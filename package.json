@@ -5,7 +5,8 @@
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
-    "build": "NODE_ENV=production react-router build"
+    "build": "NODE_ENV=production react-router build",
+    "dev": "react-router dev"
   },
   "dependencies": {
     "@gadget-client/strata": "link:.gadget/client",
