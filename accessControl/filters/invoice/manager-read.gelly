@@ -1,0 +1,1 @@
+filter ($session: Session, $user: User) on Invoice [ where businessId == $user.id ]

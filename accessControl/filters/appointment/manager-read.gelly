@@ -1,0 +1,1 @@
+filter ($session: Session, $user: User) on Appointment [ where businessId == $user.id ]

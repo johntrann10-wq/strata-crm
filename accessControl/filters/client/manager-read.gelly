@@ -1,0 +1,1 @@
+filter ($session: Session, $user: User) on Client [ where businessId == $user.id ]

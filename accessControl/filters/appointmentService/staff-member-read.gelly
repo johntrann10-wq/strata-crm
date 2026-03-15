@@ -1,0 +1,1 @@
+filter ($session: Session, $user: User) on AppointmentService [ where appointment.assignedStaff.userId == $user.id ]

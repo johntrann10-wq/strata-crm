@@ -1,0 +1,4 @@
+filter ($session: Session, $user: User) on Service [
+  where businessId == $user.id
+]
+# structured filters: [{"type":"tenancy_read_filter","field":"business"}]

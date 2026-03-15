@@ -1,0 +1,5 @@
+# TODO: Gadget assistant picked the "business" field for tenancy but couldn't locate a field with that name on model activityLog -- this needs to be fixed!
+filter ($session: Session, $user: User) on ActivityLog [
+  where true == false
+]
+# structured filters: [{"type":"tenancy_read_filter","field":"business"}]

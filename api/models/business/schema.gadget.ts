@@ -1,0 +1,141 @@
+import type { GadgetModel } from "gadget-server";
+
+// This file describes the schema for the "business" model, go to https://strata.gadget.app/edit to view/edit your model in Gadget
+// For more information on how to update this file http://docs.gadget.dev
+
+export const schema: GadgetModel = {
+  type: "gadget/model-schema/v2",
+  storageKey: "zLZnZwc2Fr3x",
+  comment:
+    "The `business` model represents a company owned by a user. It stores the business's identifying information, contact details, location, branding (logo URL), and configuration such as its type and timezone. This model is scoped to the owning user for tenancy and is only accessible to signed‑in users belonging to that tenant.",
+  fields: {
+    address: { type: "string", storageKey: "SNzhUfjE4JX7" },
+    appointmentBufferMinutes: {
+      type: "number",
+      default: 15,
+      decimals: 0,
+      validations: { numberRange: { min: 0, max: 240 } },
+      storageKey: "4Bx5gRN28o71",
+      searchIndex: false,
+    },
+    bio: {
+      type: "string",
+      validations: { stringLength: { min: null, max: 255 } },
+      storageKey: "39rVjdbhLZDc",
+      filterIndex: false,
+    },
+    city: { type: "string", storageKey: "0yHYSsMfzPN1" },
+    currency: {
+      type: "string",
+      default: "USD",
+      validations: { regex: ["^[A-Z]{3}$"] },
+      storageKey: "ewxo1ofzs9-q",
+      searchIndex: false,
+    },
+    defaultTaxRate: {
+      type: "number",
+      default: 0,
+      decimals: 2,
+      validations: { numberRange: { min: 0, max: 100 } },
+      storageKey: "JHwC1liK3V6d",
+      searchIndex: false,
+    },
+    email: { type: "string", storageKey: "gGy6we3lHPOE" },
+    facebook: {
+      type: "string",
+      validations: { stringLength: { min: null, max: 255 } },
+      storageKey: "y2Hb3BeNg53l",
+      filterIndex: false,
+    },
+    facebookReviewLink: {
+      type: "string",
+      validations: { stringLength: { min: null, max: 500 } },
+      storageKey: "poDedd0wwJlc",
+      filterIndex: false,
+      searchIndex: false,
+    },
+    googleReviewLink: {
+      type: "string",
+      validations: { stringLength: { min: null, max: 500 } },
+      storageKey: "78VKagphRnIk",
+      filterIndex: false,
+    },
+    instagram: {
+      type: "string",
+      validations: { stringLength: { min: null, max: 255 } },
+      storageKey: "Edz793S87_rL",
+      filterIndex: false,
+    },
+    logoUrl: {
+      type: "url",
+      storageKey: "_aa9ALPSNZ7F",
+      filterIndex: false,
+      searchIndex: false,
+    },
+    name: {
+      type: "string",
+      validations: { required: true },
+      storageKey: "ZBUXTbHqH6Ya",
+    },
+    nextInvoiceNumber: {
+      type: "number",
+      default: 1,
+      decimals: 0,
+      validations: {
+        required: true,
+        numberRange: { min: 1, max: null },
+      },
+      storageKey: "OwAY8X45B7ga",
+      filterIndex: false,
+      searchIndex: false,
+    },
+    onboardingComplete: {
+      type: "boolean",
+      default: false,
+      storageKey: "11CrNt8Y9-s2",
+      searchIndex: false,
+    },
+    owner: {
+      type: "belongsTo",
+      validations: { required: true },
+      parent: { model: "user" },
+      storageKey: "3FyVhMVMFsbW",
+    },
+    phone: { type: "string", storageKey: "bK5a7P57upx2" },
+    state: { type: "string", storageKey: "_-P6cGcm4d2Z" },
+    timezone: {
+      type: "string",
+      storageKey: "GiUAuupptlDk",
+      filterIndex: false,
+      searchIndex: false,
+    },
+    type: {
+      type: "enum",
+      acceptMultipleSelections: false,
+      acceptUnlistedOptions: false,
+      options: [
+        "auto_detailing",
+        "mobile_detailing",
+        "ppf_ceramic",
+        "tint_shop",
+        "mechanic",
+        "tire_shop",
+        "car_wash",
+        "wrap_shop",
+        "dealership_service",
+        "other_auto_service",
+      ],
+      validations: { required: true },
+      storageKey: "_wqmSWXAXcQn",
+    },
+    website: { type: "string", storageKey: "jiYL1kMHjGhH" },
+    yelpReviewLink: {
+      type: "string",
+      validations: { stringLength: { min: null, max: 500 } },
+      storageKey: "6XSpB7M5p0Ha",
+      filterIndex: false,
+      searchIndex: false,
+    },
+    zip: { type: "string", storageKey: "7pxjfEiZhr4f" },
+  },
+};

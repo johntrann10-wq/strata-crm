@@ -1,0 +1,3 @@
+filter ($session: Session, $user: User) on Vehicle [
+  where client.businessId == $user.id
+]

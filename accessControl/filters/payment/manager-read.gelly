@@ -1,0 +1,1 @@
+filter ($session: Session, $user: User) on Payment [ where businessId == $user.id ]

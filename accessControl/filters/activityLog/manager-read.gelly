@@ -1,0 +1,1 @@
+filter ($session: Session, $user: User) on ActivityLog [ where business.ownerId == $user.id ]

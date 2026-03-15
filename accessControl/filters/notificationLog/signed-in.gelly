@@ -1,0 +1,1 @@
+filter ($session: Session) on notificationLog [ where businessId == $session.userId ]
