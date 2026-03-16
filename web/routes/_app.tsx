@@ -318,7 +318,6 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       .catch(() => {
         if (!cancelled) {
           setAuthCheckDone(true);
-          navigate(signInPath, { replace: true });
         }
       });
     return () => {
@@ -337,9 +336,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   });
   useEffect(() => {
     if (userFetching) return;
-    if (authCheckDone && !user && effectiveUserId) {
-      navigate(signInPath, { replace: true });
-    }
+    // Do not redirect here; sign-in flow and /auth/me already control access.
   }, [user, userFetching, effectiveUserId, authCheckDone, navigate, signInPath]);
   if (!authCheckDone || !effectiveUserId) {
     return (
