@@ -1,13 +1,12 @@
 /**
  * Fetch-based API client for Node API endpoints.
- * Replaces @gadget-client/strata; all requests go to /node-api/* on Vercel,
- * which is rewritten to your Railway backend's /api/*.
+ * Uses JWT in Authorization header and talks directly to the Railway backend.
  */
-/** Base URL for the API. Empty = same origin. */
+/** Base URL for the API (your Railway backend). */
 export const API_BASE =
   typeof window !== "undefined"
-    ? ""
-    : process.env.API_BASE ?? "";
+    ? "https://strata-crm-production.up.railway.app"
+    : process.env.API_BASE ?? "https://strata-crm-production.up.railway.app";
 function getToken() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem("authToken");
@@ -16,7 +15,7 @@ async function request<T = unknown>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
-  const url = path.startsWith("http") ? path : `${API_BASE}/node-api${path}`;
+  const url = path.startsWith("http") ? path : `${API_BASE}/api${path}`;
   const token = getToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
