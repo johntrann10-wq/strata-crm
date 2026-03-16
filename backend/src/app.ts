@@ -23,10 +23,8 @@ import { activityLogsRouter } from "./routes/activity-logs.js";
 import { notificationLogsRouter } from "./routes/notification-logs.js";
 import { billingRouter, handleStripeWebhook } from "./routes/billing.js";
 import { requireSubscription } from "./middleware/subscription.js";
-
 const app = express();
-
-// CORS: when frontend and backend are on different origins (e.g. Vercel + Render)
+// CORS: when frontend and backend are on different origins (e.g. Vercel + Railway)
 const frontendOrigin = process.env.FRONTEND_URL ?? process.env.CORS_ORIGIN;
 if (frontendOrigin) {
   app.use((_req, res, next) => {
@@ -41,27 +39,39 @@ if (frontendOrigin) {
     next();
   });
 }
-
 // Stripe webhook needs raw body (must be before express.json())
 app.post(
   "/api/billing/webhook",
   express.raw({ type: "application/json" }),
   (req, res, next) => handleStripeWebhook(req, res).catch(next)
 );
-
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.use(
-  (session as (opts: { secret: string; resave: boolean; saveUninitialized: boolean; cookie: object }) => express.RequestHandler)({
+  (session as (opts: {
+    secret: string;
+    resave: boolean;
+    saveUninitialized: boolean;
+    cookie: {
+      secure: boolean;
+      httpOnly: boolean;
+      maxAge: number;
+      sameSite: "lax" | "strict" | "none";
+    };
+  }) => express.RequestHandler)({
     secret: process.env.SESSION_SECRET ?? "strata-dev-secret-change-in-production",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === "production", httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 },
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: "none",
+    },
   })
 );
 app.use(requestId);
 app.use(requestLogging);
-
 app.use("/api/auth", authRouter);
 app.use("/api/users", optionalAuth, usersRouter);
 app.use("/api/billing", billingRouter);
@@ -79,9 +89,6 @@ app.use("/api/services", optionalAuth, requireSubscription, servicesRouter);
 app.use("/api/actions", optionalAuth, requireSubscription, actionsRouter);
 app.use("/api/activity-logs", optionalAuth, requireSubscription, activityLogsRouter);
 app.use("/api/notification-logs", optionalAuth, requireSubscription, notificationLogsRouter);
-
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
-
 app.use(errorHandler);
-
 export { app };
