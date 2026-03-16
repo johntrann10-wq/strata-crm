@@ -279,19 +279,20 @@ export default function SignedIn() {
     void handleRefresh();
   }, [businessId, handleRefresh]);
 
+  // Disable background auto-refresh to avoid excessive network traffic.
+  // Dashboard data can be refreshed manually via the Refresh button.
   useEffect(() => {
-    const interval = setInterval(() => {
-      void handleRefresh();
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [handleRefresh]);
+    return () => {
+      // no-op cleanup
+    };
+  }, []);
 
   const [{ data: activityLogs, fetching: fetchingActivity }] = useFindMany(api.activityLog, {
     filter: businessId ? { business: { id: { equals: businessId } } } : undefined,
     sort: { createdAt: "Descending" },
     select: { id: true, type: true, description: true, createdAt: true },
     first: 8,
-    live: true,
+    // Disable live polling to prevent continuous requests.
     pause: !businessId,
   });
 
