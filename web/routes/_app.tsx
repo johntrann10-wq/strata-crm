@@ -9,7 +9,6 @@
 //   - Main content area for app routes (via <Outlet />)
 //   - Handles redirecting logged out users to the sign-in page
 // To extend: update the navigation, header, or main content area as needed for your app's logged-in experience.
-
 import { UserIcon } from "@/components/shared/UserIcon";
 import { SecondaryNavigation } from "@/components/app/nav";
 import { QuickCreateMenu } from "../components/shared/QuickCreateMenu";
@@ -44,9 +43,7 @@ import { CommandPalette } from "../components/shared/CommandPalette";
 import { getEnabledModules } from "../lib/modules";
 import { useFindOne, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
-
 // SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
-
 export type AuthOutletContext = RootOutletContext & {
   user: any;
   businessName: string | null;
@@ -54,7 +51,6 @@ export type AuthOutletContext = RootOutletContext & {
   businessType: string | null;
   enabledModules: Set<string>;
 };
-
 const primaryNavItems: { icon: React.ElementType; label: string; href: string; end: boolean; module?: string }[] = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/signed-in", end: true },
   { icon: Calendar, label: "Calendar", href: "/calendar", end: false, module: "calendar" },
@@ -64,7 +60,6 @@ const primaryNavItems: { icon: React.ElementType; label: string; href: string; e
   { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes" },
   { icon: BarChart2, label: "Analytics", href: "/analytics", end: false, module: "analytics" },
 ];
-
 const managementNavItems: { icon: React.ElementType; label: string; href: string; end: boolean; module?: string }[] = [
   { icon: Car, label: "Vehicles", href: "/vehicles", end: false, module: "vehicles" },
   { icon: Wrench, label: "Services", href: "/services", end: false, module: "services" },
@@ -74,31 +69,25 @@ const managementNavItems: { icon: React.ElementType; label: string; href: string
   { icon: TrendingDown, label: "Lapsed Clients", href: "/lapsed-clients", end: false, module: "lapsedClients" },
   { icon: RouteIcon, label: "Route Planner", href: "/route-planner", end: false, module: "routePlanner" },
 ];
-
 const bottomNavItems = [
   { icon: Settings, label: "Settings", href: "/settings", end: false },
   { icon: ShieldAlert, label: "Recovery", href: "/admin/recovery", end: false },
 ];
-
 interface AppErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
 }
-
 class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppErrorBoundaryState> {
   constructor(props: React.PropsWithChildren) {
     super(props);
     this.state = { hasError: false, error: null };
   }
-
   static getDerivedStateFromError(error: Error): AppErrorBoundaryState {
     return { hasError: true, error };
   }
-
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
     console.error(error, info);
   }
-
   render() {
     if (this.state.hasError) {
       return (
@@ -115,7 +104,6 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
     return this.props.children;
   }
 }
-
 const SidebarNav = memo(function SidebarNav({
   onItemClick,
   enabledModules,
@@ -129,7 +117,6 @@ const SidebarNav = memo(function SidebarNav({
   const visibleManagementItems = managementNavItems.filter(
     (item) => !item.module || enabledModules.has(item.module)
   );
-
   return (
     <div className="flex flex-col h-full bg-[hsl(220,20%,10%)]">
       {/* Logo area */}
@@ -137,7 +124,6 @@ const SidebarNav = memo(function SidebarNav({
         <Wrench className="h-5 w-5 text-orange-400 shrink-0" />
         <span className="text-[15px] font-semibold text-white tracking-tight">Strata</span>
       </div>
-
       {/* Main navigation */}
       <nav className="flex-1 px-3 py-3 overflow-y-auto">
         <div className="space-y-0.5">
@@ -161,13 +147,11 @@ const SidebarNav = memo(function SidebarNav({
             </NavLink>
           ))}
         </div>
-
         {visibleManagementItems.length > 0 && (
           <div className="text-white/25 text-[10px] font-semibold px-3 mt-4 mb-1 tracking-[0.08em] uppercase border-t border-white/8 pt-3">
             TOOLS
           </div>
         )}
-
         <div className="space-y-0.5">
           {visibleManagementItems.map(({ icon: Icon, label, href, end }) => (
             <NavLink
@@ -190,7 +174,6 @@ const SidebarNav = memo(function SidebarNav({
           ))}
         </div>
       </nav>
-
       {/* Bottom navigation */}
       <div className="px-3 pb-4 pt-2 border-t border-white/8 space-y-0.5">
         {bottomNavItems.map(({ icon: Icon, label, href, end }) => (
@@ -216,7 +199,6 @@ const SidebarNav = memo(function SidebarNav({
     </div>
   );
 });
-
 function AppLayoutInner({
   user,
   business,
@@ -239,7 +221,6 @@ function AppLayoutInner({
     () => ({ ...rootOutletContext, user, businessName, businessId, businessType, enabledModules } as AuthOutletContext),
     [rootOutletContext, user, businessName, businessId, businessType, enabledModules]
   );
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -250,16 +231,13 @@ function AppLayoutInner({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [setOpen]);
-
   return (
     <div className="h-screen flex overflow-hidden">
       <CommandPalette enabledModules={enabledModules} />
-
       {/* Desktop sidebar – fixed, visible on md+ screens */}
       <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:w-64 z-20">
         <SidebarNav enabledModules={enabledModules} />
       </aside>
-
       {/* Mobile sidebar – Sheet that slides in from the left */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
@@ -269,7 +247,6 @@ function AppLayoutInner({
           <SidebarNav onItemClick={() => setMobileOpen(false)} enabledModules={enabledModules} />
         </SheetContent>
       </Sheet>
-
       {/* Main content area */}
       <div className="flex-1 flex flex-col md:pl-64 min-w-0">
         <header className="h-16 flex items-center justify-between px-4 md:px-6 border-b bg-background z-10 w-full">
@@ -283,7 +260,6 @@ function AppLayoutInner({
           >
             <Menu className="h-5 w-5" />
           </Button>
-
           <div className="flex items-center gap-2 ml-auto">
             <QuickCreateMenu />
             <div className="flex items-center">
@@ -296,14 +272,13 @@ function AppLayoutInner({
                 icon={
                   <>
                     <UserIcon user={user} />
-                    <span className="text-sm font-medium">{user.firstName ?? user.email}</span>
+                    <span className="text-sm font-medium">{(user as any).firstName ?? (user as any).email}</span>
                   </>
                 }
               />
             </div>
           </div>
         </header>
-
         <main className="flex-1 overflow-y-auto overflow-x-auto">
           <AppErrorBoundary>
             <div className="w-full">
@@ -315,18 +290,19 @@ function AppLayoutInner({
     </div>
   );
 }
-
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const rootOutletContext = useOutletContext<RootOutletContext>();
   const navigate = useNavigate();
-  const signInPath = loaderData.signInPath ?? "/sign-in";
+  // Make loaderData fully optional-safe
+  const safeLoaderData = (loaderData ?? {}) as Partial<Route.LoaderData>;
+  const signInPath = safeLoaderData.signInPath ?? "/sign-in";
+  const initialUserId = safeLoaderData.userId ?? null;
   // When server has no session (e.g. dev with proxied API), resolve user via /api/auth/me
   const [clientUserId, setClientUserId] = useState<string | null>(null);
-  const [authCheckDone, setAuthCheckDone] = useState(!!loaderData.userId);
-  const effectiveUserId = loaderData.userId ?? clientUserId;
-
+  const [authCheckDone, setAuthCheckDone] = useState(!!initialUserId);
+  const effectiveUserId = initialUserId ?? clientUserId;
   useEffect(() => {
-    if (loaderData.userId) {
+    if (initialUserId) {
       setAuthCheckDone(true);
       return;
     }
@@ -335,7 +311,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       .me()
       .then((me) => {
         if (!cancelled) {
-          setClientUserId(me.id);
+          setClientUserId((me as any).id);
           setAuthCheckDone(true);
         }
       })
@@ -348,9 +324,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     return () => {
       cancelled = true;
     };
-  }, [loaderData.userId, navigate, signInPath]);
-
-  const [{ data: user, fetching: userFetching }, refetchUser] = useFindOne(
+  }, [initialUserId, navigate, signInPath]);
+  const [{ data: user, fetching: userFetching }] = useFindOne(
     api.user,
     effectiveUserId ?? "",
     { select: { id: true, firstName: true, lastName: true, email: true }, pause: !effectiveUserId }
@@ -360,14 +335,12 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     select: { id: true, name: true, type: true },
     pause: !effectiveUserId,
   });
-
   useEffect(() => {
     if (userFetching) return;
     if (authCheckDone && !user && effectiveUserId) {
       navigate(signInPath, { replace: true });
     }
   }, [user, userFetching, effectiveUserId, authCheckDone, navigate, signInPath]);
-
   if (!authCheckDone || !effectiveUserId) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -382,10 +355,13 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       </div>
     );
   }
-
   return (
     <CommandPaletteProvider>
-      <AppLayoutInner user={user as Record<string, unknown>} business={(business as Record<string, unknown>) ?? null} rootOutletContext={rootOutletContext} />
+      <AppLayoutInner
+        user={user as Record<string, unknown>}
+        business={(business as Record<string, unknown>) ?? null}
+        rootOutletContext={rootOutletContext}
+      />
     </CommandPaletteProvider>
   );
 }
