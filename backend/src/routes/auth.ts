@@ -182,7 +182,7 @@ authRouter.get(
 
     // Find or create user
     const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    let user = existing;
+    let user = existing as (typeof users.$inferSelect) | undefined;
     if (!user) {
       const [created] = await db
         .insert(users)
@@ -191,12 +191,7 @@ authRouter.get(
           firstName,
           lastName,
         })
-        .returning({
-          id: users.id,
-          email: users.email,
-          firstName: users.firstName,
-          lastName: users.lastName,
-        });
+        .returning();
       if (!created) throw new BadRequestError("Failed to create account from Google profile.");
       user = created;
       logger.info("User signed up via Google", { userId: user.id, email: user.email });
