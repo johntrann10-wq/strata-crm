@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useActionForm } from "../../hooks/useApi";
 import { Wrench } from "lucide-react";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { api, API_BASE } from "../../api";
 
 export const SignInComponent = (props: {
@@ -12,12 +12,19 @@ export const SignInComponent = (props: {
 }) => {
   const location = useLocation();
   const search = props.searchParamsOverride ?? location.search;
+  const navigate = useNavigate();
 
   const {
     submit,
     register,
     formState: { errors, isSubmitting },
-  } = useActionForm(api.user.signIn, props.options);
+  } = useActionForm(api.user.signIn, {
+    ...props.options,
+    onSuccess: () => {
+      props.options?.onSuccess?.();
+      navigate("/signed-in", { replace: true });
+    },
+  });
 
   return (
     <div className="w-full max-w-sm">
