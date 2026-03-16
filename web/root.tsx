@@ -24,22 +24,29 @@ export type RootOutletContext = {
   csrfToken?: string;
 };
 
-export const loader = async ({ context }: Route.LoaderArgs) => {
-  const { session, gadgetConfig } = context as {
-    session?: { get: (k: string) => unknown };
-    gadgetConfig?: RootOutletContext["gadgetConfig"];
-  };
+const defaultGadgetConfig = {
+  authentication: {
+    signInPath: "/sign-in",
+    redirectOnSuccessfulSignInPath: "/signed-in",
+  },
+};
 
-  return {
-    gadgetConfig:
-      gadgetConfig ?? {
-        authentication: {
-          signInPath: "/sign-in",
-          redirectOnSuccessfulSignInPath: "/signed-in",
-        },
-      },
-    csrfToken: session?.get?.("csrfToken"),
-  };
+export const loader = async ({ context }: Route.LoaderArgs) => {
+  try {
+    const ctx = context as {
+      session?: { get: (k: string) => unknown };
+      gadgetConfig?: RootOutletContext["gadgetConfig"];
+    } | undefined;
+    const session = ctx?.session;
+    const gadgetConfig = ctx?.gadgetConfig;
+
+    return {
+      gadgetConfig: gadgetConfig ?? defaultGadgetConfig,
+      csrfToken: session?.get?.("csrfToken"),
+    };
+  } catch {
+    return { gadgetConfig: defaultGadgetConfig, csrfToken: undefined };
+  }
 };
 
 export default function App({ loaderData }: Route.ComponentProps) {

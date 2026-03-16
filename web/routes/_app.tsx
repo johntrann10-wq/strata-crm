@@ -46,14 +46,20 @@ import { useFindOne, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
 
 export const loader = async ({ context }: Route.LoaderArgs) => {
-  const { session, gadgetConfig } = context as {
-    session?: { get: (k: string) => unknown };
-    gadgetConfig?: { authentication?: { signInPath?: string } };
-  };
+  try {
+    const ctx = context as {
+      session?: { get: (k: string) => unknown };
+      gadgetConfig?: { authentication?: { signInPath?: string } };
+    } | undefined;
+    const session = ctx?.session;
+    const gadgetConfig = ctx?.gadgetConfig;
 
-  // Server may not have session (e.g. dev with separate API); layout will re-check via /api/auth/me
-  const userId = (session?.get("user") as string | undefined) ?? null;
-  return { userId, signInPath: gadgetConfig?.authentication?.signInPath ?? "/sign-in" };
+    // Server may not have session (e.g. dev with separate API or Vercel serverless); layout will re-check via /api/auth/me
+    const userId = (session?.get("user") as string | undefined) ?? null;
+    return { userId, signInPath: gadgetConfig?.authentication?.signInPath ?? "/sign-in" };
+  } catch {
+    return { userId: null, signInPath: "/sign-in" };
+  }
 };
 
 export type AuthOutletContext = RootOutletContext & {

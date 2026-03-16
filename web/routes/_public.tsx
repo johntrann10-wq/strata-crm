@@ -17,9 +17,13 @@ import type { Route } from "./+types/_public";
 import type { RootOutletContext } from "../root";
 
 export const loader = async ({ context }: Route.LoaderArgs) => {
-  const { session } = context as { session?: { get: (k: string) => unknown } };
-  const userId = session?.get("user");
-  return { userId: userId ?? null };
+  try {
+    const ctx = context as { session?: { get: (k: string) => unknown } } | undefined;
+    const userId = ctx?.session?.get("user");
+    return { userId: userId ?? null };
+  } catch {
+    return { userId: null };
+  }
 };
 
 export default function ({ loaderData }: Route.ComponentProps) {

@@ -14,14 +14,20 @@ import type { RootOutletContext } from "../root";
 import type { Route } from "./+types/_auth";
 
 export const loader = async ({ context }: Route.LoaderArgs) => {
-  const { session, gadgetConfig } = context;
+  try {
+    const ctx = context as { session?: { get: (k: string) => unknown }; gadgetConfig?: { authentication?: { redirectOnSuccessfulSignInPath?: string } } } | undefined;
+    const session = ctx?.session;
+    const gadgetConfig = ctx?.gadgetConfig;
 
-  const signedIn = !!session?.get("user");
+    const signedIn = !!session?.get("user");
 
-  if (signedIn) {
-    return redirect(gadgetConfig.authentication!.redirectOnSuccessfulSignInPath!);
+    if (signedIn) {
+      const redirectPath = gadgetConfig?.authentication?.redirectOnSuccessfulSignInPath ?? "/signed-in";
+      return redirect(redirectPath);
+    }
+  } catch {
+    // If context is missing (e.g. Vercel serverless), treat as not signed in
   }
-
   return {};
 };
 
