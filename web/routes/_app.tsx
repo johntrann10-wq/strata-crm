@@ -296,9 +296,9 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   // Make loaderData fully optional-safe
   const safeLoaderData = (loaderData ?? {}) as Partial<Route.LoaderData>;
   const signInPath = safeLoaderData.signInPath ?? "/sign-in";
-  const initialUserId = safeLoaderData.userId ?? null;
   // When server has no session (e.g. dev with proxied API), resolve user via /api/auth/me
   const [clientUserId, setClientUserId] = useState<string | null>(null);
+  const initialUserId = safeLoaderData.userId ?? null;
   const [authCheckDone, setAuthCheckDone] = useState(!!initialUserId);
   const effectiveUserId = initialUserId ?? clientUserId;
   useEffect(() => {
@@ -325,7 +325,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       cancelled = true;
     };
   }, [initialUserId, navigate, signInPath]);
-  const [{ data: user, fetching: userFetching }] = useFindOne(
+  const [{ data: user, fetching: userFetching }, refetchUser] = useFindOne(
     api.user,
     effectiveUserId ?? "",
     { select: { id: true, firstName: true, lastName: true, email: true }, pause: !effectiveUserId }
