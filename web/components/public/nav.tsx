@@ -35,33 +35,44 @@ interface NavSection {
 }
 type NavItems = (NavItem | NavSection)[];
 
-// Main navigation data. Extend this array to add links/sections.
-// Example:
-// const navigationItems: NavItems = [
-//   { type: "item", title: "Docs", href: "/docs", description: "Documentation" },
-//   {
-//     type: "section",
-//     title: "More",
-//     items: [
-//       { type: "item", title: "About", href: "/about" },
-//       { type: "item", title: "Contact", href: "/contact" },
-//     ],
-//   },
-// ];
-const navigationItems: NavItems = [];
+// Main navigation data. Tabs + “buy signals” for the marketing page.
+const navigationItems: NavItems = [
+  {
+    type: "item",
+    title: "Product",
+    href: "/#product",
+    description: "Overview of how Strata runs your shop.",
+  },
+  {
+    type: "item",
+    title: "Features",
+    href: "/#features",
+    description: "Calendar, CRM, invoices, inventory, and more.",
+  },
+  {
+    type: "item",
+    title: "Who it’s for",
+    href: "/#industries",
+    description: "Detailers, tinters, wrap shops, mechanics.",
+  },
+  {
+    type: "item",
+    title: "Pricing",
+    href: "/#pricing",
+    description: "$29/month, first month free.",
+  },
+];
 
 // Root navigation bar: logo, mobile, and desktop nav
 export const Navigation = () => (
   <div className="flex justify-center items-center gap-2">
     <MobileNav />
     <div className="flex-shrink-0">
-      {/*
-        Placeholder for app logo.
-        Replace the <img> below with your real logo once available.
-        You can update the src, alt, and styling as needed for your brand.
-      */}
-      <Link to="/" className="text-xl font-bold">
-        <img src="/api/assets/autologo?background=dark" alt="App name" className="h-5 w-auto" />
+      <Link to="/" className="flex items-center gap-2">
+        <div className="h-7 w-7 rounded-md bg-orange-500 flex items-center justify-center">
+          <WrenchIcon />
+        </div>
+        <span className="text-lg font-semibold tracking-tight">Strata</span>
       </Link>
     </div>
     <DesktopNav />
@@ -153,6 +164,16 @@ const DesktopNav = () => (
     </NavigationMenuList>
     <NavigationMenuViewport />
   </NavigationMenu>
+);
+
+// Simple wrench mark for the logo
+const WrenchIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white" aria-hidden="true">
+    <path
+      fill="currentColor"
+      d="M21 7.5a5.5 5.5 0 0 1-7.53 5.12l-4.7 4.7a2.5 2.5 0 1 1-3.54-3.54l4.7-4.7A5.5 5.5 0 1 1 21 7.5Zm-4.25-3a1.75 1.75 0 1 0 2.5 2.45 3.5 3.5 0 0 0-2.5-2.45Z"
+    />
+  </svg>
 );
 
 // --------------------------------------------------------------------------------------

@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { useActionForm } from "../../hooks/useApi";
 import { Wrench } from "lucide-react";
 import { Link, useLocation } from "react-router";
-import { api } from "../../api";
+import { api, API_BASE } from "../../api";
 
 export const SignInComponent = (props: {
   options?: Parameters<typeof useActionForm>[1];
@@ -38,7 +38,7 @@ export const SignInComponent = (props: {
         <form onSubmit={submit}>
           {/* Google Sign In */}
           <a
-            href={`/auth/google/start${search}`}
+            href={`${API_BASE}/api/auth/google/start${search}`}
             className="w-full h-10 border border-border bg-background hover:bg-muted text-[13px] font-medium rounded-lg flex items-center justify-center gap-2.5 transition-colors"
           >
             <img

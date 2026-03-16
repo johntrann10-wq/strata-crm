@@ -55,7 +55,10 @@ export default function LandingPage() {
   return (
     <div className="bg-white text-gray-900 min-h-screen">
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-orange-50 to-white py-24 px-6">
+      <section
+        id="product"
+        className="relative overflow-hidden bg-gradient-to-b from-orange-50 to-white py-24 px-6"
+      >
         {/* Subtle decorative blobs */}
         <div
           className="pointer-events-none absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-20"
@@ -126,7 +129,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Features ── */}
-      <section className="py-24 px-6 bg-white">
+      <section id="features" className="py-24 px-6 bg-white">
         <div className="mx-auto max-w-6xl">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
@@ -158,7 +161,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Social Proof Strip ── */}
-      <section className="py-14 px-6 bg-orange-50 border-y border-orange-100">
+      <section id="industries" className="py-14 px-6 bg-orange-50 border-y border-orange-100">
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-gray-700 text-lg font-medium leading-relaxed">
             Trusted by auto shops, detailers, tinters, wrap studios, and mechanics across the
@@ -186,8 +189,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Bottom CTA ── */}
-      <section className="py-24 px-6 bg-white">
+      {/* ── Bottom CTA / Pricing ── */}
+      <section id="pricing" className="py-24 px-6 bg-white">
         <div className="mx-auto max-w-3xl">
           <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 p-10 sm:p-16 flex flex-col items-center text-center gap-6 shadow-xl shadow-orange-200">
             <h2 className="text-3xl sm:text-4xl font-bold text-white">

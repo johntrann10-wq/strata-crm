@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { useActionForm } from "../../hooks/useApi";
 import { Wrench } from "lucide-react";
 import { Link, useLocation } from "react-router";
-import { api } from "../../api";
+import { api, API_BASE } from "../../api";
 
 export const SignUpComponent = (props: {
   options?: Parameters<typeof useActionForm>[1];
@@ -40,8 +40,12 @@ export const SignUpComponent = (props: {
         <form onSubmit={submit}>
           <div className="flex flex-col gap-5">
             {/* Google button */}
-            <Button variant="outline" className="w-full h-9 text-[13px] font-medium rounded-lg shadow-none" asChild>
-              <a href={`/auth/google/start${search}`}>
+            <Button
+              variant="outline"
+              className="w-full h-9 text-[13px] font-medium rounded-lg shadow-none"
+              asChild
+            >
+              <a href={`${API_BASE}/api/auth/google/start${search}`}>
                 <img
                   className="mr-2 h-4 w-4"
                   src="https://assets.gadget.dev/assets/default-app-assets/google.svg"
@@ -55,6 +59,7 @@ export const SignUpComponent = (props: {
             <div className="flex items-center gap-3">
               <div className="flex-1 h-px bg-border" />
               <span className="text-[12px] text-muted-foreground">or</span>
+              <div className="flex-1 h-px bg-border" />
               <div className="flex-1 h-px bg-border" />
             </div>
 

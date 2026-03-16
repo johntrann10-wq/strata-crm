@@ -6,6 +6,7 @@ import { users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { BadRequestError, UnauthorizedError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
+import { googleClient } from "../lib/googleAuth.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 
 const signInSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
@@ -122,3 +123,104 @@ authRouter.post("/reset-password", wrapAsync(async (req: Request, res: Response)
   logger.info("Reset password requested", { code: parsed.data.code });
   res.json({ message: "Password has been reset. You can sign in now." });
 }));
+
+// ---------------------------------------------------------------------------
+// Google OAuth (sign in / sign up with Google)
+// ---------------------------------------------------------------------------
+
+authRouter.get(
+  "/google/start",
+  wrapAsync(async (req: Request, res: Response) => {
+    if (!googleClient) {
+      throw new BadRequestError("Google sign-in is not configured.");
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL;
+    const redirectPath = frontendUrl ?? "/";
+
+    const url = googleClient.generateAuthUrl({
+      access_type: "offline",
+      scope: ["openid", "email", "profile"],
+      // We can pass state if we want to redirect to a specific page later.
+      state: JSON.stringify({ redirectPath }),
+    });
+
+    res.redirect(url);
+  })
+);
+
+authRouter.get(
+  "/google/callback",
+  wrapAsync(async (req: Request, res: Response) => {
+    if (!googleClient) {
+      throw new BadRequestError("Google sign-in is not configured.");
+    }
+
+    const code = req.query.code as string | undefined;
+    if (!code) {
+      throw new BadRequestError("Missing authorization code from Google.");
+    }
+
+    const { tokens } = await googleClient.getToken(code);
+    const idToken = tokens.id_token;
+    if (!idToken) {
+      throw new BadRequestError("Failed to obtain ID token from Google.");
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    if (!payload?.email) {
+      throw new BadRequestError("Google account did not return an email.");
+    }
+
+    const email = payload.email;
+    const firstName = payload.given_name ?? null;
+    const lastName = payload.family_name ?? null;
+
+    // Find or create user
+    const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    let user = existing;
+    if (!user) {
+      const [created] = await db
+        .insert(users)
+        .values({
+          email,
+          firstName,
+          lastName,
+        })
+        .returning({
+          id: users.id,
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        });
+      if (!created) throw new BadRequestError("Failed to create account from Google profile.");
+      user = created;
+      logger.info("User signed up via Google", { userId: user.id, email: user.email });
+    } else {
+      logger.info("User signed in via Google", { userId: user.id, email: user.email });
+    }
+
+    const s = req.session as { userId?: string };
+    if (!s) throw new Error("Session not configured");
+    s.userId = user.id;
+
+    const redirectPath = (() => {
+      try {
+        const raw = (req.query.state as string | undefined) ?? "";
+        if (!raw) return "/";
+        const parsed = JSON.parse(raw) as { redirectPath?: string };
+        return parsed.redirectPath ?? "/";
+      } catch {
+        return "/";
+      }
+    })();
+
+    const frontendUrl = process.env.FRONTEND_URL ?? "";
+    const redirectUrl = frontendUrl ? `${frontendUrl}${redirectPath}` : redirectPath;
+    res.redirect(redirectUrl);
+  })
+);
