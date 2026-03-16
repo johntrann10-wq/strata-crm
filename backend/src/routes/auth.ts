@@ -8,6 +8,7 @@ import { BadRequestError, UnauthorizedError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { googleClient } from "../lib/googleAuth.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
+import { randomUUID } from "crypto";
 
 const signInSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
 const signUpSchema = z.object({
@@ -69,6 +70,7 @@ authRouter.post("/sign-up", wrapAsync(async (req: Request, res: Response, _next:
   const [user] = await db
     .insert(users)
     .values({
+      id: randomUUID(),
       email,
       passwordHash,
       firstName: firstName ?? null,
@@ -187,6 +189,7 @@ authRouter.get(
       const [created] = await db
         .insert(users)
         .values({
+          id: randomUUID(),
           email,
           firstName,
           lastName,
