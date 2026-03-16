@@ -1,8 +1,15 @@
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
-import { Suspense } from "react";
+import { Suspense, useState, useEffect } from "react";
 import "./app.css";
 import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
+
+/** Renders Toaster only on the client to avoid SSR crashes (e.g. Sonner in serverless). */
+function ClientToaster() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted ? <Toaster richColors /> : null;
+}
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -62,7 +69,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
       <body>
         <Suspense>
           <Outlet context={{ gadgetConfig, csrfToken }} />
-          <Toaster richColors />
+          <ClientToaster />
         </Suspense>
         <ScrollRestoration />
         <Scripts />

@@ -13,7 +13,7 @@
 import { UserIcon } from "@/components/shared/UserIcon";
 import { SecondaryNavigation } from "@/components/app/nav";
 import { QuickCreateMenu } from "../components/shared/QuickCreateMenu";
-import { Outlet, redirect, useOutletContext, NavLink, useNavigate } from "react-router";
+import { Outlet, useOutletContext, NavLink, useNavigate } from "react-router";
 import type { RootOutletContext } from "../root";
 import type { Route } from "./+types/_app";
 import {
@@ -45,22 +45,7 @@ import { getEnabledModules } from "../lib/modules";
 import { useFindOne, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
 
-export const loader = async ({ context }: Route.LoaderArgs) => {
-  try {
-    const ctx = context as {
-      session?: { get: (k: string) => unknown };
-      gadgetConfig?: { authentication?: { signInPath?: string } };
-    } | undefined;
-    const session = ctx?.session;
-    const gadgetConfig = ctx?.gadgetConfig;
-
-    // Server may not have session (e.g. dev with separate API or Vercel serverless); layout will re-check via /api/auth/me
-    const userId = (session?.get("user") as string | undefined) ?? null;
-    return { userId, signInPath: gadgetConfig?.authentication?.signInPath ?? "/sign-in" };
-  } catch {
-    return { userId: null, signInPath: "/sign-in" };
-  }
-};
+// SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
 
 export type AuthOutletContext = RootOutletContext & {
   user: any;

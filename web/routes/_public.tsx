@@ -13,22 +13,11 @@
 import { Link, Outlet, useOutletContext } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Navigation } from "@/components/public/nav";
-import type { Route } from "./+types/_public";
 import type { RootOutletContext } from "../root";
 
-export const loader = async ({ context }: Route.LoaderArgs) => {
-  try {
-    const ctx = context as { session?: { get: (k: string) => unknown } } | undefined;
-    const userId = ctx?.session?.get("user");
-    return { userId: userId ?? null };
-  } catch {
-    return { userId: null };
-  }
-};
-
-export default function ({ loaderData }: Route.ComponentProps) {
-  const { userId } = loaderData;
-
+// SPA mode: no loader; we treat the user as logged out here and
+// let the app layout handle auth once the app loads.
+export default function PublicLayout() {
   const context = useOutletContext<RootOutletContext>();
 
   return (
@@ -39,22 +28,14 @@ export default function ({ loaderData }: Route.ComponentProps) {
             <Navigation />
 
             <div className="flex items-center space-x-2">
-              {userId ? (
-                <Button variant="ghost" size="lg" className="p-2 rounded-full" asChild>
-                  <Link to="/signed-in">
-                    Go to app
-                  </Link>
+              <>
+                <Button size="sm" variant="outline" asChild>
+                  <Link to="/sign-in">Login</Link>
                 </Button>
-              ) : (
-                <>
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to="/sign-in">Login</Link>
-                  </Button>
-                  <Button size="sm" asChild>
-                    <Link to="/sign-up">Get started</Link>
-                  </Button>
-                </>
-              )}
+                <Button size="sm" asChild>
+                  <Link to="/sign-up">Get started</Link>
+                </Button>
+              </>
             </div>
           </div>
         </div>
