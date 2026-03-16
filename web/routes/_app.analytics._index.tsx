@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router";
-import { useGlobalAction, useFindFirst } from "@gadgetinc/react";
+import { useGlobalAction, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

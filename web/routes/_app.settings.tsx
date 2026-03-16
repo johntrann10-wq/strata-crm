@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useOutletContext, Link } from "react-router";
-import { useFindFirst, useAction, useFindMany, useGlobalAction } from "@gadgetinc/react";
+import { useFindFirst, useAction, useFindMany, useGlobalAction } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

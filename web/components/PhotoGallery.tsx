@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useFindMany, useAction } from "@gadgetinc/react";
+import { useFindMany, useAction } from "../hooks/useApi";
 import { toast } from "sonner";
 import { Camera, Upload, X, Loader2, ZoomIn } from "lucide-react";
 import { cn } from "@/lib/utils";

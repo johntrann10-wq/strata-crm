@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useOutletContext } from "react-router";
-import { useFindOne, useAction } from "@gadgetinc/react";
+import { useFindOne, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +56,7 @@ import {
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
+import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
@@ -88,6 +89,24 @@ function capitalize(str: string | null | undefined): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+/** Normalize line items from API (array or edges.node) */
+function normalizeLineItems(inv: Record<string, unknown> | null | undefined): Array<{ id: string; description?: string; quantity?: number; unitPrice?: number; total?: number }> {
+  if (!inv?.lineItems) return [];
+  const li = inv.lineItems as unknown;
+  if (Array.isArray(li)) return li as Array<{ id: string; description?: string; quantity?: number; unitPrice?: number; total?: number }>;
+  const edges = (li as { edges?: Array<{ node?: unknown }> })?.edges;
+  return Array.isArray(edges) ? edges.map((e) => e?.node as { id: string; description?: string; quantity?: number; unitPrice?: number; total?: number }).filter(Boolean) : [];
+}
+
+/** Normalize payments from API (array or edges.node) */
+function normalizePayments(inv: Record<string, unknown> | null | undefined): Array<{ id: string; amount?: number; method?: string; createdAt?: string }> {
+  if (!inv?.payments) return [];
+  const p = inv.payments as unknown;
+  if (Array.isArray(p)) return p as Array<{ id: string; amount?: number; method?: string; createdAt?: string }>;
+  const edges = (p as { edges?: Array<{ node?: unknown }> })?.edges;
+  return Array.isArray(edges) ? edges.map((e) => e?.node as { id: string; amount?: number; method?: string; createdAt?: string }).filter(Boolean) : [];
+}
+
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useOutletContext<AuthOutletContext>();
@@ -116,7 +135,7 @@ export default function InvoiceDetailPage() {
     unitPrice: number;
   }>({ description: "", qty: 1, unitPrice: 0 });
 
-  const [{ data: invoice, fetching, error }, refetch] = useFindOne(api.invoice, id!, {
+  const [{ data: invoice, fetching, error }, refetch] = useFindOne(api.invoice, id ?? null, {
     select: {
       id: true,
       invoiceNumber: true,
@@ -171,14 +190,20 @@ export default function InvoiceDetailPage() {
     },
   });
 
-  const sendToClientAction = (api.invoice as any).sendToClient as any;
-  const voidInvoiceActionRef = (api.invoice as any).voidInvoice as any;
-  const [{ fetching: sendingToClient }, sendToClient] = (useAction as any)(sendToClientAction);
-  const [{ fetching: voidingInvoice }, voidInvoiceAction] = (useAction as any)(voidInvoiceActionRef);
+  const [{ fetching: sendingToClient }, sendToClient] = useAction(api.invoice.sendToClient);
+  const [{ fetching: voidingInvoice }, voidInvoiceAction] = useAction(api.invoice.voidInvoice);
   const [{ fetching: creatingPayment }, createPayment] = useAction(api.payment.create);
   const [{ fetching: creatingLineItem }, createLineItem] = useAction(api.invoiceLineItem.create);
-  const [{ fetching: updatingLineItem }, updateLineItem] = useAction(api.invoiceLineItem.update);
-  const [{ fetching: deletingLineItem }, deleteLineItem] = useAction(api.invoiceLineItem.delete);
+  const [{ fetching: updatingLineItem }, updateLineItem] = useAction((params: Record<string, unknown>) =>
+    api.invoiceLineItem.update(params.id as string, {
+      description: params.description,
+      quantity: params.quantity,
+      unitPrice: params.unitPrice,
+    })
+  );
+  const [{ fetching: deletingLineItem }, deleteLineItem] = useAction((params: Record<string, unknown>) =>
+    api.invoiceLineItem.delete(params.id as string)
+  );
 
   const { setPageContext } = usePageContext();
 
@@ -200,12 +225,10 @@ export default function InvoiceDetailPage() {
     return () => setPageContext(null);
   }, [invoice, setPageContext]);
 
-  const payments: any[] =
-    (invoice as any)?.payments?.edges?.map((e: any) => e.node) ?? [];
-  const lineItems: any[] =
-    (invoice as any)?.lineItems?.edges?.map((e: any) => e.node) ?? [];
-  const totalPaid = payments.reduce((sum: number, p: any) => sum + (p.amount ?? 0), 0);
-  const remainingBalance = (invoice?.total ?? 0) - totalPaid;
+  const paymentsList = normalizePayments(invoice as Record<string, unknown>);
+  const lineItemsList = normalizeLineItems(invoice as Record<string, unknown>);
+  const totalPaid = paymentsList.reduce((sum, p) => sum + (Number(p.amount) ?? 0), 0);
+  const remainingBalance = (Number((invoice as Record<string, unknown>)?.total) ?? 0) - totalPaid;
 
   const handleOpenPaymentDialog = () => {
     setPaymentAmount(remainingBalance > 0 ? remainingBalance.toFixed(2) : "0.00");
@@ -217,23 +240,20 @@ export default function InvoiceDetailPage() {
 
   const handleRecordPayment = async () => {
     if (!invoice?.id) return;
-    const wouldExceed = parseFloat(paymentAmount) > remainingBalance + 0.005;
-    if (wouldExceed) {
-      toast.error(
-        `Payment amount exceeds the remaining balance of ${formatCurrency(remainingBalance)}. Please enter a smaller amount.`
-      );
+    const amountNum = parseFloat(paymentAmount);
+    const validation = validatePaymentAmount(amountNum, remainingBalance);
+    if (!validation.ok) {
+      toast.error(validation.message);
       return;
     }
-    const businessId = (invoice as any).business?.id;
     const [py, pm, pd] = paymentDate.split("-").map(Number);
     const paidAtDate = new Date(py, pm - 1, pd);
     const result = await createPayment({
-      amount: parseFloat(paymentAmount),
-      method: paymentMethod as any,
+      invoiceId: invoice.id,
+      amount: amountNum,
+      method: paymentMethod,
       paidAt: paidAtDate.toISOString(),
       notes: paymentNotes || undefined,
-      invoice: { _link: invoice.id },
-      ...(businessId ? { business: { _link: businessId } } : {}),
     });
     if (!result.error) {
       toast.success("Payment recorded successfully");
@@ -248,12 +268,19 @@ export default function InvoiceDetailPage() {
     if (!invoice?.id) return;
     const qty = parseInt(lineItemQuantity, 10) || 1;
     const unitPrice = parseFloat(lineItemUnitPrice) || 0;
+    if (!lineItemDescription.trim()) {
+      toast.error("Description is required.");
+      return;
+    }
+    if (unitPrice < 0) {
+      toast.error("Unit price cannot be negative.");
+      return;
+    }
     const result = await createLineItem({
-      description: lineItemDescription,
+      invoiceId: invoice.id,
+      description: lineItemDescription.trim(),
       quantity: qty,
-      unitPrice: unitPrice,
-      total: qty * unitPrice,
-      invoice: { _link: invoice.id },
+      unitPrice,
     });
     if (!result.error) {
       toast.success("Line item added");
@@ -310,8 +337,7 @@ export default function InvoiceDetailPage() {
       id: editingLineItemId,
       description: editLineItemValues.description,
       quantity: qty,
-      unitPrice: unitPrice,
-      total: qty * unitPrice,
+      unitPrice,
     });
     if (!result.error) {
       toast.success("Line item updated");
@@ -329,7 +355,7 @@ export default function InvoiceDetailPage() {
 
   const confirmDeleteLineItem = async () => {
     if (!pendingDeleteLineItemId) return;
-    const result = await deleteLineItem({ id: pendingDeleteLineItemId });
+    const result = await deleteLineItem({ id: pendingDeleteLineItemId } as Record<string, unknown>);
     if (!result.error) {
       toast.success("Line item removed");
       void refetch();
@@ -339,6 +365,15 @@ export default function InvoiceDetailPage() {
     setShowDeleteLineItemDialog(false);
     setPendingDeleteLineItemId(null);
   };
+
+  if (!id) {
+    return (
+      <div className="container mx-auto p-6 max-w-5xl">
+        <p className="text-muted-foreground">Invalid invoice ID.</p>
+        <Link to="/invoices" className="text-sm text-primary mt-2 inline-block">Back to Invoices</Link>
+      </div>
+    );
+  }
 
   if (fetching) {
     return (
@@ -453,7 +488,7 @@ export default function InvoiceDetailPage() {
               {status === "draft" ? "Send to Client" : "Re-send to Client"}
             </Button>
           )}
-          {(status === "sent" || status === "partial") && (
+          {invoiceAllowsPayment(status) && (
             <Button onClick={handleOpenPaymentDialog} size="sm">
               <CreditCard className="h-4 w-4 mr-2" />
               Record Payment
@@ -498,7 +533,7 @@ export default function InvoiceDetailPage() {
         <div className="lg:col-span-2 space-y-6">
           {/* Line Items Table */}
           <InvoiceLineItemsTable
-            lineItems={lineItems}
+            lineItems={lineItemsList}
             canEditLineItems={canEditLineItems}
             editingLineItemId={editingLineItemId}
             editLineItemValues={editLineItemValues}
@@ -525,7 +560,7 @@ export default function InvoiceDetailPage() {
               <CardTitle className="text-base font-semibold">Payment History</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {payments.length === 0 ? (
+              {paymentsList.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">
                   No payments recorded yet.
                 </div>
@@ -539,7 +574,7 @@ export default function InvoiceDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {payments.map((payment: any) => (
+                    {paymentsList.map((payment) => (
                       <TableRow key={payment.id}>
                         <TableCell className="pl-6">
                           {formatDate(payment.createdAt)}

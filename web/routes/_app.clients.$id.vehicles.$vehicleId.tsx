@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router";
-import { useFindOne, useFindFirst, useAction } from "@gadgetinc/react";
+import { useFindOne, useFindFirst, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";

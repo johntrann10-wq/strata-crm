@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useOutletContext, Link } from "react-router";
-import { useFindMany, useGlobalAction } from "@gadgetinc/react";
+import { useFindMany, useGlobalAction } from "../hooks/useApi";
 import { formatDistanceToNow, format } from "date-fns";
 import {
   Calendar,
@@ -239,8 +239,9 @@ export default function SignedIn() {
     }
   );
 
-  const [{ data: dashStats, fetching: fetchingStats }, runGetStats] = useGlobalAction(api.getDashboardStats);
-  const [{ data: capacityData, fetching: fetchingCapacity }, runGetCapacity] = useGlobalAction(api.getCapacityInsights);
+  const [{ data: dashStats, fetching: fetchingStats, error: statsError }, runGetStats] = useGlobalAction(api.getDashboardStats);
+  const [{ data: capacityData, fetching: fetchingCapacity, error: capacityError }, runGetCapacity] = useGlobalAction(api.getCapacityInsights);
+  const dashboardError = statsError ?? capacityError;
 
   const runGetStatsRef = useRef(runGetStats);
   useEffect(() => { runGetStatsRef.current = runGetStats; }, [runGetStats]);
@@ -315,6 +316,24 @@ export default function SignedIn() {
 
   return (
     <div className="p-6 sm:p-8 space-y-8 max-w-7xl mx-auto">
+      {/* Dashboard error banner with retry */}
+      {dashboardError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            Could not load some dashboard data: {dashboardError.message}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => void handleRefresh()}
+            disabled={refreshing}
+          >
+            {refreshing ? "Retrying…" : "Try again"}
+          </Button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>

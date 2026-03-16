@@ -23,7 +23,6 @@
 import type { ExoticComponent, ReactNode } from "react";
 import { useState } from "react";
 import { Link, useLocation } from "react-router";
-import { useSignOut } from "@gadgetinc/react";
 import { NavDrawer } from "@/components/shared/NavDrawer";
 import { Home, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -163,10 +162,14 @@ export const SecondaryNavigation = ({ icon }: { icon: ReactNode }) => {
 };
 
 const SignOutOption = () => {
-  const signOut = useSignOut({ redirectToPath: "/" });
+  const handleSignOut = () => {
+    fetch("/api/auth/sign-out", { method: "POST", credentials: "include" }).then(() => {
+      window.location.href = "/";
+    });
+  };
 
   return (
-    <DropdownMenuItem onClick={signOut} className="flex items-center text-red-600 focus:text-red-600 cursor-pointer">
+    <DropdownMenuItem onClick={handleSignOut} className="flex items-center text-red-600 focus:text-red-600 cursor-pointer">
       <LogOut className="mr-2 h-4 w-4" />
       Sign out
     </DropdownMenuItem>

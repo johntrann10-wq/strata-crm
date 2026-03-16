@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router";
-import { useGlobalAction } from "@gadgetinc/react";
+import { useGlobalAction } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import {
   Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ModuleGuard } from "@/components/shared/ModuleGuard";
 
 function statusColor(status: string): string {
   switch (status) {
@@ -40,7 +41,7 @@ function statusColor(status: string): string {
 }
 
 export default function RoutePlannerPage() {
-  const _ctx = useOutletContext<AuthOutletContext>();
+  const { enabledModules } = useOutletContext<AuthOutletContext>();
 
   const [selectedDate, setSelectedDate] = useState<string>("");
 
@@ -63,6 +64,7 @@ export default function RoutePlannerPage() {
   };
 
   return (
+    <ModuleGuard module="routePlanner" enabledModules={enabledModules ?? new Set()} title="Route Planner is for mobile businesses">
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -238,5 +240,6 @@ export default function RoutePlannerPage() {
         </div>
       )}
     </div>
+    </ModuleGuard>
   );
 }

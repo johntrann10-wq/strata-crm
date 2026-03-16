@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment } from "react";
 import { useParams, Link, useOutletContext } from "react-router";
 import { isModuleEnabled } from "../lib/modules";
-import { useFindOne, useFindFirst, useFindMany, useAction } from "@gadgetinc/react";
+import { useFindOne, useFindFirst, useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
 import type { AuthOutletContext } from "./_app";
@@ -462,7 +462,7 @@ export default function AppointmentDetail() {
       return;
     }
     setIsEditing(false);
-    void refetchAppointment({ requestPolicy: "network-only" });
+    void refetchAppointment();
   };
 
   const handleCancelEdit = () => {
@@ -508,7 +508,7 @@ export default function AppointmentDetail() {
     } else {
       toast.success("Appointment updated");
       setShowEditDialog(false);
-      void refetchAppointment({ requestPolicy: "network-only" });
+      void refetchAppointment();
     }
   };
 
@@ -519,9 +519,20 @@ export default function AppointmentDetail() {
       toast.error(result.error.message ?? "Failed to send review request");
     } else {
       toast.success("Review request sent!");
-      void refetchAppointment({ requestPolicy: "network-only" });
+      void refetchAppointment();
     }
   };
+
+  if (!id) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <p className="text-muted-foreground">Invalid appointment ID.</p>
+        <Button variant="outline" asChild>
+          <Link to="/appointments">Back to Appointments</Link>
+        </Button>
+      </div>
+    );
+  }
 
   if (fetching) {
     return (

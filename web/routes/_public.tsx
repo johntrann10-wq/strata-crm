@@ -12,24 +12,18 @@
 
 import { Link, Outlet, useOutletContext } from "react-router";
 import { Button } from "@/components/ui/button";
-import { UserIcon } from "@/components/shared/UserIcon";
 import { Navigation } from "@/components/public/nav";
 import type { Route } from "./+types/_public";
 import type { RootOutletContext } from "../root";
 
 export const loader = async ({ context }: Route.LoaderArgs) => {
-  const { session, gadgetConfig } = context;
-
+  const { session } = context as { session?: { get: (k: string) => unknown } };
   const userId = session?.get("user");
-  const user = userId ? await context.api.user.findOne(userId) : undefined;
-
-  return {
-    user,
-  };
+  return { userId: userId ?? null };
 };
 
 export default function ({ loaderData }: Route.ComponentProps) {
-  const { user } = loaderData;
+  const { userId } = loaderData;
 
   const context = useOutletContext<RootOutletContext>();
 
@@ -41,11 +35,10 @@ export default function ({ loaderData }: Route.ComponentProps) {
             <Navigation />
 
             <div className="flex items-center space-x-2">
-              {user ? (
+              {userId ? (
                 <Button variant="ghost" size="lg" className="p-2 rounded-full" asChild>
                   <Link to="/signed-in">
                     Go to app
-                    <UserIcon user={user} />
                   </Link>
                 </Button>
               ) : (

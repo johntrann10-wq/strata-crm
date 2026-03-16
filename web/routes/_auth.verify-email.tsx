@@ -2,25 +2,23 @@ import { Link, useOutletContext } from "react-router";
 import type { RootOutletContext } from "../root";
 import type { Route } from "./+types/_auth.verify-email";
 
-export const loader = async ({ context, request }: Route.LoaderArgs) => {
+export const loader = async ({ request }: Route.LoaderArgs) => {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-
+  const apiBase = process.env.API_BASE ?? "";
   try {
-    await context.api.user.verifyEmail({ code });
+    const res = await fetch(`${apiBase}/api/auth/verify-email?code=${encodeURIComponent(code ?? "")}`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { success: false, error: { message: (data as { message?: string }).message ?? "Verification failed" } };
     return { success: true, error: null };
   } catch (error) {
-    return {
-      error: { message: (error as Error).message },
-
-      success: false,
-    };
+    return { success: false, error: { message: (error as Error).message } };
   }
 };
 
 export default function ({ loaderData }: Route.ComponentProps) {
-  const { gadgetConfig } = useOutletContext<RootOutletContext>();
-
+  const context = useOutletContext<RootOutletContext>();
+  const signInPath = context.gadgetConfig?.authentication?.signInPath ?? "/sign-in";
   const { success, error } = loaderData;
 
   if (error) {
@@ -29,7 +27,7 @@ export default function ({ loaderData }: Route.ComponentProps) {
 
   return success ? (
     <p className="format-message success">
-      Email has been verified successfully. <Link to={gadgetConfig.authentication!.signInPath}>Sign in now</Link>
+      Email has been verified successfully. <Link to={signInPath}>Sign in now</Link>
     </p>
   ) : null;
 }

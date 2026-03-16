@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useParams } from "react-router";
-import { useGlobalAction } from "@gadgetinc/react";
+import { useGlobalAction } from "../hooks/useApi";
 import { api } from "../api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

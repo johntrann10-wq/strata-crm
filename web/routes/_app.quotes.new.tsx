@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, Link, useOutletContext, useSearchParams } from "react-router";
-import { useFindMany, useFindFirst, useAction } from "@gadgetinc/react";
+import { useFindMany, useFindFirst, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
 import type { AuthOutletContext } from "./_app";

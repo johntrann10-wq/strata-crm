@@ -13,7 +13,7 @@
 import { UserIcon } from "@/components/shared/UserIcon";
 import { SecondaryNavigation } from "@/components/app/nav";
 import { QuickCreateMenu } from "../components/shared/QuickCreateMenu";
-import { Outlet, redirect, useOutletContext, NavLink } from "react-router";
+import { Outlet, redirect, useOutletContext, NavLink, useNavigate } from "react-router";
 import type { RootOutletContext } from "../root";
 import type { Route } from "./+types/_app";
 import {
@@ -41,32 +41,24 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { CommandPaletteProvider, useCommandPalette } from "../components/shared/CommandPaletteContext";
 import { CommandPalette } from "../components/shared/CommandPalette";
-import { getEnabledModules, isModuleEnabled } from "../lib/modules";
+import { getEnabledModules } from "../lib/modules";
+import { useFindOne, useFindFirst } from "../hooks/useApi";
+import { api } from "../api";
 
 export const loader = async ({ context }: Route.LoaderArgs) => {
-  const { session, gadgetConfig } = context;
+  const { session, gadgetConfig } = context as {
+    session?: { get: (k: string) => unknown };
+    gadgetConfig?: { authentication?: { signInPath?: string } };
+  };
 
-  const userId = session?.get("user");
+  const userId = session?.get("user") as string | undefined;
+  const signInPath = gadgetConfig?.authentication?.signInPath ?? "/sign-in";
 
   if (!userId) {
-    return redirect(gadgetConfig.authentication!.signInPath);
+    return redirect(signInPath);
   }
 
-  const [user, business] = await Promise.all([
-    context.api.user.findOne(userId, { select: { id: true, firstName: true, lastName: true, email: true } }).catch(() => null),
-    context.api.business.maybeFindFirst({ filter: { owner: { id: { equals: userId } } }, select: { id: true, name: true, type: true } }).catch(() => null),
-  ]);
-
-  if (!user) {
-    return redirect(gadgetConfig.authentication!.signInPath);
-  }
-
-  return {
-    user,
-    businessName: business?.name ?? null,
-    businessId: business?.id ?? null,
-    businessType: business?.type ?? null,
-  };
+  return { userId };
 };
 
 export type AuthOutletContext = RootOutletContext & {
@@ -83,8 +75,8 @@ const primaryNavItems: { icon: React.ElementType; label: string; href: string; e
   { icon: ClipboardList, label: "Jobs", href: "/appointments", end: false, module: "appointments" },
   { icon: Users, label: "Clients", href: "/clients", end: false, module: "clients" },
   { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices" },
-  { icon: FileText, label: "Quotes", href: "/quotes", end: false },
-  { icon: BarChart2, label: "Analytics", href: "/analytics", end: false },
+  { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes" },
+  { icon: BarChart2, label: "Analytics", href: "/analytics", end: false, module: "analytics" },
 ];
 
 const managementNavItems: { icon: React.ElementType; label: string; href: string; end: boolean; module?: string }[] = [
@@ -93,7 +85,7 @@ const managementNavItems: { icon: React.ElementType; label: string; href: string
   { icon: UserCheck, label: "Staff", href: "/staff", end: false, module: "staff" },
   { icon: Package, label: "Inventory", href: "/inventory", end: false, module: "inventory" },
   { icon: Zap, label: "Automations", href: "/automations", end: false, module: "automations" },
-  { icon: TrendingDown, label: "Lapsed Clients", href: "/lapsed-clients", end: false },
+  { icon: TrendingDown, label: "Lapsed Clients", href: "/lapsed-clients", end: false, module: "lapsedClients" },
   { icon: RouteIcon, label: "Route Planner", href: "/route-planner", end: false, module: "routePlanner" },
 ];
 
@@ -240,13 +232,17 @@ const SidebarNav = memo(function SidebarNav({
 });
 
 function AppLayoutInner({
-  loaderData,
+  user,
+  business,
   rootOutletContext,
 }: {
-  loaderData: { user: any; businessName: string | null; businessId: string | null; businessType: string | null };
+  user: Record<string, unknown>;
+  business: Record<string, unknown> | null;
   rootOutletContext: RootOutletContext;
 }) {
-  const { user, businessName, businessId, businessType } = loaderData;
+  const businessName = (business?.name as string) ?? null;
+  const businessId = (business?.id as string) ?? null;
+  const businessType = (business?.type as string) ?? null;
   const [mobileOpen, setMobileOpen] = useState(false);
   const { setOpen } = useCommandPalette();
   const enabledModules = useMemo(
@@ -271,7 +267,7 @@ function AppLayoutInner({
 
   return (
     <div className="h-screen flex overflow-hidden">
-      <CommandPalette />
+      <CommandPalette enabledModules={enabledModules} />
 
       {/* Desktop sidebar – fixed, visible on md+ screens */}
       <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:w-64 z-20">
@@ -336,10 +332,36 @@ function AppLayoutInner({
 
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const rootOutletContext = useOutletContext<RootOutletContext>();
+  const navigate = useNavigate();
+  const [{ data: user, fetching: userFetching }, refetchUser] = useFindOne(
+    api.user,
+    loaderData.userId,
+    { select: { id: true, firstName: true, lastName: true, email: true } }
+  );
+  const [{ data: business }] = useFindFirst(api.business, {
+    filter: { owner: { id: { equals: loaderData.userId } } },
+    select: { id: true, name: true, type: true },
+    pause: !loaderData.userId,
+  });
+
+  useEffect(() => {
+    if (userFetching) return;
+    if (!user && loaderData.userId) {
+      navigate((rootOutletContext.gadgetConfig?.authentication?.signInPath) ?? "/sign-in", { replace: true });
+    }
+  }, [user, userFetching, loaderData.userId, navigate, rootOutletContext.gadgetConfig?.authentication?.signInPath]);
+
+  if (userFetching || !user) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
 
   return (
     <CommandPaletteProvider>
-      <AppLayoutInner loaderData={loaderData} rootOutletContext={rootOutletContext} />
+      <AppLayoutInner user={user as Record<string, unknown>} business={(business as Record<string, unknown>) ?? null} rootOutletContext={rootOutletContext} />
     </CommandPaletteProvider>
   );
 }

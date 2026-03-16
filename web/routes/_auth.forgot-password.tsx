@@ -3,16 +3,16 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useActionForm } from "@gadgetinc/react";
+import { useActionForm } from "../hooks/useApi";
 import { CheckCircle } from "lucide-react";
 import { api } from "../api";
 
-export default function () {
+export default function ForgotPasswordPage() {
   const {
     submit,
     register,
     formState: { isSubmitSuccessful, isSubmitting },
-  } = useActionForm(api.user.sendResetPassword);
+  } = useActionForm(api.user.sendResetPassword, { send: ["email"] });
 
   return (
     <Card className="p-8">

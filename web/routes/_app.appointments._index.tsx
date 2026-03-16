@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useFindMany, useAction } from "@gadgetinc/react";
+import { useFindMany, useAction } from "../hooks/useApi";
 import { Link, useNavigate, useOutletContext } from "react-router";
 import { format } from "date-fns";
 import { toast } from "sonner";

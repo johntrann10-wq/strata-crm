@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useOutletContext, useNavigate } from "react-router";
-import { useFindMany, useAction } from "@gadgetinc/react";
+import { useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
 import type { AuthOutletContext } from "./_app";
@@ -66,6 +66,7 @@ export default function CalendarPage() {
 
   const [{ data: appointmentsData, fetching, error }, refetchAppointments] = useFindMany(api.appointment, {
     filter: appointmentFilter,
+    sort: { startTime: "Ascending" },
     pause: !businessId,
     select: {
       id: true,
@@ -74,7 +75,6 @@ export default function CalendarPage() {
       endTime: true,
       status: true,
       totalPrice: true,
-      isMobile: true,
       assignedStaffId: true,
       client: { firstName: true, lastName: true },
       vehicle: { make: true, model: true },
@@ -213,10 +213,21 @@ export default function CalendarPage() {
         onDismiss={() => setConflictDismissed(true)}
       />
 
-      {/* ── Error ── */}
+      {/* ── Error with retry ── */}
       {error && (
-        <div className="mx-4 mt-3 p-3 rounded-md bg-red-50 text-red-700 text-sm shrink-0">
-          Failed to load appointments: {error.message}
+        <div className="mx-4 mt-3 p-4 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <p className="text-sm text-red-700 dark:text-red-300">
+            Failed to load appointments: {error.message}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 border-red-300 text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/50"
+            onClick={() => refetchAppointments()}
+            disabled={fetching}
+          >
+            {fetching ? "Retrying…" : "Try again"}
+          </Button>
         </div>
       )}
 

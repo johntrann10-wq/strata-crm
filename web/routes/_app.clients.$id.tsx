@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { useFindOne, useFindMany, useAction, useGlobalAction } from "@gadgetinc/react";
+import { useFindOne, useFindMany, useAction, useGlobalAction } from "../hooks/useApi";
 import { api } from "../api";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ExternalLink, Pencil, CalendarPlus, FileText, MoreVertical, Loader2 } from "lucide-react";

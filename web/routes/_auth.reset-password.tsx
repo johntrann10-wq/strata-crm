@@ -3,27 +3,22 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useActionForm } from "@gadgetinc/react";
+import { useActionForm } from "../hooks/useApi";
 import { CheckCircle } from "lucide-react";
-import { Link, useLocation, useOutletContext } from "react-router";
+import { Link, useLocation } from "react-router";
 import { api } from "../api";
-import type { RootOutletContext } from "../root";
 
-export default function () {
+export default function ResetPasswordPage() {
   const location = useLocation();
-
-  const { gadgetConfig } = useOutletContext<RootOutletContext>();
+  const code = new URLSearchParams(location.search).get("code") ?? "";
 
   const {
     submit,
     register,
     formState: { errors, isSubmitSuccessful, isSubmitting },
   } = useActionForm(api.user.resetPassword, {
-    defaultValues: {
-      code: new URLSearchParams(location.search).get("code"),
-      password: "",
-      confirmPassword: "",
-    },
+    defaultValues: { code, password: "", confirmPassword: "" },
+    send: ["code", "password", "confirmPassword"],
   });
 
   return isSubmitSuccessful ? (
@@ -31,7 +26,7 @@ export default function () {
       <CheckCircle className="h-4 w-4 text-green-600" />
       <AlertDescription>
         Password reset successfully.{" "}
-        <Link to={gadgetConfig.authentication!.signInPath} className="font-medium text-green-900 hover:underline">
+        <Link to="/sign-in" className="font-medium text-green-900 hover:underline">
           Sign in now
         </Link>
       </AlertDescription>

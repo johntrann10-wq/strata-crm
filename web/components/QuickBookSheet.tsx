@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import { useState, useEffect, useCallback } from "react";
-import { useFindMany, useAction } from "@gadgetinc/react";
+import { useFindMany, useAction } from "../hooks/useApi";
 import { useOutletContext } from "react-router";
 import { api } from "../api";
 import type { AuthOutletContext } from "../routes/_app";

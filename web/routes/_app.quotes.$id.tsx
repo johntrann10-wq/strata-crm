@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate, useOutletContext } from "react-router";
-import { useFindOne, useAction, useGlobalAction } from "@gadgetinc/react";
+import { useFindOne, useAction, useGlobalAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
 import type { AuthOutletContext } from "./_app";

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useActionForm } from "@gadgetinc/react";
+import { useActionForm } from "../hooks/useApi";
 import { useState } from "react";
 import { useOutletContext, useRevalidator } from "react-router";
 import { api } from "../api";

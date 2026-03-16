@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useAction } from "@gadgetinc/react";
+import { useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,7 +34,7 @@ interface FormData {
 function ProgressIndicator({ step }: { step: number }) {
   return (
     <div className="flex items-center gap-3 mb-10">
-      {[1, 2].map((s) => (
+      {[1, 2, 3].map((s) => (
         <div key={s} className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <div
@@ -82,6 +82,8 @@ export default function OnboardingPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [staffCount, setStaffCount] = useState<string>("1");
+  const [operatingHours, setOperatingHours] = useState({ open: "09:00", close: "17:00", days: "Mon-Fri" });
   const [formData, setFormData] = useState<FormData>({
     name: "",
     phone: "",
@@ -102,16 +104,26 @@ export default function OnboardingPage() {
   };
 
   const handleNext = () => {
-    if (!selectedType) {
-      setValidationError("Please select a business type to continue.");
-      return;
+    if (step === 1) {
+      if (!selectedType) {
+        setValidationError("Please select a business type to continue.");
+        return;
+      }
+      setValidationError(null);
+      setStep(2);
+    } else if (step === 2) {
+      const num = parseInt(staffCount, 10);
+      if (isNaN(num) || num < 0) {
+        setValidationError("Please enter a valid number of staff (0 or more).");
+        return;
+      }
+      setValidationError(null);
+      setStep(3);
     }
-    setValidationError(null);
-    setStep(2);
   };
 
   const handleBack = () => {
-    setStep(1);
+    setStep((s) => Math.max(1, s - 1));
     setValidationError(null);
   };
 
@@ -124,6 +136,9 @@ export default function OnboardingPage() {
     }
     setValidationError(null);
 
+    const staffNum = parseInt(staffCount, 10);
+    const hoursStr = `${operatingHours.days} ${operatingHours.open}-${operatingHours.close}`;
+
     const result = await createBusiness({
       name: formData.name,
       type: selectedType as any,
@@ -133,7 +148,8 @@ export default function OnboardingPage() {
       city: formData.city || undefined,
       state: formData.state || undefined,
       zip: formData.zip || undefined,
-      website: formData.website || undefined,
+      staffCount: isNaN(staffNum) ? undefined : staffNum,
+      operatingHours: hoursStr,
     });
 
     if (result?.data) {
@@ -246,8 +262,99 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 2 – Business Details */}
+        {/* Step 2 – Staff & Operating Hours */}
         {step === 2 && (
+          <div>
+            <div className="mb-8">
+              <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3 leading-tight">
+                Staff and operating hours
+              </h1>
+              <p className="text-[#9ca3af] text-base sm:text-lg">
+                This helps us tailor your dashboard and features (e.g. route planner for mobile teams).
+              </p>
+            </div>
+
+            {selectedType && (
+              <div className="inline-flex items-center gap-2 bg-[#1f1a16] border border-orange-500/30 rounded-full px-4 py-1.5 mb-6">
+                <span className="text-lg">{businessTypes.find((t) => t.value === selectedType)?.icon}</span>
+                <span className="text-sm font-medium text-orange-400">
+                  {businessTypes.find((t) => t.value === selectedType)?.label}
+                </span>
+              </div>
+            )}
+
+            <div className="max-w-2xl space-y-6 mb-8">
+              <div className="space-y-1.5">
+                <Label htmlFor="staffCount" className="text-sm font-medium text-[#d1d5db]">
+                  Number of staff
+                </Label>
+                <Input
+                  id="staffCount"
+                  type="number"
+                  min={0}
+                  max={500}
+                  value={staffCount}
+                  onChange={(e) => {
+                    setStaffCount(e.target.value);
+                    if (validationError) setValidationError(null);
+                  }}
+                  placeholder="1"
+                  className="bg-[#1a1a1a] border-[#2a2a2a] text-white placeholder:text-[#4b5563] focus:border-orange-500 h-11 rounded-lg w-32"
+                />
+                <p className="text-xs text-[#6b7280]">Include yourself. You can change this in settings.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-[#d1d5db]">Typical operating hours</Label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Input
+                    value={operatingHours.days}
+                    onChange={(e) => setOperatingHours((h) => ({ ...h, days: e.target.value }))}
+                    placeholder="Mon-Fri"
+                    className="bg-[#1a1a1a] border-[#2a2a2a] text-white w-28 rounded-lg h-11"
+                  />
+                  <Input
+                    type="time"
+                    value={operatingHours.open}
+                    onChange={(e) => setOperatingHours((h) => ({ ...h, open: e.target.value }))}
+                    className="bg-[#1a1a1a] border-[#2a2a2a] text-white rounded-lg h-11"
+                  />
+                  <span className="text-[#6b7280]">to</span>
+                  <Input
+                    type="time"
+                    value={operatingHours.close}
+                    onChange={(e) => setOperatingHours((h) => ({ ...h, close: e.target.value }))}
+                    className="bg-[#1a1a1a] border-[#2a2a2a] text-white rounded-lg h-11"
+                  />
+                </div>
+                <p className="text-xs text-[#6b7280]">Used for reminders and automation timing.</p>
+              </div>
+            </div>
+
+            {validationError && <p className="text-red-400 text-sm mb-4">{validationError}</p>}
+
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleBack}
+                className="border-[#2a2a2a] text-zinc-300 hover:bg-[#1a1a1a] hover:text-white h-11 px-6 rounded-lg"
+              >
+                Back
+              </Button>
+              <Button
+                type="button"
+                onClick={handleNext}
+                size="lg"
+                className="bg-orange-500 hover:bg-orange-400 text-white font-semibold px-8 py-3 rounded-lg"
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 – Business Details */}
+        {step === 3 && (
           <div>
             <div className="mb-8">
               <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3 leading-tight">

@@ -1,0 +1,19 @@
+# Run Strata automations (reminders, lapsed clients, review requests) on a schedule.
+# Requires: GitHub repo secrets API_URL and CRON_SECRET matching backend env.
+name: Run automations
+on:
+  schedule:
+    - cron: "0 * * * *"  # Every hour at :00
+  workflow_dispatch:     # Allow manual run from Actions tab
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call runAutomations
+        run: |
+          curl -sf -X POST "${{ secrets.API_URL }}/api/actions/runAutomations" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

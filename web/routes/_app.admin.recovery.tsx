@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useOutletContext } from "react-router";
-import { useFindMany, useGlobalAction } from "@gadgetinc/react";
+import { useFindMany, useGlobalAction } from "../hooks/useApi";
 import { api } from "../api";
 import { format } from "date-fns";
 import {

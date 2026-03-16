@@ -2,3 +2,19 @@
 node_modules/
 **/.DS_Store
 .react-router/
+build/
+dist/
+backend/dist/
+.cursor/
+
+# Local env (secrets); .env.example is committed for reference
+.env
+.env.local
+.env.*.local
+*.local
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

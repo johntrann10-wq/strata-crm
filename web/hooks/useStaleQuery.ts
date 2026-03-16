@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useFindMany } from "@gadgetinc/react";
+import { useFindMany } from "./useApi";
 
 type UseFindManyParams = Parameters<typeof useFindMany>;
 

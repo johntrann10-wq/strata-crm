@@ -1,193 +1,47 @@
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
-import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { Badge } from "./ui/badge";
+/**
+ * Auto components — stubs after removing @gadgetinc/react.
+ * Use useFindMany/useFindOne from hooks/useApi with Table/Form from ui/ instead.
+ */
+import type { ComponentType } from "react";
+import { Table } from "./ui/table";
 import { Button } from "./ui/button";
-import { Calendar } from "./ui/calendar";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
-import { Checkbox } from "./ui/checkbox";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "./ui/command";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogOverlay,
-  DialogPortal,
-  DialogTitle,
-  DialogTrigger,
-} from "./ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
 import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { Skeleton } from "./ui/skeleton";
-import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Textarea } from "./ui/textarea";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
-import { cn } from "../lib/utils";
-import { makeAutocomponents, type ShadcnElements } from "@gadgetinc/react/auto/shadcn";
-import { toast } from "sonner";
 
-const elements: ShadcnElements = {
-  cn,
+const noop = () => null;
+const FormStub: ComponentType<React.PropsWithChildren<Record<string, unknown>>> = ({ children, ...props }) => (
+  <form {...props}>{children}</form>
+);
 
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-  Badge,
-  Button,
-  Calendar,
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-  Checkbox,
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogOverlay,
-  DialogPortal,
-  DialogTitle,
-  DialogTrigger,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  Input,
-  Label,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  Skeleton,
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-  Textarea,
-  toast,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-};
-
-const {
-  AutoButton,
-
-  AutoTable,
-
-  AutoForm,
-
-  AutoInput,
-  AutoBooleanInput,
-  AutoDateTimePicker,
-  AutoEmailInput,
-  AutoEncryptedStringInput,
-  AutoEnumInput,
-  AutoFileInput,
-  AutoHiddenInput,
-  AutoIdInput,
-  AutoJSONInput,
-  AutoNumberInput,
-  AutoPasswordInput,
-  AutoRichTextInput,
-  AutoRolesInput,
-  AutoStringInput,
-  AutoTextAreaInput,
-  AutoUrlInput,
-
-  AutoBelongsToInput,
-  AutoHasManyInput,
-  AutoHasManyThroughInput,
-  AutoHasOneInput,
-
-  AutoBelongsToForm,
-  AutoHasManyForm,
-  AutoHasManyThroughForm,
-  AutoHasManyThroughJoinModelForm,
-  AutoHasOneForm,
-
-  AutoSubmit,
-  SubmitErrorBanner,
-  SubmitResultBanner,
-  SubmitSuccessfulBanner,
-} = makeAutocomponents(elements);
-
-export {
-  AutoButton,
-  AutoTable,
-  AutoForm,
-  AutoInput,
-  AutoBooleanInput,
-  AutoDateTimePicker,
-  AutoEmailInput,
-  AutoEncryptedStringInput,
-  AutoEnumInput,
-  AutoFileInput,
-  AutoHiddenInput,
-  AutoIdInput,
-  AutoJSONInput,
-  AutoNumberInput,
-  AutoPasswordInput,
-  AutoRichTextInput,
-  AutoRolesInput,
-  AutoStringInput,
-  AutoTextAreaInput,
-  AutoUrlInput,
-  AutoBelongsToInput,
-  AutoHasManyInput,
-  AutoHasManyThroughInput,
-  AutoHasOneInput,
-  AutoBelongsToForm,
-  AutoHasManyForm,
-  AutoHasManyThroughForm,
-  AutoHasManyThroughJoinModelForm,
-  AutoHasOneForm,
-  AutoSubmit,
-  SubmitErrorBanner,
-  SubmitResultBanner,
-  SubmitSuccessfulBanner,
-};
+export const AutoButton = Button;
+export const AutoTable = Table;
+export const AutoForm = FormStub;
+export const AutoInput = Input;
+export const AutoBooleanInput = Input;
+export const AutoDateTimePicker = Input;
+export const AutoEmailInput = Input;
+export const AutoEncryptedStringInput = Input;
+export const AutoEnumInput = Input;
+export const AutoFileInput = Input;
+export const AutoHiddenInput = Input;
+export const AutoIdInput = Input;
+export const AutoJSONInput = Input;
+export const AutoNumberInput = Input;
+export const AutoPasswordInput = Input;
+export const AutoRichTextInput = Input;
+export const AutoRolesInput = Input;
+export const AutoStringInput = Input;
+export const AutoTextAreaInput = Input;
+export const AutoUrlInput = Input;
+export const AutoBelongsToInput = Input;
+export const AutoHasManyInput = Input;
+export const AutoHasManyThroughInput = Input;
+export const AutoHasOneInput = Input;
+export const AutoBelongsToForm = FormStub;
+export const AutoHasManyForm = FormStub;
+export const AutoHasManyThroughForm = FormStub;
+export const AutoHasManyThroughJoinModelForm = FormStub;
+export const AutoHasOneForm = FormStub;
+export const AutoSubmit = Button;
+export const SubmitErrorBanner = noop;
+export const SubmitResultBanner = noop;
+export const SubmitSuccessfulBanner = noop;

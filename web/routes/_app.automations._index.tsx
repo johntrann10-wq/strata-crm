@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useGlobalAction, useFindMany } from "@gadgetinc/react";
+import { useGlobalAction, useFindMany } from "../hooks/useApi";
 import { api } from "../api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

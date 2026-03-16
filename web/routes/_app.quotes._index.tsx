@@ -1,11 +1,11 @@
-import { AutoTable } from "@/components/auto";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, CheckCircle, Send, Loader2 } from "lucide-react";
 import { Link, useNavigate, useOutletContext } from "react-router";
 import type { AuthOutletContext } from "./_app";
 import { api } from "../api";
-import { useFindMany, useAction } from "@gadgetinc/react";
+import { useFindMany, useAction } from "../hooks/useApi";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -58,6 +58,12 @@ export default function QuotesIndexPage() {
   const isFirstLoad = lostFetching && !lostQuotes;
   const isRefetching = lostFetching && !!lostQuotes;
 
+  const [{ data: allQuotes, fetching: allFetching }] = useFindMany(api.quote, {
+    filter: businessId ? { business: { id: { equals: businessId } } } : undefined,
+    pause: !businessId,
+    sort: { createdAt: "Descending" },
+    first: 100,
+  });
   const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
 
   const handleSendFollowUp = async (quoteId: string) => {
@@ -116,56 +122,72 @@ export default function QuotesIndexPage() {
         </TabsList>
 
         <TabsContent value="all">
-          <AutoTable
-            model={api.quote}
-            columns={[
-              {
-                header: "Client",
-                render: ({ record }) => {
-                  const fullName = [record.client?.firstName, record.client?.lastName]
-                    .filter(Boolean)
-                    .join(" ");
-                  return record.clientId ? (
-                    <Link
-                      to={`/clients/${record.clientId}`}
-                      className="text-blue-600 hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {fullName || "—"}
-                    </Link>
-                  ) : (
-                    <span>{fullName || "—"}</span>
-                  );
-                },
-              },
-              "status",
-              {
-                header: "Total",
-                render: ({ record }) =>
-                  record.total != null
-                    ? new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: "USD",
-                      }).format(record.total)
-                    : "—",
-              },
-              {
-                header: "Created",
-                render: ({ record }) =>
-                  record.createdAt
-                    ? new Date(record.createdAt).toLocaleDateString()
-                    : "—",
-              },
-              {
-                header: "Expires",
-                render: ({ record }) =>
-                  record.expiresAt
-                    ? new Date(record.expiresAt).toLocaleDateString()
-                    : "—",
-              },
-            ]}
-            onClick={(record) => navigate(`/quotes/${record.id}`)}
-          />
+          {allFetching ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !allQuotes?.length ? (
+            <EmptyState title="No quotes" description="Create a quote to get started." />
+          ) : (
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Expires</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(allQuotes as Record<string, unknown>[]).map((record) => {
+                    const client = record.client as Record<string, unknown> | undefined;
+                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "—";
+                    return (
+                      <TableRow
+                        key={String(record.id)}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/quotes/${record.id}`)}
+                      >
+                        <TableCell>
+                          {record.clientId ? (
+                            <Link
+                              to={`/clients/${record.clientId}`}
+                              className="text-blue-600 hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {fullName}
+                            </Link>
+                          ) : (
+                            fullName
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={String(record.status ?? "")} type="quote" />
+                        </TableCell>
+                        <TableCell>
+                          {record.total != null
+                            ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(record.total as number)
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {record.createdAt
+                            ? new Date(record.createdAt as string).toLocaleDateString()
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {record.expiresAt
+                            ? new Date(record.expiresAt as string).toLocaleDateString()
+                            : "—"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="lost">

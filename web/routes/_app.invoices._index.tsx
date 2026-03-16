@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useOutletContext } from "react-router";
-import { useFindMany, useGlobalAction } from "@gadgetinc/react";
+import { useFindMany, useGlobalAction } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";

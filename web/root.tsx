@@ -1,13 +1,8 @@
-import { Provider as GadgetProvider } from "@gadgetinc/react";
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 import { Suspense } from "react";
-import { api } from "./api";
 import "./app.css";
-import { ProductionErrorBoundary, DevelopmentErrorBoundary } from "gadget-server/react-router";
 import { Toaster } from "@/components/ui/sonner";
-import type { GadgetConfig } from "gadget-server";
 import type { Route } from "./+types/root";
-
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -20,16 +15,30 @@ export const meta = () => [
 ];
 
 export type RootOutletContext = {
-  gadgetConfig: GadgetConfig;
-  csrfToken: string;
+  gadgetConfig?: {
+    authentication?: {
+      signInPath?: string;
+      redirectOnSuccessfulSignInPath?: string;
+    };
+  };
+  csrfToken?: string;
 };
 
 export const loader = async ({ context }: Route.LoaderArgs) => {
-  const { session, gadgetConfig } = context;
+  const { session, gadgetConfig } = context as {
+    session?: { get: (k: string) => unknown };
+    gadgetConfig?: RootOutletContext["gadgetConfig"];
+  };
 
   return {
-    gadgetConfig,
-    csrfToken: session?.get("csrfToken"),
+    gadgetConfig:
+      gadgetConfig ?? {
+        authentication: {
+          signInPath: "/sign-in",
+          redirectOnSuccessfulSignInPath: "/signed-in",
+        },
+      },
+    csrfToken: session?.get?.("csrfToken"),
   };
 };
 
@@ -45,10 +54,8 @@ export default function App({ loaderData }: Route.ComponentProps) {
       </head>
       <body>
         <Suspense>
-          <GadgetProvider api={api}>
-            <Outlet context={{ gadgetConfig, csrfToken }} />
-            <Toaster richColors />
-          </GadgetProvider>
+          <Outlet context={{ gadgetConfig, csrfToken }} />
+          <Toaster richColors />
         </Suspense>
         <ScrollRestoration />
         <Scripts />
@@ -57,7 +64,20 @@ export default function App({ loaderData }: Route.ComponentProps) {
   );
 }
 
-// Default Gadget error boundary component
-// This can be replaced with your own custom error boundary implementation
-// For more info, checkout https://reactrouter.com/how-to/error-boundary#1-add-a-root-error-boundary
-export const ErrorBoundary = isProduction ? ProductionErrorBoundary : DevelopmentErrorBoundary;
+export function ErrorBoundary() {
+  return (
+    <html lang="en">
+      <head>
+        <Meta />
+        <Links />
+      </head>
+      <body>
+        <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
+          <h1>Something went wrong</h1>
+          <p>An error occurred. Please refresh the page or try again later.</p>
+        </div>
+        <Scripts />
+      </body>
+    </html>
+  );
+}

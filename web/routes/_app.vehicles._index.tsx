@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useOutletContext } from "react-router";
-import { useFindMany, useFindFirst } from "@gadgetinc/react";
+import { useFindMany, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

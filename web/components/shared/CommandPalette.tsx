@@ -1,7 +1,7 @@
 import React from "react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { useFindMany } from "@gadgetinc/react";
+import { useFindMany } from "../../hooks/useApi";
 import { api } from "../../api";
 import { useCommandPalette, usePageContext } from "./CommandPaletteContext";
 import {
@@ -76,7 +76,7 @@ function statusColor(status: string): string {
   }
 }
 
-export function CommandPalette() {
+export function CommandPalette({ enabledModules = new Set<string>() }: { enabledModules?: Set<string> }) {
   const { open, setOpen } = useCommandPalette();
   const { pageContext } = usePageContext();
   const navigate = useNavigate();
@@ -311,18 +311,24 @@ export function CommandPalette() {
                 <Receipt className="mr-2 h-4 w-4" />
                 Quotes
               </CommandItem>
-              <CommandItem onSelect={() => go("/analytics")}>
-                <BarChart2 className="mr-2 h-4 w-4" />
-                Analytics
-              </CommandItem>
-              <CommandItem onSelect={() => go("/lapsed-clients")}>
-                <TrendingDown className="mr-2 h-4 w-4" />
-                Lapsed Clients
-              </CommandItem>
-              <CommandItem onSelect={() => go("/route-planner")}>
-                <Route className="mr-2 h-4 w-4" />
-                Route Planner
-              </CommandItem>
+              {enabledModules.has("analytics") && (
+                <CommandItem onSelect={() => go("/analytics")}>
+                  <BarChart2 className="mr-2 h-4 w-4" />
+                  Analytics
+                </CommandItem>
+              )}
+              {enabledModules.has("lapsedClients") && (
+                <CommandItem onSelect={() => go("/lapsed-clients")}>
+                  <TrendingDown className="mr-2 h-4 w-4" />
+                  Lapsed Clients
+                </CommandItem>
+              )}
+              {enabledModules.has("routePlanner") && (
+                <CommandItem onSelect={() => go("/route-planner")}>
+                  <Route className="mr-2 h-4 w-4" />
+                  Route Planner
+                </CommandItem>
+              )}
               <CommandItem onSelect={() => go("/services")}>
                 <Wrench className="mr-2 h-4 w-4" />
                 Services

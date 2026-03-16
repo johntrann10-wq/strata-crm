@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useOutletContext } from "react-router";
-import { useFindFirst, useGlobalAction } from "@gadgetinc/react";
+import { useFindFirst, useGlobalAction } from "../hooks/useApi";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
+import { ModuleGuard } from "@/components/shared/ModuleGuard";
 
 interface LapsedClient {
   clientId: string;
@@ -57,7 +58,7 @@ function getUrgencyStyle(urgency: string): string {
 }
 
 export default function LapsedClientsPage() {
-  const { user } = useOutletContext<AuthOutletContext>();
+  const { user, enabledModules } = useOutletContext<AuthOutletContext>();
 
   const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
   const [sendingIds, setSendingIds] = useState<Set<string>>(new Set());
@@ -165,6 +166,7 @@ export default function LapsedClientsPage() {
   };
 
   return (
+    <ModuleGuard module="lapsedClients" enabledModules={enabledModules ?? new Set()} title="Lapsed Clients is for businesses that track repeat visits">
     <div className="p-4 md:p-6 space-y-6">
       {/* Top Banner */}
       <div className="rounded-xl bg-gray-950 text-white p-6">
@@ -510,5 +512,6 @@ export default function LapsedClientsPage() {
         </>
       )}
     </div>
+    </ModuleGuard>
   );
 }
