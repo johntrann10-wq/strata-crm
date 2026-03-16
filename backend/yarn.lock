@@ -154,7 +154,16 @@
   dependencies:
     "@types/express" "*"
 
-"@types/express@*", "@types/express@^4.17.21":
+"@types/express@*":
+  version "5.0.6"
+  resolved "https://registry.npmjs.org/@types/express/-/express-5.0.6.tgz"
+  integrity sha512-sKYVuV7Sv9fbPIt/442koC7+IIwK5olP1KWeD88e/idgoJqDm3JV/YUiPwkoKK92ylff2MGxSz1CSjsXelx0YA==
+  dependencies:
+    "@types/body-parser" "*"
+    "@types/express-serve-static-core" "^5.0.0"
+    "@types/serve-static" "^2"
+
+"@types/express@^4.17.21":
   version "4.17.25"
   resolved "https://registry.npmjs.org/@types/express/-/express-4.17.25.tgz"
   integrity sha512-dVd04UKsfpINUnK0yBoYHDF3xu7xVH4BuDotC/xGuycx4CgbP48X/KF/586bcObxT0HENHXEU8Nqtu6NR+eKhw==
@@ -186,7 +195,7 @@
   dependencies:
     undici-types "~7.18.0"
 
-"@types/node@^18.0.0 || >=20.0.0", "@types/node@^22.10.0", "@types/node@>=16":
+"@types/node@^22.10.0":
   version "22.19.15"
   resolved "https://registry.npmjs.org/@types/node/-/node-22.19.15.tgz"
   integrity sha512-F0R/h2+dsy5wJAUe3tAU6oqa2qbWY5TpNfL/RGmo1y38hiyO1w3x2jPtt76wmuaJI4DQnOBu21cNXQ2STIUUWg==
@@ -200,7 +209,7 @@
   dependencies:
     "@types/node" "*"
 
-"@types/pg@*", "@types/pg@^8.11.6":
+"@types/pg@^8.11.6":
   version "8.18.0"
   resolved "https://registry.npmjs.org/@types/pg/-/pg-8.18.0.tgz"
   integrity sha512-gT+oueVQkqnj6ajGJXblFR4iavIXWsGAFCk3dP4Kki5+a9R4NMt0JARdk6s8cUKcfUoqP5dAtDSLU8xYUTFV+Q==
@@ -775,7 +784,7 @@ esbuild@^0.21.3:
     "@esbuild/win32-ia32" "0.21.5"
     "@esbuild/win32-x64" "0.21.5"
 
-esbuild@^0.25.4, "esbuild@>=0.12 <1":
+esbuild@^0.25.4:
   version "0.25.12"
   resolved "https://registry.npmjs.org/esbuild/-/esbuild-0.25.12.tgz"
   integrity sha512-bbPBYYrtZbkt6Os6FiTLCTFxvq4tt3JKall1vRwshA3fdVztsLAatFaZobhkBC8/BrPetoa0oksYoKXoG4ryJg==
@@ -1420,7 +1429,7 @@ pg-types@^2.2.0, pg-types@2.2.0:
     postgres-date "~1.0.4"
     postgres-interval "^1.1.0"
 
-pg@^8.13.0, pg@^8.7.3, pg@>=8, pg@>=8.0:
+pg@^8.13.0, pg@^8.7.3:
   version "8.20.0"
   resolved "https://registry.npmjs.org/pg/-/pg-8.20.0.tgz"
   integrity sha512-ldhMxz2r8fl/6QkXnBD3CR9/xg694oT6DZQ2s6c/RI28OjtSOpxnPrUCGOBJ46RCUxcWdx3p6kw/xnDHjKvaRA==
