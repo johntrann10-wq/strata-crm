@@ -189,6 +189,10 @@ export function useActionForm(
             setErrors({ root: { message: res.error.message } });
             return;
           }
+          // If the action returned a JWT token, persist it for subsequent requests
+          if (res && (res as any).data && (res as any).data.token && typeof window !== "undefined") {
+            window.localStorage.setItem("authToken", (res as any).data.token as string);
+          }
           setIsSubmitSuccessful(true);
           options?.onSuccess?.();
         })
