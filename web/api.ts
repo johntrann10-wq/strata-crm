@@ -1,24 +1,33 @@
 /**
  * Fetch-based API client for Node API endpoints.
- * Replaces @gadget-client/strata; all requests go to /api/*.
- * In production (Vercel), set VITE_API_URL to your Railway backend URL so the client calls the right origin.
+ * Replaces @gadget-client/strata; all requests go to /node-api/* on Vercel,
+ * which is rewritten to your Railway backend's /api/*.
  */
-
-/** Base URL for the API (e.g. your Railway backend). Empty = same origin. Use for fetch("/api/...") in the client. */
+/** Base URL for the API. Empty = same origin. */
 export const API_BASE =
   typeof window !== "undefined"
-    ? ((import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ?? "")
+    ? ""
     : process.env.API_BASE ?? "";
-
+function getToken() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem("authToken");
+}
 async function request<T = unknown>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
-  const url = path.startsWith("http") ? path : `${API_BASE}/api${path}`;
+  const url = path.startsWith("http") ? path : `${API_BASE}/node-api${path}`;
+  const token = getToken();
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+    ...init.headers,
+  };
+  if (token) {
+    (headers as any).Authorization = `Bearer ${token}`;
+  }
   const res = await fetch(url, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init.headers },
-    credentials: "include",
+    headers,
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { message?: string };
@@ -27,7 +36,6 @@ async function request<T = unknown>(
   const text = await res.text();
   return (text ? JSON.parse(text) : null) as T;
 }
-
 function resource(path: string) {
   const base = path.startsWith("/") ? path : `/${path}`;
   return {
@@ -53,7 +61,6 @@ function resource(path: string) {
       request(`${base}/${encodeURIComponent(id)}`, { method: "DELETE" }),
   };
 }
-
 function serializeQuery(q: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(q)) {
@@ -62,7 +69,6 @@ function serializeQuery(q: Record<string, unknown>): Record<string, string> {
   }
   return out;
 }
-
 function action(path: string) {
   const [resourceName, actionName] = path.split("/").filter(Boolean);
   const base = `/${resourceName}`;
@@ -72,7 +78,6 @@ function action(path: string) {
       { method: "POST", body: JSON.stringify(params ?? {}) }
     );
 }
-
 // Resource endpoints matching your Node API and frontend usage
 export const api = {
   appointment: {
@@ -180,7 +185,7 @@ export const api = {
     findOne: (id: string, _opts?: Record<string, unknown>) =>
       request<unknown>(`/users/${encodeURIComponent(id)}`),
   },
-  // Global actions (POST /api/actions/:name)
+  // Global actions (POST /node-api/actions/:name)
   getDashboardStats: (params?: Record<string, unknown>) =>
     request<unknown>("/actions/getDashboardStats", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getCapacityInsights: (params?: Record<string, unknown>) =>
