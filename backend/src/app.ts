@@ -31,7 +31,7 @@ if (frontendOrigin) {
     res.setHeader("Access-Control-Allow-Origin", frontendOrigin);
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-cron-secret");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-cron-secret, Authorization");
     if (_req.method === "OPTIONS") {
       res.status(204).end();
       return;
