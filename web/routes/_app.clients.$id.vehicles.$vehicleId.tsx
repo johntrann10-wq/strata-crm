@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router";
 import { useFindOne, useFindFirst, useAction } from "../hooks/useApi";
-import { api } from "../api";
+import { api, API_BASE } from "../api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -135,7 +135,7 @@ export default function VehicleEditPage() {
     setVinError("");
     setIsDecodingVin(true);
     try {
-      const response = await fetch(`/api/decode-vin?vin=${encodeURIComponent(vin.trim())}`);
+      const response = await fetch(`${API_BASE}/api/decode-vin?vin=${encodeURIComponent(vin.trim())}`);
       const data = await response.json();
       if (response.ok && data) {
         if (data.year) setYear(data.year.toString());

@@ -110,6 +110,111 @@ const BILLING_FEATURES = [
   "Payment tracking (cash, card, Venmo & more)",
 ];
 
+function BillingTab({
+  billingStatus,
+  setBillingStatus,
+  billingPortalLoading,
+  setBillingPortalLoading,
+  billingFeatures,
+}: {
+  billingStatus: { status: string | null; trialEndsAt: string | null; currentPeriodEnd: string | null } | null;
+  setBillingStatus: (s: { status: string | null; trialEndsAt: string | null; currentPeriodEnd: string | null } | null) => void;
+  billingPortalLoading: boolean;
+  setBillingPortalLoading: (v: boolean) => void;
+  billingFeatures: string[];
+}) {
+  useEffect(() => {
+    let cancelled = false;
+    api.billing.getStatus()
+      .then((s) => { if (!cancelled) setBillingStatus(s); })
+      .catch(() => { if (!cancelled) setBillingStatus({ status: null, trialEndsAt: null, currentPeriodEnd: null }); });
+    return () => { cancelled = true; };
+  }, [setBillingStatus]);
+
+  const handleManageSubscription = async () => {
+    setBillingPortalLoading(true);
+    try {
+      const result = await api.billing.createPortalSession();
+      if (result?.url) window.location.href = result.url;
+      else toast.error("Could not open billing portal.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setBillingPortalLoading(false);
+    }
+  };
+
+  const isActive = billingStatus?.status === "active" || billingStatus?.status === "trialing";
+  const trialEnd = billingStatus?.trialEndsAt ? new Date(billingStatus.trialEndsAt) : null;
+  const periodEnd = billingStatus?.currentPeriodEnd ? new Date(billingStatus.currentPeriodEnd) : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3 mb-1">
+          <div className="p-2 rounded-md bg-primary/10">
+            <CreditCard className="h-5 w-5 text-primary" />
+          </div>
+          <CardTitle>Plan &amp; Billing</CardTitle>
+        </div>
+        <CardDescription>
+          Strata is $29/month. First month free. Manage your subscription and payment method below.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {billingStatus && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={isActive ? "default" : "secondary"}>
+              {billingStatus.status === "trialing" ? "Free trial" : billingStatus.status === "active" ? "Active" : billingStatus.status ?? "No subscription"}
+            </Badge>
+            {trialEnd && billingStatus.status === "trialing" && (
+              <span className="text-sm text-muted-foreground">
+                Trial ends {trialEnd.toLocaleDateString()}
+              </span>
+            )}
+            {periodEnd && billingStatus.status === "active" && (
+              <span className="text-sm text-muted-foreground">
+                Renews {periodEnd.toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        )}
+        <div>
+          <p className="text-sm font-medium mb-3">Everything included:</p>
+          <ul className="space-y-2">
+            {billingFeatures.map((feature) => (
+              <li key={feature} className="flex items-center gap-2 text-sm">
+                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                {feature}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <Separator />
+        {isActive && (
+          <Button
+            onClick={handleManageSubscription}
+            disabled={billingPortalLoading}
+          >
+            {billingPortalLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ExternalLink className="h-4 w-4 mr-2" />}
+            Manage subscription
+          </Button>
+        )}
+        {!isActive && billingStatus !== null && (
+          <div className="space-y-2">
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              Subscribe to keep using Strata. Your data is saved.
+            </p>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/subscribe">Subscribe now — $29/mo, first month free</Link>
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface FormData {
   name: string;
   type: string;
@@ -158,6 +263,8 @@ export default function SettingsPage() {
   const { user, businessId } = useOutletContext<AuthOutletContext>();
   const [activeTab, setActiveTab] = useState("profile");
   const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
+  const [billingStatus, setBillingStatus] = useState<{ status: string | null; trialEndsAt: string | null; currentPeriodEnd: string | null } | null>(null);
+  const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [editingLocation, setEditingLocation] = useState<any | null>(null);
   const [deleteLocationId, setDeleteLocationId] = useState<string | null>(null);
@@ -717,41 +824,13 @@ export default function SettingsPage() {
 
         {/* ─── Billing Tab ─── */}
         <TabsContent value="billing" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3 mb-1">
-                <div className="p-2 rounded-md bg-primary/10">
-                  <CreditCard className="h-5 w-5 text-primary" />
-                </div>
-                <CardTitle>Plan &amp; Billing</CardTitle>
-              </div>
-              <CardDescription>
-                Your plan and billing details are managed outside this application.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Feature list */}
-              <div>
-                <p className="text-sm font-medium mb-3">Everything included in your plan:</p>
-                <ul className="space-y-2">
-                  {BILLING_FEATURES.map((feature) => (
-                    <li key={feature} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <Separator />
-
-              {/* Contact note */}
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Lock className="h-3.5 w-3.5 shrink-0" />
-                <span>To make changes to your subscription, please contact your account administrator.</span>
-              </div>
-            </CardContent>
-          </Card>
+          <BillingTab
+            billingStatus={billingStatus}
+            setBillingStatus={setBillingStatus}
+            billingPortalLoading={billingPortalLoading}
+            setBillingPortalLoading={setBillingPortalLoading}
+            billingFeatures={BILLING_FEATURES}
+          />
         </TabsContent>
         {/* ─── Backups Tab ─── */}
         <TabsContent value="backups" className="space-y-6">

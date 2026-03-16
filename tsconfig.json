@@ -3,11 +3,9 @@
   "references": [
     {
       "path": "./tsconfig.web.json"
-    },
-    {
-      "path": "./tsconfig.api.json"
     }
   ],
+  "exclude": ["api", "backend", "node_modules"],
   "compilerOptions": {
     "strict": true,
     "allowJs": true,

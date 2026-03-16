@@ -15,8 +15,7 @@
       "ES2022"
     ],
     "types": [
-      "vite/client",
-      "./.gadget/server/dist-esm/index"
+      "vite/client"
     ],
     "target": "ES2022",
     "module": "ES2022",

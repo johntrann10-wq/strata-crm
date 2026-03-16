@@ -92,6 +92,15 @@ export default function LandingPage() {
             wrappers, and mechanics.
           </p>
 
+          {/* Pricing highlight */}
+          <div className="rounded-xl border border-orange-200 bg-white/80 px-6 py-3 text-center">
+            <p className="text-gray-700 font-semibold">
+              <span className="text-2xl text-orange-600">$29</span>
+              <span className="text-gray-500 font-normal">/month</span>
+              <span className="ml-2 text-green-600 font-medium">— First month free</span>
+            </p>
+          </div>
+
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 mt-2">
             <Button

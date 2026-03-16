@@ -21,6 +21,8 @@ import { servicesRouter } from "./routes/services.js";
 import { actionsRouter } from "./routes/actions.js";
 import { activityLogsRouter } from "./routes/activity-logs.js";
 import { notificationLogsRouter } from "./routes/notification-logs.js";
+import { billingRouter, handleStripeWebhook } from "./routes/billing.js";
+import { requireSubscription } from "./middleware/subscription.js";
 
 const app = express();
 
@@ -40,6 +42,13 @@ if (frontendOrigin) {
   });
 }
 
+// Stripe webhook needs raw body (must be before express.json())
+app.post(
+  "/api/billing/webhook",
+  express.raw({ type: "application/json" }),
+  (req, res, next) => handleStripeWebhook(req, res).catch(next)
+);
+
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.use(
@@ -55,20 +64,21 @@ app.use(requestLogging);
 
 app.use("/api/auth", authRouter);
 app.use("/api/users", optionalAuth, usersRouter);
-app.use("/api/businesses", optionalAuth, businessesRouter);
-app.use("/api/appointments", optionalAuth, appointmentsRouter);
-app.use("/api/invoices", optionalAuth, invoicesRouter);
-app.use("/api/invoice-line-items", optionalAuth, invoiceLineItemsRouter);
-app.use("/api/payments", optionalAuth, paymentsRouter);
-app.use("/api/clients", optionalAuth, clientsRouter);
-app.use("/api/vehicles", optionalAuth, vehiclesRouter);
-app.use("/api/quotes", optionalAuth, quotesRouter);
-app.use("/api/staff", optionalAuth, staffRouter);
-app.use("/api/locations", optionalAuth, locationsRouter);
-app.use("/api/services", optionalAuth, servicesRouter);
-app.use("/api/actions", optionalAuth, actionsRouter);
-app.use("/api/activity-logs", optionalAuth, activityLogsRouter);
-app.use("/api/notification-logs", optionalAuth, notificationLogsRouter);
+app.use("/api/billing", billingRouter);
+app.use("/api/businesses", optionalAuth, requireSubscription, businessesRouter);
+app.use("/api/appointments", optionalAuth, requireSubscription, appointmentsRouter);
+app.use("/api/invoices", optionalAuth, requireSubscription, invoicesRouter);
+app.use("/api/invoice-line-items", optionalAuth, requireSubscription, invoiceLineItemsRouter);
+app.use("/api/payments", optionalAuth, requireSubscription, paymentsRouter);
+app.use("/api/clients", optionalAuth, requireSubscription, clientsRouter);
+app.use("/api/vehicles", optionalAuth, requireSubscription, vehiclesRouter);
+app.use("/api/quotes", optionalAuth, requireSubscription, quotesRouter);
+app.use("/api/staff", optionalAuth, requireSubscription, staffRouter);
+app.use("/api/locations", optionalAuth, requireSubscription, locationsRouter);
+app.use("/api/services", optionalAuth, requireSubscription, servicesRouter);
+app.use("/api/actions", optionalAuth, requireSubscription, actionsRouter);
+app.use("/api/activity-logs", optionalAuth, requireSubscription, activityLogsRouter);
+app.use("/api/notification-logs", optionalAuth, requireSubscription, notificationLogsRouter);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 

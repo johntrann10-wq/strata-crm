@@ -48,6 +48,13 @@ export class ConflictError extends AppError {
   }
 }
 
+export class SubscriptionRequiredError extends AppError {
+  constructor(message = "Active subscription required") {
+    super(message, 402, "SUBSCRIPTION_REQUIRED");
+    this.name = "SubscriptionRequiredError";
+  }
+}
+
 /** Safe shape for API error responses */
 export function toApiError(err: unknown): { message: string; code?: string } {
   if (err instanceof AppError) {

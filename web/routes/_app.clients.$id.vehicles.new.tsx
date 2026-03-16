@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useFindFirst, useAction } from "../hooks/useApi";
-import { api } from "../api";
+import { api, API_BASE } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,7 +87,7 @@ export default function NewVehiclePage() {
     setVinError("");
     setVinDecoded(false);
     try {
-      const response = await fetch(`/api/decode-vin?vin=${encodeURIComponent(vin.trim())}`);
+      const response = await fetch(`${API_BASE}/api/decode-vin?vin=${encodeURIComponent(vin.trim())}`);
       const result = await response.json();
       if (!response.ok || result.error) {
         setVinError(result.error || "VIN lookup failed");

@@ -154,7 +154,7 @@ export default function OnboardingPage() {
 
     if (result?.data) {
       await api.business.completeOnboarding(result.data.id);
-      navigate("/signed-in");
+      navigate("/subscribe");
     }
   };
 

@@ -23,6 +23,7 @@
 import type { ExoticComponent, ReactNode } from "react";
 import { useState } from "react";
 import { Link, useLocation } from "react-router";
+import { API_BASE } from "../../api";
 import { NavDrawer } from "@/components/shared/NavDrawer";
 import { Home, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -163,7 +164,7 @@ export const SecondaryNavigation = ({ icon }: { icon: ReactNode }) => {
 
 const SignOutOption = () => {
   const handleSignOut = () => {
-    fetch("/api/auth/sign-out", { method: "POST", credentials: "include" }).then(() => {
+    fetch(`${API_BASE}/api/auth/sign-out`, { method: "POST", credentials: "include" }).then(() => {
       window.location.href = "/";
     });
   };

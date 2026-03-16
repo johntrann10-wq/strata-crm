@@ -4,6 +4,9 @@
   "description": "Internal package for Gadget app strata (Development environment)",
   "license": "UNLICENSED",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev",
@@ -14,7 +17,9 @@
     "test": "yarn test:backend",
     "test:backend": "cd backend && yarn test",
     "test:e2e": "playwright test",
-    "predeploy": "yarn test:backend && yarn build:backend && yarn build"
+    "predeploy": "yarn test:backend && yarn build:backend && yarn build",
+    "run:db": "docker compose up -d",
+    "run": "node run-local.js"
   },
   "dependencies": {
     "@mdxeditor/editor": "^3.8.0",
@@ -40,6 +45,7 @@
     "@react-router/node": "^7.12.0",
     "@react-router/serve": "^7.12.0",
     "@tailwindcss/vite": "^4.1.7",
+    "@vercel/react-router": "^1.2.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.0",

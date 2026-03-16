@@ -26,4 +26,19 @@ ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS retry_count integer NOT N
 ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS last_retry_at timestamp with time zone;
 ```
 
+**businesses (Stripe subscription — $29/mo, first month free)**
+- `stripe_customer_id` text NULL
+- `stripe_subscription_id` text NULL
+- `subscription_status` text NULL  -- trialing|active|past_due|canceled|incomplete_expired
+- `trial_ends_at` timestamp with time zone NULL
+- `current_period_end` timestamp with time zone NULL
+
+```sql
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_customer_id text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_subscription_id text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS subscription_status text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS trial_ends_at timestamp with time zone;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS current_period_end timestamp with time zone;
+```
+
 Then run `yarn db:migrate` as usual (or use your migration workflow).

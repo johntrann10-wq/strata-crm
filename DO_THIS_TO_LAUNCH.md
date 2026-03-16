@@ -55,13 +55,14 @@ After deploy, note your backend URL (e.g. `https://your-api.onrender.com`).
 
 Import this repo. Root is the repo root (not `web/`). Build and output are set in `vercel.json` / `netlify.toml`.
 
-**Environment variable:**
+**Environment variables** (use your **Railway** backend URL, no trailing slash):
 
 | Name | Value |
 |------|--------|
-| `API_BASE` | Your backend URL, e.g. `https://your-api.onrender.com` (no trailing slash) |
+| `VITE_API_URL` | Backend URL, e.g. `https://your-app.up.railway.app` — used by the browser to call your API |
+| `API_BASE` | Same backend URL — used by server-side loaders (e.g. email verification) |
 
-Deploy. Note your frontend URL.
+Deploy. Note your frontend URL. On the backend (Railway), set `FRONTEND_URL` to this Vercel URL so CORS and redirects work.
 
 ---
 

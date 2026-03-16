@@ -1,9 +1,14 @@
 /**
  * Fetch-based API client for Node API endpoints.
  * Replaces @gadget-client/strata; all requests go to /api/*.
+ * In production (Vercel), set VITE_API_URL to your Railway backend URL so the client calls the right origin.
  */
 
-const API_BASE = typeof window !== "undefined" ? "" : process.env.API_BASE ?? "";
+/** Base URL for the API (e.g. your Railway backend). Empty = same origin. Use for fetch("/api/...") in the client. */
+export const API_BASE =
+  typeof window !== "undefined"
+    ? ((import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ?? "")
+    : process.env.API_BASE ?? "";
 
 async function request<T = unknown>(
   path: string,
@@ -157,6 +162,7 @@ export const api = {
     signUp: (params: Record<string, unknown>) =>
       request<unknown>("/auth/sign-up", { method: "POST", body: JSON.stringify(params) }),
     signOut: () => request("/auth/sign-out", { method: "POST" }),
+    me: () => request<{ id: string; email: string; firstName?: string; lastName?: string }>("/auth/me"),
     sendResetPassword: (params: Record<string, unknown>) =>
       request<unknown>("/auth/forgot-password", { method: "POST", body: JSON.stringify(params) }),
     resetPassword: (params: Record<string, unknown>) =>
@@ -201,4 +207,12 @@ export const api = {
     request<unknown>("/actions/getAnalyticsData", { method: "POST", body: JSON.stringify(params ?? {}) }),
   optimizeDailyRoute: (params?: Record<string, unknown>) =>
     request<unknown>("/actions/optimizeDailyRoute", { method: "POST", body: JSON.stringify(params ?? {}) }),
+  // Billing: $29/mo, first month free
+  billing: {
+    getStatus: () => request<{ status: string | null; trialEndsAt: string | null; currentPeriodEnd: string | null }>("/billing/status"),
+    createCheckoutSession: () =>
+      request<{ url: string }>("/billing/create-checkout-session", { method: "POST" }),
+    createPortalSession: () =>
+      request<{ url: string }>("/billing/portal", { method: "POST" }),
+  },
 } as const;

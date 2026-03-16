@@ -39,7 +39,22 @@ All tenant-scoped API routes must use `requireAuth` + `requireTenant` and filter
 
 ---
 
-## 2. SMTP email setup
+## 2. Stripe subscription billing ($29/mo, first month free)
+
+| Item | Status | Notes |
+|------|--------|--------|
+| **Stripe account** | ☐ | Create at [dashboard.stripe.com](https://dashboard.stripe.com). Get Secret key (Settings → API keys). |
+| **Product & Price** | ☐ | Create Product (e.g. "Strata Monthly") and recurring Price $29/month. Copy Price ID (`price_...`). |
+| **Env vars** | ☐ | Backend: `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `FRONTEND_URL`. |
+| **Webhook** | ☐ | Stripe → Developers → Webhooks → Add `https://your-api-url/api/billing/webhook`. Events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Copy signing secret to `STRIPE_WEBHOOK_SECRET`. |
+| **Customer portal** | ☐ | Stripe → Settings → Billing → Customer portal: enable so customers can update payment method and cancel. |
+| **DB columns** | ☐ | Run migration or apply SQL in [backend/MIGRATION_STAGE2.md](backend/MIGRATION_STAGE2.md) for `businesses` (stripe_customer_id, stripe_subscription_id, subscription_status, trial_ends_at, current_period_end). |
+
+**Flow:** Sign up → Onboarding → Subscribe page → Stripe Checkout (30-day trial) → Dashboard. Settings → Billing: "Manage subscription" opens Stripe Customer Portal.
+
+---
+
+## 3. SMTP email setup
 
 Email is used for: appointment confirmations, reminders, payment receipts, review requests, lapsed client re-engagement, weekly summary, and notification retries.
 
@@ -55,7 +70,7 @@ Email is used for: appointment confirmations, reminders, payment receipts, revie
 
 ---
 
-## 3. Automations run on schedule
+## 4. Automations run on schedule
 
 Automations (appointment reminders, lapsed client detection, review requests) are triggered by calling the cron endpoint. They do **not** run automatically unless you schedule them.
 
@@ -85,7 +100,7 @@ jobs:
 
 ---
 
-## 4. Documentation for onboarding new users
+## 5. Documentation for onboarding new users
 
 | Item | Status | Notes |
 |------|--------|--------|
@@ -96,13 +111,13 @@ jobs:
 
 ---
 
-## 5. Production-ready, tested, deployable
+## 6. Production-ready, tested, deployable
 
 ### 5.1 Backend
 
 | Item | Status | Notes |
 |------|--------|--------|
-| **Env (production)** | ☐ | `DATABASE_URL`, `SESSION_SECRET`, `SMTP_*`, `PORT`. Optional: `CRON_SECRET`, `LOG_LEVEL`. |
+| **Env (production)** | ☐ | `DATABASE_URL`, `SESSION_SECRET`, `SMTP_*`, `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `FRONTEND_URL`, `PORT`. Optional: `CRON_SECRET`, `LOG_LEVEL`. |
 | **SESSION_SECRET** | ☐ | Strong random string; never default in production. |
 | **Migrations** | ☐ | Run `yarn db:migrate` (or your migration process) against production DB before first deploy. |
 | **Build** | ☐ | `cd backend && yarn build` succeeds. |
@@ -150,7 +165,7 @@ jobs:
 
 ---
 
-## 6. Post-launch smoke checks
+## 7. Post-launch smoke checks
 
 - [ ] Sign up a new user and complete onboarding (business type, details).
 - [ ] Create a client and vehicle, then an appointment.

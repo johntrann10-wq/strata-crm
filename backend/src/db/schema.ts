@@ -57,6 +57,12 @@ export const businesses = pgTable("businesses", {
   onboardingComplete: boolean("onboarding_complete").default(false),
   staffCount: integer("staff_count"),
   operatingHours: text("operating_hours"),
+  // Stripe subscription: $29/mo, first month free (trial)
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  subscriptionStatus: text("subscription_status"), // trialing|active|past_due|canceled|incomplete_expired
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -25,8 +25,19 @@ Copy from `backend/.env.example`:
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` — SMTP credentials (optional: `SMTP_FROM` for From address)
 - `SESSION_SECRET` — random string for session signing (required in production)
 - `CRON_SECRET` — optional; if set, `POST /api/actions/runAutomations` requires header `x-cron-secret: <CRON_SECRET>` (for scheduled automations)
+- `FRONTEND_URL` — origin of the frontend (e.g. `https://your-app.vercel.app`) for CORS and Stripe redirect URLs
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` — required for paid subscriptions ($29/mo, first month free). See **Stripe setup** below.
 - `PORT` — server port (default 3001)
 - `LOG_LEVEL` — optional: `debug` | `info` | `warn` | `error`
+
+### Stripe (subscription billing)
+
+1. Create a [Stripe](https://dashboard.stripe.com) account and get **Secret key** (Settings → API keys).
+2. Create a **Product** (e.g. "Strata Monthly") and a **Price**: $29/month, recurring. Copy the Price ID (`price_...`).
+3. Set **Customer portal** (Settings → Billing → Customer portal) so customers can update payment method and cancel.
+4. Add env: `STRIPE_SECRET_KEY=sk_live_...`, `STRIPE_PRICE_ID=price_...`.
+5. **Webhook**: Stripe Dashboard → Developers → Webhooks → Add endpoint: `https://your-api.onrender.com/api/billing/webhook`. Select events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Copy the **Signing secret** (`whsec_...`) and set `STRIPE_WEBHOOK_SECRET=whsec_...`.
+6. Ensure `FRONTEND_URL` is set so checkout success/cancel and portal return URLs are correct.
 
 ## Backend (Node)
 

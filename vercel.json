@@ -1,6 +1,5 @@
 {
+  "installCommand": "yarn install",
   "buildCommand": "yarn build",
-  "outputDirectory": "build/client",
-  "framework": null,
-  "installCommand": "yarn install"
+  "framework": "react-router"
 }

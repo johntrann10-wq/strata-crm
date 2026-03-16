@@ -51,14 +51,9 @@ export const loader = async ({ context }: Route.LoaderArgs) => {
     gadgetConfig?: { authentication?: { signInPath?: string } };
   };
 
-  const userId = session?.get("user") as string | undefined;
-  const signInPath = gadgetConfig?.authentication?.signInPath ?? "/sign-in";
-
-  if (!userId) {
-    return redirect(signInPath);
-  }
-
-  return { userId };
+  // Server may not have session (e.g. dev with separate API); layout will re-check via /api/auth/me
+  const userId = (session?.get("user") as string | undefined) ?? null;
+  return { userId, signInPath: gadgetConfig?.authentication?.signInPath ?? "/sign-in" };
 };
 
 export type AuthOutletContext = RootOutletContext & {
@@ -333,24 +328,62 @@ function AppLayoutInner({
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const rootOutletContext = useOutletContext<RootOutletContext>();
   const navigate = useNavigate();
+  const signInPath = loaderData.signInPath ?? "/sign-in";
+  // When server has no session (e.g. dev with proxied API), resolve user via /api/auth/me
+  const [clientUserId, setClientUserId] = useState<string | null>(null);
+  const [authCheckDone, setAuthCheckDone] = useState(!!loaderData.userId);
+  const effectiveUserId = loaderData.userId ?? clientUserId;
+
+  useEffect(() => {
+    if (loaderData.userId) {
+      setAuthCheckDone(true);
+      return;
+    }
+    let cancelled = false;
+    api.user
+      .me()
+      .then((me) => {
+        if (!cancelled) {
+          setClientUserId(me.id);
+          setAuthCheckDone(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAuthCheckDone(true);
+          navigate(signInPath, { replace: true });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loaderData.userId, navigate, signInPath]);
+
   const [{ data: user, fetching: userFetching }, refetchUser] = useFindOne(
     api.user,
-    loaderData.userId,
-    { select: { id: true, firstName: true, lastName: true, email: true } }
+    effectiveUserId ?? "",
+    { select: { id: true, firstName: true, lastName: true, email: true }, pause: !effectiveUserId }
   );
   const [{ data: business }] = useFindFirst(api.business, {
-    filter: { owner: { id: { equals: loaderData.userId } } },
+    filter: { owner: { id: { equals: effectiveUserId } } },
     select: { id: true, name: true, type: true },
-    pause: !loaderData.userId,
+    pause: !effectiveUserId,
   });
 
   useEffect(() => {
     if (userFetching) return;
-    if (!user && loaderData.userId) {
-      navigate((rootOutletContext.gadgetConfig?.authentication?.signInPath) ?? "/sign-in", { replace: true });
+    if (authCheckDone && !user && effectiveUserId) {
+      navigate(signInPath, { replace: true });
     }
-  }, [user, userFetching, loaderData.userId, navigate, rootOutletContext.gadgetConfig?.authentication?.signInPath]);
+  }, [user, userFetching, effectiveUserId, authCheckDone, navigate, signInPath]);
 
+  if (!authCheckDone || !effectiveUserId) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
   if (userFetching || !user) {
     return (
       <div className="h-screen flex items-center justify-center">

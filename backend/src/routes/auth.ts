@@ -18,6 +18,25 @@ const signUpSchema = z.object({
 
 export const authRouter = Router();
 
+/** GET /api/auth/me — current user from session (for frontend auth check). Returns 401 if not signed in. */
+authRouter.get("/me", wrapAsync(async (req: Request, res: Response) => {
+  const userId = (req.session as { userId?: string } | undefined)?.userId;
+  if (!userId) {
+    res.status(401).json({ message: "Not signed in" });
+    return;
+  }
+  const [user] = await db
+    .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!user) {
+    res.status(401).json({ message: "Not signed in" });
+    return;
+  }
+  res.json(user);
+}));
+
 authRouter.post("/sign-in", wrapAsync(async (req: Request, res: Response, _next: NextFunction) => {
   const parsed = signInSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
