@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useOutletContext } from "react-router";
 import { useFindMany } from "../hooks/useApi";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Users, Search, UserPlus, Loader2, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
+import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 
 const TAG_STYLES: Record<string, string> = {
   vip: "bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700",
@@ -133,7 +134,9 @@ export default function ClientsPage() {
       {!isLoading && clientsError && (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
-          Could not load clients. Please refresh the page.
+          {clientsError instanceof ApiError && (clientsError.status === 401 || clientsError.status === 403)
+            ? "Your session expired. Redirecting to sign-in…"
+            : "Could not load clients. Please refresh the page."}
         </div>
       )}
 
@@ -286,3 +289,5 @@ export default function ClientsPage() {
     </div>
   );
 }
+
+export { RouteErrorBoundary as ErrorBoundary };

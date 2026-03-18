@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db/index.js";
-import { quotes } from "../db/schema.js";
+import { quotes, clients, vehicles, quoteLineItems } from "../db/schema.js";
 import { eq, and, desc } from "drizzle-orm";
 import { NotFoundError, ForbiddenError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -27,7 +27,48 @@ quotesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: R
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, businessId(req))))
     .limit(1);
   if (!row) throw new NotFoundError("Quote not found.");
-  res.json(row);
+
+  const bid = businessId(req);
+
+  const [clientRow] = await db
+    .select({
+      id: clients.id,
+      firstName: clients.firstName,
+      lastName: clients.lastName,
+      email: clients.email,
+      phone: clients.phone,
+    })
+    .from(clients)
+    .where(and(eq(clients.id, row.clientId), eq(clients.businessId, bid)))
+    .limit(1);
+
+  const [vehicleRow] = await db
+    .select({
+      id: vehicles.id,
+      year: vehicles.year,
+      make: vehicles.make,
+      model: vehicles.model,
+      color: vehicles.color,
+      licensePlate: vehicles.licensePlate,
+    })
+    .from(vehicles)
+    .where(and(eq(vehicles.id, row.vehicleId), eq(vehicles.businessId, bid)))
+    .limit(1);
+
+  const lineItemsRows = await db
+    .select()
+    .from(quoteLineItems)
+    .where(eq(quoteLineItems.quoteId, row.id))
+    .orderBy(desc(quoteLineItems.createdAt));
+
+  res.json({
+    ...row,
+    client: clientRow ?? null,
+    vehicle: vehicleRow ?? null,
+    lineItems: {
+      edges: lineItemsRows.map((li) => ({ node: li })),
+    },
+  });
 });
 
 quotesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {

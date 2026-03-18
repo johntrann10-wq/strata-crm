@@ -2,9 +2,10 @@ import { OAuth2Client } from "google-auth-library";
 
 const clientId = process.env.GOOGLE_CLIENT_ID;
 const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-const redirectUri = `${process.env.API_BASE ?? ""}/api/auth/google/callback`;
+const apiBase = process.env.API_BASE;
+const redirectUri = apiBase ? `${apiBase}/api/auth/google/callback` : "";
 
-if (!clientId || !clientSecret || !redirectUri) {
+if (!clientId || !clientSecret) {
   // We don't throw here to avoid crashing startup if Google isn't configured;
   // routes will guard on the client existing.
   // eslint-disable-next-line no-console

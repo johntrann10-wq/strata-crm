@@ -220,11 +220,20 @@ export const DEFAULT_MODULES: ModuleKey[] = [
   "vinDecoder",
 ];
 
+// Modules whose backend routes/tables are not implemented yet.
+// We filter them out so the UI doesn't 404 during navigation.
+const UNSUPPORTED_MODULES: ModuleKey[] = [
+  "inventory",
+  "automations",
+  "lapsedClients",
+  "vehicleInspection",
+  "photoUploads",
+];
+
 export function getEnabledModules(businessType: string | null | undefined): Set<ModuleKey> {
-  if (businessType && businessType in MODULE_RULES) {
-    return new Set<ModuleKey>(MODULE_RULES[businessType]);
-  }
-  return new Set<ModuleKey>(DEFAULT_MODULES);
+  const modules = businessType && businessType in MODULE_RULES ? new Set<ModuleKey>(MODULE_RULES[businessType]) : new Set<ModuleKey>(DEFAULT_MODULES);
+  for (const m of UNSUPPORTED_MODULES) modules.delete(m);
+  return modules;
 }
 
 export function isModuleEnabled(modules: Set<ModuleKey>, module: ModuleKey): boolean {

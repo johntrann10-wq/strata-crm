@@ -1,10 +1,11 @@
 /**
- * API hooks that mirror @gadgetinc/react but call the Node API (/api/*).
+ * Client-side API hooks for talking to the Express backend under `/api/*`.
  * Use these instead of useFindOne, useFindMany, useAction, useGlobalAction.
  */
 
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
+import { setAuthToken } from "../lib/auth";
 
 type FindManyOpts = {
   filter?: Record<string, unknown>;
@@ -24,6 +25,15 @@ export function useFindOne(
   const [data, setData] = useState<unknown>(undefined);
   const [fetching, setFetching] = useState(!!id);
   const [error, setError] = useState<Error | null>(null);
+
+  // Ensure we don't keep stale data when switching between "signed in" and "signed out".
+  useEffect(() => {
+    if (id == null || id === "") {
+      setData(undefined);
+      setError(null);
+      setFetching(false);
+    }
+  }, [id]);
 
   const refetch = useCallback(async () => {
     if (id == null || id === "") {
@@ -90,6 +100,15 @@ export function useFindFirst(
   const [data, setData] = useState<unknown>(undefined);
   const [fetching, setFetching] = useState(!opts?.pause);
   const [error, setError] = useState<Error | null>(null);
+
+  // Clear data when paused so we don't keep stale business/user records around.
+  useEffect(() => {
+    if (opts?.pause) {
+      setData(undefined);
+      setError(null);
+      setFetching(false);
+    }
+  }, [opts?.pause]);
 
   const refetch = useCallback(async () => {
     if (opts?.pause) {
@@ -191,7 +210,7 @@ export function useActionForm(
           }
           // If the action returned a JWT token, persist it for subsequent requests
           if (res && (res as any).data && (res as any).data.token && typeof window !== "undefined") {
-            window.localStorage.setItem("authToken", (res as any).data.token as string);
+            setAuthToken((res as any).data.token as string);
           }
           setIsSubmitSuccessful(true);
           options?.onSuccess?.();

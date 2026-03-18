@@ -5,12 +5,15 @@ import session from "express-session";
 import { requestId, requestLogging } from "./middleware/logging.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { optionalAuth } from "./middleware/auth.js";
+import { validateEnv } from "./lib/env.js";
 import { authRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
 import { businessesRouter } from "./routes/businesses.js";
 import { appointmentsRouter } from "./routes/appointments.js";
 import { invoicesRouter } from "./routes/invoices.js";
 import { invoiceLineItemsRouter } from "./routes/invoice-line-items.js";
+import { appointmentServicesRouter } from "./routes/appointment-services.js";
+import { quoteLineItemsRouter } from "./routes/quote-line-items.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { clientsRouter } from "./routes/clients.js";
 import { vehiclesRouter } from "./routes/vehicles.js";
@@ -22,73 +25,80 @@ import { actionsRouter } from "./routes/actions.js";
 import { activityLogsRouter } from "./routes/activity-logs.js";
 import { notificationLogsRouter } from "./routes/notification-logs.js";
 import { billingRouter, handleStripeWebhook } from "./routes/billing.js";
+import { vinRouter } from "./routes/vin.js";
+
+validateEnv();
+
 const app = express();
+
 // CORS: when frontend and backend are on different origins (e.g. Vercel + Railway)
-const frontendOrigin = process.env.FRONTEND_URL ?? process.env.CORS_ORIGIN;
+// - Must match the exact frontend origin (no wildcard when credentials are enabled).
+// - JWT is sent via Authorization header, not cookies.
+const frontendOrigin = (process.env.FRONTEND_URL ?? "").replace(/\/+$/, "");
 if (frontendOrigin) {
-  app.use((_req, res, next) => {
-    res.setHeader("Access-Control-Allow-Origin", frontendOrigin);
-    res.setHeader("Access-Control-Allow-Credentials", "true");
+  app.use((req, res, next) => {
+    const requestOrigin = (req.headers.origin ?? "").replace(/\/+$/, "");
+    if (requestOrigin && requestOrigin === frontendOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", frontendOrigin);
+      res.setHeader("Vary", "Origin");
+    }
+
+    res.setHeader("Access-Control-Allow-Credentials", "false");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-cron-secret, Authorization");
-    if (_req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, x-cron-secret");
+
+    if (req.method === "OPTIONS") {
       res.status(204).end();
       return;
     }
     next();
   });
 }
+
 // Stripe webhook needs raw body (must be before express.json())
 app.post(
   "/api/billing/webhook",
   express.raw({ type: "application/json" }),
   (req, res, next) => handleStripeWebhook(req, res).catch(next)
 );
+
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.use(
-  (session as (opts: {
-    secret: string;
-    resave: boolean;
-    saveUninitialized: boolean;
-    cookie: {
-      secure: boolean;
-      httpOnly: boolean;
-      maxAge: number;
-      sameSite: "lax" | "strict" | "none";
-    };
-  }) => express.RequestHandler)({
-    secret: process.env.SESSION_SECRET ?? "strata-dev-secret-change-in-production",
+  (session as (opts: { secret: string; resave: boolean; saveUninitialized: boolean; cookie: object }) => express.RequestHandler)({
+    secret: process.env.SESSION_SECRET!,
     resave: false,
     saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: "none",
-    },
+    cookie: { secure: process.env.NODE_ENV === "production", httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 },
   })
 );
 app.use(requestId);
 app.use(requestLogging);
+
 app.use("/api/auth", authRouter);
 app.use("/api/users", optionalAuth, usersRouter);
 app.use("/api/billing", billingRouter);
+app.use("/api", vinRouter);
 // Temporarily disable subscription requirement so the app is usable without billing configured.
 app.use("/api/businesses", optionalAuth, businessesRouter);
 app.use("/api/appointments", optionalAuth, appointmentsRouter);
 app.use("/api/invoices", optionalAuth, invoicesRouter);
 app.use("/api/invoice-line-items", optionalAuth, invoiceLineItemsRouter);
+app.use("/api/appointment-services", optionalAuth, appointmentServicesRouter);
 app.use("/api/payments", optionalAuth, paymentsRouter);
 app.use("/api/clients", optionalAuth, clientsRouter);
 app.use("/api/vehicles", optionalAuth, vehiclesRouter);
 app.use("/api/quotes", optionalAuth, quotesRouter);
+app.use("/api/quote-line-items", optionalAuth, quoteLineItemsRouter);
 app.use("/api/staff", optionalAuth, staffRouter);
 app.use("/api/locations", optionalAuth, locationsRouter);
 app.use("/api/services", optionalAuth, servicesRouter);
 app.use("/api/actions", optionalAuth, actionsRouter);
 app.use("/api/activity-logs", optionalAuth, activityLogsRouter);
 app.use("/api/notification-logs", optionalAuth, notificationLogsRouter);
+
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
+
 app.use(errorHandler);
+
 export { app };

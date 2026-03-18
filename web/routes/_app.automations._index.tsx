@@ -29,6 +29,9 @@ import {
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useOutletContext } from "react-router";
+import type { AuthOutletContext } from "./_app";
+import { ModuleGuard } from "@/components/shared/ModuleGuard";
 
 function getRuleIconAndColor(triggerType: string): {
   Icon: React.ElementType;
@@ -69,6 +72,9 @@ function getDelayHelperText(triggerType: string): string | null {
 }
 
 export default function AutomationsPage() {
+  const { enabledModules } = useOutletContext<AuthOutletContext>();
+  const automationsEnabled = enabledModules?.has("automations") ?? false;
+
   const [{ data: rulesData, fetching: fetchingRules }, runGetRules] = useGlobalAction(
     (api as any).getAutomationRules
   );
@@ -86,6 +92,7 @@ export default function AutomationsPage() {
       reason: true,
       createdAt: true,
     },
+    pause: !automationsEnabled,
   });
 
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
@@ -94,8 +101,9 @@ export default function AutomationsPage() {
   >({});
 
   useEffect(() => {
+    if (!automationsEnabled) return;
     void runGetRules();
-  }, []);
+  }, [automationsEnabled, runGetRules]);
 
   const rules: any[] = (rulesData as any)?.rules ?? [];
 
@@ -134,6 +142,12 @@ export default function AutomationsPage() {
     await runGetRules();
     toast.success("Automations ran successfully");
   };
+
+  if (!automationsEnabled) {
+    return (
+      <ModuleGuard module="automations" enabledModules={enabledModules ?? new Set()} title="Automations are not configured yet" />
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-5xl mx-auto">

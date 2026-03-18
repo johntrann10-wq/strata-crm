@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useOutletContext } from "react-router";
 import { useFindMany, useGlobalAction } from "../hooks/useApi";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PlusCircle, FileText, DollarSign, Clock, Loader2 } from "lucide-react";
+import { PlusCircle, FileText, DollarSign, Clock, Loader2, AlertCircle } from "lucide-react";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { PageHeader } from "../components/shared/PageHeader";
+import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 
 const FILTER_TABS = ["all", "draft", "sent", "paid", "partial", "void"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
@@ -39,7 +40,7 @@ export default function InvoicesIndexPage() {
 
   const hasLoadedMetrics = useRef(false);
 
-  const [{ data: invoiceMetrics, fetching: metricsFetching }, runGetMetrics] =
+  const [{ data: invoiceMetrics, fetching: metricsFetching, error: metricsError }, runGetMetrics] =
     useGlobalAction((api as any).getInvoiceMetrics);
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export default function InvoicesIndexPage() {
       ? { businessId: { equals: businessId } }
       : { AND: [{ businessId: { equals: businessId } }, { status: { equals: activeTab } }] };
 
-  const [{ data: invoices, fetching: invoicesFetching }] = useFindMany(
+  const [{ data: invoices, fetching: invoicesFetching, error: invoicesError }, refetchInvoices] = useFindMany(
     api.invoice,
     {
       filter: invoiceFilter,
@@ -88,6 +89,7 @@ export default function InvoicesIndexPage() {
   const isRefetching = invoicesFetching && !!invoices && invoices.length > 0;
 
   const displayedInvoices = invoices ?? [];
+  const pageError = metricsError ?? invoicesError;
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -108,6 +110,30 @@ export default function InvoicesIndexPage() {
           </Button>
         }
       />
+
+      {/* Error state (avoid raw stack traces) */}
+      {pageError && !isLoading && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="font-medium">Could not load invoices</div>
+            <div className="text-xs text-destructive/70 mt-1">
+              {pageError instanceof ApiError && (pageError.status === 401 || pageError.status === 403)
+                ? "Your session expired. Redirecting to sign-in…"
+                : pageError.message}
+            </div>
+            <button
+              className="mt-3 inline-flex items-center rounded-md border border-input bg-muted px-3 py-1.5 text-sm"
+              onClick={() => {
+                void runGetMetrics();
+                void refetchInvoices();
+              }}
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -320,3 +346,5 @@ export default function InvoicesIndexPage() {
     </div>
   );
 }
+
+export { RouteErrorBoundary as ErrorBoundary };

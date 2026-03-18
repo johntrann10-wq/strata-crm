@@ -297,6 +297,7 @@ interface ReviewRequestCardProps {
   reviewRequestSent?: boolean | null;
   appointmentStatus: string;
   resendingReview: boolean;
+  resendEnabled?: boolean;
   onResendReview: () => void;
 }
 
@@ -304,6 +305,7 @@ export function ReviewRequestCard({
   reviewRequestSent,
   appointmentStatus,
   resendingReview,
+  resendEnabled = true,
   onResendReview,
 }: ReviewRequestCardProps) {
   const isCompleted = appointmentStatus === "completed";
@@ -336,8 +338,8 @@ export function ReviewRequestCard({
               variant="outline"
               size="sm"
               className="w-full"
-              disabled={resendingReview}
-              onClick={onResendReview}
+              disabled={!resendEnabled || resendingReview}
+              onClick={resendEnabled ? onResendReview : undefined}
             >
               {resendingReview ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -346,6 +348,11 @@ export function ReviewRequestCard({
               )}
               Re-send Review Request
             </Button>
+            {!resendEnabled && (
+              <p className="text-xs text-muted-foreground">
+                Review requests are not configured yet in this environment.
+              </p>
+            )}
             {reviewRequestSent && (
               <p className="text-xs text-muted-foreground">
                 A review request was previously sent. Clicking will send another.

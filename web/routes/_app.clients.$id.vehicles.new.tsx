@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
-import { useFindFirst, useAction } from "../hooks/useApi";
+import { useAction } from "../hooks/useApi";
 import { api, API_BASE } from "../api";
-import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +22,6 @@ export default function NewVehiclePage() {
   const { id: clientId } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [{ data: business, fetching: businessFetching }] = useFindFirst(api.business);
   const [{ data: createdVehicle, fetching: creating, error: createError }, createVehicle] =
     useAction(api.vehicle.create);
 
@@ -60,9 +58,10 @@ export default function NewVehiclePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientId || !business?.id) return;
+    if (!clientId) return;
 
     await createVehicle({
+      clientId,
       year: year ? parseInt(year, 10) : undefined,
       make,
       model: vehicleModel,
@@ -73,8 +72,6 @@ export default function NewVehiclePage() {
       mileage: mileage ? parseInt(mileage, 10) : undefined,
       paintType: (paintType as any) || undefined,
       notes: notes || undefined,
-      client: { _link: clientId },
-      business: { _link: business.id },
     });
   };
 
@@ -328,7 +325,7 @@ export default function NewVehiclePage() {
               </Button>
               <Button
                 type="submit"
-                disabled={creating || businessFetching || !business?.id}
+                disabled={creating || !clientId}
               >
                 {creating ? "Adding Vehicle..." : "Add Vehicle"}
               </Button>

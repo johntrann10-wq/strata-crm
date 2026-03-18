@@ -138,13 +138,101 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
 });
 
 appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+
   const [row] = await db
-    .select()
+    .select({
+      id: appointments.id,
+      businessId: appointments.businessId,
+      clientId: appointments.clientId,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      clientPhone: clients.phone,
+      clientEmail: clients.email,
+      vehicleId: appointments.vehicleId,
+      vehicleYear: vehicles.year,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
+      vehicleColor: vehicles.color,
+      vehicleLicensePlate: vehicles.licensePlate,
+      assignedStaffId: appointments.assignedStaffId,
+      staffFirstName: staff.firstName,
+      staffLastName: staff.lastName,
+      title: appointments.title,
+      startTime: appointments.startTime,
+      endTime: appointments.endTime,
+      status: appointments.status,
+      totalPrice: appointments.totalPrice,
+      depositAmount: appointments.depositAmount,
+      depositPaid: appointments.depositPaid,
+      notes: appointments.notes,
+      internalNotes: appointments.internalNotes,
+      cancelledAt: appointments.cancelledAt,
+      completedAt: appointments.completedAt,
+      createdAt: appointments.createdAt,
+      updatedAt: appointments.updatedAt,
+    })
     .from(appointments)
-    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, businessId(req))))
+    .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
+    .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
+    .leftJoin(staff, and(eq(appointments.assignedStaffId, staff.id), eq(staff.businessId, bid)))
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
     .limit(1);
+
   if (!row) throw new NotFoundError("Appointment not found.");
-  res.json(row);
+
+  res.json({
+    // Keep flat columns for existing clients
+    id: row.id,
+    businessId: row.businessId,
+    clientId: row.clientId,
+    vehicleId: row.vehicleId,
+    assignedStaffId: row.assignedStaffId,
+    title: row.title,
+    startTime: row.startTime,
+    endTime: row.endTime,
+    status: row.status,
+    totalPrice: row.totalPrice,
+    depositAmount: row.depositAmount,
+    depositPaid: row.depositPaid,
+    notes: row.notes,
+    internalNotes: row.internalNotes,
+    cancelledAt: row.cancelledAt,
+    completedAt: row.completedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    // Add nested objects expected by the frontend
+    client:
+      row.clientFirstName != null
+        ? {
+            id: row.clientId,
+            firstName: row.clientFirstName,
+            lastName: row.clientLastName,
+            phone: row.clientPhone ?? null,
+            email: row.clientEmail ?? null,
+          }
+        : null,
+    vehicle:
+      row.vehicleMake != null
+        ? {
+            id: row.vehicleId,
+            year: row.vehicleYear ?? null,
+            make: row.vehicleMake,
+            model: row.vehicleModel,
+            color: row.vehicleColor ?? null,
+            licensePlate: row.vehicleLicensePlate ?? null,
+          }
+        : null,
+    assignedStaff:
+      row.assignedStaffId != null
+        ? {
+            id: row.assignedStaffId,
+            firstName: row.staffFirstName,
+            lastName: row.staffLastName,
+          }
+        : null,
+    business: { id: row.businessId },
+  });
 });
 
 appointmentsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {

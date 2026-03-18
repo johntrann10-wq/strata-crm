@@ -75,11 +75,12 @@ export default function LapsedClientsPage() {
   const [, runSendOutreach] = useGlobalAction((api as any).sendLapsedClientOutreach);
 
   useEffect(() => {
+    if (!enabledModules?.has("lapsedClients")) return;
     if (business?.id) {
       runDetect({ businessId: business.id });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [business?.id]);
+  }, [business?.id, enabledModules]);
 
   const detectFetching: boolean = detectResult.fetching;
   const detectError: Error | null = detectResult.error ?? null;
@@ -119,6 +120,7 @@ export default function LapsedClientsPage() {
   };
 
   const handleSendIndividual = async (clientId: string) => {
+    if (!enabledModules?.has("lapsedClients")) return;
     if (!business?.id) return;
     setSendingIds((prev) => new Set([...prev, clientId]));
     try {
@@ -140,6 +142,7 @@ export default function LapsedClientsPage() {
   };
 
   const handleBulkSend = async () => {
+    if (!enabledModules?.has("lapsedClients")) return;
     if (!business?.id || selectedClientIds.size === 0) return;
     setIsBulkSending(true);
     try {
@@ -160,6 +163,7 @@ export default function LapsedClientsPage() {
   };
 
   const handleRefresh = () => {
+    if (!enabledModules?.has("lapsedClients")) return;
     if (business?.id) {
       runDetect({ businessId: business.id });
     }

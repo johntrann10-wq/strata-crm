@@ -1132,14 +1132,18 @@ function RevertEditTab({
 // ─── System Health Tab ───────────────────────────────────────────────────────
 
 function SystemHealthTab({ userId, businessId }: { userId: string; businessId?: string | null }) {
+  // Backend/system-health tables/actions are not implemented yet.
+  const SYSTEM_HEALTH_SUPPORTED = false;
+
   const [{ data: healthData, fetching: healthFetching }, getSystemHealth] = useGlobalAction(
     (api as any).getSystemHealth
   );
   const [showResolved, setShowResolved] = useState(false);
 
   useEffect(() => {
+    if (!SYSTEM_HEALTH_SUPPORTED) return;
     void getSystemHealth();
-  }, []);
+  }, [SYSTEM_HEALTH_SUPPORTED, getSystemHealth]);
 
   const [{ data: errors, fetching: errorsFetching, error: errorsError }, refetchErrors] =
     useFindMany(api.systemErrorLog, {
@@ -1149,7 +1153,7 @@ function SystemHealthTab({ userId, businessId }: { userId: string; businessId?: 
           ...(showResolved ? [] : [{ resolved: { equals: false } }]),
         ],
       } as any,
-      pause: !businessId,
+      pause: !businessId || !SYSTEM_HEALTH_SUPPORTED,
       sort: { createdAt: "Descending" },
       first: 50,
       select: {

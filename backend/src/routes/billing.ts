@@ -63,7 +63,7 @@ billingRouter.post(
       .limit(1);
     const email = user?.email;
     if (!email) throw new BadRequestError("User email required.");
-    const base = process.env.FRONTEND_URL ?? "http://localhost:5173";
+    const base = process.env.FRONTEND_URL!;
     const result = await createCheckoutSession({
       businessId,
       customerEmail: email,
@@ -92,7 +92,7 @@ billingRouter.post(
     if (!b?.stripeCustomerId) {
       throw new BadRequestError("No billing account. Subscribe first.");
     }
-    const base = process.env.FRONTEND_URL ?? "http://localhost:5173";
+    const base = process.env.FRONTEND_URL!;
     const result = await createPortalSession({
       customerId: b.stripeCustomerId,
       returnUrl: `${base}/settings`,

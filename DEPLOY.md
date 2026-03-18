@@ -15,7 +15,7 @@
 
 ### Frontend (Vercel/Netlify)
 
-- `API_BASE` — URL of the backend API (e.g. `https://your-api.onrender.com`). Leave empty if same-origin.
+- `VITE_API_URL` — backend API origin (e.g. `https://your-api.onrender.com`). Used by the frontend at build time.
 
 ### Backend
 
@@ -23,12 +23,15 @@ Copy from `backend/.env.example`:
 
 - `DATABASE_URL` — PostgreSQL connection string
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` — SMTP credentials (optional: `SMTP_FROM` for From address)
-- `SESSION_SECRET` — random string for session signing (required in production)
-- `CRON_SECRET` — optional; if set, `POST /api/actions/runAutomations` requires header `x-cron-secret: <CRON_SECRET>` (for scheduled automations)
+- `JWT_SECRET` — JWT signing secret (required for `sign-in`, `sign-up`, and `GET /api/auth/me`)
+- `SESSION_SECRET` — random string for session signing
 - `FRONTEND_URL` — origin of the frontend (e.g. `https://your-app.vercel.app`) for CORS and Stripe redirect URLs
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` — required for paid subscriptions ($29/mo, first month free). See **Stripe setup** below.
-- `PORT` — server port (default 3001)
-- `LOG_LEVEL` — optional: `debug` | `info` | `warn` | `error`
+- `API_BASE` — backend API origin (required for Google OAuth redirect URIs)
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Google OAuth credentials
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` — required for paid subscriptions ($29/mo, first month free)
+- `CRON_SECRET` — required; `POST /api/actions/runAutomations` requires header `x-cron-secret: <CRON_SECRET>`
+- `PORT` — required (server port, e.g. `3001`)
+- `LOG_LEVEL` — required (e.g. `info`)
 
 ### Stripe (subscription billing)
 
@@ -84,16 +87,16 @@ yarn build
 - **Vercel**: Import repo → Framework Preset: Vite (or Other) → Build Command: `yarn build` → Output: `build/client` (or per React Router output).
 - **Netlify**: Build command: `yarn build`; Publish directory: `build/client` (check `react-router.config.ts` and build output).
 
-Set `API_BASE` to your backend URL so the frontend can call the API.
+Set `VITE_API_URL` to your backend URL origin so the frontend can call the API.
 
-**CORS:** The backend reads `FRONTEND_URL` or `CORS_ORIGIN` and, when set, allows that origin with credentials. Set `FRONTEND_URL=https://your-app.vercel.app` (or your Netlify URL) on the backend so the frontend can call the API.
+**CORS:** Set `FRONTEND_URL=https://your-app.vercel.app` (or your Netlify URL) on the backend so the frontend can call the API.
 
 ## Automations (cron)
 
 Appointment reminders, lapsed client detection, and review requests run via:
 
 - **Endpoint:** `POST /api/actions/runAutomations`
-- **Auth:** No session; require header `x-cron-secret: <CRON_SECRET>` when `CRON_SECRET` is set in backend env.
+- **Auth:** No session; require header `x-cron-secret: <CRON_SECRET>` (CRON_SECRET is always required).
 - **Schedule:** Use an external cron (e.g. GitHub Actions, Render Cron, cron-job.org) to call this URL at the desired frequency (e.g. hourly).
 
 See [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) §3 for a full checklist and example GitHub Actions workflow.
@@ -108,7 +111,7 @@ See [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) §3 for a full checklist and exam
    ```bash
    yarn install && yarn dev
    ```
-   If the frontend runs on a different port, set `API_BASE=http://localhost:3001` in the frontend env or use Vite proxy.
+If the frontend runs on a different port, set `VITE_API_URL=http://localhost:3001` in the frontend env (Vite) or use a Vite proxy.
 
 ## Weekly summary emails
 
@@ -122,8 +125,8 @@ Add a default `weekly_summary` template in `email_templates` (system default: `b
 ## Production checklist
 
 - [ ] DATABASE_URL, SESSION_SECRET, SMTP_* set on backend
-- [ ] API_BASE set on frontend to backend URL
-- [ ] CRON_SECRET set on backend if using scheduled automations; cron job configured to call `POST /api/actions/runAutomations` with header
+- [ ] VITE_API_URL set on frontend to backend API origin
+- [ ] CRON_SECRET set on backend; cron job configured to call `POST /api/actions/runAutomations` with header
 - [ ] Migrations run on backend DB
 - [ ] Frontend build succeeds (`yarn build`)
 - [ ] Backend starts and `GET /api/health` returns 200

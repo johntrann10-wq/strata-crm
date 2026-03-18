@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams, useOutletContext } from "react-router";
 import { useFindFirst, useFindMany, useFindOne, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/command";
 import { ArrowLeft, Check, ChevronsUpDown, FileText, Plus, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { AuthOutletContext } from "./_app";
 
 interface LineItem {
   id: string;
@@ -30,17 +31,18 @@ interface LineItem {
 
 export default function NewInvoicePage() {
   const navigate = useNavigate();
-  const session = useSession(api);
-  const userId = (session as any)?.user?.id as string | undefined;
+  const { user, businessId } = useOutletContext<AuthOutletContext>();
+  const userId = (user as any)?.id as string | undefined;
 
   const [searchParams] = useSearchParams();
   const appointmentIdParam = searchParams.get("appointmentId");
   const clientIdParam = searchParams.get("clientId");
   const quoteIdParam = searchParams.get("quoteId");
 
-  const [{ data: businessRecord, fetching: fetchingBusiness }] = useFindFirst(api.business, {
-    filter: { owner: { id: { equals: userId ?? "" } } },
+  const [{ data: businessRecord }] = useFindFirst(api.business, {
+    filter: businessId ? { id: { equals: businessId } } : { id: { equals: "" } },
     select: { id: true, defaultTaxRate: true },
+    pause: !businessId,
   });
 
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -48,7 +50,6 @@ export default function NewInvoicePage() {
   const [debouncedClientQuery, setDebouncedClientQuery] = useState("");
 
   const [{ data: clients, fetching: fetchingClients }] = useFindMany(api.client, {
-    filter: businessRecord?.id ? { business: { id: { equals: businessRecord.id } } } : undefined,
     ...(debouncedClientQuery.length >= 2 ? { search: debouncedClientQuery } : {}),
     first: 20,
     pause: !businessRecord?.id,
@@ -101,7 +102,6 @@ export default function NewInvoicePage() {
   });
 
   const [, createInvoice] = useAction(api.invoice.create);
-  const [, createLineItem] = useAction(api.invoiceLineItem.create);
 
   // Form state
   const [clientComboOpen, setClientComboOpen] = useState(false);
@@ -245,61 +245,27 @@ export default function NewInvoicePage() {
 
     try {
       const invoiceResult = await createInvoice({
-        client: { _link: selectedClientId },
-        business: { _link: businessRecord.id },
-        ...(dueDate ? { dueDate: new Date(dueDate) } : {}),
-        ...(notes.trim() ? { notes: notes.trim() } : {}),
-        subtotal,
-        taxRate,
-        taxAmount,
+        clientId: selectedClientId,
+        appointmentId: appointmentIdParam ?? undefined,
+        lineItems: lineItems.map((item) => ({
+          description: item.description,
+          quantity: item.qty,
+          unitPrice: item.unitPrice,
+        })),
         discountAmount: discountAmount || 0,
-        total,
-        status: mode,
-        ...(appointmentIdParam ? { appointment: { _link: appointmentIdParam } } : {}),
-      });
+      } as any);
 
-      const newInvoice = (invoiceResult as any)?.invoice ?? (invoiceResult as any)?.data;
-      const newInvoiceId: string | undefined = newInvoice?.id;
+      const newInvoice = (invoiceResult as any) ?? (invoiceResult as any)?.data;
+      const newInvoiceId: string | undefined = (newInvoice as any)?.id;
 
       if (!newInvoiceId) {
-        const errMsg = (invoiceResult as any)?.errors?.[0]?.message ?? "Failed to create invoice";
+        const errMsg = (invoiceResult as any)?.error?.message ?? "Failed to create invoice";
         toast.error(errMsg);
         setSubmitting(false);
         return;
       }
 
-      // Create all line items in parallel
-      const lineItemResults = await Promise.allSettled(
-        lineItems.map((item) =>
-          createLineItem({
-            invoice: { _link: newInvoiceId },
-            description: item.description,
-            quantity: item.qty,
-            unitPrice: item.unitPrice,
-            total: parseFloat((item.qty * item.unitPrice).toFixed(2)),
-            taxable: true,
-          })
-        )
-      );
-
-      const failedCount = lineItemResults.filter(
-        (result) =>
-          result.status === "rejected" ||
-          (result.status === "fulfilled" && result.value?.error)
-      ).length;
-
-      if (failedCount === 0) {
-        toast.success("Invoice created successfully");
-      } else if (failedCount < lineItems.length) {
-        toast.warning(
-          `${failedCount} line item(s) could not be saved. Please review and add them manually.`
-        );
-      } else {
-        toast.error(
-          "Invoice created but line items could not be saved. Please add them manually from the invoice page."
-        );
-      }
-
+      toast.success("Invoice created successfully");
       navigate(`/invoices/${newInvoiceId}`);
     } catch (err: any) {
       toast.error(err?.message ?? "Failed to create invoice");

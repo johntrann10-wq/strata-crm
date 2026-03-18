@@ -33,7 +33,7 @@ yarn dev               # start dev server (port 3001)
 
 ## API
 
-All routes are under `/api/`. Auth uses cookies; ensure frontend sends `credentials: "include"` and CORS allows origin + credentials.
+All routes are under `/api/`. Auth uses JWTs sent by the frontend via `Authorization: Bearer <token>`. Ensure CORS allows the `Authorization` header.
 
 - **Auth**: `POST /api/auth/sign-in`, `POST /api/auth/sign-up`, `POST /api/auth/sign-out`, `POST /api/auth/verify-email`
 - **Resources**: `GET/POST/PATCH/DELETE /api/appointments`, `/api/invoices`, `/api/payments`, `/api/clients`, `/api/vehicles`, `/api/businesses`, `/api/quotes`, `/api/staff`, `/api/locations`, `/api/services`

@@ -91,7 +91,6 @@ export function QuickBookSheet({
 
   // Fetch clients
   const [{ data: clients, fetching: clientsFetching }] = useFindMany(api.client, {
-    filter: { businessId: { equals: businessId ?? "" } },
     select: { id: true, firstName: true, lastName: true, phone: true },
     sort: { firstName: "Ascending" },
     first: 250,
@@ -195,21 +194,13 @@ export function QuickBookSheet({
 
     const endDateTime = addMinutes(startDateTime, totalDurationMinutes > 0 ? totalDurationMinutes : 60);
 
-    const totalPrice = selectedServiceIds.reduce((sum, id) => {
-      const svc = (services ?? []).find((s) => s.id === id);
-      return sum + (svc?.price ?? 0);
-    }, 0);
-
     try {
       const result = await createAppointment({
-        client: { _link: selectedClientId },
-        business: { _link: businessId },
-        vehicle: selectedVehicleId ? { _link: selectedVehicleId } : undefined,
-        startTime: startDateTime,
-        endTime: endDateTime,
-        status: "scheduled",
-        serviceIds: selectedServiceIds,
-        ...(totalPrice > 0 ? { totalPrice } : {}),
+        clientId: selectedClientId,
+        vehicleId: selectedVehicleId!,
+        startTime: startDateTime.toISOString(),
+        endTime: endDateTime.toISOString(),
+        title: undefined,
       } as any);
 
       if (result?.error) {

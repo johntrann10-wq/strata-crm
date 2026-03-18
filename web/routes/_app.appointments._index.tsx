@@ -3,7 +3,7 @@ import { useFindMany, useAction } from "../hooks/useApi";
 import { Link, useNavigate, useOutletContext } from "react-router";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { QuickBookSheet } from "../components/shared/QuickBookSheet";
 import { PageHeader } from "../components/shared/PageHeader";
@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus, Zap, Calendar, ChevronRight, ChevronDown, Search, AlertCircle } from "lucide-react";
+import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 
 function formatStatus(status: string): string {
   return status
@@ -131,8 +132,14 @@ export default function AppointmentsPage() {
       {appointmentsError && !isLoading ? (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>Could not load appointments. Please refresh the page.</span>
-          <span className="text-destructive/70 text-xs">({appointmentsError.message})</span>
+          <span>
+            {appointmentsError instanceof ApiError && (appointmentsError.status === 401 || appointmentsError.status === 403)
+              ? "Your session expired. Redirecting to sign-in…"
+              : "Could not load appointments. Please refresh the page."}
+          </span>
+          {!(appointmentsError instanceof ApiError && (appointmentsError.status === 401 || appointmentsError.status === 403)) && (
+            <span className="text-destructive/70 text-xs">({appointmentsError.message})</span>
+          )}
         </div>
       ) : isLoading ? (
         <div className="space-y-2">
@@ -252,3 +259,5 @@ export default function AppointmentsPage() {
     </div>
   );
 }
+
+export { RouteErrorBoundary as ErrorBoundary };

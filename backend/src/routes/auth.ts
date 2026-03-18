@@ -20,18 +20,18 @@ const signUpSchema = z.object({
 export const authRouter = Router();
 function requireJwtSecret() {
   const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("JWT_SECRET is not configured");
-  }
-  return secret;
+  if (secret && secret.trim() !== "") return secret;
+  throw new Error("JWT_SECRET is required");
 }
 function createToken(userId: string): string {
   const secret = requireJwtSecret();
   return jwt.sign({ userId }, secret, { expiresIn: "7d" });
 }
 function getUserIdFromAuthHeader(req: Request): string | null {
-  const auth = req.headers.authorization ?? "";
-  const [, rawToken] = auth.split(" ");
+  const authHeader = req.headers.authorization ?? "";
+  const bearerPrefix = "Bearer ";
+  if (!authHeader.startsWith(bearerPrefix)) return null;
+  const rawToken = authHeader.slice(bearerPrefix.length).trim();
   if (!rawToken) return null;
   try {
     const payload = jwt.verify(rawToken, requireJwtSecret()) as { userId?: string };

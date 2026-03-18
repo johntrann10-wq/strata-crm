@@ -33,11 +33,12 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { RevenueSparkline } from "../components/dashboard/RevenueSparkline";
 import { CapacityRing } from "../components/dashboard/CapacityRing";
+import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 
 function formatBusinessType(type: string | null | undefined): string {
   if (!type) return "";
@@ -211,8 +212,16 @@ export default function SignedIn() {
 
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Stagger secondary fetches to avoid ERR_INSUFFICIENT_RESOURCES (browser connection limit)
+  const [allowSecondaryFetch, setAllowSecondaryFetch] = useState(false);
 
   const [filterNow, setFilterNow] = useState(() => new Date());
+
+  useEffect(() => {
+    if (!businessId) return;
+    const t = setTimeout(() => setAllowSecondaryFetch(true), 300);
+    return () => clearTimeout(t);
+  }, [businessId]);
 
   const [{ data: upcomingAppointments, fetching: fetchingUpcoming }] = useFindMany(
     api.appointment,
@@ -273,11 +282,13 @@ export default function SignedIn() {
   }, [filterNow]);
 
   useEffect(() => {
-    if (!businessId) return;
+    if (!businessId || !allowSecondaryFetch) return;
     if (hasInitialized.current) return;
     hasInitialized.current = true;
-    void handleRefresh();
-  }, [businessId, handleRefresh]);
+    // Stagger stats/capacity so they run after appointments/activity/notifications
+    const t = setTimeout(() => void handleRefresh(), 200);
+    return () => clearTimeout(t);
+  }, [businessId, allowSecondaryFetch, handleRefresh]);
 
   // Disable background auto-refresh to avoid excessive network traffic.
   // Dashboard data can be refreshed manually via the Refresh button.
@@ -292,15 +303,14 @@ export default function SignedIn() {
     sort: { createdAt: "Descending" },
     select: { id: true, type: true, description: true, createdAt: true },
     first: 8,
-    // Disable live polling to prevent continuous requests.
-    pause: !businessId,
+    pause: !businessId || !allowSecondaryFetch,
   });
 
   const [{ data: failedNotifications }] = useFindMany(api.notificationLog, {
     filter: { AND: [{ status: { equals: "failed" } }, { business: { id: { equals: businessId ?? "" } } }] },
     first: 1,
     select: { id: true },
-    pause: !businessId,
+    pause: !businessId || !allowSecondaryFetch,
   });
 
   // Derived values
@@ -321,7 +331,9 @@ export default function SignedIn() {
       {dashboardError && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <p className="text-sm text-amber-800 dark:text-amber-200">
-            Could not load some dashboard data: {dashboardError.message}
+            {dashboardError instanceof ApiError && (dashboardError.status === 401 || dashboardError.status === 403)
+              ? "Your session expired. Redirecting to sign-in…"
+              : `Could not load some dashboard data: ${dashboardError.message}`}
           </p>
           <Button
             variant="outline"
@@ -653,3 +665,5 @@ export default function SignedIn() {
     </div>
   );
 }
+
+export { RouteErrorBoundary as ErrorBoundary };

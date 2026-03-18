@@ -5,10 +5,10 @@
 import Stripe from "stripe";
 
 const secretKey = process.env.STRIPE_SECRET_KEY;
+// Avoid module-load crashes (TypeError) when env vars are missing.
+// Startup env validation should still fail fast with a clear message.
 export const stripe =
-  secretKey && secretKey.startsWith("sk_")
-    ? new Stripe(secretKey)
-    : null;
+  secretKey && secretKey.trim() !== "" && secretKey.startsWith("sk_") ? new Stripe(secretKey) : null;
 
 export const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID ?? "";
 export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";

@@ -22,11 +22,11 @@
 
 import type { ExoticComponent, ReactNode } from "react";
 import { useState } from "react";
-import { Link, useLocation } from "react-router";
-import { API_BASE } from "../../api";
+import { Link, useLocation, useNavigate } from "react-router";
 import { NavDrawer } from "@/components/shared/NavDrawer";
 import { Home, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { clearAuthToken, emitAuthEvent } from "@/lib/auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -163,10 +163,12 @@ export const SecondaryNavigation = ({ icon }: { icon: ReactNode }) => {
 };
 
 const SignOutOption = () => {
+  const navigate = useNavigate();
   const handleSignOut = () => {
-    fetch(`${API_BASE}/api/auth/sign-out`, { method: "POST", credentials: "include" }).then(() => {
-      window.location.href = "/";
-    });
+    // Clear token + notify the app so it can drop cached user state immediately.
+    clearAuthToken();
+    emitAuthEvent("auth:logout");
+    navigate("/sign-in", { replace: true });
   };
 
   return (

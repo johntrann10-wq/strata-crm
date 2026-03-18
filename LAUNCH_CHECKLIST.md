@@ -4,7 +4,7 @@ Use this checklist before going live. Complete each section and tick items as do
 
 ## Already in the repo
 
-- **CORS** — Backend uses `FRONTEND_URL` or `CORS_ORIGIN` to allow the frontend origin when set.
+- **CORS** — Backend uses `FRONTEND_URL` to allow the frontend origin.
 - **Cron workflow** — [.github/workflows/cron-automations.yml](.github/workflows/cron-automations.yml) runs hourly; add repo secrets `API_URL` and `CRON_SECRET`.
 - **Vercel** — [vercel.json](vercel.json) sets build command and output directory (`build/client`).
 - **Netlify** — [netlify.toml](netlify.toml) sets build command and publish directory (`build/client`).
@@ -117,7 +117,7 @@ jobs:
 
 | Item | Status | Notes |
 |------|--------|--------|
-| **Env (production)** | ☐ | `DATABASE_URL`, `SESSION_SECRET`, `SMTP_*`, `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `FRONTEND_URL`, `PORT`. Optional: `CRON_SECRET`, `LOG_LEVEL`. |
+| **Env (production)** | ☐ | `DATABASE_URL`, `SESSION_SECRET`, `SMTP_*`, `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `FRONTEND_URL`, `CRON_SECRET`, `PORT`, `LOG_LEVEL`. |
 | **SESSION_SECRET** | ☐ | Strong random string; never default in production. |
 | **Migrations** | ☐ | Run `yarn db:migrate` (or your migration process) against production DB before first deploy. |
 | **Build** | ☐ | `cd backend && yarn build` succeeds. |
@@ -128,7 +128,7 @@ jobs:
 
 | Item | Status | Notes |
 |------|--------|--------|
-| **API_BASE** | ☐ | In production, set `API_BASE` to backend URL (e.g. `https://your-api.onrender.com`) so the app calls the correct API. |
+| **VITE_API_URL** | ☐ | In production, set `VITE_API_URL` to backend URL origin (e.g. `https://your-api.onrender.com`) so the app calls the correct API. |
 | **Build** | ☐ | `yarn build` (from repo root) succeeds. |
 | **E2E** | ☐ | Optional: run `yarn test:e2e` with app and backend running; Playwright tests critical paths. |
 
@@ -148,7 +148,7 @@ jobs:
 | **Root** | ☐ | Repository root (where `package.json` and `web/` live). |
 | **Build command** | ☐ | `yarn build` (or `npm run build`). |
 | **Output / Publish directory** | ☐ | React Router 7 default is typically `build/client` — confirm in [React Router deploy docs](https://reactrouter.com/start/deployment) and set in Vercel/Netlify. |
-| **Env** | ☐ | `API_BASE=https://your-backend-url` (no trailing slash). |
+| **Env** | ☐ | `VITE_API_URL=https://your-backend-url` (no trailing slash). |
 | **Branch** | ☐ | Deploy from `main` or your production branch. |
 
 ### 5.5 Deploy: Backend (Render / Railway / Heroku / Vercel serverless)
@@ -159,7 +159,7 @@ jobs:
 | **Root** | ☐ | `backend` (if monorepo). |
 | **Build** | ☐ | `yarn install && yarn build`. |
 | **Start** | ☐ | `yarn start` or `node dist/index.js`. |
-| **Env** | ☐ | `DATABASE_URL`, `SESSION_SECRET`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `PORT`. Optional: `CRON_SECRET`, `NODE_ENV=production`, `LOG_LEVEL`. |
+| **Env** | ☐ | `DATABASE_URL`, `SESSION_SECRET`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `CRON_SECRET`, `PORT`, `LOG_LEVEL`. |
 | **DB** | ☐ | PostgreSQL attached; migrations run. |
 | **CORS** | ☐ | If frontend and backend are on different origins, backend must allow frontend origin (e.g. Vercel URL). Add CORS middleware if not already present. |
 

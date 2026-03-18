@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router";
 import { useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
+import { ModuleGuard } from "@/components/shared/ModuleGuard";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -218,7 +219,8 @@ function InventoryFormDialog({
 }
 
 export default function InventoryPage() {
-  const { user, businessId } = useOutletContext<AuthOutletContext>();
+  const { user, businessId, enabledModules } = useOutletContext<AuthOutletContext>();
+  const inventoryEnabled = enabledModules?.has("inventory") ?? false;
 
   const inventoryFilter = useMemo(
     () =>
@@ -229,7 +231,7 @@ export default function InventoryPage() {
   );
 
   const [{ data: items, fetching, error }, refetchItems] = useFindMany(api.inventoryItem, {
-    pause: !businessId,
+    pause: !businessId || !inventoryEnabled,
     filter: inventoryFilter,
     sort: INVENTORY_SORT,
     first: 100,
@@ -357,6 +359,16 @@ export default function InventoryPage() {
     if (val == null) return "—";
     return `$${val.toFixed(2)}`;
   };
+
+  if (!inventoryEnabled) {
+    return (
+      <ModuleGuard
+        module="inventory"
+        enabledModules={enabledModules ?? new Set()}
+        title="Inventory isn’t available for your business type yet"
+      />
+    );
+  }
 
   return (
     <div className="p-6 max-w-6xl mx-auto">

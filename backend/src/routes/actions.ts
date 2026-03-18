@@ -97,6 +97,60 @@ actionsRouter.post("/getCapacityInsights", requireAuth, requireTenant, async (re
   res.json({ appointments: list, capacity: [] });
 });
 
+// Used by the frontend Invoices page to render month KPIs.
+actionsRouter.post("/getInvoiceMetrics", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  const [openTotals, openPaidTotals, revenueMonthRows, invoicesCreatedRows] = await Promise.all([
+    db
+      .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('draft', 'sent', 'partial')`)),
+    db
+      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+      .from(payments)
+      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .where(
+        and(
+          eq(invoices.businessId, bid),
+          sql`${invoices.status} in ('sent', 'partial')`,
+          sql`${payments.reversedAt} is null`
+        )
+      ),
+    db
+      .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.businessId, bid),
+          eq(invoices.status, "paid"),
+          gte(invoices.paidAt ?? invoices.updatedAt, startOfMonth),
+          lte(invoices.paidAt ?? invoices.updatedAt, endOfMonth)
+        )
+      ),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(invoices)
+      .where(and(eq(invoices.businessId, bid), gte(invoices.createdAt, startOfMonth), lte(invoices.createdAt, endOfMonth))),
+  ]);
+
+  const openTotal = Number(openTotals[0]?.total ?? 0);
+  const openPaid = Number(openPaidTotals[0]?.total ?? 0);
+  const outstandingBalance = Math.max(0, openTotal - openPaid);
+
+  const revenueThisMonth = Number(revenueMonthRows[0]?.total ?? 0);
+  const invoicesThisMonth = invoicesCreatedRows[0]?.count ?? 0;
+
+  res.json({
+    revenueThisMonth,
+    outstandingBalance,
+    invoicesThisMonth,
+  });
+});
+
 actionsRouter.post("/generatePortalToken", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const parsed = clientIdParamSchema.safeParse(req.body);
   const clientId = parsed.success ? parsed.data.clientId ?? parsed.data.id : undefined;

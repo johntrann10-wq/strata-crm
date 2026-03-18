@@ -286,6 +286,9 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
   );
 }
 
+// Backend routes/tables for inventory linking are not implemented yet.
+const INVENTORY_LINKS_SUPPORTED = false;
+
 export default function ServicesPage() {
   const { user, businessId } = useOutletContext<AuthOutletContext>();
 
@@ -340,7 +343,7 @@ export default function ServicesPage() {
         inventoryItem: { id: true, name: true, unit: true },
       },
       first: 50,
-      pause: !inventoryLinkServiceId,
+      pause: !INVENTORY_LINKS_SUPPORTED || !inventoryLinkServiceId,
     }
   );
 
@@ -349,7 +352,7 @@ export default function ServicesPage() {
     select: { id: true, name: true, unit: true },
     sort: { name: "Ascending" },
     first: 250,
-    pause: !businessId,
+    pause: !businessId || !INVENTORY_LINKS_SUPPORTED,
   });
 
   const [{ fetching: creatingLink }, runCreateLink] = useAction(api.serviceInventoryItem.create);
@@ -623,87 +626,95 @@ export default function ServicesPage() {
 
             <Separator className="my-3" />
 
-            {/* Inventory Links Section */}
-            <div className="flex items-center gap-2 mt-2">
-              <Package className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Inventory Links</span>
-              <span className="text-xs text-muted-foreground ml-1">(auto-deducted on job completion)</span>
-            </div>
+            {INVENTORY_LINKS_SUPPORTED ? (
+              <>
+                {/* Inventory Links Section */}
+                <div className="flex items-center gap-2 mt-2">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Inventory Links</span>
+                  <span className="text-xs text-muted-foreground ml-1">(auto-deducted on job completion)</span>
+                </div>
 
-            {svcInvFetching ? (
-              <p className="text-xs text-muted-foreground mt-1">Loading...</p>
-            ) : svcInvItems && svcInvItems.length > 0 ? (
-              <div className="space-y-1 mt-2">
-                {svcInvItems.map((link) => (
-                  <div
-                    key={link.id}
-                    className="flex items-center justify-between text-sm bg-muted/40 rounded px-2 py-1.5"
-                  >
-                    <div>
-                      <span className="font-medium">{(link as any).inventoryItem?.name}</span>
-                      <span className="text-xs text-muted-foreground ml-2">
-                        × {link.quantityUsed}
-                        {(link as any).inventoryItem?.unit ? ` ${(link as any).inventoryItem.unit}` : ""}
-                      </span>
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleRemoveLink(link.id)}
-                      type="button"
-                      disabled={deletingLink}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground mt-1">No inventory items linked yet.</p>
-            )}
-
-            <div className="flex items-center gap-2 mt-3">
-              <Select value={newLinkItemId} onValueChange={setNewLinkItemId}>
-                <SelectTrigger className="flex-1 h-8 text-xs">
-                  <SelectValue placeholder="Select inventory item" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(allInventoryItems ?? [])
-                    .filter(
-                      (item) =>
-                        !(svcInvItems ?? []).some(
-                          (link: any) => link.inventoryItemId === item.id
-                        )
-                    )
-                    .map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.name}
-                      </SelectItem>
+                {svcInvFetching ? (
+                  <p className="text-xs text-muted-foreground mt-1">Loading...</p>
+                ) : svcInvItems && svcInvItems.length > 0 ? (
+                  <div className="space-y-1 mt-2">
+                    {svcInvItems.map((link) => (
+                      <div
+                        key={link.id}
+                        className="flex items-center justify-between text-sm bg-muted/40 rounded px-2 py-1.5"
+                      >
+                        <div>
+                          <span className="font-medium">{(link as any).inventoryItem?.name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            × {link.quantityUsed}
+                            {(link as any).inventoryItem?.unit ? ` ${(link as any).inventoryItem.unit}` : ""}
+                          </span>
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemoveLink(link.id)}
+                          type="button"
+                          disabled={deletingLink}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                     ))}
-                </SelectContent>
-              </Select>
-              <Input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={newLinkQty}
-                onChange={(e) => setNewLinkQty(e.target.value)}
-                className="w-20 h-8 text-xs"
-                placeholder="Qty"
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={handleAddLink}
-                disabled={!newLinkItemId || creatingLink}
-                type="button"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                Add
-              </Button>
-            </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">No inventory items linked yet.</p>
+                )}
+
+                <div className="flex items-center gap-2 mt-3">
+                  <Select value={newLinkItemId} onValueChange={setNewLinkItemId}>
+                    <SelectTrigger className="flex-1 h-8 text-xs">
+                      <SelectValue placeholder="Select inventory item" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(allInventoryItems ?? [])
+                        .filter(
+                          (item) =>
+                            !(svcInvItems ?? []).some(
+                              (link: any) => link.inventoryItemId === item.id
+                            )
+                        )
+                        .map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {item.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={newLinkQty}
+                    onChange={(e) => setNewLinkQty(e.target.value)}
+                    className="w-20 h-8 text-xs"
+                    placeholder="Qty"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={handleAddLink}
+                    disabled={!newLinkItemId || creatingLink}
+                    type="button"
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">
+                Inventory linking is not available yet in this environment.
+              </p>
+            )}
 
             <DialogFooter className="mt-4 sm:justify-between">
               <Button

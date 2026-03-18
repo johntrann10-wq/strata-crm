@@ -26,7 +26,7 @@ All API routes enforce **tenant isolation** so that no action can read or write 
 ## Equivalent to “userBelongsToField”
 
 - **Backend**: There is no cross-tenant access. Every query that returns or mutates tenant data includes `businessId` (and, where relevant, validates related entities like client/vehicle/invoice belong to the same business). This is the backend equivalent of ensuring “user belongs to field” (here, “user’s business owns the record”).
-- **Frontend**: All API calls use `credentials: "include"`, so the session cookie is sent. The backend derives `businessId` from the session and never trusts a client-supplied business ID for authorization; it only uses server-side session and DB checks.
+- **Frontend**: All API calls send `Authorization: Bearer <token>`. The backend derives the user (and then `businessId`) from the JWT and never trusts any client-supplied business ID for authorization; it only uses DB checks.
 
 ## Adding new routes
 

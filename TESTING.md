@@ -35,7 +35,7 @@ cd backend && yarn test
 
 ### E2E (Playwright)
 
-Critical path checks (sign-in page, redirect when unauthenticated).
+Minimal critical-path smoke checks (auth + onboarding + core CRUD flows).
 
 1. Start the app (in two terminals):
 
@@ -55,6 +55,13 @@ Critical path checks (sign-in page, redirect when unauthenticated).
    ```bash
    yarn test:e2e
    ```
+
+What’s covered by the current suite:
+
+1. `sign-up` and `onboarding` completes
+2. `dashboard` loads (basic page assertions)
+3. creates a `client` and `appointment` (via authenticated API setup) and verifies they appear in UI
+4. `logout` and redirect back to `sign-in`
 
 ## Multi-tenant safety
 

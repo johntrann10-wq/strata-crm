@@ -9,3 +9,8 @@ if (!connectionString) {
 
 const pool = new pg.Pool({ connectionString });
 export const db = drizzle(pool, { schema });
+
+// Used by integration tests to avoid leaving open sockets behind.
+export async function closeDb(): Promise<void> {
+  await pool.end();
+}

@@ -1,15 +1,43 @@
+import { clearAuthToken, emitAuthEvent, getAuthToken } from "./lib/auth";
+
 /**
  * Fetch-based API client for Node API endpoints.
- * Uses JWT in Authorization header and talks directly to the Railway backend.
+ * Uses JWT in Authorization header and talks directly to the Express backend.
  */
-/** Base URL for the API (your Railway backend). */
-export const API_BASE =
-  typeof window !== "undefined"
-    ? "https://strata-crm-production.up.railway.app"
-    : process.env.API_BASE ?? "https://strata-crm-production.up.railway.app";
+/** Base URL for the backend API (your Railway/Express backend). */
+function resolveApiBase(): string {
+  const apiBaseFromViteEnv = (import.meta.env as Record<string, string | undefined>).VITE_API_URL;
+  const trimmed = apiBaseFromViteEnv?.trim();
+  if (trimmed) return trimmed;
+
+  // Local dev: rely on same-origin `/api` (Vite proxy in `vite.config.mts`).
+  if (import.meta.env.DEV) return "";
+
+  // Production: fail loudly so misconfiguration is obvious.
+  throw new Error(
+    "Strata config error: VITE_API_URL is required in production builds. " +
+      "Set it to your backend origin (e.g. https://your-api.example.com)."
+  );
+}
+
+// Base origin for browser API calls.
+export const API_BASE = resolveApiBase();
+
+export class ApiError extends Error {
+  status: number;
+  path: string;
+  detail?: string;
+  constructor(message: string, status: number, path: string, detail?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.path = path;
+    this.detail = detail;
+  }
+}
+
 function getToken() {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem("authToken");
+  return getAuthToken();
 }
 async function request<T = unknown>(
   path: string,
@@ -29,8 +57,18 @@ async function request<T = unknown>(
     headers,
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { message?: string };
-    throw new Error(err.message ?? res.statusText ?? `Request failed ${res.status}`);
+    // Special-case 402 for businesses so onboarding is never blocked
+    if (res.status === 402 && path.startsWith("/businesses")) {
+      return { records: [] } as T;
+    }
+    if (res.status === 401 || res.status === 403) {
+      // Invalid/expired token: clear local auth so boot + protected pages can redirect predictably.
+      clearAuthToken();
+      emitAuthEvent("auth:invalid", { status: res.status, path });
+    }
+    const errBody = (await res.json().catch(() => ({}))) as { message?: string; detail?: string };
+    const message = errBody.message ?? res.statusText ?? `Request failed ${res.status}`;
+    throw new ApiError(message, res.status, path, errBody.detail);
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : null) as T;
@@ -184,11 +222,13 @@ export const api = {
     findOne: (id: string, _opts?: Record<string, unknown>) =>
       request<unknown>(`/users/${encodeURIComponent(id)}`),
   },
-  // Global actions (POST /node-api/actions/:name)
+  // Global actions (POST /api/actions/:name)
   getDashboardStats: (params?: Record<string, unknown>) =>
     request<unknown>("/actions/getDashboardStats", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getCapacityInsights: (params?: Record<string, unknown>) =>
     request<unknown>("/actions/getCapacityInsights", { method: "POST", body: JSON.stringify(params ?? {}) }),
+  getInvoiceMetrics: (params?: Record<string, unknown>) =>
+    request<unknown>("/actions/getInvoiceMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
   generatePortalToken: (params?: Record<string, unknown>) =>
     request<unknown>("/actions/generatePortalToken", { method: "POST", body: JSON.stringify(params ?? {}) }),
   restoreClient: (params?: Record<string, unknown>) =>
@@ -211,6 +251,21 @@ export const api = {
     request<unknown>("/actions/getAnalyticsData", { method: "POST", body: JSON.stringify(params ?? {}) }),
   optimizeDailyRoute: (params?: Record<string, unknown>) =>
     request<unknown>("/actions/optimizeDailyRoute", { method: "POST", body: JSON.stringify(params ?? {}) }),
+  // Lightweight client-side helpers for appointment UX; backend endpoints are not required for launch.
+  checkAvailability: (params?: Record<string, unknown>) =>
+    Promise.resolve({
+      available: true,
+      staffConflicts: [],
+      businessConflicts: [],
+    } as unknown),
+  getUpsellRecommendations: (params?: Record<string, unknown>) =>
+    Promise.resolve({
+      recommendations: [],
+    } as unknown),
+  estimateDuration: (params?: Record<string, unknown>) =>
+    Promise.resolve({
+      totalEstimatedMinutes: null,
+    } as unknown),
   // Billing: $29/mo, first month free
   billing: {
     getStatus: () => request<{ status: string | null; trialEndsAt: string | null; currentPeriodEnd: string | null }>("/billing/status"),

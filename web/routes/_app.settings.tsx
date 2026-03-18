@@ -110,6 +110,9 @@ const BILLING_FEATURES = [
   "Payment tracking (cash, card, Venmo & more)",
 ];
 
+// Backend route/table is not implemented yet.
+const BACKUP_SNAPSHOTS_SUPPORTED = false;
+
 function BillingTab({
   billingStatus,
   setBillingStatus,
@@ -414,7 +417,7 @@ export default function SettingsPage() {
     sort: { createdAt: "Descending" },
     first: 30,
     select: { id: true, label: true, status: true, recordCounts: true, checksum: true, data: true, completedAt: true, createdAt: true, errorMessage: true },
-    pause: !businessId,
+    pause: !businessId || !BACKUP_SNAPSHOTS_SUPPORTED,
   } as any);
   const [{ fetching: backupRunning }, runBackup] = useGlobalAction(api.createBackup);
 
@@ -447,7 +450,7 @@ export default function SettingsPage() {
           <TabsTrigger value="automation">Automation</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="locations">Locations</TabsTrigger>
-          <TabsTrigger value="backups">Backups</TabsTrigger>
+          {BACKUP_SNAPSHOTS_SUPPORTED && <TabsTrigger value="backups">Backups</TabsTrigger>}
         </TabsList>
 
         {/* ─── Business Profile Tab ─── */}
@@ -833,6 +836,7 @@ export default function SettingsPage() {
           />
         </TabsContent>
         {/* ─── Backups Tab ─── */}
+        {BACKUP_SNAPSHOTS_SUPPORTED && (
         <TabsContent value="backups" className="space-y-6">
           <Card>
             <CardHeader>
@@ -983,6 +987,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
       </Tabs>
     </div>
 

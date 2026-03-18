@@ -154,7 +154,8 @@ export default function OnboardingPage() {
 
     if (result?.data) {
       await api.business.completeOnboarding(result.data.id);
-      navigate("/subscribe");
+      // Unblock the app immediately so protected pages/dashboard can load.
+      navigate("/signed-in");
     }
   };
 

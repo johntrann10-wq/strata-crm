@@ -373,7 +373,6 @@ export default function AppointmentDetail() {
   const [{ fetching: completing }, runComplete] = useAction(api.appointment.complete);
   const [{ fetching: cancelling }, runCancel] = useAction(api.appointment.cancel);
   const [{ fetching: updatingNotes }, runUpdate] = useAction(api.appointment.update);
-  const [{ fetching: resendingReviewAction }, runResendReview] = useAction(api.appointment.resendReviewRequest as any);
 
   useEffect(() => {
     if (appointment) {
@@ -508,17 +507,6 @@ export default function AppointmentDetail() {
     } else {
       toast.success("Appointment updated");
       setShowEditDialog(false);
-      void refetchAppointment();
-    }
-  };
-
-  const handleResendReview = async () => {
-    if (!appointment) return;
-    const result = await runResendReview({ id: appointment.id });
-    if (result.error) {
-      toast.error(result.error.message ?? "Failed to send review request");
-    } else {
-      toast.success("Review request sent!");
       void refetchAppointment();
     }
   };
@@ -990,8 +978,9 @@ export default function AppointmentDetail() {
               <ReviewRequestCard
                 reviewRequestSent={appointment.reviewRequestSent}
                 appointmentStatus={appointment.status}
-                resendingReview={resendingReviewAction}
-                onResendReview={handleResendReview}
+                resendingReview={false}
+                resendEnabled={false}
+                onResendReview={() => toast.error("Resending review requests is not available yet.")}
               />
             </div>
           </div>

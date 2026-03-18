@@ -250,19 +250,19 @@ export default function NewAppointmentPage() {
   const [, createVehicle] = useAction(api.vehicle.create);
 
   const [{ data: availData, fetching: checkingAvail }, runCheckAvail] = useGlobalAction(
-    (api as any).checkAvailability
+    api.checkAvailability
   );
   const runCheckAvailRef = useRef(runCheckAvail);
   useEffect(() => { runCheckAvailRef.current = runCheckAvail; });
 
   const [{ data: upsellData, fetching: fetchingUpsells }, runGetUpsells] = useGlobalAction(
-    (api as any).getUpsellRecommendations
+    api.getUpsellRecommendations
   );
   const runGetUpsellsRef = useRef(runGetUpsells);
   useEffect(() => { runGetUpsellsRef.current = runGetUpsells; });
 
   const [{ data: estimateData, fetching: fetchingEstimate }, runEstimateDuration] = useGlobalAction(
-    (api as any).estimateDuration
+    api.estimateDuration
   );
   const runEstimateDurationRef = useRef(runEstimateDuration);
   useEffect(() => { runEstimateDurationRef.current = runEstimateDuration; });
@@ -502,22 +502,13 @@ export default function NewAppointmentPage() {
         .filter(Boolean)
         .join(" + ");
       const result = await createAppointment({
-        business: businessId ? { _link: businessId } : undefined,
-        client: { _link: selectedClientId },
-        vehicle: selectedVehicleId ? { _link: selectedVehicleId } : undefined,
-        startTime: startDateTime,
-        endTime: endDateTime ?? undefined,
-        status: "scheduled",
+        clientId: selectedClientId,
+        vehicleId: selectedVehicleId!,
+        startTime: startDateTime.toISOString(),
+        endTime: endDateTime ? endDateTime.toISOString() : undefined,
         title: autoTitle || undefined,
-        assignedStaff: selectedStaffId ? { _link: selectedStaffId } : undefined,
-        isMobile,
-        mobileAddress: isMobile && mobileAddress.trim() ? mobileAddress.trim() : undefined,
-        notes: notes.trim() || undefined,
-        internalNotes: internalNotes.trim() || undefined,
-        depositAmount: depositAmount ? parseFloat(depositAmount) : undefined,
-        totalPrice: totalPrice > 0 ? totalPrice : undefined,
-        location: selectedLocationId ? { _link: selectedLocationId } : undefined,
-        serviceIds: selectedServiceIds,
+        assignedStaffId: selectedStaffId ?? undefined,
+        locationId: selectedLocationId ?? undefined,
       } as any);
 
       if (result.error) {

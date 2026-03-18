@@ -333,10 +333,12 @@ export function CommandPalette({ enabledModules = new Set<string>() }: { enabled
                 <Wrench className="mr-2 h-4 w-4" />
                 Services
               </CommandItem>
-              <CommandItem onSelect={() => go("/inventory")}>
-                <Package className="mr-2 h-4 w-4" />
-                Inventory
-              </CommandItem>
+              {enabledModules.has("inventory") && (
+                <CommandItem onSelect={() => go("/inventory")}>
+                  <Package className="mr-2 h-4 w-4" />
+                  Inventory
+                </CommandItem>
+              )}
               <CommandItem onSelect={() => go("/staff")}>
                 <UserCheck className="mr-2 h-4 w-4" />
                 Staff

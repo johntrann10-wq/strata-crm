@@ -22,24 +22,28 @@ declare global {
 }
 function requireJwtSecret() {
   const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("JWT_SECRET is not configured");
-  }
-  return secret;
+  if (secret && secret.trim() !== "") return secret;
+  throw new Error("JWT_SECRET is required");
 }
 function getUserIdFromRequest(req: Request): string | null {
-  // Prefer JWT in Authorization header
-  const auth = req.headers.authorization ?? "";
-  const [, rawToken] = auth.split(" ");
-  if (rawToken) {
+  // JWT has explicit precedence when Authorization header is present.
+  // If the header is present but invalid, we do NOT fall back to session
+  // (prevents JWT/session conflicts).
+  const authHeader = req.headers.authorization ?? "";
+  const bearerPrefix = "Bearer ";
+  if (authHeader.trim() !== "") {
+    if (!authHeader.startsWith(bearerPrefix)) return null;
+    const rawToken = authHeader.slice(bearerPrefix.length).trim();
+    if (!rawToken) return null;
     try {
       const payload = jwt.verify(rawToken, requireJwtSecret()) as { userId?: string };
-      if (payload.userId) return payload.userId;
+      return payload.userId ?? null;
     } catch {
-      // ignore and fall back to session
+      return null;
     }
   }
-  // Fallback to legacy session-based auth (if still used anywhere)
+
+  // No Authorization header -> optional session-based auth fallback.
   const sessionUserId = (req.session as { userId?: string } | undefined)?.userId;
   return sessionUserId ?? null;
 }
