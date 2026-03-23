@@ -10,15 +10,6 @@
 // --------------------------------------------------------------------------------------
 
 import { Link } from "react-router";
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-  navigationMenuTriggerStyle,
-} from "@/components/ui/navigation-menu";
 import { cn } from "@/lib/utils";
 import { NavDrawer } from "@/components/shared/NavDrawer";
 
@@ -121,48 +112,42 @@ const MobileNav = () => {
   );
 };
 
-// Desktop horizontal nav, supports dropdown sections
+// Desktop: plain links only — Radix NavigationMenu + viewport sat under the header with z-50 and
+// intercepted clicks on the hero CTAs / main content on some layouts.
+const desktopLinkClass = cn(
+  "inline-flex h-9 items-center justify-center rounded-md bg-background px-3 py-2 text-sm font-medium",
+  "text-foreground hover:bg-accent hover:text-accent-foreground",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+);
+
 const DesktopNav = () => (
-  <NavigationMenu className="hidden md:flex px-4">
-    <NavigationMenuList className="flex gap-1">
-      {navigationItems.map((item) => (
-        <NavigationMenuItem key={item.title}>
-          {item.type === "item" ? (
-            <NavigationMenuLink asChild>
-              <Link to={item.href} className={cn(navigationMenuTriggerStyle(), "inline-flex px-3")}>
-                {item.title}
+  <nav className="hidden md:flex items-center gap-1 px-4" aria-label="Marketing">
+    {navigationItems.map((item) =>
+      item.type === "item" ? (
+        <Link key={item.title} to={item.href} className={desktopLinkClass}>
+          {item.title}
+        </Link>
+      ) : (
+        <div key={item.title} className="group relative">
+          <span className={cn(desktopLinkClass, "cursor-default")}>{item.title}</span>
+          <div className="absolute left-0 top-full z-50 mt-1 hidden min-w-[220px] rounded-md border bg-popover p-2 text-popover-foreground shadow-md group-hover:block group-focus-within:block">
+            {item.items.map((subItem) => (
+              <Link
+                key={subItem.title}
+                to={subItem.href}
+                className="block rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+              >
+                <div className="font-medium">{subItem.title}</div>
+                {subItem.description ? (
+                  <p className="text-xs text-muted-foreground">{subItem.description}</p>
+                ) : null}
               </Link>
-            </NavigationMenuLink>
-          ) : (
-            <>
-              <NavigationMenuTrigger className="px-3 py-2 text-sm font-medium transition-colors hover:text-accent-foreground">
-                {item.title}
-              </NavigationMenuTrigger>
-              <NavigationMenuContent className="min-w-[200px] p-2">
-                <div className="p-2">
-                  <div className="grid grid-cols-1">
-                    {item.items.map((subItem) => (
-                      <NavigationMenuLink key={subItem.title} asChild>
-                        <Link
-                          to={subItem.href}
-                          className="block flex flex-col gap-1 rounded-md p-3 transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-                        >
-                          <div className="text-sm font-medium">{subItem.title}</div>
-                          {subItem.description && (
-                            <p className="text-sm text-muted-foreground">{subItem.description}</p>
-                          )}
-                        </Link>
-                      </NavigationMenuLink>
-                    ))}
-                  </div>
-                </div>
-              </NavigationMenuContent>
-            </>
-          )}
-        </NavigationMenuItem>
-      ))}
-    </NavigationMenuList>
-  </NavigationMenu>
+            ))}
+          </div>
+        </div>
+      )
+    )}
+  </nav>
 );
 
 // Simple wrench mark for the logo

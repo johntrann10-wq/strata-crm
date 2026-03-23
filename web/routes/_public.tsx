@@ -42,7 +42,7 @@ export default function PublicLayout() {
           </div>
         </div>
       </nav>
-      <main className="grow bg-muted/20">
+      <main className="relative z-10 grow bg-muted/20">
         <Outlet context={context} />
       </main>
       <footer className="bg-gray-50 border-t shrink-0">

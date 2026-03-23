@@ -11,7 +11,8 @@ import {
   ArrowRight,
   Sparkles,
 } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
+import { useEffect } from "react";
 
 const features = [
   {
@@ -53,6 +54,18 @@ const features = [
 ];
 
 export default function LandingPage() {
+  const location = useLocation();
+
+  // React Router updates the URL for /#section but does not always scroll; fix in-page anchors.
+  useEffect(() => {
+    const id = location.hash.replace(/^#/, "");
+    if (!id) return;
+    const el = document.getElementById(id);
+    if (el) {
+      requestAnimationFrame(() => el.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  }, [location.pathname, location.hash]);
+
   return (
     <div className="bg-white text-gray-900 min-h-screen">
       {/* ── Hero ── */}
