@@ -20,8 +20,12 @@ type AuthEnvelope = { data: AuthUserData };
  * - If both unset: empty string → relative `/api/...` (dev: Vite proxy; prod: same-origin + edge proxy when VITE_ALLOW_RELATIVE_API=true at build)
  */
 function resolveApiBase(): string {
-  const env = import.meta.env;
-  const raw = env.VITE_API_URL?.trim() || env.NEXT_PUBLIC_API_URL?.trim() || "";
+  // Use `import.meta.env.VITE_*` directly here — assigning `import.meta.env` to a variable
+  // breaks Vite's static replacement and can minify to `{}`, ignoring build-time API URLs.
+  const raw =
+    import.meta.env.VITE_API_URL?.trim() ||
+    import.meta.env.NEXT_PUBLIC_API_URL?.trim() ||
+    "";
   if (raw) return raw.replace(/\/+$/, "");
 
   // Development: always same-origin; Vite proxies /api (see vite.config.mts).
