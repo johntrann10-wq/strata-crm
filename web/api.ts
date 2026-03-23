@@ -26,6 +26,13 @@ function resolveApiBase(): string {
 // Base origin for browser API calls.
 export const API_BASE = resolveApiBase();
 
+/** True when the SPA knows where the API lives (dev proxy or explicit VITE_API_URL). */
+export function isApiUrlConfigured(): boolean {
+  if (import.meta.env.DEV) return true;
+  const v = (import.meta.env as Record<string, string | undefined>).VITE_API_URL;
+  return !!(v && String(v).trim());
+}
+
 export class ApiError extends Error {
   status: number;
   path: string;
@@ -69,12 +76,29 @@ async function request<T = unknown>(
       clearAuthToken();
       emitAuthEvent("auth:invalid", { status: res.status, path });
     }
-    const errBody = (await res.json().catch(() => ({}))) as { message?: string; detail?: string };
-    const message = errBody.message ?? res.statusText ?? `Request failed ${res.status}`;
+    const errText = await res.text();
+    let errBody: { message?: string; detail?: string } = {};
+    if (errText) {
+      try {
+        errBody = JSON.parse(errText) as { message?: string; detail?: string };
+      } catch {
+        errBody = { message: errText.slice(0, 200) };
+      }
+    }
+    let message =
+      errBody.message ?? res.statusText ?? `Request failed ${res.status}`;
+    if (res.status === 404 && import.meta.env.PROD && !isApiUrlConfigured()) {
+      message =
+        "API not found (404). Set VITE_API_URL to your backend URL when building the frontend, or proxy /api to your API.";
+    }
     throw new ApiError(message, res.status, path, errBody.detail);
   }
   const text = await res.text();
-  return (text ? JSON.parse(text) : null) as T;
+  try {
+    return (text ? JSON.parse(text) : null) as T;
+  } catch {
+    throw new ApiError("Invalid JSON from server", res.status, path);
+  }
 }
 function resource(path: string) {
   const base = path.startsWith("/") ? path : `/${path}`;

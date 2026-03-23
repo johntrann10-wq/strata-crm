@@ -4,8 +4,16 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import type { FormEvent } from "react";
 import { api } from "../api";
 import { setAuthToken } from "../lib/auth";
+
+function persistAuthTokenFromResponse(res: unknown): void {
+  if (typeof window === "undefined") return;
+  const r = res as { data?: { token?: string }; token?: string } | null | undefined;
+  const token = r?.data?.token ?? (typeof r?.token === "string" ? r.token : undefined);
+  if (token) setAuthToken(token);
+}
 
 type FindManyOpts = {
   filter?: Record<string, unknown>;
@@ -195,27 +203,43 @@ export function useActionForm(
   }), []);
 
   const submit = useCallback(
-    (e?: React.FormEvent) => {
+    (e?: FormEvent) => {
       e?.preventDefault();
       setIsSubmitting(true);
       setErrors({});
-      const payload = options?.send
-        ? Object.fromEntries(options.send.map((k) => [k, values[k]]))
-        : values;
+      // Prefer live form values so submit never sends stale React state (fixes empty payload / failed login).
+      let payload: Record<string, unknown>;
+      const form = e?.currentTarget;
+      if (form instanceof HTMLFormElement) {
+        const fd = new FormData(form);
+        payload = Object.fromEntries(fd.entries()) as Record<string, unknown>;
+        if (options?.send?.length) {
+          payload = Object.fromEntries(options.send.map((k) => [k, payload[k]]));
+        }
+      } else {
+        payload = options?.send
+          ? Object.fromEntries(options.send.map((k) => [k, values[k]]))
+          : { ...values };
+      }
       return actionFn(payload)
         .then((res) => {
-          if (res?.error) {
-            setErrors({ root: { message: res.error.message } });
+          if (res && typeof res === "object" && "error" in res && (res as { error?: { message?: string } }).error) {
+            const msg = (res as { error?: { message?: string } }).error?.message;
+            setErrors({ root: { message: msg ?? "Request failed" } });
             return;
           }
-          // If the action returned a JWT token, persist it for subsequent requests
-          if (res && (res as any).data && (res as any).data.token && typeof window !== "undefined") {
-            setAuthToken((res as any).data.token as string);
-          }
+          persistAuthTokenFromResponse(res);
           setIsSubmitSuccessful(true);
           options?.onSuccess?.();
         })
-        .catch((err: Error) => setErrors({ root: { message: err.message } }))
+        .catch((err: Error) => {
+          let msg = err.message;
+          if (msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("Load failed")) {
+            msg =
+              "Cannot reach the API. Locally: run the backend and ensure Vite proxies /api to it. Production: set VITE_API_URL to your API origin and redeploy.";
+          }
+          setErrors({ root: { message: msg } });
+        })
         .finally(() => setIsSubmitting(false));
     },
     [actionFn, values, options?.onSuccess, options?.send]

@@ -8,48 +8,42 @@ import {
   Layers,
   CreditCard,
   ArrowRight,
-  Zap,
+  Sparkles,
 } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import { useEffect } from "react";
 
-/** Capabilities — universal auto shop; flexible services (see PRODUCT.md). */
+/** Product pillars — speed, clarity, any shop (see PRODUCT.md). */
 const features = [
   {
-    icon: Zap,
-    title: "Built for speed",
-    description:
-      "Quote and schedule in seconds—not minutes. Fewer taps, less admin, more time on the floor.",
-  },
-  {
     icon: FileText,
-    title: "Quotes & jobs",
+    title: "Quote → job → paid",
     description:
-      "Turn estimates into scheduled work with a clear path from quote to invoice to paid.",
+      "Move from estimate to scheduled work and invoice without friction—built for shops that live on appointments, not spreadsheets.",
   },
   {
     icon: Calendar,
-    title: "Scheduling",
+    title: "Scheduling that fits the bay",
     description:
-      "Calendar and appointments that match how real shops run—mobile-friendly for owners on the move.",
+      "Calendar and jobs that match how real shops run—fast on mobile when you are on the floor.",
   },
   {
     icon: Users,
     title: "Clients & vehicles",
     description:
-      "Keep customers and vehicles in one place—history and notes without spreadsheet chaos.",
+      "History, vehicles, and notes in one place—so every touchpoint feels intentional, not chaotic.",
   },
   {
     icon: CreditCard,
     title: "Invoices & payments",
     description:
-      "Professional invoices and payment flows that match a serious shop—not toy software.",
+      "Professional money flows that match a serious shop—simple pricing on our side, no upsell maze.",
   },
   {
     icon: Layers,
     title: "Flexible services",
     description:
-      "You define services and pricing—detail, tint, tires, mechanical, mobile routes, or mixed. No niche lock-in.",
+      "You define what you sell—detail, tint, tires, mechanical, mobile, or mixed. No niche lock-in.",
   },
 ];
 
@@ -69,7 +63,7 @@ export default function LandingPage() {
     <div className="bg-white text-gray-900 min-h-screen">
       <section
         id="product"
-        className="relative overflow-hidden bg-gradient-to-b from-orange-50 to-white py-20 sm:py-24 px-4 sm:px-6"
+        className="relative overflow-hidden bg-gradient-to-b from-orange-50 to-white py-24 px-6"
       >
         <div
           className="pointer-events-none absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-20"
@@ -86,38 +80,38 @@ export default function LandingPage() {
           }}
         />
 
-        <div className="relative z-10 mx-auto max-w-4xl text-center flex flex-col items-center gap-6 sm:gap-8">
+        <div className="relative z-10 mx-auto max-w-4xl text-center flex flex-col items-center gap-8">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-orange-300 bg-orange-100 text-orange-700 text-sm font-medium">
-            <Zap className="w-4 h-4" />
-            CRM for any auto service shop
+            <Sparkles className="w-4 h-4" />
+            CRM built for speed—works for any auto service shop
           </div>
 
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight leading-tight text-gray-900 px-2">
-            Run the shop from your phone.
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.05] text-gray-900">
+            Close faster.
             <br />
-            <span className="text-orange-500">Less clutter. Less admin.</span>
+            <span className="text-orange-500">Admin less.</span>
           </h1>
 
-          <p className="text-base sm:text-lg text-gray-600 max-w-2xl leading-relaxed px-2">
-            Strata is for owner-operated shops—detail, tint, PPF, tires, light mechanical, mobile
-            routes, or mixed. Simple pricing, no upsell traps, and UX that stays out of your way.
+          <p className="text-lg sm:text-xl text-gray-600 max-w-2xl leading-relaxed">
+            Strata is for owner-operated shops that refuse slow software—detail, tint, PPF, tires,
+            mechanical, or mobile. Mobile-first, honest pricing, UX that stays out of your way.
           </p>
 
-          <div className="rounded-xl border border-orange-200 bg-white/80 px-6 py-3 text-center">
-            <p className="text-gray-700 font-semibold">
-              <span className="text-2xl text-orange-600">$29</span>
+          <div className="rounded-xl border border-orange-200 bg-white/90 backdrop-blur-sm px-6 py-4 text-center shadow-sm">
+            <p className="text-gray-800 font-semibold">
+              <span className="text-3xl text-orange-600">$29</span>
               <span className="text-gray-500 font-normal">/month</span>
-              <span className="ml-2 text-green-600 font-medium">· First month free</span>
+              <span className="ml-2 text-green-600 font-medium">— First month free</span>
             </p>
-            <p className="text-xs text-gray-500 mt-1">Straightforward pricing—no surprise tiers.</p>
+            <p className="text-xs text-gray-500 mt-1">One simple price. No surprise tiers.</p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-2 w-full max-w-md sm:max-w-none justify-center">
+          <div className="flex flex-col sm:flex-row gap-4 mt-2">
             <Link
               to="/sign-up"
               className={cn(
                 buttonVariants({ size: "lg" }),
-                "min-h-[48px] bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 text-base font-semibold shadow-md shadow-orange-200",
+                "min-h-[52px] bg-orange-500 hover:bg-orange-600 text-white px-10 py-3.5 text-base font-semibold shadow-lg shadow-orange-200/80",
                 "[&_svg]:pointer-events-auto"
               )}
             >
@@ -128,7 +122,7 @@ export default function LandingPage() {
               to="/sign-in"
               className={cn(
                 buttonVariants({ size: "lg", variant: "outline" }),
-                "min-h-[48px] border-gray-300 text-gray-700 hover:bg-gray-50 px-8 py-3 text-base font-semibold"
+                "min-h-[52px] border-gray-300 text-gray-800 hover:bg-gray-50 px-10 py-3.5 text-base font-semibold"
               )}
             >
               Sign in
@@ -137,25 +131,25 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="features" className="py-16 sm:py-24 px-4 sm:px-6 bg-white">
+      <section id="features" className="py-24 px-6 bg-white">
         <div className="mx-auto max-w-6xl">
-          <div className="text-center mb-12 sm:mb-16">
-            <h2 className="text-2xl sm:text-4xl font-bold text-gray-900 mb-3 sm:mb-4">
-              Clean UX. No broken states.
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+              Fewer screens. Each one excellent.
             </h2>
-            <p className="text-gray-500 text-base sm:text-lg max-w-2xl mx-auto">
-              Fewer screens, obvious actions, and flows that work on a phone—so you are not fighting
-              the tool between bays and customers.
+            <p className="text-gray-500 text-lg max-w-xl mx-auto">
+              Speed, clarity, and flows that work on a phone—so you are selling and scheduling, not
+              fighting the tool.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map(({ icon: Icon, title, description }) => (
               <Card
                 key={title}
-                className="bg-white border border-gray-200 hover:border-orange-400 hover:shadow-md transition-all duration-300 group"
+                className="bg-white border border-gray-200 hover:border-orange-400 hover:shadow-lg transition-all duration-300 group"
               >
-                <CardContent className="p-5 sm:p-6 flex flex-col gap-3 sm:gap-4">
+                <CardContent className="p-6 flex flex-col gap-4">
                   <div className="w-11 h-11 rounded-lg bg-orange-100 flex items-center justify-center group-hover:bg-orange-200 transition-colors">
                     <Icon className="w-5 h-5 text-orange-500" />
                   </div>
@@ -168,24 +162,25 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="industries" className="py-12 sm:py-14 px-4 sm:px-6 bg-orange-50 border-y border-orange-100">
+      <section id="industries" className="py-16 px-6 bg-orange-50 border-y border-orange-100">
         <div className="mx-auto max-w-3xl text-center">
-          <p className="text-gray-700 text-base sm:text-lg font-medium leading-relaxed">
-            One product for many shop types—use the same flexible service catalog whether you are
-            focused on appearance, tires, light repair, or a mix.
+          <p className="text-gray-800 text-lg font-medium leading-relaxed">
+            Built for shops that care how every client touchpoint feels—whether you are appearance,
+            tires, light repair, or a mix.
           </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-500">
+          <div className="mt-8 flex flex-wrap justify-center gap-3 text-sm text-gray-600">
             {[
-              "Detail & coating",
+              "Premium detail",
+              "Ceramic coating",
               "Tint & PPF",
               "Tire shops",
               "Mobile service",
               "Light mechanical",
-              "Mixed operations",
+              "Mixed ops",
             ].map((type) => (
               <span
                 key={type}
-                className="px-3 py-1.5 rounded-full bg-white border border-orange-200 text-gray-600 font-medium"
+                className="px-3 py-1.5 rounded-full bg-white border border-orange-200 font-medium shadow-sm"
               >
                 {type}
               </span>
@@ -194,18 +189,20 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="pricing" className="py-16 sm:py-24 px-4 sm:px-6 bg-white">
+      <section id="pricing" className="py-24 px-6 bg-white">
         <div className="mx-auto max-w-3xl">
-          <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 p-8 sm:p-16 flex flex-col items-center text-center gap-5 sm:gap-6 shadow-xl shadow-orange-200">
-            <h2 className="text-2xl sm:text-4xl font-bold text-white">Ready to move faster?</h2>
-            <p className="text-orange-100 text-base sm:text-lg max-w-md">
-              Simple monthly pricing—no upsell maze. Try it free for the first month.
+          <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 p-10 sm:p-16 flex flex-col items-center text-center gap-6 shadow-xl shadow-orange-200/80">
+            <h2 className="text-3xl sm:text-4xl font-bold text-white">
+              Ready for a tighter, faster operation?
+            </h2>
+            <p className="text-orange-100 text-lg max-w-md">
+              Less admin, cleaner workflows, and pricing that does not punish you for growing.
             </p>
             <Link
               to="/sign-up"
               className={cn(
                 buttonVariants({ size: "lg" }),
-                "min-h-[48px] bg-white text-orange-600 hover:bg-orange-50 px-10 py-3 text-base font-semibold shadow-md mt-2",
+                "min-h-[52px] bg-white text-orange-600 hover:bg-orange-50 px-10 py-3.5 text-base font-semibold shadow-md mt-2",
                 "[&_svg]:pointer-events-auto"
               )}
             >
