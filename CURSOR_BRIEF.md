@@ -45,18 +45,14 @@ Use this document when working on the Strata codebase. It defines scope, priorit
 
 ## 5. Product positioning (read first)
 
-- **North star**: Strata is a **premium CRM for detailing, ceramic coating, tint, and PPF shops**—speed, UX, and quote-to-deposit-to-booking over generic “shop management” bloat. Competitive reference: simpler/faster/cleaner than overbuilt tools (e.g. OrbisX-class products).
-- Full ICP, principles, and non-goals: **`PRODUCT.md`** in the repo root. Apply that lens to UI copy, onboarding, and feature scope—not generic automotive CRM language.
+- **North star**: Strata is a **fast, simple CRM for auto service shops**—quote and schedule in seconds, **clean UX** (no clutter, no broken states), **universal** (any shop type; flexible service catalog), **simple honest pricing**, **mobile-first** for owners. Full principles and ICP: **`PRODUCT.md`** in the repo root. Apply that lens to UI copy, onboarding, and feature scope.
 
 ---
 
-## 6. Business-type-specific behavior
+## 6. Business types and services
 
-- Support **business types** (e.g. tire shop, detail shop, body shop) and branch UI and logic where needed.
-- **Tire shop**: e.g. tire-specific services, inventory (tires), and any tire-specific flows.
-- **Detail shop**: e.g. detailing packages, add-ons, and scheduling nuances.
-- **Body shop**: e.g. estimates, parts, insurance-related flows.
-- Use `business.type` (or equivalent) to drive feature flags, forms, and validation. Add business-type-specific UI and backend rules without breaking existing flows.
+- **Default**: **Universal service catalog** (name, category, price, duration, add-ons, notes)—same structure for **any** auto shop; avoid hard-coding one vertical into shared flows.
+- **Optional**: Use `business.type` (or equivalent) for **labels, defaults, or optional modules** (e.g. tire vs detail vs body) when it helps, without **locking** the product to one niche or duplicating core flows per vertical.
 
 ---
 

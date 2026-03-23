@@ -46,7 +46,7 @@ export const links = () => [];
 export const meta = () => [
   { charset: "utf-8" },
   { name: "viewport", content: "width=device-width, initial-scale=1" },
-  { title: "Strata — CRM for premium detailing, tint & PPF" },
+  { title: "Strata — fast CRM for auto service shops" },
 ];
 
 export type RootOutletContext = {

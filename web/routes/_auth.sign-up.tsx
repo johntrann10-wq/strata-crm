@@ -1,12 +1,18 @@
 import { SignUpComponent } from "@/components/auth/sign-up";
-import { Link, useLocation, useNavigate, useOutletContext } from "react-router";
+import { useNavigate, useOutletContext } from "react-router";
 import type { RootOutletContext } from "../root";
 
-export default function () {
+export default function AuthSignUpRoute() {
   const { gadgetConfig } = useOutletContext<RootOutletContext>();
-
-  const { search } = useLocation();
   const navigate = useNavigate();
+  const afterAuth =
+    gadgetConfig?.authentication?.redirectOnSuccessfulSignInPath ?? "/signed-in";
 
-  return <SignUpComponent />;
+  return (
+    <SignUpComponent
+      options={{
+        onSuccess: () => navigate(afterAuth, { replace: true }),
+      }}
+    />
+  );
 }

@@ -1,50 +1,69 @@
 # Strata — product positioning
 
-Strata is **not** generic auto shop management software.
+Strata is a **fast, simple CRM for auto service shops**—detail, tint, PPF, tires, mechanical, mobile ops, or mixed. We win on **speed, clarity, and honest pricing**, not on being the biggest feature matrix.
 
-We are building the **best CRM for premium detailing, ceramic coating, tint, and PPF shops**—simpler, faster, cleaner, and more premium than bloated alternatives (e.g. **OrbisX** is the bar to beat on positioning and workflow depth; we win on **speed, UX, and focus**).
+---
+
+## North star (non‑negotiables)
+
+1. **Faster than everything else**  
+   - **Create a quote in under 60 seconds** (minimal steps, smart defaults, no hunting).  
+   - **Schedule a job in under 30 seconds** (pick client/vehicle/time without long forms).
+
+2. **Cleaner UX**  
+   - **No clutter** — every screen earns its pixels.  
+   - **No confusion** — obvious next action; labels match how shops talk.  
+   - **No broken states** — loading, empty, and error paths always recoverable (retry, clear message, no dead ends).
+
+3. **Works for ANY auto shop**  
+   - **No niche lock-in** — same core product for different shop types.  
+   - **Flexible services** — universal catalog (name, category, price, duration, add-ons, notes); avoid hard-coded “only for detailers” logic in shared flows.
+
+4. **Cheap pricing**  
+   - **Simple pricing model** — easy to understand on one screen.  
+   - **No upsell traps** — no dark patterns, surprise limits, or nag screens to extract upgrades.
+
+5. **Mobile usable**  
+   - **Owners run the shop from the phone** — large tap targets, short flows, core actions without desktop-only steps.
 
 ---
 
 ## Product goal
 
-Beat generic and overbuilt tools by being **simpler, faster, cleaner, and more premium** for **detailing-centric** businesses—without half-shipped features.
-
----
-
-## Core principles
-
-1. **Speed over bloat** — every interaction should feel instant; avoid feature sprawl.
-2. **Premium UX over feature count** — polish beats a long checklist.
-3. **Mobile-first for shop owners** — owners live on their phone between bays and clients.
-4. **Quote → deposit → booking** — this flow must be **frictionless** end-to-end.
-5. **Every screen** should feel designed for **high-ticket service** businesses—not “management software.”
-6. **No broken half-features** — ship fewer surfaces; each one must work.
-7. **Fewer modules, each excellent** — depth where it matters for detailing workflows.
-8. **Real-world detailing workflows** — coatings, film, multi-stage jobs, deposits, reputation-sensitive clients.
-9. **Reduce admin work, increase close rate** — the product should measurably help **sell and schedule**, not just “track stuff.”
+Ship **fewer surfaces, each excellent**: depth on quote → schedule → invoice → paid, not breadth of half-built modules.
 
 ---
 
 ## Target customer (ICP)
 
-- Owner-operated or **small-team** shops  
-- **Premium / detail-focused** positioning  
-- **Ceramic coating**, **paint correction**, **tint**, **PPF**, wraps where relevant  
-- **High average ticket**, appointment-based  
-- **Image- and reputation-sensitive**  
-- Wants a **premium client experience** that matches their brand  
+- **Small shops and owner-operators** (often &lt; ~15 staff).  
+- **Appointment-based**, **vehicle-centric** work (detail, coating, tint, PPF, wraps, tires, light mechanical, mobile routes, etc.).  
+- Wants **less admin** and **faster closes**, not another ERP.  
+- Cares that **clients** get a clear, professional experience (confirmations, quotes, invoices) without the team fighting the software.
 
 ---
 
-## Non-goals (for positioning and UX)
+## Non-goals (positioning and UX)
 
-- Generic “we serve every automotive vertical equally” messaging or UI  
-- Competing on raw feature count with full-suite shop ERPs  
-- Cluttered dashboards and module sprawl that bury the quote-to-cash path  
+- Competing on **raw feature count** with full-suite ERPs.  
+- **Cluttered dashboards** that bury quote → schedule → cash.  
+- **Industry-only** messaging or UI that locks out adjacent shops (keep the product **inclusive** unless a feature is genuinely gated by business type).  
+- **Pricing gimmicks** and hidden upsells.
 
 ---
 
 ## Implementation note
 
-When adding features or copy, ask: *Does this help a premium detail/tint/PPF shop **close and schedule** faster, or does it add admin noise?* Prefer the former.
+When adding features or copy, ask:
+
+- Does this help a shop **close and schedule faster**, or add admin noise?  
+- Does this **work on a phone** for the owner between jobs?  
+- Does this stay **honest and simple** (pricing, limits, upgrade paths)?
+
+Prefer **measurable** speed (time-to-quote, time-to-book) over more checkboxes.
+
+---
+
+## Related docs
+
+- Engineering scope and deploy expectations: **`CURSOR_BRIEF.md`**.

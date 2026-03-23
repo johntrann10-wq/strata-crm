@@ -8,49 +8,54 @@ import {
   Layers,
   CreditCard,
   ArrowRight,
-  Sparkles,
+  Zap,
 } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import { useEffect } from "react";
 
-/** Focused capabilities — fewer modules, each aligned with premium detailing workflows (see PRODUCT.md). */
+/** Capabilities — universal auto shop; flexible services (see PRODUCT.md). */
 const features = [
   {
-    icon: FileText,
-    title: "Quote → deposit → booking",
+    icon: Zap,
+    title: "Built for speed",
     description:
-      "Move leads from estimate to paid deposit to scheduled job without friction—built for high-ticket, reputation-sensitive sales.",
+      "Quote and schedule in seconds—not minutes. Fewer taps, less admin, more time on the floor.",
+  },
+  {
+    icon: FileText,
+    title: "Quotes & jobs",
+    description:
+      "Turn estimates into scheduled work with a clear path from quote to invoice to paid.",
   },
   {
     icon: Calendar,
-    title: "Scheduling that fits the bay",
+    title: "Scheduling",
     description:
-      "Appointment-based calendar that matches how real detail, tint, and PPF shops run—not generic block booking.",
+      "Calendar and appointments that match how real shops run—mobile-friendly for owners on the move.",
   },
   {
     icon: Users,
-    title: "Client & vehicle CRM",
+    title: "Clients & vehicles",
     description:
-      "Full history, vehicles, and service notes—so every touchpoint feels premium, not transactional.",
+      "Keep customers and vehicles in one place—history and notes without spreadsheet chaos.",
   },
   {
     icon: CreditCard,
     title: "Invoices & payments",
     description:
-      "Get paid fast with flows that look as professional as the work you deliver.",
+      "Professional invoices and payment flows that match a serious shop—not toy software.",
   },
   {
     icon: Layers,
-    title: "Services & packages",
+    title: "Flexible services",
     description:
-      "Coatings, correction, tint, PPF, add-ons—priced, repeatable, and easy to quote.",
+      "You define services and pricing—detail, tint, tires, mechanical, mobile routes, or mixed. No niche lock-in.",
   },
 ];
 
 export default function LandingPage() {
   const location = useLocation();
 
-  // React Router updates the URL for /#section but does not always scroll; fix in-page anchors.
   useEffect(() => {
     const id = location.hash.replace(/^#/, "");
     if (!id) return;
@@ -62,12 +67,10 @@ export default function LandingPage() {
 
   return (
     <div className="bg-white text-gray-900 min-h-screen">
-      {/* ── Hero ── */}
       <section
         id="product"
-        className="relative overflow-hidden bg-gradient-to-b from-orange-50 to-white py-24 px-6"
+        className="relative overflow-hidden bg-gradient-to-b from-orange-50 to-white py-20 sm:py-24 px-4 sm:px-6"
       >
-        {/* Subtle decorative blobs */}
         <div
           className="pointer-events-none absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-20"
           style={{
@@ -83,81 +86,76 @@ export default function LandingPage() {
           }}
         />
 
-        <div className="relative z-10 mx-auto max-w-4xl text-center flex flex-col items-center gap-8">
-          {/* Badge */}
+        <div className="relative z-10 mx-auto max-w-4xl text-center flex flex-col items-center gap-6 sm:gap-8">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-orange-300 bg-orange-100 text-orange-700 text-sm font-medium">
-            <Sparkles className="w-4 h-4" />
-            CRM for premium detailing, tint &amp; PPF
+            <Zap className="w-4 h-4" />
+            CRM for any auto service shop
           </div>
 
-          {/* Headline */}
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-tight text-gray-900">
-            Close faster.
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight leading-tight text-gray-900 px-2">
+            Run the shop from your phone.
             <br />
-            <span className="text-orange-500">Admin less.</span>
+            <span className="text-orange-500">Less clutter. Less admin.</span>
           </h1>
 
-          {/* Subheadline */}
-          <p className="text-lg sm:text-xl text-gray-600 max-w-2xl leading-relaxed">
-            Strata is built for owner-operated detail shops—ceramic coating, paint correction, tint, and PPF.
-            Mobile-first, fast, and designed for high-ticket work—not generic “shop management” bloat.
+          <p className="text-base sm:text-lg text-gray-600 max-w-2xl leading-relaxed px-2">
+            Strata is for owner-operated shops—detail, tint, PPF, tires, light mechanical, mobile
+            routes, or mixed. Simple pricing, no upsell traps, and UX that stays out of your way.
           </p>
 
-          {/* Pricing highlight */}
           <div className="rounded-xl border border-orange-200 bg-white/80 px-6 py-3 text-center">
             <p className="text-gray-700 font-semibold">
               <span className="text-2xl text-orange-600">$29</span>
               <span className="text-gray-500 font-normal">/month</span>
-              <span className="ml-2 text-green-600 font-medium">— First month free</span>
+              <span className="ml-2 text-green-600 font-medium">· First month free</span>
             </p>
+            <p className="text-xs text-gray-500 mt-1">Straightforward pricing—no surprise tiers.</p>
           </div>
 
-          {/* CTAs — Link + buttonVariants (Button import removed; avoids undefined Button at runtime) */}
-          <div className="flex flex-col sm:flex-row gap-4 mt-2">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-2 w-full max-w-md sm:max-w-none justify-center">
             <Link
               to="/sign-up"
               className={cn(
                 buttonVariants({ size: "lg" }),
-                "bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 text-base font-semibold shadow-md shadow-orange-200",
+                "min-h-[48px] bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 text-base font-semibold shadow-md shadow-orange-200",
                 "[&_svg]:pointer-events-auto"
               )}
             >
-              Get Started Free
+              Get started free
               <ArrowRight className="ml-2 w-4 h-4" />
             </Link>
             <Link
               to="/sign-in"
               className={cn(
                 buttonVariants({ size: "lg", variant: "outline" }),
-                "border-gray-300 text-gray-700 hover:bg-gray-50 px-8 py-3 text-base font-semibold"
+                "min-h-[48px] border-gray-300 text-gray-700 hover:bg-gray-50 px-8 py-3 text-base font-semibold"
               )}
             >
-              Sign In
+              Sign in
             </Link>
           </div>
         </div>
       </section>
 
-      {/* ── Features ── */}
-      <section id="features" className="py-24 px-6 bg-white">
+      <section id="features" className="py-16 sm:py-24 px-4 sm:px-6 bg-white">
         <div className="mx-auto max-w-6xl">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Fewer modules. Each one excellent.
+          <div className="text-center mb-12 sm:mb-16">
+            <h2 className="text-2xl sm:text-4xl font-bold text-gray-900 mb-3 sm:mb-4">
+              Clean UX. No broken states.
             </h2>
-            <p className="text-gray-500 text-lg max-w-xl mx-auto">
-              Speed, premium UX, and a frictionless quote-to-deposit-to-booking flow—so you spend
-              less time in software and more time closing premium work.
+            <p className="text-gray-500 text-base sm:text-lg max-w-2xl mx-auto">
+              Fewer screens, obvious actions, and flows that work on a phone—so you are not fighting
+              the tool between bays and customers.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {features.map(({ icon: Icon, title, description }) => (
               <Card
                 key={title}
                 className="bg-white border border-gray-200 hover:border-orange-400 hover:shadow-md transition-all duration-300 group"
               >
-                <CardContent className="p-6 flex flex-col gap-4">
+                <CardContent className="p-5 sm:p-6 flex flex-col gap-3 sm:gap-4">
                   <div className="w-11 h-11 rounded-lg bg-orange-100 flex items-center justify-center group-hover:bg-orange-200 transition-colors">
                     <Icon className="w-5 h-5 text-orange-500" />
                   </div>
@@ -170,22 +168,20 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Social Proof Strip ── */}
-      <section id="industries" className="py-14 px-6 bg-orange-50 border-y border-orange-100">
+      <section id="industries" className="py-12 sm:py-14 px-4 sm:px-6 bg-orange-50 border-y border-orange-100">
         <div className="mx-auto max-w-3xl text-center">
-          <p className="text-gray-700 text-lg font-medium leading-relaxed">
-            Built for premium detail studios, ceramic coating, paint correction, tint, PPF, and
-            wrap shops that care how every client touchpoint feels.
+          <p className="text-gray-700 text-base sm:text-lg font-medium leading-relaxed">
+            One product for many shop types—use the same flexible service catalog whether you are
+            focused on appearance, tires, light repair, or a mix.
           </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-3 text-sm text-gray-500">
+          <div className="mt-6 flex flex-wrap justify-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-500">
             {[
-              "Premium Detail",
-              "Ceramic Coating",
-              "Paint Correction",
-              "Window Tint",
-              "PPF",
-              "Wrap Studios",
-              "Mobile Detailing",
+              "Detail & coating",
+              "Tint & PPF",
+              "Tire shops",
+              "Mobile service",
+              "Light mechanical",
+              "Mixed operations",
             ].map((type) => (
               <span
                 key={type}
@@ -198,22 +194,18 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Bottom CTA / Pricing ── */}
-      <section id="pricing" className="py-24 px-6 bg-white">
+      <section id="pricing" className="py-16 sm:py-24 px-4 sm:px-6 bg-white">
         <div className="mx-auto max-w-3xl">
-          <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 p-10 sm:p-16 flex flex-col items-center text-center gap-6 shadow-xl shadow-orange-200">
-            <h2 className="text-3xl sm:text-4xl font-bold text-white">
-              Ready for a tighter, more premium operation?
-            </h2>
-            <p className="text-orange-100 text-lg max-w-md">
-              Less admin, cleaner workflows, and a client experience that matches a high-ticket
-              brand.
+          <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 p-8 sm:p-16 flex flex-col items-center text-center gap-5 sm:gap-6 shadow-xl shadow-orange-200">
+            <h2 className="text-2xl sm:text-4xl font-bold text-white">Ready to move faster?</h2>
+            <p className="text-orange-100 text-base sm:text-lg max-w-md">
+              Simple monthly pricing—no upsell maze. Try it free for the first month.
             </p>
             <Link
               to="/sign-up"
               className={cn(
                 buttonVariants({ size: "lg" }),
-                "bg-white text-orange-600 hover:bg-orange-50 px-10 py-3 text-base font-semibold shadow-md mt-2",
+                "min-h-[48px] bg-white text-orange-600 hover:bg-orange-50 px-10 py-3 text-base font-semibold shadow-md mt-2",
                 "[&_svg]:pointer-events-auto"
               )}
             >

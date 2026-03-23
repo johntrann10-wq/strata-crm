@@ -32,7 +32,7 @@ const navigationItems: NavItems = [
     type: "item",
     title: "Product",
     href: "/#product",
-    description: "How Strata fits premium detail, tint & PPF workflows.",
+    description: "Speed, quotes, and scheduling for any auto service shop.",
   },
   {
     type: "item",
@@ -44,7 +44,7 @@ const navigationItems: NavItems = [
     type: "item",
     title: "Who it’s for",
     href: "/#industries",
-    description: "Owner-operated shops with high-ticket, reputation-sensitive work.",
+    description: "Detail, tint, tires, mechanical, mobile—flexible services, one CRM.",
   },
   {
     type: "item",

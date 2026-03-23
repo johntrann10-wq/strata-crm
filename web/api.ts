@@ -13,11 +13,14 @@ function resolveApiBase(): string {
   // Local dev: same-origin `/api` + Vite proxy (`vite.config.mts` targets `VITE_API_URL` or localhost).
   if (import.meta.env.DEV) return "";
 
-  // Production: fail loudly so misconfiguration is obvious.
-  throw new Error(
-    "Strata config error: VITE_API_URL is required in production builds. " +
-      "Set it to your backend origin (e.g. https://your-api.example.com)."
-  );
+  // Production: missing env must not crash the SPA bundle (auth/landing would white-screen).
+  // Same-origin `/api` works if the API is reverse-proxied to the app host; otherwise set VITE_API_URL.
+  if (import.meta.env.PROD && typeof console !== "undefined") {
+    console.warn(
+      "[Strata] VITE_API_URL is unset. API requests use same-origin /api. For a separate API host, set VITE_API_URL at build time."
+    );
+  }
+  return "";
 }
 
 // Base origin for browser API calls.

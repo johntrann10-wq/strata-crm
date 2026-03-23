@@ -18,7 +18,7 @@ export const SignUpComponent = (props: {
   const {
     submit,
     register,
-    formState: { errors, isSubmitSuccessful, isSubmitting },
+    formState: { errors, isSubmitting },
   } = useActionForm(api.user.signUp, props.options);
 
   return (
@@ -60,7 +60,6 @@ export const SignUpComponent = (props: {
               <div className="flex-1 h-px bg-border" />
               <span className="text-[12px] text-muted-foreground">or</span>
               <div className="flex-1 h-px bg-border" />
-              <div className="flex-1 h-px bg-border" />
             </div>
 
             {/* Email field */}
@@ -74,11 +73,8 @@ export const SignUpComponent = (props: {
                 placeholder="you@example.com"
                 autoComplete="off"
                 {...register("email")}
-                className={`h-9 text-[13px] rounded-lg shadow-none${errors?.user?.email?.message ? " border-destructive" : ""}`}
+                className={`h-9 text-[13px] rounded-lg shadow-none${errors?.root?.message ? " border-destructive" : ""}`}
               />
-              {errors?.user?.email?.message && (
-                <p className="text-[12px] text-destructive">{errors.user.email.message}</p>
-              )}
             </div>
 
             {/* Password field */}
@@ -92,17 +88,9 @@ export const SignUpComponent = (props: {
                 placeholder="••••••••"
                 autoComplete="off"
                 {...register("password")}
-                className={`h-9 text-[13px] rounded-lg shadow-none${errors?.user?.password?.message ? " border-destructive" : ""}`}
+                className={`h-9 text-[13px] rounded-lg shadow-none${errors?.root?.message ? " border-destructive" : ""}`}
               />
-              {errors?.user?.password?.message && (
-                <p className="text-[12px] text-destructive">{errors.user.password.message}</p>
-              )}
             </div>
-
-            {/* Success message */}
-            {isSubmitSuccessful && (
-              <p className="text-[13px] text-emerald-600 text-center py-2">Please check your inbox</p>
-            )}
 
             {/* Submit button */}
             <Button
