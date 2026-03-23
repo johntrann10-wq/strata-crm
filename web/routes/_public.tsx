@@ -11,7 +11,8 @@
 // --------------------------------------------------------------------------------------
 
 import { Link, Outlet, useOutletContext } from "react-router";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Navigation } from "@/components/public/nav";
 import type { RootOutletContext } from "../root";
 
@@ -28,14 +29,15 @@ export default function PublicLayout() {
             <Navigation />
 
             <div className="flex items-center space-x-2">
-              <>
-                <Button size="sm" variant="outline" asChild>
-                  <Link to="/sign-in">Login</Link>
-                </Button>
-                <Button size="sm" asChild>
-                  <Link to="/sign-up">Get started</Link>
-                </Button>
-              </>
+              <Link
+                to="/sign-in"
+                className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
+              >
+                Login
+              </Link>
+              <Link to="/sign-up" className={cn(buttonVariants({ size: "sm" }))}>
+                Get started
+              </Link>
             </div>
           </div>
         </div>

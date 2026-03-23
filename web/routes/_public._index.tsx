@@ -1,5 +1,6 @@
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   Calendar,
   FileText,
@@ -199,16 +200,17 @@ export default function LandingPage() {
             <p className="text-orange-100 text-lg max-w-md">
               Join automotive professionals already using Strata to save time and increase revenue.
             </p>
-            <Button
-              asChild
-              size="lg"
-              className="bg-white text-orange-600 hover:bg-orange-50 px-10 py-3 text-base font-semibold shadow-md mt-2"
+            <Link
+              to="/sign-up"
+              className={cn(
+                buttonVariants({ size: "lg" }),
+                "bg-white text-orange-600 hover:bg-orange-50 px-10 py-3 text-base font-semibold shadow-md mt-2",
+                "[&_svg]:pointer-events-auto"
+              )}
             >
-              <Link to="/sign-up">
-                Start for free
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Link>
-            </Button>
+              Start for free
+              <ArrowRight className="ml-2 w-4 h-4" />
+            </Link>
           </div>
         </div>
       </section>

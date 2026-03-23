@@ -10,7 +10,6 @@
 // --------------------------------------------------------------------------------------
 
 import { Link } from "react-router";
-import { Button } from "@/components/ui/button";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -18,8 +17,9 @@ import {
   NavigationMenuLink,
   NavigationMenuList,
   NavigationMenuTrigger,
-  NavigationMenuViewport,
+  navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
+import { cn } from "@/lib/utils";
 import { NavDrawer } from "@/components/shared/NavDrawer";
 
 interface NavItem {
@@ -129,9 +129,9 @@ const DesktopNav = () => (
         <NavigationMenuItem key={item.title}>
           {item.type === "item" ? (
             <NavigationMenuLink asChild>
-              <Button className="px-3" variant="ghost">
-                <Link to={item.href}>{item.title}</Link>
-              </Button>
+              <Link to={item.href} className={cn(navigationMenuTriggerStyle(), "inline-flex px-3")}>
+                {item.title}
+              </Link>
             </NavigationMenuLink>
           ) : (
             <>
@@ -162,7 +162,6 @@ const DesktopNav = () => (
         </NavigationMenuItem>
       ))}
     </NavigationMenuList>
-    <NavigationMenuViewport />
   </NavigationMenu>
 );
 
