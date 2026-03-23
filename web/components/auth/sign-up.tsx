@@ -4,8 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useActionForm } from "../../hooks/useApi";
 import { Wrench } from "lucide-react";
+import { GoogleMark } from "./GoogleMark";
 import { Link, useLocation } from "react-router";
-import { api, API_BASE, isApiUrlConfigured } from "../../api";
+import { api, API_BASE } from "../../api";
 
 export const SignUpComponent = (props: {
   options?: Parameters<typeof useActionForm>[1];
@@ -37,16 +38,6 @@ export const SignUpComponent = (props: {
 
       {/* Form card */}
       <Card className="shadow-sm border border-border rounded-2xl p-8">
-        {import.meta.env.PROD && !isApiUrlConfigured() && (
-          <div
-            className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-left text-amber-950 text-[12px] leading-snug"
-            role="status"
-          >
-            <strong className="font-semibold">Sign-up won&apos;t work until the API URL is set.</strong>{" "}
-            Add <code className="rounded bg-amber-100 px-1">VITE_API_URL</code> in your host env to your
-            backend URL, then redeploy.
-          </div>
-        )}
         <form onSubmit={submit}>
           <div className="flex flex-col gap-5">
             {/* Google button */}
@@ -56,11 +47,7 @@ export const SignUpComponent = (props: {
               asChild
             >
               <a href={`${API_BASE}/api/auth/google/start${search}`}>
-                <img
-                  className="mr-2 h-4 w-4"
-                  src="https://assets.gadget.dev/assets/default-app-assets/google.svg"
-                  alt="Google logo"
-                />
+                <GoogleMark className="mr-2 h-4 w-4 shrink-0" />
                 Sign up with Google
               </a>
             </Button>

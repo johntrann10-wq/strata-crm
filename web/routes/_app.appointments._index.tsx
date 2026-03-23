@@ -53,18 +53,17 @@ export default function AppointmentsPage() {
     e.preventDefault();
     e.stopPropagation();
     const result = await runUpdateStatus({ id: appointmentId, status: newStatus });
-    if (result.error) {
+    if (result?.error) {
       toast.error("Failed: " + result.error.message);
     } else {
       toast.success("Status updated to " + newStatus);
-      refetch({ requestPolicy: "network-only" });
+      void refetch();
     }
   };
 
   const [{ data: appointments, fetching: appointmentsFetching, error: appointmentsError }, refetch] = useFindMany(
     api.appointment,
     {
-      filter: { business: { id: { equals: businessId } } },
       sort: { startTime: "Descending" },
       first: 100,
       select: {
@@ -81,9 +80,9 @@ export default function AppointmentsPage() {
     }
   );
 
-  const isLoading = appointmentsFetching;
+  const isInitialLoad = appointmentsFetching && appointments === undefined;
 
-  const filteredAppointments = appointments
+  const filteredAppointments = Array.isArray(appointments)
     ? appointments.filter((appt) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
@@ -129,7 +128,7 @@ export default function AppointmentsPage() {
         onBooked={(id) => navigate(`/appointments/${id}`)}
       />
 
-      {appointmentsError && !isLoading ? (
+      {appointmentsError && !isInitialLoad ? (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>
@@ -141,7 +140,7 @@ export default function AppointmentsPage() {
             <span className="text-destructive/70 text-xs">({appointmentsError.message})</span>
           )}
         </div>
-      ) : isLoading ? (
+      ) : isInitialLoad ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
             <div

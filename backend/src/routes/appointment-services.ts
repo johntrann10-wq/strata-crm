@@ -6,6 +6,7 @@ import { and, eq, desc } from "drizzle-orm";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
 
 export const appointmentServicesRouter = Router({ mergeParams: true });
 
@@ -81,17 +82,21 @@ appointmentServicesRouter.post("/", requireAuth, requireTenant, async (req: Requ
   const quantity = parsed.data.quantity ?? 1;
   const unitPrice = parsed.data.unitPrice != null ? String(parsed.data.unitPrice) : null;
 
-  const [created] = await db
-    .insert(appointmentServices)
-    .values({
-      appointmentId,
-      serviceId,
-      quantity,
-      unitPrice,
-    })
-    .returning();
+  const created = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(appointmentServices)
+      .values({
+        appointmentId,
+        serviceId,
+        quantity,
+        unitPrice,
+      })
+      .returning();
+    if (!row) throw new BadRequestError("Failed to create appointment service.");
+    await recalculateAppointmentTotal(tx, appointmentId);
+    return row;
+  });
 
-  if (!created) throw new BadRequestError("Failed to create appointment service.");
   res.status(201).json(created);
 });
 
@@ -123,7 +128,12 @@ appointmentServicesRouter.patch("/:id", requireAuth, requireTenant, async (req: 
     updates.unitPrice = parsed.data.unitPrice === null ? null : String(parsed.data.unitPrice);
   }
 
-  const [updated] = await db.update(appointmentServices).set(updates as Record<string, unknown>).where(eq(appointmentServices.id, req.params.id)).returning();
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx.update(appointmentServices).set(updates as Record<string, unknown>).where(eq(appointmentServices.id, req.params.id)).returning();
+    if (!row) throw new NotFoundError("Appointment service not found.");
+    await recalculateAppointmentTotal(tx, existing.appointmentId);
+    return row;
+  });
   res.json(updated);
 });
 
@@ -139,7 +149,11 @@ appointmentServicesRouter.delete("/:id", requireAuth, requireTenant, async (req:
     .limit(1);
   if (!appointment[0]) throw new ForbiddenError("Access denied.");
 
-  await db.delete(appointmentServices).where(eq(appointmentServices.id, req.params.id));
+  const apptId = existing.appointmentId;
+  await db.transaction(async (tx) => {
+    await tx.delete(appointmentServices).where(eq(appointmentServices.id, req.params.id));
+    await recalculateAppointmentTotal(tx, apptId);
+  });
   res.status(204).send();
 });
 

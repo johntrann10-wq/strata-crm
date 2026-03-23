@@ -15,7 +15,9 @@
 
 ### Frontend (Vercel/Netlify)
 
-- `VITE_API_URL` — backend API origin (e.g. `https://your-api.onrender.com`). Used by the frontend at build time.
+**Recommended (no client rebuild when the API URL changes):** set **`STRATA_API_ORIGIN`** to your backend origin (e.g. `https://your-api.onrender.com`). The repo includes a same-origin **`/api` proxy** (Vercel Edge: `api/[...path].ts`; Netlify Edge: `netlify/edge-functions/strata-api-proxy.ts`). The browser keeps calling `/api/...` on your site; the edge function forwards to the real API. Set **`FRONTEND_URL`** on the backend to your Vercel/Netlify site for CORS if you also call the API directly.
+
+**Alternative:** set **`VITE_API_URL`** at **build time** so the SPA calls the API host from the browser (backend must allow CORS for your frontend origin).
 
 ### Backend
 
@@ -87,9 +89,9 @@ yarn build
 - **Vercel**: Import repo → Framework Preset: Vite (or Other) → Build Command: `yarn build` → Output: `build/client` (or per React Router output).
 - **Netlify**: Build command: `yarn build`; Publish directory: `build/client` (check `react-router.config.ts` and build output).
 
-Set `VITE_API_URL` to your backend URL origin so the frontend can call the API.
+Set **`STRATA_API_ORIGIN`** (or **`VITE_API_URL`**) as above so `/api` reaches your backend.
 
-**CORS:** Set `FRONTEND_URL=https://your-app.vercel.app` (or your Netlify URL) on the backend so the frontend can call the API.
+**CORS:** Set `FRONTEND_URL=https://your-app.vercel.app` (or your Netlify URL) on the backend. With the edge proxy, the browser often uses same-origin `/api` (no CORS for those requests); keep `FRONTEND_URL` correct for OAuth redirects and any direct API calls.
 
 ## Automations (cron)
 
@@ -125,7 +127,7 @@ Add a default `weekly_summary` template in `email_templates` (system default: `b
 ## Production checklist
 
 - [ ] DATABASE_URL, SESSION_SECRET, SMTP_* set on backend
-- [ ] VITE_API_URL set on frontend to backend API origin
+- [ ] `STRATA_API_ORIGIN` (recommended) or `VITE_API_URL` set so the frontend can reach the API
 - [ ] CRON_SECRET set on backend; cron job configured to call `POST /api/actions/runAutomations` with header
 - [ ] Migrations run on backend DB
 - [ ] Frontend build succeeds (`yarn build`)

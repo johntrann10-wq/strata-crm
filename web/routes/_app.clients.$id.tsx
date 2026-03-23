@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { useFindOne, useFindMany, useAction, useGlobalAction } from "../hooks/useApi";
+import { useFindOne, useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ExternalLink, Pencil, CalendarPlus, FileText, MoreVertical, Loader2 } from "lucide-react";
+import { ArrowLeft, Pencil, CalendarPlus, FileText, MoreVertical, Loader2 } from "lucide-react";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
@@ -21,8 +21,32 @@ import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { VehiclesCard, AppointmentHistoryCard, ClientEditForm, type FormState } from "../components/ClientDetailCards";
 
-const blank: FormState = { firstName: "", lastName: "", email: "", phone: "", address: "", city: "", state: "", zip: "", notes: "", internalNotes: "", source: "", tags: [], preferredContact: "email", marketingOptIn: true };
-const toForm = (c: any): FormState => ({ firstName: c.firstName ?? "", lastName: c.lastName ?? "", email: c.email ?? "", phone: c.phone ?? "", address: c.address ?? "", city: c.city ?? "", state: c.state ?? "", zip: c.zip ?? "", notes: c.notes ?? "", internalNotes: c.internalNotes ?? "", source: c.source ?? "", tags: c.tags ?? [], preferredContact: c.preferredContact ?? "email", marketingOptIn: c.marketingOptIn ?? true });
+const blank: FormState = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  address: "",
+  city: "",
+  state: "",
+  zip: "",
+  notes: "",
+  internalNotes: "",
+  marketingOptIn: true,
+};
+const toForm = (c: Record<string, unknown>): FormState => ({
+  firstName: (c.firstName as string) ?? "",
+  lastName: (c.lastName as string) ?? "",
+  email: (c.email as string) ?? "",
+  phone: (c.phone as string) ?? "",
+  address: (c.address as string) ?? "",
+  city: (c.city as string) ?? "",
+  state: (c.state as string) ?? "",
+  zip: (c.zip as string) ?? "",
+  notes: (c.notes as string) ?? "",
+  internalNotes: (c.internalNotes as string) ?? "",
+  marketingOptIn: Boolean(c.marketingOptIn ?? true),
+});
 
 export default function ClientDetailPage() {
   const { id } = useParams();
@@ -32,12 +56,37 @@ export default function ClientDetailPage() {
   const [form, setForm] = useState<FormState>(blank);
   const [showAllAppointments, setShowAllAppointments] = useState(false);
   const { setPageContext } = usePageContext();
-  const [{ data: client, fetching, error }, refetch] = useFindOne(api.client, id!, { select: { id: true, firstName: true, lastName: true, email: true, phone: true, address: true, city: true, state: true, zip: true, notes: true, internalNotes: true, source: true, tags: true, preferredContact: true, marketingOptIn: true, createdAt: true, business: { id: true } } });
-  const [{ data: vehicles }] = useFindMany(api.vehicle, { filter: { clientId: { equals: id } }, select: { id: true, make: true, model: true, year: true, color: true, licensePlate: true, paintType: true, mileage: true } });
-  const [{ data: appointments }] = useFindMany(api.appointment, { filter: { clientId: { equals: id } }, sort: { startTime: "Descending" }, first: 20, select: { id: true, startTime: true, status: true, title: true, totalPrice: true, vehicle: { make: true, model: true, year: true } } });
+  const [{ data: client, fetching, error }, refetch] = useFindOne(api.client, id!, {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      address: true,
+      city: true,
+      state: true,
+      zip: true,
+      notes: true,
+      internalNotes: true,
+      marketingOptIn: true,
+      createdAt: true,
+    },
+  });
+  const [{ data: vehicles, fetching: vehiclesFetching, error: vehiclesError }] = useFindMany(api.vehicle, {
+    filter: { clientId: { equals: id } },
+    select: { id: true, make: true, model: true, year: true, color: true, licensePlate: true, mileage: true },
+    pause: !id,
+  });
+  const [{ data: appointments, fetching: appointmentsFetching, error: appointmentsError }] = useFindMany(api.appointment, {
+    clientId: id,
+    sort: { startTime: "Descending" },
+    first: 20,
+    select: { id: true, startTime: true, status: true, title: true, totalPrice: true, vehicle: { make: true, model: true, year: true } },
+    pause: !id,
+  });
   const [{ fetching: saving, error: saveError }, runUpdate] = useAction(api.client.update);
   const [{ fetching: deleting }, runDelete] = useAction(api.client.delete);
-  const [{ fetching: sendingPortal }, runGeneratePortalToken] = useGlobalAction(api.generatePortalToken);
   useEffect(() => { if (client) setForm(toForm(client)); }, [client]);
 
   useEffect(() => {
@@ -67,14 +116,6 @@ export default function ClientDetailPage() {
     };
   }, [client, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSendPortalLink = async () => {
-    const result = await runGeneratePortalToken({ clientId: id! });
-    if (result?.error) {
-      toast.error(result.error.message);
-    } else {
-      toast.success("Portal link sent to client!");
-    }
-  };
   const handleSave = async () => {
     const result = await runUpdate({ id: id!, ...(form as any) });
     if (result?.error) {
@@ -96,20 +137,19 @@ export default function ClientDetailPage() {
     }
     setDeleteOpen(false);
   };
-  const totalSpend = appointments?.reduce((s, a) => s + (a.totalPrice ?? 0), 0) ?? 0;
+  const apptList = Array.isArray(appointments) ? appointments : [];
+  const vehicleList = Array.isArray(vehicles) ? vehicles : [];
+
+  const totalSpend = apptList.reduce((s, a) => s + (a.totalPrice ?? 0), 0);
 
   // For clients with 20+ appointments a backend pagination solution would be needed.
-  const displayedAppointments = showAllAppointments
-    ? (appointments ?? [])
-    : (appointments ?? []).slice(0, 5);
+  const displayedAppointments = showAllAppointments ? apptList : apptList.slice(0, 5);
 
   const lastAppointmentDate =
-    appointments && appointments.length > 0 ? appointments[0].startTime : null;
+    apptList.length > 0 ? apptList[0].startTime : null;
 
   const relatedRecords = [
-    ...(
-      appointments ?? []
-    ).map((a) => ({
+    ...apptList.map((a) => ({
       type: "appointment" as const,
       id: a.id,
       label: a.title ?? "Appointment",
@@ -160,14 +200,6 @@ export default function ClientDetailPage() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              onClick={handleSendPortalLink}
-              disabled={sendingPortal || !client.email}
-              title={client.email ? "Send a magic link to the client to access their self-service portal" : "Client has no email address on file"}
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Send Portal Link
-            </DropdownMenuItem>
-            <DropdownMenuItem
               onClick={() => setDeleteOpen(true)}
               disabled={deleting}
               className="text-destructive focus:text-destructive"
@@ -216,18 +248,40 @@ export default function ClientDetailPage() {
               </>
             )}
           </div>
-          <VehiclesCard id={id} vehicles={vehicles ?? []} />
+          {vehiclesError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              Could not load vehicles. {vehiclesError.message}
+            </div>
+          )}
+          {vehiclesFetching && !vehicleList.length && !vehiclesError ? (
+            <div className="flex justify-center py-6 text-muted-foreground text-sm">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Loading vehicles…
+            </div>
+          ) : null}
+          <VehiclesCard id={id} vehicles={vehicleList} />
         </div>
         <div className="lg:col-span-3">
+          {appointmentsError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive mb-3">
+              Could not load appointments. {appointmentsError.message}
+            </div>
+          )}
+          {appointmentsFetching && apptList.length === 0 && !appointmentsError ? (
+            <div className="flex justify-center py-6 text-muted-foreground text-sm mb-3">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Loading appointments…
+            </div>
+          ) : null}
           <AppointmentHistoryCard id={id} appointments={displayedAppointments} totalSpend={totalSpend} />
-          {!showAllAppointments && (appointments?.length ?? 0) > 5 && (
+          {!showAllAppointments && apptList.length > 5 && (
             <div className="mt-3 flex justify-center">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowAllAppointments(true)}
               >
-                Show all {appointments?.length} appointments
+                Show all {apptList.length} appointments
               </Button>
             </div>
           )}

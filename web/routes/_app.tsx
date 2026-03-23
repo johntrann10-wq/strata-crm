@@ -38,6 +38,7 @@ import { getEnabledModules } from "../lib/modules";
 import { useFindOne, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
 import { clearAuthToken } from "@/lib/auth";
+import { pathAllowsMissingBusiness } from "../lib/routeRequiresBusiness";
 
 // SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
 
@@ -238,7 +239,7 @@ function AppLayoutInner({
 
   return (
     <div className="h-screen flex overflow-hidden">
-      <CommandPalette enabledModules={enabledModules} />
+      <CommandPalette enabledModules={enabledModules} hasBusiness={!!businessId} />
 
       {/* Desktop sidebar – fixed, visible on md+ screens */}
       <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:w-64 z-20">
@@ -332,7 +333,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     return () => {
       cancelled = true;
     };
-  }, [navigate, signInPath]);
+  }, []);
 
   useEffect(() => {
     const onInvalid = () => {
@@ -366,13 +367,13 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     if (userFetching || businessFetching) return;
     if (businessError) return;
     if (!business) {
-      if (!location.pathname.startsWith("/onboarding") && !location.pathname.startsWith("/subscribe")) {
+      if (!pathAllowsMissingBusiness(location.pathname)) {
         navigate("/onboarding", { replace: true });
       }
       return;
     }
-    if ((business as any).onboardingComplete === false) {
-      if (!location.pathname.startsWith("/onboarding") && !location.pathname.startsWith("/subscribe")) {
+    if ((business as { onboardingComplete?: boolean }).onboardingComplete === false) {
+      if (!pathAllowsMissingBusiness(location.pathname)) {
         navigate("/onboarding", { replace: true });
       }
       return;
@@ -424,11 +425,10 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     );
   }
 
-  // First-run / onboarding safety:
-  // When no business exists yet (or onboarding is incomplete), protected routes can briefly mount with
-  // `businessId=null`. Block rendering those routes until the redirect effect runs.
-  const isOnboardingRoute = location.pathname.startsWith("/onboarding") || location.pathname.startsWith("/subscribe");
-  if (businessError && !isOnboardingRoute) {
+  // When no business exists yet (or onboarding is incomplete), block CRM routes until redirect runs
+  // or allow account/onboarding-only screens (see `pathAllowsMissingBusiness`).
+  const allowWithoutBusiness = pathAllowsMissingBusiness(location.pathname);
+  if (businessError && !allowWithoutBusiness) {
     return (
       <div className="h-screen flex flex-col items-center justify-center gap-4 p-6 max-w-md mx-auto text-center">
         <p className="text-muted-foreground">{businessError.message}</p>
@@ -438,14 +438,18 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       </div>
     );
   }
-  if (!business && !isOnboardingRoute) {
+  if (!business && !allowWithoutBusiness) {
     return (
       <div className="h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Preparing your workspace…</div>
       </div>
     );
   }
-  if (business && (business as any).onboardingComplete === false && !isOnboardingRoute) {
+  if (
+    business &&
+    (business as { onboardingComplete?: boolean }).onboardingComplete === false &&
+    !allowWithoutBusiness
+  ) {
     return (
       <div className="h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Finishing setup…</div>

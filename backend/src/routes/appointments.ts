@@ -1,14 +1,15 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { appointments, clients, vehicles, staff, locations } from "../db/schema.js";
-import { eq, and, desc, asc, gte, lte } from "drizzle-orm";
+import { appointments, clients, vehicles, staff, locations, quotes, services, appointmentServices } from "../db/schema.js";
+import { eq, and, or, desc, asc, gte, lte, ilike } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { logger } from "../lib/logger.js";
 import { hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
 import { ConflictError } from "../lib/errors.js";
+import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
@@ -26,53 +27,53 @@ const createSchema = z.object({
   title: z.string().optional(),
   assignedStaffId: z.string().uuid().optional(),
   locationId: z.string().uuid().optional(),
+  /** When set, links quote → appointment and marks quote accepted (client/vehicle must match quote). */
+  quoteId: z.string().uuid().optional(),
+  /** Catalog services to attach (prices from service catalog). */
+  serviceIds: z.array(z.string().uuid()).optional(),
 });
 const updateSchema = createSchema.partial();
-const filterSchema = z.object({ filter: z.unknown().optional(), sort: z.unknown().optional(), first: z.number().optional(), select: z.unknown().optional() }).optional();
-
-/** Parse filter AND array for startTime greaterThanOrEqual / lessThanOrEqual (calendar date range). */
-function parseStartTimeRange(filter: unknown): { start?: Date; end?: Date } {
-  const out: { start?: Date; end?: Date } = {};
-  if (!filter || typeof filter !== "object" || !Array.isArray((filter as { AND?: unknown[] }).AND)) return out;
-  const andArr = (filter as { AND: unknown[] }).AND;
-  for (const item of andArr) {
-    if (item && typeof item === "object" && item !== null && "startTime" in item) {
-      const st = (item as { startTime?: { greaterThanOrEqual?: string; lessThanOrEqual?: string } }).startTime;
-      if (st && typeof st === "object") {
-        if (typeof st.greaterThanOrEqual === "string") out.start = new Date(st.greaterThanOrEqual);
-        if (typeof st.lessThanOrEqual === "string") out.end = new Date(st.lessThanOrEqual);
-      }
-    }
-  }
-  return out;
+function parseIsoDate(s: string | undefined): Date | undefined {
+  if (!s?.trim()) return undefined;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
 appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  let filter: unknown;
-  try {
-    filter = req.query.filter ? JSON.parse(String(req.query.filter)) : undefined;
-  } catch {
-    filter = undefined;
+  const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 500) : 50;
+
+  let sortAsc = false;
+  if (typeof req.query.sort === "string" && req.query.sort.trim()) {
+    try {
+      const s = JSON.parse(req.query.sort) as { startTime?: string };
+      sortAsc = s?.startTime === "Ascending";
+    } catch {
+      /* ignore */
+    }
   }
-  let sortVal: unknown;
-  try {
-    sortVal = req.query.sort ? JSON.parse(String(req.query.sort)) : undefined;
-  } catch {
-    sortVal = undefined;
-  }
-  const parsed = filterSchema.safeParse({
-    filter,
-    sort: sortVal,
-    first: req.query.first != null ? Number(req.query.first) : 50,
-  });
-  const first = parsed.success && parsed.data?.first != null ? Math.min(parsed.data.first, 500) : 50;
-  const sortAsc = parsed.success && parsed.data?.sort && (parsed.data.sort as { startTime?: string })?.startTime === "Ascending";
-  const range = parseStartTimeRange(filter);
+
+  const startGte = parseIsoDate(typeof req.query.startGte === "string" ? req.query.startGte : undefined);
+  const startLte = parseIsoDate(typeof req.query.startLte === "string" ? req.query.startLte : undefined);
+
+  const clientIdRaw = typeof req.query.clientId === "string" ? req.query.clientId.trim() : "";
+  const clientIdFilter = z.string().uuid().safeParse(clientIdRaw).success ? clientIdRaw : undefined;
+
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
 
   const conditions = [eq(appointments.businessId, bid)];
-  if (range.start) conditions.push(gte(appointments.startTime, range.start));
-  if (range.end) conditions.push(lte(appointments.startTime, range.end));
+  if (clientIdFilter) conditions.push(eq(appointments.clientId, clientIdFilter));
+  if (startGte) conditions.push(gte(appointments.startTime, startGte));
+  if (startLte) conditions.push(lte(appointments.startTime, startLte));
+
+  const term = `%${search}%`;
+  const whereClause =
+    search.length >= 2
+      ? and(
+          ...conditions,
+          or(ilike(appointments.title, term), ilike(clients.firstName, term), ilike(clients.lastName, term))
+        )!
+      : and(...conditions)!;
 
   const list = await db
     .select({
@@ -107,7 +108,7 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
     .leftJoin(clients, eq(appointments.clientId, clients.id))
     .leftJoin(vehicles, eq(appointments.vehicleId, vehicles.id))
     .leftJoin(staff, eq(appointments.assignedStaffId, staff.id))
-    .where(and(...conditions))
+    .where(whereClause)
     .orderBy(sortAsc ? asc(appointments.startTime) : desc(appointments.startTime))
     .limit(first);
 
@@ -249,6 +250,16 @@ appointmentsRouter.post("/", requireAuth, requireTenant, async (req: Request, re
   if (!client) throw new BadRequestError("Client not found or access denied.");
   const [vehicle] = await db.select().from(vehicles).where(and(eq(vehicles.id, parsed.data.vehicleId), eq(vehicles.businessId, bid), eq(vehicles.clientId, parsed.data.clientId))).limit(1);
   if (!vehicle) throw new BadRequestError("Vehicle not found, or does not belong to this client or business.");
+
+  if (parsed.data.quoteId) {
+    const [q] = await db.select().from(quotes).where(and(eq(quotes.id, parsed.data.quoteId), eq(quotes.businessId, bid))).limit(1);
+    if (!q) throw new BadRequestError("Quote not found.");
+    if (q.clientId !== parsed.data.clientId) throw new BadRequestError("Appointment client must match the quote.");
+    if (!q.vehicleId || q.vehicleId !== parsed.data.vehicleId) {
+      throw new BadRequestError("Appointment vehicle must match the quote (add a vehicle to the quote first).");
+    }
+  }
+
   if (parsed.data.assignedStaffId) {
     const [staffRow] = await db.select().from(staff).where(and(eq(staff.id, parsed.data.assignedStaffId), eq(staff.businessId, bid))).limit(1);
     if (!staffRow) throw new BadRequestError("Staff not found or access denied.");
@@ -275,20 +286,53 @@ appointmentsRouter.post("/", requireAuth, requireTenant, async (req: Request, re
     );
   }
 
-  const [created] = await db
-    .insert(appointments)
-    .values({
-      businessId: bid,
-      clientId: parsed.data.clientId,
-      vehicleId: parsed.data.vehicleId,
-      startTime,
-      endTime,
-      title: parsed.data.title ?? null,
-      assignedStaffId: parsed.data.assignedStaffId ?? null,
-      locationId: parsed.data.locationId ?? null,
-    })
-    .returning();
-  if (!created) throw new BadRequestError("Failed to create appointment.");
+  let totalPriceInit = "0";
+  if (parsed.data.quoteId) {
+    const [q] = await db.select({ total: quotes.total }).from(quotes).where(eq(quotes.id, parsed.data.quoteId)).limit(1);
+    if (q?.total != null) totalPriceInit = String(q.total);
+  }
+
+  const created = await db.transaction(async (tx) => {
+    const [apt] = await tx
+      .insert(appointments)
+      .values({
+        businessId: bid,
+        clientId: parsed.data.clientId,
+        vehicleId: parsed.data.vehicleId,
+        startTime,
+        endTime,
+        title: parsed.data.title ?? null,
+        assignedStaffId: parsed.data.assignedStaffId ?? null,
+        locationId: parsed.data.locationId ?? null,
+        totalPrice: totalPriceInit,
+      })
+      .returning();
+    if (!apt) throw new BadRequestError("Failed to create appointment.");
+
+    if (parsed.data.quoteId) {
+      await tx
+        .update(quotes)
+        .set({ appointmentId: apt.id, status: "accepted", updatedAt: new Date() })
+        .where(eq(quotes.id, parsed.data.quoteId));
+    }
+
+    if (parsed.data.serviceIds && parsed.data.serviceIds.length > 0) {
+      for (const sid of parsed.data.serviceIds) {
+        const [svc] = await tx.select().from(services).where(and(eq(services.id, sid), eq(services.businessId, bid))).limit(1);
+        if (!svc) continue;
+        await tx.insert(appointmentServices).values({
+          appointmentId: apt.id,
+          serviceId: sid,
+          quantity: 1,
+          unitPrice: svc.price ?? null,
+        });
+      }
+      await recalculateAppointmentTotal(tx, apt.id);
+    }
+
+    return apt;
+  });
+
   logger.info("Appointment created", { appointmentId: created.id, businessId: bid });
   res.status(201).json(created);
 });

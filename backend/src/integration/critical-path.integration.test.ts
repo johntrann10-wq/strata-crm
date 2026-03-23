@@ -10,7 +10,12 @@ import type { Application } from "express";
 
 // Minimal smoke coverage for the critical end-to-end API chain.
 // Runs against an embedded Postgres instance so tests are self-contained.
-describe("Critical path smoke (backend integration)", () => {
+//
+// embedded-postgres often hangs on native Windows; run backend tests on Linux/macOS/WSL/CI,
+// or exercise the API manually. Unit + api.integration tests still run on Windows.
+const skipEmbeddedCriticalPath = process.platform === "win32";
+
+describe.skipIf(skipEmbeddedCriticalPath)("Critical path smoke (backend integration)", () => {
   let embedded: EmbeddedPostgres | null = null;
   let dbUrl = "";
   let app: Application | undefined;
@@ -122,7 +127,8 @@ describe("Critical path smoke (backend integration)", () => {
     // /auth/me with token
     const meRes = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${token}`);
     expect(meRes.status).toBe(200);
-    expect(meRes.body?.id).toBe(userId);
+    expect(meRes.body?.data?.id).toBe(userId);
+    expect(meRes.body?.data?.token).toBeTruthy();
 
     // create business
     const businessRes = await request(app).post("/api/businesses").set("Authorization", `Bearer ${token}`).send({

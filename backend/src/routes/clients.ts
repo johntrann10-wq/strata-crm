@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { clients, vehicles } from "../db/schema.js";
-import { eq, and, desc, isNull } from "drizzle-orm";
+import { eq, and, desc, asc, isNull, or, ilike, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -14,29 +14,81 @@ function businessId(req: Request): string {
   return req.businessId;
 }
 
+const emptyToUndefined = (v: unknown) => (v === "" || v === null ? undefined : v);
+
 const createSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  zip: z.string().optional(),
-  notes: z.string().optional(),
+  email: z.preprocess(emptyToUndefined, z.string().email().optional()),
+  phone: z.preprocess(emptyToUndefined, z.string().optional()),
+  address: z.preprocess(emptyToUndefined, z.string().optional()),
+  city: z.preprocess(emptyToUndefined, z.string().optional()),
+  state: z.preprocess(emptyToUndefined, z.string().optional()),
+  zip: z.preprocess(emptyToUndefined, z.string().optional()),
+  notes: z.preprocess(emptyToUndefined, z.string().optional()),
+  internalNotes: z.preprocess(emptyToUndefined, z.string().optional()),
+  marketingOptIn: z.boolean().optional(),
 });
-const updateSchema = createSchema.partial();
+/** Nullable optional fields clear the column when PATCH sends null (after empty-string → null normalization). */
+const updateSchema = z
+  .object({
+    firstName: z.string().min(1).optional(),
+    lastName: z.string().min(1).optional(),
+    email: z.union([z.string().email(), z.null()]).optional(),
+    phone: z.union([z.string(), z.null()]).optional(),
+    address: z.union([z.string(), z.null()]).optional(),
+    city: z.union([z.string(), z.null()]).optional(),
+    state: z.union([z.string(), z.null()]).optional(),
+    zip: z.union([z.string(), z.null()]).optional(),
+    notes: z.union([z.string(), z.null()]).optional(),
+    internalNotes: z.union([z.string(), z.null()]).optional(),
+    marketingOptIn: z.boolean().optional(),
+  })
+  .strict();
+
+/** Empty strings clear optional text fields on PATCH. */
+function normalizeClientPatchBody(body: unknown): unknown {
+  if (body == null || typeof body !== "object") return body;
+  const o = { ...(body as Record<string, unknown>) };
+  for (const k of ["email", "phone", "address", "city", "state", "zip", "notes", "internalNotes"]) {
+    if (o[k] === "") o[k] = null;
+  }
+  return o;
+}
 
 clientsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const first = req.query.first != null ? Math.min(Number(req.query.first), 100) : 50;
+  const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 100) : 50;
   const includeDeleted = req.query.includeDeleted === "true";
-  const list = await db
-    .select()
-    .from(clients)
-    .where(includeDeleted ? eq(clients.businessId, bid) : and(eq(clients.businessId, bid), isNull(clients.deletedAt)))
-    .orderBy(desc(clients.createdAt))
-    .limit(first);
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+  let orderBy = desc(clients.createdAt);
+  if (typeof req.query.sort === "string" && req.query.sort.trim()) {
+    try {
+      const s = JSON.parse(req.query.sort) as { createdAt?: string };
+      if (s?.createdAt === "Ascending") orderBy = asc(clients.createdAt);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const tenantFilter = includeDeleted ? eq(clients.businessId, bid) : and(eq(clients.businessId, bid), isNull(clients.deletedAt));
+
+  const whereClause =
+    search.length > 0
+      ? and(
+          tenantFilter,
+          or(
+            ilike(clients.firstName, `%${search}%`),
+            ilike(clients.lastName, `%${search}%`),
+            ilike(clients.email, `%${search}%`),
+            ilike(clients.phone, `%${search}%`),
+            sql`(${clients.firstName} || ' ' || ${clients.lastName}) ilike ${`%${search}%`}`
+          )
+        )
+      : tenantFilter;
+
+  const list = await db.select().from(clients).where(whereClause!).orderBy(orderBy).limit(first);
   res.json({ records: list });
 });
 
@@ -66,6 +118,8 @@ clientsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Re
       state: parsed.data.state ?? null,
       zip: parsed.data.zip ?? null,
       notes: parsed.data.notes ?? null,
+      internalNotes: parsed.data.internalNotes ?? null,
+      marketingOptIn: parsed.data.marketingOptIn ?? true,
     })
     .returning();
   res.status(201).json(created);
@@ -75,11 +129,12 @@ clientsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res
   const bid = businessId(req);
   const [existing] = await db.select().from(clients).where(and(eq(clients.id, req.params.id), eq(clients.businessId, bid))).limit(1);
   if (!existing) throw new NotFoundError("Client not found.");
-  const parsed = updateSchema.safeParse(req.body);
+  const parsed = updateSchema.safeParse(normalizeClientPatchBody(req.body));
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  const patch = { ...parsed.data };
   const [updated] = await db
     .update(clients)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set({ ...patch, updatedAt: new Date() })
     .where(eq(clients.id, req.params.id))
     .returning();
   res.json(updated);

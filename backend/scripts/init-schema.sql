@@ -112,6 +112,10 @@ CREATE TABLE IF NOT EXISTS locations (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS timezone text;
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS active boolean DEFAULT true;
+
 CREATE TABLE IF NOT EXISTS staff (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   business_id uuid NOT NULL REFERENCES businesses(id),

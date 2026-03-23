@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { invoices, businesses, invoiceLineItems, clients, payments, appointments, vehicles } from "../db/schema.js";
-import { eq, and, desc, isNull, sql } from "drizzle-orm";
+import { invoices, businesses, invoiceLineItems, clients, payments, appointments, vehicles, quotes } from "../db/schema.js";
+import { eq, and, or, desc, asc, isNull, sql, ilike } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -19,15 +19,116 @@ function businessId(req: Request): string {
 const createSchema = z.object({
   clientId: z.string().uuid(),
   appointmentId: z.string().uuid().optional(),
+  /** Optional: validated against clientId (does not auto-copy lines — UI sends lineItems). */
+  quoteId: z.string().uuid().optional(),
   lineItems: z.array(z.object({ description: z.string(), quantity: z.number(), unitPrice: z.number() })).optional(),
   discountAmount: z.number().min(0).optional(),
+  taxRate: z.coerce.number().min(0).max(100).optional(),
+  notes: z.string().optional(),
+  dueDate: z.union([z.string(), z.null()]).optional(),
 });
+
+const INVOICE_STATUSES = ["draft", "sent", "paid", "partial", "void"] as const;
 
 invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const first = req.query.first != null ? Math.min(Number(req.query.first), 100) : 50;
-  const list = await db.select().from(invoices).where(eq(invoices.businessId, bid)).orderBy(desc(invoices.createdAt)).limit(first);
-  res.json({ records: list });
+  const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 100) : 50;
+  const unpaid = req.query.unpaid === "1" || req.query.unpaid === "true";
+  const statusRaw = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const statusFilter =
+    !unpaid && statusRaw && statusRaw !== "all" && (INVOICE_STATUSES as readonly string[]).includes(statusRaw)
+      ? statusRaw
+      : undefined;
+
+  let orderBy = desc(invoices.createdAt);
+  if (typeof req.query.sort === "string" && req.query.sort.trim()) {
+    try {
+      const s = JSON.parse(req.query.sort) as { createdAt?: string };
+      if (s?.createdAt === "Ascending") orderBy = asc(invoices.createdAt);
+    } catch {
+      /* ignore invalid sort */
+    }
+  }
+
+  const conditions = [eq(invoices.businessId, bid)];
+  if (unpaid) {
+    conditions.push(sql`${invoices.status} in ('sent', 'partial')`);
+  } else if (statusFilter) {
+    conditions.push(eq(invoices.status, statusFilter as (typeof INVOICE_STATUSES)[number]));
+  }
+
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+  const term = `%${search}%`;
+  const whereClause =
+    search.length >= 2
+      ? and(
+          ...conditions,
+          or(
+            ilike(invoices.invoiceNumber, term),
+            ilike(clients.firstName, term),
+            ilike(clients.lastName, term),
+            sql`cast(${invoices.id} as text) ilike ${term}`
+          )
+        )!
+      : and(...conditions)!;
+
+  const rows = await db
+    .select({
+      id: invoices.id,
+      businessId: invoices.businessId,
+      clientId: invoices.clientId,
+      appointmentId: invoices.appointmentId,
+      invoiceNumber: invoices.invoiceNumber,
+      status: invoices.status,
+      subtotal: invoices.subtotal,
+      taxRate: invoices.taxRate,
+      taxAmount: invoices.taxAmount,
+      discountAmount: invoices.discountAmount,
+      total: invoices.total,
+      dueDate: invoices.dueDate,
+      paidAt: invoices.paidAt,
+      notes: invoices.notes,
+      createdAt: invoices.createdAt,
+      updatedAt: invoices.updatedAt,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      aptStart: appointments.startTime,
+    })
+    .from(invoices)
+    .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
+    .leftJoin(appointments, eq(invoices.appointmentId, appointments.id))
+    .where(whereClause)
+    .orderBy(orderBy)
+    .limit(first);
+
+  const records = rows.map((r) => ({
+    id: r.id,
+    businessId: r.businessId,
+    clientId: r.clientId,
+    appointmentId: r.appointmentId,
+    invoiceNumber: r.invoiceNumber,
+    status: r.status,
+    subtotal: r.subtotal,
+    taxRate: r.taxRate,
+    taxAmount: r.taxAmount,
+    discountAmount: r.discountAmount,
+    total: r.total,
+    dueDate: r.dueDate,
+    paidAt: r.paidAt,
+    notes: r.notes,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    client:
+      r.clientFirstName != null
+        ? { id: r.clientId, firstName: r.clientFirstName, lastName: r.clientLastName ?? "" }
+        : null,
+    appointment:
+      r.appointmentId != null
+        ? { id: r.appointmentId, startTime: r.aptStart ?? null }
+        : null,
+  }));
+
+  res.json({ records });
 });
 
 invoicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
@@ -128,12 +229,28 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
   const [client] = await db.select().from(clients).where(and(eq(clients.id, parsed.data.clientId), eq(clients.businessId, bid))).limit(1);
   if (!client) throw new BadRequestError("Client not found or access denied.");
 
+  if (parsed.data.appointmentId) {
+    const [apt] = await db
+      .select()
+      .from(appointments)
+      .where(and(eq(appointments.id, parsed.data.appointmentId), eq(appointments.businessId, bid)))
+      .limit(1);
+    if (!apt) throw new BadRequestError("Appointment not found.");
+    if (apt.clientId !== parsed.data.clientId) throw new BadRequestError("Invoice client must match the appointment client.");
+  }
+
+  if (parsed.data.quoteId) {
+    const [q] = await db.select().from(quotes).where(and(eq(quotes.id, parsed.data.quoteId), eq(quotes.businessId, bid))).limit(1);
+    if (!q) throw new BadRequestError("Quote not found.");
+    if (q.clientId !== parsed.data.clientId) throw new BadRequestError("Invoice client must match the quote client.");
+  }
+
   const lineItems = parsed.data.lineItems ?? [];
   const subtotal = lineItems.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
   const discountAmount = parsed.data.discountAmount ?? 0;
-  const taxRate = 0;
-  const taxAmount = 0;
-  const total = Math.max(0, subtotal - discountAmount + taxAmount);
+  const taxRate = parsed.data.taxRate ?? 0;
+  const taxAmount = (subtotal * taxRate) / 100;
+  const total = Math.max(0, subtotal + taxAmount - discountAmount);
   const items = lineItems.map((li) => {
     const lineTotal = li.quantity * li.unitPrice;
     return { description: li.description, quantity: String(li.quantity), unitPrice: String(li.unitPrice), total: String(lineTotal) };
@@ -145,6 +262,10 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
     if (!b) throw new NotFoundError("Business not found.");
     const nextNum = b.nextInvoiceNumber ?? 1;
     const invoiceNumber = `INV-${nextNum}`;
+    const dueDate =
+      parsed.data.dueDate != null && parsed.data.dueDate !== ""
+        ? new Date(parsed.data.dueDate)
+        : null;
     const [created] = await tx
       .insert(invoices)
       .values({
@@ -158,6 +279,8 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
         taxAmount: String(taxAmount),
         discountAmount: String(discountAmount),
         total: String(total),
+        notes: parsed.data.notes ?? null,
+        dueDate,
       })
       .returning();
     if (!created) throw new BadRequestError("Failed to create invoice.");

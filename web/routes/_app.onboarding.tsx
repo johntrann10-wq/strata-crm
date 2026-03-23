@@ -337,7 +337,7 @@ export default function OnboardingPage() {
                     className="bg-[#1a1a1a] border-[#2a2a2a] text-white rounded-lg h-11"
                   />
                 </div>
-                <p className="text-xs text-[#6b7280]">Used for reminders and automation timing.</p>
+                <p className="text-xs text-[#6b7280]">Used for reminders and scheduling.</p>
               </div>
             </div>
 

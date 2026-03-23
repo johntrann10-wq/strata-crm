@@ -6,6 +6,7 @@ import { requestId, requestLogging } from "./middleware/logging.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { optionalAuth } from "./middleware/auth.js";
 import { validateEnv } from "./lib/env.js";
+import { buildCorsAllowedOrigins, corsMiddleware } from "./lib/cors.js";
 import { authRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
 import { businessesRouter } from "./routes/businesses.js";
@@ -26,34 +27,16 @@ import { actionsRouter } from "./routes/actions.js";
 import { activityLogsRouter } from "./routes/activity-logs.js";
 import { notificationLogsRouter } from "./routes/notification-logs.js";
 import { billingRouter, handleStripeWebhook } from "./routes/billing.js";
-import { vinRouter } from "./routes/vin.js";
 
 validateEnv();
 
 const app = express();
 
-// CORS: when frontend and backend are on different origins (e.g. Vercel + Railway)
-// - Must match the exact frontend origin (no wildcard when credentials are enabled).
-// - JWT is sent via Authorization header, not cookies.
-const frontendOrigin = (process.env.FRONTEND_URL ?? "").replace(/\/+$/, "");
-if (frontendOrigin) {
-  app.use((req, res, next) => {
-    const requestOrigin = (req.headers.origin ?? "").replace(/\/+$/, "");
-    if (requestOrigin && requestOrigin === frontendOrigin) {
-      res.setHeader("Access-Control-Allow-Origin", frontendOrigin);
-      res.setHeader("Vary", "Origin");
-    }
-
-    res.setHeader("Access-Control-Allow-Credentials", "false");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, x-cron-secret");
-
-    if (req.method === "OPTIONS") {
-      res.status(204).end();
-      return;
-    }
-    next();
-  });
+// CORS: Vercel → Railway (or local Vite → local API). Exact origins only — see `buildCorsAllowedOrigins`.
+// JWT uses `Authorization`; preflight OPTIONS is answered before routes.
+const corsAllowedOrigins = buildCorsAllowedOrigins();
+if (corsAllowedOrigins.size > 0) {
+  app.use(corsMiddleware(corsAllowedOrigins));
 }
 
 // Stripe webhook needs raw body (must be before express.json())
@@ -79,7 +62,6 @@ app.use(requestLogging);
 app.use("/api/auth", authRouter);
 app.use("/api/users", optionalAuth, usersRouter);
 app.use("/api/billing", billingRouter);
-app.use("/api", vinRouter);
 // Temporarily disable subscription requirement so the app is usable without billing configured.
 app.use("/api/businesses", optionalAuth, businessesRouter);
 app.use("/api/appointments", optionalAuth, appointmentsRouter);

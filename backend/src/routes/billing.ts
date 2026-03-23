@@ -114,7 +114,8 @@ export async function handleStripeWebhook(
   }
   const sig = req.headers["stripe-signature"] as string | undefined;
   if (!sig || !STRIPE_WEBHOOK_SECRET || !stripe) {
-    res.status(500).send("Webhook not configured");
+    logger.info("Stripe disabled: webhook ignored");
+    res.status(200).json({ received: false, reason: "stripe_disabled" });
     return;
   }
   let event: Stripe.Event;

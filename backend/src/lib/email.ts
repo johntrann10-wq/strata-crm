@@ -1,6 +1,6 @@
 /**
  * Email sending with customizable templates.
- * Uses SMTP from env; templates in DB (business or system) or built-in defaults.
+ * Uses SMTP from env when configured; templates in DB (business or system) or built-in defaults.
  * All template vars are HTML-escaped to prevent XSS.
  */
 import nodemailer from "nodemailer";
@@ -10,16 +10,26 @@ import { eq, and, isNull, isNotNull, sql } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { escapeHtml } from "./escape.js";
 import { getBuiltinTemplate } from "./emailTemplates.js";
+import { isSmtpConfigured } from "./env.js";
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST!,
-  port: Number(process.env.SMTP_PORT!),
-  secure: true,
-  auth: {
-    user: process.env.SMTP_USER!,
-    pass: process.env.SMTP_PASS!,
-  },
-});
+let transporter: nodemailer.Transporter | null = null;
+
+function getTransporter(): nodemailer.Transporter | null {
+  if (!isSmtpConfigured()) return null;
+  if (!transporter) {
+    const secure = process.env.SMTP_SECURE !== "false";
+    transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST!,
+      port: Number(process.env.SMTP_PORT!),
+      secure,
+      auth: {
+        user: process.env.SMTP_USER!,
+        pass: process.env.SMTP_PASS!,
+      },
+    });
+  }
+  return transporter;
+}
 
 export type TemplateVars = Record<string, string | number | undefined>;
 
@@ -65,7 +75,11 @@ export async function sendTemplatedEmailInternal(
   const subject = options.subject ?? (template ? replaceVars(template.subject, vars, false) : "Notification");
   const bodyHtml = template ? replaceVars(template.bodyHtml, vars, true) : "<p>No template found.</p>";
   const bodyText = template?.bodyText ? replaceVars(template.bodyText, vars, false) : undefined;
-  await transporter.sendMail({
+  const t = getTransporter();
+  if (!t) {
+    throw new Error("SMTP is not configured");
+  }
+  await t.sendMail({
     from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
     to: options.to,
     subject,
@@ -307,6 +321,10 @@ const MAX_RETRIES = 5;
 
 /** Retry failed email notifications for a business. Updates log rows with retry count and last retry time. */
 export async function retryFailedEmailNotifications(businessId: string): Promise<{ retried: number; succeeded: number }> {
+  if (!isSmtpConfigured()) {
+    logger.debug("SMTP disabled: skip notification retries", { businessId });
+    return { retried: 0, succeeded: 0 };
+  }
   const failed = await db
     .select()
     .from(notificationLogs)

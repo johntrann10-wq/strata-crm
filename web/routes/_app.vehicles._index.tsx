@@ -35,11 +35,6 @@ function getMakeColor(make: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-function capitalize(str: string): string {
-  if (!str) return "";
-  return str.charAt(0).toUpperCase() + str.slice(1).replace(/-/g, " ");
-}
-
 function formatMileage(mileage: number | null | undefined): string {
   if (mileage == null) return "";
   return mileage.toLocaleString() + " mi";
@@ -70,31 +65,8 @@ export default function VehiclesPage() {
 
   const [{ data, fetching, error }] = useFindMany(api.vehicle as any, {
     search: isSearching ? debouncedQuery : undefined,
-    filter: {
-      AND: [
-        { business: { id: { equals: businessId } } },
-        { deletedAt: { isSet: false } },
-      ],
-    },
     first: 50,
     sort: { createdAt: "Descending" },
-    select: {
-      id: true,
-      year: true,
-      make: true,
-      model: true,
-      color: true,
-      licensePlate: true,
-      vin: true,
-      paintType: true,
-      mileage: true,
-      client: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-      },
-    },
     pause: !businessId,
   } as any);
 
@@ -234,11 +206,6 @@ export default function VehiclesPage() {
 
                 {/* Right Side */}
                 <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                  {vehicle.paintType && (
-                    <Badge variant="outline" className="text-xs">
-                      {capitalize(vehicle.paintType)}
-                    </Badge>
-                  )}
                   {vehicle.mileage != null && (
                     <span className="text-xs text-muted-foreground">
                       {formatMileage(vehicle.mileage)}
@@ -273,7 +240,7 @@ export default function VehiclesPage() {
       )}
 
       {/* Empty State — searching with no results */}
-      {!fetching && vehicles.length === 0 && isSearching && (
+      {!fetching && !error && vehicles.length === 0 && isSearching && (
         <EmptyState
           icon={Car}
           title="No vehicles found"
@@ -282,7 +249,7 @@ export default function VehiclesPage() {
       )}
 
       {/* Empty State — no query, no vehicles */}
-      {!fetching && vehicles.length === 0 && !isSearching && (
+      {!fetching && !error && vehicles.length === 0 && !isSearching && (
         <EmptyState
           icon={Car}
           title="No vehicles on file yet"

@@ -6,13 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Car, CalendarDays, Plus } from "lucide-react";
@@ -56,11 +49,6 @@ function statusClass(status: string): string {
   }
 }
 
-function cap(s: string): string {
-  if (!s) return s;
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
 interface VehiclesCardProps {
   id: string | undefined;
   vehicles:
@@ -71,7 +59,6 @@ interface VehiclesCardProps {
         model: string | null;
         color: string | null;
         licensePlate: string | null;
-        paintType: string | null;
         mileage: number | null;
       }>
     | null
@@ -121,9 +108,6 @@ export function VehiclesCard({ id, vehicles }: VehiclesCardProps) {
                       )}
                     </div>
                   </div>
-                  {vehicle.paintType && (
-                    <Badge className="text-xs capitalize">{vehicle.paintType}</Badge>
-                  )}
                 </div>
               </Link>
             ))}
@@ -145,10 +129,6 @@ export function VehiclesCard({ id, vehicles }: VehiclesCardProps) {
   );
 }
 
-const SOURCE_OPTIONS = ["walk-in", "referral", "google", "instagram", "facebook", "website", "other"];
-const PREFERRED_CONTACT_OPTIONS = ["email", "phone", "sms"];
-const TAG_OPTIONS = ["vip", "fleet", "wholesale", "retail"];
-
 export interface FormState {
   firstName: string;
   lastName: string;
@@ -158,9 +138,6 @@ export interface FormState {
   city: string;
   state: string;
   zip: string;
-  source: string;
-  preferredContact: string;
-  tags: string[];
   marketingOptIn: boolean;
   notes: string;
   internalNotes: string;
@@ -256,73 +233,6 @@ export function ClientEditForm({
           value={formState.zip}
           onChange={(e) => setFormState((p) => ({ ...p, zip: e.target.value }))}
         />
-      </div>
-
-      {/* Source */}
-      <div className="flex flex-col gap-1">
-        <Label className="text-xs">Source</Label>
-        <Select
-          value={formState.source}
-          onValueChange={(val) => setFormState((p) => ({ ...p, source: val }))}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select source" />
-          </SelectTrigger>
-          <SelectContent>
-            {SOURCE_OPTIONS.map((opt) => (
-              <SelectItem key={opt} value={opt}>
-                {cap(opt)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Preferred Contact */}
-      <div className="flex flex-col gap-1">
-        <Label className="text-xs">Preferred Contact</Label>
-        <Select
-          value={formState.preferredContact}
-          onValueChange={(val) => setFormState((p) => ({ ...p, preferredContact: val }))}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select preferred contact" />
-          </SelectTrigger>
-          <SelectContent>
-            {PREFERRED_CONTACT_OPTIONS.map((opt) => (
-              <SelectItem key={opt} value={opt}>
-                {cap(opt)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Tags */}
-      <div className="flex flex-col gap-1">
-        <Label className="text-xs">Tags</Label>
-        <div className="flex flex-wrap gap-3">
-          {TAG_OPTIONS.map((tag) => {
-            const checked = formState.tags.includes(tag);
-            return (
-              <div key={tag} className="flex items-center gap-1.5">
-                <Checkbox
-                  id={`tag-${tag}`}
-                  checked={checked}
-                  onCheckedChange={() =>
-                    setFormState((p) => ({
-                      ...p,
-                      tags: checked ? p.tags.filter((t) => t !== tag) : [...p.tags, tag],
-                    }))
-                  }
-                />
-                <label htmlFor={`tag-${tag}`} className="text-xs capitalize cursor-pointer">
-                  {tag}
-                </label>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
       {/* Marketing Opt-In */}

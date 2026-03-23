@@ -1,7 +1,6 @@
 /**
- * Global actions: getDashboardStats, getCapacityInsights, generatePortalToken,
- * restoreClient, restoreVehicle, restoreService, unvoidInvoice, reversePayment,
- * revertRecord, retryFailedNotifications, createBackup, getAnalyticsData, optimizeDailyRoute.
+ * Global actions: getDashboardStats, getCapacityInsights, restoreClient,
+ * restoreVehicle, restoreService, unvoidInvoice, reversePayment, retryFailedNotifications.
  */
 import { Router, Request, Response } from "express";
 import { z } from "zod";
@@ -24,7 +23,6 @@ function businessId(req: Request): string {
 }
 
 const idParamSchema = z.object({ id: z.string().uuid() });
-const clientIdParamSchema = z.object({ clientId: z.string().uuid().optional(), id: z.string().uuid().optional() });
 
 actionsRouter.post("/getDashboardStats", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
@@ -151,17 +149,6 @@ actionsRouter.post("/getInvoiceMetrics", requireAuth, requireTenant, async (req:
   });
 });
 
-actionsRouter.post("/generatePortalToken", requireAuth, requireTenant, async (req: Request, res: Response) => {
-  const parsed = clientIdParamSchema.safeParse(req.body);
-  const clientId = parsed.success ? parsed.data.clientId ?? parsed.data.id : undefined;
-  if (!clientId) throw new NotFoundError("clientId or id required");
-  const [c] = await db.select().from(clients).where(and(eq(clients.id, clientId), eq(clients.businessId, businessId(req)))).limit(1);
-  if (!c) throw new NotFoundError("Client not found.");
-  const token = `portal_${c.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  await db.update(clients).set({ updatedAt: new Date() }).where(eq(clients.id, clientId));
-  res.json({ token });
-});
-
 actionsRouter.post("/restoreClient", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const parsed = idParamSchema.safeParse(req.body);
   const id = parsed.success ? parsed.data.id : undefined;
@@ -224,15 +211,6 @@ actionsRouter.post("/reversePayment", requireAuth, requireTenant, async (req: Re
   res.json(updated);
 });
 
-actionsRouter.post("/createBackup", requireAuth, requireTenant, async (req: Request, res: Response) => {
-  const bid = businessId(req);
-  await withIdempotency(`backup-${bid}-${Math.floor(Date.now() / 60000)}`, { businessId: bid, operation: "createBackup" }, async () => {
-    logger.info("Backup requested", { businessId: bid });
-    return { ok: true, message: "Backup queued" };
-  });
-  res.json({ ok: true, message: "Backup queued" });
-});
-
 actionsRouter.post("/retryFailedNotifications", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
   const result = await withIdempotency(
@@ -241,20 +219,6 @@ actionsRouter.post("/retryFailedNotifications", requireAuth, requireTenant, asyn
     async () => retryFailedEmailNotifications(bid)
   );
   res.json({ ok: true, retried: result.retried, succeeded: result.succeeded });
-});
-
-actionsRouter.post("/getAnalyticsData", requireAuth, requireTenant, async (req: Request, res: Response) => {
-  const bid = businessId(req);
-  const list = await db.select().from(invoices).where(eq(invoices.businessId, bid)).orderBy(desc(invoices.createdAt)).limit(100);
-  res.json({ data: list });
-});
-
-actionsRouter.post("/optimizeDailyRoute", requireAuth, requireTenant, async (_req: Request, res: Response) => {
-  res.json({ route: [], message: "Optimization not implemented" });
-});
-
-actionsRouter.post("/revertRecord", requireAuth, requireTenant, async (_req: Request, res: Response) => {
-  res.json({ ok: true });
 });
 
 /** Cron endpoint: run business-type-aware automations (reminders, lapsed clients, review requests). Optional CRON_SECRET. */

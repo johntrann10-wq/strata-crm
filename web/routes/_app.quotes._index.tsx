@@ -1,12 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, CheckCircle, Send, Loader2 } from "lucide-react";
+import { Plus, CheckCircle, Send, Loader2, FileText, AlertCircle } from "lucide-react";
 import { Link, useNavigate, useOutletContext } from "react-router";
 import type { AuthOutletContext } from "./_app";
 import { api } from "../api";
 import { useFindMany, useAction } from "../hooks/useApi";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../components/shared/PageHeader";
@@ -18,65 +18,38 @@ export default function QuotesIndexPage() {
   const { businessId } = useOutletContext<AuthOutletContext>();
   const [sendingId, setSendingId] = useState<string | null>(null);
 
-  const lostQuotesFilter = useMemo(() => {
-    const thresholdDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-    return {
-      AND: [
-        { status: { in: ["draft", "sent"] } },
-        { followUpSentAt: { isSet: false } },
-        { createdAt: { lessThan: thresholdDate } },
-      ],
-    };
-  }, []);
-
-  const [{ data: lostQuotes, fetching: lostFetching }, refetchLost] = useFindMany(api.quote, {
-    filter: {
-      AND: [
-        lostQuotesFilter,
-        { business: { id: { equals: businessId ?? "" } } },
-      ],
-    },
+  const [{ data: lostQuotes, fetching: lostFetching, error: lostError }, refetchLost] = useFindMany(api.quote, {
+    lost: true,
     pause: !businessId,
-    select: {
-      id: true,
-      status: true,
-      total: true,
-      createdAt: true,
-      sentAt: true,
-      followUpSentAt: true,
-      client: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-      },
-    },
     sort: { createdAt: "Ascending" },
     first: 50,
   });
 
-  const isFirstLoad = lostFetching && !lostQuotes;
-  const isRefetching = lostFetching && !!lostQuotes;
+  const isFirstLoadLost = lostFetching && lostQuotes === undefined;
+  const isRefetchingLost = lostFetching && lostQuotes !== undefined;
 
-  const [{ data: allQuotes, fetching: allFetching }] = useFindMany(api.quote, {
-    filter: businessId ? { business: { id: { equals: businessId } } } : undefined,
+  const [{ data: allQuotes, fetching: allFetching, error: allError }] = useFindMany(api.quote, {
     pause: !businessId,
     sort: { createdAt: "Descending" },
     first: 100,
   });
+
+  const isFirstLoadAll = allFetching && allQuotes === undefined;
+  const allRows = Array.isArray(allQuotes) ? allQuotes : [];
+  const lostRows = Array.isArray(lostQuotes) ? lostQuotes : [];
   const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
 
   const handleSendFollowUp = async (quoteId: string) => {
     setSendingId(quoteId);
     try {
       const result = await runSendFollowUp({ id: quoteId });
-      if (result?.error) {
-        toast.error(result.error.message ?? "Failed to send follow-up");
+      if (result.error) {
+        toast.error(result.error.message ?? "Failed to record follow-up");
       } else {
-        toast.success("Follow-up sent!");
+        toast.success("Follow-up recorded");
       }
     } catch (err: any) {
-      toast.error(err?.message ?? "Failed to send follow-up");
+      toast.error(err?.message ?? "Failed to record follow-up");
     } finally {
       setSendingId(null);
       refetchLost();
@@ -89,9 +62,11 @@ export default function QuotesIndexPage() {
     return diffDays === 1 ? "1 day ago" : `${diffDays} days ago`;
   };
 
-  const formatCurrency = (amount: number | null | undefined) => {
-    if (amount == null) return "—";
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
+  const formatCurrency = (amount: number | string | null | undefined) => {
+    if (amount == null || amount === "") return "—";
+    const n = Number(amount);
+    if (Number.isNaN(n)) return "—";
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
   };
 
   return (
@@ -113,21 +88,30 @@ export default function QuotesIndexPage() {
           <TabsTrigger value="all">All Quotes</TabsTrigger>
           <TabsTrigger value="lost">
             Lost Quotes
-            {lostQuotes && lostQuotes.length > 0 && (
+            {lostRows.length > 0 && (
               <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
-                {lostQuotes.length}
+                {lostRows.length}
               </span>
             )}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="all">
-          {allFetching ? (
+          {allError && !isFirstLoadAll ? (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>Could not load quotes. {allError.message}</span>
+            </div>
+          ) : isFirstLoadAll ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : !allQuotes?.length ? (
-            <EmptyState title="No quotes" description="Create a quote to get started." />
+          ) : allRows.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="No quotes"
+              description="Create a quote to get started."
+            />
           ) : (
             <div className="border rounded-lg overflow-hidden">
               <Table>
@@ -141,19 +125,20 @@ export default function QuotesIndexPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(allQuotes as Record<string, unknown>[]).map((record) => {
-                    const client = record.client as Record<string, unknown> | undefined;
+                  {allRows.map((record) => {
+                    const row = record as Record<string, unknown>;
+                    const client = row.client as Record<string, unknown> | undefined;
                     const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "—";
                     return (
                       <TableRow
-                        key={String(record.id)}
+                        key={String(row.id)}
                         className="cursor-pointer"
-                        onClick={() => navigate(`/quotes/${record.id}`)}
+                        onClick={() => navigate(`/quotes/${String(row.id)}`)}
                       >
                         <TableCell>
-                          {record.clientId ? (
+                          {row.clientId ? (
                             <Link
-                              to={`/clients/${record.clientId}`}
+                              to={`/clients/${String(row.clientId)}`}
                               className="text-blue-600 hover:underline"
                               onClick={(e) => e.stopPropagation()}
                             >
@@ -164,21 +149,23 @@ export default function QuotesIndexPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <StatusBadge status={String(record.status ?? "")} type="quote" />
+                          <StatusBadge status={String(row.status ?? "")} type="quote" />
                         </TableCell>
                         <TableCell>
-                          {record.total != null
-                            ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(record.total as number)
+                          {row.total != null && row.total !== ""
+                            ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+                                Number(row.total)
+                              )
                             : "—"}
                         </TableCell>
                         <TableCell>
-                          {record.createdAt
-                            ? new Date(record.createdAt as string).toLocaleDateString()
+                          {row.createdAt
+                            ? new Date(row.createdAt as string).toLocaleDateString()
                             : "—"}
                         </TableCell>
                         <TableCell>
-                          {record.expiresAt
-                            ? new Date(record.expiresAt as string).toLocaleDateString()
+                          {row.expiresAt
+                            ? new Date(row.expiresAt as string).toLocaleDateString()
                             : "—"}
                         </TableCell>
                       </TableRow>
@@ -191,48 +178,55 @@ export default function QuotesIndexPage() {
         </TabsContent>
 
         <TabsContent value="lost">
-          {isFirstLoad ? (
+          {lostError && !isFirstLoadLost ? (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>Could not load lost quotes. {lostError.message}</span>
+            </div>
+          ) : isFirstLoadLost ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : !lostQuotes || lostQuotes.length === 0 ? (
+          ) : lostRows.length === 0 ? (
             <EmptyState
               icon={CheckCircle}
               title="No lost quotes"
               description="All quotes have been followed up or converted."
             />
           ) : (
-            <div className={cn("bg-white border rounded-lg overflow-hidden transition-opacity", isRefetching && "opacity-60")}>
-              {lostQuotes.map((quote) => {
+            <div className={cn("bg-white border rounded-lg overflow-hidden transition-opacity", isRefetchingLost && "opacity-60")}>
+              {lostRows.map((quote) => {
+                const q = quote as Record<string, unknown>;
+                const client = q.client as Record<string, unknown> | undefined;
                 const fullName =
-                  [(quote as any).client?.firstName, (quote as any).client?.lastName].filter(Boolean).join(" ") ||
-                  "Unknown Client";
-                const isLoading = sendingId === quote.id;
+                  [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "Unknown Client";
+                const qid = String(q.id ?? "");
+                const isLoading = sendingId === qid;
                 return (
                   <div
-                    key={quote.id}
+                    key={qid}
                     className="flex items-center justify-between border-b last:border-0 px-4 py-3"
                   >
                     <div className="flex flex-col">
                       <span className="font-medium text-sm">{fullName}</span>
                       <span className="text-xs text-muted-foreground">
-                        {getDaysAgo(quote.createdAt)} · {formatCurrency(quote.total)}
+                        {getDaysAgo(q.createdAt as string)} · {formatCurrency(q.total as number | string | null | undefined)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <StatusBadge status={quote.status ?? ''} type="quote" />
+                      <StatusBadge status={String(q.status ?? "")} type="quote" />
                       <Button
                         size="sm"
                         variant="outline"
                         disabled={sendingId !== null}
-                        onClick={() => handleSendFollowUp(quote.id)}
+                        onClick={() => handleSendFollowUp(qid)}
                       >
                         {isLoading ? (
                           <Loader2 className="h-4 w-4 animate-spin mr-1" />
                         ) : (
                           <Send className="h-4 w-4 mr-1" />
                         )}
-                        Send Follow-up
+                        Record follow-up
                       </Button>
                     </div>
                   </div>

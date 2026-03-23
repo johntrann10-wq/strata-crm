@@ -48,6 +48,37 @@ function SkeletonRows() {
   );
 }
 
+/** Command palette search result shapes (API returns loose JSON). */
+type ClientHit = {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+};
+type VehicleHit = {
+  id: string;
+  clientId?: string | null;
+  year?: number | null;
+  make?: string | null;
+  model?: string | null;
+  licensePlate?: string | null;
+  color?: string | null;
+  client?: { firstName?: string | null; lastName?: string | null } | null;
+};
+type AppointmentHit = {
+  id: string;
+  title?: string | null;
+  status?: string | null;
+  startTime?: string | null;
+};
+type InvoiceHit = {
+  id: string;
+  invoiceNumber?: string | null;
+  status?: string | null;
+  total?: number | string | null;
+};
+
 function statusColor(status: string): string {
   switch (status) {
     case "completed":
@@ -71,7 +102,8 @@ function statusColor(status: string): string {
   }
 }
 
-export function CommandPalette(_props?: { enabledModules?: Set<string> }) {
+export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusiness?: boolean }) {
+  const hasBusiness = _props?.hasBusiness ?? true;
   const { open, setOpen } = useCommandPalette();
   const { pageContext } = usePageContext();
   const navigate = useNavigate();
@@ -97,22 +129,23 @@ export function CommandPalette(_props?: { enabledModules?: Set<string> }) {
   }, [open]);
 
   const isSearching = debouncedQuery.length >= 2;
+  const canQuery = hasBusiness && isSearching;
 
-  const [{ data: clients, fetching: fetchingClients }] = useFindMany(api.client, {
+  const [{ data: clients, fetching: fetchingClients, error: clientsError }] = useFindMany(api.client, {
     search: debouncedQuery,
     first: 5,
     select: { id: true, firstName: true, lastName: true, phone: true, email: true },
-    pause: !isSearching,
+    pause: !canQuery,
   });
 
-  const [{ data: appointments, fetching: fetchingAppointments }] = useFindMany(api.appointment, {
+  const [{ data: appointments, fetching: fetchingAppointments, error: appointmentsError }] = useFindMany(api.appointment, {
     search: debouncedQuery,
     first: 5,
     select: { id: true, title: true, status: true, startTime: true },
-    pause: !isSearching,
+    pause: !canQuery,
   });
 
-  const [{ data: vehicles, fetching: fetchingVehicles }] = useFindMany(api.vehicle, {
+  const [{ data: vehicles, fetching: fetchingVehicles, error: vehiclesError }] = useFindMany(api.vehicle, {
     search: debouncedQuery,
     first: 5,
     select: {
@@ -126,17 +159,22 @@ export function CommandPalette(_props?: { enabledModules?: Set<string> }) {
       clientId: true,
       client: { id: true, firstName: true, lastName: true },
     },
-    pause: !isSearching,
+    pause: !canQuery,
   });
 
-  const [{ data: invoices, fetching: fetchingInvoices }] = useFindMany(api.invoice, {
+  const [{ data: invoices, fetching: fetchingInvoices, error: invoicesError }] = useFindMany(api.invoice, {
     search: debouncedQuery,
     first: 5,
     select: { id: true, invoiceNumber: true, total: true, status: true },
-    pause: !isSearching,
+    pause: !canQuery,
   });
 
   const isFetching = fetchingClients || fetchingAppointments || fetchingInvoices || fetchingVehicles;
+  const searchError = clientsError || appointmentsError || vehiclesError || invoicesError;
+  const clientRows = (Array.isArray(clients) ? clients : []) as ClientHit[];
+  const appointmentRows = (Array.isArray(appointments) ? appointments : []) as AppointmentHit[];
+  const vehicleRows = (Array.isArray(vehicles) ? vehicles : []) as VehicleHit[];
+  const invoiceRows = (Array.isArray(invoices) ? invoices : []) as InvoiceHit[];
 
   const go = (path: string) => {
     navigate(path);
@@ -217,16 +255,17 @@ export function CommandPalette(_props?: { enabledModules?: Set<string> }) {
     }
   }
 
-  const showClients = fetchingClients || (clients ?? []).length > 0;
-  const showVehicles = fetchingVehicles || (vehicles ?? []).length > 0;
-  const showAppointments = fetchingAppointments || (appointments ?? []).length > 0;
-  const showInvoices = fetchingInvoices || (invoices ?? []).length > 0;
+  const showClients = fetchingClients || clientRows.length > 0;
+  const showVehicles = fetchingVehicles || vehicleRows.length > 0;
+  const showAppointments = fetchingAppointments || appointmentRows.length > 0;
+  const showInvoices = fetchingInvoices || invoiceRows.length > 0;
   const noResults =
     !isFetching &&
-    (clients ?? []).length === 0 &&
-    (vehicles ?? []).length === 0 &&
-    (appointments ?? []).length === 0 &&
-    (invoices ?? []).length === 0;
+    !searchError &&
+    clientRows.length === 0 &&
+    vehicleRows.length === 0 &&
+    appointmentRows.length === 0 &&
+    invoiceRows.length === 0;
 
   return (
     <CommandDialog
@@ -324,6 +363,11 @@ export function CommandPalette(_props?: { enabledModules?: Set<string> }) {
 
         {isSearching && (
           <>
+            {searchError && (
+              <div className="px-3 py-2 text-xs text-destructive border-b border-destructive/20">
+                Search failed: {searchError.message}
+              </div>
+            )}
             {noResults && (
               <CommandEmpty>No results for &ldquo;{debouncedQuery}&rdquo;.</CommandEmpty>
             )}
@@ -333,7 +377,7 @@ export function CommandPalette(_props?: { enabledModules?: Set<string> }) {
                 {fetchingClients ? (
                   <SkeletonRows />
                 ) : (
-                  (clients ?? []).map((client) => (
+                  clientRows.map((client) => (
                     <CommandItem
                       key={client.id}
                       onSelect={() => go(`/clients/${client.id}`)}
@@ -363,10 +407,12 @@ export function CommandPalette(_props?: { enabledModules?: Set<string> }) {
                 {fetchingVehicles ? (
                   <SkeletonRows />
                 ) : (
-                  (vehicles ?? []).map((vehicle) => (
+                  vehicleRows.map((vehicle) => (
                     <CommandItem
                       key={vehicle.id}
-                      onSelect={() => go(`/clients/${vehicle.clientId}`)}
+                      onSelect={() => {
+                        if (vehicle.clientId) go(`/clients/${vehicle.clientId}`);
+                      }}
                       className="flex items-center gap-3 py-2.5"
                     >
                       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-500/10">
@@ -397,7 +443,7 @@ export function CommandPalette(_props?: { enabledModules?: Set<string> }) {
                 {fetchingAppointments ? (
                   <SkeletonRows />
                 ) : (
-                  (appointments ?? []).map((appointment) => (
+                  appointmentRows.map((appointment) => (
                     <CommandItem
                       key={appointment.id}
                       onSelect={() => go(`/appointments/${appointment.id}`)}
@@ -440,7 +486,7 @@ export function CommandPalette(_props?: { enabledModules?: Set<string> }) {
                 {fetchingInvoices ? (
                   <SkeletonRows />
                 ) : (
-                  (invoices ?? []).map((invoice) => (
+                  invoiceRows.map((invoice) => (
                     <CommandItem
                       key={invoice.id}
                       onSelect={() => go(`/invoices/${invoice.id}`)}
@@ -457,10 +503,10 @@ export function CommandPalette(_props?: { enabledModules?: Set<string> }) {
                           <span className={statusColor(invoice.status ?? "")}>
                             {invoice.status}
                           </span>
-                          {invoice.total != null && (
+                          {invoice.total != null && invoice.total !== "" && (
                             <span className="text-muted-foreground">
                               {" "}
-                              &middot; ${invoice.total.toFixed(2)}
+                              &middot; ${Number(invoice.total).toFixed(2)}
                             </span>
                           )}
                         </span>

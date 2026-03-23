@@ -15,8 +15,10 @@ import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 const FILTER_TABS = ["all", "draft", "sent", "paid", "partial", "void"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
 
-function formatCurrency(amount: number | null | undefined): string {
-  const value = amount ?? 0;
+function formatCurrency(amount: number | string | null | undefined): string {
+  if (amount == null || amount === "") return "—";
+  const value = typeof amount === "string" ? Number(amount) : amount;
+  if (Number.isNaN(value)) return "—";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -34,7 +36,7 @@ function formatDate(dateStr: string | Date | null | undefined): string {
 }
 
 export default function InvoicesIndexPage() {
-  const { user, businessId } = useOutletContext<AuthOutletContext>();
+  const { businessId } = useOutletContext<AuthOutletContext>();
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [pageSize, setPageSize] = useState(25);
 
@@ -55,32 +57,12 @@ export default function InvoicesIndexPage() {
     setPageSize(25);
   }, [activeTab]);
 
-  const invoiceFilter = !businessId
-    ? undefined
-    : activeTab === "all"
-      ? { businessId: { equals: businessId } }
-      : { AND: [{ businessId: { equals: businessId } }, { status: { equals: activeTab } }] };
-
   const [{ data: invoices, fetching: invoicesFetching, error: invoicesError }, refetchInvoices] = useFindMany(
     api.invoice,
     {
-      filter: invoiceFilter,
+      status: activeTab === "all" ? undefined : activeTab,
       sort: { createdAt: "Descending" },
       first: pageSize,
-      live: true,
-      select: {
-        id: true,
-        invoiceNumber: true,
-        status: true,
-        total: true,
-        subtotal: true,
-        taxAmount: true,
-        createdAt: true,
-        dueDate: true,
-        paidAt: true,
-        client: { id: true, firstName: true, lastName: true },
-        appointment: { id: true, startTime: true },
-      },
       pause: !businessId,
     }
   );
@@ -264,6 +246,12 @@ export default function InvoicesIndexPage() {
                       </td>
                     </tr>
                   ))
+                ) : invoicesError ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                      Could not load this list. Use &quot;Try again&quot; above.
+                    </td>
+                  </tr>
                 ) : displayedInvoices.length === 0 ? (
                   <tr>
                     <td

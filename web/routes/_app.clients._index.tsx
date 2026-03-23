@@ -3,7 +3,6 @@ import { Link, useOutletContext } from "react-router";
 import { useFindMany } from "../hooks/useApi";
 import { api, ApiError } from "../api";
 import type { AuthOutletContext } from "./_app";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,41 +12,8 @@ import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 
-const TAG_STYLES: Record<string, string> = {
-  vip: "bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700",
-  fleet:
-    "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700",
-  wholesale:
-    "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700",
-  retail:
-    "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700",
-};
-
-const SOURCE_LABELS: Record<string, string> = {
-  "walk-in": "Walk-in",
-  referral: "Referral",
-  google: "Google",
-  instagram: "Instagram",
-  facebook: "Facebook",
-  website: "Website",
-  other: "Other",
-};
-
-function TagBadge({ tag }: { tag: string }) {
-  const style =
-    TAG_STYLES[tag] ??
-    "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${style}`}
-    >
-      {tag}
-    </span>
-  );
-}
-
 export default function ClientsPage() {
-  const { user, businessId } = useOutletContext<AuthOutletContext>();
+  const { businessId } = useOutletContext<AuthOutletContext>();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [pageSize, setPageSize] = useState(25);
@@ -64,18 +30,9 @@ export default function ClientsPage() {
   }, [debouncedSearch]);
 
   const [{ data: clients, fetching: fetchingClients, error: clientsError }] = useFindMany(api.client, {
-    filter: (businessId
-      ? {
-          AND: [
-            { business: { id: { equals: businessId } } },
-            { deletedAt: { isSet: false } },
-          ],
-        }
-      : undefined) as any,
-    sort: { createdAt: "Descending" },
     search: debouncedSearch || undefined,
+    sort: { createdAt: "Descending" },
     first: pageSize,
-    select: { id: true, firstName: true, lastName: true, phone: true, email: true, source: true, tags: true, createdAt: true },
     pause: !businessId,
   });
 
@@ -176,8 +133,6 @@ export default function ClientsPage() {
                   <th className="text-left px-4 py-3 font-semibold text-foreground">Name</th>
                   <th className="text-left px-4 py-3 font-semibold text-foreground">Phone</th>
                   <th className="text-left px-4 py-3 font-semibold text-foreground">Email</th>
-                  <th className="text-left px-4 py-3 font-semibold text-foreground">Source</th>
-                  <th className="text-left px-4 py-3 font-semibold text-foreground">Tags</th>
                   <th className="text-left px-4 py-3 font-semibold text-foreground">Since</th>
                 </tr>
               </thead>
@@ -201,32 +156,10 @@ export default function ClientsPage() {
                     <td className="px-4 py-3 text-muted-foreground">
                       {client.email || <span className="text-muted-foreground/50">—</span>}
                     </td>
-                    <td className="px-4 py-3">
-                      {client.source ? (
-                        <Badge variant="outline" className="text-xs font-normal">
-                          {SOURCE_LABELS[client.source] ?? client.source}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground/50">—</span>
-                      )}
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {format(new Date(client.createdAt), "MMM d, yyyy")}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {Array.isArray(client.tags) && client.tags.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {(client.tags as string[]).map((tag) => (
-                              <TagBadge key={tag} tag={tag} />
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground/50">—</span>
-                        )}
-                      </div>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {format(new Date(client.createdAt), "MMM d, yyyy")}
-                      </td>
-                    </tr>
+                  </tr>
                   ))}
                 </tbody>
               </table>
@@ -252,19 +185,7 @@ export default function ClientsPage() {
                       <p className="text-sm text-muted-foreground">{client.email}</p>
                     )}
                   </div>
-                  {client.source && (
-                    <Badge variant="outline" className="text-xs font-normal shrink-0">
-                      {SOURCE_LABELS[client.source] ?? client.source}
-                    </Badge>
-                  )}
                 </div>
-                {Array.isArray(client.tags) && client.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {(client.tags as string[]).map((tag) => (
-                      <TagBadge key={tag} tag={tag} />
-                    ))}
-                  </div>
-                )}
               </Link>
             ))}
           </div>

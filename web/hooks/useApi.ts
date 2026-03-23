@@ -20,10 +20,25 @@ type FindManyOpts = {
   sort?: Record<string, string>;
   first?: number;
   select?: Record<string, unknown>;
+  /** Passed as query param to the API (server-side search/filter). */
+  search?: string;
+  /** Invoice / quote status tab (e.g. draft, sent). Omit or "all" for no filter. */
+  status?: string;
+  /** Quotes: lost follow-up queue. */
+  lost?: boolean;
+  /** Quotes: draft + sent only (dashboard). */
+  pending?: boolean;
+  /** Invoices: sent + partial (unpaid balance). */
+  unpaid?: boolean;
+  /** Appointments: ISO bounds on `startTime`. */
+  startGte?: string;
+  startLte?: string;
+  /** Appointments: filter by client. */
+  clientId?: string;
   pause?: boolean;
 };
 
-type FindOneOpts = { select?: Record<string, unknown> };
+type FindOneOpts = { select?: Record<string, unknown>; pause?: boolean };
 
 export function useFindOne(
   model: { findOne: (id: string, opts?: FindOneOpts) => Promise<unknown> },
@@ -53,13 +68,13 @@ export function useFindOne(
     setError(null);
     try {
       const result = await model.findOne(id, opts);
-      setData(result);
+      setData(result ?? null);
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
       setFetching(false);
     }
-  }, [id, opts?.select, model]);
+  }, [id, opts?.select, opts?.pause, model]);
 
   useEffect(() => {
     if (opts?.pause) return;
@@ -92,7 +107,22 @@ export function useFindMany(
     } finally {
       setFetching(false);
     }
-  }, [opts?.pause, opts?.filter, opts?.sort, opts?.first, opts?.select, model]);
+  }, [
+    opts?.pause,
+    opts?.filter,
+    opts?.sort,
+    opts?.first,
+    opts?.select,
+    opts?.search,
+    opts?.status,
+    opts?.lost,
+    opts?.pending,
+    opts?.unpaid,
+    opts?.startGte,
+    opts?.startLte,
+    opts?.clientId,
+    model,
+  ]);
 
   useEffect(() => {
     refetch();
@@ -133,7 +163,18 @@ export function useFindFirst(
     } finally {
       setFetching(false);
     }
-  }, [opts?.pause, opts?.filter, opts?.select, model]);
+  }, [
+    opts?.pause,
+    opts?.filter,
+    opts?.select,
+    opts?.search,
+    opts?.sort,
+    opts?.first,
+    opts?.startGte,
+    opts?.startLte,
+    opts?.clientId,
+    model,
+  ]);
 
   useEffect(() => {
     refetch();
@@ -155,12 +196,13 @@ export function useAction(actionFn: ActionFn) {
       setError(null);
       try {
         const result = await actionFn(params);
-        setData(result);
-        return { data: result, error: undefined };
+        const data = result ?? null;
+        setData(data);
+        return { data, error: undefined };
       } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e));
         setError(err);
-        return { data: undefined, error: { message: err.message } };
+        return { data: null, error: { message: err.message } };
       } finally {
         setFetching(false);
       }
@@ -236,7 +278,7 @@ export function useActionForm(
           let msg = err.message;
           if (msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("Load failed")) {
             msg =
-              "Cannot reach the API. Locally: run the backend and ensure Vite proxies /api to it. Production: set VITE_API_URL to your API origin and redeploy.";
+              "Cannot reach the API. Locally: run the backend and ensure Vite proxies /api to it. Production: set STRATA_API_ORIGIN on Vercel/Netlify (same-origin /api proxy) or VITE_API_URL / NEXT_PUBLIC_API_URL at build time; see DEPLOY.md.";
           }
           setErrors({ root: { message: msg } });
         })

@@ -58,7 +58,16 @@ authRouter.get(
       res.status(401).json({ message: "Not signed in" });
       return;
     }
-    res.json(user);
+    const token = createToken(user.id);
+    res.json({
+      data: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        token,
+      },
+    });
   })
 );
 authRouter.post(
@@ -118,42 +127,6 @@ authRouter.post("/sign-out", (_req: Request, res: Response) => {
   // JWT sign-out is handled client-side by removing the token.
   res.json({});
 });
-authRouter.post("/verify-email", async (_req: Request, res: Response) => {
-  const code = _req.query.code as string | undefined;
-  if (!code) {
-    res.status(400).json({ message: "Missing code" });
-    return;
-  }
-  // TODO: verify code against user emailVerificationToken and set emailVerified
-  res.json({ verified: true });
-});
-authRouter.post(
-  "/forgot-password",
-  wrapAsync(async (req: Request, res: Response) => {
-    const parsed = z.object({ email: z.string().email() }).safeParse(req.body);
-    if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
-    // TODO: generate reset token, store, send email. For launch we always return 200 to avoid leaking account existence.
-    logger.info("Forgot password requested", { email: parsed.data.email });
-    res.json({ message: "If an account exists with this email, you will receive a reset link." });
-  })
-);
-authRouter.post(
-  "/reset-password",
-  wrapAsync(async (req: Request, res: Response) => {
-    const parsed = z
-      .object({
-        code: z.string().min(1),
-        password: z.string().min(8),
-        confirmPassword: z.string().min(1),
-      })
-      .refine((d) => d.password === d.confirmPassword, { message: "Passwords must match", path: ["confirmPassword"] })
-      .safeParse(req.body);
-    if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
-    // TODO: verify code, find user, update password. For launch stub: return 200 (real impl would need reset tokens in DB).
-    logger.info("Reset password requested", { code: parsed.data.code });
-    res.json({ message: "Password has been reset. You can sign in now." });
-  })
-);
 // ---------------------------------------------------------------------------
 // Google OAuth (sign in / sign up with Google)
 // ---------------------------------------------------------------------------

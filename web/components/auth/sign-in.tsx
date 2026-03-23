@@ -2,8 +2,9 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useActionForm } from "../../hooks/useApi";
 import { Wrench } from "lucide-react";
+import { GoogleMark } from "./GoogleMark";
 import { Link, useLocation, useNavigate } from "react-router";
-import { api, API_BASE, isApiUrlConfigured } from "../../api";
+import { api, API_BASE } from "../../api";
 
 export const SignInComponent = (props: {
   options?: Parameters<typeof useActionForm>[1];
@@ -42,28 +43,13 @@ export const SignInComponent = (props: {
 
       {/* Form Card */}
       <Card className="shadow-sm border border-border rounded-2xl p-8">
-        {import.meta.env.PROD && !isApiUrlConfigured() && (
-          <div
-            className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-left text-amber-950 text-[12px] leading-snug"
-            role="status"
-          >
-            <strong className="font-semibold">Sign-in won&apos;t work until the API URL is set.</strong>{" "}
-            In Vercel/Netlify, add <code className="rounded bg-amber-100 px-1">VITE_API_URL</code> to your
-            backend origin (e.g. <code className="rounded bg-amber-100 px-1">https://your-api.onrender.com</code>
-            ), then redeploy the frontend.
-          </div>
-        )}
         <form onSubmit={submit}>
           {/* Google Sign In */}
           <a
             href={`${API_BASE}/api/auth/google/start${search}`}
             className="w-full h-10 border border-border bg-background hover:bg-muted text-[13px] font-medium rounded-lg flex items-center justify-center gap-2.5 transition-colors"
           >
-            <img
-              className="h-4 w-4"
-              src="https://assets.gadget.dev/assets/default-app-assets/google.svg"
-              alt="Google logo"
-            />
+            <GoogleMark className="h-4 w-4 shrink-0" />
             Sign in with Google
           </a>
 
@@ -117,14 +103,6 @@ export const SignInComponent = (props: {
             {errors?.root?.message && (
               <p className="text-sm text-destructive text-center">{errors.root.message}</p>
             )}
-
-            {/* Forgot Password */}
-            <p className="text-[12px] text-muted-foreground mt-4 text-center">
-              Forgot your password?{" "}
-              <Link to={`/forgot-password${search}`} className="text-foreground hover:underline">
-                Reset password
-              </Link>
-            </p>
           </div>
         </form>
       </Card>

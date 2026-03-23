@@ -1,19 +1,17 @@
-import { useState, useMemo, useCallback } from "react";
-import { useOutletContext, Link } from "react-router";
+import { useState, useMemo, useCallback, type ReactNode } from "react";
+import { useOutletContext, Link, Navigate } from "react-router";
 import { useFindMany } from "../hooks/useApi";
-import { format, parseISO, isSameDay, startOfDay, endOfDay, addDays } from "date-fns";
+import { format, parseISO, isSameDay, startOfDay, endOfDay } from "date-fns";
 import {
-  Calendar,
   FileText,
   DollarSign,
-  Clock,
   CalendarPlus,
   Receipt,
   RefreshCw,
   ChevronRight,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { api, ApiError } from "../api";
@@ -23,7 +21,19 @@ import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 
 function formatCurrency(amount: number | string | null | undefined): string {
   const n = Number(amount ?? 0);
+  if (!Number.isFinite(n)) return "—";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+}
+
+function safeParseISO(iso: string | undefined | null): Date | null {
+  if (iso == null || iso === "") return null;
+  const d = parseISO(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatSafe(iso: string | undefined | null, fmt: string): string {
+  const d = safeParseISO(iso);
+  return d ? format(d, fmt) : "—";
 }
 
 const ACTIVE_JOB = new Set(["scheduled", "confirmed", "in_progress"]);
@@ -34,36 +44,19 @@ export default function SignedIn() {
   const [filterNow, setFilterNow] = useState(() => new Date());
   const [refreshing, setRefreshing] = useState(false);
 
-  const appointmentFilter = useMemo(() => {
+  const { apptStartGte, apptStartLte } = useMemo(() => {
     const from = startOfDay(filterNow);
-    const to = endOfDay(addDays(filterNow, 30));
-    return {
-      AND: [
-        {
-          startTime: {
-            greaterThanOrEqual: from.toISOString(),
-            lessThanOrEqual: to.toISOString(),
-          },
-        },
-      ],
-    };
+    const to = endOfDay(filterNow);
+    return { apptStartGte: from.toISOString(), apptStartLte: to.toISOString() };
   }, [filterNow]);
 
   const [{ data: appointmentsRaw, fetching: fetchingAppts, error: apptsError }, refetchAppts] = useFindMany(
     api.appointment,
     {
-      filter: appointmentFilter,
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        startTime: true,
-        endTime: true,
-        client: { firstName: true, lastName: true },
-        vehicle: { make: true, model: true, year: true },
-      },
+      startGte: apptStartGte,
+      startLte: apptStartLte,
       sort: { startTime: "Ascending" },
-      first: 200,
+      first: 100,
       pause: !businessId,
     }
   );
@@ -71,30 +64,17 @@ export default function SignedIn() {
   const [{ data: invoicesRaw, fetching: fetchingInvoices, error: invoicesError }, refetchInvoices] = useFindMany(
     api.invoice,
     {
-      select: {
-        id: true,
-        invoiceNumber: true,
-        status: true,
-        total: true,
-        clientId: true,
-        createdAt: true,
-      },
       sort: { createdAt: "Descending" },
-      first: 60,
+      first: 25,
+      unpaid: true,
       pause: !businessId,
     }
   );
 
   const [{ data: quotesRaw, fetching: fetchingQuotes, error: quotesError }, refetchQuotes] = useFindMany(api.quote, {
-    select: {
-      id: true,
-      status: true,
-      total: true,
-      clientId: true,
-      createdAt: true,
-    },
     sort: { createdAt: "Descending" },
-    first: 40,
+    first: 25,
+    pending: true,
     pause: !businessId,
   });
 
@@ -111,41 +91,26 @@ export default function SignedIn() {
   const todayJobs = useMemo(() => {
     const day = filterNow;
     return appointments.filter((a) => {
-      const st = parseISO(a.startTime);
-      return isSameDay(st, day) && ACTIVE_JOB.has(a.status);
+      const st = safeParseISO(a.startTime);
+      if (!st) return false;
+      return isSameDay(st, day) && ACTIVE_JOB.has(a.status ?? "");
     });
   }, [appointments, filterNow]);
 
-  const upcomingAppointments = useMemo(() => {
-    const day = filterNow;
-    const dayEnd = endOfDay(day);
-    return appointments
-      .filter((a) => {
-        const st = parseISO(a.startTime);
-        return st > dayEnd && ACTIVE_JOB.has(a.status);
-      })
-      .slice(0, 12);
-  }, [appointments, filterNow]);
+  const unpaidInvoices = (invoicesRaw ?? []) as Array<{
+    id: string;
+    invoiceNumber?: string | null;
+    status: string;
+    total: number | string | null | undefined;
+  }>;
 
-  const unpaidInvoices = useMemo(() => {
-    const rows = (invoicesRaw ?? []) as Array<{
-      id: string;
-      invoiceNumber?: string | null;
-      status: string;
-      total: number | string | null | undefined;
-    }>;
-    return rows.filter((inv) => inv.status === "sent" || inv.status === "partial").slice(0, 10);
-  }, [invoicesRaw]);
-
-  const pendingQuotes = useMemo(() => {
-    const rows = (quotesRaw ?? []) as Array<{
-      id: string;
-      status: string;
-      total: number | string | null | undefined;
-      createdAt?: string;
-    }>;
-    return rows.filter((q) => q.status === "draft" || q.status === "sent").slice(0, 10);
-  }, [quotesRaw]);
+  const pendingQuotes = (quotesRaw ?? []) as Array<{
+    id: string;
+    status: string;
+    total: number | string | null | undefined;
+    createdAt?: string;
+    client?: { firstName?: string | null; lastName?: string | null } | null;
+  }>;
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -157,8 +122,15 @@ export default function SignedIn() {
     }
   }, [refetchAppts, refetchInvoices, refetchQuotes]);
 
-  const loadError = apptsError ?? invoicesError ?? quotesError;
-  const loadingInitial = fetchingAppts && !appointmentsRaw;
+  const loadingAppts = fetchingAppts && appointmentsRaw === undefined;
+  const loadingInvoices = fetchingInvoices && invoicesRaw === undefined;
+  const loadingQuotes = fetchingQuotes && quotesRaw === undefined;
+  const anyLoading = loadingAppts || loadingInvoices || loadingQuotes;
+  const anyError = apptsError ?? invoicesError ?? quotesError;
+
+  if (!businessId) {
+    return <Navigate to="/onboarding" replace />;
+  }
 
   return (
     <div className="pb-24 md:pb-8 min-h-[calc(100dvh-4rem)]">
@@ -175,18 +147,24 @@ export default function SignedIn() {
             size="icon"
             className="h-11 w-11 shrink-0 rounded-xl"
             onClick={() => void handleRefresh()}
-            disabled={refreshing}
+            disabled={refreshing || anyLoading}
             aria-label="Refresh"
           >
-            <RefreshCw className={cn("h-5 w-5", refreshing && "animate-spin")} />
+            <RefreshCw className={cn("h-5 w-5", (refreshing || anyLoading) && "animate-spin")} />
           </Button>
         </div>
 
-        {loadError && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-900 dark:text-amber-100">
-            {loadError instanceof ApiError && (loadError.status === 401 || loadError.status === 403)
-              ? "Session expired. Sign in again."
-              : `Could not load dashboard: ${loadError.message}`}
+        {anyError && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-900 dark:text-amber-100 flex gap-3">
+            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">Some dashboard data could not be loaded.</p>
+              <p className="text-amber-800/90 dark:text-amber-100/90 mt-1">
+                {anyError instanceof ApiError && (anyError.status === 401 || anyError.status === 403)
+                  ? "Your session may have expired. Sign in again."
+                  : "Check each section below or try refreshing."}
+              </p>
+            </div>
           </div>
         )}
 
@@ -223,164 +201,118 @@ export default function SignedIn() {
             )}
           >
             <DollarSign className="h-5 w-5 shrink-0" />
-            Mark paid
+            Invoices
           </Link>
         </div>
 
-        {/* Today's jobs */}
+        {/* Today's appointments (API: today only; filtered to active statuses) */}
         <DashboardSection
-          title="Today's jobs"
-          seeAllHref="/calendar"
-          seeAllLabel="Calendar"
-          isEmpty={!loadingInitial && todayJobs.length === 0}
+          title="Today's appointments"
+          seeAllHref="/appointments"
+          seeAllLabel="All appointments"
+          error={apptsError}
+          isLoading={loadingAppts}
+          isEmpty={!loadingAppts && !apptsError && todayJobs.length === 0}
           emptyMessage="Nothing on the schedule today."
           emptyCta={{ href: "/appointments/new", label: "Schedule a job" }}
+          skeletonRows={3}
         >
-          {loadingInitial ? (
-            <ListSkeleton rows={3} />
-          ) : (
-            <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
-              {todayJobs.map((apt) => (
-                <li key={apt.id}>
-                  <Link
-                    to={`/appointments/${apt.id}`}
-                    className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
-                  >
-                    <div className="text-sm font-mono text-muted-foreground w-[72px] shrink-0">
-                      {apt.startTime ? format(parseISO(apt.startTime), "h:mm a") : "—"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-base truncate">
-                        {apt.client ? `${apt.client.firstName} ${apt.client.lastName}` : apt.title ?? "Job"}
+          <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
+            {todayJobs.map((apt) => (
+              <li key={apt.id}>
+                <Link
+                  to={`/appointments/${apt.id}`}
+                  className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
+                >
+                  <div className="text-sm font-mono text-muted-foreground w-[72px] shrink-0">
+                    {formatSafe(apt.startTime, "h:mm a")}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-base truncate">
+                      {apt.client ? `${apt.client.firstName ?? ""} ${apt.client.lastName ?? ""}`.trim() : apt.title ?? "Job"}
+                    </p>
+                    {apt.vehicle && (
+                      <p className="text-sm text-muted-foreground truncate">
+                        {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
                       </p>
-                      {apt.vehicle && (
-                        <p className="text-sm text-muted-foreground truncate">
-                          {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
-                        </p>
-                      )}
-                    </div>
-                    <StatusBadge status={apt.status} type="appointment" />
-                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+                    )}
+                  </div>
+                  <StatusBadge status={apt.status ?? "scheduled"} type="appointment" />
+                  <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                </Link>
+              </li>
+            ))}
+          </ul>
         </DashboardSection>
 
-        {/* Upcoming */}
-        <DashboardSection
-          title="Upcoming"
-          seeAllHref="/appointments"
-          seeAllLabel="All jobs"
-          isEmpty={!loadingInitial && upcomingAppointments.length === 0}
-          emptyMessage="No upcoming appointments in the next 30 days."
-          emptyCta={{ href: "/appointments/new", label: "Schedule" }}
-        >
-          {loadingInitial ? (
-            <ListSkeleton rows={3} />
-          ) : (
-            <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
-              {upcomingAppointments.map((apt) => (
-                <li key={apt.id}>
-                  <Link
-                    to={`/appointments/${apt.id}`}
-                    className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
-                  >
-                    <div className="text-xs text-muted-foreground w-20 shrink-0 leading-tight">
-                      {apt.startTime ? (
-                        <>
-                          <div className="font-medium text-foreground">
-                            {format(parseISO(apt.startTime), "MMM d")}
-                          </div>
-                          <div>{format(parseISO(apt.startTime), "h:mm a")}</div>
-                        </>
-                      ) : (
-                        "—"
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">
-                        {apt.client ? `${apt.client.firstName} ${apt.client.lastName}` : apt.title ?? "Appointment"}
-                      </p>
-                      {apt.vehicle && (
-                        <p className="text-sm text-muted-foreground truncate">
-                          {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
-                        </p>
-                      )}
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </DashboardSection>
-
-        {/* Unpaid invoices */}
-        <DashboardSection
-          title="Unpaid invoices"
-          seeAllHref="/invoices"
-          seeAllLabel="Invoices"
-          isEmpty={!fetchingInvoices && unpaidInvoices.length === 0}
-          emptyMessage="No unpaid invoices."
-          emptyCta={{ href: "/invoices/new", label: "New invoice" }}
-        >
-          {fetchingInvoices && !invoicesRaw ? (
-            <ListSkeleton rows={2} />
-          ) : (
-            <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
-              {unpaidInvoices.map((inv) => (
-                <li key={inv.id}>
-                  <Link
-                    to={`/invoices/${inv.id}`}
-                    className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
-                  >
-                    <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{inv.invoiceNumber ?? `Invoice ${inv.id.slice(0, 8)}…`}</p>
-                      <p className="text-sm text-muted-foreground capitalize">{inv.status.replace("-", " ")}</p>
-                    </div>
-                    <span className="font-semibold tabular-nums">{formatCurrency(inv.total)}</span>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </DashboardSection>
-
-        {/* Pending quotes */}
+        {/* Pending quotes (API: draft + sent) */}
         <DashboardSection
           title="Pending quotes"
           seeAllHref="/quotes"
           seeAllLabel="Quotes"
-          isEmpty={!fetchingQuotes && pendingQuotes.length === 0}
+          error={quotesError}
+          isLoading={loadingQuotes}
+          isEmpty={!loadingQuotes && !quotesError && pendingQuotes.length === 0}
           emptyMessage="No open quotes."
           emptyCta={{ href: "/quotes/new", label: "New quote" }}
+          skeletonRows={2}
         >
-          {fetchingQuotes && !quotesRaw ? (
-            <ListSkeleton rows={2} />
-          ) : (
-            <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
-              {pendingQuotes.map((q) => (
-                <li key={q.id}>
-                  <Link
-                    to={`/quotes/${q.id}`}
-                    className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
-                  >
-                    <Receipt className="h-5 w-5 text-muted-foreground shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">Quote · {q.id.slice(0, 8)}…</p>
-                      <p className="text-sm text-muted-foreground capitalize">{q.status}</p>
-                    </div>
-                    <span className="font-semibold tabular-nums">{formatCurrency(q.total)}</span>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
+            {pendingQuotes.map((q) => (
+              <li key={q.id}>
+                <Link
+                  to={`/quotes/${q.id}`}
+                  className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
+                >
+                  <Receipt className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">
+                      {q.client
+                        ? `${q.client.firstName ?? ""} ${q.client.lastName ?? ""}`.trim() || "Quote"
+                        : `Quote · ${String(q.id).slice(0, 8)}…`}
+                    </p>
+                    <p className="text-sm text-muted-foreground capitalize">{String(q.status ?? "—")}</p>
+                  </div>
+                  <span className="font-semibold tabular-nums">{formatCurrency(q.total)}</span>
+                  <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </DashboardSection>
+
+        {/* Unpaid invoices (API: sent + partial) */}
+        <DashboardSection
+          title="Unpaid invoices"
+          seeAllHref="/invoices"
+          seeAllLabel="Invoices"
+          error={invoicesError}
+          isLoading={loadingInvoices}
+          isEmpty={!loadingInvoices && !invoicesError && unpaidInvoices.length === 0}
+          emptyMessage="No unpaid invoices."
+          emptyCta={{ href: "/invoices/new", label: "New invoice" }}
+          skeletonRows={2}
+        >
+          <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
+            {unpaidInvoices.map((inv) => (
+              <li key={inv.id}>
+                <Link
+                  to={`/invoices/${inv.id}`}
+                  className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
+                >
+                  <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{inv.invoiceNumber ?? `Invoice ${String(inv.id).slice(0, 8)}…`}</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {String(inv.status ?? "").replace(/-/g, " ") || "—"}
+                    </p>
+                  </div>
+                  <span className="font-semibold tabular-nums">{formatCurrency(inv.total)}</span>
+                  <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                </Link>
+              </li>
+            ))}
+          </ul>
         </DashboardSection>
       </div>
 
@@ -410,7 +342,7 @@ export default function SignedIn() {
             className="flex-1 flex flex-col items-center justify-center gap-1 min-h-[52px] rounded-xl border-2 border-border bg-card text-sm font-semibold active:scale-[0.98]"
           >
             <DollarSign className="h-5 w-5" />
-            Paid
+            Bills
           </Link>
         </div>
       </nav>
@@ -418,32 +350,55 @@ export default function SignedIn() {
   );
 }
 
+function sectionErrorMessage(err: Error): string {
+  if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+    return "Session expired. Sign in again.";
+  }
+  return err.message || "Could not load this section.";
+}
+
 function DashboardSection({
   title,
   seeAllHref,
   seeAllLabel,
+  error,
+  isLoading,
   isEmpty,
   emptyMessage,
   emptyCta,
+  skeletonRows,
   children,
 }: {
   title: string;
   seeAllHref: string;
   seeAllLabel: string;
+  error: Error | null;
+  isLoading: boolean;
   isEmpty: boolean;
   emptyMessage: string;
   emptyCta: { href: string; label: string };
-  children: React.ReactNode;
+  skeletonRows: number;
+  children: ReactNode;
 }) {
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">{title}</h2>
-        <Link to={seeAllHref} className="text-sm font-medium text-orange-600 hover:text-orange-700 py-2 min-h-[44px] inline-flex items-center">
+        <Link
+          to={seeAllHref}
+          className="text-sm font-medium text-orange-600 hover:text-orange-700 py-2 min-h-[44px] inline-flex items-center"
+        >
           {seeAllLabel}
         </Link>
       </div>
-      {isEmpty ? (
+      {error ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-4 text-sm text-destructive flex gap-3">
+          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" aria-hidden />
+          <p>{sectionErrorMessage(error)}</p>
+        </div>
+      ) : isLoading ? (
+        <ListSkeleton rows={skeletonRows} />
+      ) : isEmpty ? (
         <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center">
           <p className="text-sm text-muted-foreground mb-4">{emptyMessage}</p>
           <Button asChild size="lg" className="min-h-[48px] rounded-xl">
@@ -459,7 +414,7 @@ function DashboardSection({
 
 function ListSkeleton({ rows }: { rows: number }) {
   return (
-    <div className="rounded-xl border bg-card divide-y divide-border overflow-hidden">
+    <div className="rounded-xl border bg-card divide-y divide-border overflow-hidden" aria-busy="true" aria-label="Loading">
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 px-4 py-3 min-h-[56px]">
           <Skeleton className="h-4 w-16" />

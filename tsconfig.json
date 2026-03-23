@@ -5,7 +5,7 @@
       "path": "./tsconfig.web.json"
     }
   ],
-  "exclude": ["api", "backend", "node_modules"],
+  "exclude": ["api", "backend", "legacy", "node_modules"],
   "compilerOptions": {
     "strict": true,
     "allowJs": true,

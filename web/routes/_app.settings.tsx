@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useOutletContext, Link } from "react-router";
-import { useFindFirst, useAction, useFindMany, useGlobalAction } from "../hooks/useApi";
+import { useFindFirst, useAction, useFindMany } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -46,11 +46,6 @@ import {
   Plus,
   Trash2,
   PenLine,
-  Database,
-  Download,
-  RefreshCw,
-  ShieldCheck,
-  AlertTriangle,
 } from "lucide-react";
 import {
   Dialog,
@@ -101,9 +96,6 @@ const BILLING_FEATURES = [
   "Payments on invoices",
   "Service catalog",
 ];
-
-// Backend route/table is not implemented yet.
-const BACKUP_SNAPSHOTS_SUPPORTED = false;
 
 function BillingTab({
   billingStatus,
@@ -404,15 +396,6 @@ export default function SettingsPage() {
     }
   };
 
-  const [{ data: snapshots, fetching: snapshotsFetching }, refetchSnapshots] = useFindMany(api.backupSnapshot, {
-    filter: businessId ? { businessId: { equals: businessId } } : undefined,
-    sort: { createdAt: "Descending" },
-    first: 30,
-    select: { id: true, label: true, status: true, recordCounts: true, checksum: true, data: true, completedAt: true, createdAt: true, errorMessage: true },
-    pause: !businessId || !BACKUP_SNAPSHOTS_SUPPORTED,
-  } as any);
-  const [{ fetching: backupRunning }, runBackup] = useGlobalAction(api.createBackup);
-
   if (businessFetching) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -439,7 +422,6 @@ export default function SettingsPage() {
           <TabsTrigger value="profile">Business Profile</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="locations">Locations</TabsTrigger>
-          {BACKUP_SNAPSHOTS_SUPPORTED && <TabsTrigger value="backups">Backups</TabsTrigger>}
         </TabsList>
 
         {/* ─── Business Profile Tab ─── */}
@@ -800,159 +782,6 @@ export default function SettingsPage() {
             billingFeatures={BILLING_FEATURES}
           />
         </TabsContent>
-        {/* ─── Backups Tab ─── */}
-        {BACKUP_SNAPSHOTS_SUPPORTED && (
-        <TabsContent value="backups" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Data Backups</CardTitle>
-              <CardDescription>
-                Automatic daily snapshots of all your business data. Backups run every day at 2am UTC and are retained for 30 days. Download any snapshot as JSON to restore or audit your data.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Action row */}
-              <div className="flex justify-between items-center">
-                <Button
-                  onClick={async () => {
-                    const result = await runBackup();
-                    refetchSnapshots();
-                    if ((result as any)?.error) {
-                      toast.error((result as any).error.message ?? "Backup failed");
-                    } else {
-                      toast.success("Backup completed successfully!");
-                    }
-                  }}
-                  disabled={backupRunning}
-                >
-                  <RefreshCw className={`h-4 w-4 mr-2${backupRunning ? " animate-spin" : ""}`} />
-                  Run Backup Now
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  {(() => {
-                    const lastComplete = (snapshots as any[])?.find((s: any) => s.status === "complete");
-                    if (lastComplete?.completedAt) {
-                      return "Last backup: " + new Date(lastComplete.completedAt).toLocaleString();
-                    }
-                    return "No completed backups yet";
-                  })()}
-                </span>
-              </div>
-
-              {/* Content */}
-              {snapshotsFetching ? (
-                <div className="text-sm text-muted-foreground">Loading backups...</div>
-              ) : !snapshots || snapshots.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed rounded-lg">
-                  <Database className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                  <h3 className="font-medium text-sm">No backups yet</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Click Run Backup Now to create your first snapshot.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {(snapshots as any[]).map((snapshot: any) => (
-                    <div key={snapshot.id} className="rounded-lg border p-4 space-y-3">
-                      {/* Top row */}
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-3">
-                          <Database className="h-5 w-5 text-muted-foreground shrink-0" />
-                          <div>
-                            <p className="font-medium text-sm">{snapshot.label}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {snapshot.completedAt
-                                ? new Date(snapshot.completedAt).toLocaleString()
-                                : "In progress..."}
-                            </p>
-                          </div>
-                        </div>
-                        <div>
-                          {snapshot.status === "complete" && (
-                            <Badge className="bg-green-500/15 text-green-700 border-green-300 flex items-center gap-1">
-                              <ShieldCheck className="h-3.5 w-3.5" />
-                              Complete
-                            </Badge>
-                          )}
-                          {snapshot.status === "running" && (
-                            <Badge className="flex items-center gap-1">
-                              <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                              </svg>
-                              Running
-                            </Badge>
-                          )}
-                          {snapshot.status === "failed" && (
-                            <Badge className="bg-red-500/15 text-red-700 border-red-300 flex items-center gap-1">
-                              <AlertTriangle className="h-3.5 w-3.5" />
-                              Failed
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Error message */}
-                      {snapshot.status === "failed" && snapshot.errorMessage && (
-                        <p className="text-xs text-destructive">{snapshot.errorMessage}</p>
-                      )}
-
-                      {/* Record counts */}
-                      {(snapshot.recordCounts as any) && (
-                        <div className="flex flex-wrap gap-2">
-                          {(["clients", "vehicles", "appointments", "invoices", "payments", "services", "staff", "quotes", "inventoryItems"] as const).map((key) => {
-                            const val = (snapshot.recordCounts as any)[key];
-                            if (val == null) return null;
-                            const label = key.charAt(0).toUpperCase() + key.slice(1);
-                            return (
-                              <span key={key} className="text-xs bg-muted px-2 py-0.5 rounded-full">
-                                {label}: {val}
-                              </span>
-                            );
-                          })}
-                          {(snapshot.recordCounts as any).total != null && (
-                            <span className="text-xs bg-muted px-2 py-0.5 rounded-full font-medium">
-                              Total: {(snapshot.recordCounts as any).total}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Bottom row */}
-                      <div className="flex justify-between items-center">
-                        <div>
-                          {snapshot.checksum && (
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <ShieldCheck className="h-3.5 w-3.5" />
-                              <span>SHA-256: {snapshot.checksum.slice(0, 16)}...</span>
-                            </div>
-                          )}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement("a");
-                            a.href = url;
-                            a.download = `strata-backup-${snapshot.label}.json`;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-                          }}
-                        >
-                          <Download className="h-3.5 w-3.5 mr-1.5" />
-                          Download JSON
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        )}
       </Tabs>
     </div>
 

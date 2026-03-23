@@ -10,19 +10,24 @@ export default function SubscribePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
+  const [checkError, setCheckError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setCheckError(null);
       try {
         const status = await api.billing.getStatus();
         if (cancelled) return;
-        if (status?.status === "active" || status?.status === "trialing") {
+        const st = status && typeof status === "object" && "status" in status ? (status as { status?: string | null }).status : null;
+        if (st === "active" || st === "trialing") {
           navigate("/signed-in", { replace: true });
           return;
         }
-      } catch {
-        // Not logged in or no business
+      } catch (e) {
+        if (!cancelled) {
+          setCheckError(e instanceof Error ? e.message : "Could not verify subscription status.");
+        }
       } finally {
         if (!cancelled) setChecking(false);
       }
@@ -73,6 +78,9 @@ export default function SubscribePage() {
             <li>• Cancel anytime</li>
             <li>• Secure payment via Stripe</li>
           </ul>
+          {checkError && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">{checkError}</p>
+          )}
           {error && (
             <p className="text-sm text-destructive">{error}</p>
           )}

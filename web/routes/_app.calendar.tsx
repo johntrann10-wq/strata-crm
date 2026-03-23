@@ -49,23 +49,14 @@ export default function CalendarPage() {
     [currentDate, view]
   );
 
-  const appointmentFilter = useMemo(
-    () => {
-      const viewStartISO = viewStart.toISOString();
-      const viewEndISO = viewEnd.toISOString();
-      return {
-        AND: [
-          ...(businessId ? [{ business: { id: { equals: businessId } } }] : []),
-          { startTime: { greaterThanOrEqual: viewStartISO } },
-          { startTime: { lessThanOrEqual: viewEndISO } },
-        ],
-      };
-    },
-    [businessId, viewStart, viewEnd]
+  const { startGte, startLte } = useMemo(
+    () => ({ startGte: viewStart.toISOString(), startLte: viewEnd.toISOString() }),
+    [viewStart, viewEnd]
   );
 
   const [{ data: appointmentsData, fetching, error }, refetchAppointments] = useFindMany(api.appointment, {
-    filter: appointmentFilter,
+    startGte,
+    startLte,
     sort: { startTime: "Ascending" },
     pause: !businessId,
     select: {

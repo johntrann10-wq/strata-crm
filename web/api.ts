@@ -1,23 +1,36 @@
-import { clearAuthToken, emitAuthEvent, getAuthToken } from "./lib/auth";
+import { clearAuthToken, emitAuthEvent, getAuthToken, setAuthToken } from "./lib/auth";
+
+/** Standard auth payload from sign-in, sign-up, and GET /auth/me. */
+export type AuthUserData = {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  token: string;
+};
+
+type AuthEnvelope = { data: AuthUserData };
 
 /**
  * Fetch-based API client for Node API endpoints.
  * Uses JWT in Authorization header and talks directly to the Express backend.
+ *
+ * Public API origin (baked at build time):
+ * - `VITE_API_URL` or `NEXT_PUBLIC_API_URL` — absolute origin, e.g. https://api.example.com (no trailing slash)
+ * - If both unset: empty string → relative `/api/...` (dev: Vite proxy; prod: same-origin + edge proxy when VITE_ALLOW_RELATIVE_API=true at build)
  */
-/** Base URL for the backend API — set `VITE_API_URL` in `.env` (see `.env.example`). */
 function resolveApiBase(): string {
-  const apiBaseFromViteEnv = (import.meta.env as Record<string, string | undefined>).VITE_API_URL;
-  const trimmed = apiBaseFromViteEnv?.trim();
-  if (trimmed) return trimmed.replace(/\/+$/, "");
+  const env = import.meta.env;
+  const raw = env.VITE_API_URL?.trim() || env.NEXT_PUBLIC_API_URL?.trim() || "";
+  if (raw) return raw.replace(/\/+$/, "");
 
-  // Local dev: same-origin `/api` + Vite proxy (`vite.config.mts` targets `VITE_API_URL` or localhost).
+  // Development: always same-origin; Vite proxies /api (see vite.config.mts).
   if (import.meta.env.DEV) return "";
 
-  // Production: missing env must not crash the SPA bundle (auth/landing would white-screen).
-  // Same-origin `/api` works if the API is reverse-proxied to the app host; otherwise set VITE_API_URL.
-  if (import.meta.env.PROD && typeof console !== "undefined") {
-    console.warn(
-      "[Strata] VITE_API_URL is unset. API requests use same-origin /api. For a separate API host, set VITE_API_URL at build time."
+  // Production with empty origin: only valid when build used VITE_ALLOW_RELATIVE_API=true (see vite.config.mts).
+  if (import.meta.env.PROD && import.meta.env.VITE_ALLOW_RELATIVE_API !== "true") {
+    throw new Error(
+      "[Strata] Missing VITE_API_URL / NEXT_PUBLIC_API_URL and VITE_ALLOW_RELATIVE_API was not true at build time. Rebuild with env set — see .env.example."
     );
   }
   return "";
@@ -25,13 +38,6 @@ function resolveApiBase(): string {
 
 // Base origin for browser API calls.
 export const API_BASE = resolveApiBase();
-
-/** True when the SPA knows where the API lives (dev proxy or explicit VITE_API_URL). */
-export function isApiUrlConfigured(): boolean {
-  if (import.meta.env.DEV) return true;
-  const v = (import.meta.env as Record<string, string | undefined>).VITE_API_URL;
-  return !!(v && String(v).trim());
-}
 
 export class ApiError extends Error {
   status: number;
@@ -87,9 +93,13 @@ async function request<T = unknown>(
     }
     let message =
       errBody.message ?? res.statusText ?? `Request failed ${res.status}`;
-    if (res.status === 404 && import.meta.env.PROD && !isApiUrlConfigured()) {
-      message =
-        "API not found (404). Set VITE_API_URL to your backend URL when building the frontend, or proxy /api to your API.";
+    if (res.status === 404 && import.meta.env.PROD) {
+      const snippet = errText.slice(0, 120).toLowerCase();
+      const looksLikeSpaOrStatic = snippet.includes("<!doctype") || snippet.includes("<html");
+      if (looksLikeSpaOrStatic || (!errBody.message && !errText.trim())) {
+        message =
+          "API not found (404). Set STRATA_API_ORIGIN on Vercel/Netlify for the /api proxy, or VITE_API_URL / NEXT_PUBLIC_API_URL at build time (see DEPLOY.md).";
+      }
     }
     throw new ApiError(message, res.status, path, errBody.detail);
   }
@@ -100,13 +110,62 @@ async function request<T = unknown>(
     throw new ApiError("Invalid JSON from server", res.status, path);
   }
 }
+
+function assertAuthEnvelope(body: unknown, path: string): AuthUserData {
+  if (!body || typeof body !== "object") {
+    throw new ApiError("Invalid auth response", 500, path);
+  }
+  const data = (body as AuthEnvelope).data;
+  if (
+    !data ||
+    typeof data.id !== "string" ||
+    typeof data.email !== "string" ||
+    typeof data.token !== "string"
+  ) {
+    throw new ApiError("Invalid auth response", 500, path);
+  }
+  return data;
+}
 function resource(path: string) {
   const base = path.startsWith("/") ? path : `/${path}`;
   return {
-    findMany: (opts?: { filter?: unknown; sort?: unknown; first?: number; select?: unknown }) => {
-      const query = opts ? { filter: opts.filter, sort: opts.sort, first: opts.first, select: opts.select } : {};
-      const search = Object.keys(query).length ? "?" + new URLSearchParams(serializeQuery(query as Record<string, unknown>)).toString() : "";
-      return request<{ records?: unknown[] }>(`${base}${search}`).then((r) => r?.records ?? []);
+    findMany: (opts?: {
+      filter?: unknown;
+      sort?: unknown;
+      first?: number;
+      select?: unknown;
+      search?: string;
+      status?: string;
+      lost?: boolean;
+      /** Appointments: ISO timestamp, inclusive lower bound on `startTime`. */
+      startGte?: string;
+      /** Appointments: ISO timestamp, inclusive upper bound on `startTime`. */
+      startLte?: string;
+      /** Appointments: scope list to one client. */
+      clientId?: string;
+      /** Quotes: draft + sent only (dashboard). */
+      pending?: boolean;
+      /** Invoices: sent + partial only (dashboard unpaid). */
+      unpaid?: boolean;
+    }) => {
+      const query: Record<string, unknown> = {};
+      if (opts?.filter !== undefined) query.filter = opts.filter;
+      if (opts?.sort !== undefined) query.sort = opts.sort;
+      if (opts?.first !== undefined) query.first = opts.first;
+      if (opts?.select !== undefined) query.select = opts.select;
+      if (opts?.search !== undefined && opts.search !== "") query.search = opts.search;
+      if (opts?.status !== undefined && opts.status !== "" && opts.status !== "all") query.status = opts.status;
+      if (opts?.lost === true) query.lost = "1";
+      if (opts?.pending === true) query.pending = "1";
+      if (opts?.unpaid === true) query.unpaid = "1";
+      if (opts?.startGte !== undefined && opts.startGte !== "") query.startGte = opts.startGte;
+      if (opts?.startLte !== undefined && opts.startLte !== "") query.startLte = opts.startLte;
+      if (opts?.clientId !== undefined && opts.clientId !== "") query.clientId = opts.clientId;
+      const qs =
+        Object.keys(query).length > 0
+          ? "?" + new URLSearchParams(serializeQuery(query as Record<string, unknown>)).toString()
+          : "";
+      return request<{ records?: unknown[] }>(`${base}${qs}`).then((r) => r?.records ?? []);
     },
     findFirst: (opts?: { filter?: unknown; select?: unknown }) =>
       resource(path).findMany({ ...opts, first: 1 }).then((arr) => arr[0] ?? null),
@@ -116,13 +175,38 @@ function resource(path: string) {
       request<unknown>(`${base}/${encodeURIComponent(id)}`),
     create: (data: Record<string, unknown>) =>
       request<{ record?: unknown }>(base, { method: "POST", body: JSON.stringify(data) }).then((r) => r?.record ?? r),
-    update: (id: string, data: Record<string, unknown>) =>
-      request<{ record?: unknown }>(`${base}/${encodeURIComponent(id)}`, {
+    /**
+     * Supports both `update(id, body)` and `update({ id, ...body })` (hooks often pass a single object).
+     */
+    update: (idOrParams: string | Record<string, unknown>, data?: Record<string, unknown>) => {
+      let id: string;
+      let body: Record<string, unknown>;
+      if (typeof idOrParams === "string") {
+        id = idOrParams;
+        body = data ?? {};
+      } else if (idOrParams && typeof idOrParams === "object" && typeof idOrParams.id === "string") {
+        const { id: rid, ...rest } = idOrParams as Record<string, unknown> & { id: string };
+        id = rid;
+        body = rest;
+      } else {
+        throw new Error("update requires id (string or { id })");
+      }
+      return request<{ record?: unknown }>(`${base}/${encodeURIComponent(id)}`, {
         method: "PATCH",
-        body: JSON.stringify(data),
-      }).then((r) => r?.record ?? r),
-    delete: (id: string) =>
-      request(`${base}/${encodeURIComponent(id)}`, { method: "DELETE" }),
+        body: JSON.stringify(body),
+      }).then((r) => r?.record ?? r);
+    },
+    /** Supports `delete(id)` or `delete({ id })`. */
+    delete: (idOrParams: string | Record<string, unknown>) => {
+      const id =
+        typeof idOrParams === "string"
+          ? idOrParams
+          : typeof idOrParams?.id === "string"
+            ? idOrParams.id
+            : null;
+      if (!id) throw new Error("delete requires id (string or { id })");
+      return request(`${base}/${encodeURIComponent(id)}`, { method: "DELETE" });
+    },
   };
 }
 function serializeQuery(q: Record<string, unknown>): Record<string, string> {
@@ -161,14 +245,8 @@ export const api = {
         method: "POST",
         body: JSON.stringify(params),
       }),
-    resendReviewRequest: (params: Record<string, unknown>) =>
-      request<unknown>("/appointments/" + (params?.id ?? "") + "/resendReviewRequest", {
-        method: "POST",
-        body: JSON.stringify(params),
-      }),
   },
   appointmentService: resource("appointment-services"),
-  appointmentPhoto: resource("appointment-photos"),
   invoice: {
     ...resource("invoices"),
     sendToClient: (params: Record<string, unknown>) =>
@@ -193,7 +271,6 @@ export const api = {
   },
   client: resource("clients"),
   vehicle: resource("vehicles"),
-  vehicleInspection: resource("vehicle-inspections"),
   business: {
     ...resource("businesses"),
     completeOnboarding: (id: string) =>
@@ -230,7 +307,6 @@ export const api = {
       },
     };
   })(),
-  serviceInventoryItem: resource("service-inventory-items"),
   quote: {
     ...resource("quotes"),
     send: (params: Record<string, unknown>) =>
@@ -243,27 +319,38 @@ export const api = {
         method: "POST",
         body: JSON.stringify(params),
       }),
+    /** One-shot: create appointment from quote + link quote (accepted). */
+    schedule: (params: Record<string, unknown>) => {
+      const id = params?.id as string | undefined;
+      if (!id) throw new Error("quote schedule requires id");
+      const { id: _omit, ...body } = params;
+      return request<unknown>("/quotes/" + encodeURIComponent(id) + "/schedule", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    },
   },
   quoteLineItem: resource("quote-line-items"),
-  inventoryItem: resource("inventory-items"),
-  activityLog: resource("activity-logs"),
-  notificationLog: resource("notification-logs"),
-  systemErrorLog: resource("system-error-logs"),
-  backupSnapshot: resource("backup-snapshots"),
-  automationLog: resource("automation-logs"),
-  automationRule: resource("automation-rules"),
   user: {
     ...resource("users"),
     signIn: (params: Record<string, unknown>) =>
-      request<unknown>("/auth/sign-in", { method: "POST", body: JSON.stringify(params) }),
+      request<AuthEnvelope>("/auth/sign-in", { method: "POST", body: JSON.stringify(params) }).then((body) => {
+        assertAuthEnvelope(body, "/auth/sign-in");
+        return body;
+      }),
     signUp: (params: Record<string, unknown>) =>
-      request<unknown>("/auth/sign-up", { method: "POST", body: JSON.stringify(params) }),
+      request<AuthEnvelope>("/auth/sign-up", { method: "POST", body: JSON.stringify(params) }).then((body) => {
+        assertAuthEnvelope(body, "/auth/sign-up");
+        return body;
+      }),
     signOut: () => request("/auth/sign-out", { method: "POST" }),
-    me: () => request<{ id: string; email: string; firstName?: string; lastName?: string }>("/auth/me"),
-    sendResetPassword: (params: Record<string, unknown>) =>
-      request<unknown>("/auth/forgot-password", { method: "POST", body: JSON.stringify(params) }),
-    resetPassword: (params: Record<string, unknown>) =>
-      request<unknown>("/auth/reset-password", { method: "POST", body: JSON.stringify(params) }),
+    /** Validates JWT, returns user + fresh token (persisted to localStorage). */
+    me: () =>
+      request<AuthEnvelope>("/auth/me").then((body) => {
+        const d = assertAuthEnvelope(body, "/auth/me");
+        setAuthToken(d.token);
+        return d;
+      }),
     update: (params: Record<string, unknown>) =>
       request<unknown>("/users/" + (params?.id ?? "") + "/update", {
         method: "PATCH",
@@ -278,49 +365,8 @@ export const api = {
       request<unknown>(`/users/${encodeURIComponent(id)}`),
   },
   // Global actions (POST /api/actions/:name)
-  getDashboardStats: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/getDashboardStats", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  getCapacityInsights: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/getCapacityInsights", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getInvoiceMetrics: (params?: Record<string, unknown>) =>
     request<unknown>("/actions/getInvoiceMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  generatePortalToken: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/generatePortalToken", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  restoreClient: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/restoreClient", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  restoreVehicle: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/restoreVehicle", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  restoreService: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/restoreService", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  unvoidInvoice: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/unvoidInvoice", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  reversePayment: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/reversePayment", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  revertRecord: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/revertRecord", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  retryFailedNotifications: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/retryFailedNotifications", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  createBackup: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/createBackup", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  getAnalyticsData: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/getAnalyticsData", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  optimizeDailyRoute: (params?: Record<string, unknown>) =>
-    request<unknown>("/actions/optimizeDailyRoute", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  // Lightweight client-side helpers for appointment UX; backend endpoints are not required for launch.
-  checkAvailability: (params?: Record<string, unknown>) =>
-    Promise.resolve({
-      available: true,
-      staffConflicts: [],
-      businessConflicts: [],
-    } as unknown),
-  getUpsellRecommendations: (params?: Record<string, unknown>) =>
-    Promise.resolve({
-      recommendations: [],
-    } as unknown),
-  estimateDuration: (params?: Record<string, unknown>) =>
-    Promise.resolve({
-      totalEstimatedMinutes: null,
-    } as unknown),
   // Billing: $29/mo, first month free
   billing: {
     getStatus: () => request<{ status: string | null; trialEndsAt: string | null; currentPeriodEnd: string | null }>("/billing/status"),

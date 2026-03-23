@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useOutletContext, useSearchParams, Link } from "react-router";
-import { useFindFirst, useFindMany, useAction, useGlobalAction } from "../hooks/useApi";
+import { useFindFirst, useFindMany, useFindOne, useAction } from "../hooks/useApi";
 import { format, addMinutes } from "date-fns";
 import {
   CalendarIcon,
@@ -12,11 +12,8 @@ import {
   MapPin,
   DollarSign,
   AlertCircle,
-  CheckCircle2,
   Loader2,
   Sparkles,
-  TrendingUp,
-  Brain,
 } from "lucide-react";
 import { api } from "../api";
 import { formatServiceCategory } from "../lib/serviceCatalog";
@@ -94,9 +91,6 @@ export default function NewAppointmentPage() {
   const [quickModel, setQuickModel] = useState('');
   const [quickVehicleError, setQuickVehicleError] = useState('');
   const [savingVehicle, setSavingVehicle] = useState(false);
-  const [dismissedUpsells, setDismissedUpsells] = useState<Set<string>>(new Set());
-  const [durationOverrideMinutes, setDurationOverrideMinutes] = useState<number | null>(null);
-  const [showDurationOverride, setShowDurationOverride] = useState(false);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [showAdditionalDetails, setShowAdditionalDetails] = useState(false);
   const [showQuotePrefilledBadge, setShowQuotePrefilledBadge] = useState(false);
@@ -228,10 +222,10 @@ export default function NewAppointmentPage() {
     }
   );
 
-  const [{ data: quoteData }] = useFindFirst(api.quote, {
-    filter: quoteIdParam ? { id: { equals: quoteIdParam } } : { id: { equals: "" } },
+  const [{ data: quoteData }] = useFindOne(api.quote, quoteIdParam ?? undefined, {
     select: {
       id: true,
+      vehicleId: true,
       lineItems: {
         edges: {
           node: {
@@ -241,8 +235,7 @@ export default function NewAppointmentPage() {
         },
       },
     },
-    pause: !quoteIdParam,
-  } as any);
+  });
 
   const [{ fetching: actionFetching }, createAppointment] = useAction(
     api.appointment.create
@@ -250,27 +243,7 @@ export default function NewAppointmentPage() {
 
   const [, createVehicle] = useAction(api.vehicle.create);
 
-  const [{ data: availData, fetching: checkingAvail }, runCheckAvail] = useGlobalAction(
-    api.checkAvailability
-  );
-  const runCheckAvailRef = useRef(runCheckAvail);
-  useEffect(() => { runCheckAvailRef.current = runCheckAvail; });
-
-  const [{ data: upsellData, fetching: fetchingUpsells }, runGetUpsells] = useGlobalAction(
-    api.getUpsellRecommendations
-  );
-  const runGetUpsellsRef = useRef(runGetUpsells);
-  useEffect(() => { runGetUpsellsRef.current = runGetUpsells; });
-
-  const [{ data: estimateData, fetching: fetchingEstimate }, runEstimateDuration] = useGlobalAction(
-    api.estimateDuration
-  );
-  const runEstimateDurationRef = useRef(runEstimateDuration);
-  useEffect(() => { runEstimateDurationRef.current = runEstimateDuration; });
-
   // Derived calculations
-  const selectedServiceIdsKey = useMemo(() => selectedServiceIds.slice().sort().join(','), [selectedServiceIds]);
-
   const { totalPrice, totalDuration } = useMemo(() => {
     return selectedServiceIds.reduce(
       (acc, id) => {
@@ -293,11 +266,7 @@ export default function NewAppointmentPage() {
     return dt;
   }, [selectedDate, startTime]);
 
-  const smartEstimateMinutes: number | null =
-    selectedServiceIds.length > 0 && selectedVehicleId
-      ? ((estimateData as any)?.totalEstimatedMinutes as number) ?? null
-      : null;
-  const effectiveDuration = durationOverrideMinutes ?? smartEstimateMinutes ?? totalDuration;
+  const effectiveDuration = totalDuration;
 
   const endDateTime = useMemo(() => {
     if (!startDateTime || effectiveDuration === 0) return null;
@@ -311,54 +280,21 @@ export default function NewAppointmentPage() {
     }
   }, [prefilledClientData]);
 
-  // Debounced availability check
-  useEffect(() => {
-    if (!startDateTime || !endDateTime) return;
-
-    const timeout = setTimeout(() => {
-      void runCheckAvailRef.current({
-        startTime: startDateTime.toISOString(),
-        endTime: endDateTime.toISOString(),
-        staffId: selectedStaffId ?? undefined,
-      });
-    }, 600);
-
-    return () => clearTimeout(timeout);
-  }, [startDateTime?.toISOString(), endDateTime?.toISOString(), selectedStaffId]);
-
-  useEffect(() => {
-    if (!selectedClientId || !businessId) return;
-    const timeout = setTimeout(() => {
-      void runGetUpsellsRef.current({
-        clientId: selectedClientId,
-        vehicleId: selectedVehicleId ?? undefined,
-        businessId: businessId,
-        selectedServiceIds: selectedServiceIdsKey,
-      });
-    }, 800);
-    return () => clearTimeout(timeout);
-  }, [selectedClientId, selectedVehicleId, businessData?.id, selectedServiceIdsKey]);
-
-  useEffect(() => {
-    setDurationOverrideMinutes(null);
-    setShowDurationOverride(false);
-    if (selectedServiceIds.length === 0 || !selectedVehicleId || !businessId) return;
-    const timeout = setTimeout(() => {
-      void runEstimateDurationRef.current({
-        serviceIds: selectedServiceIds,
-        vehicleId: selectedVehicleId,
-        businessId: businessId,
-      });
-    }, 500);
-    return () => clearTimeout(timeout);
-  }, [selectedServiceIdsKey, selectedVehicleId, businessData?.id]);
-
   // Auto-select sole vehicle when client has exactly one vehicle
   useEffect(() => {
     if (vehiclesData && vehiclesData.length === 1 && selectedVehicleId === null) {
       setSelectedVehicleId(vehiclesData[0].id);
     }
   }, [vehiclesData, selectedClientId]);
+
+  // Pre-select vehicle from linked quote
+  useEffect(() => {
+    if (!quoteIdParam || !quoteData) return;
+    const vid = (quoteData as { vehicleId?: string | null }).vehicleId;
+    if (vid && selectedVehicleId === null) {
+      setSelectedVehicleId(vid);
+    }
+  }, [quoteIdParam, quoteData, selectedVehicleId]);
 
   // Auto-open quick-add vehicle form when client has no vehicles on file
   useEffect(() => {
@@ -418,7 +354,6 @@ export default function NewAppointmentPage() {
     setShowQuickAddVehicle(false);
     setClientSearchOpen(false);
     setClientSearchQuery("");
-    setDismissedUpsells(new Set());
   };
 
   const toggleService = (serviceId: string) => {
@@ -510,7 +445,9 @@ export default function NewAppointmentPage() {
         title: autoTitle || undefined,
         assignedStaffId: selectedStaffId ?? undefined,
         locationId: selectedLocationId ?? undefined,
-      } as any);
+        ...(quoteIdParam ? { quoteId: quoteIdParam } : {}),
+        ...(selectedServiceIds.length > 0 ? { serviceIds: selectedServiceIds } : {}),
+      } as Record<string, unknown>);
 
       if (result.error) {
         setFormError(result.error.message);
@@ -530,23 +467,6 @@ export default function NewAppointmentPage() {
       setIsSubmitting(false);
     }
   };
-
-  function getReasonBadgeStyle(category: string): string {
-    const styles: Record<string, string> = {
-      detail: "bg-blue-100 text-blue-700 border-blue-200",
-      tint: "bg-amber-100 text-amber-800 border-amber-200",
-      ppf: "bg-purple-100 text-purple-700 border-purple-200",
-      mechanical: "bg-slate-100 text-slate-800 border-slate-200",
-      tire: "bg-orange-100 text-orange-800 border-orange-200",
-      body: "bg-rose-100 text-rose-800 border-rose-200",
-      other: "bg-gray-100 text-gray-600 border-gray-200",
-    };
-    return styles[category] ?? "bg-gray-100 text-gray-600 border-gray-200";
-  }
-
-  const upsellRecommendations = ((upsellData as any)?.recommendations ?? []).filter(
-    (r: any) => !dismissedUpsells.has(r.serviceId) && !selectedServiceIds.includes(r.serviceId)
-  ) as Array<{ serviceId: string; name: string; category: string; price: number; duration?: number; reason: string; score: number }>;
 
   const selectedClient =
     clientsData?.find((c) => c.id === selectedClientId) ??
@@ -819,58 +739,6 @@ export default function NewAppointmentPage() {
                 </div>
               )}
 
-              {/* Upsell Recommendations */}
-              {upsellRecommendations.length > 0 && (
-                <div className='mt-4 space-y-2'>
-                  <div className='flex items-center gap-1.5 text-xs font-semibold text-amber-700 uppercase tracking-wide'>
-                    <Sparkles className='h-3.5 w-3.5' />
-                    Suggested for this client
-                  </div>
-                  {upsellRecommendations.map((rec) => (
-                    <div
-                      key={rec.serviceId}
-                      className='flex items-center gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50/60'
-                    >
-                      <div className='flex-1 min-w-0'>
-                        <div className='flex items-center gap-2 flex-wrap'>
-                          <span className='text-sm font-medium'>{rec.name}</span>
-                          <span className={cn('text-xs px-1.5 py-0.5 rounded-full border font-medium', getReasonBadgeStyle(rec.category))}>
-                            {rec.category.replace(/-/g, ' ')}
-                          </span>
-                        </div>
-                        <p className='text-xs text-muted-foreground mt-0.5 leading-snug'>{rec.reason}</p>
-                      </div>
-                      <div className='flex items-center gap-2 shrink-0'>
-                        <span className='text-sm font-semibold'>${rec.price?.toFixed(2) ?? '0.00'}</span>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant='outline'
-                          className='h-7 px-2 text-xs border-amber-300 hover:bg-amber-100 text-amber-800'
-                          onClick={() => toggleService(rec.serviceId)}
-                        >
-                          + Add
-                        </Button>
-                        <button
-                          type='button'
-                          className='text-muted-foreground hover:text-foreground transition-colors'
-                          onClick={() => setDismissedUpsells(prev => new Set([...prev, rec.serviceId]))}
-                          aria-label='Dismiss suggestion'
-                        >
-                          <span className='text-lg leading-none'>&times;</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {fetchingUpsells && selectedClientId && (
-                <div className='mt-3 flex items-center gap-1.5 text-xs text-muted-foreground'>
-                  <Loader2 className='h-3 w-3 animate-spin' />
-                  Analyzing client history…
-                </div>
-              )}
-
               {selectedServiceIds.length > 0 && (
                 <div className="mt-4 p-3 rounded-lg bg-muted/50 space-y-1.5">
                   <div className="flex justify-between text-sm text-muted-foreground">
@@ -1028,71 +896,10 @@ export default function NewAppointmentPage() {
                 </div>
               )}
 
-              {/* Availability indicator */}
               {startDateTime && endDateTime && (
-                <div className="pt-1 space-y-2">
-                  {checkingAvail ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Checking availability…
-                    </div>
-                  ) : (
-                    <>
-                      {(availData as any)?.available === true && (
-                        <div className="flex items-center gap-2 text-sm text-green-600">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          Time slot is available
-                        </div>
-                      )}
-                      {(availData as any)?.staffConflicts?.length > 0 && (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-sm text-destructive">
-                            <AlertCircle className="h-3.5 w-3.5" />
-                            Staff already booked
-                          </div>
-                          {(availData as any).staffConflicts.slice(0, 3).map(
-                            (conflict: { clientName?: string; startTime?: string }, i: number) => (
-                              <p key={i} className="text-xs text-muted-foreground pl-5">
-                                {conflict.clientName && (
-                                  <span className="font-medium">{conflict.clientName}</span>
-                                )}
-                                {conflict.startTime && (
-                                  <span>
-                                    {conflict.clientName ? " — " : ""}
-                                    {format(new Date(conflict.startTime), "h:mm a")}
-                                  </span>
-                                )}
-                              </p>
-                            )
-                          )}
-                        </div>
-                      )}
-                      {(availData as any)?.businessConflicts?.length > 0 && (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-sm text-amber-600">
-                            <Clock className="h-3.5 w-3.5" />
-                            Time slot is busy — another appointment overlaps this window
-                          </div>
-                          {(availData as any).businessConflicts.slice(0, 3).map(
-                            (conflict: { clientName?: string; startTime?: string }, i: number) => (
-                              <p key={i} className="text-xs text-muted-foreground pl-5">
-                                {conflict.clientName && (
-                                  <span className="font-medium">{conflict.clientName}</span>
-                                )}
-                                {conflict.startTime && (
-                                  <span>
-                                    {conflict.clientName ? " — " : ""}
-                                    {format(new Date(conflict.startTime), "h:mm a")}
-                                  </span>
-                                )}
-                              </p>
-                            )
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
+                <p className="text-xs text-muted-foreground pt-1">
+                  Overlapping appointments are blocked when you save. If this time conflicts, you will see an error from the server.
+                </p>
               )}
 
               {/* Service duration mismatch warning */}

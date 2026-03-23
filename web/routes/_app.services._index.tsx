@@ -37,7 +37,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Trash2, Wrench } from "lucide-react";
+import { Plus, Pencil, Package, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../components/shared/PageHeader";
@@ -261,7 +261,7 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
 }
 
 export default function ServicesPage() {
-  const { user, businessId } = useOutletContext<AuthOutletContext>();
+  const { businessId } = useOutletContext<AuthOutletContext>();
 
   const businessIdFilter = useMemo(
     () => (businessId ? { businessId: { equals: businessId } } : undefined),
@@ -295,6 +295,13 @@ export default function ServicesPage() {
     useAction(api.service.delete);
 
   const [newAddonServiceId, setNewAddonServiceId] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<"active" | "inactive">("active");
+  const [editService, setEditService] = useState<ServiceRecord | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editFormData, setEditFormData] = useState<ServiceFormData>(defaultFormData);
+  const [createFormData, setCreateFormData] = useState<ServiceFormData>(defaultFormData);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const addonLinkFilter = useMemo(
     () =>
@@ -320,14 +327,6 @@ export default function ServicesPage() {
   const resetEditDialogState = () => {
     setNewAddonServiceId("");
   };
-
-  const [activeTab, setActiveTab] = useState<"active" | "inactive">("active");
-  const [editService, setEditService] = useState<ServiceRecord | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [editFormData, setEditFormData] = useState<ServiceFormData>(defaultFormData);
-  const [createFormData, setCreateFormData] = useState<ServiceFormData>(defaultFormData);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   // Open edit dialog
   const handleEditService = (service: ServiceRecord) => {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate, useOutletContext } from "react-router";
-import { useFindOne, useAction, useGlobalAction } from "../hooks/useApi";
+import { useFindOne, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
 import type { AuthOutletContext } from "./_app";
@@ -118,7 +118,6 @@ export default function QuoteDetailPage() {
         sentAt: true,
         acceptedAt: true,
         expiresAt: true,
-        acceptToken: true,
         createdAt: true,
         client: {
           id: true,
@@ -196,9 +195,9 @@ export default function QuoteDetailPage() {
   const handleSend = async () => {
     const result = await runSend({ id: id! });
     if (result.error) {
-      toast.error("Failed to send quote: " + result.error.message);
+      toast.error("Failed to mark quote as sent: " + result.error.message);
     } else {
-      toast.success("Quote sent to client!");
+      toast.success("Quote marked as sent");
       void refetch();
     }
   };
@@ -333,10 +332,6 @@ export default function QuoteDetailPage() {
   }
 
   const clientName = `${quote.client.firstName} ${quote.client.lastName}`;
-  const acceptLink =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/portal/accept?token=${quote.acceptToken}`
-      : `/portal/accept?token=${quote.acceptToken}`;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
@@ -366,7 +361,7 @@ export default function QuoteDetailPage() {
               ) : (
                 <Send className="mr-2 h-4 w-4" />
               )}
-              Send to Client
+              Mark as sent
             </Button>
           )}
           {quote.status === "sent" && (
@@ -750,25 +745,6 @@ export default function QuoteDetailPage() {
                   <CalendarPlus className="mr-2 h-4 w-4" />
                   Book Appointment
                 </Button>
-              )}
-              {quote.status === "sent" && quote.acceptToken && (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Accept link</p>
-                  <div className="rounded-md bg-muted p-2 text-xs font-mono break-all">
-                    {acceptLink}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(acceptLink);
-                      toast.success("Link copied to clipboard");
-                    }}
-                  >
-                    Copy Link
-                  </Button>
-                </div>
               )}
               <Button variant="outline" className="w-full" asChild>
                 <Link to={`/invoices/new?clientId=${quote.client.id}`}>

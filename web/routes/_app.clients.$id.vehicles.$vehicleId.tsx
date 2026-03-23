@@ -1,18 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router";
-import { useFindOne, useFindFirst, useAction } from "../hooks/useApi";
-import { api, API_BASE } from "../api";
+import { useFindOne, useAction } from "../hooks/useApi";
+import { api } from "../api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
@@ -31,17 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2, Scan, ChevronDown, ChevronUp } from "lucide-react";
-
-const PAINT_TYPE_OPTIONS = [
-  { value: "stock", label: "Stock" },
-  { value: "custom", label: "Custom" },
-  { value: "wrapped", label: "Wrapped" },
-  { value: "ppf", label: "PPF" },
-  { value: "ceramic-coated", label: "Ceramic Coated" },
-  { value: "matte", label: "Matte" },
-  { value: "satin", label: "Satin" },
-];
+import { ArrowLeft, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 
 export default function VehicleEditPage() {
   const { id, vehicleId } = useParams<{ id: string; vehicleId: string }>();
@@ -53,19 +36,13 @@ export default function VehicleEditPage() {
       year: true,
       make: true,
       model: true,
-      trim: true,
       color: true,
       vin: true,
       licensePlate: true,
       mileage: true,
-      paintType: true,
       notes: true,
       client: { id: true, firstName: true, lastName: true },
     },
-  });
-
-  const [{ data: business }] = useFindFirst(api.business, {
-    select: { id: true },
   });
 
   const [updateResult, update] = useAction(api.vehicle.update);
@@ -76,16 +53,12 @@ export default function VehicleEditPage() {
   const [year, setYear] = useState("");
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
-  const [trim, setTrim] = useState("");
   const [color, setColor] = useState("");
   const [licensePlate, setLicensePlate] = useState("");
   const [mileage, setMileage] = useState("");
-  const [paintType, setPaintType] = useState("");
   const [notes, setNotes] = useState("");
   const [showMoreDetails, setShowMoreDetails] = useState(true);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [vinError, setVinError] = useState("");
-  const [isDecodingVin, setIsDecodingVin] = useState(false);
 
   // Pre-fill form when vehicle loads
   useEffect(() => {
@@ -94,11 +67,9 @@ export default function VehicleEditPage() {
       setYear(vehicle.year?.toString() ?? "");
       setMake(vehicle.make ?? "");
       setModel(vehicle.model ?? "");
-      setTrim(vehicle.trim ?? "");
       setColor(vehicle.color ?? "");
       setLicensePlate(vehicle.licensePlate ?? "");
       setMileage(vehicle.mileage?.toString() ?? "");
-      setPaintType(vehicle.paintType ?? "");
       setNotes(vehicle.notes ?? "");
     }
   }, [vehicle]);
@@ -131,40 +102,16 @@ export default function VehicleEditPage() {
     }
   }, [deleteResult.error]);
 
-  const handleDecodeVin = async () => {
-    setVinError("");
-    setIsDecodingVin(true);
-    try {
-      const response = await fetch(`${API_BASE}/api/decode-vin?vin=${encodeURIComponent(vin.trim())}`);
-      const data = await response.json();
-      if (response.ok && data) {
-        if (data.year) setYear(data.year.toString());
-        if (data.make) setMake(data.make);
-        if (data.model) setModel(data.model);
-        if (data.trim) setTrim(data.trim);
-        toast.success("Vehicle info updated from VIN");
-      } else {
-        setVinError(data?.error ?? "Could not decode VIN");
-      }
-    } catch {
-      setVinError("Failed to decode VIN");
-    } finally {
-      setIsDecodingVin(false);
-    }
-  };
-
   const handleSave = () => {
     update({
       id: vehicleId!,
       year: year ? parseInt(year, 10) : null,
       make,
       model,
-      trim: trim || null,
       color: color || null,
       vin: vin || null,
       licensePlate: licensePlate || null,
-      mileage: mileage ? parseFloat(mileage) : null,
-      paintType: (paintType as any) || null,
+      mileage: mileage ? parseInt(mileage, 10) : null,
       notes: notes || null,
     });
   };
@@ -227,38 +174,15 @@ export default function VehicleEditPage() {
           <CardTitle>Vehicle Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* VIN field */}
           <div className="space-y-2">
             <Label htmlFor="vin">VIN</Label>
-            <div className="flex gap-2">
-              <Input
-                id="vin"
-                value={vin}
-                onChange={(e) => {
-                  setVin(e.target.value);
-                  setVinError("");
-                }}
-                placeholder="17-character VIN"
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleDecodeVin}
-                disabled={vin.trim().length !== 17 || isDecodingVin}
-              >
-                {isDecodingVin ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                ) : (
-                  <Scan className="h-4 w-4 mr-1" />
-                )}
-                Decode VIN
-              </Button>
-            </div>
-            {vinError && (
-              <p className="text-sm text-destructive">{vinError}</p>
-            )}
+            <Input
+              id="vin"
+              value={vin}
+              onChange={(e) => setVin(e.target.value)}
+              placeholder="Vehicle Identification Number (optional)"
+              className="flex-1"
+            />
           </div>
 
           {/* Year, Make, Model */}
@@ -318,15 +242,6 @@ export default function VehicleEditPage() {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="trim">Trim</Label>
-                    <Input
-                      id="trim"
-                      value={trim}
-                      onChange={(e) => setTrim(e.target.value)}
-                      placeholder="e.g. XSE"
-                    />
-                  </div>
-                  <div className="space-y-2">
                     <Label htmlFor="color">Color</Label>
                     <Input
                       id="color"
@@ -335,9 +250,6 @@ export default function VehicleEditPage() {
                       placeholder="e.g. Midnight Black"
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="licensePlate">License Plate</Label>
                     <Input
@@ -347,6 +259,9 @@ export default function VehicleEditPage() {
                       placeholder="e.g. ABC-1234"
                     />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="mileage">Mileage</Label>
                     <Input
@@ -357,26 +272,6 @@ export default function VehicleEditPage() {
                       placeholder="e.g. 35000"
                     />
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="paintType">Paint Type</Label>
-                  <Select
-                    value={paintType || "none"}
-                    onValueChange={(v) => setPaintType(v === "none" ? "" : v)}
-                  >
-                    <SelectTrigger id="paintType">
-                      <SelectValue placeholder="Select paint type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {PAINT_TYPE_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 <div className="space-y-2">

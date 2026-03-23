@@ -35,7 +35,8 @@ function parseFilter(req: Request): Record<string, unknown> | undefined {
 const createSchema = z.object({
   name: z.string().min(1),
   price: z.coerce.number().min(0),
-  durationMinutes: z.coerce.number().int().min(0).nullable().optional(),
+  /** null first so null is not coerced to 0 by z.coerce. */
+  durationMinutes: z.union([z.null(), z.coerce.number().int().min(0)]).optional(),
   category: z.enum(CATEGORY_VALUES),
   notes: z.string().nullable().optional(),
   taxable: z.boolean().optional(),
@@ -44,7 +45,19 @@ const createSchema = z.object({
   business: z.object({ _link: z.string().uuid() }).optional(),
 });
 
-const updateSchema = createSchema.partial();
+/** PATCH accepts only persisted columns (no Gadget `business` link — tenant is implicit). */
+const patchSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    price: z.coerce.number().min(0).optional(),
+    durationMinutes: z.union([z.null(), z.coerce.number().int().min(0)]).optional(),
+    category: z.enum(CATEGORY_VALUES).optional(),
+    notes: z.union([z.string(), z.null()]).optional(),
+    taxable: z.boolean().optional(),
+    isAddon: z.boolean().optional(),
+    active: z.boolean().optional(),
+  })
+  .strict();
 
 servicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
@@ -113,7 +126,7 @@ servicesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, re
     .limit(1);
   if (!existing) throw new NotFoundError("Service not found.");
 
-  const parsed = updateSchema.safeParse(req.body);
+  const parsed = patchSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const body = parsed.data;
   if (Object.keys(body).length === 0) {

@@ -15,6 +15,13 @@
       "when": 1773860800000,
       "tag": "0001_universal_service_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773860900000,
+      "tag": "0002_locations_phone_timezone_active",
+      "breakpoints": true
     }
   ]
 }

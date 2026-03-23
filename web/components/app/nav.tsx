@@ -97,8 +97,8 @@ export const Navigation = ({ onLinkClick }: { onLinkClick?: () => void }) => {
   return (
     <>
       <div className="h-16 flex items-center px-6 border-b">
-        <Link to="/signed-in" className="flex items-center" onClick={onLinkClick}>
-          <img src="/api/assets/autologo?background=light" alt="App logo" className="h-8 w-auto" />
+        <Link to="/signed-in" className="flex items-center gap-2" onClick={onLinkClick}>
+          <span className="font-semibold text-lg tracking-tight text-foreground">Strata</span>
         </Link>
       </div>
       <nav className="flex-1 px-4 py-4 flex flex-col gap-1">

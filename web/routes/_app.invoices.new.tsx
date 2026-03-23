@@ -68,9 +68,10 @@ export default function NewInvoicePage() {
     pause: !selectedClientId,
   });
 
-  const [{ data: quoteData }] = useFindOne(api.quote, quoteIdParam ?? "", {
+  const [{ data: quoteData }] = useFindOne(api.quote, quoteIdParam ?? undefined, {
     select: {
       id: true,
+      clientId: true,
       taxRate: true,
       notes: true,
       lineItems: {
@@ -130,8 +131,8 @@ export default function NewInvoicePage() {
         (quoteData as any).lineItems?.edges?.map((edge: any) => ({
           id: crypto.randomUUID(),
           description: edge.node.description ?? "",
-          qty: edge.node.quantity ?? 1,
-          unitPrice: edge.node.unitPrice ?? 0,
+          qty: Number(edge.node.quantity) || 1,
+          unitPrice: Number(edge.node.unitPrice) || 0,
         })) ?? [];
 
       if (quoteLineItems.length > 0) {
@@ -139,14 +140,21 @@ export default function NewInvoicePage() {
       }
     }
 
-    if (taxRate === 0 && (quoteData as any).taxRate) {
-      setTaxRate((quoteData as any).taxRate);
+    if (taxRate === 0 && (quoteData as any).taxRate != null && (quoteData as any).taxRate !== "") {
+      setTaxRate(Number((quoteData as any).taxRate));
     }
 
     if (notes === "" && (quoteData as any).notes) {
       setNotes((quoteData as any).notes);
     }
   }, [quoteData]);
+
+  // Pre-fill client from linked quote
+  useEffect(() => {
+    if (!quoteData || !quoteIdParam) return;
+    const cid = (quoteData as { clientId?: string }).clientId;
+    if (cid && !selectedClientId) setSelectedClientId(cid);
+  }, [quoteData, quoteIdParam, selectedClientId]);
 
   // Pre-fill client from URL param
   useEffect(() => {
@@ -247,28 +255,36 @@ export default function NewInvoicePage() {
       const invoiceResult = await createInvoice({
         clientId: selectedClientId,
         appointmentId: appointmentIdParam ?? undefined,
+        quoteId: quoteIdParam ?? undefined,
         lineItems: lineItems.map((item) => ({
           description: item.description,
           quantity: item.qty,
           unitPrice: item.unitPrice,
         })),
         discountAmount: discountAmount || 0,
-      } as any);
+        taxRate,
+        notes: notes.trim() || undefined,
+        dueDate: dueDate ? new Date(dueDate + "T12:00:00").toISOString() : undefined,
+      });
 
-      const newInvoice = (invoiceResult as any) ?? (invoiceResult as any)?.data;
-      const newInvoiceId: string | undefined = (newInvoice as any)?.id;
+      if (invoiceResult.error) {
+        toast.error(invoiceResult.error.message ?? "Failed to create invoice");
+        setSubmitting(false);
+        return;
+      }
 
+      const newInvoiceId = (invoiceResult.data as { id?: string } | null)?.id;
       if (!newInvoiceId) {
-        const errMsg = (invoiceResult as any)?.error?.message ?? "Failed to create invoice";
-        toast.error(errMsg);
+        toast.error("Failed to create invoice");
         setSubmitting(false);
         return;
       }
 
       toast.success("Invoice created successfully");
       navigate(`/invoices/${newInvoiceId}`);
-    } catch (err: any) {
-      toast.error(err?.message ?? "Failed to create invoice");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to create invoice");
+    } finally {
       setSubmitting(false);
     }
   };

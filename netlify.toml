@@ -4,3 +4,10 @@
 
 [build.environment]
   NODE_VERSION = "18"
+  # SPA uses relative /api; edge function forwards to STRATA_API_ORIGIN (set in Netlify UI).
+  VITE_ALLOW_RELATIVE_API = "true"
+
+# Forward /api/* to STRATA_API_ORIGIN (see netlify/edge-functions/strata-api-proxy.ts)
+[[edge_functions]]
+  path = "/api/*"
+  function = "strata-api-proxy"

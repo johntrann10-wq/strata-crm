@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { recalculateInvoiceTotals } from "../lib/revenueTotals.js";
 
 export const invoiceLineItemsRouter = Router({ mergeParams: true });
 
@@ -36,17 +37,21 @@ invoiceLineItemsRouter.post("/", requireAuth, requireTenant, async (req: Request
   if (!inv) throw new NotFoundError("Invoice not found.");
   if (inv.status === "void") throw new BadRequestError("Cannot add line items to a void invoice.");
   const total = quantity * unitPrice;
-  const [created] = await db
-    .insert(invoiceLineItems)
-    .values({
-      invoiceId,
-      description,
-      quantity: String(quantity),
-      unitPrice: String(unitPrice),
-      total: String(total),
-    })
-    .returning();
-  if (!created) throw new BadRequestError("Failed to create line item.");
+  const created = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(invoiceLineItems)
+      .values({
+        invoiceId,
+        description,
+        quantity: String(quantity),
+        unitPrice: String(unitPrice),
+        total: String(total),
+      })
+      .returning();
+    if (!row) throw new BadRequestError("Failed to create line item.");
+    await recalculateInvoiceTotals(tx, invoiceId);
+    return row;
+  });
   res.status(201).json(created);
 });
 
@@ -68,7 +73,12 @@ invoiceLineItemsRouter.patch("/:id", requireAuth, requireTenant, async (req: Req
     const up = Number(updates.unitPrice ?? existing.unitPrice);
     updates.total = String(qty * up);
   }
-  const [updated] = await db.update(invoiceLineItems).set(updates).where(eq(invoiceLineItems.id, req.params.id)).returning();
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx.update(invoiceLineItems).set(updates).where(eq(invoiceLineItems.id, req.params.id)).returning();
+    if (!row) throw new NotFoundError("Line item not found.");
+    await recalculateInvoiceTotals(tx, existing.invoiceId);
+    return row;
+  });
   res.json(updated);
 });
 
@@ -79,6 +89,10 @@ invoiceLineItemsRouter.delete("/:id", requireAuth, requireTenant, async (req: Re
   const [inv] = await db.select().from(invoices).where(and(eq(invoices.id, existing.invoiceId), eq(invoices.businessId, bid))).limit(1);
   if (!inv) throw new ForbiddenError("Access denied.");
   if (inv.status === "void") throw new BadRequestError("Cannot delete line items from a void invoice.");
-  await db.delete(invoiceLineItems).where(eq(invoiceLineItems.id, req.params.id));
+  const invId = existing.invoiceId;
+  await db.transaction(async (tx) => {
+    await tx.delete(invoiceLineItems).where(eq(invoiceLineItems.id, req.params.id));
+    await recalculateInvoiceTotals(tx, invId);
+  });
   res.status(204).send();
 });

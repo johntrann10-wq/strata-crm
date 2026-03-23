@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { vehicles } from "../db/schema.js";
-import { eq, and, desc } from "drizzle-orm";
+import { vehicles, clients } from "../db/schema.js";
+import { eq, and, desc, asc, isNull, or, ilike, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -18,22 +18,122 @@ const createSchema = z.object({
   clientId: z.string().uuid(),
   make: z.string().min(1),
   model: z.string().min(1),
-  year: z.number().optional(),
-  color: z.string().optional(),
-  licensePlate: z.string().optional(),
-  vin: z.string().optional(),
-  mileage: z.number().optional(),
-  notes: z.string().optional(),
+  year: z.coerce.number().int().min(1900).max(2100).nullable().optional(),
+  color: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  licensePlate: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  vin: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  mileage: z.coerce.number().int().min(0).nullable().optional(),
+  notes: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
 });
+
+const patchSchema = z
+  .object({
+    make: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+    year: z.coerce.number().int().min(1900).max(2100).nullable().optional(),
+    color: z.preprocess((v) => (v === "" ? null : v), z.string().nullable().optional()),
+    licensePlate: z.preprocess((v) => (v === "" ? null : v), z.string().nullable().optional()),
+    vin: z.preprocess((v) => (v === "" ? null : v), z.string().nullable().optional()),
+    mileage: z.coerce.number().int().min(0).nullable().optional(),
+    notes: z.preprocess((v) => (v === "" ? null : v), z.string().nullable().optional()),
+  })
+  .strict();
 
 vehiclesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const filter = req.query.filter ? JSON.parse(String(req.query.filter)) as { clientId?: { equals?: string } } : undefined;
-  const clientId = filter?.clientId?.equals;
-  const first = req.query.first != null ? Math.min(Number(req.query.first), 100) : 50;
-  const where = clientId ? and(eq(vehicles.businessId, bid), eq(vehicles.clientId, clientId)) : eq(vehicles.businessId, bid);
-  const list = await db.select().from(vehicles).where(where).orderBy(desc(vehicles.createdAt)).limit(first);
-  res.json({ records: list });
+  let clientId: string | undefined;
+  if (typeof req.query.filter === "string" && req.query.filter.trim()) {
+    try {
+      const filter = JSON.parse(req.query.filter) as { clientId?: { equals?: string } };
+      clientId = filter?.clientId?.equals;
+    } catch {
+      /* ignore invalid filter */
+    }
+  }
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+  const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 100) : 50;
+
+  let orderBy = desc(vehicles.createdAt);
+  if (typeof req.query.sort === "string" && req.query.sort.trim()) {
+    try {
+      const s = JSON.parse(req.query.sort) as { createdAt?: string };
+      if (s?.createdAt === "Ascending") orderBy = asc(vehicles.createdAt);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const tenant = and(eq(vehicles.businessId, bid), isNull(vehicles.deletedAt))!;
+  const scoped = clientId ? and(tenant, eq(vehicles.clientId, clientId))! : tenant;
+
+  const term = `%${search}%`;
+  const whereClause =
+    search.length >= 2
+      ? and(
+          scoped,
+          or(
+            ilike(vehicles.make, term),
+            ilike(vehicles.model, term),
+            ilike(vehicles.color, term),
+            ilike(vehicles.licensePlate, term),
+            ilike(vehicles.vin, term),
+            sql`cast(${vehicles.year} as text) ilike ${term}`,
+            ilike(clients.firstName, term),
+            ilike(clients.lastName, term)
+          )
+        )!
+      : scoped;
+
+  const rows = await db
+    .select({
+      id: vehicles.id,
+      businessId: vehicles.businessId,
+      clientId: vehicles.clientId,
+      make: vehicles.make,
+      model: vehicles.model,
+      year: vehicles.year,
+      color: vehicles.color,
+      licensePlate: vehicles.licensePlate,
+      vin: vehicles.vin,
+      mileage: vehicles.mileage,
+      notes: vehicles.notes,
+      deletedAt: vehicles.deletedAt,
+      createdAt: vehicles.createdAt,
+      updatedAt: vehicles.updatedAt,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      clientPhone: clients.phone,
+    })
+    .from(vehicles)
+    .innerJoin(clients, eq(vehicles.clientId, clients.id))
+    .where(and(whereClause, eq(clients.businessId, bid)))
+    .orderBy(orderBy)
+    .limit(first);
+
+  const records = rows.map((r) => ({
+    id: r.id,
+    businessId: r.businessId,
+    clientId: r.clientId,
+    make: r.make,
+    model: r.model,
+    year: r.year,
+    color: r.color,
+    licensePlate: r.licensePlate,
+    vin: r.vin,
+    mileage: r.mileage,
+    notes: r.notes,
+    deletedAt: r.deletedAt,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    client: {
+      id: r.clientId,
+      firstName: r.clientFirstName ?? "",
+      lastName: r.clientLastName ?? "",
+      phone: r.clientPhone ?? null,
+    },
+  }));
+
+  res.json({ records });
 });
 
 vehiclesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
@@ -71,10 +171,12 @@ vehiclesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, re
   const bid = businessId(req);
   const [existing] = await db.select().from(vehicles).where(and(eq(vehicles.id, req.params.id), eq(vehicles.businessId, bid))).limit(1);
   if (!existing) throw new NotFoundError("Vehicle not found.");
-  const body = req.body as Record<string, unknown>;
-  const allowed = ["make", "model", "year", "color", "licensePlate", "vin", "mileage", "notes"];
-  const updates: Record<string, unknown> = { updatedAt: new Date() };
-  for (const k of allowed) if (body[k] !== undefined) updates[k] = body[k];
-  const [updated] = await db.update(vehicles).set(updates as Record<string, unknown>).where(eq(vehicles.id, req.params.id)).returning();
+  const parsed = patchSchema.safeParse(req.body);
+  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  const [updated] = await db
+    .update(vehicles)
+    .set({ ...parsed.data, updatedAt: new Date() })
+    .where(eq(vehicles.id, req.params.id))
+    .returning();
   res.json(updated);
 });

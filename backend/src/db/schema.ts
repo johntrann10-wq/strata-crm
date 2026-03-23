@@ -120,6 +120,9 @@ export const locations = pgTable("locations", {
   businessId: uuid("business_id").notNull().references(() => businesses.id),
   name: text("name").notNull(),
   address: text("address"),
+  phone: text("phone"),
+  timezone: text("timezone"),
+  active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -1,45 +1,13 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useOutletContext, Link } from "react-router";
+import { useNavigate, Link } from "react-router";
 import { useFindFirst, useAction } from "../hooks/useApi";
 import { api } from "../api";
-import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
-
-const SOURCE_OPTIONS = [
-  { value: "walk-in", label: "Walk-in" },
-  { value: "referral", label: "Referral" },
-  { value: "google", label: "Google" },
-  { value: "instagram", label: "Instagram" },
-  { value: "facebook", label: "Facebook" },
-  { value: "website", label: "Website" },
-  { value: "other", label: "Other" },
-];
-
-const TAG_OPTIONS = [
-  { value: "vip", label: "VIP" },
-  { value: "fleet", label: "Fleet" },
-  { value: "wholesale", label: "Wholesale" },
-  { value: "retail", label: "Retail" },
-];
-
-const PREFERRED_CONTACT_OPTIONS = [
-  { value: "email", label: "Email" },
-  { value: "phone", label: "Phone" },
-  { value: "sms", label: "SMS" },
-];
 
 interface FormData {
   firstName: string;
@@ -50,15 +18,11 @@ interface FormData {
   city: string;
   state: string;
   zip: string;
-  source: string;
-  tags: string[];
-  preferredContact: string;
   marketingOptIn: boolean;
   internalNotes: string;
 }
 
 export default function NewClientPage() {
-  const { user } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
 
   const [{ data: business, fetching: businessFetching }] = useFindFirst(api.business, {
@@ -76,9 +40,6 @@ export default function NewClientPage() {
     city: "",
     state: "",
     zip: "",
-    source: "",
-    tags: [],
-    preferredContact: "email",
     marketingOptIn: true,
     internalNotes: "",
   });
@@ -106,13 +67,6 @@ export default function NewClientPage() {
     return undefined;
   };
 
-  const handleTagChange = (tag: string, checked: boolean) => {
-    setFormData((prev) => ({
-      ...prev,
-      tags: checked ? [...prev.tags, tag] : prev.tags.filter((t) => t !== tag),
-    }));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -134,18 +88,14 @@ export default function NewClientPage() {
     await createClient({
       firstName: formData.firstName.trim(),
       lastName: formData.lastName.trim(),
-      ...(formData.phone ? { phone: formData.phone } : {}),
-      ...(formData.email ? { email: formData.email } : {}),
-      ...(formData.address ? { address: formData.address } : {}),
-      ...(formData.city ? { city: formData.city } : {}),
-      ...(formData.state ? { state: formData.state } : {}),
-      ...(formData.zip ? { zip: formData.zip } : {}),
-      ...(formData.source ? { source: formData.source as any } : {}),
-      ...(formData.tags.length > 0 ? { tags: formData.tags as any } : {}),
-      preferredContact: formData.preferredContact as any,
+      ...(formData.phone.trim() ? { phone: formData.phone.trim() } : {}),
+      ...(formData.email.trim() ? { email: formData.email.trim() } : {}),
+      ...(formData.address.trim() ? { address: formData.address.trim() } : {}),
+      ...(formData.city.trim() ? { city: formData.city.trim() } : {}),
+      ...(formData.state.trim() ? { state: formData.state.trim() } : {}),
+      ...(formData.zip.trim() ? { zip: formData.zip.trim() } : {}),
       marketingOptIn: formData.marketingOptIn,
-      ...(formData.internalNotes ? { internalNotes: formData.internalNotes } : {}),
-      business: { _link: business!.id },
+      ...(formData.internalNotes.trim() ? { internalNotes: formData.internalNotes.trim() } : {}),
     });
   };
 
@@ -293,28 +243,6 @@ export default function NewClientPage() {
         {/* Collapsible advanced fields */}
         {showAdvanced && (
           <div className="space-y-6">
-            {/* Source */}
-            <div className="space-y-2">
-              <Label htmlFor="source">Source</Label>
-              <Select
-                value={formData.source}
-                onValueChange={(val) =>
-                  setFormData((prev) => ({ ...prev, source: val }))
-                }
-              >
-                <SelectTrigger id="source">
-                  <SelectValue placeholder="How did they find you?" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SOURCE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             {/* Address */}
             <div className="space-y-2">
               <Label htmlFor="address">Address</Label>
@@ -365,57 +293,6 @@ export default function NewClientPage() {
                   placeholder="90001"
                 />
               </div>
-            </div>
-
-            {/* Tags */}
-            <div className="space-y-3">
-              <Label>Tags</Label>
-              <div className="flex flex-wrap gap-4">
-                {TAG_OPTIONS.map((tag) => (
-                  <div key={tag.value} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`tag-${tag.value}`}
-                      checked={formData.tags.includes(tag.value)}
-                      onCheckedChange={(checked) =>
-                        handleTagChange(tag.value, checked === true)
-                      }
-                    />
-                    <Label
-                      htmlFor={`tag-${tag.value}`}
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      {tag.label}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Preferred Contact */}
-            <div className="space-y-3">
-              <Label>Preferred Contact Method</Label>
-              <RadioGroup
-                value={formData.preferredContact}
-                onValueChange={(val) =>
-                  setFormData((prev) => ({ ...prev, preferredContact: val }))
-                }
-                className="flex flex-wrap gap-6"
-              >
-                {PREFERRED_CONTACT_OPTIONS.map((opt) => (
-                  <div key={opt.value} className="flex items-center gap-2">
-                    <RadioGroupItem
-                      value={opt.value}
-                      id={`contact-${opt.value}`}
-                    />
-                    <Label
-                      htmlFor={`contact-${opt.value}`}
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      {opt.label}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
             </div>
 
             {/* Marketing Opt-in */}

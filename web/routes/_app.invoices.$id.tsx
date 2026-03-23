@@ -298,10 +298,10 @@ export default function InvoiceDetailPage() {
     if (!invoice?.id) return;
     const result = await sendToClient({ id: invoice.id });
     if (!result.error) {
-      toast.success("Invoice sent to client");
+      toast.success("Invoice marked as sent");
       void refetch();
     } else {
-      toast.error("Failed to send invoice: " + result.error.message);
+      toast.error("Failed to update invoice: " + result.error.message);
     }
   };
 
@@ -485,7 +485,7 @@ export default function InvoiceDetailPage() {
               ) : (
                 <Send className="h-4 w-4 mr-2" />
               )}
-              {status === "draft" ? "Send to Client" : "Re-send to Client"}
+              Mark as sent
             </Button>
           )}
           {invoiceAllowsPayment(status) && (

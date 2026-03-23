@@ -1,0 +1,13 @@
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_API_URL?: string;
+  /** Alternative to VITE_API_URL (same meaning; supported for tooling that sets NEXT_PUBLIC_*). */
+  readonly NEXT_PUBLIC_API_URL?: string;
+  /** When "true", production bundle uses relative `/api` (requires same-origin edge proxy). */
+  readonly VITE_ALLOW_RELATIVE_API?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
