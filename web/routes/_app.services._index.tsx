@@ -37,45 +37,28 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Package, Trash2, Wrench } from "lucide-react";
+import { Plus, Pencil, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
-
-const CATEGORY_OPTIONS = [
-  "detailing",
-  "tinting",
-  "wrap",
-  "ppf",
-  "ceramic-coating",
-  "paint-correction",
-  "tires",
-  "alignment",
-  "wheels",
-  "body-repair",
-  "dent-removal",
-  "glass",
-  "performance",
-  "audio-electronics",
-  "lighting",
-  "oil-change",
-  "maintenance",
-  "other",
-] as const;
-
-type CategoryOption = (typeof CATEGORY_OPTIONS)[number];
+import {
+  SERVICE_CATEGORY_VALUES,
+  SERVICE_CATEGORY_LABELS,
+  formatServiceCategory,
+  type ServiceCategory,
+} from "../lib/serviceCatalog";
 
 interface ServiceRecord {
   id: string;
   name: string;
   price: number;
-  duration: number | null;
+  durationMinutes: number | null;
   category: string | null;
   active: boolean | null;
   isAddon: boolean | null;
   taxable: boolean | null;
-  description: string | null;
+  notes: string | null;
 }
 
 interface ServiceFormData {
@@ -83,7 +66,7 @@ interface ServiceFormData {
   price: string;
   duration: string;
   category: string;
-  description: string;
+  notes: string;
   taxable: boolean;
   isAddon: boolean;
 }
@@ -92,24 +75,17 @@ const defaultFormData: ServiceFormData = {
   name: "",
   price: "",
   duration: "",
-  category: "",
-  description: "",
+  category: "other",
+  notes: "",
   taxable: true,
   isAddon: false,
 };
 
-function formatCategory(cat: string): string {
-  return cat
-    .split("-")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-function formatPrice(price: number): string {
+function formatPrice(price: number | string): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-  }).format(price);
+  }).format(Number(price));
 }
 
 function formatDuration(minutes: number | null): string {
@@ -125,9 +101,9 @@ function serviceToFormData(service: ServiceRecord): ServiceFormData {
   return {
     name: service.name ?? "",
     price: service.price != null ? String(service.price) : "",
-    duration: service.duration != null ? String(service.duration) : "",
-    category: service.category ?? "",
-    description: service.description ?? "",
+    duration: service.durationMinutes != null ? String(service.durationMinutes) : "",
+    category: service.category ?? "other",
+    notes: service.notes ?? "",
     taxable: service.taxable ?? true,
     isAddon: service.isAddon ?? false,
   };
@@ -212,7 +188,7 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="svc-duration">Duration (min)</Label>
+          <Label htmlFor="svc-duration">Est. duration (min)</Label>
           <Input
             id="svc-duration"
             type="number"
@@ -236,23 +212,21 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
             <SelectValue placeholder="Select a category" />
           </SelectTrigger>
           <SelectContent>
-            {CATEGORY_OPTIONS.map((cat) => (
+            {SERVICE_CATEGORY_VALUES.map((cat) => (
               <SelectItem key={cat} value={cat}>
-                {formatCategory(cat)}
+                {SERVICE_CATEGORY_LABELS[cat]}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="svc-description">Description</Label>
+        <Label htmlFor="svc-notes">Notes</Label>
         <Textarea
-          id="svc-description"
-          value={formData.description}
-          onChange={(e) =>
-            onChange({ ...formData, description: e.target.value })
-          }
-          placeholder="Describe what this service includes..."
+          id="svc-notes"
+          value={formData.notes}
+          onChange={(e) => onChange({ ...formData, notes: e.target.value })}
+          placeholder="Optional — internal notes, inclusions, or booking hints."
           rows={3}
         />
       </div>
@@ -286,9 +260,6 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
   );
 }
 
-// Backend routes/tables for inventory linking are not implemented yet.
-const INVENTORY_LINKS_SUPPORTED = false;
-
 export default function ServicesPage() {
   const { user, businessId } = useOutletContext<AuthOutletContext>();
 
@@ -306,12 +277,12 @@ export default function ServicesPage() {
         id: true,
         name: true,
         price: true,
-        duration: true,
+        durationMinutes: true,
         category: true,
         active: true,
         isAddon: true,
         taxable: true,
-        description: true,
+        notes: true,
       },
       pause: !businessId,
     });
@@ -323,45 +294,31 @@ export default function ServicesPage() {
   const [{ fetching: deleteFetching, error: deleteError }, runDelete] =
     useAction(api.service.delete);
 
-  const [inventoryLinkServiceId, setInventoryLinkServiceId] = useState<string | null>(null);
-  const [newLinkItemId, setNewLinkItemId] = useState<string>("");
-  const [newLinkQty, setNewLinkQty] = useState<string>("1");
+  const [newAddonServiceId, setNewAddonServiceId] = useState<string>("");
 
-  const svcInvItemsFilter = useMemo(
-    () => (inventoryLinkServiceId ? { serviceId: { equals: inventoryLinkServiceId } } : undefined),
-    [inventoryLinkServiceId]
+  const addonLinkFilter = useMemo(
+    () =>
+      editService
+        ? { parentService: { id: { equals: editService.id } } }
+        : undefined,
+    [editService]
   );
 
-  const [{ data: svcInvItems, fetching: svcInvFetching }, refetchSvcInv] = useFindMany(
-    api.serviceInventoryItem,
+  const [{ data: addonLinks, fetching: addonLinksFetching }, refetchAddonLinks] = useFindMany(
+    api.serviceAddonLink,
     {
-      filter: svcInvItemsFilter,
-      select: {
-        id: true,
-        quantityUsed: true,
-        inventoryItemId: true,
-        inventoryItem: { id: true, name: true, unit: true },
-      },
+      filter: addonLinkFilter,
+      select: { id: true, addonServiceId: true, parentServiceId: true, sortOrder: true },
       first: 50,
-      pause: !INVENTORY_LINKS_SUPPORTED || !inventoryLinkServiceId,
+      pause: !editService,
     }
   );
 
-  const [{ data: allInventoryItems }] = useFindMany(api.inventoryItem, {
-    filter: businessIdFilter,
-    select: { id: true, name: true, unit: true },
-    sort: { name: "Ascending" },
-    first: 250,
-    pause: !businessId || !INVENTORY_LINKS_SUPPORTED,
-  });
+  const [{ fetching: creatingAddonLink }, runCreateAddonLink] = useAction(api.serviceAddonLink.create);
+  const [{ fetching: deletingAddonLink }, runDeleteAddonLink] = useAction(api.serviceAddonLink.delete);
 
-  const [{ fetching: creatingLink }, runCreateLink] = useAction(api.serviceInventoryItem.create);
-  const [{ fetching: deletingLink }, runDeleteLink] = useAction(api.serviceInventoryItem.delete);
-
-  const resetInventoryState = () => {
-    setInventoryLinkServiceId(null);
-    setNewLinkItemId("");
-    setNewLinkQty("1");
+  const resetEditDialogState = () => {
+    setNewAddonServiceId("");
   };
 
   const [activeTab, setActiveTab] = useState<"active" | "inactive">("active");
@@ -376,7 +333,7 @@ export default function ServicesPage() {
   const handleEditService = (service: ServiceRecord) => {
     setEditService(service);
     setEditFormData(serviceToFormData(service));
-    setInventoryLinkServiceId(service.id);
+    setNewAddonServiceId("");
   };
 
   // Handle edit form submit
@@ -391,9 +348,9 @@ export default function ServicesPage() {
       id: editService.id,
       name: editFormData.name.trim(),
       price: parseFloat(editFormData.price),
-      duration: editFormData.duration ? parseInt(editFormData.duration, 10) : null,
-      category: editFormData.category as CategoryOption,
-      description: editFormData.description.trim() || null,
+      durationMinutes: editFormData.duration ? parseInt(editFormData.duration, 10) : null,
+      category: editFormData.category as ServiceCategory,
+      notes: editFormData.notes.trim() || null,
       taxable: editFormData.taxable,
       isAddon: editFormData.isAddon,
     });
@@ -402,8 +359,8 @@ export default function ServicesPage() {
     } else {
       toast.success("Service updated successfully.");
       setEditService(null);
-      resetInventoryState();
-      refetchServices({ requestPolicy: "network-only" });
+      resetEditDialogState();
+      void refetchServices();
     }
   };
 
@@ -417,9 +374,9 @@ export default function ServicesPage() {
     const result = await runCreate({
       name: createFormData.name.trim(),
       price: parseFloat(createFormData.price),
-      duration: createFormData.duration ? parseInt(createFormData.duration, 10) : null,
-      category: createFormData.category as CategoryOption,
-      description: createFormData.description.trim() || null,
+      durationMinutes: createFormData.duration ? parseInt(createFormData.duration, 10) : null,
+      category: createFormData.category as ServiceCategory,
+      notes: createFormData.notes.trim() || null,
       taxable: createFormData.taxable,
       isAddon: createFormData.isAddon,
       business: businessId ? { _link: businessId } : undefined,
@@ -430,7 +387,7 @@ export default function ServicesPage() {
       toast.success("Service created successfully.");
       setCreateDialogOpen(false);
       setCreateFormData(defaultFormData);
-      refetchServices({ requestPolicy: "network-only" });
+      void refetchServices();
     }
   };
 
@@ -444,40 +401,35 @@ export default function ServicesPage() {
         toast.error("Failed to update service: " + result.error.message);
       } else {
         toast.success(newActive ? "Service activated" : "Service deactivated");
-        refetchServices({ requestPolicy: "network-only" });
+        void refetchServices();
       }
     } finally {
       setTogglingId(null);
     }
   };
 
-  const handleAddLink = async () => {
-    if (!newLinkItemId || !inventoryLinkServiceId || !businessId) return;
-    const result = await runCreateLink({
-      service: { _link: inventoryLinkServiceId },
-      inventoryItem: { _link: newLinkItemId },
-      quantityUsed: parseFloat(newLinkQty) || 1,
-      business: { _link: businessId },
+  const handleAddAddonLink = async () => {
+    if (!newAddonServiceId || !editService) return;
+    const result = await runCreateAddonLink({
+      parentServiceId: editService.id,
+      addonServiceId: newAddonServiceId,
     });
     if (result.error) {
-      toast.error("Failed to link inventory item: " + result.error.message);
+      toast.error("Failed to add add-on: " + result.error.message);
       return;
     }
-    toast.success("Inventory item linked");
-    setNewLinkItemId("");
-    setNewLinkQty("1");
-    refetchSvcInv();
-    refetchServices({ requestPolicy: "network-only" });
+    toast.success("Add-on linked");
+    setNewAddonServiceId("");
+    void refetchAddonLinks();
   };
 
-  const handleRemoveLink = async (linkId: string) => {
-    const result = await runDeleteLink({ id: linkId });
+  const handleRemoveAddonLink = async (linkId: string) => {
+    const result = await runDeleteAddonLink({ id: linkId });
     if (result.error) {
-      toast.error("Failed to remove inventory link: " + result.error.message);
+      toast.error("Failed to remove add-on: " + result.error.message);
       return;
     }
-    refetchSvcInv();
-    refetchServices({ requestPolicy: "network-only" });
+    void refetchAddonLinks();
   };
 
   const isFirstLoad = servicesFetching && !services;
@@ -558,7 +510,7 @@ export default function ServicesPage() {
                   {sortedCategories.map((cat) => (
                     <div key={cat} className="flex flex-col gap-3">
                       <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2">
-                        {formatCategory(cat)}
+                        {formatServiceCategory(cat)}
                       </h2>
                       <div className="flex flex-col gap-2">
                         {groupedByCategory[cat].map((service) => (
@@ -607,7 +559,7 @@ export default function ServicesPage() {
         onOpenChange={(open) => {
           if (!open) {
             setEditService(null);
-            resetInventoryState();
+            resetEditDialogState();
           }
         }}
       >
@@ -626,95 +578,83 @@ export default function ServicesPage() {
 
             <Separator className="my-3" />
 
-            {INVENTORY_LINKS_SUPPORTED ? (
-              <>
-                {/* Inventory Links Section */}
-                <div className="flex items-center gap-2 mt-2">
-                  <Package className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Inventory Links</span>
-                  <span className="text-xs text-muted-foreground ml-1">(auto-deducted on job completion)</span>
-                </div>
-
-                {svcInvFetching ? (
-                  <p className="text-xs text-muted-foreground mt-1">Loading...</p>
-                ) : svcInvItems && svcInvItems.length > 0 ? (
-                  <div className="space-y-1 mt-2">
-                    {svcInvItems.map((link) => (
-                      <div
-                        key={link.id}
-                        className="flex items-center justify-between text-sm bg-muted/40 rounded px-2 py-1.5"
-                      >
-                        <div>
-                          <span className="font-medium">{(link as any).inventoryItem?.name}</span>
-                          <span className="text-xs text-muted-foreground ml-2">
-                            × {link.quantityUsed}
-                            {(link as any).inventoryItem?.unit ? ` ${(link as any).inventoryItem.unit}` : ""}
-                          </span>
-                        </div>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleRemoveLink(link.id)}
-                          type="button"
-                          disabled={deletingLink}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground mt-1">No inventory items linked yet.</p>
-                )}
-
-                <div className="flex items-center gap-2 mt-3">
-                  <Select value={newLinkItemId} onValueChange={setNewLinkItemId}>
-                    <SelectTrigger className="flex-1 h-8 text-xs">
-                      <SelectValue placeholder="Select inventory item" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(allInventoryItems ?? [])
-                        .filter(
-                          (item) =>
-                            !(svcInvItems ?? []).some(
-                              (link: any) => link.inventoryItemId === item.id
-                            )
-                        )
-                        .map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={newLinkQty}
-                    onChange={(e) => setNewLinkQty(e.target.value)}
-                    className="w-20 h-8 text-xs"
-                    placeholder="Qty"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-xs"
-                    onClick={handleAddLink}
-                    disabled={!newLinkItemId || creatingLink}
-                    type="button"
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Add
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <p className="text-xs text-muted-foreground mt-1">
-                Inventory linking is not available yet in this environment.
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Optional add-ons</p>
+              <p className="text-xs text-muted-foreground">
+                Link other catalog services offered as add-ons with this service (e.g. coating + add-on polish). Same
+                structure for every business type.
               </p>
-            )}
+              {addonLinksFetching ? (
+                <p className="text-xs text-muted-foreground">Loading…</p>
+              ) : addonLinks && addonLinks.length > 0 ? (
+                <div className="space-y-1 mt-2">
+                  <div className="flex flex-col gap-1">
+                    {addonLinks.map((link) => {
+                      const name =
+                        allServices.find((s) => s.id === (link as { addonServiceId: string }).addonServiceId)
+                          ?.name ?? "Service";
+                      return (
+                        <div
+                          key={link.id}
+                          className="flex items-center justify-between text-sm bg-muted/40 rounded px-2 py-1.5"
+                        >
+                          <span className="font-medium">{name}</span>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleRemoveAddonLink(link.id)}
+                            type="button"
+                            disabled={deletingAddonLink}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1">No add-ons linked yet.</p>
+              )}
+
+              <div className="flex items-center gap-2 mt-2">
+                <Select value={newAddonServiceId} onValueChange={setNewAddonServiceId}>
+                  <SelectTrigger className="flex-1 h-8 text-xs">
+                    <SelectValue placeholder="Select a service to offer as add-on" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allServices
+                      .filter(
+                        (s) =>
+                          editService &&
+                          s.id !== editService.id &&
+                          s.active !== false &&
+                          !(addonLinks ?? []).some(
+                            (l) => (l as { addonServiceId: string }).addonServiceId === s.id
+                          )
+                      )
+                      .map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                          {s.isAddon ? " · add-on" : ""}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs shrink-0"
+                  onClick={() => void handleAddAddonLink()}
+                  disabled={!newAddonServiceId || creatingAddonLink}
+                  type="button"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add
+                </Button>
+              </div>
+            </div>
 
             <DialogFooter className="mt-4 sm:justify-between">
               <Button
@@ -731,7 +671,7 @@ export default function ServicesPage() {
                   variant="outline"
                   onClick={() => {
                     setEditService(null);
-                    resetInventoryState();
+                    resetEditDialogState();
                   }}
                   disabled={updateFetching}
                 >
@@ -767,8 +707,8 @@ export default function ServicesPage() {
                     toast.success("Service deleted");
                     setEditService(null);
                     setShowDeleteConfirm(false);
-                    resetInventoryState();
-                    refetchServices({ requestPolicy: "network-only" });
+                    resetEditDialogState();
+                    void refetchServices();
                   }
                 }
               }}
@@ -833,7 +773,7 @@ function ServiceCard({
   isToggling,
   showAddonBadge = false,
 }: ServiceCardProps) {
-  const durationStr = formatDuration(service.duration);
+  const durationStr = formatDuration(service.durationMinutes);
 
   return (
     <div
@@ -850,7 +790,7 @@ function ServiceCard({
           )}
           {service.category && (
             <Badge variant="outline" className="text-xs">
-              {formatCategory(service.category)}
+              {formatServiceCategory(service.category)}
             </Badge>
           )}
         </div>

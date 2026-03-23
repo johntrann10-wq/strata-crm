@@ -42,18 +42,31 @@ quotesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: R
     .where(and(eq(clients.id, row.clientId), eq(clients.businessId, bid)))
     .limit(1);
 
-  const [vehicleRow] = await db
-    .select({
-      id: vehicles.id,
-      year: vehicles.year,
-      make: vehicles.make,
-      model: vehicles.model,
-      color: vehicles.color,
-      licensePlate: vehicles.licensePlate,
-    })
-    .from(vehicles)
-    .where(and(eq(vehicles.id, row.vehicleId), eq(vehicles.businessId, bid)))
-    .limit(1);
+  let vehicleRow:
+    | {
+        id: string;
+        year: number | null;
+        make: string | null;
+        model: string | null;
+        color: string | null;
+        licensePlate: string | null;
+      }
+    | null = null;
+  if (row.vehicleId) {
+    const [v] = await db
+      .select({
+        id: vehicles.id,
+        year: vehicles.year,
+        make: vehicles.make,
+        model: vehicles.model,
+        color: vehicles.color,
+        licensePlate: vehicles.licensePlate,
+      })
+      .from(vehicles)
+      .where(and(eq(vehicles.id, row.vehicleId), eq(vehicles.businessId, bid)))
+      .limit(1);
+    vehicleRow = v ?? null;
+  }
 
   const lineItemsRows = await db
     .select()

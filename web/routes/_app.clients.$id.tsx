@@ -183,7 +183,7 @@ export default function ClientDetailPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Archive Client?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will archive the client record and hide them from your active client list. Their appointment history, vehicles, and invoices are preserved. You can restore archived clients from the Recovery page.
+              This will archive the client record and hide them from your active client list. Their appointment history, vehicles, and invoices are preserved.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -1,238 +1,58 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useOutletContext, Link } from "react-router";
-import { useFindMany, useGlobalAction } from "../hooks/useApi";
-import { formatDistanceToNow, format } from "date-fns";
+import { useFindMany } from "../hooks/useApi";
+import { format, parseISO, isSameDay, startOfDay, endOfDay, addDays } from "date-fns";
 import {
   Calendar,
   FileText,
-  Users,
   DollarSign,
   Clock,
-  Activity,
-  Plus,
-  Car,
-  Bell,
-  CheckCircle,
-  UserPlus,
   CalendarPlus,
   Receipt,
-  ArrowRight,
-  TrendingUp,
-  Zap,
-  AlertTriangle,
-  BarChart2,
   RefreshCw,
-  TrendingDown,
-  Repeat2,
-  Wallet,
+  ChevronRight,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { api, ApiError } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { RevenueSparkline } from "../components/dashboard/RevenueSparkline";
-import { CapacityRing } from "../components/dashboard/CapacityRing";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 
-function formatBusinessType(type: string | null | undefined): string {
-  if (!type) return "";
-  return type
-    .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+function formatCurrency(amount: number | string | null | undefined): string {
+  const n = Number(amount ?? 0);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
-}
-
-function formatLastRefreshed(date: Date | null): string {
-  if (!date) return "";
-  const diff = Math.floor((Date.now() - date.getTime()) / 60000);
-  if (diff < 1) return "Updated just now";
-  return `Updated ${diff} min ago`;
-}
-
-function ActivityTypeIcon({ type }: { type: string }) {
-  const cls = "h-4 w-4";
-  if (type.startsWith("appointment")) return <Calendar className={cls} />;
-  if (type.startsWith("invoice")) return <FileText className={cls} />;
-  if (type === "payment-received") return <DollarSign className={cls} />;
-  if (type === "client-added") return <UserPlus className={cls} />;
-  if (type === "vehicle-added") return <Car className={cls} />;
-  if (type === "reminder-sent") return <Bell className={cls} />;
-  if (type === "review-requested") return <CheckCircle className={cls} />;
-  return <Activity className={cls} />;
-}
-
-function getRecommendationIconComponent(icon: string) {
-  switch (icon) {
-    case "calendar":
-      return Calendar;
-    case "users":
-      return Users;
-    case "receipt":
-      return Receipt;
-    case "trending-up":
-      return TrendingUp;
-    default:
-      return AlertTriangle;
-  }
-}
-
-function getRecommendationIconColors(priority: string): string {
-  switch (priority) {
-    case "high":
-      return "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400";
-    case "medium":
-      return "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400";
-    case "low":
-      return "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
-
-function getProgressBarColor(pct: number): string {
-  if (pct < 50) return "bg-amber-400";
-  if (pct < 80) return "bg-orange-400";
-  return "bg-green-500";
-}
-
-function SmartInsightsCard({ data, fetching }: { data: any; fetching: boolean }) {
-  const utilizationPct: number = (data as any)?.utilizationPct ?? 0;
-  const appointmentCount: number = (data as any)?.appointmentCount ?? 0;
-  const openSlots: number = (data as any)?.openSlots ?? 0;
-  const recommendations: any[] = (data as any)?.recommendations ?? [];
-
-  return (
-    <Card className="rounded-xl border-border bg-card flex flex-col">
-      <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-        <div className="flex items-center gap-2">
-          <Zap className="h-4 w-4 text-orange-500" />
-          <CardTitle className="text-[13px] font-semibold">Smart Insights</CardTitle>
-        </div>
-        <span className="text-xs text-muted-foreground">This week</span>
-      </CardHeader>
-      <CardContent className="flex-1">
-        {fetching ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />
-            ))}
-          </div>
-        ) : !data || !(data as any).recommendations ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Zap className="h-10 w-10 text-muted-foreground/30 mb-3" />
-            <p className="text-sm text-muted-foreground">No insights available yet</p>
-          </div>
-        ) : (
-          <div>
-            <div className="flex justify-between mb-1">
-              <span className="text-sm font-medium">This Week's Utilization</span>
-              <span className="text-sm font-bold text-orange-500">{utilizationPct}%</span>
-            </div>
-            <div className="w-full bg-border rounded-full h-1.5 mb-4">
-              <div
-                className={cn("h-1.5 rounded-full transition-all", getProgressBarColor(utilizationPct))}
-                style={{ width: `${utilizationPct}%` }}
-              />
-            </div>
-            <div className="flex gap-4 text-xs text-muted-foreground mb-4">
-              <span>{appointmentCount} appointments booked</span>
-              <span>{openSlots} open hours</span>
-            </div>
-            <Separator className="mb-3" />
-            {recommendations.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-3">All clear this week!</p>
-            ) : (
-              <div>
-                {recommendations.map((rec: any, idx: number) => {
-                  const IconComponent = getRecommendationIconComponent(rec.icon);
-                  return (
-                    <div key={idx} className="flex items-start gap-3 py-2.5 border-b last:border-0">
-                      <div className="h-7 w-7 rounded-md bg-muted flex items-center justify-center shrink-0">
-                        <IconComponent className="h-3.5 w-3.5 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start gap-2">
-                          {rec.priority === "high" ? (
-                            <div className="w-1.5 h-1.5 rounded-full bg-rose-400 mt-1.5 shrink-0" />
-                          ) : rec.priority === "medium" ? (
-                            <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                          ) : (
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
-                          )}
-                          <p className="text-sm font-medium">{rec.title}</p>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                          {rec.description}
-                        </p>
-                        <Link to={rec.actionHref}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs px-2 mt-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                          >
-                            {rec.actionLabel}
-                            <ArrowRight className="h-3 w-3 ml-1" />
-                          </Button>
-                        </Link>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ActivityIconColor(type: string): string {
-  if (type.startsWith("appointment")) return "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400";
-  if (type.startsWith("invoice")) return "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400";
-  if (type === "payment-received") return "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400";
-  if (type === "client-added") return "bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400";
-  if (type === "vehicle-added") return "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400";
-  if (type === "reminder-sent") return "bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400";
-  return "bg-muted text-muted-foreground";
-}
+const ACTIVE_JOB = new Set(["scheduled", "confirmed", "in_progress"]);
 
 export default function SignedIn() {
-  const { user, businessName, businessId } = useOutletContext<AuthOutletContext & { businessId?: string }>();
-
-  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  // Stagger secondary fetches to avoid ERR_INSUFFICIENT_RESOURCES (browser connection limit)
-  const [allowSecondaryFetch, setAllowSecondaryFetch] = useState(false);
+  const { businessName, businessId } = useOutletContext<AuthOutletContext & { businessId?: string }>();
 
   const [filterNow, setFilterNow] = useState(() => new Date());
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    if (!businessId) return;
-    const t = setTimeout(() => setAllowSecondaryFetch(true), 300);
-    return () => clearTimeout(t);
-  }, [businessId]);
+  const appointmentFilter = useMemo(() => {
+    const from = startOfDay(filterNow);
+    const to = endOfDay(addDays(filterNow, 30));
+    return {
+      AND: [
+        {
+          startTime: {
+            greaterThanOrEqual: from.toISOString(),
+            lessThanOrEqual: to.toISOString(),
+          },
+        },
+      ],
+    };
+  }, [filterNow]);
 
-  const [{ data: upcomingAppointments, fetching: fetchingUpcoming }] = useFindMany(
+  const [{ data: appointmentsRaw, fetching: fetchingAppts, error: apptsError }, refetchAppts] = useFindMany(
     api.appointment,
     {
-      filter: {
-        AND: [
-          { startTime: { greaterThanOrEqual: filterNow.toISOString() } },
-          { status: { in: ["scheduled", "confirmed", "in_progress"] } },
-          { business: { id: { equals: businessId ?? "" } } },
-        ],
-      },
+      filter: appointmentFilter,
       select: {
         id: true,
         title: true,
@@ -240,428 +60,415 @@ export default function SignedIn() {
         startTime: true,
         endTime: true,
         client: { firstName: true, lastName: true },
-        vehicle: { year: true, make: true, model: true },
+        vehicle: { make: true, model: true, year: true },
       },
       sort: { startTime: "Ascending" },
-      first: 6,
+      first: 200,
       pause: !businessId,
     }
   );
 
-  const [{ data: dashStats, fetching: fetchingStats, error: statsError }, runGetStats] = useGlobalAction(api.getDashboardStats);
-  const [{ data: capacityData, fetching: fetchingCapacity, error: capacityError }, runGetCapacity] = useGlobalAction(api.getCapacityInsights);
-  const dashboardError = statsError ?? capacityError;
+  const [{ data: invoicesRaw, fetching: fetchingInvoices, error: invoicesError }, refetchInvoices] = useFindMany(
+    api.invoice,
+    {
+      select: {
+        id: true,
+        invoiceNumber: true,
+        status: true,
+        total: true,
+        clientId: true,
+        createdAt: true,
+      },
+      sort: { createdAt: "Descending" },
+      first: 60,
+      pause: !businessId,
+    }
+  );
 
-  const runGetStatsRef = useRef(runGetStats);
-  useEffect(() => { runGetStatsRef.current = runGetStats; }, [runGetStats]);
+  const [{ data: quotesRaw, fetching: fetchingQuotes, error: quotesError }, refetchQuotes] = useFindMany(api.quote, {
+    select: {
+      id: true,
+      status: true,
+      total: true,
+      clientId: true,
+      createdAt: true,
+    },
+    sort: { createdAt: "Descending" },
+    first: 40,
+    pause: !businessId,
+  });
 
-  const runGetCapacityRef = useRef(runGetCapacity);
-  useEffect(() => { runGetCapacityRef.current = runGetCapacity; }, [runGetCapacity]);
+  const appointments = (appointmentsRaw ?? []) as Array<{
+    id: string;
+    title?: string | null;
+    status: string;
+    startTime: string;
+    endTime?: string | null;
+    client: { firstName: string; lastName: string } | null;
+    vehicle: { make: string | null; model: string | null; year?: number | null } | null;
+  }>;
 
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasInitialized = useRef(false);
+  const todayJobs = useMemo(() => {
+    const day = filterNow;
+    return appointments.filter((a) => {
+      const st = parseISO(a.startTime);
+      return isSameDay(st, day) && ACTIVE_JOB.has(a.status);
+    });
+  }, [appointments, filterNow]);
+
+  const upcomingAppointments = useMemo(() => {
+    const day = filterNow;
+    const dayEnd = endOfDay(day);
+    return appointments
+      .filter((a) => {
+        const st = parseISO(a.startTime);
+        return st > dayEnd && ACTIVE_JOB.has(a.status);
+      })
+      .slice(0, 12);
+  }, [appointments, filterNow]);
+
+  const unpaidInvoices = useMemo(() => {
+    const rows = (invoicesRaw ?? []) as Array<{
+      id: string;
+      invoiceNumber?: string | null;
+      status: string;
+      total: number | string | null | undefined;
+    }>;
+    return rows.filter((inv) => inv.status === "sent" || inv.status === "partial").slice(0, 10);
+  }, [invoicesRaw]);
+
+  const pendingQuotes = useMemo(() => {
+    const rows = (quotesRaw ?? []) as Array<{
+      id: string;
+      status: string;
+      total: number | string | null | undefined;
+      createdAt?: string;
+    }>;
+    return rows.filter((q) => q.status === "draft" || q.status === "sent").slice(0, 10);
+  }, [quotesRaw]);
 
   const handleRefresh = useCallback(async () => {
-    if (new Date().toDateString() !== filterNow.toDateString()) {
-      setFilterNow(new Date());
-    }
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = setTimeout(() => {
-      setRefreshing(true);
-    }, 300);
+    setRefreshing(true);
+    setFilterNow(new Date());
     try {
-      await Promise.all([runGetStatsRef.current(), runGetCapacityRef.current()]);
-      setLastRefreshed(new Date());
+      await Promise.all([refetchAppts(), refetchInvoices(), refetchQuotes()]);
     } finally {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-        refreshTimerRef.current = null;
-      }
       setRefreshing(false);
     }
-  }, [filterNow]);
+  }, [refetchAppts, refetchInvoices, refetchQuotes]);
 
-  useEffect(() => {
-    if (!businessId || !allowSecondaryFetch) return;
-    if (hasInitialized.current) return;
-    hasInitialized.current = true;
-    // Stagger stats/capacity so they run after appointments/activity/notifications
-    const t = setTimeout(() => void handleRefresh(), 200);
-    return () => clearTimeout(t);
-  }, [businessId, allowSecondaryFetch, handleRefresh]);
-
-  // Disable background auto-refresh to avoid excessive network traffic.
-  // Dashboard data can be refreshed manually via the Refresh button.
-  useEffect(() => {
-    return () => {
-      // no-op cleanup
-    };
-  }, []);
-
-  const [{ data: activityLogs, fetching: fetchingActivity }] = useFindMany(api.activityLog, {
-    filter: businessId ? { business: { id: { equals: businessId } } } : undefined,
-    sort: { createdAt: "Descending" },
-    select: { id: true, type: true, description: true, createdAt: true },
-    first: 8,
-    pause: !businessId || !allowSecondaryFetch,
-  });
-
-  const [{ data: failedNotifications }] = useFindMany(api.notificationLog, {
-    filter: { AND: [{ status: { equals: "failed" } }, { business: { id: { equals: businessId ?? "" } } }] },
-    first: 1,
-    select: { id: true },
-    pause: !businessId || !allowSecondaryFetch,
-  });
-
-  // Derived values
-  const todayRevenue: number = (dashStats as any)?.todayRevenue ?? 0;
-  const outstandingBalance: number = (dashStats as any)?.outstandingBalance ?? 0;
-  const repeatCustomerRate: number = (dashStats as any)?.repeatCustomerRate ?? 0;
-  const weeklyRevenue: any[] = (dashStats as any)?.weeklyRevenue ?? [];
-  const revenueThisMonth: number = (dashStats as any)?.revenueThisMonth ?? 0;
-  const openInvoicesCount: number = (dashStats as any)?.openInvoicesCount ?? 0;
-  const totalClients: number = (dashStats as any)?.totalClients ?? 0;
-  const todayCount: number = (dashStats as any)?.todayAppointmentsCount ?? 0;
-  const todayBookedHours: number = (dashStats as any)?.todayBookedHours ?? 0;
-  const totalAvailableHours: number = (dashStats as any)?.totalAvailableHours ?? 8;
+  const loadError = apptsError ?? invoicesError ?? quotesError;
+  const loadingInitial = fetchingAppts && !appointmentsRaw;
 
   return (
-    <div className="p-6 sm:p-8 space-y-8 max-w-7xl mx-auto">
-      {/* Dashboard error banner with retry */}
-      {dashboardError && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <p className="text-sm text-amber-800 dark:text-amber-200">
-            {dashboardError instanceof ApiError && (dashboardError.status === 401 || dashboardError.status === 403)
-              ? "Your session expired. Redirecting to sign-in…"
-              : `Could not load some dashboard data: ${dashboardError.message}`}
-          </p>
+    <div className="pb-24 md:pb-8 min-h-[calc(100dvh-4rem)]">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight truncate">{businessName ?? "Dashboard"}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">{format(filterNow, "EEEE, MMM d")}</p>
+          </div>
           <Button
+            type="button"
             variant="outline"
-            size="sm"
-            className="shrink-0"
+            size="icon"
+            className="h-11 w-11 shrink-0 rounded-xl"
             onClick={() => void handleRefresh()}
             disabled={refreshing}
+            aria-label="Refresh"
           >
-            {refreshing ? "Retrying…" : "Try again"}
+            <RefreshCw className={cn("h-5 w-5", refreshing && "animate-spin")} />
           </Button>
         </div>
-      )}
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight">{businessName}</h1>
-        </div>
-        <div className="flex items-center gap-2 shrink-0 mt-1">
-          {lastRefreshed && (
-            <span className="text-xs text-muted-foreground hidden sm:block">
-              {formatLastRefreshed(lastRefreshed)}
-            </span>
-          )}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => void handleRefresh()}
-                  disabled={refreshing}
-                  aria-label="Refresh dashboard"
-                >
-                  <RefreshCw
-                    className={cn("h-4 w-4", refreshing && "animate-spin")}
-                  />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Refresh dashboard</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      </div>
-
-      {/* KPI Grid — 6 cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {/* 1. Today's Revenue */}
-        <div className="rounded-xl border border-border bg-card px-5 pt-5 pb-4 hover:border-border/80 transition-colors h-full">
-          <div className="flex flex-row items-center justify-between">
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.06em] leading-none">
-              Today's Revenue
-            </p>
-            <div className="h-7 w-7 rounded-md flex items-center justify-center shrink-0 bg-muted">
-              <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-            </div>
+        {loadError && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-900 dark:text-amber-100">
+            {loadError instanceof ApiError && (loadError.status === 401 || loadError.status === 403)
+              ? "Session expired. Sign in again."
+              : `Could not load dashboard: ${loadError.message}`}
           </div>
-          {fetchingStats && !dashStats ? (
-            <Skeleton className="h-7 w-24 mt-3" />
-          ) : (
-            <div className="text-2xl font-semibold tracking-tight mt-3">{formatCurrency(todayRevenue)}</div>
-          )}
-          <p className="text-[12px] text-muted-foreground mt-1">Collected today</p>
-        </div>
+        )}
 
-        {/* 2. This Month */}
-        <Link to="/invoices" className="group">
-          <div className="rounded-xl border border-border bg-card px-5 pt-5 pb-4 hover:border-border/80 transition-colors h-full">
-            <div className="flex flex-row items-center justify-between">
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.06em] leading-none">
-                This Month
-              </p>
-              <div className="h-7 w-7 rounded-md flex items-center justify-center shrink-0 bg-muted">
-                <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-            </div>
-            {fetchingStats && !dashStats ? (
-              <Skeleton className="h-7 w-24 mt-3" />
-            ) : (
-              <div className="text-2xl font-semibold tracking-tight mt-3">{formatCurrency(revenueThisMonth)}</div>
+        {/* Primary actions — desktop / tablet */}
+        <div className="hidden sm:grid grid-cols-3 gap-3">
+          <Link
+            to="/appointments/new"
+            className={cn(
+              "flex items-center justify-center gap-2 min-h-[52px] rounded-2xl px-4",
+              "bg-orange-500 text-white font-semibold text-base shadow-sm",
+              "hover:bg-orange-600 active:scale-[0.98] transition-transform"
             )}
-            <p className="text-[12px] text-muted-foreground mt-1">Total revenue</p>
-          </div>
-        </Link>
-
-        {/* 3. Open Invoices */}
-        <Link to="/invoices" className="group">
-          <div className="rounded-xl border border-border bg-card px-5 pt-5 pb-4 hover:border-border/80 transition-colors h-full">
-            <div className="flex flex-row items-center justify-between">
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.06em] leading-none">
-                Open Invoices
-              </p>
-              <div className="h-7 w-7 rounded-md flex items-center justify-center shrink-0 bg-muted">
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-            </div>
-            {fetchingStats && !dashStats ? (
-              <Skeleton className="h-7 w-12 mt-3" />
-            ) : (
-              <div className="text-2xl font-semibold tracking-tight mt-3">{openInvoicesCount}</div>
+          >
+            <CalendarPlus className="h-5 w-5 shrink-0" />
+            Schedule job
+          </Link>
+          <Link
+            to="/quotes/new"
+            className={cn(
+              "flex items-center justify-center gap-2 min-h-[52px] rounded-2xl px-4",
+              "border-2 border-border bg-card font-semibold text-base",
+              "hover:bg-muted/80 active:scale-[0.98] transition-transform"
             )}
-            <p className="text-[12px] text-muted-foreground mt-1">
-              {fetchingStats && !dashStats ? "" : `${formatCurrency(outstandingBalance)} outstanding`}
-            </p>
-          </div>
-        </Link>
-
-        {/* 4. Today's Jobs */}
-        <Link to="/calendar" className="group">
-          <div className="rounded-xl border border-border bg-card px-5 pt-5 pb-4 hover:border-border/80 transition-colors h-full">
-            <div className="flex flex-row items-center justify-between">
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.06em] leading-none">
-                Today's Jobs
-              </p>
-              <div className="h-7 w-7 rounded-md flex items-center justify-center shrink-0 bg-muted">
-                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-            </div>
-            {fetchingStats && !dashStats ? (
-              <Skeleton className="h-7 w-10 mt-3" />
-            ) : (
-              <div className="text-2xl font-semibold tracking-tight mt-3">{todayCount}</div>
+          >
+            <Receipt className="h-5 w-5 shrink-0" />
+            Create quote
+          </Link>
+          <Link
+            to="/invoices"
+            className={cn(
+              "flex items-center justify-center gap-2 min-h-[52px] rounded-2xl px-4",
+              "border-2 border-border bg-card font-semibold text-base",
+              "hover:bg-muted/80 active:scale-[0.98] transition-transform"
             )}
-            <p className="text-[12px] text-muted-foreground mt-1">Scheduled today</p>
-          </div>
-        </Link>
-
-        {/* 5. Total Clients */}
-        <Link to="/clients" className="group">
-          <div className="rounded-xl border border-border bg-card px-5 pt-5 pb-4 hover:border-border/80 transition-colors h-full">
-            <div className="flex flex-row items-center justify-between">
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.06em] leading-none">
-                Total Clients
-              </p>
-              <div className="h-7 w-7 rounded-md flex items-center justify-center shrink-0 bg-muted">
-                <Users className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-            </div>
-            {fetchingStats && !dashStats ? (
-              <Skeleton className="h-7 w-12 mt-3" />
-            ) : (
-              <div className="text-2xl font-semibold tracking-tight mt-3">{totalClients}</div>
-            )}
-            <p className="text-[12px] text-muted-foreground mt-1">In your database</p>
-          </div>
-        </Link>
-
-        {/* 6. Capacity Ring */}
-        <div className="rounded-xl border border-border bg-card px-5 pt-5 pb-4 hover:border-border/80 transition-colors h-full">
-          <div className="flex flex-row items-center justify-between">
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.06em] leading-none">
-              Capacity
-            </p>
-            <div className="h-7 w-7 rounded-md flex items-center justify-center shrink-0 bg-muted">
-              <BarChart2 className="h-3.5 w-3.5 text-muted-foreground" />
-            </div>
-          </div>
-          <div className="flex flex-col items-center mt-3">
-            <CapacityRing
-              bookedHours={todayBookedHours}
-              totalHours={totalAvailableHours}
-              fetching={fetchingStats && !dashStats}
-            />
-            <p className="text-[12px] text-muted-foreground mt-1">
-              {fetchingStats && !dashStats ? "Loading..." : `${todayBookedHours} hours booked`}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Failed Notifications Banner */}
-      {failedNotifications && failedNotifications.length > 0 && (
-        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>{failedNotifications.length} notification(s) failed to send.</span>
-          <Link to="/admin/recovery" className="ml-1 underline font-medium hover:text-amber-900">
-            View in Recovery →
+          >
+            <DollarSign className="h-5 w-5 shrink-0" />
+            Mark paid
           </Link>
         </div>
-      )}
 
-      {/* Smart Insights */}
-      <SmartInsightsCard data={capacityData} fetching={(fetchingStats || fetchingCapacity) && !capacityData} />
-
-      {/* Today's Schedule + Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {/* Today's Schedule */}
-        <Card className="rounded-xl border-border bg-card flex flex-col">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-[13px] font-semibold">
-              Today's Schedule
-              {!fetchingStats && upcomingAppointments && upcomingAppointments.length > 0 && (
-                <span className="text-muted-foreground font-normal"> · {upcomingAppointments.length}</span>
-              )}
-            </CardTitle>
-            <Link to="/appointments/new">
-              <Button size="sm" variant="outline" className="h-7 gap-1 text-xs px-2">
-                <Plus className="h-3 w-3" />
-                New Appointment
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent className="flex-1">
-            {fetchingUpcoming && !upcomingAppointments ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" />
-                ))}
-              </div>
-            ) : !upcomingAppointments || upcomingAppointments.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
-                  <Clock className="h-6 w-6 text-muted-foreground/50" />
-                </div>
-                <p className="text-sm font-medium text-muted-foreground">No appointments today</p>
-                <Link to="/appointments/new">
-                  <Button variant="outline" size="sm" className="mt-3 gap-1.5">
-                    <Plus className="h-3.5 w-3.5" />
-                    Book Appointment
-                  </Button>
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {upcomingAppointments.map((appt) => {
-                  const apt = appt as typeof appt & {
-                    client: { firstName: string; lastName: string } | null;
-                    vehicle: { year: number | null; make: string | null; model: string | null } | null;
-                  };
-                  return (
-                    <Link
-                      key={apt.id}
-                      to={`/appointments/${apt.id}`}
-                      className="flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors group"
-                    >
-                      <div className="shrink-0 pt-0.5">
-                        <p className="text-xs font-mono text-muted-foreground">
-                          {apt.startTime ? format(new Date(apt.startTime), "h:mm a") : "—"}
-                        </p>
-                        {apt.endTime && (
-                          <p className="text-xs font-mono text-muted-foreground/60">
-                            {format(new Date(apt.endTime), "h:mm a")}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {apt.client
-                            ? `${apt.client.firstName} ${apt.client.lastName}`
-                            : apt.title ?? "Appointment"}
-                        </p>
-                        {apt.vehicle && (
-                          <p className="text-xs text-muted-foreground truncate">
-                            {apt.vehicle.year ? `${apt.vehicle.year} ` : ""}{apt.vehicle.make} {apt.vehicle.model}
-                          </p>
-                        )}
-                      </div>
-                      <div className="shrink-0">
-                        <StatusBadge status={apt.status ?? "pending"} type="appointment" />
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Recent Activity */}
-        <Card className="rounded-xl border-border bg-card flex flex-col">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-[13px] font-semibold">Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1">
-            {fetchingActivity && !activityLogs ? (
-              <div className="space-y-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="flex gap-3">
-                    <div className="h-8 w-8 rounded-full bg-muted animate-pulse shrink-0" />
-                    <div className="flex-1 space-y-1.5 pt-1">
-                      <div className="h-3 bg-muted rounded animate-pulse w-4/5" />
-                      <div className="h-2.5 bg-muted rounded animate-pulse w-1/3" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : !activityLogs || activityLogs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
-                  <Activity className="h-6 w-6 text-muted-foreground/50" />
-                </div>
-                <p className="text-sm font-medium text-muted-foreground">No recent activity</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">
-                  Actions and updates will be tracked here
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {activityLogs.map((log, idx) => (
-                  <div
-                    key={log.id}
-                    className={cn(
-                      "flex items-start gap-3 py-2.5",
-                      idx < activityLogs.length - 1 && "border-b border-border/50"
-                    )}
+        {/* Today's jobs */}
+        <DashboardSection
+          title="Today's jobs"
+          seeAllHref="/calendar"
+          seeAllLabel="Calendar"
+          isEmpty={!loadingInitial && todayJobs.length === 0}
+          emptyMessage="Nothing on the schedule today."
+          emptyCta={{ href: "/appointments/new", label: "Schedule a job" }}
+        >
+          {loadingInitial ? (
+            <ListSkeleton rows={3} />
+          ) : (
+            <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
+              {todayJobs.map((apt) => (
+                <li key={apt.id}>
+                  <Link
+                    to={`/appointments/${apt.id}`}
+                    className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
                   >
-                    <div className="h-7 w-7 rounded-md bg-muted flex items-center justify-center shrink-0 mt-0.5">
-                      <ActivityTypeIcon type={log.type ?? ""} />
+                    <div className="text-sm font-mono text-muted-foreground w-[72px] shrink-0">
+                      {apt.startTime ? format(parseISO(apt.startTime), "h:mm a") : "—"}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm leading-snug text-foreground line-clamp-2">
-                        {log.description}
+                      <p className="font-medium text-base truncate">
+                        {apt.client ? `${apt.client.firstName} ${apt.client.lastName}` : apt.title ?? "Job"}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {log.createdAt
-                          ? formatDistanceToNow(new Date(log.createdAt), { addSuffix: true })
-                          : ""}
-                      </p>
+                      {apt.vehicle && (
+                        <p className="text-sm text-muted-foreground truncate">
+                          {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
+                        </p>
+                      )}
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    <StatusBadge status={apt.status} type="appointment" />
+                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DashboardSection>
+
+        {/* Upcoming */}
+        <DashboardSection
+          title="Upcoming"
+          seeAllHref="/appointments"
+          seeAllLabel="All jobs"
+          isEmpty={!loadingInitial && upcomingAppointments.length === 0}
+          emptyMessage="No upcoming appointments in the next 30 days."
+          emptyCta={{ href: "/appointments/new", label: "Schedule" }}
+        >
+          {loadingInitial ? (
+            <ListSkeleton rows={3} />
+          ) : (
+            <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
+              {upcomingAppointments.map((apt) => (
+                <li key={apt.id}>
+                  <Link
+                    to={`/appointments/${apt.id}`}
+                    className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
+                  >
+                    <div className="text-xs text-muted-foreground w-20 shrink-0 leading-tight">
+                      {apt.startTime ? (
+                        <>
+                          <div className="font-medium text-foreground">
+                            {format(parseISO(apt.startTime), "MMM d")}
+                          </div>
+                          <div>{format(parseISO(apt.startTime), "h:mm a")}</div>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">
+                        {apt.client ? `${apt.client.firstName} ${apt.client.lastName}` : apt.title ?? "Appointment"}
+                      </p>
+                      {apt.vehicle && (
+                        <p className="text-sm text-muted-foreground truncate">
+                          {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
+                        </p>
+                      )}
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DashboardSection>
+
+        {/* Unpaid invoices */}
+        <DashboardSection
+          title="Unpaid invoices"
+          seeAllHref="/invoices"
+          seeAllLabel="Invoices"
+          isEmpty={!fetchingInvoices && unpaidInvoices.length === 0}
+          emptyMessage="No unpaid invoices."
+          emptyCta={{ href: "/invoices/new", label: "New invoice" }}
+        >
+          {fetchingInvoices && !invoicesRaw ? (
+            <ListSkeleton rows={2} />
+          ) : (
+            <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
+              {unpaidInvoices.map((inv) => (
+                <li key={inv.id}>
+                  <Link
+                    to={`/invoices/${inv.id}`}
+                    className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
+                  >
+                    <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{inv.invoiceNumber ?? `Invoice ${inv.id.slice(0, 8)}…`}</p>
+                      <p className="text-sm text-muted-foreground capitalize">{inv.status.replace("-", " ")}</p>
+                    </div>
+                    <span className="font-semibold tabular-nums">{formatCurrency(inv.total)}</span>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DashboardSection>
+
+        {/* Pending quotes */}
+        <DashboardSection
+          title="Pending quotes"
+          seeAllHref="/quotes"
+          seeAllLabel="Quotes"
+          isEmpty={!fetchingQuotes && pendingQuotes.length === 0}
+          emptyMessage="No open quotes."
+          emptyCta={{ href: "/quotes/new", label: "New quote" }}
+        >
+          {fetchingQuotes && !quotesRaw ? (
+            <ListSkeleton rows={2} />
+          ) : (
+            <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
+              {pendingQuotes.map((q) => (
+                <li key={q.id}>
+                  <Link
+                    to={`/quotes/${q.id}`}
+                    className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
+                  >
+                    <Receipt className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">Quote · {q.id.slice(0, 8)}…</p>
+                      <p className="text-sm text-muted-foreground capitalize">{q.status}</p>
+                    </div>
+                    <span className="font-semibold tabular-nums">{formatCurrency(q.total)}</span>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DashboardSection>
       </div>
 
+      {/* Mobile sticky actions */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden"
+        style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        aria-label="Quick actions"
+      >
+        <div className="flex gap-2 px-3 pt-2 max-w-3xl mx-auto">
+          <Link
+            to="/appointments/new"
+            className="flex-1 flex flex-col items-center justify-center gap-1 min-h-[52px] rounded-xl bg-orange-500 text-white text-sm font-semibold shadow-sm active:scale-[0.98]"
+          >
+            <CalendarPlus className="h-5 w-5" />
+            Job
+          </Link>
+          <Link
+            to="/quotes/new"
+            className="flex-1 flex flex-col items-center justify-center gap-1 min-h-[52px] rounded-xl border-2 border-border bg-card text-sm font-semibold active:scale-[0.98]"
+          >
+            <Receipt className="h-5 w-5" />
+            Quote
+          </Link>
+          <Link
+            to="/invoices"
+            className="flex-1 flex flex-col items-center justify-center gap-1 min-h-[52px] rounded-xl border-2 border-border bg-card text-sm font-semibold active:scale-[0.98]"
+          >
+            <DollarSign className="h-5 w-5" />
+            Paid
+          </Link>
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+function DashboardSection({
+  title,
+  seeAllHref,
+  seeAllLabel,
+  isEmpty,
+  emptyMessage,
+  emptyCta,
+  children,
+}: {
+  title: string;
+  seeAllHref: string;
+  seeAllLabel: string;
+  isEmpty: boolean;
+  emptyMessage: string;
+  emptyCta: { href: string; label: string };
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <Link to={seeAllHref} className="text-sm font-medium text-orange-600 hover:text-orange-700 py-2 min-h-[44px] inline-flex items-center">
+          {seeAllLabel}
+        </Link>
+      </div>
+      {isEmpty ? (
+        <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center">
+          <p className="text-sm text-muted-foreground mb-4">{emptyMessage}</p>
+          <Button asChild size="lg" className="min-h-[48px] rounded-xl">
+            <Link to={emptyCta.href}>{emptyCta.label}</Link>
+          </Button>
+        </div>
+      ) : (
+        children
+      )}
+    </section>
+  );
+}
+
+function ListSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="rounded-xl border bg-card divide-y divide-border overflow-hidden">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 px-4 py-3 min-h-[56px]">
+          <Skeleton className="h-4 w-16" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-3/5 max-w-[200px]" />
+            <Skeleton className="h-3 w-2/5 max-w-[140px]" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

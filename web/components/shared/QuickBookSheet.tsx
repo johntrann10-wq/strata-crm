@@ -103,7 +103,7 @@ export function QuickBookSheet({
       businessId: { equals: businessId ?? "" },
       active: { equals: true },
     },
-    select: { id: true, name: true, price: true, duration: true },
+    select: { id: true, name: true, price: true, durationMinutes: true },
     sort: { name: "Ascending" },
     first: 100,
     pause: !businessId || !open,
@@ -189,7 +189,7 @@ export function QuickBookSheet({
 
     const totalDurationMinutes = selectedServiceIds.reduce((sum, id) => {
       const svc = (services ?? []).find((s) => s.id === id);
-      return sum + (svc?.duration ?? 0);
+      return sum + (svc?.durationMinutes ?? 0);
     }, 0);
 
     const endDateTime = addMinutes(startDateTime, totalDurationMinutes > 0 ? totalDurationMinutes : 60);

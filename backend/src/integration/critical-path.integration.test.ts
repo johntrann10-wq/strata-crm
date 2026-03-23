@@ -6,13 +6,14 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { fileURLToPath } from "url";
+import type { Application } from "express";
 
 // Minimal smoke coverage for the critical end-to-end API chain.
 // Runs against an embedded Postgres instance so tests are self-contained.
 describe("Critical path smoke (backend integration)", () => {
   let embedded: EmbeddedPostgres | null = null;
   let dbUrl = "";
-  let app: import("../app.js").app | undefined;
+  let app: Application | undefined;
   let closeDb: (() => Promise<void>) | undefined;
 
   const password = "TestPassword123!";

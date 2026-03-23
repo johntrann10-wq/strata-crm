@@ -152,10 +152,20 @@ export default function OnboardingPage() {
       operatingHours: hoursStr,
     });
 
-    if (result?.data) {
-      await api.business.completeOnboarding(result.data.id);
-      // Unblock the app immediately so protected pages/dashboard can load.
+    if (result.error) {
+      setValidationError(result.error.message ?? "Could not create your business.");
+      return;
+    }
+    const created = result.data as { id?: string } | undefined;
+    if (!created?.id) {
+      setValidationError("Unexpected response from server.");
+      return;
+    }
+    try {
+      await api.business.completeOnboarding(created.id);
       navigate("/signed-in");
+    } catch (e) {
+      setValidationError(e instanceof Error ? e.message : "Could not finish setup.");
     }
   };
 

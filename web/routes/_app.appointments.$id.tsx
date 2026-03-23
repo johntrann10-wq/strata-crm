@@ -1,6 +1,5 @@
 import { useState, useEffect, Fragment } from "react";
 import { useParams, Link, useOutletContext } from "react-router";
-import { isModuleEnabled } from "../lib/modules";
 import { useFindOne, useFindFirst, useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
@@ -26,7 +25,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,8 +35,6 @@ import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { PhotoGallery } from "../components/PhotoGallery";
-import { VehicleInspectionPanel } from "../components/VehicleInspectionPanel";
 import {
   ClientCard,
   VehicleCard,
@@ -57,8 +53,6 @@ import {
   Edit2,
   Check,
   X,
-  Camera,
-  ClipboardList,
   FileText,
   User,
   AlertTriangle,
@@ -270,7 +264,7 @@ function JobLifecycleStepper({
 
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
-  const { user, enabledModules } = useOutletContext<AuthOutletContext>();
+  const { user } = useOutletContext<AuthOutletContext>();
   const { setPageContext } = usePageContext();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -757,26 +751,7 @@ export default function AppointmentDetail() {
 
       <RelatedRecordsPanel records={relatedRecords} loading={fetching} />
 
-      {/* Tabs */}
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          {isModuleEnabled(enabledModules as any, "vehicleInspection") && (
-            <TabsTrigger value="inspection" className="flex items-center gap-2">
-              <ClipboardList className="h-4 w-4" />
-              Pre-Inspection
-            </TabsTrigger>
-          )}
-          {isModuleEnabled(enabledModules as any, "photoUploads") && (
-            <TabsTrigger value="photos" className="flex items-center gap-2">
-              <Camera className="h-4 w-4" />
-              Photos
-            </TabsTrigger>
-          )}
-        </TabsList>
-
-        {/* Overview Tab */}
-        <TabsContent value="overview">
+      <div className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left column */}
             <div className="lg:col-span-2 space-y-6">
@@ -984,34 +959,7 @@ export default function AppointmentDetail() {
               />
             </div>
           </div>
-        </TabsContent>
-
-        {/* Pre-Inspection Tab */}
-        {isModuleEnabled(enabledModules as any, "vehicleInspection") && (
-          <TabsContent value="inspection">
-            <VehicleInspectionPanel
-              appointmentId={appointment.id}
-              vehicleId={appointment.vehicle?.id ?? ''}
-              businessId={appointment.business?.id ?? ''}
-            />
-          </TabsContent>
-        )}
-
-        {/* Photos Tab */}
-        {isModuleEnabled(enabledModules as any, "photoUploads") && (
-          <TabsContent value="photos">
-            <PhotoGallery
-              appointmentId={appointment.id}
-              businessId={appointment.business?.id ?? ''}
-              readOnly={
-                appointment.status === "completed" ||
-                appointment.status === "cancelled" ||
-                appointment.status === "no-show"
-              }
-            />
-          </TabsContent>
-        )}
-      </Tabs>
+      </div>
 
       {/* Edit Appointment Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>

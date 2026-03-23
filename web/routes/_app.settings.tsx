@@ -51,7 +51,6 @@ import {
   RefreshCw,
   ShieldCheck,
   AlertTriangle,
-  Zap,
 } from "lucide-react";
 import {
   Dialog,
@@ -96,18 +95,11 @@ const TIMEZONES = [
 ];
 
 const BILLING_FEATURES = [
-  "Unlimited appointments & scheduling",
+  "Appointments & calendar",
   "Client & vehicle CRM",
-  "Invoice creation & management",
-  "Staff management & roles",
-  "Inventory tracking & low-stock alerts",
-  "Automated appointment reminders",
-  "Review request automation",
-  "Maintenance reminder campaigns",
-  "Promo codes & discounts",
-  "Activity log & audit trail",
-  "Multi-service catalog",
-  "Payment tracking (cash, card, Venmo & more)",
+  "Quotes & invoices",
+  "Payments on invoices",
+  "Service catalog",
 ];
 
 // Backend route/table is not implemented yet.
@@ -438,16 +430,13 @@ export default function SettingsPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage your business profile, automations, and billing
-          </p>
+          <p className="text-sm text-muted-foreground">Manage your business profile, locations, and billing</p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="profile">Business Profile</TabsTrigger>
-          <TabsTrigger value="automation">Automation</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="locations">Locations</TabsTrigger>
           {BACKUP_SNAPSHOTS_SUPPORTED && <TabsTrigger value="backups">Backups</TabsTrigger>}
@@ -737,30 +726,6 @@ export default function SettingsPage() {
                   {saving ? "Saving…" : "Save Changes"}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ─── Automation Tab ─── */}
-        <TabsContent value="automation" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Automation</CardTitle>
-              <CardDescription>
-                Automate client communications to save time and keep your customers engaged.
-                These features will be fully configurable once connected to your SMS/email providers.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Your automation rules are live and configurable. Visit the Automations page to enable reminders, review requests, maintenance follow-ups, and more.
-              </p>
-              <Button asChild>
-                <Link to="/automations">
-                  <Zap className="h-4 w-4 mr-2" />
-                  Go to Automations
-                </Link>
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>

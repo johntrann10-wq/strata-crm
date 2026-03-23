@@ -12,34 +12,49 @@ function isGoogleOAuthEnabled(): boolean {
   return !!(id && secret);
 }
 
-/** Validate required env vars at startup so production fails fast. */
-export function validateEnv(): void {
-  // Core / runtime requirements
+/** Safe defaults so local dev and tests can start without a full production .env. */
+function applyNonProductionDefaults(): void {
+  if (process.env.NODE_ENV === "production") return;
+
+  process.env.JWT_SECRET ??= "dev-jwt-secret-not-for-production";
+  process.env.SESSION_SECRET ??= "dev-session-secret-not-for-production";
+  process.env.FRONTEND_URL ??= "http://localhost:5173";
+  process.env.PORT ??= "3001";
+  process.env.LOG_LEVEL ??= "info";
+  process.env.API_BASE ??= "http://localhost:3001";
+
+  process.env.SMTP_HOST ??= "localhost";
+  process.env.SMTP_PORT ??= "465";
+  process.env.SMTP_USER ??= "dev@localhost";
+  process.env.SMTP_PASS ??= "dev";
+  process.env.SMTP_FROM ??= "dev@localhost";
+
+  process.env.STRIPE_SECRET_KEY ??= "sk_test_dev_placeholder";
+  process.env.STRIPE_WEBHOOK_SECRET ??= "whsec_dev_placeholder";
+  process.env.STRIPE_PRICE_ID ??= "price_dev_placeholder";
+  process.env.CRON_SECRET ??= "cron_dev_placeholder";
+}
+
+function validateProductionEnv(): void {
   requireEnv("DATABASE_URL");
   requireEnv("JWT_SECRET");
   requireEnv("SESSION_SECRET");
   requireEnv("FRONTEND_URL");
 
-  // SMTP (email sending)
   requireEnv("SMTP_HOST");
   requireEnv("SMTP_PORT");
   requireEnv("SMTP_USER");
   requireEnv("SMTP_PASS");
 
-  // Billing (Stripe)
   requireEnv("STRIPE_SECRET_KEY");
   requireEnv("STRIPE_WEBHOOK_SECRET");
   requireEnv("STRIPE_PRICE_ID");
 
-  // Automations (cron)
   requireEnv("CRON_SECRET");
 
-  // Server runtime
   requireEnv("PORT");
   requireEnv("LOG_LEVEL");
 
-  // Google OAuth: must not break startup when disabled.
-  // If both GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are present, require API_BASE too.
   if (isGoogleOAuthEnabled()) {
     requireEnv("GOOGLE_CLIENT_ID");
     requireEnv("GOOGLE_CLIENT_SECRET");
@@ -47,3 +62,12 @@ export function validateEnv(): void {
   }
 }
 
+/** Validate env at startup: production requires real secrets; dev/test uses safe defaults. */
+export function validateEnv(): void {
+  applyNonProductionDefaults();
+  if (process.env.NODE_ENV === "production") {
+    validateProductionEnv();
+  } else {
+    requireEnv("DATABASE_URL");
+  }
+}

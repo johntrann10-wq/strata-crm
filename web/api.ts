@@ -4,13 +4,13 @@ import { clearAuthToken, emitAuthEvent, getAuthToken } from "./lib/auth";
  * Fetch-based API client for Node API endpoints.
  * Uses JWT in Authorization header and talks directly to the Express backend.
  */
-/** Base URL for the backend API (your Railway/Express backend). */
+/** Base URL for the backend API — set `VITE_API_URL` in `.env` (see `.env.example`). */
 function resolveApiBase(): string {
   const apiBaseFromViteEnv = (import.meta.env as Record<string, string | undefined>).VITE_API_URL;
   const trimmed = apiBaseFromViteEnv?.trim();
-  if (trimmed) return trimmed;
+  if (trimmed) return trimmed.replace(/\/+$/, "");
 
-  // Local dev: rely on same-origin `/api` (Vite proxy in `vite.config.mts`).
+  // Local dev: same-origin `/api` + Vite proxy (`vite.config.mts` targets `VITE_API_URL` or localhost).
   if (import.meta.env.DEV) return "";
 
   // Production: fail loudly so misconfiguration is obvious.
@@ -174,7 +174,35 @@ export const api = {
   },
   staff: resource("staff"),
   location: resource("locations"),
-  service: resource("services"),
+  service: (() => {
+    const r = resource("services");
+    return {
+      ...r,
+      update: (params: Record<string, unknown>) => {
+        const id = params.id as string | undefined;
+        if (!id) throw new Error("Service update requires id");
+        const { id: _omit, ...body } = params;
+        return r.update(id, body);
+      },
+      delete: (params: Record<string, unknown>) => {
+        const id = params.id as string | undefined;
+        if (!id) throw new Error("Service delete requires id");
+        return r.delete(id);
+      },
+    };
+  })(),
+  /** Parent service → optional add-on service (same catalog model). */
+  serviceAddonLink: (() => {
+    const r = resource("service-addon-links");
+    return {
+      ...r,
+      delete: (params: Record<string, unknown>) => {
+        const id = params.id as string | undefined;
+        if (!id) throw new Error("id required");
+        return r.delete(id);
+      },
+    };
+  })(),
   serviceInventoryItem: resource("service-inventory-items"),
   quote: {
     ...resource("quotes"),

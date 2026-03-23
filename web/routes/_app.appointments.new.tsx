@@ -19,6 +19,7 @@ import {
   Brain,
 } from "lucide-react";
 import { api } from "../api";
+import { formatServiceCategory } from "../lib/serviceCatalog";
 import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -185,9 +186,9 @@ export default function NewAppointmentPage() {
         id: true,
         name: true,
         price: true,
-        duration: true,
+        durationMinutes: true,
         category: true,
-        description: true,
+        notes: true,
       },
       first: 250,
       sort: { name: "Ascending" },
@@ -276,7 +277,7 @@ export default function NewAppointmentPage() {
         const service = servicesData?.find((s) => s.id === id);
         if (service) {
           acc.totalPrice += service.price ?? 0;
-          acc.totalDuration += service.duration ?? 0;
+          acc.totalDuration += service.durationMinutes ?? 0;
         }
         return acc;
       },
@@ -532,14 +533,15 @@ export default function NewAppointmentPage() {
 
   function getReasonBadgeStyle(category: string): string {
     const styles: Record<string, string> = {
-      'ceramic-coating': 'bg-blue-100 text-blue-700 border-blue-200',
-      'ppf': 'bg-purple-100 text-purple-700 border-purple-200',
-      'detailing': 'bg-green-100 text-green-700 border-green-200',
-      'tinting': 'bg-amber-100 text-amber-700 border-amber-200',
-      'tires': 'bg-orange-100 text-orange-700 border-orange-200',
-      'paint-correction': 'bg-pink-100 text-pink-700 border-pink-200',
+      detail: "bg-blue-100 text-blue-700 border-blue-200",
+      tint: "bg-amber-100 text-amber-800 border-amber-200",
+      ppf: "bg-purple-100 text-purple-700 border-purple-200",
+      mechanical: "bg-slate-100 text-slate-800 border-slate-200",
+      tire: "bg-orange-100 text-orange-800 border-orange-200",
+      body: "bg-rose-100 text-rose-800 border-rose-200",
+      other: "bg-gray-100 text-gray-600 border-gray-200",
     };
-    return styles[category] ?? 'bg-gray-100 text-gray-600 border-gray-200';
+    return styles[category] ?? "bg-gray-100 text-gray-600 border-gray-200";
   }
 
   const upsellRecommendations = ((upsellData as any)?.recommendations ?? []).filter(
@@ -777,22 +779,22 @@ export default function NewAppointmentPage() {
                         />
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm">{service.name}</p>
-                          {service.description && (
+                          {service.notes && (
                             <p className="text-xs text-muted-foreground truncate">
-                              {service.description}
+                              {service.notes}
                             </p>
                           )}
                           {service.category && (
-                            <p className="text-xs text-muted-foreground capitalize">
-                              {service.category}
+                            <p className="text-xs text-muted-foreground">
+                              {formatServiceCategory(service.category)}
                             </p>
                           )}
                         </div>
                         <div className="flex items-center gap-3 shrink-0 text-sm">
-                          {service.duration != null && service.duration > 0 && (
+                          {service.durationMinutes != null && service.durationMinutes > 0 && (
                             <span className="flex items-center gap-1 text-muted-foreground">
                               <Clock className="h-3 w-3" />
-                              {formatDuration(service.duration)}
+                              {formatDuration(service.durationMinutes)}
                             </span>
                           )}
                           <span className="font-semibold">

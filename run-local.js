@@ -10,7 +10,9 @@ const path = require("path");
 const backendEnvPath = path.join(__dirname, "backend", ".env");
 const backendEnvExample = path.join(__dirname, "backend", ".env.example");
 const defaultEnv = `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/strata
+JWT_SECRET=dev-jwt-secret-change-in-production
 SESSION_SECRET=dev-secret-change-in-production
+FRONTEND_URL=http://localhost:5173
 PORT=3001
 `;
 

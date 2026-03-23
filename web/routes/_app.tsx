@@ -23,17 +23,10 @@ import {
   ClipboardList,
   FileText,
   Wrench,
-  Package,
-  UserCheck,
   Settings,
   Menu,
-  BarChart2,
   AlertCircle,
   Car,
-  Zap,
-  ShieldAlert,
-  TrendingDown,
-  RouteIcon,
 } from "lucide-react";
 import React, { useState, useEffect, memo, useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -63,23 +56,14 @@ const primaryNavItems: { icon: React.ElementType; label: string; href: string; e
   { icon: Users, label: "Clients", href: "/clients", end: false, module: "clients" },
   { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices" },
   { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes" },
-  { icon: BarChart2, label: "Analytics", href: "/analytics", end: false, module: "analytics" },
 ];
 
 const managementNavItems: { icon: React.ElementType; label: string; href: string; end: boolean; module?: string }[] = [
   { icon: Car, label: "Vehicles", href: "/vehicles", end: false, module: "vehicles" },
   { icon: Wrench, label: "Services", href: "/services", end: false, module: "services" },
-  { icon: UserCheck, label: "Staff", href: "/staff", end: false, module: "staff" },
-  { icon: Package, label: "Inventory", href: "/inventory", end: false, module: "inventory" },
-  { icon: Zap, label: "Automations", href: "/automations", end: false, module: "automations" },
-  { icon: TrendingDown, label: "Lapsed Clients", href: "/lapsed-clients", end: false, module: "lapsedClients" },
-  { icon: RouteIcon, label: "Route Planner", href: "/route-planner", end: false, module: "routePlanner" },
 ];
 
-const bottomNavItems = [
-  { icon: Settings, label: "Settings", href: "/settings", end: false },
-  { icon: ShieldAlert, label: "Recovery", href: "/admin/recovery", end: false },
-];
+const bottomNavItems = [{ icon: Settings, label: "Settings", href: "/settings", end: false }];
 
 interface AppErrorBoundaryState {
   hasError: boolean;
@@ -367,19 +351,20 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     };
   }, []);
 
-  const [{ data: user, fetching: userFetching }, refetchUser] = useFindOne(
+  const [{ data: user, fetching: userFetching, error: userError }, refetchUser] = useFindOne(
     api.user,
     effectiveUserId ?? "",
     { select: { id: true, firstName: true, lastName: true, email: true }, pause: !effectiveUserId }
   );
-  const [{ data: business }] = useFindFirst(api.business, {
+  const [{ data: business, fetching: businessFetching, error: businessError }, refetchBusiness] = useFindFirst(api.business, {
     filter: { owner: { id: { equals: effectiveUserId } } },
     select: { id: true, name: true, type: true, onboardingComplete: true },
     pause: !effectiveUserId,
   });
 
   useEffect(() => {
-    if (userFetching) return;
+    if (userFetching || businessFetching) return;
+    if (businessError) return;
     if (!business) {
       if (!location.pathname.startsWith("/onboarding") && !location.pathname.startsWith("/subscribe")) {
         navigate("/onboarding", { replace: true });
@@ -392,7 +377,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       }
       return;
     }
-  }, [business, userFetching, navigate, location.pathname]);
+  }, [business, userFetching, businessFetching, businessError, navigate, location.pathname]);
 
   useEffect(() => {
     if (authCheckDone && !effectiveUserId) {
@@ -414,7 +399,24 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       </div>
     );
   }
-  if (userFetching || !user) {
+  if (userFetching) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
+  if (!user) {
+    if (userError) {
+      return (
+        <div className="h-screen flex flex-col items-center justify-center gap-4 p-6 max-w-md mx-auto text-center">
+          <p className="text-muted-foreground">{userError.message}</p>
+          <Button type="button" onClick={() => void refetchUser()}>
+            Retry
+          </Button>
+        </div>
+      );
+    }
     return (
       <div className="h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading…</div>
@@ -426,6 +428,16 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   // When no business exists yet (or onboarding is incomplete), protected routes can briefly mount with
   // `businessId=null`. Block rendering those routes until the redirect effect runs.
   const isOnboardingRoute = location.pathname.startsWith("/onboarding") || location.pathname.startsWith("/subscribe");
+  if (businessError && !isOnboardingRoute) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center gap-4 p-6 max-w-md mx-auto text-center">
+        <p className="text-muted-foreground">{businessError.message}</p>
+        <Button type="button" onClick={() => void refetchBusiness()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
   if (!business && !isOnboardingRoute) {
     return (
       <div className="h-screen flex items-center justify-center">

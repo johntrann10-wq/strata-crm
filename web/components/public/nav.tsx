@@ -32,19 +32,19 @@ const navigationItems: NavItems = [
     type: "item",
     title: "Product",
     href: "/#product",
-    description: "Overview of how Strata runs your shop.",
+    description: "How Strata fits premium detail, tint & PPF workflows.",
   },
   {
     type: "item",
     title: "Features",
     href: "/#features",
-    description: "Calendar, CRM, invoices, inventory, and more.",
+    description: "Quote-to-booking, CRM, scheduling, and payments—done right.",
   },
   {
     type: "item",
     title: "Who it’s for",
     href: "/#industries",
-    description: "Detailers, tinters, wrap shops, mechanics.",
+    description: "Owner-operated shops with high-ticket, reputation-sensitive work.",
   },
   {
     type: "item",

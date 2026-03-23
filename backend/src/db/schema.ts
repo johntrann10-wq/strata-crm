@@ -11,6 +11,7 @@ import {
   integer,
   pgEnum,
   primaryKey,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 const businessTypeEnum = pgEnum("business_type", [
@@ -24,6 +25,17 @@ const invoiceStatusEnum = pgEnum("invoice_status", ["draft", "sent", "paid", "pa
 const quoteStatusEnum = pgEnum("quote_status", ["draft", "sent", "accepted", "declined", "expired"]);
 const paymentMethodEnum = pgEnum("payment_method", [
   "cash", "card", "check", "venmo", "cashapp", "zelle", "other",
+]);
+
+/** Universal service category — same structure for every shop type; no industry-specific logic in app code. */
+export const serviceCategoryEnum = pgEnum("service_category", [
+  "detail",
+  "tint",
+  "ppf",
+  "mechanical",
+  "tire",
+  "body",
+  "other",
 ]);
 
 export const users = pgTable("users", {
@@ -152,13 +164,37 @@ export const services = pgTable("services", {
   id: uuid("id").primaryKey().defaultRandom(),
   businessId: uuid("business_id").notNull().references(() => businesses.id),
   name: text("name").notNull(),
-  description: text("description"),
+  /** Internal / shop notes — not industry-specific; optional. */
+  notes: text("notes"),
   price: decimal("price", { precision: 12, scale: 2 }).default("0"),
+  /** Estimated job duration in minutes. */
   durationMinutes: integer("duration_minutes"),
+  category: serviceCategoryEnum("category").default("other").notNull(),
+  taxable: boolean("taxable").default(true),
+  /** When true, service is intended as an add-on to another line item (still configurable). */
+  isAddon: boolean("is_addon").default(false),
   active: boolean("active").default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/** Optional add-ons: parent service → offered add-on service (same tenant, no business rules in DB). */
+export const serviceAddonLinks = pgTable(
+  "service_addon_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id").notNull().references(() => businesses.id),
+    parentServiceId: uuid("parent_service_id")
+      .notNull()
+      .references(() => services.id, { onDelete: "cascade" }),
+    addonServiceId: uuid("addon_service_id")
+      .notNull()
+      .references(() => services.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("service_addon_links_parent_addon").on(t.parentServiceId, t.addonServiceId)]
+);
 
 export const appointmentServices = pgTable("appointment_services", {
   id: uuid("id").primaryKey().defaultRandom(),

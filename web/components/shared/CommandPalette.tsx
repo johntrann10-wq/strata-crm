@@ -24,12 +24,7 @@ import {
   Users,
   ClipboardList,
   Wrench,
-  Package,
-  UserCheck,
   Settings,
-  TrendingDown,
-  Route,
-  BarChart2,
   User,
   CalendarClock,
   Loader2,
@@ -76,7 +71,7 @@ function statusColor(status: string): string {
   }
 }
 
-export function CommandPalette({ enabledModules = new Set<string>() }: { enabledModules?: Set<string> }) {
+export function CommandPalette(_props?: { enabledModules?: Set<string> }) {
   const { open, setOpen } = useCommandPalette();
   const { pageContext } = usePageContext();
   const navigate = useNavigate();
@@ -303,6 +298,10 @@ export function CommandPalette({ enabledModules = new Set<string>() }: { enabled
                 <Users className="mr-2 h-4 w-4" />
                 Clients
               </CommandItem>
+              <CommandItem onSelect={() => go("/vehicles")}>
+                <Car className="mr-2 h-4 w-4" />
+                Vehicles
+              </CommandItem>
               <CommandItem onSelect={() => go("/invoices")}>
                 <FileText className="mr-2 h-4 w-4" />
                 Invoices
@@ -311,37 +310,9 @@ export function CommandPalette({ enabledModules = new Set<string>() }: { enabled
                 <Receipt className="mr-2 h-4 w-4" />
                 Quotes
               </CommandItem>
-              {enabledModules.has("analytics") && (
-                <CommandItem onSelect={() => go("/analytics")}>
-                  <BarChart2 className="mr-2 h-4 w-4" />
-                  Analytics
-                </CommandItem>
-              )}
-              {enabledModules.has("lapsedClients") && (
-                <CommandItem onSelect={() => go("/lapsed-clients")}>
-                  <TrendingDown className="mr-2 h-4 w-4" />
-                  Lapsed Clients
-                </CommandItem>
-              )}
-              {enabledModules.has("routePlanner") && (
-                <CommandItem onSelect={() => go("/route-planner")}>
-                  <Route className="mr-2 h-4 w-4" />
-                  Route Planner
-                </CommandItem>
-              )}
               <CommandItem onSelect={() => go("/services")}>
                 <Wrench className="mr-2 h-4 w-4" />
                 Services
-              </CommandItem>
-              {enabledModules.has("inventory") && (
-                <CommandItem onSelect={() => go("/inventory")}>
-                  <Package className="mr-2 h-4 w-4" />
-                  Inventory
-                </CommandItem>
-              )}
-              <CommandItem onSelect={() => go("/staff")}>
-                <UserCheck className="mr-2 h-4 w-4" />
-                Staff
               </CommandItem>
               <CommandItem onSelect={() => go("/settings")}>
                 <Settings className="mr-2 h-4 w-4" />

@@ -75,11 +75,8 @@ export const SignInComponent = (props: {
                 placeholder="you@example.com"
                 autoComplete="off"
                 {...register("email")}
-                className={`h-9 text-[13px] rounded-lg${errors?.user?.email?.message ? " border-destructive" : ""}`}
+                className={`h-9 text-[13px] rounded-lg${errors?.root?.message ? " border-destructive" : ""}`}
               />
-              {errors?.user?.email?.message && (
-                <p className="text-sm text-destructive">{errors.user.email.message}</p>
-              )}
             </div>
 
             {/* Password Field */}
@@ -93,11 +90,8 @@ export const SignInComponent = (props: {
                 placeholder="••••••••"
                 autoComplete="off"
                 {...register("password")}
-                className={`h-9 text-[13px] rounded-lg${errors?.user?.password?.message ? " border-destructive" : ""}`}
+                className={`h-9 text-[13px] rounded-lg${errors?.root?.message ? " border-destructive" : ""}`}
               />
-              {errors?.user?.password?.message && (
-                <p className="text-sm text-destructive">{errors.user.password.message}</p>
-              )}
             </div>
 
             {/* Submit Button */}

@@ -109,7 +109,7 @@ export function QuickBookSheet({ open, onOpenChange, onBooked }: QuickBookSheetP
       id: true,
       name: true,
       price: true,
-      duration: true,
+      durationMinutes: true,
     },
     pause: !businessId || !open,
   });
@@ -132,8 +132,8 @@ export function QuickBookSheet({ open, onOpenChange, onBooked }: QuickBookSheetP
 
     const startDateTime = new Date(`${startDate}T${startTime}`);
     const selectedService = services?.find((s) => s.id === selectedServiceId);
-    const durationMs = selectedService?.duration
-      ? selectedService.duration * 60 * 1000
+    const durationMs = selectedService?.durationMinutes
+      ? selectedService.durationMinutes * 60 * 1000
       : 3600000;
     const endDateTime = new Date(startDateTime.getTime() + durationMs);
 

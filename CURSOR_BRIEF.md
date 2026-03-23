@@ -43,7 +43,14 @@ Use this document when working on the Strata codebase. It defines scope, priorit
 
 ---
 
-## 5. Business-type-specific behavior
+## 5. Product positioning (read first)
+
+- **North star**: Strata is a **premium CRM for detailing, ceramic coating, tint, and PPF shops**—speed, UX, and quote-to-deposit-to-booking over generic “shop management” bloat. Competitive reference: simpler/faster/cleaner than overbuilt tools (e.g. OrbisX-class products).
+- Full ICP, principles, and non-goals: **`PRODUCT.md`** in the repo root. Apply that lens to UI copy, onboarding, and feature scope—not generic automotive CRM language.
+
+---
+
+## 6. Business-type-specific behavior
 
 - Support **business types** (e.g. tire shop, detail shop, body shop) and branch UI and logic where needed.
 - **Tire shop**: e.g. tire-specific services, inventory (tires), and any tire-specific flows.
@@ -53,7 +60,7 @@ Use this document when working on the Strata codebase. It defines scope, priorit
 
 ---
 
-## 6. Email system
+## 7. Email system
 
 - Make **all emails** (client-facing and business-facing) **customizable via templates** (e.g. stored in DB or files, with variables like `{{clientName}}`, `{{appointmentDate}}`).
 - Implement **weekly summary emails** for business users (e.g. appointments, revenue, key metrics).
@@ -61,7 +68,7 @@ Use this document when working on the Strata codebase. It defines scope, priorit
 
 ---
 
-## 7. Testing
+## 8. Testing
 
 - **Fully test**:
   - **Calendar**: views, navigation, time zones, and conflict checks.
@@ -73,14 +80,14 @@ Use this document when working on the Strata codebase. It defines scope, priorit
 
 ---
 
-## 8. Dashboard & analytics
+## 9. Dashboard & analytics
 
 - **Optimize dashboard & analytics**: queries, caching, and indexing so dashboard and analytics endpoints are fast and accurate.
 - Ensure metrics (revenue, appointments, capacity, etc.) are tenant-scoped and consistent with the rest of the app.
 
 ---
 
-## 9. Build & deploy
+## 10. Build & deploy
 
 - **Frontend**: Production build must succeed (`yarn build` or equivalent). Deployable via **GitHub → Vercel or Netlify** (or similar).
 - **Backend**: Node server (Express, Fastify, or similar) with a production-ready start script. Deployable on **Render, Vercel (serverless), Heroku**, or another Node host.
@@ -89,7 +96,7 @@ Use this document when working on the Strata codebase. It defines scope, priorit
 
 ---
 
-## 10. Delivering updates
+## 11. Delivering updates
 
 - Push changes to GitHub (branch or main as agreed).
 - Ensure the repo has a **fully working version**: frontend builds, backend runs, migrations and env are documented, and deployment steps are clear (e.g. in README or DEPLOY.md).
@@ -101,6 +108,7 @@ Use this document when working on the Strata codebase. It defines scope, priorit
 
 | Area            | Location / notes                                      |
 |-----------------|--------------------------------------------------------|
+| Product / ICP   | `PRODUCT.md`                                           |
 | Frontend API    | `web/api.ts`, `web/hooks/useApi.ts`                    |
 | Server stubs    | `server/api/` (appointments, invoices, payments)      |
 | Env template    | `.env.example`                                         |

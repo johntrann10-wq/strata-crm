@@ -3,7 +3,6 @@
  * Run after optionalAuth. If no businessId, allow (onboarding). If business exists and subscription invalid, 402.
  */
 import { Request, Response, NextFunction } from "express";
-import { Request, Response, NextFunction } from "express";
 
 /**
  * Subscription middleware is currently a no-op so the app is fully usable

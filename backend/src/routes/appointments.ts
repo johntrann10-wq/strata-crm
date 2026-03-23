@@ -97,6 +97,7 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
       updatedAt: appointments.updatedAt,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
+      vehicleYear: vehicles.year,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
       staffFirstName: staff.firstName,
@@ -131,7 +132,10 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     client: row.clientFirstName != null ? { firstName: row.clientFirstName, lastName: row.clientLastName } : null,
-    vehicle: row.vehicleMake != null ? { make: row.vehicleMake, model: row.vehicleModel } : null,
+    vehicle:
+      row.vehicleMake != null
+        ? { year: row.vehicleYear ?? null, make: row.vehicleMake, model: row.vehicleModel }
+        : null,
     assignedStaff: row.staffFirstName != null ? { firstName: row.staffFirstName, lastName: row.staffLastName } : null,
   }));
   res.json({ records });

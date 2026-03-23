@@ -24,10 +24,7 @@ function parseFilter(req: Request): unknown {
 
 appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const filter = parseFilter(req) as
-    | { appointmentId?: { equals?: string } }
-    | Record<string, unknown>
-    | undefined;
+  const filter = parseFilter(req) as { appointmentId?: { equals?: string } } | undefined;
 
   const appointmentId = filter?.appointmentId?.equals;
   const conditions = [eq(appointments.businessId, bid)];

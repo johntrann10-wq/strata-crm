@@ -5,51 +5,45 @@ import {
   Calendar,
   FileText,
   Users,
-  Package,
-  Wrench,
-  BarChart2,
+  Layers,
+  CreditCard,
   ArrowRight,
   Sparkles,
 } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import { useEffect } from "react";
 
+/** Focused capabilities — fewer modules, each aligned with premium detailing workflows (see PRODUCT.md). */
 const features = [
   {
-    icon: Calendar,
-    title: "Smart Scheduling",
+    icon: FileText,
+    title: "Quote → deposit → booking",
     description:
-      "Book appointments, assign staff, and track your full day with a real-time calendar.",
+      "Move leads from estimate to paid deposit to scheduled job without friction—built for high-ticket, reputation-sensitive sales.",
   },
   {
-    icon: FileText,
-    title: "Invoicing & Payments",
+    icon: Calendar,
+    title: "Scheduling that fits the bay",
     description:
-      "Create invoices, record payments, and track outstanding balances in seconds.",
+      "Appointment-based calendar that matches how real detail, tint, and PPF shops run—not generic block booking.",
   },
   {
     icon: Users,
-    title: "Client & Vehicle CRM",
+    title: "Client & vehicle CRM",
     description:
-      "Store full client history, vehicle details, and service records all in one place.",
+      "Full history, vehicles, and service notes—so every touchpoint feels premium, not transactional.",
   },
   {
-    icon: Package,
-    title: "Inventory Tracking",
+    icon: CreditCard,
+    title: "Invoices & payments",
     description:
-      "Know exactly what's in stock and get alerts before you run out.",
+      "Get paid fast with flows that look as professional as the work you deliver.",
   },
   {
-    icon: Wrench,
-    title: "Service Catalog",
+    icon: Layers,
+    title: "Services & packages",
     description:
-      "Build your menu of services with pricing, duration, and category.",
-  },
-  {
-    icon: BarChart2,
-    title: "Business Dashboard",
-    description:
-      "See today's schedule, revenue, and activity at a glance.",
+      "Coatings, correction, tint, PPF, add-ons—priced, repeatable, and easy to quote.",
   },
 ];
 
@@ -93,20 +87,20 @@ export default function LandingPage() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-orange-300 bg-orange-100 text-orange-700 text-sm font-medium">
             <Sparkles className="w-4 h-4" />
-            Built for automotive professionals
+            CRM for premium detailing, tint &amp; PPF
           </div>
 
           {/* Headline */}
           <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-tight text-gray-900">
-            Run your shop.
+            Close faster.
             <br />
-            <span className="text-orange-500">Not your spreadsheets.</span>
+            <span className="text-orange-500">Admin less.</span>
           </h1>
 
           {/* Subheadline */}
           <p className="text-lg sm:text-xl text-gray-600 max-w-2xl leading-relaxed">
-            Strata is the all-in-one shop management platform built for auto detailers, tinters,
-            wrappers, and mechanics.
+            Strata is built for owner-operated detail shops—ceramic coating, paint correction, tint, and PPF.
+            Mobile-first, fast, and designed for high-ticket work—not generic “shop management” bloat.
           </p>
 
           {/* Pricing highlight */}
@@ -149,11 +143,11 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Everything your shop needs
+              Fewer modules. Each one excellent.
             </h2>
             <p className="text-gray-500 text-lg max-w-xl mx-auto">
-              Powerful tools designed around how automotive shops actually work — not generic
-              business software.
+              Speed, premium UX, and a frictionless quote-to-deposit-to-booking flow—so you spend
+              less time in software and more time closing premium work.
             </p>
           </div>
 
@@ -180,19 +174,18 @@ export default function LandingPage() {
       <section id="industries" className="py-14 px-6 bg-orange-50 border-y border-orange-100">
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-gray-700 text-lg font-medium leading-relaxed">
-            Trusted by auto shops, detailers, tinters, wrap studios, and mechanics across the
-            country.
+            Built for premium detail studios, ceramic coating, paint correction, tint, PPF, and
+            wrap shops that care how every client touchpoint feels.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3 text-sm text-gray-500">
             {[
-              "Auto Detailers",
-              "Window Tinters",
+              "Premium Detail",
+              "Ceramic Coating",
+              "Paint Correction",
+              "Window Tint",
+              "PPF",
               "Wrap Studios",
-              "PPF Installers",
-              "Tire Shops",
-              "Mechanics",
-              "Body Shops",
-              "Mobile Services",
+              "Mobile Detailing",
             ].map((type) => (
               <span
                 key={type}
@@ -210,10 +203,11 @@ export default function LandingPage() {
         <div className="mx-auto max-w-3xl">
           <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 p-10 sm:p-16 flex flex-col items-center text-center gap-6 shadow-xl shadow-orange-200">
             <h2 className="text-3xl sm:text-4xl font-bold text-white">
-              Ready to grow your shop?
+              Ready for a tighter, more premium operation?
             </h2>
             <p className="text-orange-100 text-lg max-w-md">
-              Join automotive professionals already using Strata to save time and increase revenue.
+              Less admin, cleaner workflows, and a client experience that matches a high-ticket
+              brand.
             </p>
             <Link
               to="/sign-up"
