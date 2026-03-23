@@ -105,26 +105,28 @@ export default function LandingPage() {
             </p>
           </div>
 
-          {/* CTAs */}
+          {/* CTAs — Link + buttonVariants (Button import removed; avoids undefined Button at runtime) */}
           <div className="flex flex-col sm:flex-row gap-4 mt-2">
-            <Button
-              asChild
-              size="lg"
-              className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 text-base font-semibold shadow-md shadow-orange-200"
+            <Link
+              to="/sign-up"
+              className={cn(
+                buttonVariants({ size: "lg" }),
+                "bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 text-base font-semibold shadow-md shadow-orange-200",
+                "[&_svg]:pointer-events-auto"
+              )}
             >
-              <Link to="/sign-up">
-                Get Started Free
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Link>
-            </Button>
-            <Button
-              asChild
-              size="lg"
-              variant="outline"
-              className="border-gray-300 text-gray-700 hover:bg-gray-50 px-8 py-3 text-base font-semibold"
+              Get Started Free
+              <ArrowRight className="ml-2 w-4 h-4" />
+            </Link>
+            <Link
+              to="/sign-in"
+              className={cn(
+                buttonVariants({ size: "lg", variant: "outline" }),
+                "border-gray-300 text-gray-700 hover:bg-gray-50 px-8 py-3 text-base font-semibold"
+              )}
             >
-              <Link to="/sign-in">Sign In</Link>
-            </Button>
+              Sign In
+            </Link>
           </div>
         </div>
       </section>
