@@ -36,16 +36,17 @@ type FindManyOpts = {
   /** Appointments: filter by client. */
   clientId?: string;
   pause?: boolean;
+  live?: boolean;
 };
 
-type FindOneOpts = { select?: Record<string, unknown>; pause?: boolean };
+type FindOneOpts = { select?: Record<string, unknown>; pause?: boolean; live?: boolean };
 
 export function useFindOne(
-  model: { findOne: (id: string, opts?: FindOneOpts) => Promise<unknown> },
+  model: { findOne: (id: string, opts?: FindOneOpts) => Promise<any> },
   id: string | null | undefined,
   opts?: FindOneOpts
 ) {
-  const [data, setData] = useState<unknown>(undefined);
+  const [data, setData] = useState<any>(undefined);
   const [fetching, setFetching] = useState(!!id);
   const [error, setError] = useState<Error | null>(null);
 
@@ -85,10 +86,10 @@ export function useFindOne(
 }
 
 export function useFindMany(
-  model: { findMany: (opts?: FindManyOpts) => Promise<unknown[]> },
+  model: { findMany: (opts?: FindManyOpts) => Promise<any[]> },
   opts?: FindManyOpts
 ) {
-  const [data, setData] = useState<unknown[] | undefined>(undefined);
+  const [data, setData] = useState<any[] | undefined>(undefined);
   const [fetching, setFetching] = useState(!opts?.pause);
   const [error, setError] = useState<Error | null>(null);
 
@@ -132,10 +133,10 @@ export function useFindMany(
 }
 
 export function useFindFirst(
-  model: { findFirst: (opts?: FindManyOpts) => Promise<unknown> },
+  model: { findFirst: (opts?: FindManyOpts) => Promise<any> },
   opts?: FindManyOpts
 ) {
-  const [data, setData] = useState<unknown>(undefined);
+  const [data, setData] = useState<any>(undefined);
   const [fetching, setFetching] = useState(!opts?.pause);
   const [error, setError] = useState<Error | null>(null);
 
@@ -183,7 +184,7 @@ export function useFindFirst(
   return [{ data, fetching, error }, refetch] as const;
 }
 
-type ActionFn = (params?: Record<string, unknown>) => Promise<unknown>;
+type ActionFn = (...args: any[]) => Promise<any>;
 
 export function useAction(actionFn: ActionFn) {
   const [fetching, setFetching] = useState(false);
@@ -225,7 +226,7 @@ type ActionFormOptions = {
 };
 
 export function useActionForm(
-  actionFn: (params: Record<string, unknown>) => Promise<{ data?: unknown; error?: { message?: string } }>,
+  actionFn: (params: Record<string, unknown>) => Promise<any>,
   options?: ActionFormOptions
 ) {
   const [values, setValues] = useState<Record<string, unknown>>(options?.defaultValues ?? {});

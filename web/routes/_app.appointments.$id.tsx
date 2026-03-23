@@ -40,7 +40,6 @@ import {
   VehicleCard,
   InvoiceCard,
   FinancialSummaryCard,
-  ReviewRequestCard,
 } from "../components/AppointmentDetailCards";
 import {
   ArrowLeft,
@@ -949,14 +948,6 @@ export default function AppointmentDetail() {
                 depositPaid={appointment.depositPaid}
               />
 
-              {/* Review Request Card */}
-              <ReviewRequestCard
-                reviewRequestSent={appointment.reviewRequestSent}
-                appointmentStatus={appointment.status}
-                resendingReview={false}
-                resendEnabled={false}
-                onResendReview={() => toast.error("Resending review requests is not available yet.")}
-              />
             </div>
           </div>
       </div>

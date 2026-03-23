@@ -100,7 +100,7 @@ export default function CalendarPage() {
       toast.error("Could not reschedule: " + result.error.message);
     } else {
       toast.success("Appointment rescheduled");
-      void refetchAppointments({ requestPolicy: "network-only" });
+      void refetchAppointments();
     }
   }
 

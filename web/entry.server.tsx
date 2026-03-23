@@ -3,6 +3,7 @@
  * return a 500 response and are logged instead of crashing the serverless function.
  */
 import { handleRequest as vercelHandleRequest } from "@vercel/react-router/entry.server";
+import type { EntryContext } from "react-router";
 
 export const streamTimeout = 5_000;
 
@@ -10,9 +11,9 @@ export default async function handleRequest(
   request: Request,
   responseStatusCode: number,
   responseHeaders: Headers,
-  routerContext: unknown,
-  loadContext?: unknown,
-  options?: unknown
+  routerContext: EntryContext,
+  loadContext?: any,
+  options?: any
 ): Promise<Response> {
   try {
     return await vercelHandleRequest(

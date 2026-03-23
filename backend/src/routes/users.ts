@@ -47,7 +47,7 @@ usersRouter.get("/:id", requireAuth, async (req: Request, res: Response) => {
     .where(eq(users.id, id))
     .limit(1);
   if (!user) throw new NotFoundError("User not found.");
-  res.json(user);
+  res.json({ ...user, googleImageUrl: null, profilePicture: null });
 });
 
 const updateSchema = z.object({ firstName: z.string().optional(), lastName: z.string().optional() });
@@ -65,5 +65,5 @@ usersRouter.patch("/:id/update", requireAuth, async (req: Request, res: Response
     .where(eq(users.id, req.userId!))
     .returning({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName });
   if (!updated) throw new NotFoundError("User not found.");
-  res.json(updated);
+  res.json({ ...updated, googleImageUrl: null, profilePicture: null });
 });

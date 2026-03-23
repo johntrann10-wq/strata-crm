@@ -441,7 +441,7 @@ export default function QuoteDetailPage() {
                       </td>
                     </tr>
                   ) : (
-                    quote.lineItems.edges.map(({ node }) =>
+                    quote.lineItems.edges.map(({ node }: any) =>
                       editingQliId === node.id ? (
                         <tr key={node.id} className="border-b last:border-0">
                           <td className="px-2 py-1.5">

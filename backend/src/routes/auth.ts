@@ -18,6 +18,34 @@ const signUpSchema = z.object({
   lastName: z.string().optional(),
 });
 export const authRouter = Router();
+
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function serializeAuthUser(user: {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+}) {
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    googleImageUrl: null,
+    profilePicture: null,
+  };
+}
+
+export function resolveSafeRedirectPath(input: unknown): string {
+  if (typeof input !== "string") return "/signed-in";
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return "/signed-in";
+  return trimmed || "/signed-in";
+}
+
 function requireJwtSecret() {
   const secret = process.env.JWT_SECRET;
   if (secret && secret.trim() !== "") return secret;
@@ -61,10 +89,7 @@ authRouter.get(
     const token = createToken(user.id);
     res.json({
       data: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        ...serializeAuthUser(user),
         token,
       },
     });
@@ -75,7 +100,8 @@ authRouter.post(
   wrapAsync(async (req: Request, res: Response, _next: NextFunction) => {
     const parsed = signInSchema.safeParse(req.body);
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
-    const { email, password } = parsed.data;
+    const email = normalizeEmail(parsed.data.email);
+    const { password } = parsed.data;
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     if (!user || !user.passwordHash) throw new UnauthorizedError("Invalid email or password.");
     const ok = await bcrypt.compare(password, user.passwordHash);
@@ -84,10 +110,7 @@ authRouter.post(
     logger.info("User signed in", { userId: user.id, email: user.email });
     res.json({
       data: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        ...serializeAuthUser(user),
         token,
       },
     });
@@ -98,7 +121,8 @@ authRouter.post(
   wrapAsync(async (req: Request, res: Response, _next: NextFunction) => {
     const parsed = signUpSchema.safeParse(req.body);
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
-    const { email, password, firstName, lastName } = parsed.data;
+    const email = normalizeEmail(parsed.data.email);
+    const { password, firstName, lastName } = parsed.data;
     const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     if (existing) throw new BadRequestError("An account with this email already exists.");
     const passwordHash = await bcrypt.hash(password, 10);
@@ -117,7 +141,7 @@ authRouter.post(
     logger.info("User signed up", { userId: user.id, email: user.email });
     res.status(201).json({
       data: {
-        ...user,
+        ...serializeAuthUser(user),
         token,
       },
     });
@@ -136,12 +160,10 @@ authRouter.get(
     if (!googleClient) {
       throw new BadRequestError("Google sign-in is not configured.");
     }
-    const frontendUrl = process.env.FRONTEND_URL;
-    const redirectPath = frontendUrl ?? "/";
+    const redirectPath = resolveSafeRedirectPath(req.query.redirectPath);
     const url = googleClient.generateAuthUrl({
       access_type: "offline",
       scope: ["openid", "email", "profile"],
-      // We can pass state if we want to redirect to a specific page later.
       state: JSON.stringify({ redirectPath }),
     });
     res.redirect(url);
@@ -170,7 +192,7 @@ authRouter.get(
     if (!payload?.email) {
       throw new BadRequestError("Google account did not return an email.");
     }
-    const email = payload.email;
+    const email = normalizeEmail(payload.email);
     const firstName = payload.given_name ?? null;
     const lastName = payload.family_name ?? null;
     // Find or create user
@@ -198,9 +220,9 @@ authRouter.get(
         const raw = (req.query.state as string | undefined) ?? "";
         if (!raw) return "/";
         const parsed = JSON.parse(raw) as { redirectPath?: string };
-        return parsed.redirectPath ?? "/";
+        return resolveSafeRedirectPath(parsed.redirectPath);
       } catch {
-        return "/";
+        return "/signed-in";
       }
     })();
     const frontendUrl = process.env.FRONTEND_URL ?? "";

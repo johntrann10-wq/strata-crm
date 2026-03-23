@@ -48,8 +48,9 @@ export default function NewClientPage() {
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (data?.id) {
-      navigate(`/clients/${data.id}`);
+    const createdClientId = (data as any)?.id;
+    if (createdClientId) {
+      navigate(`/clients/${createdClientId}`);
     }
   }, [data, navigate]);
 
@@ -80,7 +81,7 @@ export default function NewClientPage() {
     }
     setLocalErrors({});
 
-    if (!business?.id) {
+    if (!(business as any)?.id) {
       setLocalErrors({ general: "Business profile not loaded. Please refresh and try again." });
       return;
     }

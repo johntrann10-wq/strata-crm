@@ -9,6 +9,7 @@ const path = require("path");
 
 const backendEnvPath = path.join(__dirname, "backend", ".env");
 const backendEnvExample = path.join(__dirname, "backend", ".env.example");
+const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
 const defaultEnv = `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/strata
 JWT_SECRET=dev-jwt-secret-change-in-production
 SESSION_SECRET=dev-secret-change-in-production
@@ -38,9 +39,9 @@ async function main() {
   ensureBackendEnv();
   const backendDir = path.join(__dirname, "backend");
   // Backend with embedded Postgres (no Docker needed)
-  const backend = spawn("yarn", ["dev:with-db"], { cwd: backendDir, stdio: "inherit", shell: true });
+  const backend = spawn(npmCmd, ["run", "dev:with-db"], { cwd: backendDir, stdio: "inherit", shell: true });
   await new Promise((r) => setTimeout(r, 5000));
-  const frontend = spawn("yarn", ["dev"], { cwd: __dirname, stdio: "inherit", shell: true });
+  const frontend = spawn(npmCmd, ["run", "dev"], { cwd: __dirname, stdio: "inherit", shell: true });
   console.log("\nBackend: http://localhost:3001  Frontend: http://localhost:5173");
   console.log("Open http://localhost:5173 in your browser. Press Ctrl+C to stop.\n");
   await Promise.race([

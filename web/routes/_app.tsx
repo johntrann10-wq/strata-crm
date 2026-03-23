@@ -281,8 +281,8 @@ function AppLayoutInner({
               <SecondaryNavigation
                 icon={
                   <>
-                    <UserIcon user={user} />
-                    <span className="text-sm font-medium">{user.firstName ?? user.email}</span>
+                    <UserIcon user={user as any} />
+                    <span className="text-sm font-medium">{(user as any).firstName ?? (user as any).email}</span>
                   </>
                 }
               />
@@ -306,7 +306,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const rootOutletContext = useOutletContext<RootOutletContext>();
   const navigate = useNavigate();
   const location = useLocation();
-  const safeLoaderData = (loaderData ?? {}) as Partial<Route.LoaderData>;
+  const safeLoaderData = (loaderData ?? {}) as { signInPath?: string };
   const signInPath = safeLoaderData.signInPath ?? "/sign-in";
   // Predictable auth persistence: always revalidate via /api/auth/me on boot.
   const [clientUserId, setClientUserId] = useState<string | null>(null);

@@ -139,9 +139,7 @@ const ChangePasswordModal = (props: { open: boolean; onClose: () => void }) => {
             <div className="grid w-full max-w-sm items-center gap-3">
               <Label>New Password</Label>
               <Input type="password" autoComplete="off" {...register("newPassword")} />
-              {errors?.user?.password?.message && (
-                <p className="text-red-500 text-sm mt-1">New password {errors.user.password.message}</p>
-              )}
+              {errors?.root?.message && <p className="text-red-500 text-sm mt-1">{errors.root.message}</p>}
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-4">

@@ -2,8 +2,8 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { locations, appointments } from "../db/schema.js";
-import { eq, and, asc, sql } from "drizzle-orm";
-import { NotFoundError, ForbiddenError, BadRequestError, ConflictError } from "../lib/errors.js";
+import { eq, and, asc } from "drizzle-orm";
+import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 
@@ -99,14 +99,12 @@ locationsRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, 
     .limit(1);
   if (!existing) throw new NotFoundError("Location not found.");
 
-  const [usage] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(appointments)
-    .where(and(eq(appointments.businessId, bid), eq(appointments.locationId, id)));
-  if ((usage?.count ?? 0) > 0) {
-    throw new ConflictError("This location is assigned to appointments. Reassign or remove those appointments first.");
-  }
-
-  await db.delete(locations).where(and(eq(locations.id, id), eq(locations.businessId, bid)));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(appointments)
+      .set({ locationId: null, updatedAt: new Date() })
+      .where(and(eq(appointments.businessId, bid), eq(appointments.locationId, id)));
+    await tx.delete(locations).where(and(eq(locations.id, id), eq(locations.businessId, bid)));
+  });
   res.json(existing);
 });

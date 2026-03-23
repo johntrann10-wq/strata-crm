@@ -22,7 +22,38 @@ const createSchema = z.object({
   zip: z.string().optional(),
   staffCount: z.number().int().min(0).max(500).optional(),
   operatingHours: z.string().max(1000).optional(),
+  timezone: z.string().optional(),
+  currency: z.string().length(3).optional(),
+  defaultTaxRate: z.coerce.number().min(0).max(100).optional(),
+  appointmentBufferMinutes: z.number().int().min(0).max(1440).optional(),
 });
+
+const updateSchema = createSchema
+  .partial()
+  .extend({
+    website: z.string().nullable().optional(),
+    bio: z.string().nullable().optional(),
+    instagram: z.string().nullable().optional(),
+    facebook: z.string().nullable().optional(),
+    googleReviewLink: z.string().nullable().optional(),
+    yelpReviewLink: z.string().nullable().optional(),
+    facebookReviewLink: z.string().nullable().optional(),
+  })
+  .strict();
+
+function serializeBusiness(record: typeof businesses.$inferSelect) {
+  return {
+    ...record,
+    website: null,
+    bio: null,
+    instagram: null,
+    facebook: null,
+    googleReviewLink: null,
+    yelpReviewLink: null,
+    facebookReviewLink: null,
+    logoUrl: null,
+  };
+}
 
 businessesRouter.get("/", requireAuth, async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
@@ -41,7 +72,7 @@ businessesRouter.get("/", requireAuth, async (req: Request, res: Response) => {
     res.json({ records: [] });
     return;
   }
-  res.json({ records: [business] });
+  res.json({ records: [serializeBusiness(business)] });
 });
 
 businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
@@ -62,10 +93,63 @@ businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
       zip: parsed.data.zip ?? null,
       staffCount: parsed.data.staffCount ?? null,
       operatingHours: parsed.data.operatingHours ?? null,
+      timezone: parsed.data.timezone ?? "America/Los_Angeles",
+      currency: parsed.data.currency ?? "USD",
+      defaultTaxRate: parsed.data.defaultTaxRate != null ? String(parsed.data.defaultTaxRate) : "0",
+      appointmentBufferMinutes: parsed.data.appointmentBufferMinutes ?? 15,
     })
     .returning();
   if (!created) throw new BadRequestError("Failed to create business.");
-  res.status(201).json(created);
+  res.status(201).json(serializeBusiness(created));
+});
+
+businessesRouter.get("/:id", requireAuth, async (req: Request, res: Response) => {
+  if (!req.userId) throw new ForbiddenError("Not signed in.");
+  const [business] = await db
+    .select()
+    .from(businesses)
+    .where(and(eq(businesses.id, req.params.id), eq(businesses.ownerId, req.userId)))
+    .limit(1);
+  if (!business) throw new NotFoundError("Business not found.");
+  res.json(serializeBusiness(business));
+});
+
+businessesRouter.patch("/:id", requireAuth, async (req: Request, res: Response) => {
+  if (!req.userId) throw new ForbiddenError("Not signed in.");
+  const parsed = updateSchema.safeParse(req.body);
+  if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
+  const [existing] = await db
+    .select()
+    .from(businesses)
+    .where(and(eq(businesses.id, req.params.id), eq(businesses.ownerId, req.userId)))
+    .limit(1);
+  if (!existing) throw new NotFoundError("Business not found.");
+
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (parsed.data.name !== undefined) updates.name = parsed.data.name;
+  if (parsed.data.type !== undefined) updates.type = parsed.data.type;
+  if (parsed.data.email !== undefined) updates.email = parsed.data.email ?? null;
+  if (parsed.data.phone !== undefined) updates.phone = parsed.data.phone ?? null;
+  if (parsed.data.address !== undefined) updates.address = parsed.data.address ?? null;
+  if (parsed.data.city !== undefined) updates.city = parsed.data.city ?? null;
+  if (parsed.data.state !== undefined) updates.state = parsed.data.state ?? null;
+  if (parsed.data.zip !== undefined) updates.zip = parsed.data.zip ?? null;
+  if (parsed.data.staffCount !== undefined) updates.staffCount = parsed.data.staffCount ?? null;
+  if (parsed.data.operatingHours !== undefined) updates.operatingHours = parsed.data.operatingHours ?? null;
+  if (parsed.data.timezone !== undefined) updates.timezone = parsed.data.timezone ?? null;
+  if (parsed.data.currency !== undefined) updates.currency = parsed.data.currency?.toUpperCase() ?? "USD";
+  if (parsed.data.defaultTaxRate !== undefined) updates.defaultTaxRate = String(parsed.data.defaultTaxRate ?? 0);
+  if (parsed.data.appointmentBufferMinutes !== undefined) {
+    updates.appointmentBufferMinutes = parsed.data.appointmentBufferMinutes ?? 15;
+  }
+
+  const [updated] = await db
+    .update(businesses)
+    .set(updates)
+    .where(eq(businesses.id, req.params.id))
+    .returning();
+  if (!updated) throw new NotFoundError("Business not found.");
+  res.json(serializeBusiness(updated));
 });
 
 businessesRouter.post("/:id/completeOnboarding", requireAuth, async (req: Request, res: Response) => {
@@ -77,5 +161,6 @@ businessesRouter.post("/:id/completeOnboarding", requireAuth, async (req: Reques
     .set({ onboardingComplete: true, updatedAt: new Date() })
     .where(eq(businesses.id, id))
     .returning();
-  res.json(updated);
+  if (!updated) throw new NotFoundError("Business not found.");
+  res.json(serializeBusiness(updated));
 });

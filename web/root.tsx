@@ -39,7 +39,7 @@ function ClientToaster() {
   return mounted ? <Toaster richColors /> : null;
 }
 
-const isProduction = process.env.NODE_ENV === "production";
+const isProduction = import.meta.env.PROD;
 
 export const links = () => [];
 
