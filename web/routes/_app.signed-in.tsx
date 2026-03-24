@@ -63,12 +63,13 @@ type QuoteRecord = {
 
 type JobRecord = {
   id: string;
+  appointmentId?: string | null;
   jobNumber?: string | null;
   title?: string | null;
   status: string;
   scheduledStart?: string | null;
   totalPrice?: number | string | null;
-  client?: { firstName?: string | null; lastName?: string | null } | null;
+  client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
   vehicle?: { make?: string | null; model?: string | null; year?: number | null } | null;
   assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
 };
@@ -165,6 +166,16 @@ export default function SignedIn() {
     locationId: currentLocationId ?? undefined,
     pause: !businessId,
   } as any);
+  const [
+    { data: readyToInvoiceJobsRaw, fetching: fetchingReadyToInvoiceJobs, error: readyToInvoiceJobsError },
+    refetchReadyToInvoiceJobs,
+  ] = useFindMany(api.job, {
+    first: 10,
+    status: "completed",
+    unbilled: true,
+    locationId: currentLocationId ?? undefined,
+    pause: !businessId,
+  } as any);
   const [{ data: staffRaw, fetching: fetchingStaff, error: staffError }, refetchStaff] = useFindMany(api.staff, {
     first: 100,
     pause: !businessId,
@@ -185,6 +196,7 @@ export default function SignedIn() {
   const pendingQuotes = (quotesRaw ?? []) as QuoteRecord[];
   const acceptedQuotes = (acceptedQuotesRaw ?? []) as QuoteRecord[];
   const jobs = (jobsRaw ?? []) as JobRecord[];
+  const readyToInvoiceJobs = (readyToInvoiceJobsRaw ?? []) as JobRecord[];
   const staffRecords = (staffRaw ?? []) as StaffRecord[];
   const locationRecords = (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>;
   const activeLocationName = useMemo(
@@ -425,11 +437,19 @@ export default function SignedIn() {
     setRefreshing(true);
     setFilterNow(new Date());
     try {
-      await Promise.all([refetchAppts(), refetchInvoices(), refetchQuotes(), refetchAcceptedQuotes(), refetchJobs(), refetchStaff()]);
+      await Promise.all([
+        refetchAppts(),
+        refetchInvoices(),
+        refetchQuotes(),
+        refetchAcceptedQuotes(),
+        refetchJobs(),
+        refetchReadyToInvoiceJobs(),
+        refetchStaff(),
+      ]);
     } finally {
       setRefreshing(false);
     }
-  }, [refetchAppts, refetchInvoices, refetchQuotes, refetchAcceptedQuotes, refetchJobs, refetchStaff]);
+  }, [refetchAppts, refetchInvoices, refetchQuotes, refetchAcceptedQuotes, refetchJobs, refetchReadyToInvoiceJobs, refetchStaff]);
 
   const handleSendQuote = useCallback(
     async (event: React.SyntheticEvent, quoteId: string) => {
@@ -557,9 +577,18 @@ export default function SignedIn() {
   const loadingQuotes = fetchingQuotes && quotesRaw === undefined;
   const loadingAcceptedQuotes = fetchingAcceptedQuotes && acceptedQuotesRaw === undefined;
   const loadingJobs = fetchingJobs && jobsRaw === undefined;
+  const loadingReadyToInvoiceJobs = fetchingReadyToInvoiceJobs && readyToInvoiceJobsRaw === undefined;
   const loadingStaff = fetchingStaff && staffRaw === undefined;
-  const anyLoading = loadingAppts || loadingInvoices || loadingQuotes || loadingAcceptedQuotes || loadingJobs || loadingStaff;
-  const anyError = jobsError ?? apptsError ?? invoicesError ?? quotesError ?? acceptedQuotesError ?? staffError;
+  const anyLoading =
+    loadingAppts ||
+    loadingInvoices ||
+    loadingQuotes ||
+    loadingAcceptedQuotes ||
+    loadingJobs ||
+    loadingReadyToInvoiceJobs ||
+    loadingStaff;
+  const anyError =
+    jobsError ?? readyToInvoiceJobsError ?? apptsError ?? invoicesError ?? quotesError ?? acceptedQuotesError ?? staffError;
 
   if (!businessId) {
     return <Navigate to="/onboarding" replace />;
@@ -1131,6 +1160,63 @@ export default function SignedIn() {
                     ) : null}
                   </div>
                   <span className="font-semibold tabular-nums">{formatCurrency(quote.total)}</span>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </DashboardSection>
+
+        <DashboardSection
+          title="Ready to invoice"
+          seeAllHref="/jobs"
+          seeAllLabel="Jobs"
+          error={readyToInvoiceJobsError}
+          isLoading={loadingReadyToInvoiceJobs}
+          isEmpty={!loadingReadyToInvoiceJobs && !readyToInvoiceJobsError && readyToInvoiceJobs.length === 0}
+          emptyMessage="No completed work is waiting for invoicing."
+          emptyCta={{ href: "/jobs", label: "Review jobs" }}
+          skeletonRows={2}
+        >
+          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
+            {readyToInvoiceJobs.map((job) => (
+              <li key={job.id}>
+                <Link
+                  to={`/jobs/${job.id}`}
+                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
+                >
+                  <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">
+                      {job.client
+                        ? `${job.client.firstName ?? ""} ${job.client.lastName ?? ""}`.trim() || "Completed job"
+                        : job.title ?? "Completed job"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {job.vehicle
+                        ? [job.vehicle.year, job.vehicle.make, job.vehicle.model].filter(Boolean).join(" ")
+                        : "No vehicle on file"}
+                    </p>
+                  </div>
+                  <div
+                    className="flex items-center gap-2"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                  >
+                    {job.client?.id ? (
+                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
+                        <Link
+                          to={`/invoices/new?clientId=${job.client.id}&appointmentId=${job.appointmentId ?? job.id}`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          Invoice
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                  <span className="font-semibold tabular-nums">{formatCurrency(job.totalPrice)}</span>
                   <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
                 </Link>
               </li>

@@ -194,6 +194,8 @@ function resource(path: string) {
       pending?: boolean;
       /** Invoices: sent + partial only (dashboard unpaid). */
       unpaid?: boolean;
+      /** Jobs: completed work without an invoice. */
+      unbilled?: boolean;
     }) => {
       const query: Record<string, unknown> = {};
       if (opts?.filter !== undefined) query.filter = opts.filter;
@@ -205,6 +207,7 @@ function resource(path: string) {
       if (opts?.lost === true) query.lost = "1";
       if (opts?.pending === true) query.pending = "1";
       if (opts?.unpaid === true) query.unpaid = "1";
+      if (opts?.unbilled === true) query.unbilled = "1";
       if (opts?.startGte !== undefined && opts.startGte !== "") query.startGte = opts.startGte;
       if (opts?.startLte !== undefined && opts.startLte !== "") query.startLte = opts.startLte;
       if (opts?.clientId !== undefined && opts.clientId !== "") query.clientId = opts.clientId;

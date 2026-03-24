@@ -30,6 +30,8 @@ type FindManyOpts = {
   pending?: boolean;
   /** Invoices: sent + partial (unpaid balance). */
   unpaid?: boolean;
+  /** Jobs: completed work without an invoice. */
+  unbilled?: boolean;
   /** Appointments: ISO bounds on `startTime`. */
   startGte?: string;
   startLte?: string;
@@ -125,6 +127,7 @@ export function useFindMany(
         opts?.lost ? "1" : "0",
         opts?.pending ? "1" : "0",
         opts?.unpaid ? "1" : "0",
+        opts?.unbilled ? "1" : "0",
         String(opts?.startGte ?? ""),
         String(opts?.startLte ?? ""),
         String(opts?.clientId ?? ""),
@@ -143,6 +146,7 @@ export function useFindMany(
       opts?.lost,
       opts?.pending,
       opts?.unpaid,
+      opts?.unbilled,
       opts?.startGte,
       opts?.startLte,
       opts?.clientId,
@@ -207,6 +211,7 @@ export function useFindFirst(
         opts?.lost ? "1" : "0",
         opts?.pending ? "1" : "0",
         opts?.unpaid ? "1" : "0",
+        opts?.unbilled ? "1" : "0",
         String(opts?.startGte ?? ""),
         String(opts?.startLte ?? ""),
         String(opts?.clientId ?? ""),
@@ -225,6 +230,7 @@ export function useFindFirst(
       opts?.lost,
       opts?.pending,
       opts?.unpaid,
+      opts?.unbilled,
       opts?.startGte,
       opts?.startLte,
       opts?.clientId,
