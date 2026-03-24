@@ -53,6 +53,7 @@ import {
   Pencil,
   Plus,
   Printer,
+  RotateCcw,
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -99,20 +100,26 @@ function normalizeLineItems(inv: Record<string, unknown> | null | undefined): Ar
 }
 
 /** Normalize payments from API (array or edges.node) */
-function normalizePayments(inv: Record<string, unknown> | null | undefined): Array<{ id: string; amount?: number; method?: string; createdAt?: string }> {
+function normalizePayments(inv: Record<string, unknown> | null | undefined): Array<{ id: string; amount?: number; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null }> {
   if (!inv?.payments) return [];
   const p = inv.payments as unknown;
-  if (Array.isArray(p)) return p as Array<{ id: string; amount?: number; method?: string; createdAt?: string }>;
+  if (Array.isArray(p)) return p as Array<{ id: string; amount?: number; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null }>;
   const edges = (p as { edges?: Array<{ node?: unknown }> })?.edges;
-  return Array.isArray(edges) ? edges.map((e) => e?.node as { id: string; amount?: number; method?: string; createdAt?: string }).filter(Boolean) : [];
+  return Array.isArray(edges)
+    ? edges
+        .map((e) => e?.node as { id: string; amount?: number; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null })
+        .filter(Boolean)
+    : [];
 }
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useOutletContext<AuthOutletContext>();
+  const { permissions } = useOutletContext<AuthOutletContext>();
+  const canWritePayments = permissions.has("payments.write") || permissions.has("invoices.write");
 
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [addLineItemOpen, setAddLineItemOpen] = useState(false);
+  const [paymentToReverse, setPaymentToReverse] = useState<string | null>(null);
 
   // Payment form state
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -193,6 +200,7 @@ export default function InvoiceDetailPage() {
   const [{ fetching: sendingToClient }, sendToClient] = useAction(api.invoice.sendToClient);
   const [{ fetching: voidingInvoice }, voidInvoiceAction] = useAction(api.invoice.voidInvoice);
   const [{ fetching: creatingPayment }, createPayment] = useAction(api.payment.create);
+  const [{ fetching: reversingPayment }, reversePayment] = useAction(api.payment.reversePayment);
   const [{ fetching: creatingLineItem }, createLineItem] = useAction(api.invoiceLineItem.create);
   const [{ fetching: updatingLineItem }, updateLineItem] = useAction((params: Record<string, unknown>) =>
     api.invoiceLineItem.update(params.id as string, {
@@ -227,7 +235,7 @@ export default function InvoiceDetailPage() {
 
   const paymentsList = normalizePayments(invoice as Record<string, unknown>);
   const lineItemsList = normalizeLineItems(invoice as Record<string, unknown>);
-  const totalPaid = paymentsList.reduce((sum, p) => sum + (Number(p.amount) ?? 0), 0);
+  const totalPaid = paymentsList.reduce((sum, p) => sum + (p.reversedAt ? 0 : Number(p.amount) ?? 0), 0);
   const remainingBalance = (Number((invoice as Record<string, unknown>)?.total) ?? 0) - totalPaid;
 
   const handleOpenPaymentDialog = () => {
@@ -313,6 +321,18 @@ export default function InvoiceDetailPage() {
       void refetch();
     } else {
       toast.error("Failed to void invoice");
+    }
+  };
+
+  const handleReversePayment = async () => {
+    if (!paymentToReverse) return;
+    const result = await reversePayment({ id: paymentToReverse });
+    if (!result.error) {
+      toast.success("Payment reversed");
+      setPaymentToReverse(null);
+      void refetch();
+    } else {
+      toast.error("Failed to reverse payment: " + result.error.message);
     }
   };
 
@@ -488,7 +508,7 @@ export default function InvoiceDetailPage() {
               Mark as sent
             </Button>
           )}
-          {invoiceAllowsPayment(status) && (
+          {invoiceAllowsPayment(status) && canWritePayments && (
             <Button onClick={handleOpenPaymentDialog} size="sm">
               <CreditCard className="h-4 w-4 mr-2" />
               Record Payment
@@ -577,13 +597,42 @@ export default function InvoiceDetailPage() {
                     {paymentsList.map((payment) => (
                       <TableRow key={payment.id}>
                         <TableCell className="pl-6">
-                          {formatDate(payment.createdAt)}
+                          <div className="space-y-1">
+                            <div>{formatDate(payment.paidAt ?? payment.createdAt)}</div>
+                            {payment.reversedAt ? (
+                              <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
+                                Reversed
+                              </Badge>
+                            ) : null}
+                          </div>
                         </TableCell>
                         <TableCell className="capitalize">
-                          {payment.method}
+                          <div className="space-y-1">
+                            <div>{payment.method}</div>
+                            {payment.notes ? (
+                              <div className="max-w-[220px] truncate text-xs text-muted-foreground">
+                                {payment.notes}
+                              </div>
+                            ) : null}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right pr-6 font-medium">
-                          {formatCurrency(payment.amount)}
+                          <div className="flex items-center justify-end gap-2">
+                            <span className={payment.reversedAt ? "text-muted-foreground line-through" : ""}>
+                              {formatCurrency(payment.amount)}
+                            </span>
+                            {!payment.reversedAt && canWritePayments ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                onClick={() => setPaymentToReverse(payment.id)}
+                              >
+                                <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                                Reverse
+                              </Button>
+                            ) : null}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -791,6 +840,24 @@ export default function InvoiceDetailPage() {
               disabled={deletingLineItem}
             >
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!paymentToReverse} onOpenChange={(open) => !open && setPaymentToReverse(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reverse payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the payment from the invoice balance and marks it as reversed for audit history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reversingPayment}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleReversePayment} disabled={reversingPayment}>
+              {reversingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Reverse Payment
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
