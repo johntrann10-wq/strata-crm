@@ -8,6 +8,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
 import { recalculateQuoteTotals } from "../lib/revenueTotals.js";
+import { createRequestActivityLog } from "../lib/activity.js";
 
 export const quotesRouter = Router({ mergeParams: true });
 
@@ -266,6 +267,17 @@ quotesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Res
     })
     .returning();
   if (!created) throw new BadRequestError("Failed to create quote.");
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "quote.created",
+    entityType: "quote",
+    entityId: created.id,
+    metadata: {
+      clientId: created.clientId,
+      vehicleId: created.vehicleId,
+      status: created.status,
+    },
+  });
   res.status(201).json(created);
 });
 
@@ -318,6 +330,15 @@ quotesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res:
     await recalculateQuoteTotals(db, req.params.id);
   }
   const [fresh] = await db.select().from(quotes).where(eq(quotes.id, req.params.id)).limit(1);
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "quote.updated",
+    entityType: "quote",
+    entityId: req.params.id,
+    metadata: {
+      status: fresh?.status ?? updated.status,
+    },
+  });
   res.json(fresh ?? updated);
 });
 
@@ -337,6 +358,15 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, async (req: Request, 
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, businessId(req))))
     .returning();
   if (!updated) throw new NotFoundError("Quote not found.");
+  await createRequestActivityLog(req, {
+    businessId: businessId(req),
+    action: "quote.sent",
+    entityType: "quote",
+    entityId: updated.id,
+    metadata: {
+      status: updated.status,
+    },
+  });
   res.json(updated);
 });
 
@@ -347,6 +377,15 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, async (req: R
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, businessId(req))))
     .returning();
   if (!updated) throw new NotFoundError("Quote not found.");
+  await createRequestActivityLog(req, {
+    businessId: businessId(req),
+    action: "quote.follow_up_recorded",
+    entityType: "quote",
+    entityId: updated.id,
+    metadata: {
+      followUpSentAt: updated.followUpSentAt,
+    },
+  });
   res.json(updated);
 });
 
@@ -424,6 +463,16 @@ quotesRouter.post("/:id/schedule", requireAuth, requireTenant, async (req: Reque
     if (!a) throw new BadRequestError("Failed to create appointment.");
     await tx.update(quotes).set({ appointmentId: a.id, status: "accepted", updatedAt: new Date() }).where(eq(quotes.id, quoteId));
     return a;
+  });
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "quote.scheduled",
+    entityType: "quote",
+    entityId: quoteId,
+    metadata: {
+      appointmentId: apt.id,
+      startTime: apt.startTime,
+    },
   });
   res.status(201).json(apt);
 });

@@ -8,6 +8,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { withIdempotency } from "../lib/idempotency.js";
 import { logger } from "../lib/logger.js";
+import { createRequestActivityLog } from "../lib/activity.js";
 
 export const paymentsRouter = Router({ mergeParams: true });
 
@@ -92,6 +93,17 @@ paymentsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
 
   const key = data.idempotencyKey ?? `payment-${data.invoiceId}-${Date.now()}`;
   const payment = await withIdempotency(key, { businessId: bid, operation: "payment.create" }, doCreate);
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "payment.recorded",
+    entityType: "invoice",
+    entityId: data.invoiceId,
+    metadata: {
+      paymentId: payment.id,
+      amount: payment.amount,
+      method: payment.method,
+    },
+  });
   res.status(201).json(payment);
 });
 
@@ -121,5 +133,15 @@ paymentsRouter.post("/:id/reverse", requireAuth, requireTenant, async (req: Requ
     const newStatus = paidNow <= 0 ? "sent" : paidNow >= invTotal ? "paid" : "partial";
     await db.update(invoices).set({ status: newStatus, paidAt: paidNow >= invTotal ? inv.paidAt : null, updatedAt: new Date() }).where(eq(invoices.id, inv.id));
   }
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "payment.reversed",
+    entityType: "invoice",
+    entityId: updated.invoiceId,
+    metadata: {
+      paymentId: updated.id,
+      amount: updated.amount,
+    },
+  });
   res.json(updated);
 });

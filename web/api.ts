@@ -184,6 +184,10 @@ function resource(path: string) {
       clientId?: string;
       /** Workflow records: scope list to one vehicle. */
       vehicleId?: string;
+      /** Activity feed: scope list to one entity type. */
+      entityType?: string;
+      /** Activity feed: scope list to one entity id. */
+      entityId?: string;
       /** Quotes: draft + sent only (dashboard). */
       pending?: boolean;
       /** Invoices: sent + partial only (dashboard unpaid). */
@@ -203,6 +207,8 @@ function resource(path: string) {
       if (opts?.startLte !== undefined && opts.startLte !== "") query.startLte = opts.startLte;
       if (opts?.clientId !== undefined && opts.clientId !== "") query.clientId = opts.clientId;
       if (opts?.vehicleId !== undefined && opts.vehicleId !== "") query.vehicleId = opts.vehicleId;
+      if (opts?.entityType !== undefined && opts.entityType !== "") query.entityType = opts.entityType;
+      if (opts?.entityId !== undefined && opts.entityId !== "") query.entityId = opts.entityId;
       const qs =
         Object.keys(query).length > 0
           ? "?" + new URLSearchParams(serializeQuery(query as Record<string, unknown>)).toString()
@@ -312,6 +318,8 @@ export const api = {
         body: JSON.stringify(params),
       }),
   },
+  activityLog: resource("activity-logs"),
+  notificationLog: resource("notification-logs"),
   client: resource("clients"),
   vehicle: resource("vehicles"),
   business: {

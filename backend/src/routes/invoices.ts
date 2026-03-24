@@ -8,6 +8,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { logger } from "../lib/logger.js";
 import { renderInvoiceHtml, type InvoiceTemplateData } from "../lib/invoiceTemplate.js";
+import { createRequestActivityLog } from "../lib/activity.js";
 
 export const invoicesRouter = Router({ mergeParams: true });
 
@@ -329,6 +330,18 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
   });
 
   logger.info("Invoice created", { invoiceId: inv.id, businessId: bid });
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "invoice.created",
+    entityType: "invoice",
+    entityId: inv.id,
+    metadata: {
+      clientId: inv.clientId,
+      appointmentId: inv.appointmentId,
+      total: inv.total,
+      status: inv.status,
+    },
+  });
   res.status(201).json(inv);
 });
 
@@ -338,6 +351,17 @@ invoicesRouter.post("/:id/void", requireAuth, requireTenant, async (req: Request
   if (!existing) throw new NotFoundError("Invoice not found.");
   if (existing.status === "void") throw new BadRequestError("Invoice is already void.");
   const [updated] = await db.update(invoices).set({ status: "void", updatedAt: new Date() }).where(eq(invoices.id, req.params.id)).returning();
+  if (updated) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "invoice.voided",
+      entityType: "invoice",
+      entityId: updated.id,
+      metadata: {
+        invoiceNumber: updated.invoiceNumber ?? null,
+      },
+    });
+  }
   res.json(updated);
 });
 
@@ -346,5 +370,16 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, async (req:
   const [existing] = await db.select().from(invoices).where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, bid))).limit(1);
   if (!existing) throw new NotFoundError("Invoice not found.");
   const [updated] = await db.update(invoices).set({ status: "sent", updatedAt: new Date() }).where(eq(invoices.id, req.params.id)).returning();
+  if (updated) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "invoice.sent",
+      entityType: "invoice",
+      entityId: updated.id,
+      metadata: {
+        invoiceNumber: updated.invoiceNumber ?? null,
+      },
+    });
+  }
   res.json(updated);
 });

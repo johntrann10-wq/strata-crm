@@ -10,6 +10,7 @@ import { logger } from "../lib/logger.js";
 import { hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
 import { ConflictError } from "../lib/errors.js";
 import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
+import { createRequestActivityLog } from "../lib/activity.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
@@ -352,6 +353,17 @@ appointmentsRouter.post("/", requireAuth, requireTenant, async (req: Request, re
   });
 
   logger.info("Appointment created", { appointmentId: created.id, businessId: bid });
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "appointment.created",
+    entityType: "appointment",
+    entityId: created.id,
+    metadata: {
+      title: created.title ?? null,
+      clientId: created.clientId,
+      vehicleId: created.vehicleId,
+    },
+  });
   res.status(201).json(created);
 });
 
@@ -390,6 +402,18 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   if (parsed.data.assignedStaffId != null) updates.assignedStaffId = parsed.data.assignedStaffId;
   if (parsed.data.locationId != null) updates.locationId = parsed.data.locationId;
   const [updated] = await db.update(appointments).set(updates as Record<string, unknown>).where(eq(appointments.id, req.params.id)).returning();
+  if (updated) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "appointment.updated",
+      entityType: "appointment",
+      entityId: updated.id,
+      metadata: {
+        title: updated.title ?? null,
+        status: updated.status,
+      },
+    });
+  }
   res.json(updated);
 });
 
@@ -404,6 +428,17 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (
   if (status === "cancelled") updates.cancelledAt = new Date();
   if (status === "completed") updates.completedAt = new Date();
   const [updated] = await db.update(appointments).set(updates as Record<string, unknown>).where(eq(appointments.id, req.params.id)).returning();
+  if (updated) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "appointment.status_changed",
+      entityType: "appointment",
+      entityId: updated.id,
+      metadata: {
+        status,
+      },
+    });
+  }
   res.json(updated);
 });
 
@@ -416,6 +451,17 @@ appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, async (req:
     .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
     .where(eq(appointments.id, req.params.id))
     .returning();
+  if (updated) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "appointment.completed",
+      entityType: "appointment",
+      entityId: updated.id,
+      metadata: {
+        completedAt: updated.completedAt,
+      },
+    });
+  }
   res.json(updated);
 });
 
@@ -428,5 +474,16 @@ appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, async (req: R
     .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
     .where(eq(appointments.id, req.params.id))
     .returning();
+  if (updated) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "appointment.cancelled",
+      entityType: "appointment",
+      entityId: updated.id,
+      metadata: {
+        cancelledAt: updated.cancelledAt,
+      },
+    });
+  }
   res.json(updated);
 });

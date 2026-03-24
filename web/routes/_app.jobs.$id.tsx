@@ -21,6 +21,7 @@ import type { AuthOutletContext } from "./_app";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { ActivityFeedCard } from "../components/shared/ActivityFeedCard";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,6 +122,12 @@ export default function JobDetailPage() {
   });
   const [{ data: staff }] = useFindMany(api.staff, { first: 100, pause: !businessId } as any);
   const [{ data: locations }] = useFindMany(api.location, { first: 100, pause: !businessId } as any);
+  const [{ data: activityLogs, fetching: activityFetching }] = useFindMany(api.activityLog, {
+    entityType: "job",
+    entityId: id,
+    first: 8,
+    pause: !businessId || !id,
+  } as any);
   const [{ fetching: saving }, runUpdateJob] = useAction(api.job.update);
 
   const record = (job ?? null) as JobRecord | null;
@@ -512,6 +519,8 @@ export default function JobDetailPage() {
               />
             </CardContent>
           </Card>
+
+          <ActivityFeedCard records={(activityLogs as any[]) ?? []} fetching={activityFetching} />
         </div>
       </div>
     </div>

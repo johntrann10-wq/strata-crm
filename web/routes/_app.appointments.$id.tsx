@@ -35,6 +35,7 @@ import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { ActivityFeedCard } from "../components/shared/ActivityFeedCard";
 import {
   ClientCard,
   VehicleCard,
@@ -354,6 +355,12 @@ export default function AppointmentDetail() {
       total: true,
     },
   });
+  const [{ data: activityLogs, fetching: activityFetching }] = useFindMany(api.activityLog, {
+    entityType: "appointment",
+    entityId: id,
+    first: 8,
+    pause: !id,
+  } as any);
 
   const [{ data: quote, fetching: quoteFetching }] = useFindFirst(api.quote, {
     live: true,
@@ -986,6 +993,8 @@ export default function AppointmentDetail() {
                 depositAmount={appointment.depositAmount}
                 depositPaid={appointment.depositPaid}
               />
+
+              <ActivityFeedCard records={(activityLogs as any[]) ?? []} fetching={activityFetching} />
 
             </div>
           </div>

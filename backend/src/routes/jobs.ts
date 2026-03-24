@@ -18,6 +18,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { createRequestActivityLog } from "../lib/activity.js";
 
 export const jobsRouter = Router({ mergeParams: true });
 
@@ -289,6 +290,17 @@ jobsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("jobs.wri
     })
     .where(eq(appointments.id, req.params.id))
     .returning();
+
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "job.updated",
+    entityType: "job",
+    entityId: req.params.id,
+    metadata: {
+      status: updated?.status ?? nextStatus,
+      title: updated?.title ?? existing.title ?? null,
+    },
+  });
 
   res.json(updated);
 });
