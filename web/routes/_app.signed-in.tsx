@@ -19,12 +19,14 @@ import {
 } from "lucide-react";
 import { useFindMany } from "../hooks/useApi";
 import { api, ApiError } from "../api";
+import { useAction } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
+import { toast } from "sonner";
 
 type AppointmentRecord = {
   id: string;
@@ -108,6 +110,9 @@ export default function SignedIn() {
   const { businessName, businessId, user, currentLocationId } = useOutletContext<AuthOutletContext & { businessId?: string }>();
   const [filterNow, setFilterNow] = useState(() => new Date());
   const [refreshing, setRefreshing] = useState(false);
+  const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
+  const [followingUpQuoteId, setFollowingUpQuoteId] = useState<string | null>(null);
+  const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null);
 
   const { apptStartGte, apptStartLte } = useMemo(() => {
     const from = startOfDay(filterNow);
@@ -153,6 +158,9 @@ export default function SignedIn() {
     first: 100,
     pause: !businessId,
   } as any);
+  const [, runSendQuote] = useAction(api.quote.send);
+  const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
+  const [, runSendInvoice] = useAction(api.invoice.sendToClient);
   const [{ data: locationsRaw }] = useFindMany(api.location, {
     first: 100,
     pause: !businessId,
@@ -407,6 +415,66 @@ export default function SignedIn() {
       setRefreshing(false);
     }
   }, [refetchAppts, refetchInvoices, refetchQuotes, refetchJobs, refetchStaff]);
+
+  const handleSendQuote = useCallback(
+    async (event: React.SyntheticEvent, quoteId: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setSendingQuoteId(quoteId);
+      try {
+        const result = await runSendQuote({ id: quoteId });
+        if (result?.error) {
+          toast.error(result.error.message ?? "Could not send quote");
+          return;
+        }
+        toast.success("Quote send recorded");
+        await refetchQuotes();
+      } finally {
+        setSendingQuoteId(null);
+      }
+    },
+    [runSendQuote, refetchQuotes]
+  );
+
+  const handleSendFollowUp = useCallback(
+    async (event: React.SyntheticEvent, quoteId: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setFollowingUpQuoteId(quoteId);
+      try {
+        const result = await runSendFollowUp({ id: quoteId });
+        if (result?.error) {
+          toast.error(result.error.message ?? "Could not follow up quote");
+          return;
+        }
+        toast.success("Quote follow-up recorded");
+        await refetchQuotes();
+      } finally {
+        setFollowingUpQuoteId(null);
+      }
+    },
+    [runSendFollowUp, refetchQuotes]
+  );
+
+  const handleSendInvoice = useCallback(
+    async (event: React.SyntheticEvent, invoiceId: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setSendingInvoiceId(invoiceId);
+      try {
+        const result = await runSendInvoice({ id: invoiceId });
+        if (result?.error) {
+          toast.error(result.error.message ?? "Could not send invoice");
+          return;
+        }
+        toast.success("Invoice send recorded");
+        await refetchInvoices();
+      } finally {
+        setSendingInvoiceId(null);
+      }
+    },
+    [runSendInvoice, refetchInvoices]
+  );
 
   const loadingAppts = fetchingAppts && appointmentsRaw === undefined;
   const loadingInvoices = fetchingInvoices && invoicesRaw === undefined;
@@ -850,6 +918,38 @@ export default function SignedIn() {
                     </p>
                     <p className="text-sm capitalize text-muted-foreground">{String(quote.status ?? "-")}</p>
                   </div>
+                  <div
+                    className="flex items-center gap-2"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                  >
+                    {["draft", "sent"].includes(String(quote.status ?? "")) ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={sendingQuoteId !== null}
+                        onClick={(event) => void handleSendQuote(event, quote.id)}
+                      >
+                        {sendingQuoteId === quote.id ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                        {String(quote.status ?? "") === "draft" ? "Send" : "Resend"}
+                      </Button>
+                    ) : null}
+                    {String(quote.status ?? "") === "sent" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={followingUpQuoteId !== null}
+                        onClick={(event) => void handleSendFollowUp(event, quote.id)}
+                      >
+                        {followingUpQuoteId === quote.id ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                        Follow up
+                      </Button>
+                    ) : null}
+                  </div>
                   <span className="font-semibold tabular-nums">{formatCurrency(quote.total)}</span>
                   <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
                 </Link>
@@ -884,6 +984,36 @@ export default function SignedIn() {
                     <p className="text-sm capitalize text-muted-foreground">
                       {String(invoice.status ?? "").replace(/-/g, " ") || "-"}
                     </p>
+                  </div>
+                  <div
+                    className="flex items-center gap-2"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                  >
+                    {["draft", "sent", "partial"].includes(String(invoice.status ?? "")) ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={sendingInvoiceId !== null}
+                        onClick={(event) => void handleSendInvoice(event, invoice.id)}
+                      >
+                        {sendingInvoiceId === invoice.id ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                        {String(invoice.status ?? "") === "draft" ? "Send" : "Resend"}
+                      </Button>
+                    ) : null}
+                    {["sent", "partial"].includes(String(invoice.status ?? "")) ? (
+                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
+                        <Link
+                          to={`/invoices/${invoice.id}`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          Collect
+                        </Link>
+                      </Button>
+                    ) : null}
                   </div>
                   <span className="font-semibold tabular-nums">{formatCurrency(invoice.total)}</span>
                   <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
