@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { quotes, clients, vehicles, quoteLineItems, appointments, staff, locations } from "../db/schema.js";
-import { eq, and, desc, asc, isNull, lt, sql } from "drizzle-orm";
+import { eq, and, desc, asc, isNull, lt, sql, ilike, or } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError, ConflictError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -28,6 +28,7 @@ quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Resp
   const lost = req.query.lost === "1" || req.query.lost === "true";
   const pending = req.query.pending === "1" || req.query.pending === "true";
   const statusRaw = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
   const statusFilter =
     !lost && !pending && statusRaw && (QUOTE_STATUSES as readonly string[]).includes(statusRaw) ? statusRaw : undefined;
 
@@ -55,6 +56,21 @@ quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Resp
     conditions.push(eq(quotes.status, statusFilter as (typeof QUOTE_STATUSES)[number]));
   }
 
+  const term = `%${search}%`;
+  const whereClause =
+    search.length >= 2
+      ? and(
+          ...conditions,
+          or(
+            ilike(clients.firstName, term),
+            ilike(clients.lastName, term),
+            ilike(vehicles.make, term),
+            ilike(vehicles.model, term),
+            sql`cast(${quotes.id} as text) ilike ${term}`
+          )
+        )!
+      : and(...conditions)!;
+
   const rows = await db
     .select({
       id: quotes.id,
@@ -76,10 +92,14 @@ quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Resp
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
       clientEmail: clients.email,
+      vehicleYear: vehicles.year,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
     })
     .from(quotes)
     .leftJoin(clients, and(eq(quotes.clientId, clients.id), eq(clients.businessId, bid)))
-    .where(and(...conditions))
+    .leftJoin(vehicles, and(eq(quotes.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
+    .where(whereClause)
     .orderBy(orderBy)
     .limit(first);
 
@@ -107,6 +127,14 @@ quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Resp
             firstName: r.clientFirstName,
             lastName: r.clientLastName ?? "",
             email: r.clientEmail ?? null,
+          }
+        : null,
+    vehicle:
+      r.vehicleMake != null
+        ? {
+            year: r.vehicleYear ?? null,
+            make: r.vehicleMake,
+            model: r.vehicleModel ?? "",
           }
         : null,
   }));

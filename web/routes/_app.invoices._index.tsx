@@ -5,9 +5,10 @@ import { api, ApiError } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PlusCircle, FileText, DollarSign, Clock, Loader2, AlertCircle } from "lucide-react";
+import { PlusCircle, FileText, DollarSign, Clock, Loader2, AlertCircle, Search } from "lucide-react";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { PageHeader } from "../components/shared/PageHeader";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
@@ -39,6 +40,8 @@ export default function InvoicesIndexPage() {
   const { businessId } = useOutletContext<AuthOutletContext>();
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const hasLoadedMetrics = useRef(false);
 
@@ -57,9 +60,15 @@ export default function InvoicesIndexPage() {
     setPageSize(25);
   }, [activeTab]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const [{ data: invoices, fetching: invoicesFetching, error: invoicesError }, refetchInvoices] = useFindMany(
     api.invoice,
     {
+      search: debouncedSearch || undefined,
       status: activeTab === "all" ? undefined : activeTab,
       sort: { createdAt: "Descending" },
       first: pageSize,
@@ -84,12 +93,27 @@ export default function InvoicesIndexPage() {
         }
         subtitle="Manage and track your invoices"
         right={
-          <Button asChild>
-            <Link to="/invoices/new">
-              <PlusCircle className="h-4 w-4 mr-2" />
-              New Invoice
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              {isRefetching ? (
+                <Loader2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              ) : (
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              )}
+              <Input
+                placeholder="Search invoice # or client..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-72 pl-9"
+              />
+            </div>
+            <Button asChild>
+              <Link to="/invoices/new">
+                <PlusCircle className="h-4 w-4 mr-2" />
+                New Invoice
+              </Link>
+            </Button>
+          </div>
         }
       />
 

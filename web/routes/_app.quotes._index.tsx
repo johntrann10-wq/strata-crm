@@ -1,12 +1,13 @@
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, CheckCircle, Send, Loader2, FileText, AlertCircle } from "lucide-react";
+import { Plus, CheckCircle, Search, Send, Loader2, FileText, AlertCircle } from "lucide-react";
 import { Link, useNavigate, useOutletContext } from "react-router";
 import type { AuthOutletContext } from "./_app";
 import { api } from "../api";
 import { useFindMany, useAction } from "../hooks/useApi";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../components/shared/PageHeader";
@@ -17,6 +18,13 @@ export default function QuotesIndexPage() {
   const navigate = useNavigate();
   const { businessId } = useOutletContext<AuthOutletContext>();
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const [{ data: lostQuotes, fetching: lostFetching, error: lostError }, refetchLost] = useFindMany(api.quote, {
     lost: true,
@@ -30,6 +38,7 @@ export default function QuotesIndexPage() {
 
   const [{ data: allQuotes, fetching: allFetching, error: allError }] = useFindMany(api.quote, {
     pause: !businessId,
+    search: debouncedSearch || undefined,
     sort: { createdAt: "Descending" },
     first: 100,
   });
@@ -74,12 +83,27 @@ export default function QuotesIndexPage() {
       <PageHeader
         title="Quotes"
         actions={
-          <Button asChild>
-            <Link to="/quotes/new">
-              <Plus className="mr-2 h-4 w-4" />
-              New Quote
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              {allFetching ? (
+                <Loader2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              ) : (
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              )}
+              <Input
+                placeholder="Search clients, vehicles, quote id..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-72 pl-9"
+              />
+            </div>
+            <Button asChild>
+              <Link to="/quotes/new">
+                <Plus className="mr-2 h-4 w-4" />
+                New Quote
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -109,8 +133,12 @@ export default function QuotesIndexPage() {
           ) : allRows.length === 0 ? (
             <EmptyState
               icon={FileText}
-              title="No quotes"
-              description="Create a quote to get started."
+              title={debouncedSearch ? "No matching quotes" : "No quotes"}
+              description={
+                debouncedSearch
+                  ? "Try a different client name, vehicle, or quote id."
+                  : "Create a quote to get started."
+              }
             />
           ) : (
             <div className="border rounded-lg overflow-hidden">
@@ -118,6 +146,7 @@ export default function QuotesIndexPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Client</TableHead>
+                    <TableHead>Vehicle</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Created</TableHead>
@@ -126,9 +155,13 @@ export default function QuotesIndexPage() {
                 </TableHeader>
                 <TableBody>
                   {allRows.map((record) => {
-                    const row = record as Record<string, unknown>;
-                    const client = row.client as Record<string, unknown> | undefined;
+                    const row = record as Record<string, any>;
+                    const client = row.client as Record<string, any> | undefined;
+                    const vehicle = row.vehicle as Record<string, any> | undefined;
                     const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "—";
+                    const vehicleLabel = vehicle
+                      ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
+                      : "—";
                     return (
                       <TableRow
                         key={String(row.id)}
@@ -148,26 +181,13 @@ export default function QuotesIndexPage() {
                             fullName
                           )}
                         </TableCell>
+                        <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
                         <TableCell>
                           <StatusBadge status={String(row.status ?? "")} type="quote" />
                         </TableCell>
-                        <TableCell>
-                          {row.total != null && row.total !== ""
-                            ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
-                                Number(row.total)
-                              )
-                            : "—"}
-                        </TableCell>
-                        <TableCell>
-                          {row.createdAt
-                            ? new Date(row.createdAt as string).toLocaleDateString()
-                            : "—"}
-                        </TableCell>
-                        <TableCell>
-                          {row.expiresAt
-                            ? new Date(row.expiresAt as string).toLocaleDateString()
-                            : "—"}
-                        </TableCell>
+                        <TableCell>{formatCurrency(row.total)}</TableCell>
+                        <TableCell>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "—"}</TableCell>
+                        <TableCell>{row.expiresAt ? new Date(row.expiresAt as string).toLocaleDateString() : "—"}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -196,10 +216,9 @@ export default function QuotesIndexPage() {
           ) : (
             <div className={cn("bg-white border rounded-lg overflow-hidden transition-opacity", isRefetchingLost && "opacity-60")}>
               {lostRows.map((quote) => {
-                const q = quote as Record<string, unknown>;
-                const client = q.client as Record<string, unknown> | undefined;
-                const fullName =
-                  [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "Unknown Client";
+                const q = quote as Record<string, any>;
+                const client = q.client as Record<string, any> | undefined;
+                const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "Unknown Client";
                 const qid = String(q.id ?? "");
                 const isLoading = sendingId === qid;
                 return (

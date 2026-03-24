@@ -179,11 +179,11 @@ export default function VehiclesPage() {
                 </div>
 
                 {/* Center Info */}
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm truncate">
-                    {[vehicle.year, vehicle.make, vehicle.model]
-                      .filter(Boolean)
-                      .join(" ")}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm truncate">
+                  {[vehicle.year, vehicle.make, vehicle.model]
+                    .filter(Boolean)
+                    .join(" ")}
                   </p>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">
                     {[vehicle.color, vehicle.licensePlate]
@@ -217,13 +217,14 @@ export default function VehiclesPage() {
 
             if (clientId) {
               return (
-                <Link
-                  key={vehicle.id}
-                  to={`/clients/${clientId}`}
-                  className="block rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                >
-                  {cardInner}
-                </Link>
+                <div key={vehicle.id} className="rounded-lg border bg-card hover:bg-accent/50 transition-colors">
+                  <Link
+                    to={`/clients/${clientId}/vehicles/${vehicle.id}`}
+                    className="block"
+                  >
+                    {cardInner}
+                  </Link>
+                </div>
               );
             }
 
