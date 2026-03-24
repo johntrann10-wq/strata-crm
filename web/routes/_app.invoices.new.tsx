@@ -256,6 +256,7 @@ export default function NewInvoicePage() {
         clientId: selectedClientId,
         appointmentId: appointmentIdParam ?? undefined,
         quoteId: quoteIdParam ?? undefined,
+        status: mode,
         lineItems: lineItems.map((item) => ({
           description: item.description,
           quantity: item.qty,
@@ -280,7 +281,7 @@ export default function NewInvoicePage() {
         return;
       }
 
-      toast.success("Invoice created successfully");
+      toast.success(mode === "sent" ? "Invoice created and marked as sent" : "Invoice created successfully");
       navigate(`/invoices/${newInvoiceId}`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create invoice");

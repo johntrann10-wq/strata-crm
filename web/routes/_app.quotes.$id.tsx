@@ -747,7 +747,7 @@ export default function QuoteDetailPage() {
                 </Button>
               )}
               <Button variant="outline" className="w-full" asChild>
-                <Link to={`/invoices/new?clientId=${quote.client.id}`}>
+                <Link to={`/invoices/new?clientId=${quote.client.id}&quoteId=${quote.id}`}>
                   <FileText className="mr-2 h-4 w-4" />
                   Create Invoice
                 </Link>

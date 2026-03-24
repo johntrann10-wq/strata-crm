@@ -21,6 +21,7 @@ const createSchema = z.object({
   appointmentId: z.string().uuid().optional(),
   /** Optional: validated against clientId (does not auto-copy lines — UI sends lineItems). */
   quoteId: z.string().uuid().optional(),
+  status: z.enum(["draft", "sent"]).optional(),
   lineItems: z.array(z.object({ description: z.string(), quantity: z.number(), unitPrice: z.number() })).optional(),
   discountAmount: z.number().min(0).optional(),
   taxRate: z.coerce.number().min(0).max(100).optional(),
@@ -246,6 +247,7 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
   }
 
   const lineItems = parsed.data.lineItems ?? [];
+  const initialStatus = parsed.data.status ?? "draft";
   const subtotal = lineItems.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
   const discountAmount = parsed.data.discountAmount ?? 0;
   const taxRate = parsed.data.taxRate ?? 0;
@@ -273,7 +275,7 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
         clientId: parsed.data.clientId,
         appointmentId: parsed.data.appointmentId ?? null,
         invoiceNumber,
-        status: "draft",
+        status: initialStatus,
         subtotal: String(subtotal),
         taxRate: String(taxRate),
         taxAmount: String(taxAmount),
