@@ -32,6 +32,7 @@ import {
   Car,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getCurrentLocationId } from "../../lib/auth";
 
 function SkeletonRows() {
   return (
@@ -242,6 +243,11 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
     navigate(path);
     setOpen(false);
   };
+  const currentLocationId = getCurrentLocationId();
+  const withLocation = (path: string) =>
+    currentLocationId
+      ? `${path}${path.includes("?") ? "&" : "?"}locationId=${encodeURIComponent(currentLocationId)}`
+      : path;
 
   const contextActions: Array<{ label: string; icon: React.ReactNode; onSelect: () => void }> = [];
   if (pageContext) {
@@ -250,7 +256,7 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
       contextActions.push({
         label: `Book Appointment for ${clientName}`,
         icon: <CalendarPlus className="mr-2 h-4 w-4 text-orange-500" />,
-        onSelect: () => go(`/appointments/new?clientId=${clientId}`),
+        onSelect: () => go(withLocation(`/appointments/new?clientId=${clientId}`)),
       });
       contextActions.push({
         label: `New Invoice for ${clientName}`,
@@ -332,7 +338,7 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
       contextActions.push({
         label: "Book Appointment for this Vehicle",
         icon: <CalendarPlus className="mr-2 h-4 w-4 text-orange-500" />,
-        onSelect: () => go(`/appointments/new?clientId=${clientId}&vehicleId=${vehicleId}`),
+        onSelect: () => go(withLocation(`/appointments/new?clientId=${clientId}&vehicleId=${vehicleId}`)),
       });
       contextActions.push({
         label: "Create Quote for this Vehicle",
@@ -348,7 +354,7 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
       contextActions.push({
         label: "Book Appointment from this Quote",
         icon: <CalendarPlus className="mr-2 h-4 w-4 text-orange-500" />,
-        onSelect: () => go(`/appointments/new?clientId=${clientId}&quoteId=${entityId}`),
+        onSelect: () => go(withLocation(`/appointments/new?clientId=${clientId}&quoteId=${entityId}`)),
       });
       contextActions.push({
         label: "Convert to Invoice",
@@ -410,7 +416,7 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
             )}
             <CommandEmpty>Type to search records or select an action.</CommandEmpty>
             <CommandGroup heading="Create">
-              <CommandItem onSelect={() => go("/appointments/new")}>
+              <CommandItem onSelect={() => go(withLocation("/appointments/new"))}>
                 <CalendarPlus className="mr-2 h-4 w-4 text-orange-500" />
                 New Appointment
                 <CommandShortcut>⌘ A</CommandShortcut>

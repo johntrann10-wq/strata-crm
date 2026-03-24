@@ -89,7 +89,7 @@ const formatDate = (date: Date | string | null | undefined): string => {
 export default function QuoteDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { permissions } = useOutletContext<AuthOutletContext>();
+  const { permissions, currentLocationId } = useOutletContext<AuthOutletContext>();
   const canWriteQuotes = permissions.has("quotes.write");
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -779,7 +779,11 @@ export default function QuoteDetailPage() {
                   variant="default"
                   className="w-full"
                   onClick={() =>
-                    navigate(`/appointments/new?quoteId=${id}&clientId=${quote.client.id}`)
+                    navigate(
+                      `/appointments/new?quoteId=${id}&clientId=${quote.client.id}${
+                        currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+                      }`
+                    )
                   }
                   disabled={Boolean((quote as any).appointmentId)}
                 >

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { AlertTriangle, CheckCircle, Lightbulb, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getCurrentLocationId } from "../../lib/auth";
 
 type EntityType = "appointment" | "client" | "invoice" | "quote";
 type BannerVariant = "amber" | "blue" | "green" | "red" | "gray";
@@ -34,6 +35,11 @@ function computeStep(
   data: Record<string, any>
 ): BannerStep | null {
   const now = new Date();
+  const currentLocationId = getCurrentLocationId();
+  const withLocation = (path: string) =>
+    currentLocationId
+      ? `${path}${path.includes("?") ? "&" : "?"}locationId=${encodeURIComponent(currentLocationId)}`
+      : path;
 
   if (entityType === "appointment") {
     if (status === "completed" && !data.invoiceId) {
@@ -107,7 +113,7 @@ function computeStep(
         cta: {
           label: "Book Appointment →",
           type: "link",
-          href: `/appointments/new?clientId=${data.id}`,
+          href: withLocation(`/appointments/new?clientId=${data.id}`),
         },
       };
     }
@@ -167,7 +173,7 @@ function computeStep(
         cta: {
           label: "Book Appointment →",
           type: "link",
-          href: `/appointments/new?clientId=${data.clientId}&quoteId=${data.id}`,
+          href: withLocation(`/appointments/new?clientId=${data.clientId}&quoteId=${data.id}`),
         },
       };
     }

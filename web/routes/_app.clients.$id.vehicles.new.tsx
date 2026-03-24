@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router";
+import { useParams, useNavigate, useSearchParams, useOutletContext } from "react-router";
 import { useAction } from "../hooks/useApi";
 import { api } from "../api";
+import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +13,7 @@ import { ArrowLeft, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 export default function NewVehiclePage() {
   const { id: clientId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { currentLocationId } = useOutletContext<AuthOutletContext>();
   const [searchParams] = useSearchParams();
   const [submitMode, setSubmitMode] = useState<"client" | "quote" | "appointment">(() => {
     const next = searchParams.get("next");
@@ -48,7 +50,11 @@ export default function NewVehiclePage() {
         return;
       }
       if (submitMode === "appointment" && createdVehicleId) {
-        navigate(`/appointments/new?clientId=${clientId}&vehicleId=${createdVehicleId}`);
+        navigate(
+          `/appointments/new?clientId=${clientId}&vehicleId=${createdVehicleId}${
+            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+          }`
+        );
         return;
       }
       navigate(`/clients/${clientId}`);

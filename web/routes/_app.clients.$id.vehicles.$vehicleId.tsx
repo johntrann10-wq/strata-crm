@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router";
+import { useParams, useNavigate, Link, useOutletContext } from "react-router";
 import { useFindOne, useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
+import type { AuthOutletContext } from "./_app";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,6 +79,7 @@ function safeDate(value: string | null | undefined): Date | null {
 }
 
 export default function VehicleDetailPage() {
+  const { currentLocationId } = useOutletContext<AuthOutletContext>();
   const { id, vehicleId } = useParams<{ id: string; vehicleId: string }>();
   const navigate = useNavigate();
   const { setPageContext } = usePageContext();
@@ -316,7 +318,7 @@ export default function VehicleDetailPage() {
         <h1 className="text-2xl font-bold">{pageTitle}</h1>
         <span className="ml-auto text-sm text-muted-foreground">{clientName}</span>
         <Button asChild size="sm">
-          <Link to={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}`}>
+          <Link to={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}`}>
             <CalendarPlus className="h-4 w-4 mr-2" />
             Book Job
           </Link>
@@ -340,7 +342,7 @@ export default function VehicleDetailPage() {
           icon={CalendarPlus}
           title="Book appointment"
           detail="Schedule the next visit for this vehicle"
-          href={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}`}
+          href={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}`}
         />
         <QuickVehicleAction
           icon={Receipt}

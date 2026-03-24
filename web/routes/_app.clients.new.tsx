@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link, useSearchParams } from "react-router";
+import { useNavigate, Link, useSearchParams, useOutletContext } from "react-router";
 import { useFindFirst, useAction } from "../hooks/useApi";
 import { api } from "../api";
+import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +25,7 @@ interface FormData {
 
 export default function NewClientPage() {
   const navigate = useNavigate();
+  const { currentLocationId } = useOutletContext<AuthOutletContext>();
   const [searchParams] = useSearchParams();
   const [submitMode, setSubmitMode] = useState<"client" | "vehicle" | "quote" | "appointment">(() => {
     const next = searchParams.get("next");
@@ -64,7 +66,11 @@ export default function NewClientPage() {
         return;
       }
       if (submitMode === "appointment") {
-        navigate(`/appointments/new?clientId=${createdClientId}`);
+        navigate(
+          `/appointments/new?clientId=${createdClientId}${
+            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+          }`
+        );
         return;
       }
       navigate(`/clients/${createdClientId}`);

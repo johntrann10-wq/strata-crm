@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { useParams, Link, useNavigate } from "react-router";
+import { useParams, Link, useNavigate, useOutletContext } from "react-router";
 import { useFindOne, useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
+import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Pencil, CalendarPlus, FileText, MoreVertical, Loader2, ClipboardList, Receipt, Car, Plus } from "lucide-react";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
@@ -56,6 +57,10 @@ function safeDate(value: string | null | undefined): Date | null {
 
 export default function ClientDetailPage() {
   const { id } = useParams();
+  const { currentLocationId } = useOutletContext<AuthOutletContext>();
+  const appointmentHref = `/appointments/new?clientId=${id}${
+    currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+  }`;
   const navigate = useNavigate();
   const [editMode, setEditMode] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -254,7 +259,7 @@ export default function ClientDetailPage() {
           </Link>
         </Button>
         <Button asChild variant="default" size="sm">
-          <Link to={`/appointments/new?clientId=${id}`}>
+          <Link to={appointmentHref}>
             <CalendarPlus className="h-4 w-4 mr-1.5" />
             Book Appointment
           </Link>
@@ -346,7 +351,7 @@ export default function ClientDetailPage() {
               icon={CalendarPlus}
               title="Book appointment"
               detail="Schedule the next service visit"
-              href={`/appointments/new?clientId=${id}`}
+              href={appointmentHref}
             />
             <QuickWorkflowAction
               icon={Receipt}
