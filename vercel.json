@@ -1,5 +1,5 @@
 {
-  "installCommand": "yarn install",
-  "buildCommand": "yarn build",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
   "framework": "react-router"
 }
