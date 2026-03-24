@@ -43,6 +43,11 @@ function formatDate(dateStr: string | Date | null | undefined): string {
   });
 }
 
+function isOverdueInvoice(invoice: { status?: string | null; dueDate?: string | Date | null | undefined }) {
+  const dueDate = safeDate(invoice.dueDate);
+  return ["sent", "partial"].includes(String(invoice.status ?? "")) && !!dueDate && dueDate.getTime() < Date.now();
+}
+
 export default function InvoicesIndexPage() {
   const { businessId } = useOutletContext<AuthOutletContext>();
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
@@ -84,10 +89,7 @@ export default function InvoicesIndexPage() {
   const isLoading = invoicesFetching && !invoices;
   const isRefetching = invoicesFetching && !!invoices && invoices.length > 0;
   const baseInvoices = invoices ?? [];
-  const overdueInvoices = baseInvoices.filter((invoice) => {
-    const dueDate = safeDate(invoice.dueDate);
-    return ["sent", "partial"].includes(String(invoice.status ?? "")) && !!dueDate && dueDate.getTime() < Date.now();
-  });
+  const overdueInvoices = baseInvoices.filter((invoice) => isOverdueInvoice(invoice));
   const displayedInvoices = activeTab === "overdue" ? overdueInvoices : baseInvoices;
   const pageError = metricsError ?? invoicesError;
 
@@ -221,6 +223,11 @@ export default function InvoicesIndexPage() {
                 {FILTER_TABS.map((tab) => (
                   <TabsTrigger key={tab} value={tab} className="capitalize">
                     {tab}
+                    {tab === "overdue" && overdueInvoices.length > 0 ? (
+                      <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">
+                        {overdueInvoices.length}
+                      </span>
+                    ) : null}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -238,6 +245,7 @@ export default function InvoicesIndexPage() {
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Date Created</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Due Date</th>
+                  <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody className={isRefetching ? "opacity-60" : ""}>
@@ -265,12 +273,15 @@ export default function InvoicesIndexPage() {
                         <td className="px-4 py-3">
                           <Skeleton className="h-4 w-24" />
                         </td>
+                        <td className="px-4 py-3">
+                          <Skeleton className="ml-auto h-7 w-24" />
+                        </td>
                       </tr>
                     ))
                   : invoicesError
                     ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                        <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
                           Could not load this list. Use "Try again" above.
                         </td>
                       </tr>
@@ -278,7 +289,7 @@ export default function InvoicesIndexPage() {
                     : displayedInvoices.length === 0
                       ? (
                         <tr>
-                          <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                          <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                             <div className="flex flex-col items-center gap-2">
                               <FileText className="h-8 w-8 opacity-30" />
                               <p className="font-medium">No invoices found</p>
@@ -329,10 +340,22 @@ export default function InvoicesIndexPage() {
                               <td className="px-4 py-3 text-muted-foreground">
                                 <div className="flex items-center gap-2">
                                   <span>{formatDate(invoice.dueDate)}</span>
-                                  {overdueInvoices.some((entry) => entry.id === invoice.id) ? (
+                                  {isOverdueInvoice(invoice) ? (
                                     <span className="rounded bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
                                       Overdue
                                     </span>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex justify-end gap-2">
+                                  <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
+                                    <Link to={`/invoices/${invoice.id}`}>Open</Link>
+                                  </Button>
+                                  {["sent", "partial"].includes(String(invoice.status ?? "")) ? (
+                                    <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
+                                      <Link to={`/invoices/${invoice.id}`}>Collect</Link>
+                                    </Button>
                                   ) : null}
                                 </div>
                               </td>

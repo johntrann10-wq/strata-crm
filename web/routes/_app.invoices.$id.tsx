@@ -146,6 +146,56 @@ function WorkflowLinkCard({
   );
 }
 
+function CollectionActionCard({
+  title,
+  detail,
+  amount,
+  primaryLabel,
+  secondaryLabel,
+  onPrimary,
+  onSecondary,
+  primaryDisabled,
+  secondaryDisabled,
+  primaryLoading,
+}: {
+  title: string;
+  detail: string;
+  amount: string;
+  primaryLabel: string;
+  secondaryLabel?: string;
+  onPrimary: () => void;
+  onSecondary?: () => void;
+  primaryDisabled?: boolean;
+  secondaryDisabled?: boolean;
+  primaryLoading?: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-1">
+          <p className="text-2xl font-semibold">{amount}</p>
+          <p className="text-sm text-muted-foreground">{detail}</p>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Button onClick={onPrimary} disabled={primaryDisabled}>
+            {primaryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
+            {primaryLabel}
+          </Button>
+          {secondaryLabel && onSecondary ? (
+            <Button variant="outline" onClick={onSecondary} disabled={secondaryDisabled}>
+              <Send className="mr-2 h-4 w-4" />
+              {secondaryLabel}
+            </Button>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { permissions } = useOutletContext<AuthOutletContext>();
@@ -462,6 +512,8 @@ export default function InvoiceDetailPage() {
   const invoiceLabel =
     invoice.invoiceNumber ?? `#${String(invoice.id).slice(0, 8).toUpperCase()}`;
   const status = invoice.status ?? "draft";
+  const dueDateValue = invoice?.dueDate ? new Date(invoice.dueDate) : null;
+  const isOverdue = !!dueDateValue && ["sent", "partial"].includes(status) && dueDateValue.getTime() < Date.now();
   const canEditLineItems = status !== "paid" && status !== "void";
 
   const clientData = invoice.client as any;
@@ -695,6 +747,29 @@ export default function InvoiceDetailPage() {
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {invoiceAllowsPayment(status) && canWritePayments ? (
+            <CollectionActionCard
+              title={isOverdue ? "Overdue balance" : "Collect payment"}
+              detail={
+                isOverdue
+                  ? `Invoice is past due. Balance remaining ${formatCurrency(remainingBalance)}.`
+                  : status === "partial"
+                    ? `Partial payment recorded. ${formatCurrency(remainingBalance)} still due.`
+                    : "Record payment or follow up with the customer."
+              }
+              amount={formatCurrency(remainingBalance)}
+              primaryLabel="Record payment"
+              secondaryLabel={status === "draft" ? "Send invoice first" : "Resend invoice"}
+              onPrimary={handleOpenPaymentDialog}
+              onSecondary={() => {
+                void handleMarkAsSent();
+              }}
+              primaryDisabled={remainingBalance <= 0}
+              secondaryDisabled={sendingToClient}
+              primaryLoading={creatingPayment}
+            />
+          ) : null}
+
           {/* Invoice Details */}
           <Card>
             <CardHeader className="pb-3">
