@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { AlertCircle, Calendar, ChevronDown, ChevronRight, Loader2, Plus, Search, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -133,6 +134,19 @@ export default function AppointmentsPage() {
       }),
     [records, activeTab, myStaffRecord]
   );
+  const stats = useMemo(() => {
+    const scheduled = records.filter((appointment) => appointment.status === "scheduled").length;
+    const confirmed = records.filter((appointment) => appointment.status === "confirmed").length;
+    const inProgress = records.filter((appointment) => appointment.status === "in_progress").length;
+    const myQueue = myStaffRecord
+      ? records.filter(
+          (appointment) =>
+            appointment.assignedStaff?.id === myStaffRecord.id &&
+            ["scheduled", "confirmed", "in_progress"].includes(appointment.status ?? "")
+        ).length
+      : 0;
+    return { scheduled, confirmed, inProgress, myQueue };
+  }, [records, myStaffRecord]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
@@ -187,6 +201,13 @@ export default function AppointmentsPage() {
           <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
         </TabsList>
       </Tabs>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Scheduled" value={String(stats.scheduled)} />
+        <MetricCard label="Confirmed" value={String(stats.confirmed)} />
+        <MetricCard label="In progress" value={String(stats.inProgress)} />
+        <MetricCard label="My queue" value={myStaffRecord ? String(stats.myQueue) : "-"} />
+      </div>
 
       {appointmentsError && !isInitialLoad ? (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -312,3 +333,14 @@ export default function AppointmentsPage() {
 }
 
 export { RouteErrorBoundary as ErrorBoundary };
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="mt-1 text-2xl font-semibold">{value}</p>
+      </CardContent>
+    </Card>
+  );
+}

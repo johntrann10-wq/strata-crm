@@ -101,11 +101,14 @@ export default function JobsIndexPage() {
     const scheduled = records.filter((job) => ["scheduled", "confirmed"].includes(job.status)).length;
     const inProgress = records.filter((job) => job.status === "in_progress").length;
     const completed = records.filter((job) => job.status === "completed").length;
+    const myQueue = myStaffRecord
+      ? records.filter((job) => job.assignedStaff?.id === myStaffRecord.id && ["scheduled", "confirmed", "in_progress"].includes(job.status)).length
+      : 0;
     const openRevenue = records
       .filter((job) => ["scheduled", "confirmed", "in_progress"].includes(job.status))
       .reduce((sum, job) => sum + Number(job.totalPrice ?? 0), 0);
-    return { scheduled, inProgress, completed, openRevenue };
-  }, [records]);
+    return { scheduled, inProgress, completed, myQueue, openRevenue };
+  }, [records, myStaffRecord]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
@@ -129,10 +132,11 @@ export default function JobsIndexPage() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Scheduled" value={String(stats.scheduled)} />
         <MetricCard label="In progress" value={String(stats.inProgress)} />
         <MetricCard label="Completed" value={String(stats.completed)} />
+        <MetricCard label="My queue" value={myStaffRecord ? String(stats.myQueue) : "-"} />
         <MetricCard label="Open revenue" value={formatCurrency(stats.openRevenue)} />
       </div>
 
