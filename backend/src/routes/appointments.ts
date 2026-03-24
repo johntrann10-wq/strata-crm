@@ -60,12 +60,16 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
   const clientIdFilter = z.string().uuid().safeParse(clientIdRaw).success ? clientIdRaw : undefined;
   const vehicleIdRaw = typeof req.query.vehicleId === "string" ? req.query.vehicleId.trim() : "";
   const vehicleIdFilter = z.string().uuid().safeParse(vehicleIdRaw).success ? vehicleIdRaw : undefined;
+  const statusRaw = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const statusParsed = appointmentStatusSchema.safeParse(statusRaw);
+  const statusFilter = statusParsed.success ? statusParsed.data : undefined;
 
   const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
 
   const conditions = [eq(appointments.businessId, bid)];
   if (clientIdFilter) conditions.push(eq(appointments.clientId, clientIdFilter));
   if (vehicleIdFilter) conditions.push(eq(appointments.vehicleId, vehicleIdFilter));
+  if (statusFilter) conditions.push(eq(appointments.status, statusFilter));
   if (startGte) conditions.push(gte(appointments.startTime, startGte));
   if (startLte) conditions.push(lte(appointments.startTime, startLte));
 
@@ -74,7 +78,15 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
     search.length >= 2
       ? and(
           ...conditions,
-          or(ilike(appointments.title, term), ilike(clients.firstName, term), ilike(clients.lastName, term))
+          or(
+            ilike(appointments.title, term),
+            ilike(clients.firstName, term),
+            ilike(clients.lastName, term),
+            ilike(vehicles.make, term),
+            ilike(vehicles.model, term),
+            ilike(staff.firstName, term),
+            ilike(staff.lastName, term)
+          )
         )!
       : and(...conditions)!;
 
@@ -106,11 +118,13 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
       vehicleModel: vehicles.model,
       staffFirstName: staff.firstName,
       staffLastName: staff.lastName,
+      locationName: locations.name,
     })
     .from(appointments)
     .leftJoin(clients, eq(appointments.clientId, clients.id))
     .leftJoin(vehicles, eq(appointments.vehicleId, vehicles.id))
     .leftJoin(staff, eq(appointments.assignedStaffId, staff.id))
+    .leftJoin(locations, eq(appointments.locationId, locations.id))
     .where(whereClause)
     .orderBy(sortAsc ? asc(appointments.startTime) : desc(appointments.startTime))
     .limit(first);
@@ -141,6 +155,7 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
         ? { year: row.vehicleYear ?? null, make: row.vehicleMake, model: row.vehicleModel }
         : null,
     assignedStaff: row.staffFirstName != null ? { firstName: row.staffFirstName, lastName: row.staffLastName } : null,
+    location: row.locationName != null ? { name: row.locationName } : null,
   }));
   res.json({ records });
 });

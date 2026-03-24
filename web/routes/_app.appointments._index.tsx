@@ -1,32 +1,28 @@
-import { useState } from "react";
-import { useFindMany, useAction } from "../hooks/useApi";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { api, ApiError } from "../api";
-import type { AuthOutletContext } from "./_app";
-import { QuickBookSheet } from "../components/shared/QuickBookSheet";
-import { PageHeader } from "../components/shared/PageHeader";
-import { StatusBadge } from "../components/shared/StatusBadge";
-import { EmptyState } from "../components/shared/EmptyState";
+import { AlertCircle, Calendar, ChevronDown, ChevronRight, Loader2, Plus, Search, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Zap, Calendar, ChevronRight, ChevronDown, Search, AlertCircle } from "lucide-react";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
+import { api, ApiError } from "../api";
+import { useAction, useFindMany } from "../hooks/useApi";
+import type { AuthOutletContext } from "./_app";
+import { QuickBookSheet } from "../components/shared/QuickBookSheet";
+import { PageHeader } from "../components/shared/PageHeader";
+import { StatusBadge } from "../components/shared/StatusBadge";
+import { EmptyState } from "../components/shared/EmptyState";
 
-function formatStatus(status: string): string {
-  return status
-    .split("-")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
+type AppointmentStatusTab = "all" | "scheduled" | "confirmed" | "in_progress" | "completed" | "cancelled";
 
 const QUICK_TRANSITIONS: Record<string, string[]> = {
   scheduled: ["confirmed", "cancelled"],
@@ -37,26 +33,42 @@ const QUICK_TRANSITIONS: Record<string, string[]> = {
   "no-show": [],
 };
 
+function formatStatus(status: string): string {
+  return status
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function matchesTab(status: string | null | undefined, tab: AppointmentStatusTab): boolean {
+  if (tab === "all") return true;
+  if (tab === "cancelled") return status === "cancelled" || status === "no-show";
+  return status === tab;
+}
+
 export default function AppointmentsPage() {
-  const { user, businessId } = useOutletContext<AuthOutletContext>();
+  const { businessId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
   const [quickBookOpen, setQuickBookOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<AppointmentStatusTab>("all");
 
   const [, runUpdateStatus] = useAction(api.appointment.updateStatus);
 
-  const handleQuickStatus = async (
-    e: React.MouseEvent,
-    appointmentId: string,
-    newStatus: string
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const handleQuickStatus = async (event: Event | React.SyntheticEvent, appointmentId: string, newStatus: string) => {
+    event.preventDefault();
+    event.stopPropagation();
     const result = await runUpdateStatus({ id: appointmentId, status: newStatus });
     if (result?.error) {
       toast.error("Failed: " + result.error.message);
     } else {
-      toast.success("Status updated to " + newStatus);
+      toast.success("Status updated to " + formatStatus(newStatus));
       void refetch();
     }
   };
@@ -64,6 +76,7 @@ export default function AppointmentsPage() {
   const [{ data: appointments, fetching: appointmentsFetching, error: appointmentsError }, refetch] = useFindMany(
     api.appointment,
     {
+      search: debouncedSearch || undefined,
       sort: { startTime: "Descending" },
       first: 100,
       select: {
@@ -72,6 +85,7 @@ export default function AppointmentsPage() {
         status: true,
         startTime: true,
         endTime: true,
+        location: { name: true },
         client: { id: true, firstName: true, lastName: true },
         vehicle: { id: true, year: true, make: true, model: true },
         assignedStaff: { id: true, firstName: true, lastName: true },
@@ -81,40 +95,39 @@ export default function AppointmentsPage() {
   );
 
   const isInitialLoad = appointmentsFetching && appointments === undefined;
-
-  const filteredAppointments = Array.isArray(appointments)
-    ? appointments.filter((appt) => {
-        if (!search.trim()) return true;
-        const q = search.toLowerCase();
-        const clientName = `${appt.client?.firstName ?? ""} ${appt.client?.lastName ?? ""}`.toLowerCase();
-        const vehicleStr = `${appt.vehicle?.make ?? ""} ${appt.vehicle?.model ?? ""}`.toLowerCase();
-        const titleStr = (appt.title ?? "").toLowerCase();
-        return titleStr.includes(q) || clientName.includes(q) || vehicleStr.includes(q);
-      })
-    : [];
+  const records = Array.isArray(appointments) ? appointments : [];
+  const filteredAppointments = useMemo(
+    () => records.filter((appointment) => matchesTab(appointment.status ?? null, activeTab)),
+    [records, activeTab]
+  );
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-6">
       <PageHeader
-        title="Jobs"
+        title="Appointments"
+        subtitle="Run the schedule clearly, move work forward fast, and keep status changes close to the list."
         right={
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              {appointmentsFetching && records.length > 0 ? (
+                <Loader2 className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              ) : (
+                <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              )}
               <Input
-                placeholder="Search appointments..."
+                placeholder="Search appointments, clients, vehicles, or techs..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 w-64"
+                onChange={(event) => setSearch(event.target.value)}
+                className="w-72 pl-8"
               />
             </div>
             <Button variant="outline" onClick={() => setQuickBookOpen(true)}>
-              <Zap className="h-4 w-4 mr-2" />
+              <Zap className="mr-2 h-4 w-4" />
               Quick Book
             </Button>
             <Button asChild>
               <Link to="/appointments/new">
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="mr-2 h-4 w-4" />
                 New Appointment
               </Link>
             </Button>
@@ -128,25 +141,33 @@ export default function AppointmentsPage() {
         onBooked={(id) => navigate(`/appointments/${id}`)}
       />
 
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AppointmentStatusTab)}>
+        <TabsList className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-6">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+          <TabsTrigger value="confirmed">Confirmed</TabsTrigger>
+          <TabsTrigger value="in_progress">In Progress</TabsTrigger>
+          <TabsTrigger value="completed">Completed</TabsTrigger>
+          <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {appointmentsError && !isInitialLoad ? (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>
             {appointmentsError instanceof ApiError && (appointmentsError.status === 401 || appointmentsError.status === 403)
-              ? "Your session expired. Redirecting to sign-in…"
+              ? "Your session expired. Redirecting to sign-in..."
               : "Could not load appointments. Please refresh the page."}
           </span>
-          {!(appointmentsError instanceof ApiError && (appointmentsError.status === 401 || appointmentsError.status === 403)) && (
-            <span className="text-destructive/70 text-xs">({appointmentsError.message})</span>
-          )}
+          {!(appointmentsError instanceof ApiError && (appointmentsError.status === 401 || appointmentsError.status === 403)) ? (
+            <span className="text-xs text-destructive/70">({appointmentsError.message})</span>
+          ) : null}
         </div>
       ) : isInitialLoad ? (
         <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between p-4 bg-white rounded-lg border animate-pulse"
-            >
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="flex items-center justify-between rounded-lg border bg-white p-4">
               <div className="space-y-2">
                 <Skeleton className="h-4 w-48" />
                 <Skeleton className="h-3 w-32" />
@@ -158,97 +179,88 @@ export default function AppointmentsPage() {
       ) : filteredAppointments.length === 0 ? (
         <EmptyState
           icon={Calendar}
-          title="No appointments yet"
-          description="Book your first appointment to get started."
+          title={debouncedSearch ? "No matching appointments" : "No appointments in this view"}
+          description={
+            debouncedSearch
+              ? "Try a different customer, vehicle, or technician search."
+              : "Book your first appointment to start filling the schedule."
+          }
           action={
             <Button asChild>
               <Link to="/appointments/new">
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="mr-2 h-4 w-4" />
                 New Appointment
               </Link>
             </Button>
           }
         />
       ) : (
-        <div className="space-y-2">
-          {filteredAppointments.map((appt) => {
-            const clientName = `${appt.client?.firstName ?? ""} ${appt.client?.lastName ?? ""}`.trim();
-            const vehicleStr = [appt.vehicle?.year, appt.vehicle?.make, appt.vehicle?.model]
+        <div className={appointmentsFetching ? "space-y-2 opacity-70" : "space-y-2"}>
+          {filteredAppointments.map((appointment) => {
+            const clientName = `${appointment.client?.firstName ?? ""} ${appointment.client?.lastName ?? ""}`.trim();
+            const vehicleLabel = [appointment.vehicle?.year, appointment.vehicle?.make, appointment.vehicle?.model]
               .filter(Boolean)
               .join(" ");
+            const techName = appointment.assignedStaff
+              ? `${appointment.assignedStaff.firstName ?? ""} ${appointment.assignedStaff.lastName ?? ""}`.trim()
+              : "Unassigned";
+
             let formattedTime = "";
             try {
-              formattedTime = appt.startTime
-                ? format(new Date(appt.startTime), "MMM d, yyyy h:mm a")
-                : "";
+              formattedTime = appointment.startTime ? format(new Date(appointment.startTime), "MMM d, yyyy h:mm a") : "";
             } catch {
               formattedTime = "";
             }
 
             return (
               <Link
-                key={appt.id}
-                to={`/appointments/${appt.id}`}
-                className="flex items-center justify-between p-4 bg-white rounded-lg border hover:border-primary transition-colors"
+                key={appointment.id}
+                to={`/appointments/${appointment.id}`}
+                className="block rounded-lg border bg-white p-4 transition-colors hover:border-primary"
               >
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={appt.status ?? ""} type="appointment" />
-                    <span className="font-medium">
-                      {appt.title || clientName || "Appointment"}
-                    </span>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={appointment.status ?? ""} type="appointment" />
+                      <span className="font-medium">{appointment.title || clientName || "Appointment"}</span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {clientName || "Walk-in customer"}
+                      {vehicleLabel ? ` · ${vehicleLabel}` : ""}
+                    </div>
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    {clientName}
-                    {vehicleStr && (
-                      <>
-                        {" · "}
-                        {vehicleStr}
-                      </>
-                    )}
+                  <div className="grid flex-none gap-1 text-sm text-muted-foreground sm:grid-cols-2 sm:gap-x-6 lg:text-right">
+                    <span>{formattedTime || "Unscheduled"}</span>
+                    <span>{appointment.location?.name ?? "No location set"}</span>
+                    <span>{techName}</span>
+                    <span>{appointment.endTime ? format(new Date(appointment.endTime), "h:mm a") : "No end time"}</span>
                   </div>
-                </div>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  {formattedTime && <span>{formattedTime}</span>}
-                  {appt.assignedStaff && (
-                    <span>
-                      {appt.assignedStaff.firstName} {appt.assignedStaff.lastName}
-                    </span>
-                  )}
-                  {(QUICK_TRANSITIONS[appt.status ?? ""]?.length ?? 0) > 0 && (
-                    <div
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                    >
+                  <div
+                    className="flex items-center gap-3"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                  >
+                    {(QUICK_TRANSITIONS[appointment.status ?? ""]?.length ?? 0) > 0 ? (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
                             Status
-                            <ChevronDown className="h-3 w-3 ml-1" />
+                            <ChevronDown className="ml-1 h-3 w-3" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          {QUICK_TRANSITIONS[appt.status ?? ""].map((status) => (
-                            <DropdownMenuItem
-                              key={status}
-                              onSelect={(e) => {
-                                handleQuickStatus(
-                                  e as unknown as React.MouseEvent,
-                                  appt.id,
-                                  status
-                                );
-                              }}
-                            >
+                          {QUICK_TRANSITIONS[appointment.status ?? ""].map((status) => (
+                            <DropdownMenuItem key={status} onSelect={(event) => handleQuickStatus(event, appointment.id, status)}>
                               {formatStatus(status)}
                             </DropdownMenuItem>
                           ))}
                         </DropdownMenuContent>
                       </DropdownMenu>
-                    </div>
-                  )}
-                  <ChevronRight className="h-4 w-4" />
+                    ) : null}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
                 </div>
               </Link>
             );
