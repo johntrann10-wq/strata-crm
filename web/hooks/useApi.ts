@@ -73,6 +73,7 @@ export function useFindOne(
     () => `${stableKey(opts?.select)}|${opts?.pause ? "1" : "0"}|${opts?.live ? "1" : "0"}`,
     [opts?.select, opts?.pause, opts?.live]
   );
+  const stableOpts = useMemo(() => opts, [optsKey]);
 
   const refetch = useCallback(async () => {
     if (id == null || id === "") {
@@ -83,14 +84,14 @@ export function useFindOne(
     setFetching(true);
     setError(null);
     try {
-      const result = await model.findOne(id, opts);
+      const result = await model.findOne(id, stableOpts);
       setData(result ?? null);
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
       setFetching(false);
     }
-  }, [id, model, opts, optsKey]);
+  }, [id, model, stableOpts]);
 
   useEffect(() => {
     if (opts?.pause) return;
@@ -143,23 +144,24 @@ export function useFindMany(
       opts?.live,
     ]
   );
+  const stableOpts = useMemo(() => opts, [optsKey]);
 
   const refetch = useCallback(async () => {
-    if (opts?.pause) {
+    if (stableOpts?.pause) {
       setFetching(false);
       return;
     }
     setFetching(true);
     setError(null);
     try {
-      const result = await model.findMany(opts);
+      const result = await model.findMany(stableOpts);
       setData(Array.isArray(result) ? result : []);
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
       setFetching(false);
     }
-  }, [model, opts, optsKey]);
+  }, [model, stableOpts]);
 
   useEffect(() => {
     refetch();
@@ -220,23 +222,24 @@ export function useFindFirst(
       opts?.live,
     ]
   );
+  const stableOpts = useMemo(() => opts, [optsKey]);
 
   const refetch = useCallback(async () => {
-    if (opts?.pause) {
+    if (stableOpts?.pause) {
       setFetching(false);
       return;
     }
     setFetching(true);
     setError(null);
     try {
-      const result = await model.findFirst(opts);
+      const result = await model.findFirst(stableOpts);
       setData(result ?? null);
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
       setFetching(false);
     }
-  }, [model, opts, optsKey]);
+  }, [model, stableOpts]);
 
   useEffect(() => {
     refetch();
