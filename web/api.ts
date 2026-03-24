@@ -294,7 +294,19 @@ export const api = {
         body: JSON.stringify(params),
       }),
   },
-  appointmentService: resource("appointment-services"),
+  appointmentService: {
+    ...resource("appointment-services"),
+    complete: (params: Record<string, unknown>) =>
+      request<unknown>("/appointment-services/" + (params?.id ?? "") + "/complete", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    reopen: (params: Record<string, unknown>) =>
+      request<unknown>("/appointment-services/" + (params?.id ?? "") + "/reopen", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  },
   job: resource("jobs"),
   invoice: {
     ...resource("invoices"),

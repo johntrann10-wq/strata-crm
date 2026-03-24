@@ -140,6 +140,8 @@ export default function JobDetailPage() {
   const [{ fetching: removingService }, runRemoveAppointmentService] = useAction(
     (params: Record<string, unknown>) => api.appointmentService.delete(params)
   );
+  const [{ fetching: completingService }, runCompleteService] = useAction(api.appointmentService.complete);
+  const [{ fetching: reopeningService }, runReopenService] = useAction(api.appointmentService.reopen);
 
   const record = (job ?? null) as JobRecord | null;
 
@@ -207,6 +209,22 @@ export default function JobDetailPage() {
         .filter((service) => service.id && !existingServiceIds.has(service.id)),
     [serviceCatalog, existingServiceIds]
   );
+  const completedServiceIds = useMemo(() => {
+    const latest = new Map<string, boolean>();
+    for (const record of ((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>)) {
+      let appointmentServiceId: string | null = null;
+      try {
+        const parsed = record.metadata ? (JSON.parse(record.metadata) as { appointmentServiceId?: string }) : null;
+        appointmentServiceId = parsed?.appointmentServiceId ?? null;
+      } catch {
+        appointmentServiceId = null;
+      }
+      if (!appointmentServiceId || latest.has(appointmentServiceId)) continue;
+      if (record.type === "job.service_completed") latest.set(appointmentServiceId, true);
+      if (record.type === "job.service_reopened") latest.set(appointmentServiceId, false);
+    }
+    return latest;
+  }, [activityLogs]);
 
   const handleSave = async () => {
     if (!record) return;
@@ -249,6 +267,26 @@ export default function JobDetailPage() {
       return;
     }
     toast.success("Service removed from job");
+    void refetchJob();
+  };
+
+  const handleCompleteService = async (appointmentServiceId: string) => {
+    const result = await runCompleteService({ id: appointmentServiceId });
+    if ((result as any)?.error) {
+      toast.error(`Failed to complete service: ${(result as any).error.message}`);
+      return;
+    }
+    toast.success("Service marked complete");
+    void refetchJob();
+  };
+
+  const handleReopenService = async (appointmentServiceId: string) => {
+    const result = await runReopenService({ id: appointmentServiceId });
+    if ((result as any)?.error) {
+      toast.error(`Failed to reopen service: ${(result as any).error.message}`);
+      return;
+    }
+    toast.success("Service reopened");
     void refetchJob();
   };
 
@@ -449,10 +487,17 @@ export default function JobDetailPage() {
                 <p className="text-sm text-muted-foreground">No services attached yet.</p>
               ) : (
                 <div className="space-y-3">
-                  {(record.services ?? []).map((service) => (
+                  {(record.services ?? []).map((service) => {
+                    const isCompleted = completedServiceIds.get(service.id) === true;
+                    return (
                     <div key={service.id} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <p className="font-medium">{service.name ?? "Service"}</p>
+                        <div className="flex items-center gap-2">
+                          <p className={isCompleted ? "font-medium line-through text-muted-foreground" : "font-medium"}>
+                            {service.name ?? "Service"}
+                          </p>
+                          {isCompleted ? <StatusBadge status="completed" type="job" /> : null}
+                        </div>
                         <p className="text-sm text-muted-foreground">
                           {service.category ?? "General"} · Qty {service.quantity ?? 1}
                           {service.durationMinutes ? ` · ${service.durationMinutes} min` : ""}
@@ -460,6 +505,22 @@ export default function JobDetailPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-sm font-medium text-foreground">{formatCurrency(service.unitPrice)}</div>
+                        {canEdit ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => void (isCompleted ? handleReopenService(service.id) : handleCompleteService(service.id))}
+                            disabled={completingService || reopeningService}
+                          >
+                            {completingService || reopeningService ? (
+                              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="mr-1 h-4 w-4" />
+                            )}
+                            {isCompleted ? "Reopen" : "Complete"}
+                          </Button>
+                        ) : null}
                         {canEdit ? (
                           <Button
                             variant="ghost"
@@ -473,7 +534,7 @@ export default function JobDetailPage() {
                         ) : null}
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </CardContent>

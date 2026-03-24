@@ -100,8 +100,8 @@ appointmentServicesRouter.post("/", requireAuth, requireTenant, async (req: Requ
 
   await createRequestActivityLog(req, {
     businessId: bid,
-    action: "appointment.service_added",
-    entityType: "appointment",
+    action: "job.service_added",
+    entityType: "job",
     entityId: appointmentId,
     metadata: {
       appointmentServiceId: created.id,
@@ -149,8 +149,8 @@ appointmentServicesRouter.patch("/:id", requireAuth, requireTenant, async (req: 
   });
   await createRequestActivityLog(req, {
     businessId: bid,
-    action: "appointment.service_updated",
-    entityType: "appointment",
+    action: "job.service_updated",
+    entityType: "job",
     entityId: existing.appointmentId,
     metadata: {
       appointmentServiceId: updated.id,
@@ -180,8 +180,8 @@ appointmentServicesRouter.delete("/:id", requireAuth, requireTenant, async (req:
   });
   await createRequestActivityLog(req, {
     businessId: bid,
-    action: "appointment.service_removed",
-    entityType: "appointment",
+    action: "job.service_removed",
+    entityType: "job",
     entityId: apptId,
     metadata: {
       appointmentServiceId: existing.id,
@@ -189,5 +189,57 @@ appointmentServicesRouter.delete("/:id", requireAuth, requireTenant, async (req:
     },
   });
   res.status(204).send();
+});
+
+appointmentServicesRouter.post("/:id/complete", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const [existing] = await db.select().from(appointmentServices).where(eq(appointmentServices.id, req.params.id)).limit(1);
+  if (!existing) throw new NotFoundError("Appointment service not found.");
+
+  const [appointment] = await db
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(and(eq(appointments.id, existing.appointmentId), eq(appointments.businessId, bid)))
+    .limit(1);
+  if (!appointment) throw new ForbiddenError("Access denied.");
+
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "job.service_completed",
+    entityType: "job",
+    entityId: existing.appointmentId,
+    metadata: {
+      appointmentServiceId: existing.id,
+      serviceId: existing.serviceId,
+      quantity: existing.quantity,
+    },
+  });
+  res.json({ ok: true });
+});
+
+appointmentServicesRouter.post("/:id/reopen", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const [existing] = await db.select().from(appointmentServices).where(eq(appointmentServices.id, req.params.id)).limit(1);
+  if (!existing) throw new NotFoundError("Appointment service not found.");
+
+  const [appointment] = await db
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(and(eq(appointments.id, existing.appointmentId), eq(appointments.businessId, bid)))
+    .limit(1);
+  if (!appointment) throw new ForbiddenError("Access denied.");
+
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "job.service_reopened",
+    entityType: "job",
+    entityId: existing.appointmentId,
+    metadata: {
+      appointmentServiceId: existing.id,
+      serviceId: existing.serviceId,
+      quantity: existing.quantity,
+    },
+  });
+  res.json({ ok: true });
 });
 
