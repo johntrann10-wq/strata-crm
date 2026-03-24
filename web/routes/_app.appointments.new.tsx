@@ -58,7 +58,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function NewAppointmentPage() {
-  const { user, businessId, businessType } = useOutletContext<AuthOutletContext>();
+  const { user, businessId, businessType, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
   const creationPreset = useMemo(() => getWorkflowCreationPreset(businessType), [businessType]);
 
@@ -94,7 +94,7 @@ export default function NewAppointmentPage() {
   const [quickModel, setQuickModel] = useState('');
   const [quickVehicleError, setQuickVehicleError] = useState('');
   const [savingVehicle, setSavingVehicle] = useState(false);
-  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(currentLocationId);
   const [showAdditionalDetails, setShowAdditionalDetails] = useState(false);
   const [showQuotePrefilledBadge, setShowQuotePrefilledBadge] = useState(false);
   const hasPrefilledFromQuote = useRef(false);
@@ -128,6 +128,10 @@ export default function NewAppointmentPage() {
       setIsMobile(true);
     }
   }, [creationPreset.defaultMobile]);
+
+  useEffect(() => {
+    setSelectedLocationId(currentLocationId);
+  }, [currentLocationId]);
 
   // Debounce client search query
   useEffect(() => {
@@ -542,6 +546,11 @@ export default function NewAppointmentPage() {
             <p className="text-sm text-muted-foreground">
               Schedule a new appointment for a client
             </p>
+            {currentLocationId && locationsData?.some((location) => location.id === currentLocationId) ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Defaulting to {locationsData.find((location) => location.id === currentLocationId)?.name ?? "current location"}
+              </p>
+            ) : null}
           </div>
         </div>
 

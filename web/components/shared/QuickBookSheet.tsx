@@ -66,7 +66,7 @@ export function QuickBookSheet({
   onBooked,
   businessId,
 }: QuickBookSheetProps) {
-  const { user } = useOutletContext<AuthOutletContext>();
+  const { currentLocationId } = useOutletContext<AuthOutletContext>();
 
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
@@ -216,6 +216,7 @@ export function QuickBookSheet({
         vehicleId: selectedVehicleId!,
         startTime: startDateTime.toISOString(),
         endTime: endDateTime.toISOString(),
+        locationId: currentLocationId ?? undefined,
       });
 
       if (result.error) {
