@@ -48,11 +48,13 @@ import {
   ArrowLeft,
   Ban,
   CreditCard,
+  CalendarClock,
   Loader2,
   Lock,
   Pencil,
   Plus,
   Printer,
+  Receipt,
   RotateCcw,
   Send,
 } from "lucide-react";
@@ -110,6 +112,37 @@ function normalizePayments(inv: Record<string, unknown> | null | undefined): Arr
         .map((e) => e?.node as { id: string; amount?: number; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null })
         .filter(Boolean)
     : [];
+}
+
+function WorkflowLinkCard({
+  icon: Icon,
+  label,
+  value,
+  href,
+  actionLabel,
+}: {
+  icon: typeof Receipt;
+  label: string;
+  value: string;
+  href: string | null;
+  actionLabel: string;
+}) {
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="flex items-start gap-3">
+        <Icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
+          {href ? (
+            <Button asChild variant="link" className="mt-1 h-auto px-0 text-sm">
+              <Link to={href}>{actionLabel}</Link>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function InvoiceDetailPage() {
@@ -447,6 +480,16 @@ export default function InvoiceDetailPage() {
       href: `/appointments/${appointmentData.id}`,
     });
   }
+  const quoteData = (invoice as any).quote;
+  if (quoteData) {
+    relatedRecords.push({
+      type: "quote",
+      id: quoteData.id,
+      label: "Quote",
+      sublabel: `${capitalize(quoteData.status)} · ${formatCurrency(Number(quoteData.total ?? 0))}`,
+      href: `/quotes/${quoteData.id}`,
+    });
+  }
 
   return (
     <div className="container mx-auto p-6 max-w-5xl space-y-6">
@@ -646,6 +689,32 @@ export default function InvoiceDetailPage() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Invoice Details */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Workflow</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <WorkflowLinkCard
+                icon={Receipt}
+                label="Quote"
+                value={
+                  quoteData
+                    ? `${capitalize(quoteData.status)} · ${formatCurrency(Number(quoteData.total ?? 0))}`
+                    : "No quote linked"
+                }
+                href={quoteData ? `/quotes/${quoteData.id}` : null}
+                actionLabel="Open quote"
+              />
+              <WorkflowLinkCard
+                icon={CalendarClock}
+                label="Schedule"
+                value={appointmentData ? formatDate(appointmentData.startTime) : "No appointment linked"}
+                href={appointmentData ? `/appointments/${appointmentData.id}` : null}
+                actionLabel="Open appointment"
+              />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold">Invoice Details</CardTitle>

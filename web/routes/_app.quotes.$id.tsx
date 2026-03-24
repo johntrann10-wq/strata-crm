@@ -166,7 +166,7 @@ export default function QuoteDetailPage() {
             .filter(Boolean)
             .join(" ")
         : null,
-      appointmentId: null,
+      appointmentId: (quote as any)?.appointmentId ?? null,
       invoiceId: null,
     });
     return () => setPageContext(null);
@@ -328,6 +328,14 @@ export default function QuoteDetailPage() {
         .filter(Boolean)
         .join(" "),
       href: `/clients/${quote.client.id}`,
+    });
+  }
+  if ((quote as any).appointmentId) {
+    relatedRecords.push({
+      type: "appointment",
+      id: (quote as any).appointmentId,
+      label: "Scheduled appointment",
+      href: `/appointments/${(quote as any).appointmentId}`,
     });
   }
 
@@ -741,9 +749,18 @@ export default function QuoteDetailPage() {
                   onClick={() =>
                     navigate(`/appointments/new?quoteId=${id}&clientId=${quote.client.id}`)
                   }
+                  disabled={Boolean((quote as any).appointmentId)}
                 >
                   <CalendarPlus className="mr-2 h-4 w-4" />
-                  Book Appointment
+                  {(quote as any).appointmentId ? "Already Scheduled" : "Book Appointment"}
+                </Button>
+              )}
+              {(quote as any).appointmentId && (
+                <Button variant="outline" className="w-full" asChild>
+                  <Link to={`/appointments/${(quote as any).appointmentId}`}>
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Open Scheduled Job
+                  </Link>
                 </Button>
               )}
               <Button variant="outline" className="w-full" asChild>

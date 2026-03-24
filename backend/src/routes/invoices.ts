@@ -144,6 +144,7 @@ invoicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res:
   const paymentsList = await db.select().from(payments).where(eq(payments.invoiceId, row.id));
   const [clientRow] = await db.select({ id: clients.id, firstName: clients.firstName, lastName: clients.lastName, email: clients.email, phone: clients.phone }).from(clients).where(eq(clients.id, row.clientId)).limit(1);
   let appointmentData: { id: string; startTime: Date | null; vehicle?: { year: number | null; make: string; model: string } } | null = null;
+  let quoteData: { id: string; status: string; total: string | null } | null = null;
   if (row.appointmentId) {
     const [apt] = await db.select({ id: appointments.id, startTime: appointments.startTime, vehicleId: appointments.vehicleId }).from(appointments).where(eq(appointments.id, row.appointmentId)).limit(1);
     if (apt?.vehicleId) {
@@ -152,6 +153,13 @@ invoicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res:
     } else {
       appointmentData = apt ? { id: apt.id, startTime: apt.startTime } : null;
     }
+    const [quote] = await db
+      .select({ id: quotes.id, status: quotes.status, total: quotes.total })
+      .from(quotes)
+      .where(and(eq(quotes.appointmentId, row.appointmentId), eq(quotes.businessId, bid)))
+      .orderBy(desc(quotes.updatedAt), desc(quotes.createdAt))
+      .limit(1);
+    quoteData = quote ?? null;
   }
   res.json({
     ...row,
@@ -159,6 +167,7 @@ invoicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res:
     payments: paymentsList,
     client: clientRow ?? null,
     appointment: appointmentData,
+    quote: quoteData,
     business: { id: row.businessId },
   });
 });
