@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { AlertCircle, Calendar, ChevronDown, ChevronRight, Loader2, Plus, Search, Zap } from "lucide-react";
+import { AlertCircle, Calendar, ChevronDown, ChevronRight, Loader2, Plus, Search, UserPlus, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -74,6 +74,7 @@ export default function AppointmentsPage() {
   const [activeTab, setActiveTab] = useState<AppointmentView>("all");
 
   const [, runUpdateStatus] = useAction(api.appointment.updateStatus);
+  const [, runUpdateAppointment] = useAction(api.appointment.update);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -88,6 +89,19 @@ export default function AppointmentsPage() {
       toast.error("Failed: " + result.error.message);
     } else {
       toast.success("Status updated to " + formatStatus(newStatus));
+      void refetch();
+    }
+  };
+
+  const handleAssignToMe = async (event: Event | React.SyntheticEvent, appointmentId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!myStaffRecord?.id) return;
+    const result = await runUpdateAppointment({ id: appointmentId, assignedStaff: { _link: myStaffRecord.id } });
+    if (result?.error) {
+      toast.error("Failed: " + result.error.message);
+    } else {
+      toast.success("Appointment assigned to you");
       void refetch();
     }
   };
@@ -303,6 +317,17 @@ export default function AppointmentsPage() {
                       event.stopPropagation();
                     }}
                   >
+                    {myStaffRecord && !appointment.assignedStaff?.id ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={(event) => void handleAssignToMe(event, appointment.id)}
+                      >
+                        <UserPlus className="mr-1 h-3 w-3" />
+                        Assign to me
+                      </Button>
+                    ) : null}
                     {(QUICK_TRANSITIONS[appointment.status ?? ""]?.length ?? 0) > 0 ? (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -320,6 +345,9 @@ export default function AppointmentsPage() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     ) : null}
+                    <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                      <Link to={`/appointments/${appointment.id}`}>Open</Link>
+                    </Button>
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </div>

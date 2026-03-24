@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router";
-import { AlertCircle, ChevronRight, ClipboardList, Loader2, Search } from "lucide-react";
+import { AlertCircle, ChevronRight, ClipboardList, Loader2, Play, Search, UserPlus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { api, ApiError } from "../api";
-import { useFindMany } from "../hooks/useApi";
+import { useAction, useFindMany } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EmptyState } from "../components/shared/EmptyState";
+import { toast } from "sonner";
 
 type JobStatusTab = "all" | "scheduled" | "in_progress" | "completed" | "cancelled";
 type JobView = JobStatusTab | "mine";
@@ -79,6 +81,7 @@ export default function JobsIndexPage() {
     first: 100,
     pause: !businessId,
   } as any);
+  const [{ fetching: updatingJob }, runUpdateJob] = useAction(api.job.update);
 
   const records = ((jobs ?? []) as JobListRecord[]).filter(Boolean);
   const staffRecords = ((staff ?? []) as StaffRecord[]).filter(Boolean);
@@ -109,6 +112,17 @@ export default function JobsIndexPage() {
       .reduce((sum, job) => sum + Number(job.totalPrice ?? 0), 0);
     return { scheduled, inProgress, completed, myQueue, openRevenue };
   }, [records, myStaffRecord]);
+
+  const handleQuickJobUpdate = async (event: React.SyntheticEvent, jobId: string, values: Record<string, unknown>, successMessage: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const result = await runUpdateJob({ id: jobId, ...values });
+    if (result?.error) {
+      toast.error(result.error.message ?? "Could not update job");
+      return;
+    }
+    toast.success(successMessage);
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
@@ -223,7 +237,59 @@ export default function JobsIndexPage() {
                       <span>{staffName}</span>
                       <span className="font-medium text-foreground">{formatCurrency(job.totalPrice)}</span>
                     </div>
-                    <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                    <div
+                      className="flex items-center gap-2"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                    >
+                      {myStaffRecord && !job.assignedStaff?.id ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          disabled={updatingJob}
+                          onClick={(event) =>
+                            void handleQuickJobUpdate(event, job.id, { assignedStaffId: myStaffRecord.id }, "Job assigned to you")
+                          }
+                        >
+                          <UserPlus className="mr-1 h-3 w-3" />
+                          Assign to me
+                        </Button>
+                      ) : null}
+                      {["scheduled", "confirmed"].includes(job.status) ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          disabled={updatingJob}
+                          onClick={(event) =>
+                            void handleQuickJobUpdate(event, job.id, { status: "in_progress" }, "Job marked in progress")
+                          }
+                        >
+                          <Play className="mr-1 h-3 w-3" />
+                          Start
+                        </Button>
+                      ) : null}
+                      {job.status === "in_progress" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          disabled={updatingJob}
+                          onClick={(event) =>
+                            void handleQuickJobUpdate(event, job.id, { status: "completed" }, "Job completed")
+                          }
+                        >
+                          Complete
+                        </Button>
+                      ) : null}
+                      <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                        <Link to={`/jobs/${job.id}`}>Open</Link>
+                      </Button>
+                      <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                    </div>
                   </CardContent>
                 </Card>
               </Link>
