@@ -37,6 +37,7 @@ import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/Re
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import { ChecklistCard } from "../components/shared/ChecklistCard";
+import { getIntakePreset } from "../lib/intakePresets";
 import {
   ClientCard,
   VehicleCard,
@@ -270,6 +271,7 @@ export default function AppointmentDetail() {
   const { user, businessType, permissions } = useOutletContext<AuthOutletContext>();
   const canEditCollaboration = permissions.has("appointments.write");
   const { setPageContext } = usePageContext();
+  const intakePreset = getIntakePreset(businessType);
 
   const [isEditing, setIsEditing] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -535,6 +537,15 @@ export default function AppointmentDetail() {
       setInternalNotesValue(appointment.internalNotes ?? "");
     }
     setIsEditing(false);
+  };
+
+  const applyNotesTemplate = (target: "client" | "internal") => {
+    if (target === "client") {
+      setNotesValue(intakePreset.clientNotes);
+    } else {
+      setInternalNotesValue(intakePreset.internalNotes);
+    }
+    toast.success(`${intakePreset.label} applied`);
   };
 
   const handleOpenEditDialog = () => {
@@ -1089,7 +1100,12 @@ export default function AppointmentDetail() {
                   {isEditing ? (
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <p className="text-sm font-medium text-muted-foreground">Client Notes</p>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium text-muted-foreground">Client Notes</p>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => applyNotesTemplate("client")}>
+                            Apply {intakePreset.label}
+                          </Button>
+                        </div>
                         <Textarea
                           value={notesValue}
                           onChange={(e) => setNotesValue(e.target.value)}
@@ -1098,7 +1114,12 @@ export default function AppointmentDetail() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <p className="text-sm font-medium text-muted-foreground">Internal Notes</p>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium text-muted-foreground">Internal Notes</p>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => applyNotesTemplate("internal")}>
+                            Apply {intakePreset.label}
+                          </Button>
+                        </div>
                         <Textarea
                           value={internalNotesValue}
                           onChange={(e) => setInternalNotesValue(e.target.value)}

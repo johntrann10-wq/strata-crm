@@ -25,6 +25,7 @@ import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import { ChecklistCard } from "../components/shared/ChecklistCard";
+import { getIntakePreset } from "../lib/intakePresets";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -210,6 +211,7 @@ export default function JobDetailPage() {
         .filter((service) => service.id && !existingServiceIds.has(service.id)),
     [serviceCatalog, existingServiceIds]
   );
+  const intakePreset = useMemo(() => getIntakePreset(businessType), [businessType]);
   const completedServiceIds = useMemo(() => {
     const latest = new Map<string, boolean>();
     for (const record of ((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>)) {
@@ -289,6 +291,14 @@ export default function JobDetailPage() {
     }
     toast.success("Service reopened");
     void refetchJob();
+  };
+
+  const applyIntakeTemplate = (target: "notes" | "internalNotes") => {
+    setForm((current) => ({
+      ...current,
+      [target]: target === "notes" ? intakePreset.clientNotes : intakePreset.internalNotes,
+    }));
+    toast.success(`${intakePreset.label} applied`);
   };
 
   if (!id) {
@@ -454,7 +464,14 @@ export default function JobDetailPage() {
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="job-notes">Customer-visible notes</Label>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor="job-notes">Customer-visible notes</Label>
+                    {canEdit ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => applyIntakeTemplate("notes")}>
+                        Apply {intakePreset.label}
+                      </Button>
+                    ) : null}
+                  </div>
                   <Textarea
                     id="job-notes"
                     value={form.notes}
@@ -465,7 +482,14 @@ export default function JobDetailPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="job-internal-notes">Internal notes</Label>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor="job-internal-notes">Internal notes</Label>
+                    {canEdit ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => applyIntakeTemplate("internalNotes")}>
+                        Apply {intakePreset.label}
+                      </Button>
+                    ) : null}
+                  </div>
                   <Textarea
                     id="job-internal-notes"
                     value={form.internalNotes}
