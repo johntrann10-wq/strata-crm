@@ -355,6 +355,16 @@ export default function AppointmentDetail() {
     },
   });
 
+  const [{ data: quote, fetching: quoteFetching }] = useFindFirst(api.quote, {
+    live: true,
+    filter: { appointmentId: { equals: id } },
+    select: {
+      id: true,
+      status: true,
+      total: true,
+    },
+  });
+
   const [{ data: staffForEdit }] = useFindMany(api.staff, {
     filter: { businessId: { equals: appointment?.business?.id } },
     select: { id: true, firstName: true, lastName: true },
@@ -574,6 +584,15 @@ export default function AppointmentDetail() {
         href: `/invoices/${invoice.id}`,
       });
     }
+    if (quote) {
+      relatedRecords.push({
+        type: "quote",
+        id: quote.id,
+        label: "Quote",
+        status: quote.status,
+        href: `/quotes/${quote.id}`,
+      });
+    }
   }
 
   const handleContextualAction = (action?: string) => {
@@ -708,11 +727,31 @@ export default function AppointmentDetail() {
             </Button>
           )}
 
+          {!quoteFetching && !quote && appointment.status !== "cancelled" && appointment.client?.id && (
+            <Button variant="outline" size="sm" asChild>
+              <Link
+                to={`/quotes/new?appointmentId=${appointment.id}&clientId=${appointment.client.id}`}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Create Quote
+              </Link>
+            </Button>
+          )}
+
           {invoice && (
             <Button variant="outline" size="sm" asChild>
               <Link to={`/invoices/${invoice.id}`}>
                 <FileText className="h-4 w-4 mr-2" />
                 View Invoice
+              </Link>
+            </Button>
+          )}
+
+          {quote && (
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/quotes/${quote.id}`}>
+                <FileText className="h-4 w-4 mr-2" />
+                View Quote
               </Link>
             </Button>
           )}
