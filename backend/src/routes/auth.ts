@@ -69,6 +69,13 @@ function getUserIdFromAuthHeader(req: Request): string | null {
     return null;
   }
 }
+
+function isMissingRelationError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: string }).code;
+  const message = String((error as { message?: string }).message ?? "");
+  return code === "42P01" || message.toLowerCase().includes("does not exist");
+}
 /** GET /api/auth/me — current user from JWT. Returns 401 if not signed in. */
 authRouter.get(
   "/me",
@@ -109,15 +116,27 @@ authRouter.get(
       .select({ id: businesses.id, name: businesses.name, type: businesses.type })
       .from(businesses)
       .where(eq(businesses.ownerId, userId));
-    const memberships = await db
-      .select({
-        businessId: businessMemberships.businessId,
-        role: businessMemberships.role,
-        status: businessMemberships.status,
-        isDefault: businessMemberships.isDefault,
-      })
-      .from(businessMemberships)
-      .where(eq(businessMemberships.userId, userId));
+    let memberships: Array<{
+      businessId: string;
+      role: "owner" | "admin" | "manager" | "service_advisor" | "technician";
+      status: "invited" | "active" | "suspended";
+      isDefault: boolean;
+    }> = [];
+
+    try {
+      memberships = await db
+        .select({
+          businessId: businessMemberships.businessId,
+          role: businessMemberships.role,
+          status: businessMemberships.status,
+          isDefault: businessMemberships.isDefault,
+        })
+        .from(businessMemberships)
+        .where(eq(businessMemberships.userId, userId));
+    } catch (error) {
+      if (!isMissingRelationError(error)) throw error;
+      logger.warn("business_memberships table missing; falling back to owner-only auth context", { userId });
+    }
 
     const byBusiness = new Map<
       string,
