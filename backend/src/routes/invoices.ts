@@ -36,6 +36,8 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
   const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 100) : 50;
   const clientIdRaw = typeof req.query.clientId === "string" ? req.query.clientId.trim() : "";
   const clientIdFilter = z.string().uuid().safeParse(clientIdRaw).success ? clientIdRaw : undefined;
+  const vehicleIdRaw = typeof req.query.vehicleId === "string" ? req.query.vehicleId.trim() : "";
+  const vehicleIdFilter = z.string().uuid().safeParse(vehicleIdRaw).success ? vehicleIdRaw : undefined;
   const unpaid = req.query.unpaid === "1" || req.query.unpaid === "true";
   const statusRaw = typeof req.query.status === "string" ? req.query.status.trim() : "";
   const statusFilter =
@@ -55,6 +57,7 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
 
   const conditions = [eq(invoices.businessId, bid)];
   if (clientIdFilter) conditions.push(eq(invoices.clientId, clientIdFilter));
+  if (vehicleIdFilter) conditions.push(eq(appointments.vehicleId, vehicleIdFilter));
   if (unpaid) {
     conditions.push(sql`${invoices.status} in ('sent', 'partial')`);
   } else if (statusFilter) {

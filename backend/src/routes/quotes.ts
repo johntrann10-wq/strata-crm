@@ -23,6 +23,8 @@ quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Resp
   const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 100) : 50;
   const clientIdRaw = typeof req.query.clientId === "string" ? req.query.clientId.trim() : "";
   const clientIdFilter = z.string().uuid().safeParse(clientIdRaw).success ? clientIdRaw : undefined;
+  const vehicleIdRaw = typeof req.query.vehicleId === "string" ? req.query.vehicleId.trim() : "";
+  const vehicleIdFilter = z.string().uuid().safeParse(vehicleIdRaw).success ? vehicleIdRaw : undefined;
   const lost = req.query.lost === "1" || req.query.lost === "true";
   const pending = req.query.pending === "1" || req.query.pending === "true";
   const statusRaw = typeof req.query.status === "string" ? req.query.status.trim() : "";
@@ -41,6 +43,7 @@ quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Resp
 
   const conditions = [eq(quotes.businessId, bid)];
   if (clientIdFilter) conditions.push(eq(quotes.clientId, clientIdFilter));
+  if (vehicleIdFilter) conditions.push(eq(quotes.vehicleId, vehicleIdFilter));
   if (pending) {
     conditions.push(sql`${quotes.status} in ('draft', 'sent')`);
   } else if (lost) {

@@ -35,6 +35,8 @@ type FindManyOpts = {
   startLte?: string;
   /** Appointments: filter by client. */
   clientId?: string;
+  /** Workflow records: filter by vehicle. */
+  vehicleId?: string;
   pause?: boolean;
   live?: boolean;
 };
@@ -124,6 +126,7 @@ export function useFindMany(
         String(opts?.startGte ?? ""),
         String(opts?.startLte ?? ""),
         String(opts?.clientId ?? ""),
+        String(opts?.vehicleId ?? ""),
         opts?.pause ? "1" : "0",
         opts?.live ? "1" : "0",
       ].join("|"),
@@ -140,6 +143,7 @@ export function useFindMany(
       opts?.startGte,
       opts?.startLte,
       opts?.clientId,
+      opts?.vehicleId,
       opts?.pause,
       opts?.live,
     ]
@@ -202,6 +206,7 @@ export function useFindFirst(
         String(opts?.startGte ?? ""),
         String(opts?.startLte ?? ""),
         String(opts?.clientId ?? ""),
+        String(opts?.vehicleId ?? ""),
         opts?.pause ? "1" : "0",
         opts?.live ? "1" : "0",
       ].join("|"),
@@ -218,6 +223,7 @@ export function useFindFirst(
       opts?.startGte,
       opts?.startLte,
       opts?.clientId,
+      opts?.vehicleId,
       opts?.pause,
       opts?.live,
     ]

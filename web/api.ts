@@ -182,6 +182,8 @@ function resource(path: string) {
       startLte?: string;
       /** Appointments: scope list to one client. */
       clientId?: string;
+      /** Workflow records: scope list to one vehicle. */
+      vehicleId?: string;
       /** Quotes: draft + sent only (dashboard). */
       pending?: boolean;
       /** Invoices: sent + partial only (dashboard unpaid). */
@@ -200,6 +202,7 @@ function resource(path: string) {
       if (opts?.startGte !== undefined && opts.startGte !== "") query.startGte = opts.startGte;
       if (opts?.startLte !== undefined && opts.startLte !== "") query.startLte = opts.startLte;
       if (opts?.clientId !== undefined && opts.clientId !== "") query.clientId = opts.clientId;
+      if (opts?.vehicleId !== undefined && opts.vehicleId !== "") query.vehicleId = opts.vehicleId;
       const qs =
         Object.keys(query).length > 0
           ? "?" + new URLSearchParams(serializeQuery(query as Record<string, unknown>)).toString()

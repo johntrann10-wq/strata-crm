@@ -58,11 +58,14 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
 
   const clientIdRaw = typeof req.query.clientId === "string" ? req.query.clientId.trim() : "";
   const clientIdFilter = z.string().uuid().safeParse(clientIdRaw).success ? clientIdRaw : undefined;
+  const vehicleIdRaw = typeof req.query.vehicleId === "string" ? req.query.vehicleId.trim() : "";
+  const vehicleIdFilter = z.string().uuid().safeParse(vehicleIdRaw).success ? vehicleIdRaw : undefined;
 
   const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
 
   const conditions = [eq(appointments.businessId, bid)];
   if (clientIdFilter) conditions.push(eq(appointments.clientId, clientIdFilter));
+  if (vehicleIdFilter) conditions.push(eq(appointments.vehicleId, vehicleIdFilter));
   if (startGte) conditions.push(gte(appointments.startTime, startGte));
   if (startLte) conditions.push(lte(appointments.startTime, startLte));
 
