@@ -150,6 +150,15 @@ export default function SignedIn() {
     pending: true,
     pause: !businessId,
   });
+  const [{ data: acceptedQuotesRaw, fetching: fetchingAcceptedQuotes, error: acceptedQuotesError }, refetchAcceptedQuotes] = useFindMany(
+    api.quote,
+    {
+      sort: { createdAt: "Descending" },
+      first: 10,
+      status: "accepted",
+      pause: !businessId,
+    } as any
+  );
 
   const [{ data: jobsRaw, fetching: fetchingJobs, error: jobsError }, refetchJobs] = useFindMany(api.job, {
     first: 25,
@@ -174,6 +183,7 @@ export default function SignedIn() {
   const appointments = (appointmentsRaw ?? []) as AppointmentRecord[];
   const unpaidInvoices = (invoicesRaw ?? []) as InvoiceRecord[];
   const pendingQuotes = (quotesRaw ?? []) as QuoteRecord[];
+  const acceptedQuotes = (acceptedQuotesRaw ?? []) as QuoteRecord[];
   const jobs = (jobsRaw ?? []) as JobRecord[];
   const staffRecords = (staffRaw ?? []) as StaffRecord[];
   const locationRecords = (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>;
@@ -415,11 +425,11 @@ export default function SignedIn() {
     setRefreshing(true);
     setFilterNow(new Date());
     try {
-      await Promise.all([refetchAppts(), refetchInvoices(), refetchQuotes(), refetchJobs(), refetchStaff()]);
+      await Promise.all([refetchAppts(), refetchInvoices(), refetchQuotes(), refetchAcceptedQuotes(), refetchJobs(), refetchStaff()]);
     } finally {
       setRefreshing(false);
     }
-  }, [refetchAppts, refetchInvoices, refetchQuotes, refetchJobs, refetchStaff]);
+  }, [refetchAppts, refetchInvoices, refetchQuotes, refetchAcceptedQuotes, refetchJobs, refetchStaff]);
 
   const handleSendQuote = useCallback(
     async (event: React.SyntheticEvent, quoteId: string) => {
@@ -545,10 +555,11 @@ export default function SignedIn() {
   const loadingAppts = fetchingAppts && appointmentsRaw === undefined;
   const loadingInvoices = fetchingInvoices && invoicesRaw === undefined;
   const loadingQuotes = fetchingQuotes && quotesRaw === undefined;
+  const loadingAcceptedQuotes = fetchingAcceptedQuotes && acceptedQuotesRaw === undefined;
   const loadingJobs = fetchingJobs && jobsRaw === undefined;
   const loadingStaff = fetchingStaff && staffRaw === undefined;
-  const anyLoading = loadingAppts || loadingInvoices || loadingQuotes || loadingJobs || loadingStaff;
-  const anyError = jobsError ?? apptsError ?? invoicesError ?? quotesError ?? staffError;
+  const anyLoading = loadingAppts || loadingInvoices || loadingQuotes || loadingAcceptedQuotes || loadingJobs || loadingStaff;
+  const anyError = jobsError ?? apptsError ?? invoicesError ?? quotesError ?? acceptedQuotesError ?? staffError;
 
   if (!businessId) {
     return <Navigate to="/onboarding" replace />;
@@ -1055,6 +1066,71 @@ export default function SignedIn() {
                     ) : null}
                   </div>
                   <StatusBadge status={appointment.status ?? "scheduled"} type="appointment" />
+                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </DashboardSection>
+
+        <DashboardSection
+          title="Ready to book"
+          seeAllHref="/quotes"
+          seeAllLabel="Quotes"
+          error={acceptedQuotesError}
+          isLoading={loadingAcceptedQuotes}
+          isEmpty={!loadingAcceptedQuotes && !acceptedQuotesError && acceptedQuotes.length === 0}
+          emptyMessage="No accepted quotes are waiting to be booked."
+          emptyCta={{ href: "/quotes", label: "Review quotes" }}
+          skeletonRows={2}
+        >
+          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
+            {acceptedQuotes.map((quote) => (
+              <li key={quote.id}>
+                <Link
+                  to={`/quotes/${quote.id}`}
+                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
+                >
+                  <Receipt className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">
+                      {quote.client
+                        ? `${quote.client.firstName ?? ""} ${quote.client.lastName ?? ""}`.trim() || "Accepted quote"
+                        : `Quote - ${String(quote.id).slice(0, 8)}...`}
+                    </p>
+                    <p className="text-sm capitalize text-muted-foreground">accepted</p>
+                  </div>
+                  <div
+                    className="flex items-center gap-2"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                  >
+                    {quote.client?.id ? (
+                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
+                        <Link
+                          to={`/appointments/new?clientId=${quote.client.id}&quoteId=${quote.id}${
+                            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+                          }`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          Book
+                        </Link>
+                      </Button>
+                    ) : null}
+                    {quote.client?.id ? (
+                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
+                        <Link
+                          to={`/invoices/new?clientId=${quote.client.id}&quoteId=${quote.id}`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          Invoice
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                  <span className="font-semibold tabular-nums">{formatCurrency(quote.total)}</span>
                   <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
                 </Link>
               </li>
