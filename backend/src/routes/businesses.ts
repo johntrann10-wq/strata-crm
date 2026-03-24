@@ -5,6 +5,7 @@ import { businesses } from "../db/schema.js";
 import { eq, and } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
+import { randomUUID } from "crypto";
 
 export const businessesRouter = Router({ mergeParams: true });
 
@@ -82,6 +83,7 @@ businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
   const [created] = await db
     .insert(businesses)
     .values({
+      id: randomUUID(),
       ownerId: req.userId,
       name: parsed.data.name,
       type: parsed.data.type,
