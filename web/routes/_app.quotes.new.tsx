@@ -4,6 +4,7 @@ import { useFindMany, useFindFirst, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
 import type { AuthOutletContext } from "./_app";
+import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,8 +57,9 @@ const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
 
 export default function NewQuotePage() {
-  const { user } = useOutletContext<AuthOutletContext>();
+  const { businessId, businessType } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
+  const creationPreset = getWorkflowCreationPreset(businessType);
   const [searchParams] = useSearchParams();
   const clientIdParam = searchParams.get("clientId");
   const vehicleIdParam = searchParams.get("vehicleId");
@@ -88,13 +90,11 @@ export default function NewQuotePage() {
     setSelectedVehicleId("");
   }, [selectedClientId]);
 
-  // Get business record
   const [{ data: business }] = useFindFirst(api.business, {
-    filter: { ownerId: { equals: user?.id } },
+    filter: { id: { equals: businessId ?? "" } },
     select: { id: true, defaultTaxRate: true },
+    pause: !businessId,
   });
-
-  const businessId = business?.id;
 
   // Pre-fill tax rate from business default
   useEffect(() => {
@@ -258,6 +258,12 @@ export default function NewQuotePage() {
       };
     })
     .filter((entry) => entry.linkedAddons.length > 0);
+  const recommendedPackageTemplates = packageTemplates.filter((pkg) =>
+    creationPreset.recommendedCategories.includes(String(pkg.baseService.category ?? "other"))
+  );
+  const otherPackageTemplates = packageTemplates.filter(
+    (pkg) => !creationPreset.recommendedCategories.includes(String(pkg.baseService.category ?? "other"))
+  );
 
   const handleSubmit = async () => {
     const validLineItems = lineItems.filter(
@@ -351,6 +357,31 @@ export default function NewQuotePage() {
               <CardTitle>Line Items</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">{creationPreset.title}</p>
+                  <p className="text-sm text-muted-foreground">{creationPreset.summary}</p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setNotes(creationPreset.quoteNotes)}>
+                      Apply quote notes
+                    </Button>
+                    {creationPreset.suggestedDepositPercent ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const nextNotes = `${creationPreset.quoteNotes}\nDeposit target: ${creationPreset.suggestedDepositPercent}%`;
+                          setNotes(nextNotes);
+                        }}
+                      >
+                        Add deposit guidance
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
               {lineItems.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No line items yet. Add one below.
@@ -429,16 +460,44 @@ export default function NewQuotePage() {
                 Add Line Item
               </Button>
 
-              {packageTemplates.length > 0 && (
+              {recommendedPackageTemplates.length > 0 && (
                 <>
                   <Separator />
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Package className="h-4 w-4 text-muted-foreground" />
-                      <p className="text-sm font-medium text-muted-foreground">Quick Add Package</p>
+                      <p className="text-sm font-medium text-muted-foreground">Recommended packages</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {packageTemplates.map((pkg) => (
+                      {recommendedPackageTemplates.map((pkg) => (
+                        <Button
+                          key={pkg.baseService.id}
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => addPackageAsLineItems(pkg.baseService, pkg.linkedAddons)}
+                        >
+                          {pkg.baseService.name}
+                          <span className="ml-1 text-muted-foreground">
+                            · {pkg.linkedAddons.length + 1} items · {formatCurrency(pkg.totalPrice)}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {otherPackageTemplates.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                      <p className="text-sm font-medium text-muted-foreground">Other packages</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {otherPackageTemplates.map((pkg) => (
                         <Button
                           key={pkg.baseService.id}
                           variant="outline"

@@ -19,6 +19,7 @@ import {
 import { api } from "../api";
 import { formatServiceCategory } from "../lib/serviceCatalog";
 import type { AuthOutletContext } from "./_app";
+import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,8 +58,9 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function NewAppointmentPage() {
-  const { user, businessId } = useOutletContext<AuthOutletContext>();
+  const { user, businessId, businessType } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
+  const creationPreset = useMemo(() => getWorkflowCreationPreset(businessType), [businessType]);
 
   const [searchParams] = useSearchParams();
   const quoteIdParam = searchParams.get("quoteId");
@@ -120,6 +122,12 @@ export default function NewAppointmentPage() {
       setSelectedDate(new Date());
     }
   }, []);
+
+  useEffect(() => {
+    if (creationPreset.defaultMobile) {
+      setIsMobile(true);
+    }
+  }, [creationPreset.defaultMobile]);
 
   // Debounce client search query
   useEffect(() => {
@@ -506,6 +514,12 @@ export default function NewAppointmentPage() {
       };
     })
     .filter((entry) => entry.linkedAddons.length > 0);
+  const recommendedPackageTemplates = packageTemplates.filter((pkg) =>
+    creationPreset.recommendedCategories.includes(String(pkg.baseService.category ?? "other"))
+  );
+  const otherPackageTemplates = packageTemplates.filter(
+    (pkg) => !creationPreset.recommendedCategories.includes(String(pkg.baseService.category ?? "other"))
+  );
   const staff = staffData ?? [];
   const isLoading = isSubmitting || actionFetching;
 
@@ -699,6 +713,26 @@ export default function NewAppointmentPage() {
               <CardTitle className="text-base font-semibold">Services</CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="mb-4 rounded-xl border border-border/70 bg-muted/30 p-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">{creationPreset.title}</p>
+                  <p className="text-sm text-muted-foreground">{creationPreset.summary}</p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setNotes(creationPreset.appointmentClientNotes)}>
+                      Apply client intake
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setInternalNotes(creationPreset.appointmentInternalNotes)}>
+                      Apply internal handoff
+                    </Button>
+                    {creationPreset.defaultMobile ? (
+                      <Button type="button" variant="outline" size="sm" onClick={() => setIsMobile(true)}>
+                        Mark as mobile
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
               {servicesFetching ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -710,14 +744,45 @@ export default function NewAppointmentPage() {
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {packageTemplates.length > 0 && (
+                  {recommendedPackageTemplates.length > 0 && (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <Package className="h-4 w-4 text-muted-foreground" />
-                        <p className="text-sm font-medium text-muted-foreground">Package templates</p>
+                        <p className="text-sm font-medium text-muted-foreground">Recommended packages</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {packageTemplates.map((pkg) => (
+                        {recommendedPackageTemplates.map((pkg) => (
+                          <Button
+                            key={pkg.baseService.id}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              applyPackageTemplate(
+                                pkg.baseService.id,
+                                pkg.linkedAddons.map((addon) => addon!.id)
+                              )
+                            }
+                          >
+                            {pkg.baseService.name}
+                            <span className="ml-1 text-muted-foreground">
+                              · {pkg.linkedAddons.length + 1} services · ${pkg.totalPackagePrice.toFixed(2)}
+                              {pkg.totalPackageDuration > 0 ? ` · ${formatDuration(pkg.totalPackageDuration)}` : ""}
+                            </span>
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {otherPackageTemplates.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-sm font-medium text-muted-foreground">Other package templates</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {otherPackageTemplates.map((pkg) => (
                           <Button
                             key={pkg.baseService.id}
                             type="button"
