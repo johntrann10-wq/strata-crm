@@ -56,6 +56,8 @@ import {
   FileText,
   User,
   AlertTriangle,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 const APPOINTMENT_STATUSES = [
@@ -283,6 +285,7 @@ export default function AppointmentDetail() {
   const [editNotes, setEditNotes] = useState("");
   const [editInternalNotes, setEditInternalNotes] = useState("");
   const [editVehicleId, setEditVehicleId] = useState("");
+  const [selectedServiceId, setSelectedServiceId] = useState("__none__");
   const [editServiceIds, setEditServiceIds] = useState<string[]>([]);
 
   const [{ data: appointment, fetching, error }, refetchAppointment] = useFindOne(
@@ -340,9 +343,20 @@ export default function AppointmentDetail() {
 
   const [{ data: appointmentServices }] = useFindMany(api.appointmentService, {
     filter: { appointmentId: { equals: id } },
-    first: 1,
+    first: 50,
     live: true,
-    select: { id: true },
+    select: {
+      id: true,
+      serviceId: true,
+      quantity: true,
+      unitPrice: true,
+      service: {
+        id: true,
+        name: true,
+        category: true,
+        durationMinutes: true,
+      },
+    },
   });
 
   const [{ data: invoice, fetching: invoiceFetching }] = useFindFirst(api.invoice, {
@@ -378,11 +392,22 @@ export default function AppointmentDetail() {
     first: 50,
     pause: !appointment?.business?.id,
   } as any);
+  const [{ data: serviceCatalog, fetching: servicesFetching }] = useFindMany(api.service, {
+    first: 200,
+    sort: { createdAt: "Descending" },
+    pause: !appointment?.business?.id,
+  } as any);
 
   const [{ fetching: updatingStatus }, runUpdateStatus] = useAction(api.appointment.updateStatus);
   const [{ fetching: completing }, runComplete] = useAction(api.appointment.complete);
   const [{ fetching: cancelling }, runCancel] = useAction(api.appointment.cancel);
   const [{ fetching: updatingNotes }, runUpdate] = useAction(api.appointment.update);
+  const [{ fetching: addingService }, runAddAppointmentService] = useAction(api.appointmentService.create);
+  const [{ fetching: removingService }, runRemoveAppointmentService] = useAction(
+    (params: Record<string, unknown>) => api.appointmentService.delete(params)
+  );
+  const [{ fetching: completingService }, runCompleteService] = useAction(api.appointmentService.complete);
+  const [{ fetching: reopeningService }, runReopenService] = useAction(api.appointmentService.reopen);
 
   useEffect(() => {
     if (appointment) {
@@ -427,6 +452,34 @@ export default function AppointmentDetail() {
       });
     };
   }, [appointment, invoice]);
+
+  const existingServiceIds = new Set(
+    ((appointmentServices ?? []) as Array<{ serviceId?: string | null }>).map((service) => service.serviceId).filter(Boolean)
+  );
+  const availableServices = ((serviceCatalog ?? []) as Array<{
+    id: string;
+    name?: string | null;
+    category?: string | null;
+    price?: number | string | null;
+  }>).filter((service) => service.id && !existingServiceIds.has(service.id));
+  const completedServiceIds = new Map(
+    (((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>).reduce(
+      (acc, record) => {
+        let appointmentServiceId: string | null = null;
+        try {
+          const parsed = record.metadata ? (JSON.parse(record.metadata) as { appointmentServiceId?: string }) : null;
+          appointmentServiceId = parsed?.appointmentServiceId ?? null;
+        } catch {
+          appointmentServiceId = null;
+        }
+        if (!appointmentServiceId || acc.has(appointmentServiceId)) return acc;
+        if (record.type === "job.service_completed") acc.set(appointmentServiceId, true);
+        if (record.type === "job.service_reopened") acc.set(appointmentServiceId, false);
+        return acc;
+      },
+      new Map<string, boolean>()
+    ) as Map<string, boolean>).entries()
+  );
 
   const handleStatusChange = async (newStatus: string) => {
     if (!appointment) return;
@@ -519,6 +572,51 @@ export default function AppointmentDetail() {
       setShowEditDialog(false);
       void refetchAppointment();
     }
+  };
+
+  const handleAddService = async () => {
+    if (!appointment?.id || selectedServiceId === "__none__") return;
+    const result = await runAddAppointmentService({
+      appointmentId: appointment.id,
+      serviceId: selectedServiceId,
+    });
+    if (result.error) {
+      toast.error(`Failed to add service: ${result.error.message}`);
+      return;
+    }
+    toast.success("Service added to appointment");
+    setSelectedServiceId("__none__");
+    void refetchAppointment();
+  };
+
+  const handleRemoveService = async (appointmentServiceId: string) => {
+    const result = await runRemoveAppointmentService({ id: appointmentServiceId });
+    if (result.error) {
+      toast.error(`Failed to remove service: ${result.error.message}`);
+      return;
+    }
+    toast.success("Service removed from appointment");
+    void refetchAppointment();
+  };
+
+  const handleCompleteService = async (appointmentServiceId: string) => {
+    const result = await runCompleteService({ id: appointmentServiceId });
+    if ((result as any)?.error) {
+      toast.error(`Failed to complete service: ${(result as any).error.message}`);
+      return;
+    }
+    toast.success("Service marked complete");
+    void refetchAppointment();
+  };
+
+  const handleReopenService = async (appointmentServiceId: string) => {
+    const result = await runReopenService({ id: appointmentServiceId });
+    if ((result as any)?.error) {
+      toast.error(`Failed to reopen service: ${(result as any).error.message}`);
+      return;
+    }
+    toast.success("Service reopened");
+    void refetchAppointment();
   };
 
   if (!id) {
@@ -883,6 +981,89 @@ export default function AppointmentDetail() {
                         </p>
                       </div>
                     </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Services</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center">
+                    <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
+                      <SelectTrigger className="sm:flex-1">
+                        <SelectValue placeholder={servicesFetching ? "Loading services..." : "Add a service from your catalog"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Select a service</SelectItem>
+                        {availableServices.map((service) => (
+                          <SelectItem key={service.id} value={service.id}>
+                            {service.name ?? "Service"}
+                            {service.category ? ` - ${service.category}` : ""}
+                            {service.price != null ? ` - ${formatCurrency(Number(service.price))}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button onClick={() => void handleAddService()} disabled={addingService || selectedServiceId === "__none__"}>
+                      {addingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                      Add service
+                    </Button>
+                  </div>
+
+                  {(appointmentServices as any[])?.length ? (
+                    <div className="space-y-3">
+                      {((appointmentServices as any[]) ?? []).map((item: any) => {
+                        const isCompleted = completedServiceIds.get(item.id) === true;
+                        return (
+                          <div key={item.id} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className={isCompleted ? "font-medium line-through text-muted-foreground" : "font-medium"}>
+                                  {item.service?.name ?? "Service"}
+                                </p>
+                                {isCompleted ? <StatusBadge status="completed" type="job" /> : null}
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {item.service?.category ?? "General"} · Qty {item.quantity ?? 1}
+                                {item.service?.durationMinutes ? ` · ${item.service.durationMinutes} min` : ""}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="text-sm font-medium text-foreground">
+                                {formatCurrency(Number(item.unitPrice ?? 0))}
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                                onClick={() => void (isCompleted ? handleReopenService(item.id) : handleCompleteService(item.id))}
+                                disabled={completingService || reopeningService}
+                              >
+                                {completingService || reopeningService ? (
+                                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="mr-1 h-4 w-4" />
+                                )}
+                                {isCompleted ? "Reopen" : "Complete"}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2 text-muted-foreground hover:text-destructive"
+                                onClick={() => void handleRemoveService(item.id)}
+                                disabled={removingService}
+                              >
+                                {removingService ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No services attached yet.</p>
                   )}
                 </CardContent>
               </Card>

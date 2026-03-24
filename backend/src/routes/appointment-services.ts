@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { appointmentServices, appointments } from "../db/schema.js";
+import { appointmentServices, appointments, services } from "../db/schema.js";
 import { and, eq, desc } from "drizzle-orm";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -35,15 +35,44 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Reque
   const first = req.query.first != null ? Math.min(Number(req.query.first), 100) : 50;
 
   const rows = await db
-    .select()
+    .select({
+      id: appointmentServices.id,
+      appointmentId: appointmentServices.appointmentId,
+      serviceId: appointmentServices.serviceId,
+      quantity: appointmentServices.quantity,
+      unitPrice: appointmentServices.unitPrice,
+      createdAt: appointmentServices.createdAt,
+      updatedAt: appointmentServices.updatedAt,
+      serviceName: services.name,
+      serviceCategory: services.category,
+      serviceDurationMinutes: services.durationMinutes,
+    })
     .from(appointmentServices)
     .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
+    .leftJoin(services, eq(appointmentServices.serviceId, services.id))
     .where(and(...conditions))
     .orderBy(desc(appointmentServices.createdAt))
     .limit(first);
 
-  // Ensure stable contract for `resource(...).findMany()`
-  res.json({ records: rows });
+  res.json({
+    records: rows.map((row) => ({
+      id: row.id,
+      appointmentId: row.appointmentId,
+      serviceId: row.serviceId,
+      quantity: row.quantity,
+      unitPrice: row.unitPrice,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      service: row.serviceName
+        ? {
+            id: row.serviceId,
+            name: row.serviceName,
+            category: row.serviceCategory,
+            durationMinutes: row.serviceDurationMinutes,
+          }
+        : null,
+    })),
+  });
 });
 
 appointmentServicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
