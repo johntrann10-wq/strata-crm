@@ -27,6 +27,7 @@ import {
   Menu,
   AlertCircle,
   Car,
+  ShieldCheck,
 } from "lucide-react";
 import React, { useState, useEffect, memo, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
@@ -64,7 +65,8 @@ export type AuthOutletContext = RootOutletContext & {
 const primaryNavItems: { icon: React.ElementType; label: string; href: string; end: boolean; module?: string }[] = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/signed-in", end: true },
   { icon: Calendar, label: "Calendar", href: "/calendar", end: false, module: "calendar" },
-  { icon: ClipboardList, label: "Jobs", href: "/appointments", end: false, module: "appointments" },
+  { icon: Calendar, label: "Schedule", href: "/appointments", end: false, module: "appointments" },
+  { icon: ClipboardList, label: "Jobs", href: "/jobs", end: false, module: "jobs" },
   { icon: Users, label: "Clients", href: "/clients", end: false, module: "clients" },
   { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices" },
   { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes" },
@@ -73,6 +75,7 @@ const primaryNavItems: { icon: React.ElementType; label: string; href: string; e
 const managementNavItems: { icon: React.ElementType; label: string; href: string; end: boolean; module?: string }[] = [
   { icon: Car, label: "Vehicles", href: "/vehicles", end: false, module: "vehicles" },
   { icon: Wrench, label: "Services", href: "/services", end: false, module: "services" },
+  { icon: ShieldCheck, label: "Team", href: "/settings", end: false },
 ];
 
 const bottomNavItems = [{ icon: Settings, label: "Settings", href: "/settings", end: false }];

@@ -286,6 +286,7 @@ export const api = {
       }),
   },
   appointmentService: resource("appointment-services"),
+  job: resource("jobs"),
   invoice: {
     ...resource("invoices"),
     sendToClient: (params: Record<string, unknown>) =>

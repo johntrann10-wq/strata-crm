@@ -113,7 +113,7 @@ export function getQuoteStatusLabel(status: string): string {
 
 interface StatusBadgeProps {
   status: string;
-  type: "appointment" | "invoice" | "quote";
+  type: "appointment" | "invoice" | "quote" | "job";
   className?: string;
 }
 
@@ -121,7 +121,7 @@ export function StatusBadge({ status, type, className }: StatusBadgeProps) {
   let colorClass: string;
   let label: string;
 
-  if (type === "appointment") {
+  if (type === "appointment" || type === "job") {
     colorClass = getAppointmentStatusClass(status);
     label = getAppointmentStatusLabel(status);
   } else if (type === "invoice") {
