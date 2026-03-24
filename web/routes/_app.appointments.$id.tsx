@@ -35,7 +35,7 @@ import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { ActivityFeedCard } from "../components/shared/ActivityFeedCard";
+import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import {
   ClientCard,
   VehicleCard,
@@ -266,7 +266,8 @@ function JobLifecycleStepper({
 
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useOutletContext<AuthOutletContext>();
+  const { user, permissions } = useOutletContext<AuthOutletContext>();
+  const canEditCollaboration = permissions.has("appointments.write");
   const { setPageContext } = usePageContext();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -369,7 +370,7 @@ export default function AppointmentDetail() {
       total: true,
     },
   });
-  const [{ data: activityLogs, fetching: activityFetching }] = useFindMany(api.activityLog, {
+  const [{ data: activityLogs, fetching: activityFetching }, refetchActivity] = useFindMany(api.activityLog, {
     entityType: "appointment",
     entityId: id,
     first: 8,
@@ -1175,7 +1176,16 @@ export default function AppointmentDetail() {
                 depositPaid={appointment.depositPaid}
               />
 
-              <ActivityFeedCard records={(activityLogs as any[]) ?? []} fetching={activityFetching} />
+              <EntityCollaborationCard
+                entityType="appointment"
+                entityId={appointment.id}
+                records={(activityLogs as any[]) ?? []}
+                fetching={activityFetching}
+                canWrite={canEditCollaboration}
+                onCreated={() => {
+                  void refetchActivity();
+                }}
+              />
 
             </div>
           </div>

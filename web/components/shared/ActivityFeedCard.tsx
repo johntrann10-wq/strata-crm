@@ -24,11 +24,13 @@ function formatActivityDescription(record: ActivityRecord) {
   if (!record.metadata) return "No additional details.";
   try {
     const parsed = JSON.parse(record.metadata) as Record<string, unknown>;
+    if (typeof parsed.body === "string" && parsed.body.trim()) return parsed.body.trim();
+    if (typeof parsed.label === "string" && typeof parsed.url === "string") return `${parsed.label}: ${parsed.url}`;
     const parts = Object.entries(parsed)
       .filter(([, value]) => value != null && value !== "")
       .slice(0, 3)
       .map(([key, value]) => `${key}: ${String(value)}`);
-    return parts.length > 0 ? parts.join(" • ") : "No additional details.";
+    return parts.length > 0 ? parts.join(" | ") : "No additional details.";
   } catch {
     return record.metadata;
   }

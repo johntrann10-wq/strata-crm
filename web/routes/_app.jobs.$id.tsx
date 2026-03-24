@@ -23,7 +23,7 @@ import type { AuthOutletContext } from "./_app";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { ActivityFeedCard } from "../components/shared/ActivityFeedCard";
+import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -129,7 +129,7 @@ export default function JobDetailPage() {
     sort: { createdAt: "Descending" },
     pause: !businessId,
   } as any);
-  const [{ data: activityLogs, fetching: activityFetching }] = useFindMany(api.activityLog, {
+  const [{ data: activityLogs, fetching: activityFetching }, refetchActivity] = useFindMany(api.activityLog, {
     entityType: "job",
     entityId: id,
     first: 8,
@@ -662,7 +662,16 @@ export default function JobDetailPage() {
             </CardContent>
           </Card>
 
-          <ActivityFeedCard records={(activityLogs as any[]) ?? []} fetching={activityFetching} />
+          <EntityCollaborationCard
+            entityType="job"
+            entityId={record.id}
+            records={(activityLogs as any[]) ?? []}
+            fetching={activityFetching}
+            canWrite={canEdit}
+            onCreated={() => {
+              void refetchActivity();
+            }}
+          />
         </div>
       </div>
     </div>
