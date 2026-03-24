@@ -48,6 +48,7 @@ export type AuthOutletContext = RootOutletContext & {
   businessId: string | null;
   businessType: string | null;
   membershipRole: string | null;
+  permissions: Set<string>;
   tenantBusinesses: Array<{
     id: string;
     name: string | null;
@@ -237,6 +238,10 @@ function AppLayoutInner({
     () => getEnabledModules(businessType) as Set<string>,
     [businessType]
   );
+  const permissions = useMemo(
+    () => new Set((tenantBusinesses.find((tenantBusiness) => tenantBusiness.id === businessId)?.permissions ?? [])),
+    [tenantBusinesses, businessId]
+  );
   const outletCtx = useMemo(
     () =>
       ({
@@ -246,10 +251,11 @@ function AppLayoutInner({
         businessId,
         businessType,
         membershipRole,
+        permissions,
         tenantBusinesses,
         enabledModules,
       }) as AuthOutletContext,
-    [rootOutletContext, user, businessName, businessId, businessType, membershipRole, tenantBusinesses, enabledModules]
+    [rootOutletContext, user, businessName, businessId, businessType, membershipRole, permissions, tenantBusinesses, enabledModules]
   );
 
   useEffect(() => {

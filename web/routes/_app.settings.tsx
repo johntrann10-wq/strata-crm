@@ -287,7 +287,7 @@ function BillingTab({
 }
 
 export default function SettingsPage() {
-  const { user, businessId, membershipRole } = useOutletContext<AuthOutletContext>();
+  const { user, businessId, membershipRole, permissions } = useOutletContext<AuthOutletContext>();
   const [activeTab, setActiveTab] = useState("profile");
   const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
@@ -312,7 +312,12 @@ export default function SettingsPage() {
     role: "technician",
     active: true,
   });
-  const canManageTeam = membershipRole === "owner" || membershipRole === "admin" || membershipRole === "manager";
+  const canManageTeam =
+    permissions.has("team.write") ||
+    membershipRole === "owner" ||
+    membershipRole === "admin" ||
+    membershipRole === "manager";
+  const canEditSettings = permissions.has("settings.write");
 
   const [{ data: business, fetching: businessFetching }] = useFindOne(api.business, businessId ?? "", {
     pause: !businessId,
@@ -831,7 +836,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="flex justify-end pt-2">
-                  <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto sm:min-w-[130px]">
+                  <Button onClick={handleSave} disabled={saving || !canEditSettings} className="w-full sm:w-auto sm:min-w-[130px]">
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     {saving ? "Saving..." : "Save Changes"}
                   </Button>
@@ -850,7 +855,7 @@ export default function SettingsPage() {
                       Manage your shop locations. Assign staff and appointments to specific locations.
                     </CardDescription>
                   </div>
-                  <Button onClick={openCreateLocation} size="sm" className="w-full sm:w-auto">
+                  <Button onClick={openCreateLocation} size="sm" className="w-full sm:w-auto" disabled={!canEditSettings}>
                     <Plus className="mr-2 h-4 w-4" />
                     Add Location
                   </Button>
@@ -866,7 +871,7 @@ export default function SettingsPage() {
                     <p className="mt-1 text-xs text-muted-foreground">
                       Add your first shop location to get started.
                     </p>
-                    <Button variant="outline" size="sm" className="mt-4 w-full sm:w-auto" onClick={openCreateLocation}>
+                    <Button variant="outline" size="sm" className="mt-4 w-full sm:w-auto" onClick={openCreateLocation} disabled={!canEditSettings}>
                       <Plus className="mr-2 h-4 w-4" />
                       Add Location
                     </Button>
@@ -898,7 +903,7 @@ export default function SettingsPage() {
                             <span />
                           )}
                           <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => openEditLocation(location)}>
+                            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => openEditLocation(location)} disabled={!canEditSettings}>
                               <PenLine className="h-3.5 w-3.5" />
                             </Button>
                             <Button
@@ -906,6 +911,7 @@ export default function SettingsPage() {
                               size="icon"
                               className="h-9 w-9 text-muted-foreground hover:text-destructive"
                               onClick={() => setDeleteLocationId(location.id)}
+                              disabled={!canEditSettings}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>

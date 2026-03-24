@@ -5,6 +5,7 @@ import { businessMemberships, businesses } from "../db/schema.js";
 import { eq, and } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { randomUUID } from "crypto";
 
 export const businessesRouter = Router({ mergeParams: true });
@@ -56,7 +57,7 @@ function serializeBusiness(record: typeof businesses.$inferSelect) {
   };
 }
 
-businessesRouter.get("/", requireAuth, async (req: Request, res: Response) => {
+businessesRouter.get("/", requireAuth, requirePermission("settings.read"), async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   if (req.businessId) {
     const [currentBusiness] = await db.select().from(businesses).where(eq(businesses.id, req.businessId)).limit(1);
@@ -128,7 +129,7 @@ businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
   res.status(201).json(serializeBusiness(created));
 });
 
-businessesRouter.get("/:id", requireAuth, async (req: Request, res: Response) => {
+businessesRouter.get("/:id", requireAuth, requirePermission("settings.read"), async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   const [business] = await db
     .select()
@@ -139,7 +140,7 @@ businessesRouter.get("/:id", requireAuth, async (req: Request, res: Response) =>
   res.json(serializeBusiness(business));
 });
 
-businessesRouter.patch("/:id", requireAuth, async (req: Request, res: Response) => {
+businessesRouter.patch("/:id", requireAuth, requirePermission("settings.write"), async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
@@ -177,7 +178,7 @@ businessesRouter.patch("/:id", requireAuth, async (req: Request, res: Response) 
   res.json(serializeBusiness(updated));
 });
 
-businessesRouter.post("/:id/completeOnboarding", requireAuth, async (req: Request, res: Response) => {
+businessesRouter.post("/:id/completeOnboarding", requireAuth, requirePermission("settings.write"), async (req: Request, res: Response) => {
   const id = req.params.id;
   const [b] = await db.select().from(businesses).where(and(eq(businesses.id, id), eq(businesses.ownerId, req.userId!))).limit(1);
   if (!b) throw new NotFoundError("Business not found.");

@@ -7,6 +7,7 @@ import { businessMemberships, staff, users } from "../db/schema.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { requirePermission } from "../middleware/permissions.js";
 import type { MembershipRole } from "../lib/permissions.js";
 
 export const staffRouter = Router({ mergeParams: true });
@@ -45,7 +46,7 @@ const updateStaffSchema = createStaffSchema.partial().extend({
   status: z.enum(["invited", "active", "suspended"]).optional(),
 });
 
-staffRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+staffRouter.get("/", requireAuth, requireTenant, requirePermission("team.read"), async (req: Request, res: Response) => {
   const list = await db
     .select()
     .from(staff)
@@ -72,7 +73,7 @@ staffRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Respo
   });
 });
 
-staffRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+staffRouter.get("/:id", requireAuth, requireTenant, requirePermission("team.read"), async (req: Request, res: Response) => {
   const [row] = await db
     .select()
     .from(staff)
@@ -82,7 +83,7 @@ staffRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Re
   res.json(row);
 });
 
-staffRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+staffRouter.post("/", requireAuth, requireTenant, requirePermission("team.write"), async (req: Request, res: Response) => {
   requireTeamManager(req);
   const parsed = createStaffSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
@@ -155,7 +156,7 @@ staffRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Resp
   });
 });
 
-staffRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.write"), async (req: Request, res: Response) => {
   requireTeamManager(req);
   const parsed = updateStaffSchema.safeParse({ ...req.body, id: req.params.id });
   if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
@@ -225,7 +226,7 @@ staffRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: 
   });
 });
 
-staffRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+staffRouter.delete("/:id", requireAuth, requireTenant, requirePermission("team.write"), async (req: Request, res: Response) => {
   requireTeamManager(req);
   const [existing] = await db
     .select()
