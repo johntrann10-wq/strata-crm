@@ -72,13 +72,13 @@ function matchesTab(status: string | null | undefined, tab: AppointmentStatusTab
 }
 
 export default function AppointmentsPage() {
-  const { businessId, user } = useOutletContext<AuthOutletContext>();
+  const { businessId, user, currentLocationId, setCurrentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
   const [quickBookOpen, setQuickBookOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeTab, setActiveTab] = useState<AppointmentView>("all");
-  const [activeLocationId, setActiveLocationId] = useState<string>("all");
+  const [activeLocationId, setActiveLocationId] = useState<string>(currentLocationId ?? "all");
 
   const [, runUpdateStatus] = useAction(api.appointment.updateStatus);
   const [, runUpdateAppointment] = useAction(api.appointment.update);
@@ -87,6 +87,10 @@ export default function AppointmentsPage() {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
     return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    setActiveLocationId(currentLocationId ?? "all");
+  }, [currentLocationId]);
 
   const handleQuickStatus = async (event: Event | React.SyntheticEvent, appointmentId: string, newStatus: string) => {
     event.preventDefault();
@@ -182,7 +186,13 @@ export default function AppointmentsPage() {
         subtitle="Run the schedule clearly, move work forward fast, and keep status changes close to the list."
         right={
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            <Select value={activeLocationId} onValueChange={setActiveLocationId}>
+            <Select
+              value={activeLocationId}
+              onValueChange={(value) => {
+                setActiveLocationId(value);
+                setCurrentLocationId(value === "all" ? null : value);
+              }}
+            >
               <SelectTrigger className="w-full lg:w-52">
                 <SelectValue placeholder="All locations" />
               </SelectTrigger>

@@ -68,11 +68,15 @@ function matchesTab(job: JobListRecord, tab: JobStatusTab): boolean {
 }
 
 export default function JobsIndexPage() {
-  const { businessId, user } = useOutletContext<AuthOutletContext>();
+  const { businessId, user, currentLocationId, setCurrentLocationId } = useOutletContext<AuthOutletContext>();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeTab, setActiveTab] = useState<JobView>("all");
-  const [activeLocationId, setActiveLocationId] = useState<string>("all");
+  const [activeLocationId, setActiveLocationId] = useState<string>(currentLocationId ?? "all");
+
+  useEffect(() => {
+    setActiveLocationId(currentLocationId ?? "all");
+  }, [currentLocationId]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -144,7 +148,13 @@ export default function JobsIndexPage() {
         subtitle="Run active work orders, assign technicians, and move work from schedule to completion."
         right={
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <Select value={activeLocationId} onValueChange={setActiveLocationId}>
+            <Select
+              value={activeLocationId}
+              onValueChange={(value) => {
+                setActiveLocationId(value);
+                setCurrentLocationId(value === "all" ? null : value);
+              }}
+            >
               <SelectTrigger className="w-full sm:w-52">
                 <SelectValue placeholder="All locations" />
               </SelectTrigger>

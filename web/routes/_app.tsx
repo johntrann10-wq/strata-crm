@@ -36,9 +36,17 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { CommandPaletteProvider, useCommandPalette } from "../components/shared/CommandPaletteContext";
 import { CommandPalette } from "../components/shared/CommandPalette";
 import { getEnabledModules } from "../lib/modules";
-import { useFindOne, useFindFirst } from "../hooks/useApi";
+import { useFindMany, useFindOne, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
-import { clearAuthToken, clearCurrentBusinessId, getCurrentBusinessId, setCurrentBusinessId } from "@/lib/auth";
+import {
+  clearAuthToken,
+  clearCurrentBusinessId,
+  clearCurrentLocationId,
+  getCurrentBusinessId,
+  getCurrentLocationId,
+  setCurrentBusinessId,
+  setCurrentLocationId,
+} from "@/lib/auth";
 import { pathAllowsMissingBusiness } from "../lib/routeRequiresBusiness";
 
 // SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
@@ -48,6 +56,8 @@ export type AuthOutletContext = RootOutletContext & {
   businessName: string | null;
   businessId: string | null;
   businessType: string | null;
+  currentLocationId: string | null;
+  setCurrentLocationId: (locationId: string | null) => void;
   membershipRole: string | null;
   permissions: Set<string>;
   tenantBusinesses: Array<{
@@ -221,6 +231,8 @@ function AppLayoutInner({
   user,
   business,
   tenantBusinesses,
+  currentLocationId,
+  onLocationChange,
   membershipRole,
   onBusinessChange,
   rootOutletContext,
@@ -228,6 +240,8 @@ function AppLayoutInner({
   user: Record<string, unknown>;
   business: Record<string, unknown> | null;
   tenantBusinesses: AuthOutletContext["tenantBusinesses"];
+  currentLocationId: string | null;
+  onLocationChange: (locationId: string | null) => void;
   membershipRole: string | null;
   onBusinessChange: (businessId: string) => void;
   rootOutletContext: RootOutletContext;
@@ -245,6 +259,15 @@ function AppLayoutInner({
     () => new Set((tenantBusinesses.find((tenantBusiness) => tenantBusiness.id === businessId)?.permissions ?? [])),
     [tenantBusinesses, businessId]
   );
+  const [{ data: locations }] = useFindMany(api.location, {
+    first: 100,
+    sort: { name: "Ascending" },
+    pause: !businessId,
+  } as any);
+  const locationRecords = useMemo(
+    () => (((locations ?? []) as Array<{ id: string; name?: string | null }>).filter(Boolean)),
+    [locations]
+  );
   const outletCtx = useMemo(
     () =>
       ({
@@ -253,13 +276,42 @@ function AppLayoutInner({
         businessName,
         businessId,
         businessType,
+        currentLocationId,
+        setCurrentLocationId: onLocationChange,
         membershipRole,
         permissions,
         tenantBusinesses,
         enabledModules,
       }) as AuthOutletContext,
-    [rootOutletContext, user, businessName, businessId, businessType, membershipRole, permissions, tenantBusinesses, enabledModules]
+    [
+      rootOutletContext,
+      user,
+      businessName,
+      businessId,
+      businessType,
+      currentLocationId,
+      onLocationChange,
+      membershipRole,
+      permissions,
+      tenantBusinesses,
+      enabledModules,
+    ]
   );
+
+  useEffect(() => {
+    if (!businessId) {
+      onLocationChange(null);
+      return;
+    }
+    if (locationRecords.length === 0) {
+      if (currentLocationId) onLocationChange(null);
+      return;
+    }
+    if (!currentLocationId) return;
+    if (!locationRecords.some((location) => location.id === currentLocationId)) {
+      onLocationChange(null);
+    }
+  }, [businessId, currentLocationId, locationRecords, onLocationChange]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -308,6 +360,23 @@ function AppLayoutInner({
           <div className="flex items-center gap-2 ml-auto">
             <QuickCreateMenu />
             <div className="flex items-center">
+              {locationRecords.length > 1 ? (
+                <label className="hidden md:flex items-center mr-2">
+                  <span className="sr-only">Current location</span>
+                  <select
+                    value={currentLocationId ?? ""}
+                    onChange={(e) => onLocationChange(e.target.value || null)}
+                    className="h-9 min-w-[180px] rounded-md border bg-background px-3 text-sm text-foreground"
+                  >
+                    <option value="">All locations</option>
+                    {locationRecords.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name?.trim() || "Unnamed location"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               {tenantBusinesses.length > 1 ? (
                 <label className="hidden md:flex items-center mr-4">
                   <span className="sr-only">Current business</span>
@@ -367,6 +436,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const [clientUserId, setClientUserId] = useState<string | null>(null);
   const [tenantBusinesses, setTenantBusinesses] = useState<AuthOutletContext["tenantBusinesses"]>([]);
   const [currentBusinessId, setCurrentBusinessIdState] = useState<string | null>(() => getCurrentBusinessId());
+  const [currentLocationId, setCurrentLocationIdState] = useState<string | null>(() => getCurrentLocationId());
   const [authCheckDone, setAuthCheckDone] = useState(false);
   const effectiveUserId = clientUserId;
 
@@ -405,8 +475,10 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           // Invalid/expired token: clear local state and force the user back to sign-in.
           clearAuthToken();
           clearCurrentBusinessId();
+          clearCurrentLocationId();
           setTenantBusinesses([]);
           setCurrentBusinessIdState(null);
+          setCurrentLocationIdState(null);
           setAuthCheckDone(true);
         }
       });
@@ -421,6 +493,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       setTenantBusinesses([]);
       setCurrentBusinessIdState(null);
       clearCurrentBusinessId();
+      setCurrentLocationIdState(null);
+      clearCurrentLocationId();
       setAuthCheckDone(true);
     };
     const onLogout = () => {
@@ -428,6 +502,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       setTenantBusinesses([]);
       setCurrentBusinessIdState(null);
       clearCurrentBusinessId();
+      setCurrentLocationIdState(null);
+      clearCurrentLocationId();
       setAuthCheckDone(true);
     };
     window.addEventListener("auth:invalid", onInvalid as EventListener);
@@ -458,10 +534,18 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     (businessId: string) => {
       setCurrentBusinessIdState(businessId);
       setCurrentBusinessId(businessId);
+      setCurrentLocationIdState(null);
+      clearCurrentLocationId();
       navigate("/signed-in");
     },
     [navigate]
   );
+
+  const handleLocationChange = useCallback((locationId: string | null) => {
+    setCurrentLocationIdState(locationId);
+    if (locationId) setCurrentLocationId(locationId);
+    else clearCurrentLocationId();
+  }, []);
 
   useEffect(() => {
     if (userFetching || businessFetching) return;
@@ -567,6 +651,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         user={user as Record<string, unknown>}
         business={(business as Record<string, unknown>) ?? null}
         tenantBusinesses={tenantBusinesses}
+        currentLocationId={currentLocationId}
+        onLocationChange={handleLocationChange}
         membershipRole={currentMembership?.role ?? null}
         onBusinessChange={handleBusinessChange}
         rootOutletContext={rootOutletContext}

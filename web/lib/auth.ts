@@ -1,5 +1,6 @@
 const AUTH_TOKEN_KEY = "authToken";
 const CURRENT_BUSINESS_ID_KEY = "currentBusinessId";
+const CURRENT_LOCATION_ID_KEY = "currentLocationId";
 
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -29,6 +30,21 @@ export function setCurrentBusinessId(businessId: string): void {
 export function clearCurrentBusinessId(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(CURRENT_BUSINESS_ID_KEY);
+}
+
+export function getCurrentLocationId(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(CURRENT_LOCATION_ID_KEY);
+}
+
+export function setCurrentLocationId(locationId: string): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CURRENT_LOCATION_ID_KEY, locationId);
+}
+
+export function clearCurrentLocationId(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(CURRENT_LOCATION_ID_KEY);
 }
 
 export type AuthEventName = "auth:invalid" | "auth:logout";
