@@ -345,7 +345,7 @@ function AppLayoutInner({
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col md:pl-64 min-w-0">
-        <header className="h-16 flex items-center justify-between px-4 md:px-6 border-b bg-background z-10 w-full">
+        <header className="min-h-16 flex flex-wrap items-center justify-between gap-2 border-b bg-background px-4 py-3 md:px-6 z-10 w-full">
           {/* Mobile hamburger button */}
           <Button
             variant="ghost"
@@ -412,6 +412,44 @@ function AppLayoutInner({
               />
             </div>
           </div>
+
+          {locationRecords.length > 1 || tenantBusinesses.length > 1 ? (
+            <div className="flex w-full gap-2 md:hidden">
+              {locationRecords.length > 1 ? (
+                <label className="flex min-w-0 flex-1 items-center">
+                  <span className="sr-only">Current location</span>
+                  <select
+                    value={currentLocationId ?? ""}
+                    onChange={(e) => onLocationChange(e.target.value || null)}
+                    className="h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground"
+                  >
+                    <option value="">All locations</option>
+                    {locationRecords.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name?.trim() || "Unnamed location"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {tenantBusinesses.length > 1 ? (
+                <label className="flex min-w-0 flex-1 items-center">
+                  <span className="sr-only">Current business</span>
+                  <select
+                    value={businessId ?? ""}
+                    onChange={(e) => e.target.value && onBusinessChange(e.target.value)}
+                    className="h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground"
+                  >
+                    {tenantBusinesses.map((tenantBusiness) => (
+                      <option key={tenantBusiness.id} value={tenantBusiness.id}>
+                        {tenantBusiness.name ?? "Untitled business"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+          ) : null}
         </header>
 
         <main className="flex-1 overflow-y-auto overflow-x-auto">
