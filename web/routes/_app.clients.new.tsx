@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router";
+import { useNavigate, Link, useSearchParams } from "react-router";
 import { useFindFirst, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 
 interface FormData {
   firstName: string;
@@ -24,6 +24,11 @@ interface FormData {
 
 export default function NewClientPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [submitMode, setSubmitMode] = useState<"client" | "vehicle" | "quote" | "appointment">(() => {
+    const next = searchParams.get("next");
+    return next === "vehicle" || next === "quote" || next === "appointment" ? next : "client";
+  });
 
   const [{ data: business, fetching: businessFetching }] = useFindFirst(api.business, {
     select: { id: true },
@@ -50,9 +55,21 @@ export default function NewClientPage() {
   useEffect(() => {
     const createdClientId = (data as any)?.id;
     if (createdClientId) {
+      if (submitMode === "vehicle") {
+        navigate(`/clients/${createdClientId}/vehicles/new?next=client`);
+        return;
+      }
+      if (submitMode === "quote") {
+        navigate(`/quotes/new?clientId=${createdClientId}`);
+        return;
+      }
+      if (submitMode === "appointment") {
+        navigate(`/appointments/new?clientId=${createdClientId}`);
+        return;
+      }
       navigate(`/clients/${createdClientId}`);
     }
-  }, [data, navigate]);
+  }, [data, navigate, submitMode]);
 
   const getFieldError = (fieldName: string): string | undefined => {
     if (localErrors[fieldName]) return localErrors[fieldName];
@@ -154,6 +171,13 @@ export default function NewClientPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
+          <p className="text-sm font-medium">Lead handoff</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Save the client and continue directly into vehicle intake, quote creation, or appointment booking.
+          </p>
+        </div>
+
         {/* Name */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -340,13 +364,30 @@ export default function NewClientPage() {
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-3 pt-2">
-          <Button type="submit" disabled={fetching}>
-            {fetching ? "Saving..." : "Create Client"}
-          </Button>
+        <div className="flex flex-col gap-3 pt-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <Button type="submit" variant="outline" disabled={fetching} onClick={() => setSubmitMode("vehicle")}>
+              {fetching && submitMode === "vehicle" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save and Add Vehicle
+            </Button>
+            <Button type="submit" variant="outline" disabled={fetching} onClick={() => setSubmitMode("quote")}>
+              {fetching && submitMode === "quote" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save and Create Quote
+            </Button>
+            <Button type="submit" variant="outline" disabled={fetching} onClick={() => setSubmitMode("appointment")}>
+              {fetching && submitMode === "appointment" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save and Book Appointment
+            </Button>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={fetching} onClick={() => setSubmitMode("client")}>
+              {fetching && submitMode === "client" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save Client
+            </Button>
           <Button type="button" variant="outline" asChild>
             <Link to="/clients">Cancel</Link>
           </Button>
+          </div>
         </div>
       </form>
     </div>

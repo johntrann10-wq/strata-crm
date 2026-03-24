@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import { useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,11 @@ import { ArrowLeft, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 export default function NewVehiclePage() {
   const { id: clientId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [submitMode, setSubmitMode] = useState<"client" | "quote" | "appointment">(() => {
+    const next = searchParams.get("next");
+    return next === "quote" || next === "appointment" ? next : "client";
+  });
 
   const [{ data: createdVehicle, fetching: creating, error: createError }, createVehicle] =
     useAction(api.vehicle.create);
@@ -36,10 +41,19 @@ export default function NewVehiclePage() {
   }, []);
 
   useEffect(() => {
-    if (createdVehicle) {
+    if (createdVehicle && clientId) {
+      const createdVehicleId = (createdVehicle as any)?.id;
+      if (submitMode === "quote" && createdVehicleId) {
+        navigate(`/quotes/new?clientId=${clientId}&vehicleId=${createdVehicleId}`);
+        return;
+      }
+      if (submitMode === "appointment" && createdVehicleId) {
+        navigate(`/appointments/new?clientId=${clientId}&vehicleId=${createdVehicleId}`);
+        return;
+      }
       navigate(`/clients/${clientId}`);
     }
-  }, [createdVehicle, clientId, navigate]);
+  }, [createdVehicle, clientId, navigate, submitMode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,6 +87,13 @@ export default function NewVehiclePage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
+              <p className="text-sm font-medium">Vehicle handoff</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Save the vehicle and continue straight into a quote or appointment when you&apos;re working an active lead.
+              </p>
+            </div>
+
             {createError && (
               <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
                 {createError.message}
@@ -211,7 +232,18 @@ export default function NewVehiclePage() {
               </div>
             )}
 
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex flex-col gap-3 pt-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
+                <Button type="submit" variant="outline" disabled={creating || !clientId} onClick={() => setSubmitMode("quote")}>
+                  {creating && submitMode === "quote" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save and Create Quote
+                </Button>
+                <Button type="submit" variant="outline" disabled={creating || !clientId} onClick={() => setSubmitMode("appointment")}>
+                  {creating && submitMode === "appointment" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save and Book Appointment
+                </Button>
+              </div>
+              <div className="flex justify-end gap-3">
               <Button
                 type="button"
                 variant="outline"
@@ -221,10 +253,13 @@ export default function NewVehiclePage() {
               </Button>
               <Button
                 type="submit"
+                onClick={() => setSubmitMode("client")}
                 disabled={creating || !clientId}
               >
-                {creating ? "Adding Vehicle..." : "Add Vehicle"}
+                {creating && submitMode === "client" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Add Vehicle
               </Button>
+              </div>
             </div>
           </form>
         </CardContent>
