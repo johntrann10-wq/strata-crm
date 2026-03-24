@@ -217,10 +217,14 @@ export default function QuotesIndexPage() {
                     const canSend = ["draft", "sent"].includes(quoteStatus);
                     const canFollowUp = ["sent"].includes(quoteStatus);
                     const canBook = quoteStatus === "accepted" && !!row.clientId;
+                    const canInvoice = quoteStatus === "accepted" && !!row.clientId;
                     const bookHref = canBook
                       ? `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
                           currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
                         }`
+                      : null;
+                    const invoiceHref = canInvoice
+                      ? `/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`
                       : null;
                     return (
                       <TableRow
@@ -293,6 +297,16 @@ export default function QuotesIndexPage() {
                                   onClick={(event) => event.stopPropagation()}
                                 >
                                   Book
+                                </Link>
+                              </Button>
+                            ) : null}
+                            {canInvoice && invoiceHref ? (
+                              <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
+                                <Link
+                                  to={invoiceHref}
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  Invoice
                                 </Link>
                               </Button>
                             ) : null}
