@@ -139,6 +139,14 @@ export default function QuotesIndexPage() {
       <Tabs defaultValue="all">
         <TabsList>
           <TabsTrigger value="all">All Quotes</TabsTrigger>
+          <TabsTrigger value="accepted">
+            Ready to Book
+            {allRows.filter((record) => String((record as Record<string, any>).status ?? "") === "accepted").length > 0 && (
+              <span className="ml-1 rounded bg-green-100 text-green-700 px-1.5 py-0.5 text-xs font-medium">
+                {allRows.filter((record) => String((record as Record<string, any>).status ?? "") === "accepted").length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="aging">
             Aging
             {agingRows.length > 0 && (
@@ -327,6 +335,100 @@ export default function QuotesIndexPage() {
               </Table>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="accepted">
+          {(() => {
+            const acceptedRows = allRows.filter((record) => String((record as Record<string, any>).status ?? "") === "accepted");
+            if (acceptedRows.length === 0) {
+              return (
+                <EmptyState
+                  icon={CheckCircle}
+                  title="No accepted quotes waiting to book"
+                  description="Accepted work will appear here until it is scheduled or invoiced."
+                />
+              );
+            }
+
+            return (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Vehicle</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Accepted</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {acceptedRows.map((record) => {
+                      const row = record as Record<string, any>;
+                      const client = row.client as Record<string, any> | undefined;
+                      const vehicle = row.vehicle as Record<string, any> | undefined;
+                      const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "—";
+                      const vehicleLabel = vehicle
+                        ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
+                        : "—";
+                      const qid = String(row.id);
+                      const bookHref = row.clientId
+                        ? `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
+                            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+                          }`
+                        : null;
+                      const invoiceHref = row.clientId
+                        ? `/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`
+                        : null;
+                      return (
+                        <TableRow key={qid} className="cursor-pointer bg-green-50/40" onClick={() => navigate(`/quotes/${qid}`)}>
+                          <TableCell>
+                            {row.clientId ? (
+                              <Link
+                                to={`/clients/${String(row.clientId)}`}
+                                className="text-blue-600 hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {fullName}
+                              </Link>
+                            ) : (
+                              fullName
+                            )}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
+                          <TableCell>{formatCurrency(row.total)}</TableCell>
+                          <TableCell>{row.acceptedAt ? new Date(row.acceptedAt as string).toLocaleDateString() : "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-2">
+                              {bookHref ? (
+                                <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
+                                  <Link to={bookHref} onClick={(event) => event.stopPropagation()}>
+                                    Book
+                                  </Link>
+                                </Button>
+                              ) : null}
+                              {invoiceHref ? (
+                                <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
+                                  <Link to={invoiceHref} onClick={(event) => event.stopPropagation()}>
+                                    Invoice
+                                  </Link>
+                                </Button>
+                              ) : null}
+                              <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
+                                <Link to={`/quotes/${qid}`} onClick={(event) => event.stopPropagation()}>
+                                  Open
+                                </Link>
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            );
+          })()}
         </TabsContent>
 
         <TabsContent value="aging">
