@@ -70,11 +70,15 @@ function getUserIdFromAuthHeader(req: Request): string | null {
   }
 }
 
-function isMissingRelationError(error: unknown): boolean {
+function isTenantSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const code = (error as { code?: string }).code;
-  const message = String((error as { message?: string }).message ?? "");
-  return code === "42P01" || message.toLowerCase().includes("does not exist");
+  const message = String((error as { message?: string }).message ?? "").toLowerCase();
+  return (
+    code === "42P01" ||
+    code === "42703" ||
+    message.includes("does not exist")
+  );
 }
 /** GET /api/auth/me — current user from JWT. Returns 401 if not signed in. */
 authRouter.get(
@@ -134,8 +138,11 @@ authRouter.get(
         .from(businessMemberships)
         .where(eq(businessMemberships.userId, userId));
     } catch (error) {
-      if (!isMissingRelationError(error)) throw error;
-      logger.warn("business_memberships table missing; falling back to owner-only auth context", { userId });
+      if (!isTenantSchemaDriftError(error)) throw error;
+      logger.warn("business membership schema unavailable; falling back to owner-only auth context", {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     const byBusiness = new Map<
@@ -257,14 +264,22 @@ authRouter.post(
           .where(eq(users.id, existing.id))
           .returning({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName });
 
-        await tx
-          .update(businessMemberships)
-          .set({
-            status: "active",
-            joinedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(and(eq(businessMemberships.userId, existing.id), eq(businessMemberships.status, "invited")));
+        try {
+          await tx
+            .update(businessMemberships)
+            .set({
+              status: "active",
+              joinedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(and(eq(businessMemberships.userId, existing.id), eq(businessMemberships.status, "invited")));
+        } catch (error) {
+          if (!isTenantSchemaDriftError(error)) throw error;
+          logger.warn("business membership schema unavailable during invited account claim", {
+            userId: existing.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
 
         return [updatedUser];
       });

@@ -2,11 +2,19 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { businesses, businessMemberships } from "../db/schema.js";
 import type { MembershipRole } from "./permissions.js";
+import { logger } from "./logger.js";
 
 export interface TenantContext {
   businessId: string;
   role: MembershipRole;
   source: "owner" | "membership";
+}
+
+function isTenantSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: string }).code;
+  const message = String((error as { message?: string }).message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
 export async function resolveTenantContext(
@@ -27,17 +35,29 @@ export async function resolveTenantContext(
       return { businessId: ownerScopedBusiness[0].id, role: "owner", source: "owner" };
     }
 
-    const membershipScopedBusiness = await db
-      .select({ businessId: businessMemberships.businessId, role: businessMemberships.role })
-      .from(businessMemberships)
-      .where(
-        and(
-          eq(businessMemberships.businessId, normalizedPreferredBusinessId),
-          eq(businessMemberships.userId, userId),
-          eq(businessMemberships.status, "active")
+    let membershipScopedBusiness:
+      | Array<{ businessId: string; role: MembershipRole }>
+      | [] = [];
+    try {
+      membershipScopedBusiness = await db
+        .select({ businessId: businessMemberships.businessId, role: businessMemberships.role })
+        .from(businessMemberships)
+        .where(
+          and(
+            eq(businessMemberships.businessId, normalizedPreferredBusinessId),
+            eq(businessMemberships.userId, userId),
+            eq(businessMemberships.status, "active")
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
+    } catch (error) {
+      if (!isTenantSchemaDriftError(error)) throw error;
+      logger.warn("business membership schema unavailable during tenant resolution", {
+        userId,
+        preferredBusinessId: normalizedPreferredBusinessId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     if (membershipScopedBusiness[0]) {
       return {
         businessId: membershipScopedBusiness[0].businessId,
@@ -56,11 +76,22 @@ export async function resolveTenantContext(
     return { businessId: ownerBusiness[0].id, role: "owner", source: "owner" };
   }
 
-  const membershipBusiness = await db
-    .select({ businessId: businessMemberships.businessId, role: businessMemberships.role })
-    .from(businessMemberships)
-    .where(and(eq(businessMemberships.userId, userId), eq(businessMemberships.status, "active")))
-    .limit(1);
+  let membershipBusiness:
+    | Array<{ businessId: string; role: MembershipRole }>
+    | [] = [];
+  try {
+    membershipBusiness = await db
+      .select({ businessId: businessMemberships.businessId, role: businessMemberships.role })
+      .from(businessMemberships)
+      .where(and(eq(businessMemberships.userId, userId), eq(businessMemberships.status, "active")))
+      .limit(1);
+  } catch (error) {
+    if (!isTenantSchemaDriftError(error)) throw error;
+    logger.warn("business membership schema unavailable during tenant bootstrap", {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
   if (membershipBusiness[0]) {
     return {
       businessId: membershipBusiness[0].businessId,
