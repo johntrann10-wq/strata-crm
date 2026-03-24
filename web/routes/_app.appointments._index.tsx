@@ -315,6 +315,10 @@ export default function AppointmentsPage() {
             const techName = appointment.assignedStaff
               ? `${appointment.assignedStaff.firstName ?? ""} ${appointment.assignedStaff.lastName ?? ""}`.trim()
               : "Unassigned";
+            const invoiceHref =
+              appointment.status === "completed" && appointment.client?.id
+                ? `/invoices/new?clientId=${appointment.client.id}&appointmentId=${appointment.id}`
+                : null;
 
             let formattedTime = "";
             try {
@@ -380,6 +384,11 @@ export default function AppointmentsPage() {
                           ))}
                         </DropdownMenuContent>
                       </DropdownMenu>
+                    ) : null}
+                    {invoiceHref ? (
+                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
+                        <Link to={invoiceHref}>Invoice</Link>
+                      </Button>
                     ) : null}
                     <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
                       <Link to={`/appointments/${appointment.id}`}>Open</Link>
