@@ -4,6 +4,7 @@ import { useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -59,6 +60,13 @@ interface ServiceRecord {
   isAddon: boolean | null;
   taxable: boolean | null;
   notes: string | null;
+}
+
+interface AddonLinkRecord {
+  id: string;
+  parentServiceId: string;
+  addonServiceId: string;
+  sortOrder?: number | null;
 }
 
 interface ServiceFormData {
@@ -328,6 +336,11 @@ export default function ServicesPage() {
     setNewAddonServiceId("");
   };
 
+  const [{ data: packageAddonLinks }] = useFindMany(api.serviceAddonLink, {
+    first: 250,
+    pause: !businessId,
+  } as any);
+
   // Open edit dialog
   const handleEditService = (service: ServiceRecord) => {
     setEditService(service);
@@ -435,6 +448,7 @@ export default function ServicesPage() {
   const isRefetching = servicesFetching && !!services;
 
   const allServices: ServiceRecord[] = (services ?? []) as ServiceRecord[];
+  const allAddonLinks: AddonLinkRecord[] = (packageAddonLinks ?? []) as AddonLinkRecord[];
 
   // Separate addons from regular services
   const regularServices = allServices.filter((s) => !s.isAddon);
@@ -459,6 +473,28 @@ export default function ServicesPage() {
   }, {});
 
   const sortedCategories = Object.keys(groupedByCategory).sort();
+
+  const packageSummaries = filteredRegular
+    .map((service) => {
+      const linkedAddonRecords = allAddonLinks.filter((link) => link.parentServiceId === service.id);
+      const linkedAddons = linkedAddonRecords
+        .map((link) => allServices.find((candidate) => candidate.id === link.addonServiceId))
+        .filter(Boolean) as ServiceRecord[];
+      const basePrice = Number(service.price ?? 0);
+      const addonPrice = linkedAddons.reduce((sum, addon) => sum + Number(addon.price ?? 0), 0);
+      const baseDuration = Number(service.durationMinutes ?? 0);
+      const addonDuration = linkedAddons.reduce((sum, addon) => sum + Number(addon.durationMinutes ?? 0), 0);
+      return {
+        service,
+        linkedAddons,
+        packagePrice: basePrice + addonPrice,
+        packageDuration: baseDuration + addonDuration,
+      };
+    })
+    .sort((a, b) => a.service.name.localeCompare(b.service.name));
+
+  const packagesWithStructure = packageSummaries.filter((summary) => summary.linkedAddons.length > 0);
+  const packageCandidatesWithoutAddons = packageSummaries.filter((summary) => summary.linkedAddons.length === 0);
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -551,6 +587,111 @@ export default function ServicesPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-4 w-4" />
+                Package Templates
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Reusable job bundles built from one primary service plus linked add-ons. This works across detailing,
+                tint, PPF, repair, and any other vertical on the same shared catalog.
+              </p>
+            </div>
+            <Badge variant="outline">{packagesWithStructure.length} configured</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isFirstLoad ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <ServiceCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : packagesWithStructure.length === 0 ? (
+            <EmptyState
+              icon={Package}
+              title="No package templates yet"
+              description="Open any main service and attach add-ons to turn it into a reusable package template."
+            />
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {packagesWithStructure.map((summary) => (
+                <button
+                  key={summary.service.id}
+                  type="button"
+                  onClick={() => handleEditService(summary.service)}
+                  className="rounded-xl border bg-card p-4 text-left transition-colors hover:bg-accent/30"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-semibold">{summary.service.name}</h3>
+                        <Badge variant="secondary">{formatServiceCategory(summary.service.category)}</Badge>
+                        {summary.service.active === false ? <Badge variant="outline">Inactive</Badge> : null}
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Base service plus {summary.linkedAddons.length} linked add-on{summary.linkedAddons.length === 1 ? "" : "s"}.
+                      </p>
+                    </div>
+                    <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </div>
+                  <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Package Price</p>
+                      <p className="font-medium">{formatPrice(summary.packagePrice)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Est. Duration</p>
+                      <p className="font-medium">{formatDuration(summary.packageDuration) || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Includes</p>
+                      <p className="font-medium">{summary.linkedAddons.length + 1} services</p>
+                    </div>
+                  </div>
+                  <Separator className="my-4" />
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Linked add-ons</p>
+                    <div className="flex flex-wrap gap-2">
+                      {summary.linkedAddons.map((addon) => (
+                        <Badge key={addon.id} variant="outline" className="bg-muted/30">
+                          {addon.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {packageCandidatesWithoutAddons.length > 0 ? (
+            <div className="rounded-lg border border-dashed p-4">
+              <p className="text-sm font-medium">Good package candidates</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                These services do not have add-ons yet. Open one to attach extras and turn it into a stronger package.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {packageCandidatesWithoutAddons.slice(0, 10).map((summary) => (
+                  <Button
+                    key={summary.service.id}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEditService(summary.service)}
+                  >
+                    {summary.service.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {/* Edit Service Dialog */}
       <Dialog
