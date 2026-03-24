@@ -371,6 +371,19 @@ export default function NewInvoicePage() {
 
       <h1 className="text-2xl font-bold mb-6">New Invoice</h1>
 
+      {clientIdParam && selectedClientId && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm mb-4">
+          <Check className="h-4 w-4 shrink-0" />
+          <span>Client was carried in from the previous workflow.</span>
+          <Link
+            to={`/clients/${selectedClientId}`}
+            className="ml-auto shrink-0 underline font-medium"
+          >
+            View Client
+          </Link>
+        </div>
+      )}
+
       {appointmentIdParam && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm mb-6">
           <FileText className="h-4 w-4 shrink-0" />
@@ -473,6 +486,11 @@ export default function NewInvoicePage() {
                   </Command>
                 </PopoverContent>
               </Popover>
+              {selectedClientRecord?.email ? (
+                <p className="text-xs text-muted-foreground">
+                  Invoice communication will go to {selectedClientRecord.email}.
+                </p>
+              ) : null}
             </div>
 
             {/* Invoice Number */}

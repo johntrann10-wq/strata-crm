@@ -598,6 +598,12 @@ export default function NewQuotePage() {
                   Pre-filled from client record
                 </div>
               )}
+              {vehicleIdParam && selectedVehicleId && (
+                <div className="bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded px-2 py-1 flex items-center gap-1">
+                  <Check className="h-3 w-3" />
+                  Vehicle carried in from the previous workflow
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Client</Label>
                 <Popover open={clientComboOpen} onOpenChange={setClientComboOpen}>
@@ -677,6 +683,14 @@ export default function NewQuotePage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {selectedClientId && vehicles && vehicles.length === 0 ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    <p>This client has no vehicles on file yet.</p>
+                    <Button asChild variant="outline" size="sm" className="mt-2 h-8">
+                      <Link to={`/clients/${selectedClientId}/vehicles/new`}>Add vehicle</Link>
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </CardContent>
           </Card>
