@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from "react-router";
 import { useFindOne, useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Pencil, CalendarPlus, FileText, MoreVertical, Loader2, ClipboardList, Receipt } from "lucide-react";
+import { ArrowLeft, Pencil, CalendarPlus, FileText, MoreVertical, Loader2, ClipboardList, Receipt, Car, Plus } from "lucide-react";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
@@ -233,6 +233,12 @@ export default function ClientDetailPage() {
         <Link to="/clients"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
         <h1 className="text-2xl font-bold">{client.firstName} {client.lastName}</h1>
         <span className="text-sm text-muted-foreground ml-auto">Client since {new Date(client.createdAt).toLocaleDateString()}</span>
+        <Button asChild variant="outline" size="sm">
+          <Link to={`/clients/${id}/vehicles/new?next=appointment`}>
+            <Car className="h-4 w-4 mr-1.5" />
+            Add Vehicle
+          </Link>
+        </Button>
         <Button asChild variant="default" size="sm">
           <Link to={`/appointments/new?clientId=${id}`}>
             <CalendarPlus className="h-4 w-4 mr-1.5" />
@@ -321,6 +327,33 @@ export default function ClientDetailPage() {
           <VehiclesCard id={id} vehicles={vehicleList} />
         </div>
         <div className="lg:col-span-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 mb-4">
+            <QuickWorkflowAction
+              icon={CalendarPlus}
+              title="Book appointment"
+              detail="Schedule the next service visit"
+              href={`/appointments/new?clientId=${id}`}
+            />
+            <QuickWorkflowAction
+              icon={Receipt}
+              title="Create quote"
+              detail="Build and send a fresh estimate"
+              href={`/quotes/new?clientId=${id}`}
+            />
+            <QuickWorkflowAction
+              icon={FileText}
+              title="Create invoice"
+              detail="Bill work without leaving the record"
+              href={`/invoices/new?clientId=${id}`}
+            />
+            <QuickWorkflowAction
+              icon={Plus}
+              title="Add vehicle"
+              detail="Capture another vehicle for this client"
+              href={`/clients/${id}/vehicles/new?next=client`}
+            />
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-3 mb-4">
             <WorkflowMetricCard
               icon={ClipboardList}
@@ -426,5 +459,34 @@ function WorkflowMetricCard({
       <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
     </div>
+  );
+}
+
+function QuickWorkflowAction({
+  icon: Icon,
+  title,
+  detail,
+  href,
+}: {
+  icon: typeof FileText;
+  title: string;
+  detail: string;
+  href: string;
+}) {
+  return (
+    <Link
+      to={href}
+      className="rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/30"
+    >
+      <div className="flex items-start gap-3">
+        <div className="rounded-md bg-primary/10 p-2 text-primary">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium">{title}</p>
+          <p className="text-xs text-muted-foreground">{detail}</p>
+        </div>
+      </div>
+    </Link>
   );
 }

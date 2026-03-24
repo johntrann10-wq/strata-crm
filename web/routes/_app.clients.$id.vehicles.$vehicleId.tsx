@@ -32,6 +32,7 @@ import {
   FileText,
   Loader2,
   Pencil,
+  Plus,
   Receipt,
 } from "lucide-react";
 
@@ -313,11 +314,38 @@ export default function VehicleDetailPage() {
           </Link>
         </Button>
         <Button asChild variant="outline" size="sm">
-          <Link to={`/invoices/new?clientId=${id}`}>
+          <Link to={`/invoices/new?clientId=${id}&vehicleId=${vehicleId}`}>
             <FileText className="h-4 w-4 mr-2" />
             New Invoice
           </Link>
         </Button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <QuickVehicleAction
+          icon={CalendarPlus}
+          title="Book appointment"
+          detail="Schedule the next visit for this vehicle"
+          href={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}`}
+        />
+        <QuickVehicleAction
+          icon={Receipt}
+          title="Create quote"
+          detail="Build an estimate tied to this vehicle"
+          href={`/quotes/new?clientId=${id}&vehicleId=${vehicleId}`}
+        />
+        <QuickVehicleAction
+          icon={FileText}
+          title="Create invoice"
+          detail="Bill this vehicle directly"
+          href={`/invoices/new?clientId=${id}&vehicleId=${vehicleId}`}
+        />
+        <QuickVehicleAction
+          icon={Plus}
+          title="Add another vehicle"
+          detail="Capture another unit for this client"
+          href={`/clients/${id}/vehicles/new?next=client`}
+        />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -541,5 +569,34 @@ function VehicleMetricCard({
       <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
     </div>
+  );
+}
+
+function QuickVehicleAction({
+  icon: Icon,
+  title,
+  detail,
+  href,
+}: {
+  icon: typeof FileText;
+  title: string;
+  detail: string;
+  href: string;
+}) {
+  return (
+    <Link
+      to={href}
+      className="rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/30"
+    >
+      <div className="flex items-start gap-3">
+        <div className="rounded-md bg-primary/10 p-2 text-primary">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium">{title}</p>
+          <p className="text-xs text-muted-foreground">{detail}</p>
+        </div>
+      </div>
+    </Link>
   );
 }
