@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   CalendarPlus,
   ChevronRight,
+  ClipboardList,
   Clock3,
   DollarSign,
   FileText,
@@ -45,6 +46,18 @@ type QuoteRecord = {
   total: number | string | null | undefined;
   createdAt?: string;
   client?: { firstName?: string | null; lastName?: string | null } | null;
+};
+
+type JobRecord = {
+  id: string;
+  jobNumber?: string | null;
+  title?: string | null;
+  status: string;
+  scheduledStart?: string | null;
+  totalPrice?: number | string | null;
+  client?: { firstName?: string | null; lastName?: string | null } | null;
+  vehicle?: { make?: string | null; model?: string | null; year?: number | null } | null;
+  assignedStaff?: { firstName?: string | null; lastName?: string | null } | null;
 };
 
 const ACTIVE_JOB = new Set(["scheduled", "confirmed", "in_progress"]);
@@ -119,20 +132,39 @@ export default function SignedIn() {
     pause: !businessId,
   });
 
+  const [{ data: jobsRaw, fetching: fetchingJobs, error: jobsError }, refetchJobs] = useFindMany(api.job, {
+    first: 25,
+    pause: !businessId,
+  } as any);
+
   const appointments = (appointmentsRaw ?? []) as AppointmentRecord[];
   const unpaidInvoices = (invoicesRaw ?? []) as InvoiceRecord[];
   const pendingQuotes = (quotesRaw ?? []) as QuoteRecord[];
+  const jobs = (jobsRaw ?? []) as JobRecord[];
 
-  const todayJobs = useMemo(() => {
+  const todayAppointments = useMemo(() => {
     return appointments.filter((appointment) => {
       const start = safeParseISO(appointment.startTime);
       return !!start && isSameDay(start, filterNow) && ACTIVE_JOB.has(appointment.status ?? "");
     });
   }, [appointments, filterNow]);
 
+  const activeJobs = useMemo(
+    () =>
+      [...jobs]
+        .filter((job) => ACTIVE_JOB.has(job.status ?? ""))
+        .sort((a, b) => {
+          const aTime = safeParseISO(a.scheduledStart)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+          const bTime = safeParseISO(b.scheduledStart)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+          return aTime - bTime;
+        }),
+    [jobs]
+  );
+
   const openQuoteValue = useMemo(() => sumCurrency(pendingQuotes.map((quote) => quote.total)), [pendingQuotes]);
   const unpaidRevenue = useMemo(() => sumCurrency(unpaidInvoices.map((invoice) => invoice.total)), [unpaidInvoices]);
-  const nextJob = todayJobs[0] ?? null;
+  const activeJobValue = useMemo(() => sumCurrency(activeJobs.map((job) => job.totalPrice)), [activeJobs]);
+  const nextJob = activeJobs[0] ?? null;
 
   const priorityActions = useMemo(() => {
     const actions: Array<{ title: string; detail: string; href: string; cta: string }> = [];
@@ -143,8 +175,8 @@ export default function SignedIn() {
         : nextJob.title ?? "Open job";
       actions.push({
         title: "Next job on deck",
-        detail: `${formatSafe(nextJob.startTime, "h:mm a")} · ${nextJobClient}`,
-        href: `/appointments/${nextJob.id}`,
+        detail: `${formatSafe(nextJob.scheduledStart, "h:mm a")} · ${nextJobClient}`,
+        href: `/jobs/${nextJob.id}`,
         cta: "Open job",
       });
     }
@@ -187,17 +219,18 @@ export default function SignedIn() {
     setRefreshing(true);
     setFilterNow(new Date());
     try {
-      await Promise.all([refetchAppts(), refetchInvoices(), refetchQuotes()]);
+      await Promise.all([refetchAppts(), refetchInvoices(), refetchQuotes(), refetchJobs()]);
     } finally {
       setRefreshing(false);
     }
-  }, [refetchAppts, refetchInvoices, refetchQuotes]);
+  }, [refetchAppts, refetchInvoices, refetchQuotes, refetchJobs]);
 
   const loadingAppts = fetchingAppts && appointmentsRaw === undefined;
   const loadingInvoices = fetchingInvoices && invoicesRaw === undefined;
   const loadingQuotes = fetchingQuotes && quotesRaw === undefined;
-  const anyLoading = loadingAppts || loadingInvoices || loadingQuotes;
-  const anyError = apptsError ?? invoicesError ?? quotesError;
+  const loadingJobs = fetchingJobs && jobsRaw === undefined;
+  const anyLoading = loadingAppts || loadingInvoices || loadingQuotes || loadingJobs;
+  const anyError = jobsError ?? apptsError ?? invoicesError ?? quotesError;
 
   if (!businessId) {
     return <Navigate to="/onboarding" replace />;
@@ -242,9 +275,9 @@ export default function SignedIn() {
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <MetricCard
-            label="Jobs today"
-            value={String(todayJobs.length)}
-            detail={nextJob ? `Next at ${formatSafe(nextJob.startTime, "h:mm a")}` : "No active jobs scheduled"}
+            label="Open jobs"
+            value={String(activeJobs.length)}
+            detail={activeJobValue > 0 ? formatCurrency(activeJobValue) : "No active work orders"}
             icon={<Clock3 className="h-5 w-5" />}
           />
           <MetricCard
@@ -281,8 +314,8 @@ export default function SignedIn() {
               icon={<CalendarPlus className="h-5 w-5 shrink-0" />}
               primary
             />
+            <QuickAction href="/jobs" label="Open jobs" icon={<ClipboardList className="h-5 w-5 shrink-0" />} />
             <QuickAction href="/quotes/new" label="Create quote" icon={<Receipt className="h-5 w-5 shrink-0" />} />
-            <QuickAction href="/invoices" label="Invoices" icon={<DollarSign className="h-5 w-5 shrink-0" />} />
           </div>
         </section>
 
@@ -312,18 +345,65 @@ export default function SignedIn() {
         </section>
 
         <DashboardSection
-          title="Today's appointments"
+          title="Active jobs"
+          seeAllHref="/jobs"
+          seeAllLabel="All jobs"
+          error={jobsError}
+          isLoading={loadingJobs}
+          isEmpty={!loadingJobs && !jobsError && activeJobs.length === 0}
+          emptyMessage="No active work orders right now."
+          emptyCta={{ href: "/appointments/new", label: "Schedule a job" }}
+          skeletonRows={3}
+        >
+          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
+            {activeJobs.map((job) => (
+              <li key={job.id}>
+                <Link
+                  to={`/jobs/${job.id}`}
+                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
+                >
+                  <div className="w-[72px] shrink-0 font-mono text-sm text-muted-foreground">
+                    {formatSafe(job.scheduledStart, "h:mm a")}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-medium">
+                      {job.title?.trim() ||
+                        (job.client
+                          ? `${job.client.firstName ?? ""} ${job.client.lastName ?? ""}`.trim()
+                          : "Job")}
+                    </p>
+                    {job.vehicle ? (
+                      <p className="truncate text-sm text-muted-foreground">
+                        {[job.vehicle.year, job.vehicle.make, job.vehicle.model].filter(Boolean).join(" ")}
+                      </p>
+                    ) : job.assignedStaff ? (
+                      <p className="truncate text-sm text-muted-foreground">
+                        Assigned to{" "}
+                        {`${job.assignedStaff.firstName ?? ""} ${job.assignedStaff.lastName ?? ""}`.trim() || "team"}
+                      </p>
+                    ) : null}
+                  </div>
+                  <StatusBadge status={job.status ?? "scheduled"} type="job" />
+                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </DashboardSection>
+
+        <DashboardSection
+          title="Today's schedule"
           seeAllHref="/appointments"
           seeAllLabel="All appointments"
           error={apptsError}
           isLoading={loadingAppts}
-          isEmpty={!loadingAppts && !apptsError && todayJobs.length === 0}
+          isEmpty={!loadingAppts && !apptsError && todayAppointments.length === 0}
           emptyMessage="Nothing on the schedule today."
           emptyCta={{ href: "/appointments/new", label: "Schedule a job" }}
           skeletonRows={3}
         >
           <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
-            {todayJobs.map((appointment) => (
+            {todayAppointments.map((appointment) => (
               <li key={appointment.id}>
                 <Link
                   to={`/appointments/${appointment.id}`}
@@ -431,8 +511,8 @@ export default function SignedIn() {
         <div className="mx-auto flex max-w-4xl gap-2 px-3 pt-2">
           <MobileQuickAction href="/clients/new" label="Client" icon={<Users className="h-5 w-5" />} />
           <MobileQuickAction href="/appointments/new" label="Job" icon={<CalendarPlus className="h-5 w-5" />} primary />
+          <MobileQuickAction href="/jobs" label="Queue" icon={<ClipboardList className="h-5 w-5" />} />
           <MobileQuickAction href="/quotes/new" label="Quote" icon={<Receipt className="h-5 w-5" />} />
-          <MobileQuickAction href="/invoices" label="Bills" icon={<DollarSign className="h-5 w-5" />} />
         </div>
       </nav>
     </div>
