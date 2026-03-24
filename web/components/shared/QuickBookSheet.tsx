@@ -75,6 +75,11 @@ export function QuickBookSheet({
   const [bookingTime, setBookingTime] = useState<string>(() => initialTime ?? getNextHour());
   const [clientSearch, setClientSearch] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const fullFormHref = selectedClientId
+    ? `/clients/${selectedClientId}/vehicles/new`
+    : currentLocationId
+      ? `/appointments/new?locationId=${encodeURIComponent(currentLocationId)}`
+      : "/appointments/new";
 
   // Sync initialDate / initialTime prop changes
   useEffect(() => {
@@ -391,9 +396,14 @@ export function QuickBookSheet({
                   <span>Loading vehicles…</span>
                 </div>
               ) : vehicleList.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  No vehicles on file — can be added later.
-                </p>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    This client needs a vehicle on file before you can book the appointment.
+                  </p>
+                  <Button asChild variant="outline" size="sm" className="h-8">
+                    <Link to={`/clients/${selectedClientId}/vehicles/new`}>Add vehicle</Link>
+                  </Button>
+                </div>
               ) : (
                 <select
                   value={selectedVehicleId ?? ""}
@@ -419,7 +429,7 @@ export function QuickBookSheet({
         </div>
 
         <SheetFooter className="border-t pt-4 px-4 pb-4 shrink-0 flex flex-row items-center justify-between gap-2">
-          <Link to="/appointments/new">
+          <Link to={fullFormHref}>
             <Button variant="ghost" size="sm">
               Full form →
             </Button>
