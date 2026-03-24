@@ -72,6 +72,19 @@ type AppointmentHit = {
   status?: string | null;
   startTime?: string | null;
 };
+type JobHit = {
+  id: string;
+  jobNumber?: string | number | null;
+  title?: string | null;
+  status?: string | null;
+  scheduledStart?: string | null;
+};
+type QuoteHit = {
+  id: string;
+  status?: string | null;
+  total?: number | string | null;
+  client?: { firstName?: string | null; lastName?: string | null } | null;
+};
 type InvoiceHit = {
   id: string;
   invoiceNumber?: string | null;
@@ -145,6 +158,13 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
     pause: !canQuery,
   });
 
+  const [{ data: jobs, fetching: fetchingJobs, error: jobsError }] = useFindMany(api.job, {
+    search: debouncedQuery,
+    first: 5,
+    select: { id: true, jobNumber: true, title: true, status: true, scheduledStart: true },
+    pause: !canQuery,
+  });
+
   const [{ data: vehicles, fetching: fetchingVehicles, error: vehiclesError }] = useFindMany(api.vehicle, {
     search: debouncedQuery,
     first: 5,
@@ -169,12 +189,38 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
     pause: !canQuery,
   });
 
-  const isFetching = fetchingClients || fetchingAppointments || fetchingInvoices || fetchingVehicles;
-  const searchError = clientsError || appointmentsError || vehiclesError || invoicesError;
+  const [{ data: quotes, fetching: fetchingQuotes, error: quotesError }] = useFindMany(api.quote, {
+    search: debouncedQuery,
+    first: 5,
+    select: {
+      id: true,
+      status: true,
+      total: true,
+      client: { id: true, firstName: true, lastName: true },
+    },
+    pause: !canQuery,
+  });
+
+  const isFetching =
+    fetchingClients ||
+    fetchingAppointments ||
+    fetchingJobs ||
+    fetchingInvoices ||
+    fetchingQuotes ||
+    fetchingVehicles;
+  const searchError =
+    clientsError ||
+    appointmentsError ||
+    jobsError ||
+    vehiclesError ||
+    invoicesError ||
+    quotesError;
   const clientRows = (Array.isArray(clients) ? clients : []) as ClientHit[];
   const appointmentRows = (Array.isArray(appointments) ? appointments : []) as AppointmentHit[];
+  const jobRows = (Array.isArray(jobs) ? jobs : []) as JobHit[];
   const vehicleRows = (Array.isArray(vehicles) ? vehicles : []) as VehicleHit[];
   const invoiceRows = (Array.isArray(invoices) ? invoices : []) as InvoiceHit[];
+  const quoteRows = (Array.isArray(quotes) ? quotes : []) as QuoteHit[];
 
   const go = (path: string) => {
     navigate(path);
@@ -258,25 +304,29 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
   const showClients = fetchingClients || clientRows.length > 0;
   const showVehicles = fetchingVehicles || vehicleRows.length > 0;
   const showAppointments = fetchingAppointments || appointmentRows.length > 0;
+  const showJobs = fetchingJobs || jobRows.length > 0;
   const showInvoices = fetchingInvoices || invoiceRows.length > 0;
+  const showQuotes = fetchingQuotes || quoteRows.length > 0;
   const noResults =
     !isFetching &&
     !searchError &&
     clientRows.length === 0 &&
     vehicleRows.length === 0 &&
     appointmentRows.length === 0 &&
-    invoiceRows.length === 0;
+    jobRows.length === 0 &&
+    invoiceRows.length === 0 &&
+    quoteRows.length === 0;
 
   return (
     <CommandDialog
       open={open}
       onOpenChange={setOpen}
       title="Quick Actions"
-      description="Search clients, appointments, invoices or jump anywhere"
+      description="Search jobs, quotes, clients, vehicles, invoices or jump anywhere"
       className="sm:max-w-xl"
     >
       <CommandInput
-        placeholder="Search clients, invoices, actions..."
+        placeholder="Search jobs, quotes, clients, invoices..."
         value={query}
         onValueChange={setQuery}
       />
@@ -331,7 +381,11 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
               </CommandItem>
               <CommandItem onSelect={() => go("/appointments")}>
                 <ClipboardList className="mr-2 h-4 w-4" />
-                Appointments
+                Schedule
+              </CommandItem>
+              <CommandItem onSelect={() => go("/jobs")}>
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Jobs
               </CommandItem>
               <CommandItem onSelect={() => go("/clients")}>
                 <Users className="mr-2 h-4 w-4" />
@@ -479,7 +533,86 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
               </CommandGroup>
             )}
 
-            {(showClients || showVehicles || showAppointments) && showInvoices && <CommandSeparator />}
+            {(showClients || showVehicles || showAppointments) && showJobs && <CommandSeparator />}
+
+            {showJobs && (
+              <CommandGroup heading="Jobs">
+                {fetchingJobs ? (
+                  <SkeletonRows />
+                ) : (
+                  jobRows.map((job) => (
+                    <CommandItem
+                      key={job.id}
+                      onSelect={() => go(`/jobs/${job.id}`)}
+                      className="flex items-center gap-3 py-2.5"
+                    >
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
+                        <ClipboardList className="h-3.5 w-3.5 text-amber-500" />
+                      </div>
+                      <div className="flex flex-1 flex-col min-w-0">
+                        <span className="text-sm font-medium truncate">
+                          {job.title ?? (job.jobNumber ? `Job #${job.jobNumber}` : `Job #${job.id}`)}
+                        </span>
+                        <span className="text-xs truncate">
+                          <span className={statusColor(job.status ?? "")}>{job.status ?? "open"}</span>
+                          {job.scheduledStart && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              &middot;{" "}
+                              {new Date(job.scheduledStart).toLocaleDateString(undefined, {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </CommandItem>
+                  ))
+                )}
+              </CommandGroup>
+            )}
+
+            {(showClients || showVehicles || showAppointments || showJobs) && showQuotes && <CommandSeparator />}
+
+            {showQuotes && (
+              <CommandGroup heading="Quotes">
+                {fetchingQuotes ? (
+                  <SkeletonRows />
+                ) : (
+                  quoteRows.map((quote) => (
+                    <CommandItem
+                      key={quote.id}
+                      onSelect={() => go(`/quotes/${quote.id}`)}
+                      className="flex items-center gap-3 py-2.5"
+                    >
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500/10">
+                        <Receipt className="h-3.5 w-3.5 text-indigo-500" />
+                      </div>
+                      <div className="flex flex-1 flex-col min-w-0">
+                        <span className="text-sm font-medium truncate">
+                          {quote.client
+                            ? `${quote.client.firstName ?? ""} ${quote.client.lastName ?? ""}`.trim() || `Quote #${quote.id}`
+                            : `Quote #${quote.id}`}
+                        </span>
+                        <span className="text-xs truncate">
+                          <span className={statusColor(quote.status ?? "")}>{quote.status ?? "draft"}</span>
+                          {quote.total != null && quote.total !== "" && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              &middot; ${Number(quote.total).toFixed(2)}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </CommandItem>
+                  ))
+                )}
+              </CommandGroup>
+            )}
+
+            {(showClients || showVehicles || showAppointments || showJobs || showQuotes) && showInvoices && <CommandSeparator />}
 
             {showInvoices && (
               <CommandGroup heading="Invoices">
