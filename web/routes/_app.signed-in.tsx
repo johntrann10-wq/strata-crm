@@ -33,6 +33,13 @@ type AppointmentRecord = {
   vehicle: { make?: string | null; model?: string | null; year?: number | null } | null;
 };
 
+type StaffRecord = {
+  id: string;
+  userId?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+};
+
 type InvoiceRecord = {
   id: string;
   invoiceNumber?: string | null;
@@ -57,7 +64,7 @@ type JobRecord = {
   totalPrice?: number | string | null;
   client?: { firstName?: string | null; lastName?: string | null } | null;
   vehicle?: { make?: string | null; model?: string | null; year?: number | null } | null;
-  assignedStaff?: { firstName?: string | null; lastName?: string | null } | null;
+  assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
 };
 
 const ACTIVE_JOB = new Set(["scheduled", "confirmed", "in_progress"]);
@@ -94,7 +101,7 @@ function sectionErrorMessage(err: Error): string {
 }
 
 export default function SignedIn() {
-  const { businessName, businessId } = useOutletContext<AuthOutletContext & { businessId?: string }>();
+  const { businessName, businessId, user } = useOutletContext<AuthOutletContext & { businessId?: string }>();
   const [filterNow, setFilterNow] = useState(() => new Date());
   const [refreshing, setRefreshing] = useState(false);
 
@@ -136,11 +143,20 @@ export default function SignedIn() {
     first: 25,
     pause: !businessId,
   } as any);
+  const [{ data: staffRaw, fetching: fetchingStaff, error: staffError }, refetchStaff] = useFindMany(api.staff, {
+    first: 100,
+    pause: !businessId,
+  } as any);
 
   const appointments = (appointmentsRaw ?? []) as AppointmentRecord[];
   const unpaidInvoices = (invoicesRaw ?? []) as InvoiceRecord[];
   const pendingQuotes = (quotesRaw ?? []) as QuoteRecord[];
   const jobs = (jobsRaw ?? []) as JobRecord[];
+  const staffRecords = (staffRaw ?? []) as StaffRecord[];
+  const myStaffRecord = useMemo(
+    () => staffRecords.find((staff) => staff.userId === user?.id) ?? null,
+    [staffRecords, user?.id]
+  );
 
   const todayAppointments = useMemo(() => {
     return appointments.filter((appointment) => {
@@ -160,16 +176,35 @@ export default function SignedIn() {
         }),
     [jobs]
   );
+  const myActiveJobs = useMemo(
+    () =>
+      activeJobs.filter(
+        (job) => !!myStaffRecord && !!job.assignedStaff?.id && job.assignedStaff.id === myStaffRecord.id
+      ),
+    [activeJobs, myStaffRecord]
+  );
 
   const openQuoteValue = useMemo(() => sumCurrency(pendingQuotes.map((quote) => quote.total)), [pendingQuotes]);
   const unpaidRevenue = useMemo(() => sumCurrency(unpaidInvoices.map((invoice) => invoice.total)), [unpaidInvoices]);
   const activeJobValue = useMemo(() => sumCurrency(activeJobs.map((job) => job.totalPrice)), [activeJobs]);
+  const myActiveJobValue = useMemo(() => sumCurrency(myActiveJobs.map((job) => job.totalPrice)), [myActiveJobs]);
   const nextJob = activeJobs[0] ?? null;
+  const myNextJob = myActiveJobs[0] ?? null;
 
   const priorityActions = useMemo(() => {
     const actions: Array<{ title: string; detail: string; href: string; cta: string }> = [];
 
-    if (nextJob) {
+    if (myNextJob) {
+      const myJobClient = myNextJob.client
+        ? `${myNextJob.client.firstName ?? ""} ${myNextJob.client.lastName ?? ""}`.trim()
+        : myNextJob.title ?? "Open job";
+      actions.push({
+        title: "Your next assigned job",
+        detail: `${formatSafe(myNextJob.scheduledStart, "h:mm a")} - ${myJobClient}`,
+        href: `/jobs/${myNextJob.id}`,
+        cta: "Open my job",
+      });
+    } else if (nextJob) {
       const nextJobClient = nextJob.client
         ? `${nextJob.client.firstName ?? ""} ${nextJob.client.lastName ?? ""}`.trim()
         : nextJob.title ?? "Open job";
@@ -213,24 +248,25 @@ export default function SignedIn() {
     }
 
     return actions.slice(0, 3);
-  }, [nextJob, pendingQuotes, unpaidInvoices, unpaidRevenue]);
+  }, [myNextJob, nextJob, pendingQuotes, unpaidInvoices, unpaidRevenue]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     setFilterNow(new Date());
     try {
-      await Promise.all([refetchAppts(), refetchInvoices(), refetchQuotes(), refetchJobs()]);
+      await Promise.all([refetchAppts(), refetchInvoices(), refetchQuotes(), refetchJobs(), refetchStaff()]);
     } finally {
       setRefreshing(false);
     }
-  }, [refetchAppts, refetchInvoices, refetchQuotes, refetchJobs]);
+  }, [refetchAppts, refetchInvoices, refetchQuotes, refetchJobs, refetchStaff]);
 
   const loadingAppts = fetchingAppts && appointmentsRaw === undefined;
   const loadingInvoices = fetchingInvoices && invoicesRaw === undefined;
   const loadingQuotes = fetchingQuotes && quotesRaw === undefined;
   const loadingJobs = fetchingJobs && jobsRaw === undefined;
-  const anyLoading = loadingAppts || loadingInvoices || loadingQuotes || loadingJobs;
-  const anyError = jobsError ?? apptsError ?? invoicesError ?? quotesError;
+  const loadingStaff = fetchingStaff && staffRaw === undefined;
+  const anyLoading = loadingAppts || loadingInvoices || loadingQuotes || loadingJobs || loadingStaff;
+  const anyError = jobsError ?? apptsError ?? invoicesError ?? quotesError ?? staffError;
 
   if (!businessId) {
     return <Navigate to="/onboarding" replace />;
@@ -279,6 +315,18 @@ export default function SignedIn() {
             value={String(activeJobs.length)}
             detail={activeJobValue > 0 ? formatCurrency(activeJobValue) : "No active work orders"}
             icon={<Clock3 className="h-5 w-5" />}
+          />
+          <MetricCard
+            label="My queue"
+            value={myStaffRecord ? String(myActiveJobs.length) : "-"}
+            detail={
+              myStaffRecord
+                ? myActiveJobValue > 0
+                  ? formatCurrency(myActiveJobValue)
+                  : "No assigned work"
+                : "Not linked to staff"
+            }
+            icon={<ClipboardList className="h-5 w-5" />}
           />
           <MetricCard
             label="Open quotes"
@@ -343,6 +391,61 @@ export default function SignedIn() {
             ))}
           </div>
         </section>
+
+        <DashboardSection
+          title={myStaffRecord ? "My queue" : "Assigned work"}
+          seeAllHref="/jobs"
+          seeAllLabel="All jobs"
+          error={staffError}
+          isLoading={loadingJobs || loadingStaff}
+          isEmpty={!loadingJobs && !loadingStaff && !!myStaffRecord && myActiveJobs.length === 0}
+          emptyMessage={
+            myStaffRecord
+              ? "No jobs are assigned to you right now."
+              : "Link this user to a staff profile to unlock assigned work."
+          }
+          emptyCta={{ href: "/settings", label: myStaffRecord ? "Open team" : "Set up team" }}
+          skeletonRows={2}
+        >
+          {myStaffRecord ? (
+            <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
+              {myActiveJobs.map((job) => (
+                <li key={job.id}>
+                  <Link
+                    to={`/jobs/${job.id}`}
+                    className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
+                  >
+                    <div className="w-[72px] shrink-0 font-mono text-sm text-muted-foreground">
+                      {formatSafe(job.scheduledStart, "h:mm a")}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-medium">
+                        {job.title?.trim() ||
+                          (job.client
+                            ? `${job.client.firstName ?? ""} ${job.client.lastName ?? ""}`.trim()
+                            : "Assigned job")}
+                      </p>
+                      {job.vehicle ? (
+                        <p className="truncate text-sm text-muted-foreground">
+                          {[job.vehicle.year, job.vehicle.make, job.vehicle.model].filter(Boolean).join(" ")}
+                        </p>
+                      ) : null}
+                    </div>
+                    <StatusBadge status={job.status ?? "scheduled"} type="job" />
+                    <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center">
+              <p className="mb-4 text-sm text-muted-foreground">This user is not linked to a staff profile yet.</p>
+              <Button asChild size="lg" className="min-h-[48px] rounded-xl">
+                <Link to="/settings">Open team settings</Link>
+              </Button>
+            </div>
+          )}
+        </DashboardSection>
 
         <DashboardSection
           title="Active jobs"
