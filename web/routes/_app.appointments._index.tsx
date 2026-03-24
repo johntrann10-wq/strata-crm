@@ -23,6 +23,24 @@ import { StatusBadge } from "../components/shared/StatusBadge";
 import { EmptyState } from "../components/shared/EmptyState";
 
 type AppointmentStatusTab = "all" | "scheduled" | "confirmed" | "in_progress" | "completed" | "cancelled";
+type AppointmentView = AppointmentStatusTab | "mine";
+
+type StaffRecord = {
+  id: string;
+  userId?: string | null;
+};
+
+type AppointmentListRecord = {
+  id: string;
+  title?: string | null;
+  status?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  location?: { name?: string | null } | null;
+  client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
+  vehicle?: { id?: string | null; year?: number | null; make?: string | null; model?: string | null } | null;
+  assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
+};
 
 const QUICK_TRANSITIONS: Record<string, string[]> = {
   scheduled: ["confirmed", "cancelled"],
@@ -47,12 +65,12 @@ function matchesTab(status: string | null | undefined, tab: AppointmentStatusTab
 }
 
 export default function AppointmentsPage() {
-  const { businessId } = useOutletContext<AuthOutletContext>();
+  const { businessId, user } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
   const [quickBookOpen, setQuickBookOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<AppointmentStatusTab>("all");
+  const [activeTab, setActiveTab] = useState<AppointmentView>("all");
 
   const [, runUpdateStatus] = useAction(api.appointment.updateStatus);
 
@@ -93,12 +111,27 @@ export default function AppointmentsPage() {
       pause: !businessId,
     }
   );
+  const [{ data: staffRaw }] = useFindMany(api.staff, {
+    first: 100,
+    pause: !businessId,
+  } as any);
 
   const isInitialLoad = appointmentsFetching && appointments === undefined;
-  const records = Array.isArray(appointments) ? appointments : [];
+  const records = (Array.isArray(appointments) ? appointments : []) as AppointmentListRecord[];
+  const staffRecords = ((staffRaw ?? []) as StaffRecord[]).filter(Boolean);
+  const myStaffRecord = useMemo(
+    () => staffRecords.find((staff) => staff.userId === user?.id) ?? null,
+    [staffRecords, user?.id]
+  );
   const filteredAppointments = useMemo(
-    () => records.filter((appointment) => matchesTab(appointment.status ?? null, activeTab)),
-    [records, activeTab]
+    () =>
+      records.filter((appointment) => {
+        if (activeTab === "mine") {
+          return !!myStaffRecord && appointment.assignedStaff?.id === myStaffRecord.id;
+        }
+        return matchesTab(appointment.status ?? null, activeTab);
+      }),
+    [records, activeTab, myStaffRecord]
   );
 
   return (
@@ -141,9 +174,12 @@ export default function AppointmentsPage() {
         onBooked={(id) => navigate(`/appointments/${id}`)}
       />
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AppointmentStatusTab)}>
-        <TabsList className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-6">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AppointmentView)}>
+        <TabsList className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-7">
           <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="mine" disabled={!myStaffRecord}>
+            My Queue
+          </TabsTrigger>
           <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
           <TabsTrigger value="confirmed">Confirmed</TabsTrigger>
           <TabsTrigger value="in_progress">In Progress</TabsTrigger>
@@ -183,6 +219,10 @@ export default function AppointmentsPage() {
           description={
             debouncedSearch
               ? "Try a different customer, vehicle, or technician search."
+              : activeTab === "mine" && !myStaffRecord
+                ? "Link this user to a staff profile to unlock an assigned queue."
+                : activeTab === "mine"
+                  ? "No appointments are assigned to this staff account right now."
               : "Book your first appointment to start filling the schedule."
           }
           action={

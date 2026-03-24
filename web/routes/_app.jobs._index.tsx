@@ -14,6 +14,14 @@ import { StatusBadge } from "../components/shared/StatusBadge";
 import { EmptyState } from "../components/shared/EmptyState";
 
 type JobStatusTab = "all" | "scheduled" | "in_progress" | "completed" | "cancelled";
+type JobView = JobStatusTab | "mine";
+
+type StaffRecord = {
+  id: string;
+  userId?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+};
 
 type JobListRecord = {
   id: string;
@@ -24,7 +32,7 @@ type JobListRecord = {
   totalPrice?: number | string | null;
   client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
   vehicle?: { id?: string | null; year?: number | null; make?: string | null; model?: string | null } | null;
-  assignedStaff?: { firstName?: string | null; lastName?: string | null } | null;
+  assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
   location?: { name?: string | null } | null;
 };
 
@@ -52,10 +60,10 @@ function matchesTab(job: JobListRecord, tab: JobStatusTab): boolean {
 }
 
 export default function JobsIndexPage() {
-  const { businessId } = useOutletContext<AuthOutletContext>();
+  const { businessId, user } = useOutletContext<AuthOutletContext>();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<JobStatusTab>("all");
+  const [activeTab, setActiveTab] = useState<JobView>("all");
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -67,9 +75,27 @@ export default function JobsIndexPage() {
     search: debouncedSearch || undefined,
     pause: !businessId,
   } as any);
+  const [{ data: staff }] = useFindMany(api.staff, {
+    first: 100,
+    pause: !businessId,
+  } as any);
 
   const records = ((jobs ?? []) as JobListRecord[]).filter(Boolean);
-  const visibleRecords = useMemo(() => records.filter((job) => matchesTab(job, activeTab)), [records, activeTab]);
+  const staffRecords = ((staff ?? []) as StaffRecord[]).filter(Boolean);
+  const myStaffRecord = useMemo(
+    () => staffRecords.find((record) => record.userId === user?.id) ?? null,
+    [staffRecords, user?.id]
+  );
+  const visibleRecords = useMemo(
+    () =>
+      records.filter((job) => {
+        if (activeTab === "mine") {
+          return !!myStaffRecord && job.assignedStaff?.id === myStaffRecord.id;
+        }
+        return matchesTab(job, activeTab);
+      }),
+    [records, activeTab, myStaffRecord]
+  );
 
   const stats = useMemo(() => {
     const scheduled = records.filter((job) => ["scheduled", "confirmed"].includes(job.status)).length;
@@ -110,9 +136,12 @@ export default function JobsIndexPage() {
         <MetricCard label="Open revenue" value={formatCurrency(stats.openRevenue)} />
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as JobStatusTab)}>
-        <TabsList className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-5">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as JobView)}>
+        <TabsList className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-6">
           <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="mine" disabled={!myStaffRecord}>
+            My Queue
+          </TabsTrigger>
           <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
           <TabsTrigger value="in_progress">In Progress</TabsTrigger>
           <TabsTrigger value="completed">Completed</TabsTrigger>
@@ -148,6 +177,10 @@ export default function JobsIndexPage() {
           description={
             debouncedSearch
               ? "Try a different customer, vehicle, tech, or location search."
+              : activeTab === "mine" && !myStaffRecord
+                ? "Link this user to a staff profile to unlock an assigned queue."
+                : activeTab === "mine"
+                  ? "No jobs are assigned to this staff account right now."
               : "Jobs appear here from scheduled appointments, so the crew always has a clean operational queue."
           }
         />
