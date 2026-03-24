@@ -33,6 +33,7 @@ type LocationRecord = {
 
 type JobListRecord = {
   id: string;
+  appointmentId?: string | null;
   jobNumber: string;
   status: string;
   title?: string | null;
@@ -252,6 +253,10 @@ export default function JobsIndexPage() {
             const staffName = job.assignedStaff
               ? `${job.assignedStaff.firstName ?? ""} ${job.assignedStaff.lastName ?? ""}`.trim()
               : "Unassigned";
+            const invoiceHref =
+              job.status === "completed" && job.client?.id
+                ? `/invoices/new?clientId=${job.client.id}&appointmentId=${job.appointmentId ?? job.id}`
+                : null;
 
             return (
               <Link key={job.id} to={`/jobs/${job.id}`}>
@@ -321,6 +326,11 @@ export default function JobsIndexPage() {
                           }
                         >
                           Complete
+                        </Button>
+                      ) : null}
+                      {invoiceHref ? (
+                        <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
+                          <Link to={invoiceHref}>Invoice</Link>
                         </Button>
                       ) : null}
                       <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
