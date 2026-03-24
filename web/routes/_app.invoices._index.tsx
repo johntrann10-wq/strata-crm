@@ -12,9 +12,16 @@ import { PageHeader } from "../components/shared/PageHeader";
 import { useFindMany, useGlobalAction } from "../hooks/useApi";
 import { api, ApiError } from "../api";
 import type { AuthOutletContext } from "./_app";
+import { cn } from "@/lib/utils";
 
-const FILTER_TABS = ["all", "draft", "sent", "paid", "partial", "void"] as const;
+const FILTER_TABS = ["all", "overdue", "draft", "sent", "paid", "partial", "void"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
+
+function safeDate(value: string | Date | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 function formatCurrency(amount: number | string | null | undefined): string {
   if (amount == null || amount === "") return "-";
@@ -67,7 +74,7 @@ export default function InvoicesIndexPage() {
     api.invoice,
     {
       search: debouncedSearch || undefined,
-      status: activeTab === "all" ? undefined : activeTab,
+      status: activeTab === "all" || activeTab === "overdue" ? undefined : activeTab,
       sort: { createdAt: "Descending" },
       first: pageSize,
       pause: !businessId,
@@ -76,7 +83,12 @@ export default function InvoicesIndexPage() {
 
   const isLoading = invoicesFetching && !invoices;
   const isRefetching = invoicesFetching && !!invoices && invoices.length > 0;
-  const displayedInvoices = invoices ?? [];
+  const baseInvoices = invoices ?? [];
+  const overdueInvoices = baseInvoices.filter((invoice) => {
+    const dueDate = safeDate(invoice.dueDate);
+    return ["sent", "partial"].includes(String(invoice.status ?? "")) && !!dueDate && dueDate.getTime() < Date.now();
+  });
+  const displayedInvoices = activeTab === "overdue" ? overdueInvoices : baseInvoices;
   const pageError = metricsError ?? invoicesError;
 
   return (
@@ -188,6 +200,19 @@ export default function InvoicesIndexPage() {
         </Card>
       </div>
 
+      {overdueInvoices.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FollowupCard
+            tone="danger"
+            title="Overdue invoices need collection"
+            detail={`${overdueInvoices.length} invoice${overdueInvoices.length === 1 ? "" : "s"} are past due`}
+            amount={formatCurrency(overdueInvoices.reduce((sum, invoice) => sum + Number(invoice.total ?? 0), 0))}
+            href={`/invoices/${overdueInvoices[0].id}`}
+            actionLabel="Open oldest overdue invoice"
+          />
+        </div>
+      ) : null}
+
       <Card>
         <CardContent className="p-0">
           <div className="px-4 pt-4">
@@ -274,7 +299,13 @@ export default function InvoicesIndexPage() {
                             : "-";
 
                           return (
-                            <tr key={invoice.id} className="border-b transition-colors hover:bg-muted/20">
+                            <tr
+                              key={invoice.id}
+                              className={cn(
+                                "border-b transition-colors hover:bg-muted/20",
+                                overdueInvoices.some((entry) => entry.id === invoice.id) && "bg-red-50/50"
+                              )}
+                            >
                               <td className="px-4 py-3">
                                 <Link to={`/invoices/${invoice.id}`} className="font-bold text-primary hover:underline">
                                   {invoice.invoiceNumber ?? `#${invoice.id.slice(0, 8)}`}
@@ -295,7 +326,16 @@ export default function InvoicesIndexPage() {
                                 {invoice.status ? <StatusBadge status={invoice.status} type="invoice" /> : "-"}
                               </td>
                               <td className="px-4 py-3 text-muted-foreground">{formatDate(invoice.createdAt)}</td>
-                              <td className="px-4 py-3 text-muted-foreground">{formatDate(invoice.dueDate)}</td>
+                              <td className="px-4 py-3 text-muted-foreground">
+                                <div className="flex items-center gap-2">
+                                  <span>{formatDate(invoice.dueDate)}</span>
+                                  {overdueInvoices.some((entry) => entry.id === invoice.id) ? (
+                                    <span className="rounded bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
+                                      Overdue
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </td>
                             </tr>
                           );
                         })}
@@ -323,3 +363,34 @@ export default function InvoicesIndexPage() {
 }
 
 export { RouteErrorBoundary as ErrorBoundary };
+
+function FollowupCard({
+  title,
+  detail,
+  amount,
+  href,
+  actionLabel,
+  tone,
+}: {
+  title: string;
+  detail: string;
+  amount: string;
+  href: string;
+  actionLabel: string;
+  tone: "danger";
+}) {
+  return (
+    <div className={cn("rounded-lg border border-red-200 bg-red-50/80 p-4")}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">{title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        </div>
+        <p className="text-sm font-semibold">{amount}</p>
+      </div>
+      <Button asChild size="sm" variant="outline" className="mt-3">
+        <Link to={href}>{actionLabel}</Link>
+      </Button>
+    </div>
+  );
+}

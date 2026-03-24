@@ -14,6 +14,12 @@ import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
 import { StatusBadge } from "../components/shared/StatusBadge";
 
+function safeDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export default function QuotesIndexPage() {
   const navigate = useNavigate();
   const { businessId } = useOutletContext<AuthOutletContext>();
@@ -46,6 +52,11 @@ export default function QuotesIndexPage() {
   const isFirstLoadAll = allFetching && allQuotes === undefined;
   const allRows = Array.isArray(allQuotes) ? allQuotes : [];
   const lostRows = Array.isArray(lostQuotes) ? lostQuotes : [];
+  const agingRows = allRows.filter((record) => {
+    const row = record as Record<string, any>;
+    const createdAt = safeDate(String(row.createdAt ?? ""));
+    return ["draft", "sent"].includes(String(row.status ?? "")) && !!createdAt && Date.now() - createdAt.getTime() >= 3 * 24 * 60 * 60 * 1000;
+  });
   const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
 
   const handleSendFollowUp = async (quoteId: string) => {
@@ -110,6 +121,14 @@ export default function QuotesIndexPage() {
       <Tabs defaultValue="all">
         <TabsList>
           <TabsTrigger value="all">All Quotes</TabsTrigger>
+          <TabsTrigger value="aging">
+            Aging
+            {agingRows.length > 0 && (
+              <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
+                {agingRows.length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="lost">
             Lost Quotes
             {lostRows.length > 0 && (
@@ -121,6 +140,18 @@ export default function QuotesIndexPage() {
         </TabsList>
 
         <TabsContent value="all">
+          {agingRows.length > 0 ? (
+            <div className="mb-4 grid gap-3 sm:grid-cols-2">
+              <FollowupCard
+                tone="warn"
+                title="Quotes are cooling off"
+                detail={`${agingRows.length} quotes are older than 3 days`}
+                amount={formatCurrency(agingRows.reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0))}
+                href={`/quotes/${String((agingRows[0] as any).id)}`}
+                actionLabel="Open oldest quote"
+              />
+            </div>
+          ) : null}
           {allError && !isFirstLoadAll ? (
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-start gap-2">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -165,7 +196,7 @@ export default function QuotesIndexPage() {
                     return (
                       <TableRow
                         key={String(row.id)}
-                        className="cursor-pointer"
+                        className={cn("cursor-pointer", agingRows.some((quote) => String((quote as any).id) === String(row.id)) && "bg-amber-50/50")}
                         onClick={() => navigate(`/quotes/${String(row.id)}`)}
                       >
                         <TableCell>
@@ -188,6 +219,50 @@ export default function QuotesIndexPage() {
                         <TableCell>{formatCurrency(row.total)}</TableCell>
                         <TableCell>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "—"}</TableCell>
                         <TableCell>{row.expiresAt ? new Date(row.expiresAt as string).toLocaleDateString() : "—"}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="aging">
+          {agingRows.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle}
+              title="No aging quotes"
+              description="No quotes older than 3 days need attention right now."
+            />
+          ) : (
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Vehicle</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Age</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {agingRows.map((record) => {
+                    const row = record as Record<string, any>;
+                    const client = row.client as Record<string, any> | undefined;
+                    const vehicle = row.vehicle as Record<string, any> | undefined;
+                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "—";
+                    const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "—";
+                    return (
+                      <TableRow key={String(row.id)} className="cursor-pointer bg-amber-50/50" onClick={() => navigate(`/quotes/${String(row.id)}`)}>
+                        <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
+                        <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
+                        <TableCell><StatusBadge status={String(row.status ?? "")} type="quote" /></TableCell>
+                        <TableCell>{formatCurrency(row.total)}</TableCell>
+                        <TableCell>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "—"}</TableCell>
+                        <TableCell>{getDaysAgo(row.createdAt as string)}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -255,6 +330,38 @@ export default function QuotesIndexPage() {
           )}
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function FollowupCard({
+  title,
+  detail,
+  amount,
+  href,
+  actionLabel,
+  tone,
+}: {
+  title: string;
+  detail: string;
+  amount: string;
+  href: string;
+  actionLabel: string;
+  tone: "warn" | "danger";
+}) {
+  const toneClass = tone === "danger" ? "border-red-200 bg-red-50/80" : "border-amber-200 bg-amber-50/80";
+  return (
+    <div className={cn("rounded-lg border p-4", toneClass)}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">{title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        </div>
+        <p className="text-sm font-semibold">{amount}</p>
+      </div>
+      <Button asChild size="sm" variant="outline" className="mt-3">
+        <Link to={href}>{actionLabel}</Link>
+      </Button>
     </div>
   );
 }
