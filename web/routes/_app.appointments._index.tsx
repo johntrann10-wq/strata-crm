@@ -315,6 +315,11 @@ export default function AppointmentsPage() {
             const techName = appointment.assignedStaff
               ? `${appointment.assignedStaff.firstName ?? ""} ${appointment.assignedStaff.lastName ?? ""}`.trim()
               : "Unassigned";
+            const quoteHref = appointment.client?.id
+              ? `/quotes/new?clientId=${appointment.client.id}${
+                  appointment.vehicle?.id ? `&vehicleId=${appointment.vehicle.id}` : ""
+                }`
+              : null;
             const invoiceHref =
               appointment.status === "completed" && appointment.client?.id
                 ? `/invoices/new?clientId=${appointment.client.id}&appointmentId=${appointment.id}`
@@ -384,6 +389,11 @@ export default function AppointmentsPage() {
                           ))}
                         </DropdownMenuContent>
                       </DropdownMenu>
+                    ) : null}
+                    {quoteHref ? (
+                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
+                        <Link to={quoteHref}>Quote</Link>
+                      </Button>
                     ) : null}
                     {invoiceHref ? (
                       <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
