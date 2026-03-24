@@ -48,10 +48,13 @@ jobsRouter.get("/", requireAuth, requireTenant, requirePermission("jobs.read"), 
   const clientIdFilter = z.string().uuid().safeParse(clientIdRaw).success ? clientIdRaw : undefined;
   const vehicleIdRaw = typeof req.query.vehicleId === "string" ? req.query.vehicleId.trim() : "";
   const vehicleIdFilter = z.string().uuid().safeParse(vehicleIdRaw).success ? vehicleIdRaw : undefined;
+  const locationIdRaw = typeof req.query.locationId === "string" ? req.query.locationId.trim() : "";
+  const locationIdFilter = z.string().uuid().safeParse(locationIdRaw).success ? locationIdRaw : undefined;
 
   const conditions = [eq(appointments.businessId, bid)];
   if (clientIdFilter) conditions.push(eq(appointments.clientId, clientIdFilter));
   if (vehicleIdFilter) conditions.push(eq(appointments.vehicleId, vehicleIdFilter));
+  if (locationIdFilter) conditions.push(eq(appointments.locationId, locationIdFilter));
   if (status) conditions.push(eq(appointments.status, status as any));
   if (search.length >= 2) {
     const term = `%${search}%`;

@@ -6,6 +6,7 @@ import { AlertCircle, Calendar, ChevronDown, ChevronRight, Loader2, Plus, Search
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -29,6 +30,11 @@ type AppointmentView = AppointmentStatusTab | "mine";
 type StaffRecord = {
   id: string;
   userId?: string | null;
+};
+
+type LocationRecord = {
+  id: string;
+  name?: string | null;
 };
 
 type AppointmentListRecord = {
@@ -72,6 +78,7 @@ export default function AppointmentsPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeTab, setActiveTab] = useState<AppointmentView>("all");
+  const [activeLocationId, setActiveLocationId] = useState<string>("all");
 
   const [, runUpdateStatus] = useAction(api.appointment.updateStatus);
   const [, runUpdateAppointment] = useAction(api.appointment.update);
@@ -110,6 +117,7 @@ export default function AppointmentsPage() {
     api.appointment,
     {
       search: debouncedSearch || undefined,
+      locationId: activeLocationId !== "all" ? activeLocationId : undefined,
       sort: { startTime: "Descending" },
       first: 100,
       select: {
@@ -130,10 +138,15 @@ export default function AppointmentsPage() {
     first: 100,
     pause: !businessId,
   } as any);
+  const [{ data: locationsRaw }] = useFindMany(api.location, {
+    first: 100,
+    pause: !businessId,
+  } as any);
 
   const isInitialLoad = appointmentsFetching && appointments === undefined;
   const records = (Array.isArray(appointments) ? appointments : []) as AppointmentListRecord[];
   const staffRecords = ((staffRaw ?? []) as StaffRecord[]).filter(Boolean);
+  const locationRecords = ((locationsRaw ?? []) as LocationRecord[]).filter(Boolean);
   const myStaffRecord = useMemo(
     () => staffRecords.find((staff) => staff.userId === user?.id) ?? null,
     [staffRecords, user?.id]
@@ -168,7 +181,20 @@ export default function AppointmentsPage() {
         title="Appointments"
         subtitle="Run the schedule clearly, move work forward fast, and keep status changes close to the list."
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <Select value={activeLocationId} onValueChange={setActiveLocationId}>
+              <SelectTrigger className="w-full lg:w-52">
+                <SelectValue placeholder="All locations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All locations</SelectItem>
+                {locationRecords.map((location) => (
+                  <SelectItem key={location.id} value={location.id}>
+                    {location.name?.trim() || "Unnamed location"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <div className="relative">
               {appointmentsFetching && records.length > 0 ? (
                 <Loader2 className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />

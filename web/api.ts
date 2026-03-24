@@ -184,6 +184,8 @@ function resource(path: string) {
       clientId?: string;
       /** Workflow records: scope list to one vehicle. */
       vehicleId?: string;
+      /** Workflow records: scope list to one location. */
+      locationId?: string;
       /** Activity feed: scope list to one entity type. */
       entityType?: string;
       /** Activity feed: scope list to one entity id. */
@@ -207,6 +209,7 @@ function resource(path: string) {
       if (opts?.startLte !== undefined && opts.startLte !== "") query.startLte = opts.startLte;
       if (opts?.clientId !== undefined && opts.clientId !== "") query.clientId = opts.clientId;
       if (opts?.vehicleId !== undefined && opts.vehicleId !== "") query.vehicleId = opts.vehicleId;
+      if (opts?.locationId !== undefined && opts.locationId !== "") query.locationId = opts.locationId;
       if (opts?.entityType !== undefined && opts.entityType !== "") query.entityType = opts.entityType;
       if (opts?.entityId !== undefined && opts.entityId !== "") query.entityId = opts.entityId;
       const qs =

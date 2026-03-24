@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { api, ApiError } from "../api";
@@ -23,6 +24,11 @@ type StaffRecord = {
   userId?: string | null;
   firstName?: string | null;
   lastName?: string | null;
+};
+
+type LocationRecord = {
+  id: string;
+  name?: string | null;
 };
 
 type JobListRecord = {
@@ -66,6 +72,7 @@ export default function JobsIndexPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeTab, setActiveTab] = useState<JobView>("all");
+  const [activeLocationId, setActiveLocationId] = useState<string>("all");
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -74,6 +81,7 @@ export default function JobsIndexPage() {
 
   const [{ data: jobs, fetching, error }] = useFindMany(api.job, {
     first: 100,
+    locationId: activeLocationId !== "all" ? activeLocationId : undefined,
     search: debouncedSearch || undefined,
     pause: !businessId,
   } as any);
@@ -81,10 +89,15 @@ export default function JobsIndexPage() {
     first: 100,
     pause: !businessId,
   } as any);
+  const [{ data: locations }] = useFindMany(api.location, {
+    first: 100,
+    pause: !businessId,
+  } as any);
   const [{ fetching: updatingJob }, runUpdateJob] = useAction(api.job.update);
 
   const records = ((jobs ?? []) as JobListRecord[]).filter(Boolean);
   const staffRecords = ((staff ?? []) as StaffRecord[]).filter(Boolean);
+  const locationRecords = ((locations ?? []) as LocationRecord[]).filter(Boolean);
   const myStaffRecord = useMemo(
     () => staffRecords.find((record) => record.userId === user?.id) ?? null,
     [staffRecords, user?.id]
@@ -130,18 +143,33 @@ export default function JobsIndexPage() {
         title="Jobs"
         subtitle="Run active work orders, assign technicians, and move work from schedule to completion."
         right={
-          <div className="relative w-full sm:w-80">
-            {fetching && records.length > 0 ? (
-              <Loader2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-            ) : (
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            )}
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search jobs, techs, locations, clients, vehicles..."
-              className="pl-9"
-            />
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Select value={activeLocationId} onValueChange={setActiveLocationId}>
+              <SelectTrigger className="w-full sm:w-52">
+                <SelectValue placeholder="All locations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All locations</SelectItem>
+                {locationRecords.map((location) => (
+                  <SelectItem key={location.id} value={location.id}>
+                    {location.name?.trim() || "Unnamed location"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="relative w-full sm:w-80">
+              {fetching && records.length > 0 ? (
+                <Loader2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              ) : (
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              )}
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search jobs, techs, locations, clients, vehicles..."
+                className="pl-9"
+              />
+            </div>
           </div>
         }
       />
