@@ -203,6 +203,18 @@ export default function SignedIn() {
   const unpaidRevenue = useMemo(() => sumCurrency(unpaidInvoices.map((invoice) => invoice.total)), [unpaidInvoices]);
   const activeJobValue = useMemo(() => sumCurrency(activeJobs.map((job) => job.totalPrice)), [activeJobs]);
   const myActiveJobValue = useMemo(() => sumCurrency(myActiveJobs.map((job) => job.totalPrice)), [myActiveJobs]);
+  const todayBookedValue = useMemo(
+    () => sumCurrency(todayAppointments.map((appointment) => (appointment as AppointmentRecord & { totalPrice?: number | string | null }).totalPrice)),
+    [todayAppointments]
+  );
+  const assignedTodayAppointments = useMemo(
+    () => todayAppointments.filter((appointment) => !!appointment.assignedStaff?.id),
+    [todayAppointments]
+  );
+  const todayCoverageRate = useMemo(() => {
+    if (todayAppointments.length === 0) return 100;
+    return Math.round((assignedTodayAppointments.length / todayAppointments.length) * 100);
+  }, [assignedTodayAppointments.length, todayAppointments.length]);
   const overdueInvoices = useMemo(
     () =>
       unpaidInvoices.filter((invoice) => {
@@ -484,6 +496,61 @@ export default function SignedIn() {
             compactValue
           />
         </div>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">Today's operating pulse</h2>
+            <span className="text-sm text-muted-foreground">
+              {activeLocationName ? "Focused on current location" : "Across the current business"}
+            </span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <Link
+              to="/appointments"
+              className="rounded-2xl border bg-card p-4 transition-colors hover:bg-muted/40"
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-muted-foreground">Booked today</p>
+                <CalendarPlus className="h-5 w-5 text-orange-600" />
+              </div>
+              <p className="text-2xl font-semibold tracking-tight">{todayAppointments.length}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {todayBookedValue > 0 ? formatCurrency(todayBookedValue) : "No booked value yet"}
+              </p>
+            </Link>
+
+            <Link
+              to="/appointments"
+              className="rounded-2xl border bg-card p-4 transition-colors hover:bg-muted/40"
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-muted-foreground">Staffing coverage</p>
+                <Users className="h-5 w-5 text-orange-600" />
+              </div>
+              <p className="text-2xl font-semibold tracking-tight">{todayCoverageRate}%</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {assignedTodayAppointments.length}/{todayAppointments.length} assigned
+                {unassignedTodayAppointments.length > 0
+                  ? ` · ${unassignedTodayAppointments.length} still open`
+                  : " · fully staffed"}
+              </p>
+            </Link>
+
+            <Link
+              to="/invoices"
+              className="rounded-2xl border bg-card p-4 transition-colors hover:bg-muted/40"
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-muted-foreground">Cash risk</p>
+                <DollarSign className="h-5 w-5 text-orange-600" />
+              </div>
+              <p className="text-2xl font-semibold tracking-tight">{overdueInvoices.length}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {overdueInvoices.length > 0 ? formatCurrency(unpaidRevenue) : "No overdue cash right now"}
+              </p>
+            </Link>
+          </div>
+        </section>
 
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-2">
