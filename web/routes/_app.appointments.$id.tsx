@@ -37,6 +37,7 @@ import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/Re
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import { ChecklistCard } from "../components/shared/ChecklistCard";
+import { VerticalWorkflowCard } from "../components/shared/VerticalWorkflowCard";
 import { getIntakePreset } from "../lib/intakePresets";
 import {
   ClientCard,
@@ -1197,6 +1198,8 @@ export default function AppointmentDetail() {
                 depositAmount={appointment.depositAmount}
                 depositPaid={appointment.depositPaid}
               />
+
+              <VerticalWorkflowCard businessType={businessType} mode="appointment" />
 
               <ChecklistCard
                 entityType="appointment"

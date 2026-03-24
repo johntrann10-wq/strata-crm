@@ -25,6 +25,7 @@ import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import { ChecklistCard } from "../components/shared/ChecklistCard";
+import { VerticalWorkflowCard } from "../components/shared/VerticalWorkflowCard";
 import { getIntakePreset } from "../lib/intakePresets";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { Button } from "@/components/ui/button";
@@ -621,6 +622,8 @@ export default function JobDetailPage() {
               <MiniStat label="Invoice linked" value={record.invoice ? "Yes" : "No"} />
             </CardContent>
           </Card>
+
+          <VerticalWorkflowCard businessType={businessType} mode="job" />
 
           <ChecklistCard
             entityType="job"
