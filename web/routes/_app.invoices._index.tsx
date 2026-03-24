@@ -11,8 +11,10 @@ import { StatusBadge } from "../components/shared/StatusBadge";
 import { PageHeader } from "../components/shared/PageHeader";
 import { useFindMany, useGlobalAction } from "../hooks/useApi";
 import { api, ApiError } from "../api";
+import { useAction } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const FILTER_TABS = ["all", "overdue", "draft", "sent", "paid", "partial", "void"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
@@ -54,10 +56,12 @@ export default function InvoicesIndexPage() {
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null);
   const hasLoadedMetrics = useRef(false);
 
   const [{ data: invoiceMetrics, fetching: metricsFetching, error: metricsError }, runGetMetrics] =
     useGlobalAction((api as any).getInvoiceMetrics);
+  const [, runSendInvoice] = useAction(api.invoice.sendToClient);
 
   useEffect(() => {
     if (!businessId) return;
@@ -92,6 +96,23 @@ export default function InvoicesIndexPage() {
   const overdueInvoices = baseInvoices.filter((invoice) => isOverdueInvoice(invoice));
   const displayedInvoices = activeTab === "overdue" ? overdueInvoices : baseInvoices;
   const pageError = metricsError ?? invoicesError;
+
+  const handleSendInvoice = async (invoiceId: string) => {
+    setSendingInvoiceId(invoiceId);
+    try {
+      const result = await runSendInvoice({ id: invoiceId });
+      if (result?.error) {
+        toast.error(result.error.message ?? "Could not send invoice");
+        return;
+      }
+      toast.success("Invoice send recorded");
+      void refetchInvoices();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not send invoice");
+    } finally {
+      setSendingInvoiceId(null);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
@@ -349,6 +370,20 @@ export default function InvoicesIndexPage() {
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex justify-end gap-2">
+                                  {["draft", "sent", "partial"].includes(String(invoice.status ?? "")) ? (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 text-xs"
+                                      disabled={sendingInvoiceId !== null}
+                                      onClick={() => void handleSendInvoice(invoice.id)}
+                                    >
+                                      {sendingInvoiceId === invoice.id ? (
+                                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                      ) : null}
+                                      {invoice.status === "draft" ? "Send" : "Resend"}
+                                    </Button>
+                                  ) : null}
                                   <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
                                     <Link to={`/invoices/${invoice.id}`}>Open</Link>
                                   </Button>

@@ -255,14 +255,37 @@ export default function QuotesIndexPage() {
                     const vehicle = row.vehicle as Record<string, any> | undefined;
                     const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "—";
                     const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "—";
+                    const qid = String(row.id);
+                    const isLoading = sendingId === qid;
                     return (
-                      <TableRow key={String(row.id)} className="cursor-pointer bg-amber-50/50" onClick={() => navigate(`/quotes/${String(row.id)}`)}>
+                      <TableRow key={qid} className="cursor-pointer bg-amber-50/50" onClick={() => navigate(`/quotes/${qid}`)}>
                         <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
                         <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
                         <TableCell><StatusBadge status={String(row.status ?? "")} type="quote" /></TableCell>
                         <TableCell>{formatCurrency(row.total)}</TableCell>
                         <TableCell>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "—"}</TableCell>
-                        <TableCell>{getDaysAgo(row.createdAt as string)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-between gap-2">
+                            <span>{getDaysAgo(row.createdAt as string)}</span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs"
+                              disabled={sendingId !== null}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleSendFollowUp(qid);
+                              }}
+                            >
+                              {isLoading ? (
+                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Send className="mr-1 h-3.5 w-3.5" />
+                              )}
+                              Follow up
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
