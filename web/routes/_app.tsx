@@ -28,7 +28,7 @@ import {
   AlertCircle,
   Car,
 } from "lucide-react";
-import React, { useState, useEffect, memo, useMemo } from "react";
+import React, { useState, useEffect, memo, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -37,7 +37,7 @@ import { CommandPalette } from "../components/shared/CommandPalette";
 import { getEnabledModules } from "../lib/modules";
 import { useFindOne, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
-import { clearAuthToken } from "@/lib/auth";
+import { clearAuthToken, clearCurrentBusinessId, getCurrentBusinessId, setCurrentBusinessId } from "@/lib/auth";
 import { pathAllowsMissingBusiness } from "../lib/routeRequiresBusiness";
 
 // SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
@@ -47,6 +47,16 @@ export type AuthOutletContext = RootOutletContext & {
   businessName: string | null;
   businessId: string | null;
   businessType: string | null;
+  membershipRole: string | null;
+  tenantBusinesses: Array<{
+    id: string;
+    name: string | null;
+    type: string | null;
+    role: string;
+    status: string;
+    isDefault: boolean;
+    permissions: string[];
+  }>;
   enabledModules: Set<string>;
 };
 
@@ -206,10 +216,16 @@ const SidebarNav = memo(function SidebarNav({
 function AppLayoutInner({
   user,
   business,
+  tenantBusinesses,
+  membershipRole,
+  onBusinessChange,
   rootOutletContext,
 }: {
   user: Record<string, unknown>;
   business: Record<string, unknown> | null;
+  tenantBusinesses: AuthOutletContext["tenantBusinesses"];
+  membershipRole: string | null;
+  onBusinessChange: (businessId: string) => void;
   rootOutletContext: RootOutletContext;
 }) {
   const businessName = (business?.name as string) ?? null;
@@ -222,8 +238,18 @@ function AppLayoutInner({
     [businessType]
   );
   const outletCtx = useMemo(
-    () => ({ ...rootOutletContext, user, businessName, businessId, businessType, enabledModules } as AuthOutletContext),
-    [rootOutletContext, user, businessName, businessId, businessType, enabledModules]
+    () =>
+      ({
+        ...rootOutletContext,
+        user,
+        businessName,
+        businessId,
+        businessType,
+        membershipRole,
+        tenantBusinesses,
+        enabledModules,
+      }) as AuthOutletContext,
+    [rootOutletContext, user, businessName, businessId, businessType, membershipRole, tenantBusinesses, enabledModules]
   );
 
   useEffect(() => {
@@ -273,11 +299,31 @@ function AppLayoutInner({
           <div className="flex items-center gap-2 ml-auto">
             <QuickCreateMenu />
             <div className="flex items-center">
-              {businessName && (
-                <span className="hidden md:block text-sm font-semibold text-foreground mr-4">
-                  {businessName}
-                </span>
-              )}
+              {tenantBusinesses.length > 1 ? (
+                <label className="hidden md:flex items-center mr-4">
+                  <span className="sr-only">Current business</span>
+                  <select
+                    value={businessId ?? ""}
+                    onChange={(e) => e.target.value && onBusinessChange(e.target.value)}
+                    className="h-9 min-w-[220px] rounded-md border bg-background px-3 text-sm text-foreground"
+                  >
+                    {tenantBusinesses.map((tenantBusiness) => (
+                      <option key={tenantBusiness.id} value={tenantBusiness.id}>
+                        {tenantBusiness.name ?? "Untitled business"} ({tenantBusiness.role})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : businessName ? (
+                <div className="hidden md:block mr-4 text-right">
+                  <span className="block text-sm font-semibold text-foreground">{businessName}</span>
+                  {membershipRole ? (
+                    <span className="block text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+                      {membershipRole.replace(/_/g, " ")}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
               <SecondaryNavigation
                 icon={
                   <>
@@ -310,6 +356,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const signInPath = safeLoaderData.signInPath ?? "/sign-in";
   // Predictable auth persistence: always revalidate via /api/auth/me on boot.
   const [clientUserId, setClientUserId] = useState<string | null>(null);
+  const [tenantBusinesses, setTenantBusinesses] = useState<AuthOutletContext["tenantBusinesses"]>([]);
+  const [currentBusinessId, setCurrentBusinessIdState] = useState<string | null>(() => getCurrentBusinessId());
   const [authCheckDone, setAuthCheckDone] = useState(false);
   const effectiveUserId = clientUserId;
 
@@ -317,9 +365,21 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     let cancelled = false;
     api.user
       .me()
-      .then((me) => {
+      .then(async (me) => {
+        const context = await api.user.context();
+        const availableBusinesses = context.businesses;
+        const storedBusinessId = getCurrentBusinessId();
+        const resolvedBusinessId =
+          availableBusinesses.find((business) => business.id === storedBusinessId)?.id ??
+          context.currentBusinessId ??
+          availableBusinesses[0]?.id ??
+          null;
         if (!cancelled) {
           setClientUserId(me.id);
+          setTenantBusinesses(availableBusinesses);
+          setCurrentBusinessIdState(resolvedBusinessId);
+          if (resolvedBusinessId) setCurrentBusinessId(resolvedBusinessId);
+          else clearCurrentBusinessId();
           setAuthCheckDone(true);
         }
       })
@@ -327,6 +387,9 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         if (!cancelled) {
           // Invalid/expired token: clear local state and force the user back to sign-in.
           clearAuthToken();
+          clearCurrentBusinessId();
+          setTenantBusinesses([]);
+          setCurrentBusinessIdState(null);
           setAuthCheckDone(true);
         }
       });
@@ -338,10 +401,16 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     const onInvalid = () => {
       setClientUserId(null);
+      setTenantBusinesses([]);
+      setCurrentBusinessIdState(null);
+      clearCurrentBusinessId();
       setAuthCheckDone(true);
     };
     const onLogout = () => {
       setClientUserId(null);
+      setTenantBusinesses([]);
+      setCurrentBusinessIdState(null);
+      clearCurrentBusinessId();
       setAuthCheckDone(true);
     };
     window.addEventListener("auth:invalid", onInvalid as EventListener);
@@ -357,11 +426,25 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     effectiveUserId ?? "",
     { select: { id: true, firstName: true, lastName: true, email: true }, pause: !effectiveUserId }
   );
-  const [{ data: business, fetching: businessFetching, error: businessError }, refetchBusiness] = useFindFirst(api.business, {
-    filter: { owner: { id: { equals: effectiveUserId } } },
-    select: { id: true, name: true, type: true, onboardingComplete: true },
-    pause: !effectiveUserId,
-  });
+  const [{ data: business, fetching: businessFetching, error: businessError }, refetchBusiness] = useFindOne(
+    api.business,
+    currentBusinessId ?? "",
+    { pause: !effectiveUserId || !currentBusinessId }
+  );
+
+  const currentMembership = useMemo(
+    () => tenantBusinesses.find((tenantBusiness) => tenantBusiness.id === currentBusinessId) ?? null,
+    [tenantBusinesses, currentBusinessId]
+  );
+
+  const handleBusinessChange = useCallback(
+    (businessId: string) => {
+      setCurrentBusinessIdState(businessId);
+      setCurrentBusinessId(businessId);
+      navigate("/signed-in");
+    },
+    [navigate]
+  );
 
   useEffect(() => {
     if (userFetching || businessFetching) return;
@@ -439,6 +522,10 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     );
   }
   if (!business && !allowWithoutBusiness) {
+    if (tenantBusinesses.length === 0) {
+      navigate("/onboarding", { replace: true });
+      return null;
+    }
     return (
       <div className="h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Preparing your workspace…</div>
@@ -459,7 +546,14 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
 
   return (
     <CommandPaletteProvider>
-      <AppLayoutInner user={user as Record<string, unknown>} business={(business as Record<string, unknown>) ?? null} rootOutletContext={rootOutletContext} />
+      <AppLayoutInner
+        user={user as Record<string, unknown>}
+        business={(business as Record<string, unknown>) ?? null}
+        tenantBusinesses={tenantBusinesses}
+        membershipRole={currentMembership?.role ?? null}
+        onBusinessChange={handleBusinessChange}
+        rootOutletContext={rootOutletContext}
+      />
     </CommandPaletteProvider>
   );
 }

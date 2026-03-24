@@ -1,10 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { db } from "../db/index.js";
-import { businesses } from "../db/schema.js";
-import { eq } from "drizzle-orm";
 import { UnauthorizedError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
+import { resolveTenantContext } from "../lib/tenantContext.js";
+import type { MembershipRole } from "../lib/permissions.js";
 export interface SessionUser {
   id: string;
   email?: string;
@@ -16,6 +15,7 @@ declare global {
     interface Request {
       userId?: string;
       businessId?: string;
+      membershipRole?: MembershipRole;
       user?: SessionUser;
     }
   }
@@ -58,12 +58,12 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     return;
   }
   req.userId = userId;
-  const [business] = await db
-    .select({ id: businesses.id })
-    .from(businesses)
-    .where(eq(businesses.ownerId, userId))
-    .limit(1);
-  if (business) req.businessId = business.id;
+  const preferredBusinessId = typeof req.headers["x-business-id"] === "string" ? req.headers["x-business-id"] : null;
+  const tenantContext = await resolveTenantContext(userId, preferredBusinessId);
+  if (tenantContext) {
+    req.businessId = tenantContext.businessId;
+    req.membershipRole = tenantContext.role;
+  }
   next();
 }
 /** Optional auth: set req.userId/businessId if token/session exists, but do not require. */
@@ -74,11 +74,11 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
     return;
   }
   req.userId = userId;
-  const [business] = await db
-    .select({ id: businesses.id })
-    .from(businesses)
-    .where(eq(businesses.ownerId, userId))
-    .limit(1);
-  if (business) req.businessId = business.id;
+  const preferredBusinessId = typeof req.headers["x-business-id"] === "string" ? req.headers["x-business-id"] : null;
+  const tenantContext = await resolveTenantContext(userId, preferredBusinessId);
+  if (tenantContext) {
+    req.businessId = tenantContext.businessId;
+    req.membershipRole = tenantContext.role;
+  }
   next();
 }

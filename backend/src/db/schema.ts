@@ -26,6 +26,41 @@ const quoteStatusEnum = pgEnum("quote_status", ["draft", "sent", "accepted", "de
 const paymentMethodEnum = pgEnum("payment_method", [
   "cash", "card", "check", "venmo", "cashapp", "zelle", "other",
 ]);
+export const membershipRoleEnum = pgEnum("membership_role", [
+  "owner",
+  "admin",
+  "manager",
+  "service_advisor",
+  "technician",
+]);
+export const membershipStatusEnum = pgEnum("membership_status", [
+  "invited",
+  "active",
+  "suspended",
+]);
+export const permissionEnum = pgEnum("permission", [
+  "dashboard.view",
+  "customers.read",
+  "customers.write",
+  "vehicles.read",
+  "vehicles.write",
+  "services.read",
+  "services.write",
+  "quotes.read",
+  "quotes.write",
+  "appointments.read",
+  "appointments.write",
+  "jobs.read",
+  "jobs.write",
+  "invoices.read",
+  "invoices.write",
+  "payments.read",
+  "payments.write",
+  "team.read",
+  "team.write",
+  "settings.read",
+  "settings.write",
+]);
 
 /** Universal service category — same structure for every shop type; no industry-specific logic in app code. */
 export const serviceCategoryEnum = pgEnum("service_category", [
@@ -78,6 +113,39 @@ export const businesses = pgTable("businesses", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const businessMemberships = pgTable(
+  "business_memberships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id").notNull().references(() => businesses.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    role: membershipRoleEnum("role").notNull(),
+    status: membershipStatusEnum("status").default("active").notNull(),
+    isDefault: boolean("is_default").default(false).notNull(),
+    invitedByUserId: uuid("invited_by_user_id").references(() => users.id),
+    invitedAt: timestamp("invited_at", { withTimezone: true }),
+    joinedAt: timestamp("joined_at", { withTimezone: true }),
+    lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("business_memberships_business_user_unique").on(t.businessId, t.userId)]
+);
+
+export const rolePermissionGrants = pgTable(
+  "role_permission_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id").references(() => businesses.id, { onDelete: "cascade" }),
+    role: membershipRoleEnum("role").notNull(),
+    permission: permissionEnum("permission").notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("role_permission_grants_scope_role_permission_unique").on(t.businessId, t.role, t.permission)]
+);
 
 export const clients = pgTable("clients", {
   id: uuid("id").primaryKey().defaultRandom(),

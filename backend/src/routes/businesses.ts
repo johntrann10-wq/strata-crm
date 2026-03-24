@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { businesses } from "../db/schema.js";
+import { businessMemberships, businesses } from "../db/schema.js";
 import { eq, and } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -58,6 +58,11 @@ function serializeBusiness(record: typeof businesses.$inferSelect) {
 
 businessesRouter.get("/", requireAuth, async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
+  if (req.businessId) {
+    const [currentBusiness] = await db.select().from(businesses).where(eq(businesses.id, req.businessId)).limit(1);
+    res.json({ records: currentBusiness ? [serializeBusiness(currentBusiness)] : [] });
+    return;
+  }
   let ownerId = req.userId;
   if (req.query.filter) {
     try {
@@ -80,27 +85,45 @@ businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
-  const [created] = await db
-    .insert(businesses)
-    .values({
-      id: randomUUID(),
-      ownerId: req.userId,
-      name: parsed.data.name,
-      type: parsed.data.type,
-      email: parsed.data.email ?? null,
-      phone: parsed.data.phone ?? null,
-      address: parsed.data.address ?? null,
-      city: parsed.data.city ?? null,
-      state: parsed.data.state ?? null,
-      zip: parsed.data.zip ?? null,
-      staffCount: parsed.data.staffCount ?? null,
-      operatingHours: parsed.data.operatingHours ?? null,
-      timezone: parsed.data.timezone ?? "America/Los_Angeles",
-      currency: parsed.data.currency ?? "USD",
-      defaultTaxRate: parsed.data.defaultTaxRate != null ? String(parsed.data.defaultTaxRate) : "0",
-      appointmentBufferMinutes: parsed.data.appointmentBufferMinutes ?? 15,
-    })
-    .returning();
+  const businessId = randomUUID();
+  const membershipId = randomUUID();
+  const [created] = await db.transaction(async (tx) => {
+    const [newBusiness] = await tx
+      .insert(businesses)
+      .values({
+        id: businessId,
+        ownerId: req.userId!,
+        name: parsed.data.name,
+        type: parsed.data.type,
+        email: parsed.data.email ?? null,
+        phone: parsed.data.phone ?? null,
+        address: parsed.data.address ?? null,
+        city: parsed.data.city ?? null,
+        state: parsed.data.state ?? null,
+        zip: parsed.data.zip ?? null,
+        staffCount: parsed.data.staffCount ?? null,
+        operatingHours: parsed.data.operatingHours ?? null,
+        timezone: parsed.data.timezone ?? "America/Los_Angeles",
+        currency: parsed.data.currency ?? "USD",
+        defaultTaxRate: parsed.data.defaultTaxRate != null ? String(parsed.data.defaultTaxRate) : "0",
+        appointmentBufferMinutes: parsed.data.appointmentBufferMinutes ?? 15,
+      })
+      .returning();
+
+    if (!newBusiness) return [];
+
+    await tx.insert(businessMemberships).values({
+      id: membershipId,
+      businessId,
+      userId: req.userId!,
+      role: "owner",
+      status: "active",
+      isDefault: true,
+      joinedAt: new Date(),
+    });
+
+    return [newBusiness];
+  });
   if (!created) throw new BadRequestError("Failed to create business.");
   res.status(201).json(serializeBusiness(created));
 });

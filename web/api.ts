@@ -1,4 +1,10 @@
-import { clearAuthToken, emitAuthEvent, getAuthToken, setAuthToken } from "./lib/auth";
+import {
+  clearAuthToken,
+  emitAuthEvent,
+  getAuthToken,
+  getCurrentBusinessId,
+  setAuthToken,
+} from "./lib/auth";
 
 /** Standard auth payload from sign-in, sign-up, and GET /auth/me. */
 export type AuthUserData = {
@@ -9,7 +15,21 @@ export type AuthUserData = {
   token: string;
 };
 
+export type AuthContextData = {
+  businesses: Array<{
+    id: string;
+    name: string | null;
+    type: string | null;
+    role: string;
+    status: string;
+    isDefault: boolean;
+    permissions: string[];
+  }>;
+  currentBusinessId: string | null;
+};
+
 type AuthEnvelope = { data: AuthUserData };
+type AuthContextEnvelope = { data: AuthContextData };
 
 /**
  * Fetch-based API client for Node API endpoints.
@@ -72,6 +92,10 @@ async function request<T = unknown>(
   if (token) {
     (headers as any).Authorization = `Bearer ${token}`;
   }
+  const currentBusinessId = getCurrentBusinessId();
+  if (currentBusinessId) {
+    (headers as any)["x-business-id"] = currentBusinessId;
+  }
   const res = await fetch(url, {
     ...init,
     headers,
@@ -127,6 +151,17 @@ function assertAuthEnvelope(body: unknown, path: string): AuthUserData {
     typeof data.token !== "string"
   ) {
     throw new ApiError("Invalid auth response", 500, path);
+  }
+  return data;
+}
+
+function assertAuthContextEnvelope(body: unknown, path: string): AuthContextData {
+  if (!body || typeof body !== "object" || !("data" in body)) {
+    throw new ApiError("Invalid auth context response", 500, path);
+  }
+  const data = (body as AuthContextEnvelope).data;
+  if (!data || !Array.isArray(data.businesses)) {
+    throw new ApiError("Invalid auth context response", 500, path);
   }
   return data;
 }
@@ -355,6 +390,10 @@ export const api = {
         setAuthToken(d.token);
         return d;
       }),
+    context: () =>
+      request<AuthContextEnvelope>("/auth/context").then((body) =>
+        assertAuthContextEnvelope(body, "/auth/context")
+      ),
     update: (params: Record<string, unknown>) =>
       request<unknown>("/users/" + (params?.id ?? "") + "/update", {
         method: "PATCH",
