@@ -7,6 +7,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
+import { createRequestActivityLog } from "../lib/activity.js";
 
 export const appointmentServicesRouter = Router({ mergeParams: true });
 
@@ -97,6 +98,18 @@ appointmentServicesRouter.post("/", requireAuth, requireTenant, async (req: Requ
     return row;
   });
 
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "appointment.service_added",
+    entityType: "appointment",
+    entityId: appointmentId,
+    metadata: {
+      appointmentServiceId: created.id,
+      serviceId,
+      quantity: created.quantity,
+    },
+  });
+
   res.status(201).json(created);
 });
 
@@ -134,6 +147,17 @@ appointmentServicesRouter.patch("/:id", requireAuth, requireTenant, async (req: 
     await recalculateAppointmentTotal(tx, existing.appointmentId);
     return row;
   });
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "appointment.service_updated",
+    entityType: "appointment",
+    entityId: existing.appointmentId,
+    metadata: {
+      appointmentServiceId: updated.id,
+      serviceId: updated.serviceId,
+      quantity: updated.quantity,
+    },
+  });
   res.json(updated);
 });
 
@@ -153,6 +177,16 @@ appointmentServicesRouter.delete("/:id", requireAuth, requireTenant, async (req:
   await db.transaction(async (tx) => {
     await tx.delete(appointmentServices).where(eq(appointmentServices.id, req.params.id));
     await recalculateAppointmentTotal(tx, apptId);
+  });
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "appointment.service_removed",
+    entityType: "appointment",
+    entityId: apptId,
+    metadata: {
+      appointmentServiceId: existing.id,
+      serviceId: existing.serviceId,
+    },
   });
   res.status(204).send();
 });

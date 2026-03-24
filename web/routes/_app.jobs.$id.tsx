@@ -11,7 +11,9 @@ import {
   FileText,
   Loader2,
   MapPin,
+  Plus,
   Save,
+  Trash2,
   UserRound,
   Car,
 } from "lucide-react";
@@ -122,6 +124,11 @@ export default function JobDetailPage() {
   });
   const [{ data: staff }] = useFindMany(api.staff, { first: 100, pause: !businessId } as any);
   const [{ data: locations }] = useFindMany(api.location, { first: 100, pause: !businessId } as any);
+  const [{ data: serviceCatalog, fetching: servicesFetching }] = useFindMany(api.service, {
+    first: 200,
+    sort: { createdAt: "Descending" },
+    pause: !businessId,
+  } as any);
   const [{ data: activityLogs, fetching: activityFetching }] = useFindMany(api.activityLog, {
     entityType: "job",
     entityId: id,
@@ -129,6 +136,10 @@ export default function JobDetailPage() {
     pause: !businessId || !id,
   } as any);
   const [{ fetching: saving }, runUpdateJob] = useAction(api.job.update);
+  const [{ fetching: addingService }, runAddAppointmentService] = useAction(api.appointmentService.create);
+  const [{ fetching: removingService }, runRemoveAppointmentService] = useAction(
+    (params: Record<string, unknown>) => api.appointmentService.delete(params)
+  );
 
   const record = (job ?? null) as JobRecord | null;
 
@@ -140,6 +151,7 @@ export default function JobDetailPage() {
     notes: "",
     internalNotes: "",
   });
+  const [selectedServiceId, setSelectedServiceId] = useState("__none__");
 
   useEffect(() => {
     if (!record) return;
@@ -185,6 +197,16 @@ export default function JobDetailPage() {
       ),
     [record?.services]
   );
+  const existingServiceIds = useMemo(
+    () => new Set((record?.services ?? []).map((service) => service.serviceId).filter(Boolean)),
+    [record?.services]
+  );
+  const availableServices = useMemo(
+    () =>
+      ((serviceCatalog ?? []) as Array<{ id: string; name?: string | null; category?: string | null; price?: number | string | null }>)
+        .filter((service) => service.id && !existingServiceIds.has(service.id)),
+    [serviceCatalog, existingServiceIds]
+  );
 
   const handleSave = async () => {
     if (!record) return;
@@ -202,6 +224,31 @@ export default function JobDetailPage() {
       return;
     }
     toast.success("Job updated");
+    void refetchJob();
+  };
+
+  const handleAddService = async () => {
+    if (!record?.appointmentId || selectedServiceId === "__none__") return;
+    const result = await runAddAppointmentService({
+      appointmentId: record.appointmentId,
+      serviceId: selectedServiceId,
+    });
+    if (result.error) {
+      toast.error(`Failed to add service: ${result.error.message}`);
+      return;
+    }
+    toast.success("Service added to job");
+    setSelectedServiceId("__none__");
+    void refetchJob();
+  };
+
+  const handleRemoveService = async (appointmentServiceId: string) => {
+    const result = await runRemoveAppointmentService({ id: appointmentServiceId });
+    if (result.error) {
+      toast.error(`Failed to remove service: ${result.error.message}`);
+      return;
+    }
+    toast.success("Service removed from job");
     void refetchJob();
   };
 
@@ -333,6 +380,29 @@ export default function JobDetailPage() {
               <CardTitle>Job details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {canEdit ? (
+                <div className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center">
+                  <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
+                    <SelectTrigger className="sm:flex-1">
+                      <SelectValue placeholder={servicesFetching ? "Loading services..." : "Add a service from your catalog"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Select a service</SelectItem>
+                      {availableServices.map((service) => (
+                        <SelectItem key={service.id} value={service.id}>
+                          {service.name ?? "Service"}
+                          {service.category ? ` - ${service.category}` : ""}
+                          {service.price != null ? ` - ${formatCurrency(service.price)}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={() => void handleAddService()} disabled={addingService || selectedServiceId === "__none__"}>
+                    {addingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                    Add service
+                  </Button>
+                </div>
+              ) : null}
               <div className="space-y-2">
                 <Label htmlFor="job-title">Display title</Label>
                 <Input
@@ -374,13 +444,13 @@ export default function JobDetailPage() {
             <CardHeader>
               <CardTitle>Services on this job</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               {(record.services ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">No services attached yet.</p>
               ) : (
                 <div className="space-y-3">
                   {(record.services ?? []).map((service) => (
-                    <div key={service.id} className="flex flex-col gap-1 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div key={service.id} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="font-medium">{service.name ?? "Service"}</p>
                         <p className="text-sm text-muted-foreground">
@@ -388,8 +458,19 @@ export default function JobDetailPage() {
                           {service.durationMinutes ? ` · ${service.durationMinutes} min` : ""}
                         </p>
                       </div>
-                      <div className="text-sm font-medium text-foreground">
-                        {formatCurrency(service.unitPrice)}
+                      <div className="flex items-center gap-3">
+                        <div className="text-sm font-medium text-foreground">{formatCurrency(service.unitPrice)}</div>
+                        {canEdit ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-muted-foreground hover:text-destructive"
+                            onClick={() => void handleRemoveService(service.id)}
+                            disabled={removingService}
+                          >
+                            {removingService ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   ))}
