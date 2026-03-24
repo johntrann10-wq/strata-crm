@@ -271,6 +271,81 @@ export async function sendPaymentReceipt(options: {
   });
 }
 
+export async function sendQuoteEmail(options: {
+  to: string;
+  businessId?: string | null;
+  clientName: string;
+  businessName: string;
+  amount: string;
+  vehicle?: string | null;
+  quoteUrl?: string | null;
+  message?: string | null;
+}) {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "quote_sent",
+    businessId: options.businessId,
+    vars: {
+      clientName: options.clientName,
+      businessName: options.businessName,
+      amount: options.amount,
+      vehicle: fallback(options.vehicle),
+      quoteUrl: fallback(options.quoteUrl),
+      message: fallback(options.message),
+    },
+  });
+}
+
+export async function sendQuoteFollowUpEmail(options: {
+  to: string;
+  businessId?: string | null;
+  clientName: string;
+  businessName: string;
+  amount: string;
+  vehicle?: string | null;
+  quoteUrl?: string | null;
+  message?: string | null;
+}) {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "quote_follow_up",
+    businessId: options.businessId,
+    vars: {
+      clientName: options.clientName,
+      businessName: options.businessName,
+      amount: options.amount,
+      vehicle: fallback(options.vehicle),
+      quoteUrl: fallback(options.quoteUrl),
+      message: fallback(options.message),
+    },
+  });
+}
+
+export async function sendInvoiceEmail(options: {
+  to: string;
+  businessId?: string | null;
+  clientName: string;
+  businessName: string;
+  amount: string;
+  invoiceNumber: string;
+  invoiceUrl?: string | null;
+  message?: string | null;
+}) {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "invoice_sent",
+    businessId: options.businessId,
+    vars: {
+      clientName: options.clientName,
+      businessName: options.businessName,
+      amount: options.amount,
+      invoiceNumber: options.invoiceNumber,
+      invoiceUrl: fallback(options.invoiceUrl),
+      message: fallback(options.message),
+    },
+  });
+}
+
 /** Send review request. Vars: clientName, businessName, reviewUrl?, serviceSummary? */
 export async function sendReviewRequest(options: {
   to: string;

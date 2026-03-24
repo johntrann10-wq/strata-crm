@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate, useOutletContext } from "react-router";
-import { useFindOne, useAction } from "../hooks/useApi";
+import { useFindOne, useAction, useFindMany } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
 import type { AuthOutletContext } from "./_app";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
+import { CommunicationCard } from "../components/shared/CommunicationCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -88,7 +89,8 @@ const formatDate = (date: Date | string | null | undefined): string => {
 export default function QuoteDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  useOutletContext<AuthOutletContext>();
+  const { permissions } = useOutletContext<AuthOutletContext>();
+  const canWriteQuotes = permissions.has("quotes.write");
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDeclineDialog, setShowDeclineDialog] = useState(false);
@@ -173,11 +175,16 @@ export default function QuoteDetailPage() {
   }, [quote, id, setPageContext]);
 
   const [{ fetching: sending }, runSend] = useAction(api.quote.send);
+  const [{ fetching: followingUp }, runSendFollowUp] = useAction(api.quote.sendFollowUp);
   const [{ fetching: updating }, runUpdate] = useAction(api.quote.update);
   const [{ fetching: deleting }, runDelete] = useAction(api.quote.delete);
   const [{ fetching: updatingQli }, updateQli] = useAction(api.quoteLineItem.update);
   const [{ fetching: deletingQli }, deleteQli] = useAction(api.quoteLineItem.delete);
   const [{ fetching: creatingQli }, createQli] = useAction(api.quoteLineItem.create);
+  const [{ data: activityLogs }, refetchActivity] = useFindMany(
+    api.activityLog,
+    { entityType: "quote", entityId: id, first: 10, pause: !id } as any
+  );
 
   useEffect(() => {
     if (
@@ -192,14 +199,27 @@ export default function QuoteDetailPage() {
     }
   }, [quote?.id, quote?.status, quote?.expiresAt]);
 
-  const handleSend = async () => {
-    const result = await runSend({ id: id! });
+  const handleSend = async (message?: string) => {
+    const result = await runSend({ id: id!, message });
     if (result.error) {
-      toast.error("Failed to mark quote as sent: " + result.error.message);
+      toast.error("Failed to send quote: " + result.error.message);
     } else {
-      toast.success("Quote marked as sent");
+      toast.success((result.data as any)?.deliveryStatus === "emailed" ? "Quote emailed to client" : "Quote recorded as sent");
       void refetch();
+      void refetchActivity();
     }
+    return result;
+  };
+
+  const handleSendFollowUp = async (message?: string) => {
+    const result = await runSendFollowUp({ id: id!, message });
+    if (result.error) {
+      toast.error("Failed to send follow-up: " + result.error.message);
+    } else {
+      toast.success((result.data as any)?.deliveryStatus === "emailed" ? "Follow-up emailed to client" : "Follow-up recorded");
+      void refetchActivity();
+    }
+    return result;
   };
 
   const handleMarkDeclined = async () => {
@@ -360,7 +380,7 @@ export default function QuoteDetailPage() {
         <div className="flex items-center gap-2 flex-wrap">
           {(quote.status === "draft" || quote.status === "sent") && (
             <Button
-              onClick={handleSend}
+              onClick={() => void handleSend()}
               disabled={sending}
               className="bg-orange-500 hover:bg-orange-600 text-white"
             >
@@ -705,6 +725,18 @@ export default function QuoteDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          <CommunicationCard
+            title="Client communication"
+            recipient={quote.client.email}
+            primaryLabel={quote.status === "sent" ? "Resend quote" : "Send quote"}
+            followUpLabel="Send follow-up"
+            activities={((activityLogs ?? []) as any[]).filter((record) => record.type === "quote.sent" || record.type === "quote.follow_up_recorded")}
+            sending={sending || followingUp}
+            canSend={canWriteQuotes}
+            onPrimarySend={handleSend}
+            onFollowUpSend={handleSendFollowUp}
+          />
 
           {/* Actions Card */}
           <Card>

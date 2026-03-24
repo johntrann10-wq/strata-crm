@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useOutletContext } from "react-router";
-import { useFindOne, useAction } from "../hooks/useApi";
+import { useFindOne, useAction, useFindMany } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +64,7 @@ import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { InvoiceLineItemsTable } from "../components/invoices/InvoiceLineItemsTable";
+import { CommunicationCard } from "../components/shared/CommunicationCard";
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700 border-gray-200",
@@ -229,6 +230,10 @@ export default function InvoiceDetailPage() {
       },
     },
   });
+  const [{ data: activityLogs }, refetchActivity] = useFindMany(
+    api.activityLog,
+    { entityType: "invoice", entityId: id, first: 10, pause: !id } as any
+  );
 
   const [{ fetching: sendingToClient }, sendToClient] = useAction(api.invoice.sendToClient);
   const [{ fetching: voidingInvoice }, voidInvoiceAction] = useAction(api.invoice.voidInvoice);
@@ -335,15 +340,17 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  const handleMarkAsSent = async () => {
+  const handleMarkAsSent = async (message?: string) => {
     if (!invoice?.id) return;
-    const result = await sendToClient({ id: invoice.id });
+    const result = await sendToClient({ id: invoice.id, message });
     if (!result.error) {
-      toast.success("Invoice marked as sent");
+      toast.success((result.data as any)?.deliveryStatus === "emailed" ? "Invoice emailed to client" : "Invoice recorded as sent");
       void refetch();
+      void refetchActivity();
     } else {
       toast.error("Failed to update invoice: " + result.error.message);
     }
+    return result;
   };
 
   const handleVoid = async () => {
@@ -538,7 +545,7 @@ export default function InvoiceDetailPage() {
           )}
           {(status === "draft" || status === "sent" || status === "partial") && (
             <Button
-              onClick={handleMarkAsSent}
+              onClick={() => void handleMarkAsSent()}
               disabled={sendingToClient}
               variant="outline"
               size="sm"
@@ -761,6 +768,16 @@ export default function InvoiceDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          <CommunicationCard
+            title="Client communication"
+            recipient={clientData?.email}
+            primaryLabel={status === "sent" ? "Resend invoice" : "Send invoice"}
+            activities={((activityLogs ?? []) as any[]).filter((record) => record.type === "invoice.sent")}
+            sending={sendingToClient}
+            canSend={permissions.has("invoices.write")}
+            onPrimarySend={handleMarkAsSent}
+          />
 
           {/* Client Info */}
           {clientData && (

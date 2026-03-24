@@ -119,6 +119,48 @@ const builtins: Record<string, { subject: string; bodyHtml: string }> = {
   review_request: reviewRequest,
   lapsed_client_reengagement: lapsedClientReengagement,
   weekly_summary: weeklySummary,
+  quote_sent: {
+    subject: "Your quote from {{businessName}}",
+    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
+    <div style="max-width:560px;margin:0 auto;padding:24px;">
+      <div style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);padding:24px;">
+        <div style="font-size:18px;font-weight:700;">{{businessName}}</div>
+        <h1 style="font-size:20px;margin:0 0 16px;">Your quote is ready</h1>
+        <p>Hi {{clientName}},</p>
+        <p>We prepared a quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>
+        <p>{{message}}</p>
+        <p><a href="{{quoteUrl}}" style="display:inline-block;padding:10px 20px;background:#ea580c;color:#fff;text-decoration:none;border-radius:6px;">View quote</a></p>
+      </div>
+    </div></body></html>`,
+  },
+  quote_follow_up: {
+    subject: "Following up on your quote from {{businessName}}",
+    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
+    <div style="max-width:560px;margin:0 auto;padding:24px;">
+      <div style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);padding:24px;">
+        <div style="font-size:18px;font-weight:700;">{{businessName}}</div>
+        <h1 style="font-size:20px;margin:0 0 16px;">Checking in on your quote</h1>
+        <p>Hi {{clientName}},</p>
+        <p>We wanted to follow up on your quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>
+        <p>{{message}}</p>
+        <p><a href="{{quoteUrl}}" style="display:inline-block;padding:10px 20px;background:#ea580c;color:#fff;text-decoration:none;border-radius:6px;">Review quote</a></p>
+      </div>
+    </div></body></html>`,
+  },
+  invoice_sent: {
+    subject: "Your invoice from {{businessName}}",
+    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
+    <div style="max-width:560px;margin:0 auto;padding:24px;">
+      <div style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);padding:24px;">
+        <div style="font-size:18px;font-weight:700;">{{businessName}}</div>
+        <h1 style="font-size:20px;margin:0 0 16px;">Your invoice is ready</h1>
+        <p>Hi {{clientName}},</p>
+        <p>Invoice <strong>{{invoiceNumber}}</strong> is ready for <strong>{{amount}}</strong>.</p>
+        <p>{{message}}</p>
+        <p><a href="{{invoiceUrl}}" style="display:inline-block;padding:10px 20px;background:#ea580c;color:#fff;text-decoration:none;border-radius:6px;">View invoice</a></p>
+      </div>
+    </div></body></html>`,
+  },
 };
 
 export function getBuiltinTemplate(slug: string): { subject: string; bodyHtml: string } | null {

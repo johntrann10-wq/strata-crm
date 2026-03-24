@@ -9,6 +9,8 @@ import { requireTenant } from "../middleware/tenant.js";
 import { logger } from "../lib/logger.js";
 import { renderInvoiceHtml, type InvoiceTemplateData } from "../lib/invoiceTemplate.js";
 import { createRequestActivityLog } from "../lib/activity.js";
+import { isSmtpConfigured } from "../lib/env.js";
+import { sendInvoiceEmail } from "../lib/email.js";
 
 export const invoicesRouter = Router({ mergeParams: true });
 
@@ -28,6 +30,9 @@ const createSchema = z.object({
   taxRate: z.coerce.number().min(0).max(100).optional(),
   notes: z.string().optional(),
   dueDate: z.union([z.string(), z.null()]).optional(),
+});
+const sendInvoiceSchema = z.object({
+  message: z.string().max(2000).optional(),
 });
 
 const INVOICE_STATUSES = ["draft", "sent", "paid", "partial", "void"] as const;
@@ -366,11 +371,51 @@ invoicesRouter.post("/:id/void", requireAuth, requireTenant, async (req: Request
 });
 
 invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const parsed = sendInvoiceSchema.safeParse(req.body ?? {});
+  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
-  const [existing] = await db.select().from(invoices).where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, bid))).limit(1);
+  const [existing] = await db
+    .select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      total: invoices.total,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      clientEmail: clients.email,
+      businessName: businesses.name,
+    })
+    .from(invoices)
+    .leftJoin(clients, eq(invoices.clientId, clients.id))
+    .leftJoin(businesses, eq(invoices.businessId, businesses.id))
+    .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, bid)))
+    .limit(1);
   if (!existing) throw new NotFoundError("Invoice not found.");
   const [updated] = await db.update(invoices).set({ status: "sent", updatedAt: new Date() }).where(eq(invoices.id, req.params.id)).returning();
   if (updated) {
+    let deliveryStatus = "recorded";
+    let deliveryError: string | null = null;
+    if (existing.clientEmail && isSmtpConfigured()) {
+      try {
+        await sendInvoiceEmail({
+          to: existing.clientEmail,
+          businessId: bid,
+          clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
+          businessName: existing.businessName ?? "Your shop",
+          amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+          invoiceNumber: existing.invoiceNumber ?? "Invoice",
+          invoiceUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/invoices/${updated.id}`,
+          message: parsed.data.message ?? null,
+        });
+        deliveryStatus = "emailed";
+      } catch (error) {
+        deliveryStatus = "email_failed";
+        deliveryError = error instanceof Error ? error.message : String(error);
+      }
+    } else if (!existing.clientEmail) {
+      deliveryStatus = "missing_email";
+    } else {
+      deliveryStatus = "smtp_disabled";
+    }
     await createRequestActivityLog(req, {
       businessId: bid,
       action: "invoice.sent",
@@ -378,8 +423,14 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, async (req:
       entityId: updated.id,
       metadata: {
         invoiceNumber: updated.invoiceNumber ?? null,
+        recipient: existing.clientEmail ?? null,
+        message: parsed.data.message ?? null,
+        deliveryStatus,
+        deliveryError,
       },
     });
+    res.json({ ...updated, deliveryStatus, deliveryError });
+    return;
   }
   res.json(updated);
 });

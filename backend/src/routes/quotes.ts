@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { quotes, clients, vehicles, quoteLineItems, appointments, staff, locations } from "../db/schema.js";
+import { quotes, clients, vehicles, quoteLineItems, appointments, staff, locations, businesses } from "../db/schema.js";
 import { eq, and, desc, asc, isNull, lt, sql, ilike, or } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError, ConflictError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -9,6 +9,8 @@ import { requireTenant } from "../middleware/tenant.js";
 import { hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
 import { recalculateQuoteTotals } from "../lib/revenueTotals.js";
 import { createRequestActivityLog } from "../lib/activity.js";
+import { isSmtpConfigured } from "../lib/env.js";
+import { sendQuoteEmail, sendQuoteFollowUpEmail } from "../lib/email.js";
 
 export const quotesRouter = Router({ mergeParams: true });
 
@@ -18,6 +20,9 @@ function businessId(req: Request): string {
 }
 
 const QUOTE_STATUSES = ["draft", "sent", "accepted", "declined", "expired"] as const;
+const sendQuoteSchema = z.object({
+  message: z.string().max(2000).optional(),
+});
 
 quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
@@ -352,41 +357,144 @@ quotesRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res
 });
 
 quotesRouter.post("/:id/send", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const parsed = sendQuoteSchema.safeParse(req.body ?? {});
+  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  const bid = businessId(req);
+  const [existing] = await db
+    .select({
+      id: quotes.id,
+      total: quotes.total,
+      vehicleId: quotes.vehicleId,
+      clientId: quotes.clientId,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      clientEmail: clients.email,
+      businessName: businesses.name,
+      vehicleYear: vehicles.year,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
+    })
+    .from(quotes)
+    .leftJoin(clients, eq(quotes.clientId, clients.id))
+    .leftJoin(vehicles, eq(quotes.vehicleId, vehicles.id))
+    .leftJoin(businesses, eq(quotes.businessId, businesses.id))
+    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
+    .limit(1);
+  if (!existing) throw new NotFoundError("Quote not found.");
   const [updated] = await db
     .update(quotes)
     .set({ status: "sent", sentAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, businessId(req))))
+    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
     .returning();
   if (!updated) throw new NotFoundError("Quote not found.");
+  let deliveryStatus = "recorded";
+  let deliveryError: string | null = null;
+  if (existing.clientEmail && isSmtpConfigured()) {
+    try {
+      await sendQuoteEmail({
+        to: existing.clientEmail,
+        businessId: bid,
+        clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
+        businessName: existing.businessName ?? "Your shop",
+        amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+        vehicle: [existing.vehicleYear, existing.vehicleMake, existing.vehicleModel].filter(Boolean).join(" "),
+        quoteUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/quotes/${updated.id}`,
+        message: parsed.data.message ?? null,
+      });
+      deliveryStatus = "emailed";
+    } catch (error) {
+      deliveryStatus = "email_failed";
+      deliveryError = error instanceof Error ? error.message : String(error);
+    }
+  } else if (!existing.clientEmail) {
+    deliveryStatus = "missing_email";
+  } else {
+    deliveryStatus = "smtp_disabled";
+  }
   await createRequestActivityLog(req, {
-    businessId: businessId(req),
+    businessId: bid,
     action: "quote.sent",
     entityType: "quote",
     entityId: updated.id,
     metadata: {
       status: updated.status,
+      recipient: existing.clientEmail ?? null,
+      message: parsed.data.message ?? null,
+      deliveryStatus,
+      deliveryError,
     },
   });
-  res.json(updated);
+  res.json({ ...updated, deliveryStatus, deliveryError });
 });
 
 quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const parsed = sendQuoteSchema.safeParse(req.body ?? {});
+  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  const bid = businessId(req);
+  const [existing] = await db
+    .select({
+      id: quotes.id,
+      total: quotes.total,
+      vehicleId: quotes.vehicleId,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      clientEmail: clients.email,
+      businessName: businesses.name,
+      vehicleYear: vehicles.year,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
+    })
+    .from(quotes)
+    .leftJoin(clients, eq(quotes.clientId, clients.id))
+    .leftJoin(vehicles, eq(quotes.vehicleId, vehicles.id))
+    .leftJoin(businesses, eq(quotes.businessId, businesses.id))
+    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
+    .limit(1);
+  if (!existing) throw new NotFoundError("Quote not found.");
   const [updated] = await db
     .update(quotes)
     .set({ followUpSentAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, businessId(req))))
+    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
     .returning();
   if (!updated) throw new NotFoundError("Quote not found.");
+  let deliveryStatus = "recorded";
+  let deliveryError: string | null = null;
+  if (existing.clientEmail && isSmtpConfigured()) {
+    try {
+      await sendQuoteFollowUpEmail({
+        to: existing.clientEmail,
+        businessId: bid,
+        clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
+        businessName: existing.businessName ?? "Your shop",
+        amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+        vehicle: [existing.vehicleYear, existing.vehicleMake, existing.vehicleModel].filter(Boolean).join(" "),
+        quoteUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/quotes/${updated.id}`,
+        message: parsed.data.message ?? null,
+      });
+      deliveryStatus = "emailed";
+    } catch (error) {
+      deliveryStatus = "email_failed";
+      deliveryError = error instanceof Error ? error.message : String(error);
+    }
+  } else if (!existing.clientEmail) {
+    deliveryStatus = "missing_email";
+  } else {
+    deliveryStatus = "smtp_disabled";
+  }
   await createRequestActivityLog(req, {
-    businessId: businessId(req),
+    businessId: bid,
     action: "quote.follow_up_recorded",
     entityType: "quote",
     entityId: updated.id,
     metadata: {
       followUpSentAt: updated.followUpSentAt,
+      recipient: existing.clientEmail ?? null,
+      message: parsed.data.message ?? null,
+      deliveryStatus,
+      deliveryError,
     },
   });
-  res.json(updated);
+  res.json({ ...updated, deliveryStatus, deliveryError });
 });
 
 const scheduleFromQuoteSchema = z.object({
