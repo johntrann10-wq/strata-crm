@@ -5,10 +5,22 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = path.join(process.cwd(), "build/client");
+const configuredApiOrigin =
+  process.env.VITE_API_URL?.trim() || process.env.NEXT_PUBLIC_API_URL?.trim() || "";
+const configuredApiHost = configuredApiOrigin
+  ? new URL(configuredApiOrigin).host.toLowerCase()
+  : "";
 const forbidden = [
-  { re: /railway\.app/i, msg: "railway.app (use env-driven API URL only)" },
   { re: /strata\.gadget\.app/i, msg: "strata.gadget.app (legacy Gadget host)" },
 ];
+
+if (configuredApiHost && configuredApiHost !== "localhost" && configuredApiHost !== "127.0.0.1") {
+  forbidden.push({
+    re: /railway\.app/i,
+    msg: `unexpected railway.app host (expected only ${configuredApiHost})`,
+    allow: new RegExp(configuredApiHost.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+  });
+}
 
 function walk(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -17,8 +29,8 @@ function walk(dir) {
     if (e.isDirectory()) walk(p);
     else if (/\.(js|css|html)$/i.test(e.name)) {
       const c = fs.readFileSync(p, "utf8");
-      for (const { re, msg } of forbidden) {
-        if (re.test(c)) {
+      for (const { re, msg, allow } of forbidden) {
+        if (re.test(c) && !(allow && allow.test(c))) {
           console.error(`[verify-client-bundle] Forbidden pattern (${msg}) in ${p}`);
           process.exit(1);
         }

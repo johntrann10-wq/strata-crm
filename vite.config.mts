@@ -11,7 +11,6 @@ function publicApiOrigin(env: Record<string, string>): string {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const apiOrigin = publicApiOrigin(env);
-  const proxyTarget = apiOrigin || "http://localhost:3001";
 
   if (mode === "production") {
     const allowRelative =
@@ -27,14 +26,18 @@ export default defineConfig(({ mode }) => {
   return {
     envPrefix: ["VITE_", "NEXT_PUBLIC_"],
     plugins: [reactRouter(), tailwindcss()],
-    server: {
-      proxy: {
-        "/api": {
-          target: proxyTarget,
-          changeOrigin: true,
-        },
-      },
-    },
+    ...(mode === "development"
+      ? {
+          server: {
+            proxy: {
+              "/api": {
+                target: apiOrigin || "http://localhost:3001",
+                changeOrigin: true,
+              },
+            },
+          },
+        }
+      : {}),
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./web"),
