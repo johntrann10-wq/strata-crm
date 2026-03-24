@@ -19,6 +19,12 @@ export default function NewVehiclePage() {
     const next = searchParams.get("next");
     return next === "quote" || next === "appointment" ? next : "client";
   });
+  const intendedNext =
+    submitMode === "quote"
+      ? "Save this vehicle and continue straight into quote creation."
+      : submitMode === "appointment"
+        ? "Save this vehicle and continue straight into appointment booking."
+        : "Save this vehicle and return to the client record.";
 
   const [{ data: createdVehicle, fetching: creating, error: createError }, createVehicle] =
     useAction(api.vehicle.create);
@@ -98,6 +104,7 @@ export default function NewVehiclePage() {
               <p className="mt-1 text-sm text-muted-foreground">
                 Save the vehicle and continue straight into a quote or appointment when you&apos;re working an active lead.
               </p>
+              <p className="mt-2 text-xs text-muted-foreground">{intendedNext}</p>
             </div>
 
             {createError && (

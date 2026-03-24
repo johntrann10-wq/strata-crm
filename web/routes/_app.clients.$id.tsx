@@ -253,7 +253,7 @@ export default function ClientDetailPage() {
         <h1 className="text-2xl font-bold">{client.firstName} {client.lastName}</h1>
         <span className="text-sm text-muted-foreground ml-auto">Client since {new Date(client.createdAt).toLocaleDateString()}</span>
         <Button asChild variant="outline" size="sm">
-          <Link to={`/clients/${id}/vehicles/new?next=appointment`}>
+          <Link to={`/clients/${id}/vehicles/new?next=client`}>
             <Car className="h-4 w-4 mr-1.5" />
             Add Vehicle
           </Link>

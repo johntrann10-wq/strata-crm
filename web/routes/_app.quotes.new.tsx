@@ -687,7 +687,7 @@ export default function NewQuotePage() {
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                     <p>This client has no vehicles on file yet.</p>
                     <Button asChild variant="outline" size="sm" className="mt-2 h-8">
-                      <Link to={`/clients/${selectedClientId}/vehicles/new`}>Add vehicle</Link>
+                      <Link to={`/clients/${selectedClientId}/vehicles/new?next=quote`}>Add vehicle</Link>
                     </Button>
                   </div>
                 ) : null}
