@@ -22,7 +22,7 @@ import { QuickBookSheet } from "../components/shared/QuickBookSheet";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function CalendarPage() {
-  const { user, businessId } = useOutletContext<AuthOutletContext>();
+  const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -57,6 +57,7 @@ export default function CalendarPage() {
   const [{ data: appointmentsData, fetching, error }, refetchAppointments] = useFindMany(api.appointment, {
     startGte,
     startLte,
+    locationId: currentLocationId ?? undefined,
     sort: { startTime: "Ascending" },
     pause: !businessId,
     select: {
@@ -73,6 +74,14 @@ export default function CalendarPage() {
     },
     first: 250,
   });
+  const [{ data: locationsRaw }] = useFindMany(api.location, {
+    first: 100,
+    pause: !businessId,
+  } as any);
+  const activeLocationName = useMemo(() => {
+    const locations = (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>;
+    return locations.find((location) => location.id === currentLocationId)?.name?.trim() || null;
+  }, [locationsRaw, currentLocationId]);
 
   // Keep previous appointments visible during re-fetches (isFirstLoad pattern)
   const stableAppointmentsRef = useRef<ApptRecord[]>([]);
@@ -169,6 +178,11 @@ export default function CalendarPage() {
           <h2 className="text-base font-semibold text-foreground ml-1">
             {getHeaderTitle(currentDate, view)}
           </h2>
+          {activeLocationName ? (
+            <span className="hidden rounded-md border bg-muted/40 px-3 py-1 text-sm text-muted-foreground lg:inline-flex">
+              {activeLocationName}
+            </span>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2">

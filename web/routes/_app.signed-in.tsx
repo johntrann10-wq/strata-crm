@@ -105,7 +105,7 @@ function sectionErrorMessage(err: Error): string {
 }
 
 export default function SignedIn() {
-  const { businessName, businessId, user } = useOutletContext<AuthOutletContext & { businessId?: string }>();
+  const { businessName, businessId, user, currentLocationId } = useOutletContext<AuthOutletContext & { businessId?: string }>();
   const [filterNow, setFilterNow] = useState(() => new Date());
   const [refreshing, setRefreshing] = useState(false);
 
@@ -120,6 +120,7 @@ export default function SignedIn() {
     {
       startGte: apptStartGte,
       startLte: apptStartLte,
+      locationId: currentLocationId ?? undefined,
       sort: { startTime: "Ascending" },
       first: 100,
       pause: !businessId,
@@ -145,9 +146,14 @@ export default function SignedIn() {
 
   const [{ data: jobsRaw, fetching: fetchingJobs, error: jobsError }, refetchJobs] = useFindMany(api.job, {
     first: 25,
+    locationId: currentLocationId ?? undefined,
     pause: !businessId,
   } as any);
   const [{ data: staffRaw, fetching: fetchingStaff, error: staffError }, refetchStaff] = useFindMany(api.staff, {
+    first: 100,
+    pause: !businessId,
+  } as any);
+  const [{ data: locationsRaw }] = useFindMany(api.location, {
     first: 100,
     pause: !businessId,
   } as any);
@@ -157,6 +163,11 @@ export default function SignedIn() {
   const pendingQuotes = (quotesRaw ?? []) as QuoteRecord[];
   const jobs = (jobsRaw ?? []) as JobRecord[];
   const staffRecords = (staffRaw ?? []) as StaffRecord[];
+  const locationRecords = (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>;
+  const activeLocationName = useMemo(
+    () => locationRecords.find((location) => location.id === currentLocationId)?.name?.trim() || null,
+    [locationRecords, currentLocationId]
+  );
   const myStaffRecord = useMemo(
     () => staffRecords.find((staff) => staff.userId === user?.id) ?? null,
     [staffRecords, user?.id]
@@ -403,6 +414,9 @@ export default function SignedIn() {
               {businessName ?? "Dashboard"}
             </h1>
             <p className="mt-0.5 text-sm text-muted-foreground">{format(filterNow, "EEEE, MMM d")}</p>
+            {activeLocationName ? (
+              <p className="mt-1 text-sm text-muted-foreground">Location focus: {activeLocationName}</p>
+            ) : null}
           </div>
           <Button
             type="button"
