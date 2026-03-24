@@ -7,6 +7,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ClipboardList,
+  Receipt,
   FileText,
   Loader2,
   MapPin,
@@ -17,6 +18,7 @@ import {
 import { api } from "../api";
 import { useAction, useFindMany, useFindOne } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
+import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
@@ -110,6 +112,9 @@ export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { businessId, permissions } = useOutletContext<AuthOutletContext>();
   const canEdit = permissions.has("jobs.write");
+  const canWriteQuotes = permissions.has("quotes.write");
+  const canWriteInvoices = permissions.has("invoices.write");
+  const { setPageContext } = usePageContext();
 
   const [{ data: job, fetching, error }, refetchJob] = useFindOne(api.job, id ?? "", {
     pause: !businessId || !id,
@@ -140,6 +145,26 @@ export default function JobDetailPage() {
       internalNotes: record.internalNotes ?? "",
     });
   }, [record]);
+
+  useEffect(() => {
+    if (!record) return;
+    const clientName = record.client ? formatName(record.client) : null;
+    const vehicleLabel = record.vehicle
+      ? [record.vehicle.year, record.vehicle.make, record.vehicle.model].filter(Boolean).join(" ")
+      : null;
+    setPageContext({
+      entityType: "job",
+      entityId: record.id,
+      entityLabel: record.title?.trim() || record.jobNumber,
+      clientId: record.client?.id ?? null,
+      clientName,
+      vehicleId: record.vehicle?.id ?? null,
+      vehicleLabel,
+      appointmentId: record.appointmentId ?? record.id,
+      invoiceId: record.invoice?.id ?? null,
+    });
+    return () => setPageContext(null);
+  }, [record, setPageContext]);
 
   const serviceSummary = useMemo(
     () =>
@@ -370,6 +395,47 @@ export default function JobDetailPage() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
+              <CardTitle>Next action</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <WorkflowStep
+                label="Quote"
+                status={record.quote ? `Linked · ${record.quote.status}` : "No quote attached"}
+                actionHref={
+                  record.quote
+                    ? `/quotes/${record.quote.id}`
+                    : canWriteQuotes && record.client?.id
+                      ? `/quotes/new?clientId=${record.client.id}&appointmentId=${record.appointmentId}`
+                      : null
+                }
+                actionLabel={record.quote ? "Open quote" : "Create quote"}
+                icon={Receipt}
+              />
+              <WorkflowStep
+                label="Invoice"
+                status={record.invoice ? `${record.invoice.status} · ${formatCurrency(record.invoice.total)}` : "No invoice created"}
+                actionHref={
+                  record.invoice
+                    ? `/invoices/${record.invoice.id}`
+                    : canWriteInvoices && record.client?.id
+                      ? `/invoices/new?appointmentId=${record.appointmentId}&clientId=${record.client.id}`
+                      : null
+                }
+                actionLabel={record.invoice ? "Open invoice" : "Create invoice"}
+                icon={FileText}
+              />
+              <WorkflowStep
+                label="Schedule"
+                status={formatDateRange(record.scheduledStart, record.scheduledEnd)}
+                actionHref={record.appointmentId ? `/appointments/${record.appointmentId}` : null}
+                actionLabel="Open appointment"
+                icon={CalendarClock}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle>At a glance</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
@@ -377,6 +443,8 @@ export default function JobDetailPage() {
               <MiniStat label="Services" value={String(serviceSummary.count)} />
               <MiniStat label="Estimated labor" value={serviceSummary.minutes > 0 ? `${serviceSummary.minutes} min` : "-"} />
               <MiniStat label="Completed at" value={record.completedAt ? new Date(record.completedAt).toLocaleString() : "-"} />
+              <MiniStat label="Quote linked" value={record.quote ? "Yes" : "No"} />
+              <MiniStat label="Invoice linked" value={record.invoice ? "Yes" : "No"} />
             </CardContent>
           </Card>
 
@@ -477,6 +545,37 @@ function MiniStat({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between gap-4">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function WorkflowStep({
+  label,
+  status,
+  actionHref,
+  actionLabel,
+  icon: Icon,
+}: {
+  label: string;
+  status: string;
+  actionHref: string | null;
+  actionLabel: string;
+  icon: typeof FileText;
+}) {
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="flex items-start gap-3">
+        <Icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{status}</p>
+          {actionHref ? (
+            <Button asChild variant="link" className="mt-1 h-auto px-0 text-sm">
+              <Link to={actionHref}>{actionLabel}</Link>
+            </Button>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
