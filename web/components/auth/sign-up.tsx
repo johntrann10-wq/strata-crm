@@ -33,7 +33,9 @@ export const SignUpComponent = (props: {
       {/* Heading */}
       <div className="text-center mb-8">
         <h1 className="text-[22px] font-semibold tracking-tight text-foreground">Create your account</h1>
-        <p className="text-[13px] text-muted-foreground mt-1.5">Start your free Strata account</p>
+        <p className="text-[13px] text-muted-foreground mt-1.5">
+          Start your free Strata account or finish setup with an email your shop owner already added.
+        </p>
       </div>
 
       {/* Form card */}
@@ -72,6 +74,9 @@ export const SignUpComponent = (props: {
                 {...register("email")}
                 className={`h-9 text-[13px] rounded-lg shadow-none${errors?.root?.message ? " border-destructive" : ""}`}
               />
+              <p className="text-[12px] text-muted-foreground">
+                If your shop already added you to the team, use that same email to claim your account.
+              </p>
             </div>
 
             {/* Password field */}

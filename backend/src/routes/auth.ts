@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { db } from "../db/index.js";
 import { businessMemberships, businesses, users } from "../db/schema.js";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { BadRequestError, UnauthorizedError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { googleClient } from "../lib/googleAuth.js";
@@ -230,21 +230,64 @@ authRouter.post(
     const email = normalizeEmail(parsed.data.email);
     const { password, firstName, lastName } = parsed.data;
     const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (existing) throw new BadRequestError("An account with this email already exists.");
     const passwordHash = await bcrypt.hash(password, 10);
-    const [user] = await db
-      .insert(users)
-      .values({
-        id: randomUUID(),
-        email,
-        passwordHash,
-        firstName: firstName ?? null,
-        lastName: lastName ?? null,
-      })
-      .returning({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName });
+    let user:
+      | {
+          id: string;
+          email: string;
+          firstName: string | null;
+          lastName: string | null;
+        }
+      | undefined;
+
+    if (existing) {
+      if (existing.passwordHash) {
+        throw new BadRequestError("An account with this email already exists.");
+      }
+
+      const [claimedUser] = await db.transaction(async (tx) => {
+        const [updatedUser] = await tx
+          .update(users)
+          .set({
+            passwordHash,
+            firstName: firstName ?? existing.firstName ?? null,
+            lastName: lastName ?? existing.lastName ?? null,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, existing.id))
+          .returning({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName });
+
+        await tx
+          .update(businessMemberships)
+          .set({
+            status: "active",
+            joinedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(and(eq(businessMemberships.userId, existing.id), eq(businessMemberships.status, "invited")));
+
+        return [updatedUser];
+      });
+
+      user = claimedUser;
+      logger.info("Invited user claimed account", { userId: existing.id, email });
+    } else {
+      const [createdUser] = await db
+        .insert(users)
+        .values({
+          id: randomUUID(),
+          email,
+          passwordHash,
+          firstName: firstName ?? null,
+          lastName: lastName ?? null,
+        })
+        .returning({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName });
+      user = createdUser;
+      logger.info("User signed up", { userId: user?.id, email: user?.email });
+    }
+
     if (!user) throw new BadRequestError("Failed to create account.");
     const token = createToken(user.id);
-    logger.info("User signed up", { userId: user.id, email: user.email });
     res.status(201).json({
       data: {
         ...serializeAuthUser(user),

@@ -1141,7 +1141,7 @@ export default function SettingsPage() {
                 placeholder="alex@shop.com"
               />
               <p className="text-xs text-muted-foreground">
-                Add an email if this person should eventually sign in to the platform.
+                Add an email if this person should sign in. They can finish setup by using Sign up with that same email.
               </p>
             </div>
             <div className="space-y-1.5">
