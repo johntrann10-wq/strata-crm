@@ -20,10 +20,12 @@ const createActivitySchema = z
   .object({
     entityType: z.enum(["appointment", "job"]),
     entityId: z.string().uuid(),
-    kind: z.enum(["note", "media"]),
+    kind: z.enum(["note", "media", "checklist_add", "checklist_toggle"]),
     body: z.string().trim().max(4000).optional(),
     label: z.string().trim().max(160).optional(),
     url: z.string().trim().url().max(2000).optional(),
+    itemId: z.string().uuid().optional(),
+    completed: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.kind === "note" && !value.body) {
@@ -32,6 +34,17 @@ const createActivitySchema = z
     if (value.kind === "media") {
       if (!value.url) ctx.addIssue({ code: "custom", message: "Media URL is required." });
       if (!value.label) ctx.addIssue({ code: "custom", message: "Media label is required." });
+    }
+    if (value.kind === "checklist_add") {
+      if (!value.label) ctx.addIssue({ code: "custom", message: "Checklist label is required." });
+      if (!value.itemId) ctx.addIssue({ code: "custom", message: "Checklist item id is required." });
+    }
+    if (value.kind === "checklist_toggle") {
+      if (!value.label) ctx.addIssue({ code: "custom", message: "Checklist label is required." });
+      if (!value.itemId) ctx.addIssue({ code: "custom", message: "Checklist item id is required." });
+      if (typeof value.completed !== "boolean") {
+        ctx.addIssue({ code: "custom", message: "Checklist completion state is required." });
+      }
     }
   });
 
@@ -95,11 +108,28 @@ activityLogsRouter.post("/", requireAuth, requireTenant, async (req: Request, re
   const metadata =
     parsed.data.kind === "note"
       ? { body: parsed.data.body ?? "" }
-      : { label: parsed.data.label ?? "", url: parsed.data.url ?? "" };
+      : parsed.data.kind === "media"
+        ? { label: parsed.data.label ?? "", url: parsed.data.url ?? "" }
+        : {
+            itemId: parsed.data.itemId ?? "",
+            label: parsed.data.label ?? "",
+            completed: parsed.data.kind === "checklist_add" ? false : parsed.data.completed ?? false,
+          };
+
+  const action =
+    parsed.data.kind === "note"
+      ? `${parsed.data.entityType}.note_added`
+      : parsed.data.kind === "media"
+        ? `${parsed.data.entityType}.media_added`
+        : parsed.data.kind === "checklist_add"
+          ? `${parsed.data.entityType}.checklist_item_added`
+          : parsed.data.completed
+            ? `${parsed.data.entityType}.checklist_item_completed`
+            : `${parsed.data.entityType}.checklist_item_reopened`;
 
   await createRequestActivityLog(req, {
     businessId: businessId(req),
-    action: parsed.data.kind === "note" ? `${parsed.data.entityType}.note_added` : `${parsed.data.entityType}.media_added`,
+    action,
     entityType: parsed.data.entityType,
     entityId: parsed.data.entityId,
     metadata,

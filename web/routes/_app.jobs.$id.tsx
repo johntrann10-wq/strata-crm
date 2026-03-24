@@ -24,6 +24,7 @@ import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
+import { ChecklistCard } from "../components/shared/ChecklistCard";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -596,6 +597,16 @@ export default function JobDetailPage() {
               <MiniStat label="Invoice linked" value={record.invoice ? "Yes" : "No"} />
             </CardContent>
           </Card>
+
+          <ChecklistCard
+            entityType="job"
+            entityId={record.id}
+            records={(activityLogs as any[]) ?? []}
+            canWrite={canEdit}
+            onChanged={() => {
+              void refetchActivity();
+            }}
+          />
 
           <Card>
             <CardHeader>
