@@ -36,6 +36,7 @@ import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
+import { ChecklistCard } from "../components/shared/ChecklistCard";
 import {
   ClientCard,
   VehicleCard,
@@ -1174,6 +1175,16 @@ export default function AppointmentDetail() {
                 totalPrice={appointment.totalPrice}
                 depositAmount={appointment.depositAmount}
                 depositPaid={appointment.depositPaid}
+              />
+
+              <ChecklistCard
+                entityType="appointment"
+                entityId={appointment.id}
+                records={(activityLogs as any[]) ?? []}
+                canWrite={canEditCollaboration}
+                onChanged={() => {
+                  void refetchActivity();
+                }}
               />
 
               <EntityCollaborationCard
