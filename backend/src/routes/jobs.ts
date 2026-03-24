@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import {
@@ -60,7 +60,11 @@ jobsRouter.get("/", requireAuth, requireTenant, requirePermission("jobs.read"), 
         ilike(clients.firstName, term),
         ilike(clients.lastName, term),
         ilike(vehicles.make, term),
-        ilike(vehicles.model, term)
+        ilike(vehicles.model, term),
+        ilike(staff.firstName, term),
+        ilike(staff.lastName, term),
+        ilike(locations.name, term),
+        sql`cast(${appointments.id} as text) ilike ${term}`
       )!
     );
   }

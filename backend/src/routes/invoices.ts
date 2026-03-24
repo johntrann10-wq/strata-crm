@@ -74,6 +74,8 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
             ilike(invoices.invoiceNumber, term),
             ilike(clients.firstName, term),
             ilike(clients.lastName, term),
+            ilike(vehicles.make, term),
+            ilike(vehicles.model, term),
             sql`cast(${invoices.id} as text) ilike ${term}`
           )
         )!
@@ -100,10 +102,14 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
       aptStart: appointments.startTime,
+      vehicleYear: vehicles.year,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
     })
     .from(invoices)
     .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
     .leftJoin(appointments, eq(invoices.appointmentId, appointments.id))
+    .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
     .where(whereClause)
     .orderBy(orderBy)
     .limit(first);
@@ -132,6 +138,14 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
     appointment:
       r.appointmentId != null
         ? { id: r.appointmentId, startTime: r.aptStart ?? null }
+        : null,
+    vehicle:
+      r.vehicleMake != null
+        ? {
+            year: r.vehicleYear ?? null,
+            make: r.vehicleMake,
+            model: r.vehicleModel ?? "",
+          }
         : null,
   }));
 

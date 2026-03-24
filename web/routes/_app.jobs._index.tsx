@@ -1,16 +1,19 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router";
-import { AlertCircle, ChevronRight, ClipboardList, Search } from "lucide-react";
+import { AlertCircle, ChevronRight, ClipboardList, Loader2, Search } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { api, ApiError } from "../api";
 import { useFindMany } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EmptyState } from "../components/shared/EmptyState";
-import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+
+type JobStatusTab = "all" | "scheduled" | "in_progress" | "completed" | "cancelled";
 
 type JobListRecord = {
   id: string;
@@ -19,8 +22,8 @@ type JobListRecord = {
   title?: string | null;
   scheduledStart?: string | null;
   totalPrice?: number | string | null;
-  client?: { firstName?: string | null; lastName?: string | null } | null;
-  vehicle?: { year?: number | null; make?: string | null; model?: string | null } | null;
+  client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
+  vehicle?: { id?: string | null; year?: number | null; make?: string | null; model?: string | null } | null;
   assignedStaff?: { firstName?: string | null; lastName?: string | null } | null;
   location?: { name?: string | null } | null;
 };
@@ -41,17 +44,32 @@ function formatDate(date: string | null | undefined): string {
   });
 }
 
+function matchesTab(job: JobListRecord, tab: JobStatusTab): boolean {
+  if (tab === "all") return true;
+  if (tab === "scheduled") return ["scheduled", "confirmed"].includes(job.status);
+  if (tab === "cancelled") return ["cancelled", "no-show"].includes(job.status);
+  return job.status === tab;
+}
+
 export default function JobsIndexPage() {
   const { businessId } = useOutletContext<AuthOutletContext>();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<JobStatusTab>("all");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const [{ data: jobs, fetching, error }] = useFindMany(api.job, {
     first: 100,
-    search: search.trim() || undefined,
+    search: debouncedSearch || undefined,
     pause: !businessId,
   } as any);
 
   const records = ((jobs ?? []) as JobListRecord[]).filter(Boolean);
+  const visibleRecords = useMemo(() => records.filter((job) => matchesTab(job, activeTab)), [records, activeTab]);
 
   const stats = useMemo(() => {
     const scheduled = records.filter((job) => ["scheduled", "confirmed"].includes(job.status)).length;
@@ -69,12 +87,16 @@ export default function JobsIndexPage() {
         title="Jobs"
         subtitle="Run active work orders, assign technicians, and move work from schedule to completion."
         right={
-          <div className="relative w-full sm:w-72">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative w-full sm:w-80">
+            {fetching && records.length > 0 ? (
+              <Loader2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+            ) : (
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            )}
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search jobs, clients, vehicles..."
+              placeholder="Search jobs, techs, locations, clients, vehicles..."
               className="pl-9"
             />
           </div>
@@ -87,6 +109,16 @@ export default function JobsIndexPage() {
         <MetricCard label="Completed" value={String(stats.completed)} />
         <MetricCard label="Open revenue" value={formatCurrency(stats.openRevenue)} />
       </div>
+
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as JobStatusTab)}>
+        <TabsList className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-5">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+          <TabsTrigger value="in_progress">In Progress</TabsTrigger>
+          <TabsTrigger value="completed">Completed</TabsTrigger>
+          <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {error ? (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -109,15 +141,19 @@ export default function JobsIndexPage() {
             </Card>
           ))}
         </div>
-      ) : records.length === 0 ? (
+      ) : visibleRecords.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
-          title="No jobs yet"
-          description="Jobs appear here from scheduled appointments, so the crew always has a clean operational queue."
+          title={debouncedSearch ? "No matching jobs" : "No jobs in this view"}
+          description={
+            debouncedSearch
+              ? "Try a different customer, vehicle, tech, or location search."
+              : "Jobs appear here from scheduled appointments, so the crew always has a clean operational queue."
+          }
         />
       ) : (
-        <div className="space-y-2">
-          {records.map((job) => {
+        <div className={fetching ? "space-y-2 opacity-70" : "space-y-2"}>
+          {visibleRecords.map((job) => {
             const clientName = job.client
               ? `${job.client.firstName ?? ""} ${job.client.lastName ?? ""}`.trim()
               : "Walk-in customer";
