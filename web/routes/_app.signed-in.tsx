@@ -9,10 +9,13 @@ import {
   ClipboardList,
   Clock3,
   DollarSign,
+  Flame,
   FileText,
+  ShieldAlert,
   Receipt,
   RefreshCw,
   Users,
+  Wrench,
 } from "lucide-react";
 import { useFindMany } from "../hooks/useApi";
 import { api, ApiError } from "../api";
@@ -188,8 +191,86 @@ export default function SignedIn() {
   const unpaidRevenue = useMemo(() => sumCurrency(unpaidInvoices.map((invoice) => invoice.total)), [unpaidInvoices]);
   const activeJobValue = useMemo(() => sumCurrency(activeJobs.map((job) => job.totalPrice)), [activeJobs]);
   const myActiveJobValue = useMemo(() => sumCurrency(myActiveJobs.map((job) => job.totalPrice)), [myActiveJobs]);
+  const overdueInvoices = useMemo(
+    () =>
+      unpaidInvoices.filter((invoice) => {
+        const raw = invoice as InvoiceRecord & { dueDate?: string | null };
+        const due = safeParseISO(raw.dueDate ?? null);
+        return !!due && due.getTime() < filterNow.getTime();
+      }),
+    [unpaidInvoices, filterNow]
+  );
+  const unassignedActiveJobs = useMemo(
+    () => activeJobs.filter((job) => !job.assignedStaff?.id),
+    [activeJobs]
+  );
+  const unassignedTodayAppointments = useMemo(
+    () =>
+      todayAppointments.filter(
+        (appointment) => !(appointment as AppointmentRecord & { assignedStaff?: { id?: string | null } | null }).assignedStaff?.id
+      ),
+    [todayAppointments]
+  );
+  const agingPendingQuotes = useMemo(
+    () =>
+      pendingQuotes.filter((quote) => {
+        const createdAt = safeParseISO(quote.createdAt);
+        if (!createdAt) return false;
+        return filterNow.getTime() - createdAt.getTime() >= 3 * 24 * 60 * 60 * 1000;
+      }),
+    [pendingQuotes, filterNow]
+  );
   const nextJob = activeJobs[0] ?? null;
   const myNextJob = myActiveJobs[0] ?? null;
+  const watchlist = useMemo(() => {
+    const items: Array<{ title: string; detail: string; href: string; icon: ReactNode; tone: "danger" | "warn" | "info" }> = [];
+    if (overdueInvoices.length > 0) {
+      items.push({
+        title: "Overdue cash needs attention",
+        detail: `${overdueInvoices.length} overdue invoice${overdueInvoices.length === 1 ? "" : "s"} outstanding`,
+        href: "/invoices",
+        icon: <DollarSign className="h-4 w-4" />,
+        tone: "danger",
+      });
+    }
+    if (unassignedActiveJobs.length > 0) {
+      items.push({
+        title: "Active jobs are unassigned",
+        detail: `${unassignedActiveJobs.length} work order${unassignedActiveJobs.length === 1 ? "" : "s"} have no technician`,
+        href: "/jobs?view=mine",
+        icon: <Wrench className="h-4 w-4" />,
+        tone: "warn",
+      });
+    }
+    if (unassignedTodayAppointments.length > 0) {
+      items.push({
+        title: "Today's schedule needs staffing",
+        detail: `${unassignedTodayAppointments.length} appointment${unassignedTodayAppointments.length === 1 ? "" : "s"} are still unassigned`,
+        href: "/appointments?view=mine",
+        icon: <Users className="h-4 w-4" />,
+        tone: "warn",
+      });
+    }
+    if (agingPendingQuotes.length > 0) {
+      items.push({
+        title: "Quotes are cooling off",
+        detail: `${agingPendingQuotes.length} pending quote${agingPendingQuotes.length === 1 ? "" : "s"} are older than 3 days`,
+        href: "/quotes",
+        icon: <Flame className="h-4 w-4" />,
+        tone: "info",
+      });
+    }
+    if (items.length === 0) {
+      items.push({
+        title: "Operations look healthy",
+        detail: "No overdue cash, aging quotes, or unassigned work detected right now.",
+        href: "/jobs",
+        icon: <ShieldAlert className="h-4 w-4" />,
+        tone: "info",
+      });
+    }
+    return items.slice(0, 4);
+  }, [overdueInvoices, unassignedActiveJobs, unassignedTodayAppointments, agingPendingQuotes]);
 
   const priorityActions = useMemo(() => {
     const actions: Array<{ title: string; detail: string; href: string; cta: string }> = [];
@@ -387,6 +468,42 @@ export default function SignedIn() {
                   <p className="truncate text-sm text-muted-foreground">{action.detail}</p>
                 </div>
                 <span className="text-sm font-medium text-orange-600">{action.cta}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">Owner watchlist</h2>
+            <span className="text-sm text-muted-foreground">Risk, cash, and staffing signals</span>
+          </div>
+          <div className="grid gap-3">
+            {watchlist.map((item) => (
+              <Link
+                key={item.title}
+                to={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-2xl border px-4 py-4 transition-colors hover:bg-muted/40",
+                  item.tone === "danger" && "border-red-200 bg-red-50/70",
+                  item.tone === "warn" && "border-amber-200 bg-amber-50/70"
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                    item.tone === "danger" && "bg-red-500/10 text-red-700",
+                    item.tone === "warn" && "bg-amber-500/10 text-amber-700",
+                    item.tone === "info" && "bg-sky-500/10 text-sky-700"
+                  )}
+                >
+                  {item.icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{item.title}</p>
+                  <p className="truncate text-sm text-muted-foreground">{item.detail}</p>
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
               </Link>
             ))}
           </div>
