@@ -65,6 +65,7 @@ import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/Re
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { InvoiceLineItemsTable } from "../components/invoices/InvoiceLineItemsTable";
 import { CommunicationCard } from "../components/shared/CommunicationCard";
+import { ActivityFeedCard } from "../components/shared/ActivityFeedCard";
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700 border-gray-200",
@@ -280,7 +281,7 @@ export default function InvoiceDetailPage() {
       },
     },
   });
-  const [{ data: activityLogs }, refetchActivity] = useFindMany(
+  const [{ data: activityLogs, fetching: activityFetching }, refetchActivity] = useFindMany(
     api.activityLog,
     { entityType: "invoice", entityId: id, first: 10, pause: !id } as any
   );
@@ -852,6 +853,12 @@ export default function InvoiceDetailPage() {
             sending={sendingToClient}
             canSend={permissions.has("invoices.write")}
             onPrimarySend={handleMarkAsSent}
+          />
+
+          <ActivityFeedCard
+            title="Invoice history"
+            records={((activityLogs ?? []) as any[]).filter((record) => record.type !== "invoice.sent")}
+            fetching={activityFetching}
           />
 
           {/* Client Info */}

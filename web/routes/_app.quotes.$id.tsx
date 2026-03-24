@@ -8,6 +8,7 @@ import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { CommunicationCard } from "../components/shared/CommunicationCard";
+import { ActivityFeedCard } from "../components/shared/ActivityFeedCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -181,7 +182,7 @@ export default function QuoteDetailPage() {
   const [{ fetching: updatingQli }, updateQli] = useAction(api.quoteLineItem.update);
   const [{ fetching: deletingQli }, deleteQli] = useAction(api.quoteLineItem.delete);
   const [{ fetching: creatingQli }, createQli] = useAction(api.quoteLineItem.create);
-  const [{ data: activityLogs }, refetchActivity] = useFindMany(
+  const [{ data: activityLogs, fetching: activityFetching }, refetchActivity] = useFindMany(
     api.activityLog,
     { entityType: "quote", entityId: id, first: 10, pause: !id } as any
   );
@@ -736,6 +737,15 @@ export default function QuoteDetailPage() {
             canSend={canWriteQuotes}
             onPrimarySend={handleSend}
             onFollowUpSend={handleSendFollowUp}
+          />
+
+          <ActivityFeedCard
+            title="Quote history"
+            records={((activityLogs ?? []) as any[]).filter(
+              (record) =>
+                record.type !== "quote.sent" && record.type !== "quote.follow_up_recorded"
+            )}
+            fetching={activityFetching}
           />
 
           {/* Actions Card */}
