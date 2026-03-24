@@ -1,46 +1,87 @@
-import { useState, useMemo, useCallback, type ReactNode } from "react";
-import { useOutletContext, Link, Navigate } from "react-router";
-import { useFindMany } from "../hooks/useApi";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { Link, Navigate, useOutletContext } from "react-router";
 import { format, parseISO, isSameDay, startOfDay, endOfDay } from "date-fns";
 import {
-  FileText,
-  DollarSign,
+  AlertCircle,
+  ArrowUpRight,
   CalendarPlus,
+  ChevronRight,
+  Clock3,
+  DollarSign,
+  FileText,
   Receipt,
   RefreshCw,
-  ChevronRight,
-  AlertCircle,
+  Users,
 } from "lucide-react";
+import { useFindMany } from "../hooks/useApi";
+import { api, ApiError } from "../api";
+import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { api, ApiError } from "../api";
-import type { AuthOutletContext } from "./_app";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 
+type AppointmentRecord = {
+  id: string;
+  title?: string | null;
+  status: string;
+  startTime: string;
+  endTime?: string | null;
+  client: { firstName?: string | null; lastName?: string | null } | null;
+  vehicle: { make?: string | null; model?: string | null; year?: number | null } | null;
+};
+
+type InvoiceRecord = {
+  id: string;
+  invoiceNumber?: string | null;
+  status: string;
+  total: number | string | null | undefined;
+};
+
+type QuoteRecord = {
+  id: string;
+  status: string;
+  total: number | string | null | undefined;
+  createdAt?: string;
+  client?: { firstName?: string | null; lastName?: string | null } | null;
+};
+
+const ACTIVE_JOB = new Set(["scheduled", "confirmed", "in_progress"]);
+
 function formatCurrency(amount: number | string | null | undefined): string {
   const n = Number(amount ?? 0);
-  if (!Number.isFinite(n)) return "—";
+  if (!Number.isFinite(n)) return "-";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 }
 
 function safeParseISO(iso: string | undefined | null): Date | null {
-  if (iso == null || iso === "") return null;
-  const d = parseISO(iso);
-  return Number.isNaN(d.getTime()) ? null : d;
+  if (!iso) return null;
+  const parsed = parseISO(iso);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function formatSafe(iso: string | undefined | null, fmt: string): string {
-  const d = safeParseISO(iso);
-  return d ? format(d, fmt) : "—";
+  const parsed = safeParseISO(iso);
+  return parsed ? format(parsed, fmt) : "-";
 }
 
-const ACTIVE_JOB = new Set(["scheduled", "confirmed", "in_progress"]);
+function sumCurrency(values: Array<number | string | null | undefined>): number {
+  return values.reduce<number>((total, value) => {
+    const n = Number(value ?? 0);
+    return Number.isFinite(n) ? total + n : total;
+  }, 0);
+}
+
+function sectionErrorMessage(err: Error): string {
+  if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+    return "Session expired. Sign in again.";
+  }
+  return err.message || "Could not load this section.";
+}
 
 export default function SignedIn() {
   const { businessName, businessId } = useOutletContext<AuthOutletContext & { businessId?: string }>();
-
   const [filterNow, setFilterNow] = useState(() => new Date());
   const [refreshing, setRefreshing] = useState(false);
 
@@ -78,39 +119,69 @@ export default function SignedIn() {
     pause: !businessId,
   });
 
-  const appointments = (appointmentsRaw ?? []) as Array<{
-    id: string;
-    title?: string | null;
-    status: string;
-    startTime: string;
-    endTime?: string | null;
-    client: { firstName: string; lastName: string } | null;
-    vehicle: { make: string | null; model: string | null; year?: number | null } | null;
-  }>;
+  const appointments = (appointmentsRaw ?? []) as AppointmentRecord[];
+  const unpaidInvoices = (invoicesRaw ?? []) as InvoiceRecord[];
+  const pendingQuotes = (quotesRaw ?? []) as QuoteRecord[];
 
   const todayJobs = useMemo(() => {
-    const day = filterNow;
-    return appointments.filter((a) => {
-      const st = safeParseISO(a.startTime);
-      if (!st) return false;
-      return isSameDay(st, day) && ACTIVE_JOB.has(a.status ?? "");
+    return appointments.filter((appointment) => {
+      const start = safeParseISO(appointment.startTime);
+      return !!start && isSameDay(start, filterNow) && ACTIVE_JOB.has(appointment.status ?? "");
     });
   }, [appointments, filterNow]);
 
-  const unpaidInvoices = (invoicesRaw ?? []) as Array<{
-    id: string;
-    invoiceNumber?: string | null;
-    status: string;
-    total: number | string | null | undefined;
-  }>;
+  const openQuoteValue = useMemo(() => sumCurrency(pendingQuotes.map((quote) => quote.total)), [pendingQuotes]);
+  const unpaidRevenue = useMemo(() => sumCurrency(unpaidInvoices.map((invoice) => invoice.total)), [unpaidInvoices]);
+  const nextJob = todayJobs[0] ?? null;
 
-  const pendingQuotes = (quotesRaw ?? []) as Array<{
-    id: string;
-    status: string;
-    total: number | string | null | undefined;
-    createdAt?: string;
-    client?: { firstName?: string | null; lastName?: string | null } | null;
-  }>;
+  const priorityActions = useMemo(() => {
+    const actions: Array<{ title: string; detail: string; href: string; cta: string }> = [];
+
+    if (nextJob) {
+      const nextJobClient = nextJob.client
+        ? `${nextJob.client.firstName ?? ""} ${nextJob.client.lastName ?? ""}`.trim()
+        : nextJob.title ?? "Open job";
+      actions.push({
+        title: "Next job on deck",
+        detail: `${formatSafe(nextJob.startTime, "h:mm a")} · ${nextJobClient}`,
+        href: `/appointments/${nextJob.id}`,
+        cta: "Open job",
+      });
+    }
+
+    if (unpaidInvoices.length > 0) {
+      actions.push({
+        title: "Collect outstanding cash",
+        detail: `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length === 1 ? "" : "s"} · ${formatCurrency(unpaidRevenue)}`,
+        href: `/invoices/${unpaidInvoices[0].id}`,
+        cta: "Review invoices",
+      });
+    }
+
+    if (pendingQuotes.length > 0) {
+      const quote = pendingQuotes[0];
+      const quoteClient = quote.client
+        ? `${quote.client.firstName ?? ""} ${quote.client.lastName ?? ""}`.trim() || "Open quote"
+        : "Open quote";
+      actions.push({
+        title: "Close pending work",
+        detail: `${pendingQuotes.length} quote${pendingQuotes.length === 1 ? "" : "s"} awaiting action · ${quoteClient}`,
+        href: `/quotes/${quote.id}`,
+        cta: "Open quote",
+      });
+    }
+
+    if (actions.length === 0) {
+      actions.push({
+        title: "Pipeline is clear",
+        detail: "No urgent jobs, quotes, or unpaid invoices right now.",
+        href: "/appointments/new",
+        cta: "Book next job",
+      });
+    }
+
+    return actions.slice(0, 3);
+  }, [nextJob, pendingQuotes, unpaidInvoices, unpaidRevenue]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -133,13 +204,14 @@ export default function SignedIn() {
   }
 
   return (
-    <div className="pb-24 md:pb-8 min-h-[calc(100dvh-4rem)]">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-6">
-        {/* Header */}
+    <div className="min-h-[calc(100dvh-4rem)] pb-24 md:pb-8">
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-4 sm:px-6 sm:py-6">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight truncate">{businessName ?? "Dashboard"}</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">{format(filterNow, "EEEE, MMM d")}</p>
+            <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
+              {businessName ?? "Dashboard"}
+            </h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">{format(filterNow, "EEEE, MMM d")}</p>
           </div>
           <Button
             type="button"
@@ -154,58 +226,91 @@ export default function SignedIn() {
           </Button>
         </div>
 
-        {anyError && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-900 dark:text-amber-100 flex gap-3">
-            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" aria-hidden />
+        {anyError ? (
+          <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
             <div className="min-w-0 flex-1">
               <p className="font-medium">Some dashboard data could not be loaded.</p>
-              <p className="text-amber-800/90 dark:text-amber-100/90 mt-1">
+              <p className="mt-1 text-amber-800/90 dark:text-amber-100/90">
                 {anyError instanceof ApiError && (anyError.status === 401 || anyError.status === 403)
                   ? "Your session may have expired. Sign in again."
                   : "Check each section below or try refreshing."}
               </p>
             </div>
           </div>
-        )}
+        ) : null}
 
-        {/* Primary actions — desktop / tablet */}
-        <div className="hidden sm:grid grid-cols-3 gap-3">
-          <Link
-            to="/appointments/new"
-            className={cn(
-              "flex items-center justify-center gap-2 min-h-[52px] rounded-2xl px-4",
-              "bg-orange-500 text-white font-semibold text-base shadow-sm",
-              "hover:bg-orange-600 active:scale-[0.98] transition-transform"
-            )}
-          >
-            <CalendarPlus className="h-5 w-5 shrink-0" />
-            Schedule job
-          </Link>
-          <Link
-            to="/quotes/new"
-            className={cn(
-              "flex items-center justify-center gap-2 min-h-[52px] rounded-2xl px-4",
-              "border-2 border-border bg-card font-semibold text-base",
-              "hover:bg-muted/80 active:scale-[0.98] transition-transform"
-            )}
-          >
-            <Receipt className="h-5 w-5 shrink-0" />
-            Create quote
-          </Link>
-          <Link
-            to="/invoices"
-            className={cn(
-              "flex items-center justify-center gap-2 min-h-[52px] rounded-2xl px-4",
-              "border-2 border-border bg-card font-semibold text-base",
-              "hover:bg-muted/80 active:scale-[0.98] transition-transform"
-            )}
-          >
-            <DollarSign className="h-5 w-5 shrink-0" />
-            Invoices
-          </Link>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <MetricCard
+            label="Jobs today"
+            value={String(todayJobs.length)}
+            detail={nextJob ? `Next at ${formatSafe(nextJob.startTime, "h:mm a")}` : "No active jobs scheduled"}
+            icon={<Clock3 className="h-5 w-5" />}
+          />
+          <MetricCard
+            label="Open quotes"
+            value={String(pendingQuotes.length)}
+            detail={openQuoteValue > 0 ? formatCurrency(openQuoteValue) : "No quote value pending"}
+            icon={<Receipt className="h-5 w-5" />}
+          />
+          <MetricCard
+            label="Unpaid invoices"
+            value={String(unpaidInvoices.length)}
+            detail={unpaidRevenue > 0 ? formatCurrency(unpaidRevenue) : "Nothing outstanding"}
+            icon={<DollarSign className="h-5 w-5" />}
+          />
+          <MetricCard
+            label="Next focus"
+            value={priorityActions[0]?.title ?? "Clear"}
+            detail={priorityActions[0]?.detail ?? "No urgent actions"}
+            icon={<ArrowUpRight className="h-5 w-5" />}
+            compactValue
+          />
         </div>
 
-        {/* Today's appointments (API: today only; filtered to active statuses) */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">Quick actions</h2>
+            <span className="text-sm text-muted-foreground">Most-used workflows</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <QuickAction href="/clients/new" label="New client" icon={<Users className="h-5 w-5 shrink-0" />} />
+            <QuickAction
+              href="/appointments/new"
+              label="Schedule job"
+              icon={<CalendarPlus className="h-5 w-5 shrink-0" />}
+              primary
+            />
+            <QuickAction href="/quotes/new" label="Create quote" icon={<Receipt className="h-5 w-5 shrink-0" />} />
+            <QuickAction href="/invoices" label="Invoices" icon={<DollarSign className="h-5 w-5 shrink-0" />} />
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">Priority focus</h2>
+            <span className="text-sm text-muted-foreground">Work the highest-value next step</span>
+          </div>
+          <div className="grid gap-3">
+            {priorityActions.map((action) => (
+              <Link
+                key={action.title}
+                to={action.href}
+                className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-4 transition-colors hover:bg-muted/40"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-600">
+                  <ArrowUpRight className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{action.title}</p>
+                  <p className="truncate text-sm text-muted-foreground">{action.detail}</p>
+                </div>
+                <span className="text-sm font-medium text-orange-600">{action.cta}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
         <DashboardSection
           title="Today's appointments"
           seeAllHref="/appointments"
@@ -217,35 +322,36 @@ export default function SignedIn() {
           emptyCta={{ href: "/appointments/new", label: "Schedule a job" }}
           skeletonRows={3}
         >
-          <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
-            {todayJobs.map((apt) => (
-              <li key={apt.id}>
+          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
+            {todayJobs.map((appointment) => (
+              <li key={appointment.id}>
                 <Link
-                  to={`/appointments/${apt.id}`}
-                  className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
+                  to={`/appointments/${appointment.id}`}
+                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
                 >
-                  <div className="text-sm font-mono text-muted-foreground w-[72px] shrink-0">
-                    {formatSafe(apt.startTime, "h:mm a")}
+                  <div className="w-[72px] shrink-0 font-mono text-sm text-muted-foreground">
+                    {formatSafe(appointment.startTime, "h:mm a")}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-base truncate">
-                      {apt.client ? `${apt.client.firstName ?? ""} ${apt.client.lastName ?? ""}`.trim() : apt.title ?? "Job"}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-medium">
+                      {appointment.client
+                        ? `${appointment.client.firstName ?? ""} ${appointment.client.lastName ?? ""}`.trim()
+                        : appointment.title ?? "Job"}
                     </p>
-                    {apt.vehicle && (
-                      <p className="text-sm text-muted-foreground truncate">
-                        {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
+                    {appointment.vehicle ? (
+                      <p className="truncate text-sm text-muted-foreground">
+                        {[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")}
                       </p>
-                    )}
+                    ) : null}
                   </div>
-                  <StatusBadge status={apt.status ?? "scheduled"} type="appointment" />
-                  <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <StatusBadge status={appointment.status ?? "scheduled"} type="appointment" />
+                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
                 </Link>
               </li>
             ))}
           </ul>
         </DashboardSection>
 
-        {/* Pending quotes (API: draft + sent) */}
         <DashboardSection
           title="Pending quotes"
           seeAllHref="/quotes"
@@ -257,31 +363,30 @@ export default function SignedIn() {
           emptyCta={{ href: "/quotes/new", label: "New quote" }}
           skeletonRows={2}
         >
-          <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
-            {pendingQuotes.map((q) => (
-              <li key={q.id}>
+          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
+            {pendingQuotes.map((quote) => (
+              <li key={quote.id}>
                 <Link
-                  to={`/quotes/${q.id}`}
-                  className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
+                  to={`/quotes/${quote.id}`}
+                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
                 >
-                  <Receipt className="h-5 w-5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">
-                      {q.client
-                        ? `${q.client.firstName ?? ""} ${q.client.lastName ?? ""}`.trim() || "Quote"
-                        : `Quote · ${String(q.id).slice(0, 8)}…`}
+                  <Receipt className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">
+                      {quote.client
+                        ? `${quote.client.firstName ?? ""} ${quote.client.lastName ?? ""}`.trim() || "Quote"
+                        : `Quote - ${String(quote.id).slice(0, 8)}...`}
                     </p>
-                    <p className="text-sm text-muted-foreground capitalize">{String(q.status ?? "—")}</p>
+                    <p className="text-sm capitalize text-muted-foreground">{String(quote.status ?? "-")}</p>
                   </div>
-                  <span className="font-semibold tabular-nums">{formatCurrency(q.total)}</span>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <span className="font-semibold tabular-nums">{formatCurrency(quote.total)}</span>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
                 </Link>
               </li>
             ))}
           </ul>
         </DashboardSection>
 
-        {/* Unpaid invoices (API: sent + partial) */}
         <DashboardSection
           title="Unpaid invoices"
           seeAllHref="/invoices"
@@ -293,22 +398,24 @@ export default function SignedIn() {
           emptyCta={{ href: "/invoices/new", label: "New invoice" }}
           skeletonRows={2}
         >
-          <ul className="divide-y divide-border rounded-xl border bg-card overflow-hidden">
-            {unpaidInvoices.map((inv) => (
-              <li key={inv.id}>
+          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
+            {unpaidInvoices.map((invoice) => (
+              <li key={invoice.id}>
                 <Link
-                  to={`/invoices/${inv.id}`}
-                  className="flex items-center gap-3 min-h-[56px] px-4 py-3 hover:bg-muted/50 active:bg-muted/70 transition-colors"
+                  to={`/invoices/${invoice.id}`}
+                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
                 >
-                  <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{inv.invoiceNumber ?? `Invoice ${String(inv.id).slice(0, 8)}…`}</p>
-                    <p className="text-sm text-muted-foreground capitalize">
-                      {String(inv.status ?? "").replace(/-/g, " ") || "—"}
+                  <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">
+                      {invoice.invoiceNumber ?? `Invoice ${String(invoice.id).slice(0, 8)}...`}
+                    </p>
+                    <p className="text-sm capitalize text-muted-foreground">
+                      {String(invoice.status ?? "").replace(/-/g, " ") || "-"}
                     </p>
                   </div>
-                  <span className="font-semibold tabular-nums">{formatCurrency(inv.total)}</span>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <span className="font-semibold tabular-nums">{formatCurrency(invoice.total)}</span>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
                 </Link>
               </li>
             ))}
@@ -316,45 +423,20 @@ export default function SignedIn() {
         </DashboardSection>
       </div>
 
-      {/* Mobile sticky actions */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden"
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
         aria-label="Quick actions"
       >
-        <div className="flex gap-2 px-3 pt-2 max-w-3xl mx-auto">
-          <Link
-            to="/appointments/new"
-            className="flex-1 flex flex-col items-center justify-center gap-1 min-h-[52px] rounded-xl bg-orange-500 text-white text-sm font-semibold shadow-sm active:scale-[0.98]"
-          >
-            <CalendarPlus className="h-5 w-5" />
-            Job
-          </Link>
-          <Link
-            to="/quotes/new"
-            className="flex-1 flex flex-col items-center justify-center gap-1 min-h-[52px] rounded-xl border-2 border-border bg-card text-sm font-semibold active:scale-[0.98]"
-          >
-            <Receipt className="h-5 w-5" />
-            Quote
-          </Link>
-          <Link
-            to="/invoices"
-            className="flex-1 flex flex-col items-center justify-center gap-1 min-h-[52px] rounded-xl border-2 border-border bg-card text-sm font-semibold active:scale-[0.98]"
-          >
-            <DollarSign className="h-5 w-5" />
-            Bills
-          </Link>
+        <div className="mx-auto flex max-w-4xl gap-2 px-3 pt-2">
+          <MobileQuickAction href="/clients/new" label="Client" icon={<Users className="h-5 w-5" />} />
+          <MobileQuickAction href="/appointments/new" label="Job" icon={<CalendarPlus className="h-5 w-5" />} primary />
+          <MobileQuickAction href="/quotes/new" label="Quote" icon={<Receipt className="h-5 w-5" />} />
+          <MobileQuickAction href="/invoices" label="Bills" icon={<DollarSign className="h-5 w-5" />} />
         </div>
       </nav>
     </div>
   );
-}
-
-function sectionErrorMessage(err: Error): string {
-  if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-    return "Session expired. Sign in again.";
-  }
-  return err.message || "Could not load this section.";
 }
 
 function DashboardSection({
@@ -386,21 +468,21 @@ function DashboardSection({
         <h2 className="text-lg font-semibold">{title}</h2>
         <Link
           to={seeAllHref}
-          className="text-sm font-medium text-orange-600 hover:text-orange-700 py-2 min-h-[44px] inline-flex items-center"
+          className="inline-flex min-h-[44px] items-center py-2 text-sm font-medium text-orange-600 hover:text-orange-700"
         >
           {seeAllLabel}
         </Link>
       </div>
       {error ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-4 text-sm text-destructive flex gap-3">
-          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" aria-hidden />
+        <div className="flex gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-4 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
           <p>{sectionErrorMessage(error)}</p>
         </div>
       ) : isLoading ? (
         <ListSkeleton rows={skeletonRows} />
       ) : isEmpty ? (
         <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center">
-          <p className="text-sm text-muted-foreground mb-4">{emptyMessage}</p>
+          <p className="mb-4 text-sm text-muted-foreground">{emptyMessage}</p>
           <Button asChild size="lg" className="min-h-[48px] rounded-xl">
             <Link to={emptyCta.href}>{emptyCta.label}</Link>
           </Button>
@@ -414,17 +496,94 @@ function DashboardSection({
 
 function ListSkeleton({ rows }: { rows: number }) {
   return (
-    <div className="rounded-xl border bg-card divide-y divide-border overflow-hidden" aria-busy="true" aria-label="Loading">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3 px-4 py-3 min-h-[56px]">
+    <div className="overflow-hidden rounded-xl border divide-y divide-border bg-card" aria-busy="true" aria-label="Loading">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div key={index} className="flex min-h-[56px] items-center gap-3 px-4 py-3">
           <Skeleton className="h-4 w-16" />
           <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-3/5 max-w-[200px]" />
-            <Skeleton className="h-3 w-2/5 max-w-[140px]" />
+            <Skeleton className="h-4 max-w-[200px] w-3/5" />
+            <Skeleton className="h-3 max-w-[140px] w-2/5" />
           </div>
         </div>
       ))}
     </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  detail,
+  icon,
+  compactValue = false,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: ReactNode;
+  compactValue?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
+        <div className="text-orange-600">{icon}</div>
+      </div>
+      <p className={cn("font-semibold tracking-tight", compactValue ? "text-lg" : "text-2xl")}>{value}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function QuickAction({
+  href,
+  label,
+  icon,
+  primary = false,
+}: {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  primary?: boolean;
+}) {
+  return (
+    <Link
+      to={href}
+      className={cn(
+        "flex min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 font-semibold transition-transform active:scale-[0.98]",
+        primary
+          ? "bg-orange-500 text-sm text-white shadow-sm hover:bg-orange-600 sm:text-base"
+          : "border-2 border-border bg-card text-sm hover:bg-muted/80 sm:text-base"
+      )}
+    >
+      {icon}
+      {label}
+    </Link>
+  );
+}
+
+function MobileQuickAction({
+  href,
+  label,
+  icon,
+  primary = false,
+}: {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  primary?: boolean;
+}) {
+  return (
+    <Link
+      to={href}
+      className={cn(
+        "flex flex-1 flex-col items-center justify-center gap-1 rounded-xl text-sm font-semibold active:scale-[0.98] min-h-[52px]",
+        primary ? "bg-orange-500 text-white shadow-sm" : "border-2 border-border bg-card"
+      )}
+    >
+      {icon}
+      {label}
+    </Link>
   );
 }
 
