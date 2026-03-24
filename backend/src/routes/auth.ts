@@ -80,6 +80,34 @@ function isTenantSchemaDriftError(error: unknown): boolean {
     message.includes("does not exist")
   );
 }
+
+async function buildSafeAuthContext(userId: string) {
+  try {
+    const ownedBusinesses = await db
+      .select({ id: businesses.id, name: businesses.name, type: businesses.type })
+      .from(businesses)
+      .where(eq(businesses.ownerId, userId));
+
+    return {
+      businesses: ownedBusinesses.map((ownedBusiness, index) => ({
+        id: ownedBusiness.id,
+        name: ownedBusiness.name,
+        type: ownedBusiness.type,
+        role: "owner",
+        status: "active",
+        isDefault: index === 0,
+        permissions: Array.from(getDefaultPermissionsForRole("owner")),
+      })),
+      currentBusinessId: ownedBusinesses[0]?.id ?? null,
+    };
+  } catch (error) {
+    logger.error("Failed to build fallback auth context", {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { businesses: [], currentBusinessId: null };
+  }
+}
 /** GET /api/auth/me — current user from JWT. Returns 401 if not signed in. */
 authRouter.get(
   "/me",
@@ -116,96 +144,104 @@ authRouter.get(
       return;
     }
 
-    const ownedBusinesses = await db
-      .select({ id: businesses.id, name: businesses.name, type: businesses.type })
-      .from(businesses)
-      .where(eq(businesses.ownerId, userId));
-    let memberships: Array<{
-      businessId: string;
-      role: "owner" | "admin" | "manager" | "service_advisor" | "technician";
-      status: "invited" | "active" | "suspended";
-      isDefault: boolean;
-    }> = [];
-
     try {
-      memberships = await db
-        .select({
-          businessId: businessMemberships.businessId,
-          role: businessMemberships.role,
-          status: businessMemberships.status,
-          isDefault: businessMemberships.isDefault,
-        })
-        .from(businessMemberships)
-        .where(eq(businessMemberships.userId, userId));
+      const ownedBusinesses = await db
+        .select({ id: businesses.id, name: businesses.name, type: businesses.type })
+        .from(businesses)
+        .where(eq(businesses.ownerId, userId));
+      let memberships: Array<{
+        businessId: string;
+        role: "owner" | "admin" | "manager" | "service_advisor" | "technician";
+        status: "invited" | "active" | "suspended";
+        isDefault: boolean;
+      }> = [];
+
+      try {
+        memberships = await db
+          .select({
+            businessId: businessMemberships.businessId,
+            role: businessMemberships.role,
+            status: businessMemberships.status,
+            isDefault: businessMemberships.isDefault,
+          })
+          .from(businessMemberships)
+          .where(eq(businessMemberships.userId, userId));
+      } catch (error) {
+        if (!isTenantSchemaDriftError(error)) throw error;
+        logger.warn("business membership schema unavailable; falling back to owner-only auth context", {
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      const byBusiness = new Map<
+        string,
+        {
+          id: string;
+          name: string | null;
+          type: string | null;
+          role: string;
+          status: string;
+          isDefault: boolean;
+          permissions: string[];
+        }
+      >();
+
+      for (const ownedBusiness of ownedBusinesses) {
+        byBusiness.set(ownedBusiness.id, {
+          id: ownedBusiness.id,
+          name: ownedBusiness.name,
+          type: ownedBusiness.type,
+          role: "owner",
+          status: "active",
+          isDefault: memberships.length === 0,
+          permissions: Array.from(getDefaultPermissionsForRole("owner")),
+        });
+      }
+
+      if (memberships.length > 0) {
+        const membershipBusinessIds = memberships.map((membership) => membership.businessId).filter((id) => !byBusiness.has(id));
+        const membershipBusinesses = membershipBusinessIds.length === 0
+          ? []
+          : await db
+              .select({ id: businesses.id, name: businesses.name, type: businesses.type })
+              .from(businesses)
+              .where(inArray(businesses.id, membershipBusinessIds));
+
+        const membershipBusinessMap = new Map(membershipBusinesses.map((business) => [business.id, business]));
+        for (const membership of memberships) {
+          if (byBusiness.has(membership.businessId)) continue;
+          const membershipBusiness = membershipBusinessMap.get(membership.businessId);
+          byBusiness.set(membership.businessId, {
+            id: membership.businessId,
+            name: membershipBusiness?.name ?? null,
+            type: membershipBusiness?.type ?? null,
+            role: membership.role,
+            status: membership.status,
+            isDefault: membership.isDefault,
+            permissions: Array.from(getDefaultPermissionsForRole(membership.role)),
+          });
+        }
+      }
+
+      const orderedBusinesses = Array.from(byBusiness.values()).sort((a, b) => {
+        if (a.isDefault === b.isDefault) return a.name?.localeCompare(b.name ?? "") ?? 0;
+        return a.isDefault ? -1 : 1;
+      });
+
+      res.json({
+        data: {
+          businesses: orderedBusinesses,
+          currentBusinessId: orderedBusinesses.find((business) => business.isDefault)?.id ?? orderedBusinesses[0]?.id ?? null,
+        },
+      });
     } catch (error) {
-      if (!isTenantSchemaDriftError(error)) throw error;
-      logger.warn("business membership schema unavailable; falling back to owner-only auth context", {
+      logger.error("Auth context failed; returning safe fallback", {
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
+      res.json({ data: await buildSafeAuthContext(userId) });
     }
-
-    const byBusiness = new Map<
-      string,
-      {
-        id: string;
-        name: string | null;
-        type: string | null;
-        role: string;
-        status: string;
-        isDefault: boolean;
-        permissions: string[];
-      }
-    >();
-
-    for (const ownedBusiness of ownedBusinesses) {
-      byBusiness.set(ownedBusiness.id, {
-        id: ownedBusiness.id,
-        name: ownedBusiness.name,
-        type: ownedBusiness.type,
-        role: "owner",
-        status: "active",
-        isDefault: memberships.length === 0,
-        permissions: Array.from(getDefaultPermissionsForRole("owner")),
-      });
-    }
-
-    if (memberships.length > 0) {
-      const membershipBusinessIds = memberships.map((membership) => membership.businessId).filter((id) => !byBusiness.has(id));
-      const membershipBusinesses = membershipBusinessIds.length === 0
-        ? []
-        : await db
-            .select({ id: businesses.id, name: businesses.name, type: businesses.type })
-            .from(businesses)
-            .where(inArray(businesses.id, membershipBusinessIds));
-
-      const membershipBusinessMap = new Map(membershipBusinesses.map((business) => [business.id, business]));
-      for (const membership of memberships) {
-        if (byBusiness.has(membership.businessId)) continue;
-        const membershipBusiness = membershipBusinessMap.get(membership.businessId);
-        byBusiness.set(membership.businessId, {
-          id: membership.businessId,
-          name: membershipBusiness?.name ?? null,
-          type: membershipBusiness?.type ?? null,
-          role: membership.role,
-          status: membership.status,
-          isDefault: membership.isDefault,
-          permissions: Array.from(getDefaultPermissionsForRole(membership.role)),
-        });
-      }
-    }
-
-    const orderedBusinesses = Array.from(byBusiness.values()).sort((a, b) => {
-      if (a.isDefault === b.isDefault) return a.name?.localeCompare(b.name ?? "") ?? 0;
-      return a.isDefault ? -1 : 1;
-    });
-
-    res.json({
-      data: {
-        businesses: orderedBusinesses,
-        currentBusinessId: orderedBusinesses.find((business) => business.isDefault)?.id ?? orderedBusinesses[0]?.id ?? null,
-      },
-    });
   })
 );
 authRouter.post(

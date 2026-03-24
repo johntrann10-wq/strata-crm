@@ -375,7 +375,15 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     api.user
       .me()
       .then(async (me) => {
-        const context = await api.user.context();
+        let context: Awaited<ReturnType<typeof api.user.context>> = {
+          businesses: [],
+          currentBusinessId: null,
+        };
+        try {
+          context = await api.user.context();
+        } catch (error) {
+          console.error("Failed to load auth context", error);
+        }
         const availableBusinesses = context.businesses;
         const storedBusinessId = getCurrentBusinessId();
         const resolvedBusinessId =
