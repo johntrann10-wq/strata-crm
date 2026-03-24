@@ -113,6 +113,8 @@ export default function SignedIn() {
   const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
   const [followingUpQuoteId, setFollowingUpQuoteId] = useState<string | null>(null);
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null);
+  const [updatingJobId, setUpdatingJobId] = useState<string | null>(null);
+  const [updatingAppointmentId, setUpdatingAppointmentId] = useState<string | null>(null);
 
   const { apptStartGte, apptStartLte } = useMemo(() => {
     const from = startOfDay(filterNow);
@@ -161,6 +163,9 @@ export default function SignedIn() {
   const [, runSendQuote] = useAction(api.quote.send);
   const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
   const [, runSendInvoice] = useAction(api.invoice.sendToClient);
+  const [, runUpdateJob] = useAction(api.job.update);
+  const [, runUpdateAppointment] = useAction(api.appointment.update);
+  const [, runUpdateAppointmentStatus] = useAction(api.appointment.updateStatus);
   const [{ data: locationsRaw }] = useFindMany(api.location, {
     first: 100,
     pause: !businessId,
@@ -474,6 +479,67 @@ export default function SignedIn() {
       }
     },
     [runSendInvoice, refetchInvoices]
+  );
+
+  const handleQuickJobUpdate = useCallback(
+    async (event: React.SyntheticEvent, jobId: string, values: Record<string, unknown>, successMessage: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setUpdatingJobId(jobId);
+      try {
+        const result = await runUpdateJob({ id: jobId, ...values });
+        if (result?.error) {
+          toast.error(result.error.message ?? "Could not update job");
+          return;
+        }
+        toast.success(successMessage);
+        await refetchJobs();
+      } finally {
+        setUpdatingJobId(null);
+      }
+    },
+    [runUpdateJob, refetchJobs]
+  );
+
+  const handleAssignAppointmentToMe = useCallback(
+    async (event: React.SyntheticEvent, appointmentId: string) => {
+      if (!myStaffRecord?.id) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setUpdatingAppointmentId(appointmentId);
+      try {
+        const result = await runUpdateAppointment({ id: appointmentId, assignedStaff: { _link: myStaffRecord.id } });
+        if (result?.error) {
+          toast.error(result.error.message ?? "Could not assign appointment");
+          return;
+        }
+        toast.success("Appointment assigned to you");
+        await refetchAppts();
+      } finally {
+        setUpdatingAppointmentId(null);
+      }
+    },
+    [myStaffRecord?.id, runUpdateAppointment, refetchAppts]
+  );
+
+  const handleQuickAppointmentStatus = useCallback(
+    async (event: React.SyntheticEvent, appointmentId: string, status: string, successMessage: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setUpdatingAppointmentId(appointmentId);
+      try {
+        const result = await runUpdateAppointmentStatus({ id: appointmentId, status });
+        if (result?.error) {
+          toast.error(result.error.message ?? "Could not update appointment");
+          return;
+        }
+        toast.success(successMessage);
+        await refetchAppts();
+      } finally {
+        setUpdatingAppointmentId(null);
+      }
+    },
+    [runUpdateAppointmentStatus, refetchAppts]
   );
 
   const loadingAppts = fetchingAppts && appointmentsRaw === undefined;
@@ -842,6 +908,53 @@ export default function SignedIn() {
                       </p>
                     ) : null}
                   </div>
+                  <div
+                    className="flex items-center gap-2"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                  >
+                    {myStaffRecord && !job.assignedStaff?.id ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={updatingJobId !== null}
+                        onClick={(event) =>
+                          void handleQuickJobUpdate(event, job.id, { assignedStaffId: myStaffRecord.id }, "Job assigned to you")
+                        }
+                      >
+                        Assign to me
+                      </Button>
+                    ) : null}
+                    {["scheduled", "confirmed"].includes(job.status ?? "") ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={updatingJobId !== null}
+                        onClick={(event) =>
+                          void handleQuickJobUpdate(event, job.id, { status: "in_progress" }, "Job marked in progress")
+                        }
+                      >
+                        Start
+                      </Button>
+                    ) : null}
+                    {job.status === "in_progress" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={updatingJobId !== null}
+                        onClick={(event) =>
+                          void handleQuickJobUpdate(event, job.id, { status: "completed" }, "Job completed")
+                        }
+                      >
+                        Complete
+                      </Button>
+                    ) : null}
+                  </div>
                   <StatusBadge status={job.status ?? "scheduled"} type="job" />
                   <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
                 </Link>
@@ -881,6 +994,64 @@ export default function SignedIn() {
                       <p className="truncate text-sm text-muted-foreground">
                         {[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")}
                       </p>
+                    ) : null}
+                  </div>
+                  <div
+                    className="flex items-center gap-2"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                  >
+                    {myStaffRecord && !appointment.assignedStaff?.id ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={updatingAppointmentId !== null}
+                        onClick={(event) => void handleAssignAppointmentToMe(event, appointment.id)}
+                      >
+                        Assign to me
+                      </Button>
+                    ) : null}
+                    {appointment.status === "scheduled" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={updatingAppointmentId !== null}
+                        onClick={(event) =>
+                          void handleQuickAppointmentStatus(event, appointment.id, "confirmed", "Appointment confirmed")
+                        }
+                      >
+                        Confirm
+                      </Button>
+                    ) : null}
+                    {appointment.status === "confirmed" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={updatingAppointmentId !== null}
+                        onClick={(event) =>
+                          void handleQuickAppointmentStatus(event, appointment.id, "in_progress", "Appointment started")
+                        }
+                      >
+                        Start
+                      </Button>
+                    ) : null}
+                    {appointment.status === "in_progress" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={updatingAppointmentId !== null}
+                        onClick={(event) =>
+                          void handleQuickAppointmentStatus(event, appointment.id, "completed", "Appointment completed")
+                        }
+                      >
+                        Complete
+                      </Button>
                     ) : null}
                   </div>
                   <StatusBadge status={appointment.status ?? "scheduled"} type="appointment" />
