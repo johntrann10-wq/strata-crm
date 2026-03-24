@@ -3,7 +3,7 @@
  * Use these instead of useFindOne, useFindMany, useAction, useGlobalAction.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { FormEvent } from "react";
 import { api } from "../api";
 import { setAuthToken } from "../lib/auth";
@@ -41,6 +41,16 @@ type FindManyOpts = {
 
 type FindOneOpts = { select?: Record<string, unknown>; pause?: boolean; live?: boolean };
 
+function stableKey(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value !== "object") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "[unserializable]";
+  }
+}
+
 export function useFindOne(
   model: { findOne: (id: string, opts?: FindOneOpts) => Promise<any> },
   id: string | null | undefined,
@@ -59,6 +69,11 @@ export function useFindOne(
     }
   }, [id]);
 
+  const optsKey = useMemo(
+    () => `${stableKey(opts?.select)}|${opts?.pause ? "1" : "0"}|${opts?.live ? "1" : "0"}`,
+    [opts?.select, opts?.pause, opts?.live]
+  );
+
   const refetch = useCallback(async () => {
     if (id == null || id === "") {
       setData(undefined);
@@ -75,7 +90,7 @@ export function useFindOne(
     } finally {
       setFetching(false);
     }
-  }, [id, opts?.select, opts?.pause, model]);
+  }, [id, model, opts, optsKey]);
 
   useEffect(() => {
     if (opts?.pause) return;
@@ -93,6 +108,42 @@ export function useFindMany(
   const [fetching, setFetching] = useState(!opts?.pause);
   const [error, setError] = useState<Error | null>(null);
 
+  const optsKey = useMemo(
+    () =>
+      [
+        stableKey(opts?.filter),
+        stableKey(opts?.sort),
+        String(opts?.first ?? ""),
+        stableKey(opts?.select),
+        String(opts?.search ?? ""),
+        String(opts?.status ?? ""),
+        opts?.lost ? "1" : "0",
+        opts?.pending ? "1" : "0",
+        opts?.unpaid ? "1" : "0",
+        String(opts?.startGte ?? ""),
+        String(opts?.startLte ?? ""),
+        String(opts?.clientId ?? ""),
+        opts?.pause ? "1" : "0",
+        opts?.live ? "1" : "0",
+      ].join("|"),
+    [
+      opts?.filter,
+      opts?.sort,
+      opts?.first,
+      opts?.select,
+      opts?.search,
+      opts?.status,
+      opts?.lost,
+      opts?.pending,
+      opts?.unpaid,
+      opts?.startGte,
+      opts?.startLte,
+      opts?.clientId,
+      opts?.pause,
+      opts?.live,
+    ]
+  );
+
   const refetch = useCallback(async () => {
     if (opts?.pause) {
       setFetching(false);
@@ -108,22 +159,7 @@ export function useFindMany(
     } finally {
       setFetching(false);
     }
-  }, [
-    opts?.pause,
-    opts?.filter,
-    opts?.sort,
-    opts?.first,
-    opts?.select,
-    opts?.search,
-    opts?.status,
-    opts?.lost,
-    opts?.pending,
-    opts?.unpaid,
-    opts?.startGte,
-    opts?.startLte,
-    opts?.clientId,
-    model,
-  ]);
+  }, [model, opts, optsKey]);
 
   useEffect(() => {
     refetch();
@@ -149,6 +185,42 @@ export function useFindFirst(
     }
   }, [opts?.pause]);
 
+  const optsKey = useMemo(
+    () =>
+      [
+        stableKey(opts?.filter),
+        stableKey(opts?.sort),
+        String(opts?.first ?? ""),
+        stableKey(opts?.select),
+        String(opts?.search ?? ""),
+        String(opts?.status ?? ""),
+        opts?.lost ? "1" : "0",
+        opts?.pending ? "1" : "0",
+        opts?.unpaid ? "1" : "0",
+        String(opts?.startGte ?? ""),
+        String(opts?.startLte ?? ""),
+        String(opts?.clientId ?? ""),
+        opts?.pause ? "1" : "0",
+        opts?.live ? "1" : "0",
+      ].join("|"),
+    [
+      opts?.filter,
+      opts?.sort,
+      opts?.first,
+      opts?.select,
+      opts?.search,
+      opts?.status,
+      opts?.lost,
+      opts?.pending,
+      opts?.unpaid,
+      opts?.startGte,
+      opts?.startLte,
+      opts?.clientId,
+      opts?.pause,
+      opts?.live,
+    ]
+  );
+
   const refetch = useCallback(async () => {
     if (opts?.pause) {
       setFetching(false);
@@ -164,18 +236,7 @@ export function useFindFirst(
     } finally {
       setFetching(false);
     }
-  }, [
-    opts?.pause,
-    opts?.filter,
-    opts?.select,
-    opts?.search,
-    opts?.sort,
-    opts?.first,
-    opts?.startGte,
-    opts?.startLte,
-    opts?.clientId,
-    model,
-  ]);
+  }, [model, opts, optsKey]);
 
   useEffect(() => {
     refetch();
