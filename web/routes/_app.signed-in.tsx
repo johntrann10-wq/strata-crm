@@ -58,7 +58,7 @@ type QuoteRecord = {
   status: string;
   total: number | string | null | undefined;
   createdAt?: string;
-  client?: { firstName?: string | null; lastName?: string | null } | null;
+  client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
 };
 
 type JobRecord = {
@@ -1118,6 +1118,18 @@ export default function SignedIn() {
                       >
                         {followingUpQuoteId === quote.id ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
                         Follow up
+                      </Button>
+                    ) : null}
+                    {String(quote.status ?? "") === "accepted" && quote.client?.id ? (
+                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
+                        <Link
+                          to={`/appointments/new?clientId=${quote.client.id}&quoteId=${quote.id}${
+                            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+                          }`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          Book
+                        </Link>
                       </Button>
                     ) : null}
                   </div>

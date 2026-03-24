@@ -22,7 +22,7 @@ function safeDate(value: string | null | undefined): Date | null {
 
 export default function QuotesIndexPage() {
   const navigate = useNavigate();
-  const { businessId } = useOutletContext<AuthOutletContext>();
+  const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -216,6 +216,12 @@ export default function QuotesIndexPage() {
                     const quoteStatus = String(row.status ?? "");
                     const canSend = ["draft", "sent"].includes(quoteStatus);
                     const canFollowUp = ["sent"].includes(quoteStatus);
+                    const canBook = quoteStatus === "accepted" && !!row.clientId;
+                    const bookHref = canBook
+                      ? `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
+                          currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+                        }`
+                      : null;
                     return (
                       <TableRow
                         key={qid}
@@ -278,6 +284,16 @@ export default function QuotesIndexPage() {
                                   <Send className="mr-1 h-3.5 w-3.5" />
                                 )}
                                 Follow up
+                              </Button>
+                            ) : null}
+                            {canBook && bookHref ? (
+                              <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
+                                <Link
+                                  to={bookHref}
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  Book
+                                </Link>
                               </Button>
                             ) : null}
                             <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
