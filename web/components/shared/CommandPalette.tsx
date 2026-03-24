@@ -238,6 +238,55 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
   const vehicleRows = (Array.isArray(vehicles) ? vehicles : []) as VehicleHit[];
   const invoiceRows = (Array.isArray(invoices) ? invoices : []) as InvoiceHit[];
   const quoteRows = (Array.isArray(quotes) ? quotes : []) as QuoteHit[];
+  const topClient = clientRows[0] ?? null;
+  const topVehicle = vehicleRows[0] ?? null;
+  const topQuote = quoteRows[0] ?? null;
+  const topInvoice = invoiceRows[0] ?? null;
+  const searchActions: Array<{ label: string; icon: React.ReactNode; onSelect: () => void }> = [];
+
+  if (topClient?.id) {
+    const clientLabel = `${topClient.firstName ?? ""} ${topClient.lastName ?? ""}`.trim() || "client";
+    searchActions.push({
+      label: `Book ${clientLabel}`,
+      icon: <CalendarPlus className="mr-2 h-4 w-4 text-orange-500" />,
+      onSelect: () => go(withLocation(`/appointments/new?clientId=${topClient.id}`)),
+    });
+    searchActions.push({
+      label: `Quote ${clientLabel}`,
+      icon: <Receipt className="mr-2 h-4 w-4 text-purple-500" />,
+      onSelect: () => go(`/quotes/new?clientId=${topClient.id}`),
+    });
+  }
+  if (topVehicle?.id && topVehicle.clientId) {
+    const vehicleLabel =
+      [topVehicle.year, topVehicle.make, topVehicle.model].filter(Boolean).join(" ") || "vehicle";
+    searchActions.push({
+      label: `Book ${vehicleLabel}`,
+      icon: <CalendarPlus className="mr-2 h-4 w-4 text-orange-500" />,
+      onSelect: () =>
+        go(withLocation(`/appointments/new?clientId=${topVehicle.clientId}&vehicleId=${topVehicle.id}`)),
+    });
+  }
+  const topQuoteClientId = (topQuote as { client?: { id?: string | null } | null } | null)?.client?.id ?? null;
+  if (topQuote?.id && topQuoteClientId) {
+    searchActions.push({
+      label: "Schedule top quote",
+      icon: <CalendarPlus className="mr-2 h-4 w-4 text-orange-500" />,
+      onSelect: () => go(withLocation(`/appointments/new?clientId=${topQuoteClientId}&quoteId=${topQuote.id}`)),
+    });
+    searchActions.push({
+      label: "Invoice top quote",
+      icon: <FileText className="mr-2 h-4 w-4 text-green-500" />,
+      onSelect: () => go(`/invoices/new?clientId=${topQuoteClientId}&quoteId=${topQuote.id}`),
+    });
+  }
+  if (topInvoice?.id && isCollectableInvoice(topInvoice)) {
+    searchActions.push({
+      label: "Collect top invoice",
+      icon: <CreditCard className="mr-2 h-4 w-4 text-green-500" />,
+      onSelect: () => go(`/invoices/${topInvoice.id}`),
+    });
+  }
 
   const go = (path: string) => {
     navigate(path);
@@ -492,6 +541,20 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
             )}
             {noResults && (
               <CommandEmpty>No results for &ldquo;{debouncedQuery}&rdquo;.</CommandEmpty>
+            )}
+
+            {searchActions.length > 0 && (
+              <>
+                <CommandGroup heading="Suggested actions">
+                  {searchActions.map((action, index) => (
+                    <CommandItem key={`${action.label}-${index}`} onSelect={action.onSelect}>
+                      {action.icon}
+                      {action.label}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+                <CommandSeparator />
+              </>
             )}
 
             {showClients && (
