@@ -1,8 +1,8 @@
 import { Link } from "react-router";
-import { User, Car, FileText, CalendarClock, Receipt } from "lucide-react";
+import { User, Car, FileText, CalendarClock, Receipt, ClipboardList } from "lucide-react";
 
 export interface RelatedRecord {
-  type: "client" | "vehicle" | "invoice" | "appointment" | "quote";
+  type: "client" | "vehicle" | "invoice" | "appointment" | "job" | "quote";
   id: string;
   label: string;
   sublabel?: string;
@@ -23,6 +23,7 @@ const typeConfig: Record<
   vehicle: { icon: Car, colorClass: "bg-purple-500/10 text-purple-600" },
   invoice: { icon: FileText, colorClass: "bg-green-500/10 text-green-600" },
   appointment: { icon: CalendarClock, colorClass: "bg-orange-500/10 text-orange-600" },
+  job: { icon: ClipboardList, colorClass: "bg-amber-500/10 text-amber-600" },
   quote: { icon: Receipt, colorClass: "bg-violet-500/10 text-violet-600" },
 };
 

@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from "react-router";
 import { useFindOne, useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Pencil, CalendarPlus, FileText, MoreVertical, Loader2 } from "lucide-react";
+import { ArrowLeft, Pencil, CalendarPlus, FileText, MoreVertical, Loader2, ClipboardList, Receipt } from "lucide-react";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
@@ -85,6 +85,23 @@ export default function ClientDetailPage() {
     select: { id: true, startTime: true, status: true, title: true, totalPrice: true, vehicle: { make: true, model: true, year: true } },
     pause: !id,
   });
+  const [{ data: quotes, fetching: quotesFetching, error: quotesError }] = useFindMany(api.quote, {
+    clientId: id,
+    sort: { createdAt: "Descending" },
+    first: 10,
+    pause: !id,
+  } as any);
+  const [{ data: invoices, fetching: invoicesFetching, error: invoicesError }] = useFindMany(api.invoice, {
+    clientId: id,
+    sort: { createdAt: "Descending" },
+    first: 10,
+    pause: !id,
+  } as any);
+  const [{ data: jobs, fetching: jobsFetching, error: jobsError }] = useFindMany(api.job, {
+    clientId: id,
+    first: 10,
+    pause: !id,
+  } as any);
   const [{ fetching: saving, error: saveError }, runUpdate] = useAction(api.client.update);
   const [{ fetching: deleting }, runDelete] = useAction(api.client.delete);
   useEffect(() => { if (client) setForm(toForm(client)); }, [client]);
@@ -139,8 +156,20 @@ export default function ClientDetailPage() {
   };
   const apptList = Array.isArray(appointments) ? appointments : [];
   const vehicleList = Array.isArray(vehicles) ? vehicles : [];
+  const quoteList = Array.isArray(quotes) ? quotes : [];
+  const invoiceList = Array.isArray(invoices) ? invoices : [];
+  const jobList = Array.isArray(jobs) ? jobs : [];
 
   const totalSpend = apptList.reduce((s, a) => s + (a.totalPrice ?? 0), 0);
+  const openQuoteValue = quoteList
+    .filter((quote) => ["draft", "sent"].includes(String((quote as any).status ?? "")))
+    .reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0);
+  const unpaidInvoiceValue = invoiceList
+    .filter((invoice) => ["sent", "partial"].includes(String((invoice as any).status ?? "")))
+    .reduce((sum, invoice) => sum + Number((invoice as any).total ?? 0), 0);
+  const activeJobsCount = jobList.filter((job) =>
+    ["scheduled", "confirmed", "in_progress"].includes(String((job as any).status ?? ""))
+  ).length;
 
   // For clients with 20+ appointments a backend pagination solution would be needed.
   const displayedAppointments = showAllAppointments ? apptList : apptList.slice(0, 5);
@@ -149,6 +178,30 @@ export default function ClientDetailPage() {
     apptList.length > 0 ? apptList[0].startTime : null;
 
   const relatedRecords = [
+    ...jobList.slice(0, 4).map((job) => ({
+      type: "job" as const,
+      id: (job as any).id,
+      label: (job as any).title ?? (job as any).jobNumber ?? "Job",
+      sublabel: (job as any).scheduledStart ? new Date((job as any).scheduledStart).toLocaleDateString() : undefined,
+      status: (job as any).status ?? undefined,
+      href: `/jobs/${(job as any).id}`,
+    })),
+    ...invoiceList.slice(0, 4).map((invoice) => ({
+      type: "invoice" as const,
+      id: (invoice as any).id,
+      label: (invoice as any).invoiceNumber ?? "Invoice",
+      sublabel: (invoice as any).total != null ? `$${Number((invoice as any).total).toFixed(2)}` : undefined,
+      status: (invoice as any).status ?? undefined,
+      href: `/invoices/${(invoice as any).id}`,
+    })),
+    ...quoteList.slice(0, 4).map((quote) => ({
+      type: "quote" as const,
+      id: (quote as any).id,
+      label: "Quote",
+      sublabel: (quote as any).total != null ? `$${Number((quote as any).total).toFixed(2)}` : undefined,
+      status: (quote as any).status ?? undefined,
+      href: `/quotes/${(quote as any).id}`,
+    })),
     ...apptList.map((a) => ({
       type: "appointment" as const,
       id: a.id,
@@ -190,6 +243,12 @@ export default function ClientDetailPage() {
           <Link to={`/invoices/new?clientId=${id}`}>
             <FileText className="h-4 w-4 mr-1.5" />
             New Invoice
+          </Link>
+        </Button>
+        <Button asChild variant="outline" size="sm">
+          <Link to={`/quotes/new?clientId=${id}`}>
+            <Receipt className="h-4 w-4 mr-1.5" />
+            New Quote
           </Link>
         </Button>
         <DropdownMenu>
@@ -262,6 +321,47 @@ export default function ClientDetailPage() {
           <VehiclesCard id={id} vehicles={vehicleList} />
         </div>
         <div className="lg:col-span-3">
+          <div className="grid gap-3 sm:grid-cols-3 mb-4">
+            <WorkflowMetricCard
+              icon={ClipboardList}
+              label="Active jobs"
+              value={String(activeJobsCount)}
+              detail={activeJobsCount > 0 ? "Work in progress" : "No active jobs"}
+            />
+            <WorkflowMetricCard
+              icon={Receipt}
+              label="Open quotes"
+              value={`$${openQuoteValue.toFixed(2)}`}
+              detail={`${quoteList.filter((quote) => ["draft", "sent"].includes(String((quote as any).status ?? ""))).length} awaiting action`}
+            />
+            <WorkflowMetricCard
+              icon={FileText}
+              label="Unpaid invoices"
+              value={`$${unpaidInvoiceValue.toFixed(2)}`}
+              detail={`${invoiceList.filter((invoice) => ["sent", "partial"].includes(String((invoice as any).status ?? ""))).length} awaiting payment`}
+            />
+          </div>
+
+          {(quotesError || invoicesError || jobsError) && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive mb-3">
+              Could not load full workflow history.
+              {quotesError ? ` Quotes: ${quotesError.message}` : ""}
+              {invoicesError ? ` Invoices: ${invoicesError.message}` : ""}
+              {jobsError ? ` Jobs: ${jobsError.message}` : ""}
+            </div>
+          )}
+          {(quotesFetching || invoicesFetching || jobsFetching) &&
+          quoteList.length === 0 &&
+          invoiceList.length === 0 &&
+          jobList.length === 0 &&
+          !quotesError &&
+          !invoicesError &&
+          !jobsError ? (
+            <div className="flex justify-center py-4 text-muted-foreground text-sm mb-3">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Loading workflow history…
+            </div>
+          ) : null}
           {appointmentsError && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive mb-3">
               Could not load appointments. {appointmentsError.message}
@@ -302,6 +402,29 @@ export default function ClientDetailPage() {
           <RelatedRecordsPanel records={relatedRecords} loading={false} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function WorkflowMetricCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: typeof FileText;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
     </div>
   );
 }
