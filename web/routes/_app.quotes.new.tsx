@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Plus, Trash2, Loader2, Check, ChevronsUpDown, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Loader2, Check, ChevronsUpDown, ChevronDown, ChevronUp, Package } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
@@ -35,6 +35,21 @@ type LineItem = {
   quantity: string;
   unitPrice: string;
   taxable: boolean;
+};
+
+type ServiceRecord = {
+  id: string;
+  name: string;
+  price: number | null;
+  category?: string | null;
+  isAddon?: boolean | null;
+  active?: boolean | null;
+};
+
+type AddonLinkRecord = {
+  id: string;
+  parentServiceId: string;
+  addonServiceId: string;
 };
 
 const formatCurrency = (amount: number) =>
@@ -137,10 +152,13 @@ export default function NewQuotePage() {
   // Services for quick-add
   const [{ data: services }] = useFindMany(api.service, {
     filter: { active: { equals: true } },
-    select: { id: true, name: true, price: true, category: true },
+    select: { id: true, name: true, price: true, category: true, isAddon: true, active: true },
     sort: { name: "Ascending" },
     first: 250,
   });
+  const [{ data: packageAddonLinks }] = useFindMany(api.serviceAddonLink, {
+    first: 250,
+  } as any);
 
   const [, runCreate] = useAction(api.quote.create);
   const [, runCreateLineItem] = useAction(api.quoteLineItem.create);
@@ -198,6 +216,48 @@ export default function NewQuotePage() {
     },
     []
   );
+
+  const addPackageAsLineItems = useCallback(
+    (baseService: ServiceRecord, addonServices: ServiceRecord[]) => {
+      const nextItems: LineItem[] = [
+        {
+          id: crypto.randomUUID(),
+          description: baseService.name,
+          quantity: "1",
+          unitPrice: baseService.price != null ? String(baseService.price) : "",
+          taxable: true,
+        },
+        ...addonServices.map((service) => ({
+          id: crypto.randomUUID(),
+          description: service.name,
+          quantity: "1",
+          unitPrice: service.price != null ? String(service.price) : "",
+          taxable: true,
+        })),
+      ];
+      setLineItems((prev) => [...prev, ...nextItems]);
+    },
+    []
+  );
+
+  const serviceRecords = (services ?? []) as ServiceRecord[];
+  const addonLinks = (packageAddonLinks ?? []) as AddonLinkRecord[];
+  const packageTemplates = serviceRecords
+    .filter((service) => !service.isAddon)
+    .map((service) => {
+      const linkedAddons = addonLinks
+        .filter((link) => link.parentServiceId === service.id)
+        .map((link) => serviceRecords.find((candidate) => candidate.id === link.addonServiceId))
+        .filter(Boolean) as ServiceRecord[];
+      return {
+        baseService: service,
+        linkedAddons,
+        totalPrice:
+          Number(service.price ?? 0) +
+          linkedAddons.reduce((sum, addon) => sum + Number(addon.price ?? 0), 0),
+      };
+    })
+    .filter((entry) => entry.linkedAddons.length > 0);
 
   const handleSubmit = async () => {
     const validLineItems = lineItems.filter(
@@ -368,6 +428,34 @@ export default function NewQuotePage() {
                 <Plus className="h-4 w-4 mr-2" />
                 Add Line Item
               </Button>
+
+              {packageTemplates.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                      <p className="text-sm font-medium text-muted-foreground">Quick Add Package</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {packageTemplates.map((pkg) => (
+                        <Button
+                          key={pkg.baseService.id}
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => addPackageAsLineItems(pkg.baseService, pkg.linkedAddons)}
+                        >
+                          {pkg.baseService.name}
+                          <span className="ml-1 text-muted-foreground">
+                            · {pkg.linkedAddons.length + 1} items · {formatCurrency(pkg.totalPrice)}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
 
               {services && services.length > 0 && (
                 <>

@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Loader2,
   Sparkles,
+  Package,
 } from "lucide-react";
 import { api } from "../api";
 import { formatServiceCategory } from "../lib/serviceCatalog";
@@ -189,6 +190,10 @@ export default function NewAppointmentPage() {
       pause: !businessId,
     }
   );
+  const [{ data: packageAddonLinks }] = useFindMany(api.serviceAddonLink, {
+    first: 250,
+    pause: !businessId,
+  } as any);
 
   const [{ data: staffData, fetching: staffFetching }] = useFindMany(
     api.staff,
@@ -364,6 +369,13 @@ export default function NewAppointmentPage() {
     );
   };
 
+  const applyPackageTemplate = useCallback(
+    (baseServiceId: string, addonServiceIds: string[]) => {
+      setSelectedServiceIds((prev) => [...new Set([...prev, baseServiceId, ...addonServiceIds])]);
+    },
+    []
+  );
+
   const handleQuickAddVehicle = async () => {
     if (!quickMake.trim() || !quickModel.trim()) {
       setQuickVehicleError('Make and model are required.');
@@ -474,6 +486,26 @@ export default function NewAppointmentPage() {
   const vehicles = vehiclesData ?? [];
   const clients = clientsData ?? [];
   const services = servicesData ?? [];
+  const addonLinks = (packageAddonLinks ?? []) as Array<{ parentServiceId: string; addonServiceId: string }>;
+  const packageTemplates = services
+    .filter((service) => !service.isAddon)
+    .map((service) => {
+      const linkedAddons = addonLinks
+        .filter((link) => link.parentServiceId === service.id)
+        .map((link) => services.find((candidate) => candidate.id === link.addonServiceId))
+        .filter(Boolean);
+      return {
+        baseService: service,
+        linkedAddons,
+        totalPackagePrice:
+          Number(service.price ?? 0) +
+          linkedAddons.reduce((sum, addon) => sum + Number(addon?.price ?? 0), 0),
+        totalPackageDuration:
+          Number(service.durationMinutes ?? 0) +
+          linkedAddons.reduce((sum, addon) => sum + Number(addon?.durationMinutes ?? 0), 0),
+      };
+    })
+    .filter((entry) => entry.linkedAddons.length > 0);
   const staff = staffData ?? [];
   const isLoading = isSubmitting || actionFetching;
 
@@ -677,53 +709,86 @@ export default function NewAppointmentPage() {
                   No active services found. Add services from the Services page.
                 </p>
               ) : (
-                <div className="space-y-2">
-                  {services.map((service) => {
-                    const isSelected = selectedServiceIds.includes(service.id);
-                    return (
-                      <div
-                        key={service.id}
-                        className={cn(
-                          "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors select-none",
-                          isSelected
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:bg-muted/40"
-                        )}
-                        onClick={() => toggleService(service.id)}
-                      >
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => toggleService(service.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm">{service.name}</p>
-                          {service.notes && (
-                            <p className="text-xs text-muted-foreground truncate">
-                              {service.notes}
-                            </p>
-                          )}
-                          {service.category && (
-                            <p className="text-xs text-muted-foreground">
-                              {formatServiceCategory(service.category)}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0 text-sm">
-                          {service.durationMinutes != null && service.durationMinutes > 0 && (
-                            <span className="flex items-center gap-1 text-muted-foreground">
-                              <Clock className="h-3 w-3" />
-                              {formatDuration(service.durationMinutes)}
-                            </span>
-                          )}
-                          <span className="font-semibold">
-                            ${(service.price ?? 0).toFixed(2)}
-                          </span>
-                        </div>
+                <div className="space-y-4">
+                  {packageTemplates.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-sm font-medium text-muted-foreground">Package templates</p>
                       </div>
-                    );
-                  })}
+                      <div className="flex flex-wrap gap-2">
+                        {packageTemplates.map((pkg) => (
+                          <Button
+                            key={pkg.baseService.id}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              applyPackageTemplate(
+                                pkg.baseService.id,
+                                pkg.linkedAddons.map((addon) => addon!.id)
+                              )
+                            }
+                          >
+                            {pkg.baseService.name}
+                            <span className="ml-1 text-muted-foreground">
+                              · {pkg.linkedAddons.length + 1} services · ${pkg.totalPackagePrice.toFixed(2)}
+                              {pkg.totalPackageDuration > 0 ? ` · ${formatDuration(pkg.totalPackageDuration)}` : ""}
+                            </span>
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    {services.map((service) => {
+                      const isSelected = selectedServiceIds.includes(service.id);
+                      return (
+                        <div
+                          key={service.id}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors select-none",
+                            isSelected
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:bg-muted/40"
+                          )}
+                          onClick={() => toggleService(service.id)}
+                        >
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleService(service.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm">{service.name}</p>
+                            {service.notes && (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {service.notes}
+                              </p>
+                            )}
+                            {service.category && (
+                              <p className="text-xs text-muted-foreground">
+                                {formatServiceCategory(service.category)}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0 text-sm">
+                            {service.durationMinutes != null && service.durationMinutes > 0 && (
+                              <span className="flex items-center gap-1 text-muted-foreground">
+                                <Clock className="h-3 w-3" />
+                                {formatDuration(service.durationMinutes)}
+                              </span>
+                            )}
+                            <span className="font-semibold">
+                              ${(service.price ?? 0).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
