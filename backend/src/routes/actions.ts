@@ -14,6 +14,8 @@ import { logger } from "../lib/logger.js";
 import { withIdempotency } from "../lib/idempotency.js";
 import * as automations from "../lib/automations.js";
 import { retryFailedEmailNotifications } from "../lib/email.js";
+import { applyBusinessPreset, getPresetSummaryForBusinessType } from "../lib/businessPresets.js";
+import { businesses } from "../db/schema.js";
 
 export const actionsRouter = Router({ mergeParams: true });
 
@@ -219,6 +221,19 @@ actionsRouter.post("/retryFailedNotifications", requireAuth, requireTenant, asyn
     async () => retryFailedEmailNotifications(bid)
   );
   res.json({ ok: true, retried: result.retried, succeeded: result.succeeded });
+});
+
+actionsRouter.post("/getBusinessPreset", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const [business] = await db.select({ type: businesses.type }).from(businesses).where(eq(businesses.id, bid)).limit(1);
+  const summary = getPresetSummaryForBusinessType(business?.type ?? null);
+  res.json(summary);
+});
+
+actionsRouter.post("/applyBusinessPreset", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const result = await applyBusinessPreset(bid);
+  res.json({ ok: true, ...result });
 });
 
 /** Cron endpoint: run business-type-aware automations (reminders, lapsed clients, review requests). Optional CRON_SECRET. */

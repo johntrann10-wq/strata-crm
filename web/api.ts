@@ -434,6 +434,16 @@ export const api = {
   // Global actions (POST /api/actions/:name)
   getInvoiceMetrics: (params?: Record<string, unknown>) =>
     request<unknown>("/actions/getInvoiceMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
+  getBusinessPreset: () =>
+    request<{ group: string; count: number; names: string[] }>("/actions/getBusinessPreset", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  applyBusinessPreset: () =>
+    request<{ ok: true; created: number; skipped: number; group: string }>("/actions/applyBusinessPreset", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
   // Billing: $29/mo, first month free
   billing: {
     getStatus: () => request<{ status: string | null; trialEndsAt: string | null; currentPeriodEnd: string | null }>("/billing/status"),

@@ -56,6 +56,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
+import { formatBusinessPresetLabel } from "../lib/businessPresets";
+import type { BusinessPresetSummary } from "../lib/businessPresets";
 
 const BUSINESS_TYPES = [
   { value: "auto_detailing", label: "Auto Detailing" },
@@ -135,6 +137,8 @@ type StaffRecord = {
   membershipStatus?: string | null;
   active?: boolean | null;
 };
+
+type BusinessPresetActionResult = BusinessPresetSummary;
 
 const STAFF_ROLES = [
   { value: "owner", label: "Owner" },
@@ -341,6 +345,9 @@ export default function SettingsPage() {
   const [{ fetching: savingStaff }, saveStaff] = useAction(api.staff.create);
   const [{ fetching: updatingStaff }, updateStaff] = useAction(api.staff.update);
   const [{ fetching: deletingStaff }, deleteStaff] = useAction(api.staff.delete);
+  const [{ data: presetSummary }, getBusinessPreset] = useAction(api.getBusinessPreset);
+  const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
+  const preset = presetSummary as BusinessPresetActionResult | undefined;
 
   useEffect(() => {
     if (!business) return;
@@ -367,6 +374,11 @@ export default function SettingsPage() {
       timezone: business.timezone ?? "America/New_York",
     });
   }, [business]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    void getBusinessPreset();
+  }, [businessId, getBusinessPreset]);
 
   const handleFieldChange = (field: keyof FormData, value: string | number) => {
     setFormData((current) => ({ ...current, [field]: value }));
@@ -521,9 +533,24 @@ export default function SettingsPage() {
         appointmentBufferMinutes: formData.appointmentBufferMinutes,
         timezone: formData.timezone || null,
       });
+      await getBusinessPreset();
       toast.success("Settings saved successfully.");
     } catch (error: any) {
       toast.error(error?.message ?? "Failed to save settings. Please try again.");
+    }
+  };
+
+  const handleApplyPreset = async () => {
+    try {
+      const result = await applyBusinessPreset();
+      await getBusinessPreset();
+      if ((result.data?.created ?? 0) > 0) {
+        toast.success(`Added ${result.data?.created} starter services`);
+      } else {
+        toast.success("Starter services are already applied");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not apply starter services.");
     }
   };
 
@@ -579,7 +606,7 @@ export default function SettingsPage() {
           </TabsList>
 
           <TabsContent value="profile" className="space-y-6">
-            <Card>
+          <Card>
               <CardHeader>
                 <CardTitle>Business Information</CardTitle>
                 <CardDescription>
@@ -587,6 +614,32 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Starter service preset</p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatBusinessPresetLabel(preset?.group ?? formData.type)} with {preset?.count ?? 0} recommended starter services.
+                      </p>
+                      {preset?.names?.length ? (
+                        <p className="text-xs text-muted-foreground">
+                          Includes {preset.names.join(", ")}.
+                        </p>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleApplyPreset}
+                      disabled={!canEditSettings || applyingPreset || !business?.id}
+                      className="w-full sm:w-auto"
+                    >
+                      {applyingPreset ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Apply starter services
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="name">

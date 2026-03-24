@@ -126,7 +126,8 @@ export default function OnboardingPage() {
   } as any);
   const [{ fetching: creating, error }, createBusiness] = useAction(api.business.create);
   const [{ fetching: updating }, updateBusiness] = useAction(api.business.update);
-  const fetching = creating || updating;
+  const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
+  const fetching = creating || updating || applyingPreset;
 
   useEffect(() => {
     if (!existingBusiness) return;
@@ -238,6 +239,11 @@ export default function OnboardingPage() {
 
     try {
       await api.business.completeOnboarding(saved.id);
+      try {
+        await applyBusinessPreset();
+      } catch {
+        // Starter services are useful, but onboarding should still complete if seeding fails.
+      }
       navigate("/signed-in", { replace: true });
     } catch (submitError) {
       setValidationError(submitError instanceof Error ? submitError.message : "Could not finish setup.");
