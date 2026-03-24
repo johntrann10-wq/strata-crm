@@ -168,6 +168,9 @@ export default function SignedIn() {
     () => locationRecords.find((location) => location.id === currentLocationId)?.name?.trim() || null,
     [locationRecords, currentLocationId]
   );
+  const scheduleJobHref = currentLocationId
+    ? `/appointments/new?locationId=${encodeURIComponent(currentLocationId)}`
+    : "/appointments/new";
   const myStaffRecord = useMemo(
     () => staffRecords.find((staff) => staff.userId === user?.id) ?? null,
     [staffRecords, user?.id]
@@ -560,7 +563,7 @@ export default function SignedIn() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <QuickAction href="/clients/new" label="New client" icon={<Users className="h-5 w-5 shrink-0" />} />
             <QuickAction
-              href="/appointments/new"
+              href={scheduleJobHref}
               label="Schedule job"
               icon={<CalendarPlus className="h-5 w-5 shrink-0" />}
               primary
@@ -740,7 +743,7 @@ export default function SignedIn() {
           isLoading={loadingJobs}
           isEmpty={!loadingJobs && !jobsError && activeJobs.length === 0}
           emptyMessage="No active work orders right now."
-          emptyCta={{ href: "/appointments/new", label: "Schedule a job" }}
+          emptyCta={{ href: scheduleJobHref, label: "Schedule a job" }}
           skeletonRows={3}
         >
           <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
@@ -787,7 +790,7 @@ export default function SignedIn() {
           isLoading={loadingAppts}
           isEmpty={!loadingAppts && !apptsError && todayAppointments.length === 0}
           emptyMessage="Nothing on the schedule today."
-          emptyCta={{ href: "/appointments/new", label: "Schedule a job" }}
+          emptyCta={{ href: scheduleJobHref, label: "Schedule a job" }}
           skeletonRows={3}
         >
           <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
@@ -898,7 +901,7 @@ export default function SignedIn() {
       >
         <div className="mx-auto flex max-w-4xl gap-2 px-3 pt-2">
           <MobileQuickAction href="/clients/new" label="Client" icon={<Users className="h-5 w-5" />} />
-          <MobileQuickAction href="/appointments/new" label="Job" icon={<CalendarPlus className="h-5 w-5" />} primary />
+          <MobileQuickAction href={scheduleJobHref} label="Job" icon={<CalendarPlus className="h-5 w-5" />} primary />
           <MobileQuickAction href="/jobs" label="Queue" icon={<ClipboardList className="h-5 w-5" />} />
           <MobileQuickAction href="/quotes/new" label="Quote" icon={<Receipt className="h-5 w-5" />} />
         </div>
