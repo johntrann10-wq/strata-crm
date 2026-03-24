@@ -2,7 +2,7 @@ import { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
 
 export interface PageContext {
-  entityType: "appointment" | "client" | "invoice" | "job" | "quote" | null;
+  entityType: "appointment" | "client" | "invoice" | "job" | "quote" | "vehicle" | null;
   entityId: string | null;
   entityLabel: string | null;
   clientId: string | null;

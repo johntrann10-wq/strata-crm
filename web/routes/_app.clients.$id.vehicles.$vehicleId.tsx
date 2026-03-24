@@ -154,8 +154,8 @@ export default function VehicleDetailPage() {
       .filter(Boolean)
       .join(" ");
     setPageContext({
-      entityType: "client",
-      entityId: (vehicle as any).client?.id ?? id ?? null,
+      entityType: "vehicle",
+      entityId: vehicleId ?? null,
       entityLabel: vehicleLabel || "Vehicle",
       clientId: (vehicle as any).client?.id ?? id ?? null,
       clientName: (vehicle as any).client

@@ -17,6 +17,7 @@ import {
 import {
   CalendarPlus,
   UserPlus,
+  CreditCard,
   FileText,
   Receipt,
   LayoutDashboard,
@@ -113,6 +114,21 @@ function statusColor(status: string): string {
     default:
       return "text-muted-foreground";
   }
+}
+
+function safeDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isAgingQuote(quote: QuoteHit & { createdAt?: string | null }): boolean {
+  const createdAt = safeDate(quote.createdAt ?? null);
+  return ["draft", "sent"].includes(String(quote.status ?? "")) && !!createdAt && Date.now() - createdAt.getTime() >= 3 * 24 * 60 * 60 * 1000;
+}
+
+function isCollectableInvoice(invoice: InvoiceHit): boolean {
+  return ["sent", "partial"].includes(String(invoice.status ?? ""));
 }
 
 export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusiness?: boolean }) {
@@ -261,10 +277,15 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
         contextActions.push({
           label: "View Vehicle",
           icon: <Car className="mr-2 h-4 w-4 text-purple-500" />,
-          onSelect: () => go(`/clients/${clientId}`),
+          onSelect: () => go(`/clients/${clientId}/vehicles/${vehicleId}`),
         });
       }
     } else if (entityType === "invoice" && clientId) {
+      contextActions.push({
+        label: "Collect payment",
+        icon: <CreditCard className="mr-2 h-4 w-4 text-green-500" />,
+        onSelect: () => go(`/invoices/${entityId}`),
+      });
       contextActions.push({
         label: `View Client — ${clientName}`,
         icon: <User className="mr-2 h-4 w-4 text-blue-500" />,
@@ -281,6 +302,47 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
         label: `New Quote for ${clientName}`,
         icon: <Receipt className="mr-2 h-4 w-4 text-purple-500" />,
         onSelect: () => go(`/quotes/new?clientId=${clientId}`),
+      });
+      if (vehicleId) {
+        contextActions.push({
+          label: "View Vehicle",
+          icon: <Car className="mr-2 h-4 w-4 text-purple-500" />,
+          onSelect: () => go(`/clients/${clientId}/vehicles/${vehicleId}`),
+        });
+      }
+    } else if (entityType === "job" && clientId) {
+      contextActions.push({
+        label: "Open work order",
+        icon: <ClipboardList className="mr-2 h-4 w-4 text-amber-500" />,
+        onSelect: () => go(`/jobs/${entityId}`),
+      });
+      contextActions.push({
+        label: "Create invoice from this job",
+        icon: <FileText className="mr-2 h-4 w-4 text-green-500" />,
+        onSelect: () => go(`/invoices/new?appointmentId=${appointmentId ?? entityId}&clientId=${clientId}`),
+      });
+      if (vehicleId) {
+        contextActions.push({
+          label: "View Vehicle",
+          icon: <Car className="mr-2 h-4 w-4 text-purple-500" />,
+          onSelect: () => go(`/clients/${clientId}/vehicles/${vehicleId}`),
+        });
+      }
+    } else if (entityType === "vehicle" && clientId && vehicleId) {
+      contextActions.push({
+        label: "Book Appointment for this Vehicle",
+        icon: <CalendarPlus className="mr-2 h-4 w-4 text-orange-500" />,
+        onSelect: () => go(`/appointments/new?clientId=${clientId}&vehicleId=${vehicleId}`),
+      });
+      contextActions.push({
+        label: "Create Quote for this Vehicle",
+        icon: <Receipt className="mr-2 h-4 w-4 text-purple-500" />,
+        onSelect: () => go(`/quotes/new?clientId=${clientId}&vehicleId=${vehicleId}`),
+      });
+      contextActions.push({
+        label: "Create Invoice for this Vehicle",
+        icon: <FileText className="mr-2 h-4 w-4 text-green-500" />,
+        onSelect: () => go(`/invoices/new?clientId=${clientId}&vehicleId=${vehicleId}`),
       });
     } else if (entityType === "quote" && clientId) {
       contextActions.push({
@@ -465,7 +527,7 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
                     <CommandItem
                       key={vehicle.id}
                       onSelect={() => {
-                        if (vehicle.clientId) go(`/clients/${vehicle.clientId}`);
+                        if (vehicle.clientId) go(`/clients/${vehicle.clientId}/vehicles/${vehicle.id}`);
                       }}
                       className="flex items-center gap-3 py-2.5"
                     >
@@ -597,7 +659,9 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
                             : `Quote #${quote.id}`}
                         </span>
                         <span className="text-xs truncate">
-                          <span className={statusColor(quote.status ?? "")}>{quote.status ?? "draft"}</span>
+                          <span className={cn(statusColor(quote.status ?? ""), isAgingQuote(quote as QuoteHit & { createdAt?: string | null }) && "font-medium")}>
+                            {isAgingQuote(quote as QuoteHit & { createdAt?: string | null }) ? "aging" : quote.status ?? "draft"}
+                          </span>
                           {quote.total != null && quote.total !== "" && (
                             <span className="text-muted-foreground">
                               {" "}
@@ -633,8 +697,8 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
                           {invoice.invoiceNumber ?? `Invoice #${invoice.id}`}
                         </span>
                         <span className="text-xs truncate">
-                          <span className={statusColor(invoice.status ?? "")}>
-                            {invoice.status}
+                          <span className={cn(statusColor(invoice.status ?? ""), isCollectableInvoice(invoice) && "font-medium")}>
+                            {isCollectableInvoice(invoice) ? `collect ${invoice.status}` : invoice.status}
                           </span>
                           {invoice.total != null && invoice.total !== "" && (
                             <span className="text-muted-foreground">
