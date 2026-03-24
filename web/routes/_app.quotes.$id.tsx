@@ -341,6 +341,10 @@ export default function QuoteDetailPage() {
       id: quote.client.id,
       label: quote.client.firstName + " " + quote.client.lastName,
       href: `/clients/${quote.client.id}/vehicles/${quote.vehicle.id}`,
+      actionHref: `/appointments/new?clientId=${quote.client.id}&vehicleId=${quote.vehicle.id}${
+        currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+      }`,
+      actionLabel: "Book",
     });
     relatedRecords.push({
       type: "vehicle",
@@ -349,6 +353,8 @@ export default function QuoteDetailPage() {
         .filter(Boolean)
         .join(" "),
       href: `/clients/${quote.client.id}`,
+      actionHref: `/invoices/new?clientId=${quote.client.id}&quoteId=${quote.id}`,
+      actionLabel: "Invoice",
     });
   }
   if ((quote as any).appointmentId) {
@@ -357,6 +363,8 @@ export default function QuoteDetailPage() {
       id: (quote as any).appointmentId,
       label: "Scheduled appointment",
       href: `/appointments/${(quote as any).appointmentId}`,
+      actionHref: `/invoices/new?clientId=${quote.client.id}&quoteId=${quote.id}`,
+      actionLabel: "Invoice",
     });
   }
 

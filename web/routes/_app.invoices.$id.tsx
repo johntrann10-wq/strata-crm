@@ -199,7 +199,7 @@ function CollectionActionCard({
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { permissions } = useOutletContext<AuthOutletContext>();
+  const { permissions, currentLocationId } = useOutletContext<AuthOutletContext>();
   const canWritePayments = permissions.has("payments.write") || permissions.has("invoices.write");
 
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
@@ -527,6 +527,10 @@ export default function InvoiceDetailPage() {
       id: clientData.id,
       label: clientData.firstName + " " + clientData.lastName,
       href: `/clients/${clientData.id}`,
+      actionHref: `/appointments/new?clientId=${clientData.id}${
+        currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+      }`,
+      actionLabel: "Book",
     });
   }
   if (appointmentData) {
@@ -538,6 +542,8 @@ export default function InvoiceDetailPage() {
         ? `${appointmentData.vehicle.year} ${appointmentData.vehicle.make} ${appointmentData.vehicle.model}`
         : undefined,
       href: `/appointments/${appointmentData.id}`,
+      actionHref: clientData?.id ? `/quotes/new?clientId=${clientData.id}` : undefined,
+      actionLabel: clientData?.id ? "Quote" : undefined,
     });
   }
   const quoteData = (invoice as any).quote;
@@ -548,6 +554,16 @@ export default function InvoiceDetailPage() {
       label: "Quote",
       sublabel: `${capitalize(quoteData.status)} · ${formatCurrency(Number(quoteData.total ?? 0))}`,
       href: `/quotes/${quoteData.id}`,
+      actionHref:
+        clientData?.id && String(quoteData.status ?? "") === "accepted" && !appointmentData
+          ? `/appointments/new?clientId=${clientData.id}&quoteId=${quoteData.id}${
+              currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+            }`
+          : undefined,
+      actionLabel:
+        clientData?.id && String(quoteData.status ?? "") === "accepted" && !appointmentData
+          ? "Book"
+          : undefined,
     });
   }
 
