@@ -34,6 +34,7 @@ type AppointmentRecord = {
   endTime?: string | null;
   client: { firstName?: string | null; lastName?: string | null } | null;
   vehicle: { make?: string | null; model?: string | null; year?: number | null } | null;
+  assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
 };
 
 type StaffRecord = {
@@ -222,6 +223,46 @@ export default function SignedIn() {
   );
   const nextJob = activeJobs[0] ?? null;
   const myNextJob = myActiveJobs[0] ?? null;
+  const teamLoad = useMemo(() => {
+    const counts = new Map<
+      string,
+      {
+        staff: StaffRecord;
+        activeJobs: number;
+        todayAppointments: number;
+        revenue: number;
+      }
+    >();
+    for (const staff of staffRecords) {
+      counts.set(staff.id, {
+        staff,
+        activeJobs: 0,
+        todayAppointments: 0,
+        revenue: 0,
+      });
+    }
+    for (const job of activeJobs) {
+      const staffId = job.assignedStaff?.id;
+      if (!staffId || !counts.has(staffId)) continue;
+      const current = counts.get(staffId)!;
+      current.activeJobs += 1;
+      current.revenue += Number(job.totalPrice ?? 0);
+    }
+    for (const appointment of todayAppointments) {
+      const staffId = appointment.assignedStaff?.id;
+      if (!staffId || !counts.has(staffId)) continue;
+      const current = counts.get(staffId)!;
+      current.todayAppointments += 1;
+    }
+    return Array.from(counts.values())
+      .filter((entry) => entry.activeJobs > 0 || entry.todayAppointments > 0 || entry.staff.userId === user?.id)
+      .sort((a, b) => {
+        const aLoad = a.activeJobs * 10 + a.todayAppointments;
+        const bLoad = b.activeJobs * 10 + b.todayAppointments;
+        return bLoad - aLoad;
+      })
+      .slice(0, 6);
+  }, [staffRecords, activeJobs, todayAppointments, user?.id]);
   const watchlist = useMemo(() => {
     const items: Array<{ title: string; detail: string; href: string; icon: ReactNode; tone: "danger" | "warn" | "info" }> = [];
     if (overdueInvoices.length > 0) {
@@ -508,6 +549,52 @@ export default function SignedIn() {
             ))}
           </div>
         </section>
+
+        <DashboardSection
+          title="Team load"
+          seeAllHref="/settings"
+          seeAllLabel="Team"
+          error={staffError}
+          isLoading={loadingStaff || loadingJobs || loadingAppts}
+          isEmpty={!loadingStaff && !loadingJobs && !loadingAppts && teamLoad.length === 0}
+          emptyMessage="No technician load is showing yet."
+          emptyCta={{ href: "/settings", label: "Set up team" }}
+          skeletonRows={3}
+        >
+          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
+            {teamLoad.map((entry) => {
+              const staffName = `${entry.staff.firstName ?? ""} ${entry.staff.lastName ?? ""}`.trim() || "Team member";
+              const loadTone =
+                entry.activeJobs >= 3 || entry.todayAppointments >= 5
+                  ? "text-red-700 bg-red-50 border-red-200"
+                  : entry.activeJobs >= 2 || entry.todayAppointments >= 3
+                    ? "text-amber-700 bg-amber-50 border-amber-200"
+                    : "text-emerald-700 bg-emerald-50 border-emerald-200";
+              return (
+                <li key={entry.staff.id}>
+                  <div className="flex min-h-[64px] items-center gap-3 px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-medium">{staffName}</p>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {entry.activeJobs} active job{entry.activeJobs === 1 ? "" : "s"} | {entry.todayAppointments} on today's schedule
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold tabular-nums">{formatCurrency(entry.revenue)}</div>
+                      <div className={cn("mt-1 inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", loadTone)}>
+                        {entry.activeJobs >= 3 || entry.todayAppointments >= 5
+                          ? "Heavy load"
+                          : entry.activeJobs >= 2 || entry.todayAppointments >= 3
+                            ? "Balanced"
+                            : "Light load"}
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </DashboardSection>
 
         <DashboardSection
           title={myStaffRecord ? "My queue" : "Assigned work"}
