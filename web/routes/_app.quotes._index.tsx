@@ -24,6 +24,7 @@ export default function QuotesIndexPage() {
   const navigate = useNavigate();
   const { businessId } = useOutletContext<AuthOutletContext>();
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -57,7 +58,24 @@ export default function QuotesIndexPage() {
     const createdAt = safeDate(String(row.createdAt ?? ""));
     return ["draft", "sent"].includes(String(row.status ?? "")) && !!createdAt && Date.now() - createdAt.getTime() >= 3 * 24 * 60 * 60 * 1000;
   });
+  const [, runSendQuote] = useAction(api.quote.send);
   const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
+
+  const handleSendQuote = async (quoteId: string) => {
+    setSendingQuoteId(quoteId);
+    try {
+      const result = await runSendQuote({ id: quoteId });
+      if (result.error) {
+        toast.error(result.error.message ?? "Failed to send quote");
+      } else {
+        toast.success("Quote send recorded");
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to send quote");
+    } finally {
+      setSendingQuoteId(null);
+    }
+  };
 
   const handleSendFollowUp = async (quoteId: string) => {
     setSendingId(quoteId);
@@ -182,6 +200,7 @@ export default function QuotesIndexPage() {
                     <TableHead>Total</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Expires</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -193,11 +212,15 @@ export default function QuotesIndexPage() {
                     const vehicleLabel = vehicle
                       ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
                       : "—";
+                    const qid = String(row.id);
+                    const quoteStatus = String(row.status ?? "");
+                    const canSend = ["draft", "sent"].includes(quoteStatus);
+                    const canFollowUp = ["sent"].includes(quoteStatus);
                     return (
                       <TableRow
-                        key={String(row.id)}
-                        className={cn("cursor-pointer", agingRows.some((quote) => String((quote as any).id) === String(row.id)) && "bg-amber-50/50")}
-                        onClick={() => navigate(`/quotes/${String(row.id)}`)}
+                        key={qid}
+                        className={cn("cursor-pointer", agingRows.some((quote) => String((quote as any).id) === qid) && "bg-amber-50/50")}
+                        onClick={() => navigate(`/quotes/${qid}`)}
                       >
                         <TableCell>
                           {row.clientId ? (
@@ -219,6 +242,54 @@ export default function QuotesIndexPage() {
                         <TableCell>{formatCurrency(row.total)}</TableCell>
                         <TableCell>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "—"}</TableCell>
                         <TableCell>{row.expiresAt ? new Date(row.expiresAt as string).toLocaleDateString() : "—"}</TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-2">
+                            {canSend ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-xs"
+                                disabled={sendingQuoteId !== null}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleSendQuote(qid);
+                                }}
+                              >
+                                {sendingQuoteId === qid ? (
+                                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                ) : null}
+                                {quoteStatus === "draft" ? "Send" : "Resend"}
+                              </Button>
+                            ) : null}
+                            {canFollowUp ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs"
+                                disabled={sendingId !== null}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleSendFollowUp(qid);
+                                }}
+                              >
+                                {sendingId === qid ? (
+                                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Send className="mr-1 h-3.5 w-3.5" />
+                                )}
+                                Follow up
+                              </Button>
+                            ) : null}
+                            <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
+                              <Link
+                                to={`/quotes/${qid}`}
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                Open
+                              </Link>
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
