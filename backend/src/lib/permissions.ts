@@ -68,6 +68,7 @@ const ROLE_PERMISSIONS: Record<MembershipRole, PermissionKey[]> = {
     "payments.read",
     "payments.write",
     "team.read",
+    "team.write",
     "settings.read",
   ],
   service_advisor: [

@@ -131,10 +131,13 @@ businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
 
 businessesRouter.get("/:id", requireAuth, requirePermission("settings.read"), async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
+  if (!req.businessId || req.businessId !== req.params.id) {
+    throw new NotFoundError("Business not found.");
+  }
   const [business] = await db
     .select()
     .from(businesses)
-    .where(and(eq(businesses.id, req.params.id), eq(businesses.ownerId, req.userId)))
+    .where(eq(businesses.id, req.params.id))
     .limit(1);
   if (!business) throw new NotFoundError("Business not found.");
   res.json(serializeBusiness(business));
@@ -142,12 +145,15 @@ businessesRouter.get("/:id", requireAuth, requirePermission("settings.read"), as
 
 businessesRouter.patch("/:id", requireAuth, requirePermission("settings.write"), async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
+  if (!req.businessId || req.businessId !== req.params.id) {
+    throw new NotFoundError("Business not found.");
+  }
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
   const [existing] = await db
     .select()
     .from(businesses)
-    .where(and(eq(businesses.id, req.params.id), eq(businesses.ownerId, req.userId)))
+    .where(eq(businesses.id, req.params.id))
     .limit(1);
   if (!existing) throw new NotFoundError("Business not found.");
 
@@ -180,7 +186,8 @@ businessesRouter.patch("/:id", requireAuth, requirePermission("settings.write"),
 
 businessesRouter.post("/:id/completeOnboarding", requireAuth, requirePermission("settings.write"), async (req: Request, res: Response) => {
   const id = req.params.id;
-  const [b] = await db.select().from(businesses).where(and(eq(businesses.id, id), eq(businesses.ownerId, req.userId!))).limit(1);
+  if (!req.businessId || req.businessId !== id) throw new NotFoundError("Business not found.");
+  const [b] = await db.select().from(businesses).where(eq(businesses.id, id)).limit(1);
   if (!b) throw new NotFoundError("Business not found.");
   const [updated] = await db
     .update(businesses)

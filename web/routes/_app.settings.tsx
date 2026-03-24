@@ -21,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
@@ -104,13 +103,6 @@ interface FormData {
   city: string;
   state: string;
   zip: string;
-  website: string;
-  bio: string;
-  instagram: string;
-  facebook: string;
-  googleReviewLink: string;
-  yelpReviewLink: string;
-  facebookReviewLink: string;
   defaultTaxRate: number;
   currency: string;
   appointmentBufferMinutes: number;
@@ -157,13 +149,6 @@ const DEFAULT_FORM: FormData = {
   city: "",
   state: "",
   zip: "",
-  website: "",
-  bio: "",
-  instagram: "",
-  facebook: "",
-  googleReviewLink: "",
-  yelpReviewLink: "",
-  facebookReviewLink: "",
   defaultTaxRate: 0,
   currency: "USD",
   appointmentBufferMinutes: 15,
@@ -361,13 +346,6 @@ export default function SettingsPage() {
       city: business.city ?? "",
       state: business.state ?? "",
       zip: business.zip ?? "",
-      website: business.website ?? "",
-      bio: business.bio ?? "",
-      instagram: business.instagram ?? "",
-      facebook: business.facebook ?? "",
-      googleReviewLink: business.googleReviewLink ?? "",
-      yelpReviewLink: business.yelpReviewLink ?? "",
-      facebookReviewLink: business.facebookReviewLink ?? "",
       defaultTaxRate: business.defaultTaxRate ?? 0,
       currency: business.currency ?? "USD",
       appointmentBufferMinutes: business.appointmentBufferMinutes ?? 15,
@@ -521,13 +499,6 @@ export default function SettingsPage() {
         city: formData.city || null,
         state: formData.state || null,
         zip: formData.zip || null,
-        website: formData.website || null,
-        bio: formData.bio || null,
-        instagram: formData.instagram || null,
-        facebook: formData.facebook || null,
-        googleReviewLink: formData.googleReviewLink || null,
-        yelpReviewLink: formData.yelpReviewLink || null,
-        facebookReviewLink: formData.facebookReviewLink || null,
         defaultTaxRate: formData.defaultTaxRate,
         currency: formData.currency || "USD",
         appointmentBufferMinutes: formData.appointmentBufferMinutes,
@@ -692,17 +663,6 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="website">Website</Label>
-                  <Input
-                    id="website"
-                    type="url"
-                    value={formData.website}
-                    onChange={(e) => handleFieldChange("website", e.target.value)}
-                    placeholder="https://yourbusiness.com"
-                  />
-                </div>
-
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
                   <div className="space-y-1.5 md:col-span-3">
                     <Label htmlFor="address">Address</Label>
@@ -743,79 +703,6 @@ export default function SettingsPage() {
                       placeholder="90001"
                     />
                   </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="bio">Bio</Label>
-                  <Textarea
-                    id="bio"
-                    value={formData.bio}
-                    onChange={(e) => handleFieldChange("bio", e.target.value)}
-                    placeholder="Tell clients a bit about your business..."
-                    rows={3}
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="instagram">Instagram Handle</Label>
-                    <div className="flex">
-                      <span className="inline-flex items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
-                        @
-                      </span>
-                      <Input
-                        id="instagram"
-                        className="rounded-l-none"
-                        value={formData.instagram}
-                        onChange={(e) => handleFieldChange("instagram", e.target.value)}
-                        placeholder="yourhandle"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="facebook">Facebook Page</Label>
-                    <Input
-                      id="facebook"
-                      value={formData.facebook}
-                      onChange={(e) => handleFieldChange("facebook", e.target.value)}
-                      placeholder="https://facebook.com/yourpage"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="googleReviewLink">Google Review Link</Label>
-                  <Input
-                    id="googleReviewLink"
-                    type="url"
-                    value={formData.googleReviewLink}
-                    onChange={(e) => handleFieldChange("googleReviewLink", e.target.value)}
-                    placeholder="https://g.page/r/..."
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="yelpReviewLink">Yelp Review Link</Label>
-                  <Input
-                    id="yelpReviewLink"
-                    type="url"
-                    value={formData.yelpReviewLink}
-                    onChange={(e) => handleFieldChange("yelpReviewLink", e.target.value)}
-                    placeholder="https://www.yelp.com/biz/your-business"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="facebookReviewLink">Facebook Review Link</Label>
-                  <Input
-                    id="facebookReviewLink"
-                    type="url"
-                    value={formData.facebookReviewLink}
-                    onChange={(e) => handleFieldChange("facebookReviewLink", e.target.value)}
-                    placeholder="https://www.facebook.com/your-page/reviews"
-                  />
                 </div>
 
                 <Separator />

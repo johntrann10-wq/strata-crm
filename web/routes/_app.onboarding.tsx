@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAction, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
+import { setCurrentBusinessId } from "../lib/auth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -238,6 +239,7 @@ export default function OnboardingPage() {
     }
 
     try {
+      setCurrentBusinessId(saved.id);
       await api.business.completeOnboarding(saved.id);
       try {
         await applyBusinessPreset();
