@@ -204,6 +204,11 @@ export default function ClientDetailPage() {
       sublabel: (job as any).scheduledStart ? new Date((job as any).scheduledStart).toLocaleDateString() : undefined,
       status: (job as any).status ?? undefined,
       href: `/jobs/${(job as any).id}`,
+      actionHref:
+        String((job as any).status ?? "") === "completed"
+          ? `/invoices/new?clientId=${id}&appointmentId=${(job as any).id}`
+          : undefined,
+      actionLabel: String((job as any).status ?? "") === "completed" ? "Invoice" : undefined,
     })),
     ...invoiceList.slice(0, 4).map((invoice) => ({
       type: "invoice" as const,
@@ -212,6 +217,10 @@ export default function ClientDetailPage() {
       sublabel: (invoice as any).total != null ? `$${Number((invoice as any).total).toFixed(2)}` : undefined,
       status: (invoice as any).status ?? undefined,
       href: `/invoices/${(invoice as any).id}`,
+      actionHref: ["sent", "partial"].includes(String((invoice as any).status ?? ""))
+        ? `/invoices/${(invoice as any).id}`
+        : undefined,
+      actionLabel: ["sent", "partial"].includes(String((invoice as any).status ?? "")) ? "Collect" : undefined,
     })),
     ...quoteList.slice(0, 4).map((quote) => ({
       type: "quote" as const,
@@ -220,6 +229,11 @@ export default function ClientDetailPage() {
       sublabel: (quote as any).total != null ? `$${Number((quote as any).total).toFixed(2)}` : undefined,
       status: (quote as any).status ?? undefined,
       href: `/quotes/${(quote as any).id}`,
+      actionHref:
+        String((quote as any).status ?? "") === "accepted"
+          ? `/appointments/new?clientId=${id}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}&quoteId=${(quote as any).id}`
+          : undefined,
+      actionLabel: String((quote as any).status ?? "") === "accepted" ? "Book" : undefined,
     })),
     ...apptList.map((a) => ({
       type: "appointment" as const,
@@ -227,6 +241,11 @@ export default function ClientDetailPage() {
       label: a.title ?? "Appointment",
       sublabel: a.startTime ? new Date(a.startTime).toLocaleDateString() : undefined,
       href: `/appointments/${a.id}`,
+      actionHref:
+        String((a as any).status ?? "") === "completed"
+          ? `/invoices/new?clientId=${id}&appointmentId=${a.id}`
+          : `/quotes/new?clientId=${id}`,
+      actionLabel: String((a as any).status ?? "") === "completed" ? "Invoice" : "Quote",
     })),
   ];
 

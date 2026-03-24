@@ -8,6 +8,8 @@ export interface RelatedRecord {
   sublabel?: string;
   status?: string;
   href: string;
+  actionHref?: string;
+  actionLabel?: string;
 }
 
 export interface RelatedRecordsPanelProps {
@@ -68,29 +70,41 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
         {records.map((record) => {
           const { icon: Icon, colorClass } = typeConfig[record.type];
           return (
-            <Link
+            <div
               key={`${record.type}-${record.id}`}
-              to={record.href}
-              className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm hover:bg-accent transition-colors shrink-0 no-underline"
+              className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm shrink-0"
             >
-              <span className={`flex items-center justify-center rounded-md p-1 ${colorClass}`}>
-                <Icon className="h-3.5 w-3.5" />
-              </span>
-              <span className="flex flex-col min-w-0">
-                <span className="font-medium leading-none">{record.label}</span>
-                {record.sublabel && (
-                  <span className="text-xs text-muted-foreground mt-0.5 leading-none">
-                    {record.sublabel}
-                  </span>
+              <Link
+                to={record.href}
+                className="flex min-w-0 flex-1 items-center gap-2 no-underline transition-colors hover:text-foreground/90"
+              >
+                <span className={`flex items-center justify-center rounded-md p-1 ${colorClass}`}>
+                  <Icon className="h-3.5 w-3.5" />
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="font-medium leading-none">{record.label}</span>
+                  {record.sublabel && (
+                    <span className="mt-0.5 text-xs leading-none text-muted-foreground">
+                      {record.sublabel}
+                    </span>
+                  )}
+                </span>
+                {record.status && (
+                  <span
+                    className={`inline-block h-2 w-2 rounded-full shrink-0 ${statusDotColor(record.status)}`}
+                    title={record.status}
+                  />
                 )}
-              </span>
-              {record.status && (
-                <span
-                  className={`inline-block h-2 w-2 rounded-full shrink-0 ${statusDotColor(record.status)}`}
-                  title={record.status}
-                />
-              )}
-            </Link>
+              </Link>
+              {record.actionHref && record.actionLabel ? (
+                <Link
+                  to={record.actionHref}
+                  className="rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  {record.actionLabel}
+                </Link>
+              ) : null}
+            </div>
           );
         })}
       </div>

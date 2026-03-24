@@ -255,6 +255,11 @@ export default function VehicleDetailPage() {
       sublabel: (job as any).scheduledStart ? formatDate((job as any).scheduledStart) : undefined,
       status: (job as any).status ?? undefined,
       href: `/jobs/${(job as any).id}`,
+      actionHref:
+        String((job as any).status ?? "") === "completed"
+          ? `/invoices/new?clientId=${id}&vehicleId=${vehicleId}&appointmentId=${(job as any).id}`
+          : undefined,
+      actionLabel: String((job as any).status ?? "") === "completed" ? "Invoice" : undefined,
     })),
     ...openQuotes.slice(0, 4).map((quote) => ({
       type: "quote" as const,
@@ -263,6 +268,11 @@ export default function VehicleDetailPage() {
       sublabel: formatCurrency((quote as any).total),
       status: (quote as any).status ?? undefined,
       href: `/quotes/${(quote as any).id}`,
+      actionHref:
+        String((quote as any).status ?? "") === "accepted"
+          ? `/appointments/new?clientId=${id}&vehicleId=${vehicleId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}&quoteId=${(quote as any).id}`
+          : undefined,
+      actionLabel: String((quote as any).status ?? "") === "accepted" ? "Book" : undefined,
     })),
     ...unpaidInvoices.slice(0, 4).map((invoice) => ({
       type: "invoice" as const,
@@ -271,6 +281,10 @@ export default function VehicleDetailPage() {
       sublabel: formatCurrency((invoice as any).total),
       status: (invoice as any).status ?? undefined,
       href: `/invoices/${(invoice as any).id}`,
+      actionHref: ["sent", "partial"].includes(String((invoice as any).status ?? ""))
+        ? `/invoices/${(invoice as any).id}`
+        : undefined,
+      actionLabel: ["sent", "partial"].includes(String((invoice as any).status ?? "")) ? "Collect" : undefined,
     })),
     ...appointmentList.slice(0, 4).map((appointment) => ({
       type: "appointment" as const,
@@ -279,6 +293,11 @@ export default function VehicleDetailPage() {
       sublabel: (appointment as any).startTime ? formatDate((appointment as any).startTime) : undefined,
       status: (appointment as any).status ?? undefined,
       href: `/appointments/${(appointment as any).id}`,
+      actionHref:
+        String((appointment as any).status ?? "") === "completed"
+          ? `/invoices/new?clientId=${id}&vehicleId=${vehicleId}&appointmentId=${(appointment as any).id}`
+          : `/quotes/new?clientId=${id}&vehicleId=${vehicleId}`,
+      actionLabel: String((appointment as any).status ?? "") === "completed" ? "Invoice" : "Quote",
     })),
   ];
 
