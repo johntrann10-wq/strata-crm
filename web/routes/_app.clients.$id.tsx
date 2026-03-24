@@ -48,6 +48,12 @@ const toForm = (c: Record<string, unknown>): FormState => ({
   marketingOptIn: Boolean(c.marketingOptIn ?? true),
 });
 
+function safeDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export default function ClientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -170,6 +176,14 @@ export default function ClientDetailPage() {
   const activeJobsCount = jobList.filter((job) =>
     ["scheduled", "confirmed", "in_progress"].includes(String((job as any).status ?? ""))
   ).length;
+  const overdueInvoices = invoiceList.filter((invoice) => {
+    const dueDate = safeDate((invoice as any).dueDate ?? null);
+    return ["sent", "partial"].includes(String((invoice as any).status ?? "")) && !!dueDate && dueDate.getTime() < Date.now();
+  });
+  const agingQuotes = quoteList.filter((quote) => {
+    const createdAt = safeDate((quote as any).createdAt ?? null);
+    return ["draft", "sent"].includes(String((quote as any).status ?? "")) && !!createdAt && Date.now() - createdAt.getTime() >= 3 * 24 * 60 * 60 * 1000;
+  });
 
   // For clients with 20+ appointments a backend pagination solution would be needed.
   const displayedAppointments = showAllAppointments ? apptList : apptList.slice(0, 5);
@@ -354,6 +368,31 @@ export default function ClientDetailPage() {
             />
           </div>
 
+          {(overdueInvoices.length > 0 || agingQuotes.length > 0) && (
+            <div className="grid gap-3 sm:grid-cols-2 mb-4">
+              {overdueInvoices.length > 0 ? (
+                <RevenueFollowupCard
+                  tone="danger"
+                  title="Overdue invoices need follow-up"
+                  detail={`${overdueInvoices.length} overdue invoice${overdueInvoices.length === 1 ? "" : "s"} for ${client.firstName}`}
+                  amount={`$${overdueInvoices.reduce((sum, invoice) => sum + Number((invoice as any).total ?? 0), 0).toFixed(2)}`}
+                  href={`/invoices/${(overdueInvoices[0] as any).id}`}
+                  actionLabel="Open overdue invoice"
+                />
+              ) : null}
+              {agingQuotes.length > 0 ? (
+                <RevenueFollowupCard
+                  tone="warn"
+                  title="Quotes are cooling off"
+                  detail={`${agingQuotes.length} quote${agingQuotes.length === 1 ? "" : "s"} older than 3 days`}
+                  amount={`$${agingQuotes.reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0).toFixed(2)}`}
+                  href={`/quotes/${(agingQuotes[0] as any).id}`}
+                  actionLabel="Open aging quote"
+                />
+              ) : null}
+            </div>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-3 mb-4">
             <WorkflowMetricCard
               icon={ClipboardList}
@@ -488,5 +527,40 @@ function QuickWorkflowAction({
         </div>
       </div>
     </Link>
+  );
+}
+
+function RevenueFollowupCard({
+  title,
+  detail,
+  amount,
+  href,
+  actionLabel,
+  tone,
+}: {
+  title: string;
+  detail: string;
+  amount: string;
+  href: string;
+  actionLabel: string;
+  tone: "danger" | "warn";
+}) {
+  const toneClass =
+    tone === "danger"
+      ? "border-red-200 bg-red-50/80"
+      : "border-amber-200 bg-amber-50/80";
+  return (
+    <div className={`rounded-lg border p-4 ${toneClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">{title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        </div>
+        <p className="text-sm font-semibold">{amount}</p>
+      </div>
+      <Button asChild size="sm" variant="outline" className="mt-3">
+        <Link to={href}>{actionLabel}</Link>
+      </Button>
+    </div>
   );
 }

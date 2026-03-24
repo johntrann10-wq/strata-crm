@@ -71,6 +71,12 @@ function statusClass(status: string): string {
   }
 }
 
+function safeDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export default function VehicleDetailPage() {
   const { id, vehicleId } = useParams<{ id: string; vehicleId: string }>();
   const navigate = useNavigate();
@@ -221,6 +227,14 @@ export default function VehicleDetailPage() {
   const unpaidInvoices = invoiceList.filter((invoice) =>
     ["sent", "partial"].includes(String((invoice as any).status ?? ""))
   );
+  const overdueInvoices = unpaidInvoices.filter((invoice) => {
+    const dueDate = safeDate((invoice as any).dueDate ?? null);
+    return !!dueDate && dueDate.getTime() < Date.now();
+  });
+  const agingQuotes = openQuotes.filter((quote) => {
+    const createdAt = safeDate((quote as any).createdAt ?? null);
+    return !!createdAt && Date.now() - createdAt.getTime() >= 3 * 24 * 60 * 60 * 1000;
+  });
 
   const clientName = (vehicle as any)?.client
     ? `${(vehicle as any).client.firstName} ${(vehicle as any).client.lastName}`.trim()
@@ -347,6 +361,31 @@ export default function VehicleDetailPage() {
           href={`/clients/${id}/vehicles/new?next=client`}
         />
       </div>
+
+      {(overdueInvoices.length > 0 || agingQuotes.length > 0) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {overdueInvoices.length > 0 ? (
+            <VehicleRevenueCard
+              tone="danger"
+              title="Overdue invoices on this vehicle"
+              detail={`${overdueInvoices.length} invoice${overdueInvoices.length === 1 ? "" : "s"} need collection`}
+              amount={formatCurrency(overdueInvoices.reduce((sum, invoice) => sum + Number((invoice as any).total ?? 0), 0))}
+              href={`/invoices/${(overdueInvoices[0] as any).id}`}
+              actionLabel="Open overdue invoice"
+            />
+          ) : null}
+          {agingQuotes.length > 0 ? (
+            <VehicleRevenueCard
+              tone="warn"
+              title="Quotes are cooling off"
+              detail={`${agingQuotes.length} quote${agingQuotes.length === 1 ? "" : "s"} older than 3 days`}
+              amount={formatCurrency(agingQuotes.reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0))}
+              href={`/quotes/${(agingQuotes[0] as any).id}`}
+              actionLabel="Open aging quote"
+            />
+          ) : null}
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-3">
         <VehicleMetricCard
@@ -598,5 +637,40 @@ function QuickVehicleAction({
         </div>
       </div>
     </Link>
+  );
+}
+
+function VehicleRevenueCard({
+  title,
+  detail,
+  amount,
+  href,
+  actionLabel,
+  tone,
+}: {
+  title: string;
+  detail: string;
+  amount: string;
+  href: string;
+  actionLabel: string;
+  tone: "danger" | "warn";
+}) {
+  const toneClass =
+    tone === "danger"
+      ? "border-red-200 bg-red-50/80"
+      : "border-amber-200 bg-amber-50/80";
+  return (
+    <div className={`rounded-lg border p-4 ${toneClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">{title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        </div>
+        <p className="text-sm font-semibold">{amount}</p>
+      </div>
+      <Button asChild size="sm" variant="outline" className="mt-3">
+        <Link to={href}>{actionLabel}</Link>
+      </Button>
+    </div>
   );
 }
