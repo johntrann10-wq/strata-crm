@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router";
 import type { AuthOutletContext } from "./_app";
-import { useAction, useFindFirst, useFindMany } from "../hooks/useApi";
+import { useAction, useFindFirst, useFindMany, useFindOne } from "../hooks/useApi";
 import { api } from "../api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,7 @@ import {
   ExternalLink,
   Loader2,
   MapPin,
+  Shield,
   PenLine,
   Plus,
   Settings,
@@ -122,6 +123,26 @@ type LocationRecord = {
   timezone?: string | null;
   active?: boolean | null;
 };
+
+type StaffRecord = {
+  id: string;
+  userId?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  role?: string | null;
+  membershipRole?: string | null;
+  membershipStatus?: string | null;
+  active?: boolean | null;
+};
+
+const STAFF_ROLES = [
+  { value: "owner", label: "Owner" },
+  { value: "admin", label: "Admin" },
+  { value: "manager", label: "Manager" },
+  { value: "service_advisor", label: "Service Advisor" },
+  { value: "technician", label: "Technician" },
+];
 
 const DEFAULT_FORM: FormData = {
   name: "",
@@ -266,7 +287,7 @@ function BillingTab({
 }
 
 export default function SettingsPage() {
-  const { user } = useOutletContext<AuthOutletContext>();
+  const { user, businessId, membershipRole } = useOutletContext<AuthOutletContext>();
   const [activeTab, setActiveTab] = useState("profile");
   const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
@@ -274,6 +295,9 @@ export default function SettingsPage() {
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [editingLocation, setEditingLocation] = useState<LocationRecord | null>(null);
   const [deleteLocationId, setDeleteLocationId] = useState<string | null>(null);
+  const [teamDialogOpen, setTeamDialogOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<StaffRecord | null>(null);
+  const [deleteStaffId, setDeleteStaffId] = useState<string | null>(null);
   const [locForm, setLocForm] = useState({
     name: "",
     address: "",
@@ -281,32 +305,18 @@ export default function SettingsPage() {
     timezone: "",
     active: true,
   });
+  const [staffForm, setStaffForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    role: "technician",
+    active: true,
+  });
+  const canManageTeam = membershipRole === "owner" || membershipRole === "admin" || membershipRole === "manager";
 
-  const [{ data: business, fetching: businessFetching }] = useFindFirst(api.business, {
-    filter: { owner: { id: { equals: user.id } } },
-    select: {
-      id: true,
-      name: true,
-      type: true,
-      phone: true,
-      email: true,
-      address: true,
-      city: true,
-      state: true,
-      zip: true,
-      website: true,
-      bio: true,
-      instagram: true,
-      facebook: true,
-      googleReviewLink: true,
-      yelpReviewLink: true,
-      facebookReviewLink: true,
-      defaultTaxRate: true,
-      currency: true,
-      appointmentBufferMinutes: true,
-      timezone: true,
-    },
-  } as any);
+  const [{ data: business, fetching: businessFetching }] = useFindOne(api.business, businessId ?? "", {
+    pause: !businessId,
+  });
 
   const [{ fetching: saving }, update] = useAction(api.business.update);
   const [{ data: locations, fetching: locationsFetching }, refetchLocations] = useFindMany(api.location, {
@@ -319,6 +329,13 @@ export default function SettingsPage() {
   const [{ fetching: savingLocation }, saveLocation] = useAction(api.location.create);
   const [{ fetching: updatingLocation }, updateLocation] = useAction(api.location.update);
   const [{ fetching: deletingLocation }, deleteLocation] = useAction(api.location.delete);
+  const [{ data: teamMembers, fetching: teamFetching }, refetchTeam] = useFindMany(api.staff, {
+    first: 100,
+    pause: !businessId,
+  });
+  const [{ fetching: savingStaff }, saveStaff] = useAction(api.staff.create);
+  const [{ fetching: updatingStaff }, updateStaff] = useAction(api.staff.update);
+  const [{ fetching: deletingStaff }, deleteStaff] = useAction(api.staff.delete);
 
   useEffect(() => {
     if (!business) return;
@@ -368,6 +385,30 @@ export default function SettingsPage() {
     setLocationDialogOpen(true);
   };
 
+  const openCreateTeamMember = () => {
+    setEditingStaff(null);
+    setStaffForm({
+      firstName: "",
+      lastName: "",
+      email: "",
+      role: "technician",
+      active: true,
+    });
+    setTeamDialogOpen(true);
+  };
+
+  const openEditTeamMember = (teamMember: StaffRecord) => {
+    setEditingStaff(teamMember);
+    setStaffForm({
+      firstName: teamMember.firstName ?? "",
+      lastName: teamMember.lastName ?? "",
+      email: teamMember.email ?? "",
+      role: teamMember.membershipRole ?? teamMember.role ?? "technician",
+      active: teamMember.active ?? true,
+    });
+    setTeamDialogOpen(true);
+  };
+
   const handleSaveLocation = async () => {
     if (!locForm.name.trim() || !business?.id) return;
 
@@ -402,6 +443,48 @@ export default function SettingsPage() {
     setDeleteLocationId(null);
     refetchLocations();
     toast.success("Location deleted");
+  };
+
+  const handleSaveStaff = async () => {
+    if (!staffForm.firstName.trim() || !staffForm.lastName.trim()) return;
+    try {
+      if (editingStaff) {
+        await updateStaff({
+          id: editingStaff.id,
+          firstName: staffForm.firstName.trim(),
+          lastName: staffForm.lastName.trim(),
+          email: staffForm.email.trim() || null,
+          role: staffForm.role,
+          active: staffForm.active,
+          status: staffForm.active ? "active" : "suspended",
+        });
+      } else {
+        await saveStaff({
+          firstName: staffForm.firstName.trim(),
+          lastName: staffForm.lastName.trim(),
+          email: staffForm.email.trim() || undefined,
+          role: staffForm.role,
+          active: staffForm.active,
+        });
+      }
+      setTeamDialogOpen(false);
+      refetchTeam();
+      toast.success(editingStaff ? "Team member updated" : "Team member added");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save team member.");
+    }
+  };
+
+  const handleDeleteStaff = async () => {
+    if (!deleteStaffId) return;
+    try {
+      await deleteStaff({ id: deleteStaffId });
+      setDeleteStaffId(null);
+      refetchTeam();
+      toast.success("Team member removed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not remove team member.");
+    }
   };
 
   const handleSave = async () => {
@@ -463,7 +546,7 @@ export default function SettingsPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid h-auto w-full grid-cols-1 gap-2 bg-transparent p-0 sm:grid-cols-3">
+          <TabsList className="grid h-auto w-full grid-cols-1 gap-2 bg-transparent p-0 sm:grid-cols-4">
             <TabsTrigger
               value="profile"
               className="justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5"
@@ -481,6 +564,12 @@ export default function SettingsPage() {
               className="justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5"
             >
               Locations
+            </TabsTrigger>
+            <TabsTrigger
+              value="team"
+              className="justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5"
+            >
+              Team
             </TabsTrigger>
           </TabsList>
 
@@ -829,6 +918,95 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="team" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <CardTitle>Team &amp; Roles</CardTitle>
+                    <CardDescription className="mt-1">
+                      Manage the people who run the shop, assign responsibilities, and control access by role.
+                    </CardDescription>
+                  </div>
+                  <Button onClick={openCreateTeamMember} size="sm" className="w-full sm:w-auto" disabled={!canManageTeam}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Team Member
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!canManageTeam ? (
+                  <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+                    Your current role can view team members but cannot change team access.
+                  </div>
+                ) : null}
+                {teamFetching ? (
+                  <div className="py-4 text-sm text-muted-foreground">Loading team members...</div>
+                ) : !teamMembers || teamMembers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
+                    <Shield className="mb-3 h-10 w-10 text-muted-foreground/30" />
+                    <p className="text-sm font-medium">No team members yet</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Add technicians, advisors, and managers so the shop can scale beyond one owner.
+                    </p>
+                    <Button variant="outline" size="sm" className="mt-4 w-full sm:w-auto" onClick={openCreateTeamMember} disabled={!canManageTeam}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Team Member
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {(teamMembers as StaffRecord[]).map((teamMember) => (
+                      <div
+                        key={teamMember.id}
+                        className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="rounded-md bg-primary/10 p-1.5">
+                            <Shield className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">
+                              {`${teamMember.firstName ?? ""} ${teamMember.lastName ?? ""}`.trim() || "Unnamed team member"}
+                            </p>
+                            <p className="break-words text-xs text-muted-foreground">
+                              {teamMember.email || "No login email"} · {(teamMember.membershipRole ?? teamMember.role ?? "technician").replace(/_/g, " ")}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 sm:justify-end">
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground capitalize">
+                            {teamMember.membershipStatus ?? (teamMember.active === false ? "suspended" : "active")}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9"
+                              onClick={() => openEditTeamMember(teamMember)}
+                              disabled={!canManageTeam}
+                            >
+                              <PenLine className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                              onClick={() => setDeleteStaffId(teamMember.id)}
+                              disabled={!canManageTeam || (teamMember.membershipRole ?? teamMember.role) === "owner"}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
           <TabsContent value="billing" className="space-y-6">
             <BillingTab
               billingStatus={billingStatus}
@@ -917,6 +1095,90 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={teamDialogOpen} onOpenChange={setTeamDialogOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>{editingStaff ? "Edit Team Member" : "Add Team Member"}</DialogTitle>
+            <DialogDescription>
+              Create a role-based team roster for your advisors, managers, and technicians.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>
+                  First Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  value={staffForm.firstName}
+                  onChange={(e) => setStaffForm((current) => ({ ...current, firstName: e.target.value }))}
+                  placeholder="Alex"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  Last Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  value={staffForm.lastName}
+                  onChange={(e) => setStaffForm((current) => ({ ...current, lastName: e.target.value }))}
+                  placeholder="Morgan"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={staffForm.email}
+                onChange={(e) => setStaffForm((current) => ({ ...current, email: e.target.value }))}
+                placeholder="alex@shop.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                Add an email if this person should eventually sign in to the platform.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Role</Label>
+              <Select value={staffForm.role} onValueChange={(value) => setStaffForm((current) => ({ ...current, role: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STAFF_ROLES.map((role) => (
+                    <SelectItem key={role.value} value={role.value}>
+                      {role.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                id="team-active"
+                checked={staffForm.active}
+                onCheckedChange={(value) => setStaffForm((current) => ({ ...current, active: value }))}
+              />
+              <Label htmlFor="team-active" className="cursor-pointer">
+                Active
+              </Label>
+            </div>
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button variant="outline" onClick={() => setTeamDialogOpen(false)} className="w-full sm:w-auto">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveStaff}
+              disabled={savingStaff || updatingStaff || !staffForm.firstName.trim() || !staffForm.lastName.trim()}
+              className="w-full sm:w-auto"
+            >
+              {savingStaff || updatingStaff ? "Saving..." : editingStaff ? "Save Changes" : "Add Team Member"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={!!deleteLocationId} onOpenChange={(open) => !open && setDeleteLocationId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -933,6 +1195,27 @@ export default function SettingsPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deletingLocation ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteStaffId} onOpenChange={(open) => !open && setDeleteStaffId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Team Member?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will suspend their access and remove them from the active team roster.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteStaff}
+              disabled={deletingStaff}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingStaff ? "Removing..." : "Remove"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
