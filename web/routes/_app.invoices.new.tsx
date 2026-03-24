@@ -18,7 +18,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { ArrowLeft, Check, ChevronsUpDown, FileText, Plus, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronsUpDown, FileText, Package, Plus, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
 
@@ -28,6 +28,20 @@ interface LineItem {
   qty: number;
   unitPrice: number;
 }
+
+type ServiceRecord = {
+  id: string;
+  name: string;
+  price: number | null;
+  category?: string | null;
+  isAddon?: boolean | null;
+};
+
+type AddonLinkRecord = {
+  id: string;
+  parentServiceId: string;
+  addonServiceId: string;
+};
 
 export default function NewInvoicePage() {
   const navigate = useNavigate();
@@ -101,6 +115,17 @@ export default function NewInvoicePage() {
     first: 50,
     pause: !appointmentIdParam,
   });
+  const [{ data: servicesData }] = useFindMany(api.service, {
+    filter: { active: { equals: true } },
+    select: { id: true, name: true, price: true, category: true, isAddon: true },
+    sort: { name: "Ascending" },
+    first: 250,
+    pause: !businessRecord?.id,
+  });
+  const [{ data: packageAddonLinks }] = useFindMany(api.serviceAddonLink, {
+    first: 250,
+    pause: !businessRecord?.id,
+  } as any);
 
   const [, createInvoice] = useAction(api.invoice.create);
 
@@ -220,6 +245,43 @@ export default function NewInvoicePage() {
       prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
     );
   };
+
+  const addPackageAsLineItems = (baseService: ServiceRecord, addonServices: ServiceRecord[]) => {
+    setLineItems((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        description: baseService.name,
+        qty: 1,
+        unitPrice: Number(baseService.price ?? 0),
+      },
+      ...addonServices.map((service) => ({
+        id: crypto.randomUUID(),
+        description: service.name,
+        qty: 1,
+        unitPrice: Number(service.price ?? 0),
+      })),
+    ]);
+  };
+
+  const serviceRecords = (servicesData ?? []) as ServiceRecord[];
+  const addonLinks = (packageAddonLinks ?? []) as AddonLinkRecord[];
+  const packageTemplates = serviceRecords
+    .filter((service) => !service.isAddon)
+    .map((service) => {
+      const linkedAddons = addonLinks
+        .filter((link) => link.parentServiceId === service.id)
+        .map((link) => serviceRecords.find((candidate) => candidate.id === link.addonServiceId))
+        .filter(Boolean) as ServiceRecord[];
+      return {
+        baseService: service,
+        linkedAddons,
+        totalPrice:
+          Number(service.price ?? 0) +
+          linkedAddons.reduce((sum, addon) => sum + Number(addon.price ?? 0), 0),
+      };
+    })
+    .filter((entry) => entry.linkedAddons.length > 0);
 
 
   const doSubmit = async (mode: 'draft' | 'sent') => {
@@ -517,6 +579,34 @@ export default function NewInvoicePage() {
                 <Plus className="h-4 w-4 mr-2" />
                 Add Item
               </Button>
+
+              {packageTemplates.length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                      <p className="text-sm font-medium text-muted-foreground">Quick Add Package</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {packageTemplates.map((pkg) => (
+                        <Button
+                          key={pkg.baseService.id}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => addPackageAsLineItems(pkg.baseService, pkg.linkedAddons)}
+                        >
+                          {pkg.baseService.name}
+                          <span className="ml-1 text-muted-foreground">
+                            · {pkg.linkedAddons.length + 1} items · ${pkg.totalPrice.toFixed(2)}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Totals */}
