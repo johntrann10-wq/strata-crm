@@ -6,6 +6,7 @@ import { useAction } from "../../hooks/useApi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { getChecklistPresetItems } from "../../lib/workflowPresets";
 
 type ActivityRecord = {
   id: string;
@@ -22,17 +23,20 @@ type ChecklistItem = {
 export function ChecklistCard({
   entityType,
   entityId,
+  businessType,
   records,
   canWrite,
   onChanged,
 }: {
   entityType: "job" | "appointment";
   entityId: string;
+  businessType?: string | null;
   records: ActivityRecord[];
   canWrite: boolean;
   onChanged?: () => void;
 }) {
   const [label, setLabel] = useState("");
+  const [applyingPreset, setApplyingPreset] = useState(false);
   const [{ fetching: saving }, runCreate] = useAction(api.activityLog.create as any);
 
   const items = useMemo(() => {
@@ -92,6 +96,40 @@ export function ChecklistCard({
   };
 
   const completedCount = items.filter((item) => item.completed).length;
+  const preset = useMemo(() => getChecklistPresetItems(businessType, entityType), [businessType, entityType]);
+  const existingLabels = useMemo(
+    () => new Set(items.map((item) => item.label.trim().toLowerCase())),
+    [items]
+  );
+  const missingPresetItems = useMemo(
+    () => preset.items.filter((item) => !existingLabels.has(item.trim().toLowerCase())),
+    [preset.items, existingLabels]
+  );
+
+  const handleApplyPreset = async () => {
+    if (missingPresetItems.length === 0) return;
+    setApplyingPreset(true);
+    try {
+      for (const presetItem of missingPresetItems) {
+        const result = await runCreate({
+          entityType,
+          entityId,
+          kind: "checklist_add",
+          itemId: crypto.randomUUID(),
+          label: presetItem,
+        });
+        if (result.error) {
+          throw new Error(result.error.message);
+        }
+      }
+      toast.success(`Added ${missingPresetItems.length} starter checklist items`);
+      onChanged?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to apply checklist preset.");
+    } finally {
+      setApplyingPreset(false);
+    }
+  };
 
   return (
     <Card>
@@ -99,6 +137,29 @@ export function ChecklistCard({
         <CardTitle>Execution Checklist</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {canWrite ? (
+          <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">{preset.label}</p>
+              <p className="text-xs text-muted-foreground">
+                {missingPresetItems.length > 0
+                  ? `Add ${missingPresetItems.length} starter items tailored to this workflow.`
+                  : "Starter checklist already applied."}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleApplyPreset()}
+              disabled={saving || applyingPreset || missingPresetItems.length === 0}
+              className="w-full sm:w-auto"
+            >
+              {applyingPreset ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Apply starter checklist
+            </Button>
+          </div>
+        ) : null}
+
         {canWrite ? (
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input

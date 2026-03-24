@@ -267,7 +267,7 @@ function JobLifecycleStepper({
 
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
-  const { user, permissions } = useOutletContext<AuthOutletContext>();
+  const { user, businessType, permissions } = useOutletContext<AuthOutletContext>();
   const canEditCollaboration = permissions.has("appointments.write");
   const { setPageContext } = usePageContext();
 
@@ -1180,6 +1180,7 @@ export default function AppointmentDetail() {
               <ChecklistCard
                 entityType="appointment"
                 entityId={appointment.id}
+                businessType={businessType}
                 records={(activityLogs as any[]) ?? []}
                 canWrite={canEditCollaboration}
                 onChanged={() => {

@@ -114,7 +114,7 @@ function formatName(person?: { firstName?: string | null; lastName?: string | nu
 
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { businessId, permissions } = useOutletContext<AuthOutletContext>();
+  const { businessId, businessType, permissions } = useOutletContext<AuthOutletContext>();
   const canEdit = permissions.has("jobs.write");
   const canWriteQuotes = permissions.has("quotes.write");
   const canWriteInvoices = permissions.has("invoices.write");
@@ -601,6 +601,7 @@ export default function JobDetailPage() {
           <ChecklistCard
             entityType="job"
             entityId={record.id}
+            businessType={businessType}
             records={(activityLogs as any[]) ?? []}
             canWrite={canEdit}
             onChanged={() => {
