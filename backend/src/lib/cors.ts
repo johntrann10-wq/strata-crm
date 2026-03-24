@@ -39,7 +39,7 @@ export function buildCorsAllowedOrigins(): Set<string> {
 
 /**
  * Echoes the request `Origin` when it is in the allowlist (never `*`).
- * Handles OPTIONS preflight; includes `Authorization` in allowed request headers.
+ * Handles OPTIONS preflight; includes tenant and auth headers used by the SPA.
  */
 export function corsMiddleware(allowedOrigins: Set<string>) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -52,7 +52,7 @@ export function corsMiddleware(allowedOrigins: Set<string>) {
       res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,PATCH,PUT,DELETE,OPTIONS");
       res.setHeader(
         "Access-Control-Allow-Headers",
-        "Authorization, Content-Type, x-cron-secret"
+        "Authorization, Content-Type, x-business-id, x-cron-secret"
       );
       res.setHeader("Access-Control-Max-Age", "86400");
     }

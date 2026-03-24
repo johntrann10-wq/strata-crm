@@ -64,6 +64,7 @@ describe("corsMiddleware", () => {
     });
     expect(headers["Access-Control-Allow-Origin"]).toBe("https://app.vercel.app");
     expect(headers["Access-Control-Allow-Headers"]).toContain("Authorization");
+    expect(headers["Access-Control-Allow-Headers"]).toContain("x-business-id");
     expect(nextCalled).toBe(false);
   });
 
