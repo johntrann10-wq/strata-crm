@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useOutletContext } from "react-router";
+import { Link, useOutletContext, useSearchParams } from "react-router";
 import { AlertCircle, Clock, DollarSign, FileText, Loader2, PlusCircle, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +16,7 @@ import type { AuthOutletContext } from "./_app";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-const FILTER_TABS = ["all", "overdue", "draft", "sent", "paid", "partial", "void"] as const;
+const FILTER_TABS = ["all", "overdue", "stale", "draft", "sent", "paid", "partial", "void"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
 
 function safeDate(value: string | Date | null | undefined): Date | null {
@@ -50,6 +50,12 @@ function formatFreshness(dateStr: string | Date | null | undefined, label: strin
   return `${label} ${formatDate(dateStr)}`;
 }
 
+function isOlderThanDays(value: string | Date | null | undefined, days: number): boolean {
+  const parsed = safeDate(value);
+  if (!parsed) return false;
+  return Date.now() - parsed.getTime() >= days * 24 * 60 * 60 * 1000;
+}
+
 function isOverdueInvoice(invoice: { status?: string | null; dueDate?: string | Date | null | undefined }) {
   const dueDate = safeDate(invoice.dueDate);
   return ["sent", "partial"].includes(String(invoice.status ?? "")) && !!dueDate && dueDate.getTime() < Date.now();
@@ -75,7 +81,11 @@ function paidAmount(invoice: { totalPaid?: number | string | null }) {
 
 export default function InvoicesIndexPage() {
   const { businessId } = useOutletContext<AuthOutletContext>();
-  const [activeTab, setActiveTab] = useState<FilterTab>("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = (FILTER_TABS as readonly string[]).includes(searchParams.get("tab") ?? "")
+    ? (searchParams.get("tab") as FilterTab)
+    : "all";
+  const [activeTab, setActiveTab] = useState<FilterTab>(initialTab);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -98,6 +108,12 @@ export default function InvoicesIndexPage() {
   }, [activeTab, debouncedSearch]);
 
   useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", activeTab);
+    setSearchParams(next, { replace: true });
+  }, [activeTab, searchParams, setSearchParams]);
+
+  useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
     return () => clearTimeout(timer);
   }, [search]);
@@ -117,7 +133,13 @@ export default function InvoicesIndexPage() {
   const isRefetching = invoicesFetching && !!invoices && invoices.length > 0;
   const baseInvoices = invoices ?? [];
   const overdueInvoices = baseInvoices.filter((invoice) => isOverdueInvoice(invoice));
-  const displayedInvoices = activeTab === "overdue" ? overdueInvoices : baseInvoices;
+  const staleInvoices = baseInvoices.filter(
+    (invoice) =>
+      ["sent", "partial"].includes(String(invoice.status ?? "")) &&
+      !safeDate((invoice as any).lastPaidAt ?? null) &&
+      isOlderThanDays((invoice as any).lastSentAt ?? null, 3)
+  );
+  const displayedInvoices = activeTab === "overdue" ? overdueInvoices : activeTab === "stale" ? staleInvoices : baseInvoices;
   const pageError = metricsError ?? invoicesError;
 
   const handleSendInvoice = async (invoiceId: string) => {

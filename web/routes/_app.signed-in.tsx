@@ -410,7 +410,7 @@ export default function SignedIn() {
       items.push({
         title: "Sales follow-up is stale",
         detail: `${staleQuoteFollowUps.length} quote${staleQuoteFollowUps.length === 1 ? "" : "s"} need another touch`,
-        href: "/quotes",
+        href: "/quotes?tab=followup",
         icon: <Receipt className="h-4 w-4" />,
         tone: "warn",
       });
@@ -419,7 +419,7 @@ export default function SignedIn() {
       items.push({
         title: "Collections follow-up is stale",
         detail: `${staleInvoiceCollections.length} invoice${staleInvoiceCollections.length === 1 ? "" : "s"} have gone cold`,
-        href: "/invoices",
+        href: "/invoices?tab=stale",
         icon: <DollarSign className="h-4 w-4" />,
         tone: "danger",
       });

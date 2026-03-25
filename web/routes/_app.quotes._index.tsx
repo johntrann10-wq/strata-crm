@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, CheckCircle, Search, Send, Loader2, FileText, AlertCircle } from "lucide-react";
-import { Link, useNavigate, useOutletContext } from "react-router";
+import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import type { AuthOutletContext } from "./_app";
 import { api } from "../api";
 import { useFindMany, useAction } from "../hooks/useApi";
@@ -25,13 +25,26 @@ function formatFreshness(value: string | null | undefined, label: string): strin
   return parsed ? `${label} ${parsed.toLocaleDateString()}` : null;
 }
 
+function isOlderThanDays(value: string | null | undefined, days: number): boolean {
+  const parsed = safeDate(value);
+  if (!parsed) return false;
+  return Date.now() - parsed.getTime() >= days * 24 * 60 * 60 * 1000;
+}
+
+const QUOTE_TABS = ["all", "accepted", "aging", "followup", "lost"] as const;
+type QuoteTab = (typeof QUOTE_TABS)[number];
+
 export default function QuotesIndexPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const activeTab = (QUOTE_TABS as readonly string[]).includes(searchParams.get("tab") ?? "")
+    ? (searchParams.get("tab") as QuoteTab)
+    : "all";
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -62,6 +75,16 @@ export default function QuotesIndexPage() {
     const row = record as Record<string, any>;
     const createdAt = safeDate(String(row.createdAt ?? ""));
     return ["draft", "sent"].includes(String(row.status ?? "")) && !!createdAt && Date.now() - createdAt.getTime() >= 3 * 24 * 60 * 60 * 1000;
+  });
+  const followUpRows = allRows.filter((record) => {
+    const row = record as Record<string, any>;
+    const status = String(row.status ?? "");
+    if (!["sent", "accepted"].includes(status)) return false;
+    const sentAt = (row.sentAt as string | null | undefined) ?? null;
+    const followUpSentAt = (row.followUpSentAt as string | null | undefined) ?? null;
+    return !safeDate(followUpSentAt)
+      ? isOlderThanDays(sentAt, 2)
+      : isOlderThanDays(followUpSentAt, 5);
   });
   const [, runSendQuote] = useAction(api.quote.send);
   const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
@@ -141,7 +164,14 @@ export default function QuotesIndexPage() {
         }
       />
 
-      <Tabs defaultValue="all">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("tab", value);
+          setSearchParams(next);
+        }}
+      >
         <TabsList>
           <TabsTrigger value="all">All Quotes</TabsTrigger>
           <TabsTrigger value="accepted">
@@ -157,6 +187,14 @@ export default function QuotesIndexPage() {
             {agingRows.length > 0 && (
               <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
                 {agingRows.length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="followup">
+            Follow-up
+            {followUpRows.length > 0 && (
+              <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
+                {followUpRows.length}
               </span>
             )}
           </TabsTrigger>
@@ -513,6 +551,78 @@ export default function QuotesIndexPage() {
                                 <Send className="mr-1 h-3.5 w-3.5" />
                               )}
                               Follow up
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="followup">
+          {followUpRows.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle}
+              title="No stale quote follow-up"
+              description="No sent or accepted quotes are waiting on another touch right now."
+            />
+          ) : (
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Vehicle</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Freshness</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {followUpRows.map((record) => {
+                    const row = record as Record<string, any>;
+                    const client = row.client as Record<string, any> | undefined;
+                    const vehicle = row.vehicle as Record<string, any> | undefined;
+                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "—";
+                    const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "—";
+                    const qid = String(row.id);
+                    const freshness = [
+                      formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
+                      formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
+                    return (
+                      <TableRow key={qid} className="cursor-pointer bg-amber-50/40" onClick={() => navigate(`/quotes/${qid}`)}>
+                        <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
+                        <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
+                        <TableCell><StatusBadge status={String(row.status ?? "")} type="quote" /></TableCell>
+                        <TableCell>{formatCurrency(row.total)}</TableCell>
+                        <TableCell className="text-muted-foreground">{freshness || "No outreach recorded"}</TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs"
+                              disabled={sendingId !== null}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleSendFollowUp(qid);
+                              }}
+                            >
+                              {sendingId === qid ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
+                              Follow up
+                            </Button>
+                            <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
+                              <Link to={`/quotes/${qid}`} onClick={(event) => event.stopPropagation()}>
+                                Open
+                              </Link>
                             </Button>
                           </div>
                         </TableCell>
