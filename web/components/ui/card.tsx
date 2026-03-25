@@ -7,7 +7,7 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card"
       className={cn(
-        "bg-card/96 text-card-foreground flex flex-col gap-5 rounded-2xl border border-border/80 py-5 shadow-[0_1px_2px_rgba(15,23,42,0.03),0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-sm",
+        "bg-card text-card-foreground flex flex-col gap-5 rounded-[1.4rem] border border-white/65 py-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_18px_42px_rgba(15,23,42,0.07)] backdrop-blur-md supports-[backdrop-filter]:bg-card/92",
         className
       )}
       {...props}
@@ -29,7 +29,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="card-title" className={cn("text-base leading-tight font-semibold tracking-tight", className)} {...props} />;
+  return <div data-slot="card-title" className={cn("text-[1.02rem] leading-tight font-semibold tracking-[-0.02em]", className)} {...props} />;
 }
 
 function CardDescription({ className, ...props }: React.ComponentProps<"div">) {

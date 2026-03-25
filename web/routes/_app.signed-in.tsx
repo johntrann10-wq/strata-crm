@@ -3,20 +3,14 @@ import { Link, Navigate, useOutletContext } from "react-router";
 import { format, parseISO, isSameDay, startOfDay, endOfDay } from "date-fns";
 import {
   AlertCircle,
-  ArrowUpRight,
   CalendarPlus,
   ChevronDown,
   ChevronRight,
-  ClipboardList,
-  Clock3,
   DollarSign,
-  Flame,
   FileText,
   ShieldAlert,
   Receipt,
   RefreshCw,
-  Users,
-  Wrench,
 } from "lucide-react";
 import { useFindMany } from "../hooks/useApi";
 import { api, ApiError } from "../api";
@@ -25,6 +19,7 @@ import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { ActivityFeedCard, type ActivityRecord } from "../components/shared/ActivityFeedCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { toast } from "sonner";
@@ -35,6 +30,9 @@ type AppointmentRecord = {
   status: string;
   startTime: string;
   endTime?: string | null;
+  totalPrice?: number | string | null;
+  depositAmount?: number | string | null;
+  depositPaid?: boolean | null;
   client: { firstName?: string | null; lastName?: string | null } | null;
   vehicle: { make?: string | null; model?: string | null; year?: number | null } | null;
   assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
@@ -165,7 +163,6 @@ export default function SignedIn() {
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null);
   const [updatingJobId, setUpdatingJobId] = useState<string | null>(null);
   const [updatingAppointmentId, setUpdatingAppointmentId] = useState<string | null>(null);
-  const [showMobileInsights, setShowMobileInsights] = useState(false);
 
   const { apptStartGte, apptStartLte } = useMemo(() => {
     const from = startOfDay(filterNow);
@@ -201,28 +198,8 @@ export default function SignedIn() {
     pending: true,
     pause: !businessId,
   });
-  const [{ data: acceptedQuotesRaw, fetching: fetchingAcceptedQuotes, error: acceptedQuotesError }, refetchAcceptedQuotes] = useFindMany(
-    api.quote,
-    {
-      sort: { createdAt: "Descending" },
-      first: 10,
-      status: "accepted",
-      pause: !businessId,
-    } as any
-  );
-
   const [{ data: jobsRaw, fetching: fetchingJobs, error: jobsError }, refetchJobs] = useFindMany(api.job, {
     first: 25,
-    locationId: currentLocationId ?? undefined,
-    pause: !businessId,
-  } as any);
-  const [
-    { data: readyToInvoiceJobsRaw, fetching: fetchingReadyToInvoiceJobs, error: readyToInvoiceJobsError },
-    refetchReadyToInvoiceJobs,
-  ] = useFindMany(api.job, {
-    first: 10,
-    status: "completed",
-    unbilled: true,
     locationId: currentLocationId ?? undefined,
     pause: !businessId,
   } as any);
@@ -230,6 +207,13 @@ export default function SignedIn() {
     first: 100,
     pause: !businessId,
   } as any);
+  const [{ data: activityRaw, fetching: fetchingActivity, error: activityError }, refetchActivity] = useFindMany(
+    api.activityLog,
+    {
+      first: 6,
+      pause: !businessId,
+    } as any
+  );
   const [, runSendQuote] = useAction(api.quote.send);
   const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
   const [, runSendInvoice] = useAction(api.invoice.sendToClient);
@@ -244,10 +228,9 @@ export default function SignedIn() {
   const appointments = (appointmentsRaw ?? []) as AppointmentRecord[];
   const unpaidInvoices = (invoicesRaw ?? []) as InvoiceRecord[];
   const pendingQuotes = (quotesRaw ?? []) as QuoteRecord[];
-  const acceptedQuotes = (acceptedQuotesRaw ?? []) as QuoteRecord[];
   const jobs = (jobsRaw ?? []) as JobRecord[];
-  const readyToInvoiceJobs = (readyToInvoiceJobsRaw ?? []) as JobRecord[];
   const staffRecords = (staffRaw ?? []) as StaffRecord[];
+  const activityRecords = (activityRaw ?? []) as ActivityRecord[];
   const locationRecords = (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>;
   const activeLocationName = useMemo(
     () => locationRecords.find((location) => location.id === currentLocationId)?.name?.trim() || null,
@@ -279,16 +262,6 @@ export default function SignedIn() {
         }),
     [jobs]
   );
-  const myActiveJobs = useMemo(
-    () =>
-      activeJobs.filter(
-        (job) => !!myStaffRecord && !!job.assignedStaff?.id && job.assignedStaff.id === myStaffRecord.id
-      ),
-    [activeJobs, myStaffRecord]
-  );
-
-  const openQuoteValue = useMemo(() => sumCurrency(pendingQuotes.map((quote) => quote.total)), [pendingQuotes]);
-  const acceptedQuoteValue = useMemo(() => sumCurrency(acceptedQuotes.map((quote) => quote.total)), [acceptedQuotes]);
   const unpaidRevenue = useMemo(() => sumCurrency(unpaidInvoices.map((invoice) => invoiceBalance(invoice))), [unpaidInvoices]);
   const staleQuoteFollowUps = useMemo(
     () =>
@@ -309,73 +282,34 @@ export default function SignedIn() {
       ),
     [unpaidInvoices]
   );
-  const activeJobValue = useMemo(() => sumCurrency(activeJobs.map((job) => job.totalPrice)), [activeJobs]);
-  const myActiveJobValue = useMemo(() => sumCurrency(myActiveJobs.map((job) => job.totalPrice)), [myActiveJobs]);
-  const readyToInvoiceValue = useMemo(
-    () => sumCurrency(readyToInvoiceJobs.map((job) => job.totalPrice)),
-    [readyToInvoiceJobs]
-  );
-  const averageOutstandingInvoice = useMemo(
-    () => (unpaidInvoices.length > 0 ? unpaidRevenue / unpaidInvoices.length : 0),
-    [unpaidInvoices.length, unpaidRevenue]
-  );
   const todayBookedValue = useMemo(
-    () => sumCurrency(todayAppointments.map((appointment) => (appointment as AppointmentRecord & { totalPrice?: number | string | null }).totalPrice)),
+    () => sumCurrency(todayAppointments.map((appointment) => appointment.totalPrice)),
     [todayAppointments]
   );
   const assignedTodayAppointments = useMemo(
     () => todayAppointments.filter((appointment) => !!appointment.assignedStaff?.id),
     [todayAppointments]
   );
-  const todayCoverageRate = useMemo(() => {
-    if (todayAppointments.length === 0) return 100;
-    return Math.round((assignedTodayAppointments.length / todayAppointments.length) * 100);
-  }, [assignedTodayAppointments.length, todayAppointments.length]);
-  const overdueInvoices = useMemo(
+  const depositsAwaitingPayment = useMemo(
     () =>
-      unpaidInvoices.filter((invoice) => {
-        const raw = invoice as InvoiceRecord & { dueDate?: string | null };
-        const due = safeParseISO(raw.dueDate ?? null);
-        return !!due && due.getTime() < filterNow.getTime();
+      todayAppointments.filter((appointment) => {
+        const deposit = Number(appointment.depositAmount ?? 0);
+        return Number.isFinite(deposit) && deposit > 0 && !appointment.depositPaid;
       }),
-    [unpaidInvoices, filterNow]
-  );
-  const overdueRevenue = useMemo(() => sumCurrency(overdueInvoices.map((invoice) => invoiceBalance(invoice))), [overdueInvoices]);
-  const unassignedActiveJobs = useMemo(
-    () => activeJobs.filter((job) => !job.assignedStaff?.id),
-    [activeJobs]
-  );
-  const unassignedTodayAppointments = useMemo(
-    () =>
-      todayAppointments.filter(
-        (appointment) => !(appointment as AppointmentRecord & { assignedStaff?: { id?: string | null } | null }).assignedStaff?.id
-      ),
     [todayAppointments]
   );
-  const agingPendingQuotes = useMemo(
+  const depositDueValue = useMemo(
+    () => sumCurrency(depositsAwaitingPayment.map((appointment) => appointment.depositAmount)),
+    [depositsAwaitingPayment]
+  );
+  const pendingApprovalsCount = useMemo(
     () =>
-      pendingQuotes.filter((quote) => {
-        const createdAt = safeParseISO(quote.createdAt);
-        if (!createdAt) return false;
-        return filterNow.getTime() - createdAt.getTime() >= 3 * 24 * 60 * 60 * 1000;
-      }),
-    [pendingQuotes, filterNow]
+      pendingQuotes.length +
+      staleQuoteFollowUps.length +
+      staleInvoiceCollections.length +
+      depositsAwaitingPayment.length,
+    [pendingQuotes.length, staleQuoteFollowUps.length, staleInvoiceCollections.length, depositsAwaitingPayment.length]
   );
-  const quoteConversionRate = useMemo(() => {
-    const denominator = pendingQuotes.length + acceptedQuotes.length;
-    if (denominator === 0) return 0;
-    return Math.round((acceptedQuotes.length / denominator) * 100);
-  }, [acceptedQuotes.length, pendingQuotes.length]);
-  const averageActiveJobValue = useMemo(
-    () => (activeJobs.length > 0 ? activeJobValue / activeJobs.length : 0),
-    [activeJobValue, activeJobs.length]
-  );
-  const averageBookedValue = useMemo(
-    () => (todayAppointments.length > 0 ? todayBookedValue / todayAppointments.length : 0),
-    [todayAppointments.length, todayBookedValue]
-  );
-  const nextJob = activeJobs[0] ?? null;
-  const myNextJob = myActiveJobs[0] ?? null;
   const teamLoad = useMemo(() => {
     const counts = new Map<
       string,
@@ -416,139 +350,7 @@ export default function SignedIn() {
       })
       .slice(0, 6);
   }, [staffRecords, activeJobs, todayAppointments, user?.id]);
-  const watchlist = useMemo(() => {
-    const items: Array<{ title: string; detail: string; href: string; icon: ReactNode; tone: "danger" | "warn" | "info" }> = [];
-    if (overdueInvoices.length > 0) {
-      items.push({
-        title: "Overdue cash needs attention",
-        detail: `${overdueInvoices.length} overdue invoice${overdueInvoices.length === 1 ? "" : "s"} outstanding`,
-        href: "/invoices",
-        icon: <DollarSign className="h-4 w-4" />,
-        tone: "danger",
-      });
-    }
-    if (unassignedActiveJobs.length > 0) {
-      items.push({
-        title: "Active jobs are unassigned",
-        detail: `${unassignedActiveJobs.length} work order${unassignedActiveJobs.length === 1 ? "" : "s"} have no technician`,
-        href: "/jobs?view=mine",
-        icon: <Wrench className="h-4 w-4" />,
-        tone: "warn",
-      });
-    }
-    if (unassignedTodayAppointments.length > 0) {
-      items.push({
-        title: "Today's schedule needs staffing",
-        detail: `${unassignedTodayAppointments.length} appointment${unassignedTodayAppointments.length === 1 ? "" : "s"} are still unassigned`,
-        href: "/appointments?view=mine",
-        icon: <Users className="h-4 w-4" />,
-        tone: "warn",
-      });
-    }
-    if (agingPendingQuotes.length > 0) {
-      items.push({
-        title: "Quotes are cooling off",
-        detail: `${agingPendingQuotes.length} pending quote${agingPendingQuotes.length === 1 ? "" : "s"} are older than 3 days`,
-        href: "/quotes",
-        icon: <Flame className="h-4 w-4" />,
-        tone: "info",
-      });
-    }
-    if (staleQuoteFollowUps.length > 0) {
-      items.push({
-        title: "Sales follow-up is stale",
-        detail: `${staleQuoteFollowUps.length} quote${staleQuoteFollowUps.length === 1 ? "" : "s"} need another touch`,
-        href: "/quotes?tab=followup",
-        icon: <Receipt className="h-4 w-4" />,
-        tone: "warn",
-      });
-    }
-    if (staleInvoiceCollections.length > 0) {
-      items.push({
-        title: "Collections follow-up is stale",
-        detail: `${staleInvoiceCollections.length} invoice${staleInvoiceCollections.length === 1 ? "" : "s"} have gone cold`,
-        href: "/invoices?tab=stale",
-        icon: <DollarSign className="h-4 w-4" />,
-        tone: "danger",
-      });
-    }
-    if (items.length === 0) {
-      items.push({
-        title: "Operations look healthy",
-        detail: "No overdue cash, aging quotes, or unassigned work detected right now.",
-        href: "/jobs",
-        icon: <ShieldAlert className="h-4 w-4" />,
-        tone: "info",
-      });
-    }
-    return items.slice(0, 4);
-  }, [
-    overdueInvoices,
-    unassignedActiveJobs,
-    unassignedTodayAppointments,
-    agingPendingQuotes,
-    staleQuoteFollowUps,
-    staleInvoiceCollections,
-  ]);
-
-  const priorityActions = useMemo(() => {
-    const actions: Array<{ title: string; detail: string; href: string; cta: string }> = [];
-
-    if (myNextJob) {
-      const myJobClient = myNextJob.client
-        ? `${myNextJob.client.firstName ?? ""} ${myNextJob.client.lastName ?? ""}`.trim()
-        : myNextJob.title ?? "Open job";
-      actions.push({
-        title: "Your next assigned job",
-        detail: `${formatSafe(myNextJob.scheduledStart, "h:mm a")} - ${myJobClient}`,
-        href: `/jobs/${myNextJob.id}`,
-        cta: "Open my job",
-      });
-    } else if (nextJob) {
-      const nextJobClient = nextJob.client
-        ? `${nextJob.client.firstName ?? ""} ${nextJob.client.lastName ?? ""}`.trim()
-        : nextJob.title ?? "Open job";
-      actions.push({
-        title: "Next job on deck",
-        detail: `${formatSafe(nextJob.scheduledStart, "h:mm a")} - ${nextJobClient}`,
-        href: `/jobs/${nextJob.id}`,
-        cta: "Open job",
-      });
-    }
-
-    if (unpaidInvoices.length > 0) {
-      actions.push({
-        title: "Collect outstanding cash",
-        detail: `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length === 1 ? "" : "s"} - ${formatCurrency(unpaidRevenue)}`,
-        href: `/invoices/${unpaidInvoices[0].id}`,
-        cta: "Review invoices",
-      });
-    }
-
-    if (pendingQuotes.length > 0) {
-      const quote = pendingQuotes[0];
-      const quoteClient = quote.client
-        ? `${quote.client.firstName ?? ""} ${quote.client.lastName ?? ""}`.trim() || "Open quote"
-        : "Open quote";
-      actions.push({
-        title: "Close pending work",
-        detail: `${pendingQuotes.length} quote${pendingQuotes.length === 1 ? "" : "s"} awaiting action - ${quoteClient}`,
-        href: `/quotes/${quote.id}`,
-        cta: "Open quote",
-      });
-    }
-
-    if (actions.length === 0) {
-      actions.push({
-        title: "Pipeline is clear",
-        detail: "No urgent jobs, quotes, or unpaid invoices right now.",
-        href: "/appointments/new",
-        cta: "Book next job",
-      });
-    }
-
-    return actions.slice(0, 3);
-  }, [myNextJob, nextJob, pendingQuotes, unpaidInvoices, unpaidRevenue]);
+  const showTeamAssignments = staffRecords.length > 1 || teamLoad.length > 0;
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -558,15 +360,14 @@ export default function SignedIn() {
         refetchAppts(),
         refetchInvoices(),
         refetchQuotes(),
-        refetchAcceptedQuotes(),
         refetchJobs(),
-        refetchReadyToInvoiceJobs(),
         refetchStaff(),
+        refetchActivity(),
       ]);
     } finally {
       setRefreshing(false);
     }
-  }, [refetchAppts, refetchInvoices, refetchQuotes, refetchAcceptedQuotes, refetchJobs, refetchReadyToInvoiceJobs, refetchStaff]);
+  }, [refetchActivity, refetchAppts, refetchInvoices, refetchJobs, refetchQuotes, refetchStaff]);
 
   const handleSendQuote = useCallback(
     async (event: React.SyntheticEvent, quoteId: string) => {
@@ -712,20 +513,18 @@ export default function SignedIn() {
   const loadingAppts = fetchingAppts && appointmentsRaw === undefined;
   const loadingInvoices = fetchingInvoices && invoicesRaw === undefined;
   const loadingQuotes = fetchingQuotes && quotesRaw === undefined;
-  const loadingAcceptedQuotes = fetchingAcceptedQuotes && acceptedQuotesRaw === undefined;
   const loadingJobs = fetchingJobs && jobsRaw === undefined;
-  const loadingReadyToInvoiceJobs = fetchingReadyToInvoiceJobs && readyToInvoiceJobsRaw === undefined;
   const loadingStaff = fetchingStaff && staffRaw === undefined;
+  const loadingActivity = fetchingActivity && activityRaw === undefined;
   const anyLoading =
     loadingAppts ||
     loadingInvoices ||
     loadingQuotes ||
-    loadingAcceptedQuotes ||
     loadingJobs ||
-    loadingReadyToInvoiceJobs ||
-    loadingStaff;
+    loadingStaff ||
+    loadingActivity;
   const anyError =
-    jobsError ?? readyToInvoiceJobsError ?? apptsError ?? invoicesError ?? quotesError ?? acceptedQuotesError ?? staffError;
+    jobsError ?? apptsError ?? invoicesError ?? quotesError ?? staffError ?? activityError;
 
   if (!businessId) {
     return <Navigate to="/onboarding" replace />;
@@ -733,29 +532,46 @@ export default function SignedIn() {
 
   return (
     <div className="pb-6 md:pb-8">
-      <div className="page-content page-section max-w-6xl">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
-              {businessName ?? "Dashboard"}
-            </h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">{format(filterNow, "EEEE, MMM d")}</p>
-            {activeLocationName ? (
-              <p className="mt-1 text-sm text-muted-foreground">Location focus: {activeLocationName}</p>
-            ) : null}
+      <div className="page-content page-section max-w-7xl space-y-5">
+        <section className="rounded-[28px] border border-border/70 bg-card px-4 py-5 shadow-sm sm:px-5 sm:py-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Control center</p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+                {businessName ?? "Dashboard"}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
+                What needs attention today, what is on the board, and which money or approvals are still waiting.
+              </p>
+              <p className="mt-3 text-sm text-muted-foreground">
+                {format(filterNow, "EEEE, MMM d")}
+                {activeLocationName ? ` · ${activeLocationName}` : ""}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-11 w-11 shrink-0 rounded-xl"
+              onClick={() => void handleRefresh()}
+              disabled={refreshing || anyLoading}
+              aria-label="Refresh dashboard"
+            >
+              <RefreshCw className={cn("h-5 w-5", (refreshing || anyLoading) && "animate-spin")} />
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-11 w-11 shrink-0 rounded-xl"
-            onClick={() => void handleRefresh()}
-            disabled={refreshing || anyLoading}
-            aria-label="Refresh"
-          >
-            <RefreshCw className={cn("h-5 w-5", (refreshing || anyLoading) && "animate-spin")} />
-          </Button>
-        </div>
+
+          <div className="mt-5 grid gap-2.5 sm:grid-cols-3 sm:gap-3">
+            <QuickAction
+              href={scheduleJobHref}
+              label="New Appointment"
+              icon={<CalendarPlus className="h-5 w-5 shrink-0" />}
+              primary
+            />
+            <QuickAction href="/quotes/new" label="New Quote" icon={<Receipt className="h-5 w-5 shrink-0" />} />
+            <QuickAction href="/invoices/new" label="New Invoice" icon={<FileText className="h-5 w-5 shrink-0" />} />
+          </div>
+        </section>
 
         {anyError ? (
           <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
@@ -771,864 +587,517 @@ export default function SignedIn() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
-            label="Open jobs"
-            value={String(activeJobs.length)}
-            detail={activeJobValue > 0 ? formatCurrency(activeJobValue) : "No active work orders"}
-            icon={<Clock3 className="h-5 w-5" />}
-          />
-          <MetricCard
-            label="My queue"
-            value={myStaffRecord ? String(myActiveJobs.length) : "-"}
+            href="/appointments"
+            label="Revenue Today"
+            value={formatCurrency(todayBookedValue)}
             detail={
-              myStaffRecord
-                ? myActiveJobValue > 0
-                  ? formatCurrency(myActiveJobValue)
-                  : "No assigned work"
-                : "Not linked to staff"
+              todayAppointments.length > 0
+                ? `${todayAppointments.length} appointment${todayAppointments.length === 1 ? "" : "s"} on the board`
+                : "No appointments booked yet"
             }
-            icon={<ClipboardList className="h-5 w-5" />}
-          />
-          <MetricCard
-            label="Open quotes"
-            value={String(pendingQuotes.length)}
-            detail={openQuoteValue > 0 ? formatCurrency(openQuoteValue) : "No quote value pending"}
-            icon={<Receipt className="h-5 w-5" />}
-          />
-          <MetricCard
-            label="Unpaid invoices"
-            value={String(unpaidInvoices.length)}
-            detail={unpaidRevenue > 0 ? formatCurrency(unpaidRevenue) : "Nothing outstanding"}
             icon={<DollarSign className="h-5 w-5" />}
           />
           <MetricCard
-            label="Next focus"
-            value={priorityActions[0]?.title ?? "Clear"}
-            detail={priorityActions[0]?.detail ?? "No urgent actions"}
-            icon={<ArrowUpRight className="h-5 w-5" />}
-            compactValue
+            href="/invoices"
+            label="Open Invoices"
+            value={formatCurrency(unpaidRevenue)}
+            detail={
+              unpaidInvoices.length > 0
+                ? `${unpaidInvoices.length} invoice${unpaidInvoices.length === 1 ? "" : "s"} awaiting payment`
+                : "Nothing outstanding right now"
+            }
+            icon={<FileText className="h-5 w-5" />}
+          />
+          <MetricCard
+            href="/appointments"
+            label="Today's Appointments"
+            value={String(todayAppointments.length)}
+            detail={
+              todayAppointments.length > 0
+                ? `${assignedTodayAppointments.length}/${todayAppointments.length} assigned`
+                : "No schedule pressure yet"
+            }
+            icon={<CalendarPlus className="h-5 w-5" />}
+          />
+          <MetricCard
+            href={pendingApprovalsCount > 0 ? "/quotes" : "/appointments"}
+            label="Pending Actions"
+            value={String(pendingApprovalsCount)}
+            detail={
+              pendingApprovalsCount > 0
+                ? `${pendingQuotes.length} quote${pendingQuotes.length === 1 ? "" : "s"} and ${
+                    staleQuoteFollowUps.length + staleInvoiceCollections.length + depositsAwaitingPayment.length
+                  } follow-up${staleQuoteFollowUps.length + staleInvoiceCollections.length + depositsAwaitingPayment.length === 1 ? "" : "s"}`
+                : "Nothing urgent is waiting"
+            }
+            icon={<ShieldAlert className="h-5 w-5" />}
           />
         </div>
 
-        <div className="sm:hidden">
-          <button
-            type="button"
-            onClick={() => setShowMobileInsights((open) => !open)}
-            className="mobile-support-card flex w-full items-center justify-between text-left"
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
+          <DashboardSection
+            title="Today's Schedule"
+            seeAllHref="/appointments"
+            seeAllLabel="All appointments"
+            error={apptsError}
+            isLoading={loadingAppts}
+            isEmpty={!loadingAppts && !apptsError && todayAppointments.length === 0}
+            emptyMessage="Nothing is booked for today yet."
+            emptyCta={{ href: scheduleJobHref, label: "New appointment" }}
+            skeletonRows={4}
           >
-            <div>
-              <p className="text-sm font-semibold text-foreground">Business insights</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {showMobileInsights ? "Hide deeper sales and cash signals" : "Show quote conversion, cash, and momentum"}
-              </p>
-            </div>
-            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", showMobileInsights ? "rotate-180" : "")} />
-          </button>
-        </div>
-
-        <section className={cn("space-y-3", !showMobileInsights && "hidden sm:block")}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Pipeline snapshot</h2>
-            <span className="text-sm text-muted-foreground">Sales, cash, and billing momentum at a glance</span>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <PipelineCard
-              href="/quotes?tab=ready-to-book"
-              label="Ready to book"
-              value={String(acceptedQuotes.length)}
-              detail={acceptedQuoteValue > 0 ? formatCurrency(acceptedQuoteValue) : "No accepted quote value yet"}
-              tone="sales"
-            />
-            <PipelineCard
-              href="/jobs"
-              label="Ready to invoice"
-              value={String(readyToInvoiceJobs.length)}
-              detail={readyToInvoiceValue > 0 ? formatCurrency(readyToInvoiceValue) : "No completed unbilled work"}
-              tone="billing"
-            />
-            <PipelineCard
-              href="/invoices?tab=stale"
-              label="Average unpaid balance"
-              value={formatCurrency(averageOutstandingInvoice)}
-              detail={
-                unpaidInvoices.length > 0
-                  ? `${unpaidInvoices.length} invoice${unpaidInvoices.length === 1 ? "" : "s"} in queue`
-                  : "No unpaid invoices"
-              }
-              tone="risk"
-            />
-            <PipelineCard
-              href="/quotes"
-              label="Quote conversion"
-              value={`${quoteConversionRate}%`}
-              detail={
-                acceptedQuotes.length + pendingQuotes.length > 0
-                  ? `${acceptedQuotes.length} accepted vs ${pendingQuotes.length} still open`
-                  : "No active quote pipeline"
-              }
-              tone="ops"
-            />
-          </div>
-        </section>
-
-        <section className={cn("space-y-3", !showMobileInsights && "hidden sm:block")}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Performance signals</h2>
-            <span className="text-sm text-muted-foreground">Useful planning context for the next few hours</span>
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <PipelineCard
-              href="/jobs"
-              label="Average active job value"
-              value={formatCurrency(averageActiveJobValue)}
-              detail={
-                activeJobs.length > 0
-                  ? `${activeJobs.length} active job${activeJobs.length === 1 ? "" : "s"} in progress`
-                  : "No active jobs in queue"
-              }
-              tone="ops"
-            />
-            <PipelineCard
-              href="/appointments"
-              label="Average booked ticket"
-              value={formatCurrency(averageBookedValue)}
-              detail={
-                todayAppointments.length > 0
-                  ? `${todayAppointments.length} appointment${todayAppointments.length === 1 ? "" : "s"} on today's board`
-                  : "Nothing booked today"
-              }
-              tone="sales"
-            />
-            <PipelineCard
-              href="/invoices"
-              label="Overdue share of receivables"
-              value={unpaidRevenue > 0 ? `${Math.round((overdueRevenue / unpaidRevenue) * 100)}%` : "0%"}
-              detail={
-                overdueInvoices.length > 0
-                  ? `${overdueInvoices.length} overdue invoice${overdueInvoices.length === 1 ? "" : "s"} need collection`
-                  : "No overdue invoices in receivables"
-              }
-              tone="risk"
-            />
-          </div>
-        </section>
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Today's operating pulse</h2>
-            <span className="text-sm text-muted-foreground">
-              {activeLocationName ? "Focused on current location" : "Across the current business"}
-            </span>
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <Link
-              to="/appointments"
-              className="rounded-2xl border bg-card p-4 transition-colors hover:bg-muted/40"
-            >
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-muted-foreground">Booked today</p>
-                <CalendarPlus className="h-5 w-5 text-orange-600" />
-              </div>
-              <p className="text-2xl font-semibold tracking-tight">{todayAppointments.length}</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {todayBookedValue > 0 ? formatCurrency(todayBookedValue) : "No booked value yet"}
-              </p>
-            </Link>
-
-            <Link
-              to="/appointments"
-              className="rounded-2xl border bg-card p-4 transition-colors hover:bg-muted/40"
-            >
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-muted-foreground">Staffing coverage</p>
-                <Users className="h-5 w-5 text-orange-600" />
-              </div>
-              <p className="text-2xl font-semibold tracking-tight">{todayCoverageRate}%</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {assignedTodayAppointments.length}/{todayAppointments.length} assigned
-                {unassignedTodayAppointments.length > 0
-                  ? ` - ${unassignedTodayAppointments.length} still open`
-                  : " - fully staffed"}
-              </p>
-            </Link>
-
-            <Link
-              to="/invoices"
-              className="rounded-2xl border bg-card p-4 transition-colors hover:bg-muted/40"
-            >
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-muted-foreground">Cash risk</p>
-                <DollarSign className="h-5 w-5 text-orange-600" />
-              </div>
-              <p className="text-2xl font-semibold tracking-tight">{overdueInvoices.length}</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {overdueInvoices.length > 0 ? formatCurrency(overdueRevenue) : "No overdue cash right now"}
-              </p>
-            </Link>
-          </div>
-        </section>
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Quick actions</h2>
-            <span className="text-sm text-muted-foreground">Most-used workflows</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
-            <QuickAction href="/clients/new" label="New client" icon={<Users className="h-5 w-5 shrink-0" />} />
-            <QuickAction
-              href={scheduleJobHref}
-              label="Schedule job"
-              icon={<CalendarPlus className="h-5 w-5 shrink-0" />}
-              primary
-            />
-            <QuickAction href="/jobs" label="Open jobs" icon={<ClipboardList className="h-5 w-5 shrink-0" />} />
-            <QuickAction href="/quotes/new" label="Create quote" icon={<Receipt className="h-5 w-5 shrink-0" />} />
-          </div>
-        </section>
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Priority focus</h2>
-            <span className="text-sm text-muted-foreground">Work the highest-value next step</span>
-          </div>
-          <div className="grid gap-3">
-            {priorityActions.map((action) => (
-              <Link
-                key={action.title}
-                to={action.href}
-                className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-4 transition-colors hover:bg-muted/40"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-600">
-                  <ArrowUpRight className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{action.title}</p>
-                  <p className="truncate text-sm text-muted-foreground">{action.detail}</p>
-                </div>
-                <span className="text-sm font-medium text-orange-600">{action.cta}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Owner watchlist</h2>
-            <span className="text-sm text-muted-foreground">Risk, cash, and staffing signals</span>
-          </div>
-          <div className="grid gap-3">
-            {watchlist.map((item) => (
-              <Link
-                key={item.title}
-                to={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-2xl border px-4 py-4 transition-colors hover:bg-muted/40",
-                  item.tone === "danger" && "border-red-200 bg-red-50/70",
-                  item.tone === "warn" && "border-amber-200 bg-amber-50/70"
-                )}
-              >
-                <div
-                  className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-                    item.tone === "danger" && "bg-red-500/10 text-red-700",
-                    item.tone === "warn" && "bg-amber-500/10 text-amber-700",
-                    item.tone === "info" && "bg-sky-500/10 text-sky-700"
-                  )}
-                >
-                  {item.icon}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{item.title}</p>
-                  <p className="truncate text-sm text-muted-foreground">{item.detail}</p>
-                </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        <DashboardSection
-          title="Team load"
-          seeAllHref="/settings"
-          seeAllLabel="Team"
-          error={staffError}
-          isLoading={loadingStaff || loadingJobs || loadingAppts}
-          isEmpty={!loadingStaff && !loadingJobs && !loadingAppts && teamLoad.length === 0}
-          emptyMessage="No technician load is showing yet."
-          emptyCta={{ href: "/settings", label: "Set up team" }}
-          skeletonRows={3}
-          mobileCollapsed
-        >
-          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
-            {teamLoad.map((entry) => {
-              const staffName = `${entry.staff.firstName ?? ""} ${entry.staff.lastName ?? ""}`.trim() || "Team member";
-              const loadTone =
-                entry.activeJobs >= 3 || entry.todayAppointments >= 5
-                  ? "text-red-700 bg-red-50 border-red-200"
-                  : entry.activeJobs >= 2 || entry.todayAppointments >= 3
-                    ? "text-amber-700 bg-amber-50 border-amber-200"
-                    : "text-emerald-700 bg-emerald-50 border-emerald-200";
-              return (
-                <li key={entry.staff.id}>
-                  <div className="flex min-h-[64px] items-center gap-3 px-4 py-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-base font-medium">{staffName}</p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {entry.activeJobs} active job{entry.activeJobs === 1 ? "" : "s"} | {entry.todayAppointments} on today's schedule
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-semibold tabular-nums">{formatCurrency(entry.revenue)}</div>
-                      <div className={cn("mt-1 inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", loadTone)}>
-                        {entry.activeJobs >= 3 || entry.todayAppointments >= 5
-                          ? "Heavy load"
-                          : entry.activeJobs >= 2 || entry.todayAppointments >= 3
-                            ? "Balanced"
-                            : "Light load"}
-                      </div>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </DashboardSection>
-
-        <DashboardSection
-          title={myStaffRecord ? "My queue" : "Assigned work"}
-          seeAllHref="/jobs"
-          seeAllLabel="All jobs"
-          error={staffError}
-          isLoading={loadingJobs || loadingStaff}
-          isEmpty={!loadingJobs && !loadingStaff && !!myStaffRecord && myActiveJobs.length === 0}
-          emptyMessage={
-            myStaffRecord
-              ? "No jobs are assigned to you right now."
-              : "Link this user to a staff profile to unlock assigned work."
-          }
-          emptyCta={{ href: "/settings", label: myStaffRecord ? "Open team" : "Set up team" }}
-          skeletonRows={2}
-        >
-          {myStaffRecord ? (
-            <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
-              {myActiveJobs.map((job) => (
-                <li key={job.id}>
+            <ul className="overflow-hidden rounded-2xl border divide-y divide-border bg-card">
+              {todayAppointments.map((appointment) => (
+                <li key={appointment.id}>
                   <Link
-                    to={`/jobs/${job.id}`}
-                    className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
+                    to={`/appointments/${appointment.id}`}
+                    className="flex min-h-[72px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 active:bg-muted/70"
                   >
-                    <div className="w-[72px] shrink-0 font-mono text-sm text-muted-foreground">
-                      {formatSafe(job.scheduledStart, "h:mm a")}
+                    <div className="w-[74px] shrink-0">
+                      <p className="font-mono text-sm font-medium text-foreground">{formatSafe(appointment.startTime, "h:mm a")}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {appointment.assignedStaff?.firstName
+                          ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName ?? ""}`.trim()
+                          : "Unassigned"}
+                      </p>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-base font-medium">
-                        {job.title?.trim() ||
-                          (job.client
-                            ? `${job.client.firstName ?? ""} ${job.client.lastName ?? ""}`.trim()
-                            : "Assigned job")}
+                        {appointment.client
+                          ? `${appointment.client.firstName ?? ""} ${appointment.client.lastName ?? ""}`.trim()
+                          : appointment.title ?? "Appointment"}
                       </p>
-                      {job.vehicle ? (
-                        <p className="truncate text-sm text-muted-foreground">
-                          {[job.vehicle.year, job.vehicle.make, job.vehicle.model].filter(Boolean).join(" ")}
-                        </p>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {appointment.vehicle
+                          ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+                          : "No vehicle on file"}
+                      </p>
+                    </div>
+                    <div
+                      className="hidden items-center gap-2 md:flex"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                    >
+                      {myStaffRecord && !appointment.assignedStaff?.id ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 px-2 text-xs"
+                          disabled={updatingAppointmentId !== null}
+                          onClick={(event) => void handleAssignAppointmentToMe(event, appointment.id)}
+                        >
+                          Assign to me
+                        </Button>
+                      ) : null}
+                      {appointment.status === "scheduled" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 px-2 text-xs"
+                          disabled={updatingAppointmentId !== null}
+                          onClick={(event) =>
+                            void handleQuickAppointmentStatus(event, appointment.id, "confirmed", "Appointment confirmed")
+                          }
+                        >
+                          Confirm
+                        </Button>
+                      ) : null}
+                      {appointment.status === "confirmed" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 px-2 text-xs"
+                          disabled={updatingAppointmentId !== null}
+                          onClick={(event) =>
+                            void handleQuickAppointmentStatus(event, appointment.id, "in_progress", "Appointment started")
+                          }
+                        >
+                          Start
+                        </Button>
+                      ) : null}
+                      {appointment.status === "in_progress" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 px-2 text-xs"
+                          disabled={updatingAppointmentId !== null}
+                          onClick={(event) =>
+                            void handleQuickAppointmentStatus(event, appointment.id, "completed", "Appointment completed")
+                          }
+                        >
+                          Complete
+                        </Button>
                       ) : null}
                     </div>
-                    <StatusBadge status={job.status ?? "scheduled"} type="job" />
+                    <div className="flex flex-col items-end gap-2">
+                      <StatusBadge status={appointment.status ?? "scheduled"} type="appointment" />
+                      {appointment.totalPrice ? (
+                        <span className="text-sm font-semibold tabular-nums text-foreground">
+                          {formatCurrency(appointment.totalPrice)}
+                        </span>
+                      ) : null}
+                    </div>
                     <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
                   </Link>
                 </li>
               ))}
             </ul>
-          ) : (
-            <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center">
-              <p className="mb-4 text-sm text-muted-foreground">This user is not linked to a staff profile yet.</p>
-              <Button asChild size="lg" className="min-h-[48px] rounded-xl">
-                <Link to="/settings">Open team settings</Link>
-              </Button>
-            </div>
-          )}
-        </DashboardSection>
+          </DashboardSection>
 
-        <DashboardSection
-          title="Active jobs"
-          seeAllHref="/jobs"
-          seeAllLabel="All jobs"
-          error={jobsError}
-          isLoading={loadingJobs}
-          isEmpty={!loadingJobs && !jobsError && activeJobs.length === 0}
-          emptyMessage="No active work orders right now."
-          emptyCta={{ href: scheduleJobHref, label: "Schedule a job" }}
-          skeletonRows={3}
-        >
-          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
-            {activeJobs.map((job) => (
-              <li key={job.id}>
-                <Link
-                  to={`/jobs/${job.id}`}
-                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
-                >
-                  <div className="w-[72px] shrink-0 font-mono text-sm text-muted-foreground">
-                    {formatSafe(job.scheduledStart, "h:mm a")}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-medium">
-                      {job.title?.trim() ||
-                        (job.client
-                          ? `${job.client.firstName ?? ""} ${job.client.lastName ?? ""}`.trim()
-                          : "Job")}
-                    </p>
-                    {job.vehicle ? (
-                      <p className="truncate text-sm text-muted-foreground">
-                        {[job.vehicle.year, job.vehicle.make, job.vehicle.model].filter(Boolean).join(" ")}
+          <div className="space-y-5">
+            <DashboardSection
+              title="Active Jobs In Progress"
+              seeAllHref="/jobs"
+              seeAllLabel="All jobs"
+              error={jobsError}
+              isLoading={loadingJobs}
+              isEmpty={!loadingJobs && !jobsError && activeJobs.length === 0}
+              emptyMessage="No active jobs need attention right now."
+              emptyCta={{ href: scheduleJobHref, label: "Open schedule" }}
+              skeletonRows={3}
+              mobileCollapsed
+            >
+              <ul className="overflow-hidden rounded-2xl border divide-y divide-border bg-card">
+                {activeJobs.slice(0, 5).map((job) => (
+                  <li key={job.id}>
+                    <Link
+                      to={`/jobs/${job.id}`}
+                      className="flex min-h-[68px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 active:bg-muted/70"
+                    >
+                      <div className="w-[72px] shrink-0">
+                        <p className="font-mono text-sm font-medium text-foreground">{formatSafe(job.scheduledStart, "h:mm a")}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {job.assignedStaff
+                            ? `${job.assignedStaff.firstName ?? ""} ${job.assignedStaff.lastName ?? ""}`.trim() || "Assigned"
+                            : "Unassigned"}
+                        </p>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-base font-medium">
+                          {job.title?.trim() ||
+                            (job.client
+                              ? `${job.client.firstName ?? ""} ${job.client.lastName ?? ""}`.trim()
+                              : "Job")}
+                        </p>
+                        <p className="truncate text-sm text-muted-foreground">
+                          {job.vehicle
+                            ? [job.vehicle.year, job.vehicle.make, job.vehicle.model].filter(Boolean).join(" ")
+                            : "No vehicle on file"}
+                        </p>
+                      </div>
+                      <div
+                        className="hidden items-center gap-2 md:flex"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                      >
+                        {myStaffRecord && !job.assignedStaff?.id ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            disabled={updatingJobId !== null}
+                            onClick={(event) =>
+                              void handleQuickJobUpdate(event, job.id, { assignedStaffId: myStaffRecord.id }, "Job assigned to you")
+                            }
+                          >
+                            Assign
+                          </Button>
+                        ) : null}
+                        {["scheduled", "confirmed"].includes(job.status ?? "") ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            disabled={updatingJobId !== null}
+                            onClick={(event) =>
+                              void handleQuickJobUpdate(event, job.id, { status: "in_progress" }, "Job marked in progress")
+                            }
+                          >
+                            Start
+                          </Button>
+                        ) : null}
+                        {job.status === "in_progress" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            disabled={updatingJobId !== null}
+                            onClick={(event) =>
+                              void handleQuickJobUpdate(event, job.id, { status: "completed" }, "Job completed")
+                            }
+                          >
+                            Complete
+                          </Button>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <StatusBadge status={job.status ?? "scheduled"} type="job" />
+                        {job.totalPrice ? (
+                          <span className="text-sm font-semibold tabular-nums text-foreground">
+                            {formatCurrency(job.totalPrice)}
+                          </span>
+                        ) : null}
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </DashboardSection>
+
+            <DashboardSection
+              title="Quotes Awaiting Approval"
+              seeAllHref="/quotes"
+              seeAllLabel="All quotes"
+              error={quotesError}
+              isLoading={loadingQuotes}
+              isEmpty={!loadingQuotes && !quotesError && pendingQuotes.length === 0}
+              emptyMessage="No quotes are waiting on client approval."
+              emptyCta={{ href: "/quotes/new", label: "New quote" }}
+              skeletonRows={3}
+              mobileCollapsed
+            >
+              <ul className="overflow-hidden rounded-2xl border divide-y divide-border bg-card">
+                {pendingQuotes.slice(0, 5).map((quote) => (
+                  <li key={quote.id}>
+                    <Link
+                      to={`/quotes/${quote.id}`}
+                      className="flex min-h-[68px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 active:bg-muted/70"
+                    >
+                      <Receipt className="h-5 w-5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">
+                          {quote.client
+                            ? `${quote.client.firstName ?? ""} ${quote.client.lastName ?? ""}`.trim() || "Quote"
+                            : `Quote ${String(quote.id).slice(0, 8)}...`}
+                        </p>
+                        <p className="text-sm capitalize text-muted-foreground">{String(quote.status ?? "-")}</p>
+                        {(quote.sentAt || quote.followUpSentAt) ? (
+                          <p className="text-xs text-muted-foreground">
+                            {[formatFreshness(quote.sentAt ?? null, "Sent"), formatFreshness(quote.followUpSentAt ?? null, "Followed up")]
+                              .filter(Boolean)
+                              .join(" ? ")}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div
+                        className="hidden items-center gap-2 md:flex"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                      >
+                        {["draft", "sent"].includes(String(quote.status ?? "")) ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            disabled={sendingQuoteId !== null}
+                            onClick={(event) => void handleSendQuote(event, quote.id)}
+                          >
+                            {sendingQuoteId === quote.id ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                            {String(quote.status ?? "") === "draft" ? "Send" : "Resend"}
+                          </Button>
+                        ) : null}
+                        {String(quote.status ?? "") === "sent" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            disabled={followingUpQuoteId !== null}
+                            onClick={(event) => void handleSendFollowUp(event, quote.id)}
+                          >
+                            {followingUpQuoteId === quote.id ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                            Follow up
+                          </Button>
+                        ) : null}
+                      </div>
+                      <span className="font-semibold tabular-nums">{formatCurrency(quote.total)}</span>
+                      <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </DashboardSection>
+
+            <DashboardSection
+              title="Deposits Awaiting Payment"
+              seeAllHref="/appointments"
+              seeAllLabel="All appointments"
+              error={apptsError}
+              isLoading={loadingAppts}
+              isEmpty={!loadingAppts && !apptsError && depositsAwaitingPayment.length === 0}
+              emptyMessage="No deposits are waiting on today's board."
+              emptyCta={{ href: scheduleJobHref, label: "Open schedule" }}
+              skeletonRows={2}
+              mobileCollapsed
+            >
+              <div className="space-y-3">
+                <div className="rounded-2xl border bg-card px-4 py-4">
+                  <p className="text-sm font-medium text-muted-foreground">Deposit value still due</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight">{formatCurrency(depositDueValue)}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {depositsAwaitingPayment.length} appointment{depositsAwaitingPayment.length === 1 ? "" : "s"} waiting on deposit
+                  </p>
+                </div>
+                <ul className="overflow-hidden rounded-2xl border divide-y divide-border bg-card">
+                  {depositsAwaitingPayment.map((appointment) => (
+                    <li key={appointment.id}>
+                      <Link
+                        to={`/appointments/${appointment.id}`}
+                        className="flex min-h-[60px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 active:bg-muted/70"
+                      >
+                        <div className="w-[72px] shrink-0 font-mono text-sm text-muted-foreground">
+                          {formatSafe(appointment.startTime, "h:mm a")}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">
+                            {appointment.client
+                              ? `${appointment.client.firstName ?? ""} ${appointment.client.lastName ?? ""}`.trim()
+                              : appointment.title ?? "Appointment"}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Deposit due {formatCurrency(appointment.depositAmount)}
+                          </p>
+                        </div>
+                        <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </DashboardSection>
+          </div>
+        </div>
+
+        <div className={cn("grid gap-5", showTeamAssignments ? "xl:grid-cols-3" : "xl:grid-cols-2")}>
+          <ActivityFeedCard title="Recent Activity" records={activityRecords} fetching={loadingActivity} />
+
+          <DashboardSection
+            title="Follow-Ups Due"
+            seeAllHref={staleInvoiceCollections.length > 0 ? "/invoices?tab=stale" : "/quotes?tab=followup"}
+            seeAllLabel="Work queue"
+            error={quotesError ?? invoicesError}
+            isLoading={loadingQuotes || loadingInvoices}
+            isEmpty={
+              !loadingQuotes &&
+              !loadingInvoices &&
+              !quotesError &&
+              !invoicesError &&
+              staleQuoteFollowUps.length === 0 &&
+              staleInvoiceCollections.length === 0
+            }
+            emptyMessage="No follow-ups are overdue right now."
+            emptyCta={{ href: "/quotes", label: "Open quotes" }}
+            skeletonRows={3}
+            mobileCollapsed
+          >
+            <ul className="overflow-hidden rounded-2xl border divide-y divide-border bg-card">
+              {staleQuoteFollowUps.map((quote) => (
+                <li key={`quote-${quote.id}`}>
+                  <Link
+                    to={`/quotes/${quote.id}`}
+                    className="flex min-h-[60px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 active:bg-muted/70"
+                  >
+                    <Receipt className="h-5 w-5 shrink-0 text-amber-600" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">
+                        {quote.client
+                          ? `${quote.client.firstName ?? ""} ${quote.client.lastName ?? ""}`.trim() || "Quote follow-up"
+                          : "Quote follow-up"}
                       </p>
-                    ) : job.assignedStaff ? (
-                      <p className="truncate text-sm text-muted-foreground">
-                        Assigned to{" "}
-                        {`${job.assignedStaff.firstName ?? ""} ${job.assignedStaff.lastName ?? ""}`.trim() || "team"}
+                      <p className="text-sm text-muted-foreground">
+                        {formatFreshness(quote.followUpSentAt ?? quote.sentAt ?? null, "Last touched") ?? "Needs follow-up"}
                       </p>
-                    ) : null}
-                  </div>
-                  <div
-                    className="flex items-center gap-2"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2 text-xs"
+                      disabled={followingUpQuoteId !== null}
+                      onClick={(event) => void handleSendFollowUp(event, quote.id)}
+                    >
+                      Follow up
+                    </Button>
+                  </Link>
+                </li>
+              ))}
+              {staleInvoiceCollections.map((invoice) => (
+                <li key={`invoice-${invoice.id}`}>
+                  <Link
+                    to={`/invoices/${invoice.id}`}
+                    className="flex min-h-[60px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 active:bg-muted/70"
                   >
-                    {myStaffRecord && !job.assignedStaff?.id ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={updatingJobId !== null}
-                        onClick={(event) =>
-                          void handleQuickJobUpdate(event, job.id, { assignedStaffId: myStaffRecord.id }, "Job assigned to you")
-                        }
-                      >
-                        Assign to me
-                      </Button>
-                    ) : null}
-                    {["scheduled", "confirmed"].includes(job.status ?? "") ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={updatingJobId !== null}
-                        onClick={(event) =>
-                          void handleQuickJobUpdate(event, job.id, { status: "in_progress" }, "Job marked in progress")
-                        }
-                      >
-                        Start
-                      </Button>
-                    ) : null}
-                    {job.status === "in_progress" ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={updatingJobId !== null}
-                        onClick={(event) =>
-                          void handleQuickJobUpdate(event, job.id, { status: "completed" }, "Job completed")
-                        }
-                      >
-                        Complete
-                      </Button>
-                    ) : null}
-                  </div>
-                  <StatusBadge status={job.status ?? "scheduled"} type="job" />
-                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </DashboardSection>
-
-        <DashboardSection
-          title="Today's schedule"
-          seeAllHref="/appointments"
-          seeAllLabel="All appointments"
-          error={apptsError}
-          isLoading={loadingAppts}
-          isEmpty={!loadingAppts && !apptsError && todayAppointments.length === 0}
-          emptyMessage="Nothing on the schedule today."
-          emptyCta={{ href: scheduleJobHref, label: "Schedule a job" }}
-          skeletonRows={3}
-        >
-          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
-            {todayAppointments.map((appointment) => (
-              <li key={appointment.id}>
-                <Link
-                  to={`/appointments/${appointment.id}`}
-                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
-                >
-                  <div className="w-[72px] shrink-0 font-mono text-sm text-muted-foreground">
-                    {formatSafe(appointment.startTime, "h:mm a")}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-medium">
-                      {appointment.client
-                        ? `${appointment.client.firstName ?? ""} ${appointment.client.lastName ?? ""}`.trim()
-                        : appointment.title ?? "Job"}
-                    </p>
-                    {appointment.vehicle ? (
-                      <p className="truncate text-sm text-muted-foreground">
-                        {[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")}
+                    <DollarSign className="h-5 w-5 shrink-0 text-red-600" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">
+                        {invoice.invoiceNumber ?? `Invoice ${String(invoice.id).slice(0, 8)}...`}
                       </p>
-                    ) : null}
-                  </div>
-                  <div
-                    className="flex items-center gap-2"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                  >
-                    {myStaffRecord && !appointment.assignedStaff?.id ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={updatingAppointmentId !== null}
-                        onClick={(event) => void handleAssignAppointmentToMe(event, appointment.id)}
-                      >
-                        Assign to me
-                      </Button>
-                    ) : null}
-                    {appointment.status === "scheduled" ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={updatingAppointmentId !== null}
-                        onClick={(event) =>
-                          void handleQuickAppointmentStatus(event, appointment.id, "confirmed", "Appointment confirmed")
-                        }
-                      >
-                        Confirm
-                      </Button>
-                    ) : null}
-                    {appointment.status === "confirmed" ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={updatingAppointmentId !== null}
-                        onClick={(event) =>
-                          void handleQuickAppointmentStatus(event, appointment.id, "in_progress", "Appointment started")
-                        }
-                      >
-                        Start
-                      </Button>
-                    ) : null}
-                    {appointment.status === "in_progress" ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={updatingAppointmentId !== null}
-                        onClick={(event) =>
-                          void handleQuickAppointmentStatus(event, appointment.id, "completed", "Appointment completed")
-                        }
-                      >
-                        Complete
-                      </Button>
-                    ) : null}
-                  </div>
-                  <StatusBadge status={appointment.status ?? "scheduled"} type="appointment" />
-                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </DashboardSection>
-
-        <DashboardSection
-          title="Ready to book"
-          seeAllHref="/quotes"
-          seeAllLabel="Quotes"
-          error={acceptedQuotesError}
-          isLoading={loadingAcceptedQuotes}
-          isEmpty={!loadingAcceptedQuotes && !acceptedQuotesError && acceptedQuotes.length === 0}
-          emptyMessage="No accepted quotes are waiting to be booked."
-          emptyCta={{ href: "/quotes", label: "Review quotes" }}
-          skeletonRows={2}
-          mobileCollapsed
-        >
-          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
-            {acceptedQuotes.map((quote) => (
-              <li key={quote.id}>
-                <Link
-                  to={`/quotes/${quote.id}`}
-                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
-                >
-                  <Receipt className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
-                      {quote.client
-                        ? `${quote.client.firstName ?? ""} ${quote.client.lastName ?? ""}`.trim() || "Accepted quote"
-                        : `Quote - ${String(quote.id).slice(0, 8)}...`}
-                    </p>
-                    <p className="text-sm capitalize text-muted-foreground">accepted</p>
-                  </div>
-                  <div
-                    className="flex items-center gap-2"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                  >
-                    {quote.client?.id ? (
-                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
-                        <Link
-                          to={`/appointments/new?clientId=${quote.client.id}&quoteId=${quote.id}${
-                            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-                          }`}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          Book
-                        </Link>
-                      </Button>
-                    ) : null}
-                    {quote.client?.id ? (
-                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
-                        <Link
-                          to={`/invoices/new?clientId=${quote.client.id}&quoteId=${quote.id}`}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          Invoice
-                        </Link>
-                      </Button>
-                    ) : null}
-                  </div>
-                  <span className="font-semibold tabular-nums">{formatCurrency(quote.total)}</span>
-                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </DashboardSection>
-
-        <DashboardSection
-          title="Ready to invoice"
-          seeAllHref="/jobs"
-          seeAllLabel="Jobs"
-          error={readyToInvoiceJobsError}
-          isLoading={loadingReadyToInvoiceJobs}
-          isEmpty={!loadingReadyToInvoiceJobs && !readyToInvoiceJobsError && readyToInvoiceJobs.length === 0}
-          emptyMessage="No completed work is waiting for invoicing."
-          emptyCta={{ href: "/jobs", label: "Review jobs" }}
-          skeletonRows={2}
-          mobileCollapsed
-        >
-          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
-            {readyToInvoiceJobs.map((job) => (
-              <li key={job.id}>
-                <Link
-                  to={`/jobs/${job.id}`}
-                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
-                >
-                  <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
-                      {job.client
-                        ? `${job.client.firstName ?? ""} ${job.client.lastName ?? ""}`.trim() || "Completed job"
-                        : job.title ?? "Completed job"}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {job.vehicle
-                        ? [job.vehicle.year, job.vehicle.make, job.vehicle.model].filter(Boolean).join(" ")
-                        : "No vehicle on file"}
-                    </p>
-                  </div>
-                  <div
-                    className="flex items-center gap-2"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                  >
-                    {job.client?.id ? (
-                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
-                        <Link
-                          to={`/invoices/new?clientId=${job.client.id}&appointmentId=${job.appointmentId ?? job.id}`}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          Invoice
-                        </Link>
-                      </Button>
-                    ) : null}
-                  </div>
-                  <span className="font-semibold tabular-nums">{formatCurrency(job.totalPrice)}</span>
-                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </DashboardSection>
-
-        <DashboardSection
-          title="Pending quotes"
-          seeAllHref="/quotes"
-          seeAllLabel="Quotes"
-          error={quotesError}
-          isLoading={loadingQuotes}
-          isEmpty={!loadingQuotes && !quotesError && pendingQuotes.length === 0}
-          emptyMessage="No open quotes."
-          emptyCta={{ href: "/quotes/new", label: "New quote" }}
-          skeletonRows={2}
-          mobileCollapsed
-        >
-          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
-            {pendingQuotes.map((quote) => (
-              <li key={quote.id}>
-                <Link
-                  to={`/quotes/${quote.id}`}
-                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
-                >
-                  <Receipt className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
-                      {quote.client
-                        ? `${quote.client.firstName ?? ""} ${quote.client.lastName ?? ""}`.trim() || "Quote"
-                        : `Quote - ${String(quote.id).slice(0, 8)}...`}
-                    </p>
-                    <p className="text-sm capitalize text-muted-foreground">{String(quote.status ?? "-")}</p>
-                    {(quote.sentAt || quote.followUpSentAt) ? (
-                      <p className="text-xs text-muted-foreground">
-                        {[
-                          formatFreshness(quote.sentAt ?? null, "Sent"),
-                          formatFreshness(quote.followUpSentAt ?? null, "Followed up"),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
+                      <p className="text-sm text-muted-foreground">
+                        {formatFreshness(invoice.lastSentAt ?? null, "Sent") ?? "Needs collection follow-up"}
                       </p>
-                    ) : null}
-                  </div>
-                  <div
-                    className="flex items-center gap-2"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                  >
-                    {["draft", "sent"].includes(String(quote.status ?? "")) ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={sendingQuoteId !== null}
-                        onClick={(event) => void handleSendQuote(event, quote.id)}
-                      >
-                        {sendingQuoteId === quote.id ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-                        {String(quote.status ?? "") === "draft" ? "Send" : "Resend"}
-                      </Button>
-                    ) : null}
-                    {String(quote.status ?? "") === "sent" ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={followingUpQuoteId !== null}
-                        onClick={(event) => void handleSendFollowUp(event, quote.id)}
-                      >
-                        {followingUpQuoteId === quote.id ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-                        Follow up
-                      </Button>
-                    ) : null}
-                    {String(quote.status ?? "") === "accepted" && quote.client?.id ? (
-                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
-                        <Link
-                          to={`/appointments/new?clientId=${quote.client.id}&quoteId=${quote.id}${
-                            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-                          }`}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          Book
-                        </Link>
-                      </Button>
-                    ) : null}
-                  </div>
-                  <span className="font-semibold tabular-nums">{formatCurrency(quote.total)}</span>
-                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </DashboardSection>
+                    </div>
+                    <span className="font-semibold tabular-nums">{formatCurrency(invoiceBalance(invoice))}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </DashboardSection>
 
-        <DashboardSection
-          title="Unpaid invoices"
-          seeAllHref="/invoices"
-          seeAllLabel="Invoices"
-          error={invoicesError}
-          isLoading={loadingInvoices}
-          isEmpty={!loadingInvoices && !invoicesError && unpaidInvoices.length === 0}
-          emptyMessage="No unpaid invoices."
-          emptyCta={{ href: "/invoices/new", label: "New invoice" }}
-          skeletonRows={2}
-          mobileCollapsed
-        >
-          <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
-            {unpaidInvoices.map((invoice) => (
-              <li key={invoice.id}>
-                <Link
-                  to={`/invoices/${invoice.id}`}
-                  className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 active:bg-muted/70"
-                >
-                  <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
-                      {invoice.invoiceNumber ?? `Invoice ${String(invoice.id).slice(0, 8)}...`}
-                    </p>
-                    <p className="text-sm capitalize text-muted-foreground">
-                      {String(invoice.status ?? "").replace(/-/g, " ") || "-"}
-                    </p>
-                    {(invoice.lastSentAt || invoice.lastPaidAt) ? (
-                      <p className="text-xs text-muted-foreground">
-                        {[formatFreshness(invoice.lastSentAt ?? null, "Sent"), formatFreshness(invoice.lastPaidAt ?? null, "Paid")]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div
-                    className="flex items-center gap-2"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                  >
-                    {["draft", "sent", "partial"].includes(String(invoice.status ?? "")) ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={sendingInvoiceId !== null}
-                        onClick={(event) => void handleSendInvoice(event, invoice.id)}
-                      >
-                        {sendingInvoiceId === invoice.id ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-                        {String(invoice.status ?? "") === "draft" ? "Send" : "Resend"}
-                      </Button>
-                    ) : null}
-                    {["sent", "partial"].includes(String(invoice.status ?? "")) ? (
-                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
-                        <Link
-                          to={`/invoices/${invoice.id}`}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          Collect
-                        </Link>
-                      </Button>
-                    ) : null}
-                  </div>
-                  <span className="font-semibold tabular-nums">{formatCurrency(invoiceBalance(invoice))}</span>
-                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </DashboardSection>
+          {showTeamAssignments ? (
+            <DashboardSection
+              title="Technician Assignments"
+              seeAllHref="/settings"
+              seeAllLabel="Team"
+              error={staffError}
+              isLoading={loadingStaff || loadingJobs || loadingAppts}
+              isEmpty={!loadingStaff && !loadingJobs && !loadingAppts && teamLoad.length === 0}
+              emptyMessage="No technician assignments are active yet."
+              emptyCta={{ href: "/settings", label: "Set up team" }}
+              skeletonRows={3}
+              mobileCollapsed
+            >
+              <ul className="overflow-hidden rounded-2xl border divide-y divide-border bg-card">
+                {teamLoad.map((entry) => {
+                  const staffName = `${entry.staff.firstName ?? ""} ${entry.staff.lastName ?? ""}`.trim() || "Team member";
+                  const loadTone =
+                    entry.activeJobs >= 3 || entry.todayAppointments >= 5
+                      ? "text-red-700 bg-red-50 border-red-200"
+                      : entry.activeJobs >= 2 || entry.todayAppointments >= 3
+                        ? "text-amber-700 bg-amber-50 border-amber-200"
+                        : "text-emerald-700 bg-emerald-50 border-emerald-200";
+                  return (
+                    <li key={entry.staff.id}>
+                      <div className="flex min-h-[64px] items-center gap-3 px-4 py-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-base font-medium">{staffName}</p>
+                          <p className="truncate text-sm text-muted-foreground">
+                            {entry.activeJobs} active job{entry.activeJobs === 1 ? "" : "s"} • {entry.todayAppointments} on today's board
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold tabular-nums">{formatCurrency(entry.revenue)}</div>
+                          <div className={cn("mt-1 inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", loadTone)}>
+                            {entry.activeJobs >= 3 || entry.todayAppointments >= 5
+                              ? "Heavy load"
+                              : entry.activeJobs >= 2 || entry.todayAppointments >= 3
+                                ? "Balanced"
+                                : "Light load"}
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </DashboardSection>
+          ) : null}
+        </div>
       </div>
 
     </div>
@@ -1745,20 +1214,22 @@ function ListSkeleton({ rows }: { rows: number }) {
 }
 
 function MetricCard({
+  href,
   label,
   value,
   detail,
   icon,
   compactValue = false,
 }: {
+  href?: string;
   label: string;
   value: string;
   detail: string;
   icon: ReactNode;
   compactValue?: boolean;
 }) {
-  return (
-    <div className="rounded-2xl border bg-card p-4">
+  const content = (
+    <div className="rounded-[24px] border border-border/70 bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-muted-foreground">{label}</p>
         <div className="text-orange-600">{icon}</div>
@@ -1767,46 +1238,12 @@ function MetricCard({
       <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
     </div>
   );
-}
-
-function PipelineCard({
-  href,
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  href: string;
-  label: string;
-  value: string;
-  detail: string;
-  tone: "sales" | "billing" | "risk" | "ops";
-}) {
-  const toneClasses =
-    tone === "sales"
-      ? "bg-sky-500/10 text-sky-700"
-      : tone === "billing"
-        ? "bg-emerald-500/10 text-emerald-700"
-        : tone === "risk"
-          ? "bg-amber-500/10 text-amber-700"
-          : "bg-violet-500/10 text-violet-700";
-
-  return (
-    <Link
-      to={href}
-      className="rounded-2xl border bg-card p-4 transition-colors hover:bg-muted/40"
-    >
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">{label}</p>
-          <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
-        </div>
-        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", toneClasses)}>
-          <ArrowUpRight className="h-5 w-5" />
-        </div>
-      </div>
-      <p className="text-sm text-muted-foreground">{detail}</p>
+  return href ? (
+    <Link to={href} className="block transition-transform hover:-translate-y-0.5">
+      {content}
     </Link>
+  ) : (
+    content
   );
 }
 
@@ -1838,3 +1275,4 @@ function QuickAction({
 }
 
 export { RouteErrorBoundary as ErrorBoundary };
+
