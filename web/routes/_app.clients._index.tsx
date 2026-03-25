@@ -175,7 +175,7 @@ export default function ClientsPage() {
           <EmptyState
             icon={Users}
             title="No clients yet"
-            description="Add your first client to start tracking their vehicles and service history."
+            description="Start with one real customer. Once a client exists, Strata can hold their vehicles, appointments, invoices, and follow-up history in one place."
             action={
               <Button asChild>
                 <Link to="/clients/new">

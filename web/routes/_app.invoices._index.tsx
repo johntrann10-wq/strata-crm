@@ -396,7 +396,7 @@ export default function InvoicesIndexPage() {
                                 {activeTab === "all"
                                   ? debouncedSearch
                                     ? "Try a different invoice number, client, or vehicle."
-                                    : "Create your first invoice to get started."
+                                    : "Create the first invoice so Strata starts tracking real money, not just jobs."
                                   : `No ${activeTab} invoices match this view.`}
                               </p>
                             </div>

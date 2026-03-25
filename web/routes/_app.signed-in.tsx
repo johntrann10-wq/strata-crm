@@ -806,6 +806,18 @@ export default function SignedIn() {
           )}
         </section>
 
+        <DailyOperationsCard
+          activationChecklist={activationChecklist}
+          todayAppointments={todayAppointments.length}
+          nextUpcomingAppointment={upcomingAppointments[0] ?? null}
+          activeJobs={activeJobs.length}
+          unpaidRevenue={unpaidRevenue}
+          pendingApprovalsCount={pendingApprovalsCount}
+          staleFollowUps={staleQuoteFollowUps.length + staleInvoiceCollections.length}
+          depositCount={depositsAwaitingPayment.length}
+          scheduleJobHref={scheduleJobHref}
+        />
+
         {anyError ? (
           <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
@@ -1785,6 +1797,148 @@ function ActivationChecklistCard({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function DailyOperationsCard({
+  activationChecklist,
+  todayAppointments,
+  nextUpcomingAppointment,
+  activeJobs,
+  unpaidRevenue,
+  pendingApprovalsCount,
+  staleFollowUps,
+  depositCount,
+  scheduleJobHref,
+}: {
+  activationChecklist: {
+    completed: number;
+    total: number;
+    items: Array<{
+      key: string;
+      label: string;
+      detail: string;
+      done: boolean;
+      href: string;
+      actionLabel: string;
+    }>;
+  };
+  todayAppointments: number;
+  nextUpcomingAppointment: AppointmentRecord | null;
+  activeJobs: number;
+  unpaidRevenue: number;
+  pendingApprovalsCount: number;
+  staleFollowUps: number;
+  depositCount: number;
+  scheduleJobHref: string;
+}) {
+  const isOperational = activationChecklist.completed >= 4;
+  const nextSteps = activationChecklist.items.filter((item) => !item.done).slice(0, 3);
+
+  return (
+    <section className="rounded-[28px] border border-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] px-4 py-5 shadow-sm sm:px-5 sm:py-6">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            {isOperational ? "Daily operating view" : "Make Strata indispensable"}
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+            {isOperational ? "Run the shop from here every day" : "Finish the essentials that make Strata useful daily"}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm text-slate-600">
+            {isOperational
+              ? "Use this as the control point for today's schedule, live work, pending money, and follow-up so nothing important lives outside the system."
+              : "Once the first client, vehicle, appointment, and invoice are in place, Strata stops feeling like setup software and starts acting like the shop's operating system."}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+          <Button asChild className="min-h-[46px] rounded-xl bg-slate-950 text-white hover:bg-slate-800">
+            <Link to={scheduleJobHref}>Open today's schedule</Link>
+          </Button>
+          <Button asChild variant="outline" className="min-h-[46px] rounded-xl">
+            <Link to={pendingApprovalsCount > 0 || staleFollowUps > 0 ? "/quotes?tab=followup" : "/invoices?tab=stale"}>
+              Open money queue
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-3">
+        {isOperational ? (
+          <>
+            <OperatingLane
+              title="Schedule"
+              value={todayAppointments > 0 ? `${todayAppointments} today` : "Nothing today yet"}
+              detail={
+                nextUpcomingAppointment
+                  ? `Next up ${formatSafe(nextUpcomingAppointment.startTime, "EEE h:mm a")}`
+                  : "Book the next job to keep the calendar moving."
+              }
+              href="/appointments"
+              actionLabel="Open appointments"
+            />
+            <OperatingLane
+              title="Work & handoffs"
+              value={activeJobs > 0 ? `${activeJobs} active job${activeJobs === 1 ? "" : "s"}` : "No live work"}
+              detail={
+                depositCount > 0
+                  ? `${depositCount} deposit${depositCount === 1 ? "" : "s"} still need attention.`
+                  : "Keep status, notes, and handoffs current so the team stays aligned."
+              }
+              href="/jobs"
+              actionLabel="Open jobs"
+            />
+            <OperatingLane
+              title="Money & follow-up"
+              value={unpaidRevenue > 0 ? formatCurrency(unpaidRevenue) : "Nothing outstanding"}
+              detail={
+                pendingApprovalsCount > 0 || staleFollowUps > 0
+                  ? `${pendingApprovalsCount} pending action${pendingApprovalsCount === 1 ? "" : "s"} and ${staleFollowUps} follow-up${staleFollowUps === 1 ? "" : "s"} need attention.`
+                  : "Quotes, invoices, and reminders are under control right now."
+              }
+              href={pendingApprovalsCount > 0 ? "/quotes" : "/invoices"}
+              actionLabel="Open billing"
+            />
+          </>
+        ) : (
+          nextSteps.map((step) => (
+            <OperatingLane
+              key={step.key}
+              title={step.label}
+              value="Recommended next"
+              detail={step.detail}
+              href={step.href}
+              actionLabel={step.actionLabel}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function OperatingLane({
+  title,
+  value,
+  detail,
+  href,
+  actionLabel,
+}: {
+  title: string;
+  value: string;
+  detail: string;
+  href: string;
+  actionLabel: string;
+}) {
+  return (
+    <div className="rounded-[1.4rem] border border-border/70 bg-white/85 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</p>
+      <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{value}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{detail}</p>
+      <Button asChild variant="ghost" className="mt-3 h-auto px-0 text-sm font-semibold text-slate-900 hover:bg-transparent hover:text-slate-700">
+        <Link to={href}>{actionLabel}</Link>
+      </Button>
     </div>
   );
 }

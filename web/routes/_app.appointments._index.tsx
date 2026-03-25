@@ -335,10 +335,10 @@ export default function AppointmentsPage() {
             debouncedSearch
               ? "Try a different customer, vehicle, or technician search."
               : activeTab === "mine" && !myStaffRecord
-                ? "Link this user to a staff profile to unlock an assigned queue."
+              ? "Link this user to a staff profile to unlock an assigned queue."
                 : activeTab === "mine"
                   ? "No appointments are assigned to this staff account right now."
-              : "Book your first appointment to start filling the schedule."
+              : "Book the first real appointment so Strata starts running the schedule instead of just storing setup."
           }
           action={
             <Button asChild>

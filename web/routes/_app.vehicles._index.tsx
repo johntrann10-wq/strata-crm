@@ -259,7 +259,7 @@ export default function VehiclesPage() {
         <EmptyState
           icon={Car}
           title="No vehicles on file yet"
-          description="Vehicles are added from a client's profile page."
+          description="Vehicles make Strata operational. Add them from a client record so appointments, notes, quotes, invoices, and service history stay tied to the right car."
           action={
             <Button asChild variant="outline">
               <Link to="/clients">Open clients</Link>
