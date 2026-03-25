@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   CircleDot,
   ClipboardList,
+  ChevronDown,
   FileText,
   Loader2,
   MapPin,
@@ -201,6 +202,9 @@ export default function JobDetailPage() {
     internalNotes: "",
   });
   const [selectedServiceId, setSelectedServiceId] = useState("__none__");
+  const [showMobileWorkflowProgress, setShowMobileWorkflowProgress] = useState(false);
+  const [showMobilePickupReadiness, setShowMobilePickupReadiness] = useState(false);
+  const [showMobileFollowUp, setShowMobileFollowUp] = useState(false);
 
   useEffect(() => {
     if (!record) return;
@@ -409,7 +413,39 @@ export default function JobDetailPage() {
           }
         />
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <Card className="border-border/70 shadow-sm sm:hidden">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Quick actions</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-2">
+            {canEdit ? (
+              <Button onClick={() => void handleSave()} disabled={saving} className="w-full">
+                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save job
+              </Button>
+            ) : null}
+            <div className="grid grid-cols-2 gap-2">
+              <Button asChild variant="outline" className="w-full">
+                <Link to={record.appointmentId ? withReturn(`/appointments/${record.appointmentId}`) : "/appointments"}>
+                  Open appointment
+                </Link>
+              </Button>
+              {record.invoice ? (
+                <Button asChild variant="outline" className="w-full">
+                  <Link to={withReturn(`/invoices/${record.invoice.id}`)}>Open invoice</Link>
+                </Button>
+              ) : canWriteInvoices && record.client?.id ? (
+                <Button asChild variant="outline" className="w-full">
+                  <Link to={withReturn(`/invoices/new?appointmentId=${record.appointmentId}&clientId=${record.client.id}`)}>
+                    Create invoice
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-3 grid-cols-2 xl:grid-cols-5">
           <TopMetric label="Schedule" value={formatDateRange(record.scheduledStart, record.scheduledEnd)} />
           <TopMetric label="Technician" value={formatName(record.assignedStaff)} />
           <TopMetric label="Revenue" value={formatCurrency(record.totalPrice)} />
@@ -418,8 +454,22 @@ export default function JobDetailPage() {
         </div>
 
         <Card className="border-border/70 shadow-sm">
-          <CardHeader className="pb-4"><CardTitle>Workflow Progress</CardTitle></CardHeader>
-          <CardContent>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>Workflow Progress</CardTitle>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="sm:hidden"
+                onClick={() => setShowMobileWorkflowProgress((value) => !value)}
+              >
+                {showMobileWorkflowProgress ? "Hide" : "Show"}
+                <ChevronDown className={showMobileWorkflowProgress ? "ml-1 h-4 w-4 rotate-180" : "ml-1 h-4 w-4"} />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className={showMobileWorkflowProgress ? "" : "hidden sm:block"}>
             <div className="grid gap-3 md:grid-cols-5">
               {progressStages.map((stage) => (
                 <div key={stage.key} className="rounded-xl border border-border/70 bg-background/95 p-4">
@@ -567,8 +617,22 @@ export default function JobDetailPage() {
             </Card>
 
             <Card className="border-border/70 shadow-sm">
-              <CardHeader className="pb-4"><CardTitle>Pickup Readiness</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle>Pickup Readiness</CardTitle>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="sm:hidden"
+                    onClick={() => setShowMobilePickupReadiness((value) => !value)}
+                  >
+                    {showMobilePickupReadiness ? "Hide" : "Show"}
+                    <ChevronDown className={showMobilePickupReadiness ? "ml-1 h-4 w-4 rotate-180" : "ml-1 h-4 w-4"} />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className={showMobilePickupReadiness ? "space-y-3" : "hidden space-y-3 sm:block"}>
                 <ReadinessRow label="All services complete" ready={(record.services ?? []).length > 0 && completedServiceCount === (record.services ?? []).length} />
                 <ReadinessRow label="Invoice prepared" ready={Boolean(record.invoice?.id)} />
                 <ReadinessRow label="Job marked complete" ready={record.status === "completed"} />
@@ -596,8 +660,22 @@ export default function JobDetailPage() {
             </Card>
 
             <Card className="border-border/70 shadow-sm">
-              <CardHeader className="pb-4"><CardTitle>Follow-up Freshness</CardTitle></CardHeader>
-              <CardContent className="space-y-3 text-sm">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle>Follow-up Freshness</CardTitle>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="sm:hidden"
+                    onClick={() => setShowMobileFollowUp((value) => !value)}
+                  >
+                    {showMobileFollowUp ? "Hide" : "Show"}
+                    <ChevronDown className={showMobileFollowUp ? "ml-1 h-4 w-4 rotate-180" : "ml-1 h-4 w-4"} />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className={showMobileFollowUp ? "space-y-3 text-sm" : "hidden space-y-3 text-sm sm:block"}>
                 <MiniStat label="Quote follow-up" value={record.quote ? [formatFreshness((quoteFreshness as any)?.sentAt ?? null, "Sent"), formatFreshness((quoteFreshness as any)?.followUpSentAt ?? null, "Followed up")].filter(Boolean).join(" - ") || "No quote outreach yet" : "No quote linked"} />
                 <MiniStat label="Invoice collection" value={record.invoice ? [formatFreshness((invoiceFreshness as any)?.lastSentAt ?? null, "Sent"), formatFreshness((invoiceFreshness as any)?.lastPaidAt ?? null, "Paid")].filter(Boolean).join(" - ") || "No invoice activity yet" : "No invoice linked"} />
               </CardContent>
