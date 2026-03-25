@@ -28,8 +28,6 @@ import {
   AlertCircle,
   Car,
   Search as SearchIcon,
-  Building2,
-  MapPin,
   Plus,
 } from "lucide-react";
 import React, { useState, useEffect, memo, useMemo, useCallback } from "react";
@@ -173,10 +171,24 @@ const SidebarNav = memo(function SidebarNav({
   onItemClick,
   enabledModules,
   onOpenCommandPalette,
+  businessId,
+  currentLocationId,
+  locationRecords,
+  membershipRole,
+  onBusinessChange,
+  onLocationChange,
+  tenantBusinesses,
 }: {
   onItemClick?: () => void;
   enabledModules: Set<string>;
   onOpenCommandPalette: () => void;
+  businessId?: string | null;
+  currentLocationId?: string | null;
+  locationRecords?: Array<{ id: string; name?: string | null }>;
+  membershipRole?: string | null;
+  onBusinessChange?: (businessId: string) => void;
+  onLocationChange?: (locationId: string | null) => void;
+  tenantBusinesses?: AuthOutletContext["tenantBusinesses"];
 }) {
   const location = useLocation();
   const visibleSections = navSections
@@ -253,6 +265,53 @@ const SidebarNav = memo(function SidebarNav({
           ))}
         </div>
       </nav>
+      {((tenantBusinesses?.length ?? 0) > 1 || (locationRecords?.length ?? 0) > 1 || membershipRole) && (
+        <div className="border-t border-white/8 px-4 py-4">
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/28">
+            Workspace
+          </div>
+          <div className="space-y-3">
+            {(tenantBusinesses?.length ?? 0) > 1 && onBusinessChange ? (
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-medium text-white/55">Business</span>
+                <select
+                  value={businessId ?? ""}
+                  onChange={(e) => e.target.value && onBusinessChange(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-white/10 bg-white/6 px-3 text-sm text-white outline-none"
+                >
+                  {tenantBusinesses?.map((tenantBusiness) => (
+                    <option key={tenantBusiness.id} value={tenantBusiness.id} className="text-black">
+                      {tenantBusiness.name ?? "Untitled business"} ({tenantBusiness.role})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {(locationRecords?.length ?? 0) > 1 && onLocationChange ? (
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-medium text-white/55">Location</span>
+                <select
+                  value={currentLocationId ?? ""}
+                  onChange={(e) => onLocationChange(e.target.value || null)}
+                  className="h-10 w-full rounded-xl border border-white/10 bg-white/6 px-3 text-sm text-white outline-none"
+                >
+                  <option value="" className="text-black">All locations</option>
+                  {locationRecords?.map((entry) => (
+                    <option key={entry.id} value={entry.id} className="text-black">
+                      {entry.name?.trim() || "Unnamed location"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {membershipRole ? (
+              <div className="rounded-xl border border-white/8 bg-white/5 px-3 py-2 text-[11px] uppercase tracking-[0.12em] text-white/50">
+                {membershipRole.replace(/_/g, " ")}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 });
@@ -281,7 +340,6 @@ function AppLayoutInner({
   const businessId = (business?.id as string) ?? null;
   const businessType = (business?.type as string) ?? null;
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
   const { setOpen } = useCommandPalette();
   const enabledModules = useMemo(
     () => getEnabledModules(businessType) as Set<string>,
@@ -379,12 +437,12 @@ function AppLayoutInner({
     <div className="flex min-h-dvh flex-col md:h-screen md:flex-row md:overflow-hidden">
       <CommandPalette enabledModules={enabledModules} hasBusiness={!!businessId} />
 
-      {/* Desktop sidebar – fixed, visible on md+ screens */}
+      {/* Desktop sidebar â€“ fixed, visible on md+ screens */}
       <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:w-64 z-20">
         <SidebarNav enabledModules={enabledModules} onOpenCommandPalette={() => setOpen(true)} />
       </aside>
 
-      {/* Mobile sidebar – Sheet that slides in from the left */}
+      {/* Mobile sidebar â€“ Sheet that slides in from the left */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
           side="left"
@@ -394,25 +452,50 @@ function AppLayoutInner({
             onItemClick={() => setMobileOpen(false)}
             enabledModules={enabledModules}
             onOpenCommandPalette={() => setOpen(true)}
+            businessId={businessId}
+            currentLocationId={currentLocationId}
+            locationRecords={locationRecords}
+            membershipRole={membershipRole}
+            onBusinessChange={(nextBusinessId) => {
+              onBusinessChange(nextBusinessId);
+              setMobileOpen(false);
+            }}
+            onLocationChange={onLocationChange}
+            tenantBusinesses={tenantBusinesses}
           />
         </SheetContent>
       </Sheet>
 
       {/* Main content area */}
       <div className="flex min-w-0 flex-1 flex-col md:pl-64">
-        <header className="sticky top-0 z-10 w-full border-b border-border/70 bg-background/92 backdrop-blur supports-[backdrop-filter]:bg-background/86">
-          <div className="flex flex-col gap-2.5 px-3 py-2.5 md:gap-3 md:px-6 md:py-3">
+        <header className="z-10 w-full border-b border-border/70 bg-background/92 backdrop-blur supports-[backdrop-filter]:bg-background/86 md:sticky md:top-0">
+          <div className="flex items-center justify-between gap-3 px-3 py-2.5 md:hidden">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-foreground">{activeNavEntry.item.label}</p>
+              {(businessName || activeLocationName) ? (
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {businessName ? businessName : "No business selected"}
+                  {activeLocationName ? ` · ${activeLocationName}` : ""}
+                </p>
+              ) : null}
+            </div>
+            <div className="shrink-0">
+              <SecondaryNavigation icon={<UserIcon user={user as any} />} />
+            </div>
+          </div>
+
+          <div className="hidden flex-col gap-2.5 px-3 py-2.5 md:flex md:gap-3 md:px-6 md:py-3">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div className="flex min-w-0 items-start gap-3">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                    className="mt-0.5 h-9 w-9 shrink-0 md:hidden"
-                  onClick={() => setMobileOpen(true)}
-                  aria-label="Open navigation menu"
-                >
-                  <Menu className="h-5 w-5" />
-                </Button>
                 <div className="min-w-0">
                   <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
                     <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2.5 sm:text-[11px]">
@@ -428,7 +511,7 @@ function AppLayoutInner({
                   {(businessName || activeLocationName) ? (
                     <p className="mt-1 text-[11px] text-muted-foreground sm:text-sm">
                       {businessName ? businessName : "No business selected"}
-                      {activeLocationName ? ` � ${activeLocationName}` : ""}
+                      {activeLocationName ? ` · ${activeLocationName}` : ""}
                     </p>
                   ) : null}
                 </div>
@@ -495,70 +578,6 @@ function AppLayoutInner({
                     </label>
                   ) : null}
                 </div>
-                {(tenantBusinesses.length > 1 || locationRecords.length > 1 || membershipRole) ? (
-                  <div className="sm:hidden">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-9 w-full justify-between rounded-xl border border-border/70 bg-background/80 px-3 text-sm"
-                      onClick={() => setMobileWorkspaceOpen((open) => !open)}
-                    >
-                      <span className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        Workspace
-                      </span>
-                      <span className="text-xs text-muted-foreground">{mobileWorkspaceOpen ? "Hide" : "Show"}</span>
-                    </Button>
-                    {mobileWorkspaceOpen ? (
-                      <div className="mt-2 space-y-2 rounded-2xl border border-border/70 bg-card/96 p-3">
-                        {tenantBusinesses.length > 1 ? (
-                          <label className="block">
-                            <span className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                              <Building2 className="h-3.5 w-3.5" />
-                              Business
-                            </span>
-                            <select
-                              value={businessId ?? ""}
-                              onChange={(e) => e.target.value && onBusinessChange(e.target.value)}
-                              className="h-10 w-full rounded-xl border border-border/80 bg-background px-3.5 text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
-                            >
-                              {tenantBusinesses.map((tenantBusiness) => (
-                                <option key={tenantBusiness.id} value={tenantBusiness.id}>
-                                  {tenantBusiness.name ?? "Untitled business"} ({tenantBusiness.role})
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        ) : null}
-                        {locationRecords.length > 1 ? (
-                          <label className="block">
-                            <span className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                              <MapPin className="h-3.5 w-3.5" />
-                              Location
-                            </span>
-                            <select
-                              value={currentLocationId ?? ""}
-                              onChange={(e) => onLocationChange(e.target.value || null)}
-                              className="h-10 w-full rounded-xl border border-border/80 bg-background px-3.5 text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
-                            >
-                              <option value="">All locations</option>
-                              {locationRecords.map((location) => (
-                                <option key={location.id} value={location.id}>
-                                  {location.name?.trim() || "Unnamed location"}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        ) : null}
-                        {membershipRole ? (
-                          <div className="mobile-support-card text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                            {membershipRole.replace(/_/g, " ")}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
               </div>
             </div>
 
@@ -744,21 +763,21 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   if (!authCheckDone) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading…</div>
+        <div className="animate-pulse text-muted-foreground">Loadingâ€¦</div>
       </div>
     );
   }
   if (!effectiveUserId) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Redirecting…</div>
+        <div className="animate-pulse text-muted-foreground">Redirectingâ€¦</div>
       </div>
     );
   }
   if (userFetching) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading…</div>
+        <div className="animate-pulse text-muted-foreground">Loadingâ€¦</div>
       </div>
     );
   }
@@ -775,7 +794,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     }
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading…</div>
+        <div className="animate-pulse text-muted-foreground">Loadingâ€¦</div>
       </div>
     );
   }
@@ -800,7 +819,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     }
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Preparing your workspace…</div>
+        <div className="animate-pulse text-muted-foreground">Preparing your workspaceâ€¦</div>
       </div>
     );
   }
@@ -811,7 +830,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   ) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Finishing setup…</div>
+        <div className="animate-pulse text-muted-foreground">Finishing setupâ€¦</div>
       </div>
     );
   }
