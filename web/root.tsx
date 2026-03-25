@@ -14,6 +14,7 @@ import "./app.css";
 import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
 import { setAuthToken } from "./lib/auth";
+import { recordRuntimeError } from "./lib/runtimeErrors";
 
 /** Google OAuth redirects with ?token= — persist before /auth/me runs. */
 function OAuthTokenFromQuery() {
@@ -37,6 +38,42 @@ function ClientToaster() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   return mounted ? <Toaster richColors /> : null;
+}
+
+function BrowserErrorReporter() {
+  useEffect(() => {
+    const onError = (event: ErrorEvent) => {
+      recordRuntimeError({
+        source: "window.error",
+        message: event.message || "Unhandled browser error",
+        detail: event.error instanceof Error ? event.error.stack ?? event.error.message : undefined,
+      });
+    };
+
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const message =
+        reason instanceof Error
+          ? reason.message
+          : typeof reason === "string"
+            ? reason
+            : "Unhandled promise rejection";
+      recordRuntimeError({
+        source: "window.unhandledrejection",
+        message,
+        detail: reason instanceof Error ? reason.stack : undefined,
+      });
+    };
+
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onUnhandledRejection);
+    };
+  }, []);
+
+  return null;
 }
 
 const isProduction = import.meta.env.PROD;
@@ -97,6 +134,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
       <body>
         <Suspense>
           <OAuthTokenFromQuery />
+          <BrowserErrorReporter />
           <Outlet context={{ gadgetConfig, csrfToken }} />
           <ClientToaster />
         </Suspense>

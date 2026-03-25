@@ -48,6 +48,7 @@ import {
   setCurrentLocationId,
 } from "@/lib/auth";
 import { pathAllowsMissingBusiness } from "../lib/routeRequiresBusiness";
+import { recordRuntimeError } from "../lib/runtimeErrors";
 
 // SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
 
@@ -106,6 +107,11 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    recordRuntimeError({
+      source: "react.boundary",
+      message: error.message || "React render error",
+      detail: info.componentStack || error.stack,
+    });
     console.error(error, info);
   }
 
