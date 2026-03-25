@@ -50,6 +50,24 @@ function isOverdueInvoice(invoice: { status?: string | null; dueDate?: string | 
   return ["sent", "partial"].includes(String(invoice.status ?? "")) && !!dueDate && dueDate.getTime() < Date.now();
 }
 
+function balanceAmount(invoice: { remainingBalance?: number | string | null; total?: number | string | null }) {
+  if (invoice.remainingBalance != null && invoice.remainingBalance !== "") {
+    const value =
+      typeof invoice.remainingBalance === "string"
+        ? Number(invoice.remainingBalance)
+        : invoice.remainingBalance;
+    return Number.isNaN(value) ? 0 : value;
+  }
+  const total = typeof invoice.total === "string" ? Number(invoice.total) : Number(invoice.total ?? 0);
+  return Number.isNaN(total) ? 0 : total;
+}
+
+function paidAmount(invoice: { totalPaid?: number | string | null }) {
+  const value =
+    typeof invoice.totalPaid === "string" ? Number(invoice.totalPaid) : Number(invoice.totalPaid ?? 0);
+  return Number.isNaN(value) ? 0 : value;
+}
+
 export default function InvoicesIndexPage() {
   const { businessId } = useOutletContext<AuthOutletContext>();
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
@@ -229,7 +247,7 @@ export default function InvoicesIndexPage() {
             tone="danger"
             title="Overdue invoices need collection"
             detail={`${overdueInvoices.length} invoice${overdueInvoices.length === 1 ? "" : "s"} are past due`}
-            amount={formatCurrency(overdueInvoices.reduce((sum, invoice) => sum + Number(invoice.total ?? 0), 0))}
+            amount={formatCurrency(overdueInvoices.reduce((sum, invoice) => sum + balanceAmount(invoice), 0))}
             href={`/invoices/${overdueInvoices[0].id}`}
             actionLabel="Open oldest overdue invoice"
           />
@@ -262,7 +280,7 @@ export default function InvoicesIndexPage() {
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Invoice #</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Client</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Vehicle</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Amount</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Balance</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Date Created</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Due Date</th>
@@ -329,6 +347,9 @@ export default function InvoicesIndexPage() {
                           const vehicleLabel = invoice.vehicle
                             ? [invoice.vehicle.year, invoice.vehicle.make, invoice.vehicle.model].filter(Boolean).join(" ")
                             : "-";
+                          const outstanding = balanceAmount(invoice);
+                          const paid = paidAmount(invoice);
+                          const hasPaymentHistory = paid > 0;
 
                           return (
                             <tr
@@ -353,7 +374,15 @@ export default function InvoicesIndexPage() {
                                 )}
                               </td>
                               <td className="px-4 py-3 text-muted-foreground">{vehicleLabel || "-"}</td>
-                              <td className="px-4 py-3 font-medium">{formatCurrency(invoice.total)}</td>
+                              <td className="px-4 py-3">
+                                <div className="space-y-1">
+                                  <div className="font-medium">{formatCurrency(outstanding)}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Total {formatCurrency(invoice.total)}
+                                    {hasPaymentHistory ? ` · Paid ${formatCurrency(paid)}` : ""}
+                                  </div>
+                                </div>
+                              </td>
                               <td className="px-4 py-3">
                                 {invoice.status ? <StatusBadge status={invoice.status} type="invoice" /> : "-"}
                               </td>
@@ -389,7 +418,9 @@ export default function InvoicesIndexPage() {
                                   </Button>
                                   {["sent", "partial"].includes(String(invoice.status ?? "")) ? (
                                     <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
-                                      <Link to={`/invoices/${invoice.id}`}>Collect</Link>
+                                      <Link to={`/invoices/${invoice.id}`}>
+                                        {outstanding > 0 ? `Collect ${formatCurrency(outstanding)}` : "Collect"}
+                                      </Link>
                                     </Button>
                                   ) : null}
                                 </div>

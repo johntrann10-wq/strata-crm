@@ -111,49 +111,83 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
       vehicleYear: vehicles.year,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
+      totalPaid: sql<string>`coalesce(sum(case when ${payments.reversedAt} is null then ${payments.amount} else 0 end), 0)`,
+      lastPaidAt: sql<Date | null>`max(case when ${payments.reversedAt} is null then ${payments.paidAt} else null end)`,
     })
     .from(invoices)
     .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
     .leftJoin(appointments, eq(invoices.appointmentId, appointments.id))
     .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
+    .leftJoin(payments, eq(payments.invoiceId, invoices.id))
     .where(whereClause)
+    .groupBy(
+      invoices.id,
+      invoices.businessId,
+      invoices.clientId,
+      invoices.appointmentId,
+      invoices.invoiceNumber,
+      invoices.status,
+      invoices.subtotal,
+      invoices.taxRate,
+      invoices.taxAmount,
+      invoices.discountAmount,
+      invoices.total,
+      invoices.dueDate,
+      invoices.paidAt,
+      invoices.notes,
+      invoices.createdAt,
+      invoices.updatedAt,
+      clients.firstName,
+      clients.lastName,
+      appointments.startTime,
+      vehicles.year,
+      vehicles.make,
+      vehicles.model
+    )
     .orderBy(orderBy)
     .limit(first);
 
-  const records = rows.map((r) => ({
-    id: r.id,
-    businessId: r.businessId,
-    clientId: r.clientId,
-    appointmentId: r.appointmentId,
-    invoiceNumber: r.invoiceNumber,
-    status: r.status,
-    subtotal: r.subtotal,
-    taxRate: r.taxRate,
-    taxAmount: r.taxAmount,
-    discountAmount: r.discountAmount,
-    total: r.total,
-    dueDate: r.dueDate,
-    paidAt: r.paidAt,
-    notes: r.notes,
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
-    client:
-      r.clientFirstName != null
-        ? { id: r.clientId, firstName: r.clientFirstName, lastName: r.clientLastName ?? "" }
-        : null,
-    appointment:
-      r.appointmentId != null
-        ? { id: r.appointmentId, startTime: r.aptStart ?? null }
-        : null,
-    vehicle:
-      r.vehicleMake != null
-        ? {
-            year: r.vehicleYear ?? null,
-            make: r.vehicleMake,
-            model: r.vehicleModel ?? "",
-          }
-        : null,
-  }));
+  const records = rows.map((r) => {
+    const totalAmount = Number(r.total ?? 0);
+    const paidAmount = Number(r.totalPaid ?? 0);
+    return {
+      id: r.id,
+      businessId: r.businessId,
+      clientId: r.clientId,
+      appointmentId: r.appointmentId,
+      invoiceNumber: r.invoiceNumber,
+      status: r.status,
+      subtotal: r.subtotal,
+      taxRate: r.taxRate,
+      taxAmount: r.taxAmount,
+      discountAmount: r.discountAmount,
+      total: r.total,
+      totalPaid: r.totalPaid,
+      remainingBalance: String(Math.max(0, totalAmount - paidAmount).toFixed(2)),
+      dueDate: r.dueDate,
+      paidAt: r.paidAt,
+      lastPaidAt: r.lastPaidAt,
+      notes: r.notes,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      client:
+        r.clientFirstName != null
+          ? { id: r.clientId, firstName: r.clientFirstName, lastName: r.clientLastName ?? "" }
+          : null,
+      appointment:
+        r.appointmentId != null
+          ? { id: r.appointmentId, startTime: r.aptStart ?? null }
+          : null,
+      vehicle:
+        r.vehicleMake != null
+          ? {
+              year: r.vehicleYear ?? null,
+              make: r.vehicleMake,
+              model: r.vehicleModel ?? "",
+            }
+          : null,
+    };
+  });
 
   res.json({ records });
 });
