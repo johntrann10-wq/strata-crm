@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -101,9 +101,14 @@ function statusPillClass(status: string): string {
 export default function ClientDetailPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { currentLocationId } = useOutletContext<AuthOutletContext>();
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/clients";
-  const appointmentHref = `/appointments/new?clientId=${id}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}`;
+  const currentRecordPath = `${location.pathname}${location.search}`;
+  const appointmentHref = `/appointments/new?clientId=${id}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}&from=${encodeURIComponent(currentRecordPath)}`;
+  const addVehicleHref = `/clients/${id}/vehicles/new?next=client&from=${encodeURIComponent(currentRecordPath)}`;
+  const newInvoiceHref = `/invoices/new?clientId=${id}&from=${encodeURIComponent(currentRecordPath)}`;
+  const newQuoteHref = `/quotes/new?clientId=${id}&from=${encodeURIComponent(currentRecordPath)}`;
   const navigate = useNavigate();
   const [editMode, setEditMode] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -352,7 +357,7 @@ export default function ClientDetailPage() {
           actions={
             <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
               <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-                <Link to={`/clients/${id}/vehicles/new?next=client`}>
+                <Link to={addVehicleHref}>
                   <Car className="mr-1.5 h-4 w-4" />
                   Add Vehicle
                 </Link>
@@ -364,13 +369,13 @@ export default function ClientDetailPage() {
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-                <Link to={`/invoices/new?clientId=${id}`}>
+                <Link to={newInvoiceHref}>
                   <FileText className="mr-1.5 h-4 w-4" />
                   New Invoice
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-                <Link to={`/quotes/new?clientId=${id}`}>
+                <Link to={newQuoteHref}>
                   <Receipt className="mr-1.5 h-4 w-4" />
                   New Quote
                 </Link>
@@ -531,9 +536,9 @@ export default function ClientDetailPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <QuickWorkflowAction icon={CalendarPlus} title="Book appointment" detail="Schedule the next service visit" href={appointmentHref} />
-                <QuickWorkflowAction icon={Receipt} title="Create quote" detail="Build and send a fresh estimate" href={`/quotes/new?clientId=${id}`} />
-                <QuickWorkflowAction icon={FileText} title="Create invoice" detail="Bill work without leaving the record" href={`/invoices/new?clientId=${id}`} />
-                <QuickWorkflowAction icon={Plus} title="Add vehicle" detail="Capture another vehicle for this client" href={`/clients/${id}/vehicles/new?next=client`} />
+                <QuickWorkflowAction icon={Receipt} title="Create quote" detail="Build and send a fresh estimate" href={newQuoteHref} />
+                <QuickWorkflowAction icon={FileText} title="Create invoice" detail="Bill work without leaving the record" href={newInvoiceHref} />
+                <QuickWorkflowAction icon={Plus} title="Add vehicle" detail="Capture another vehicle for this client" href={addVehicleHref} />
               </CardContent>
             </Card>
 

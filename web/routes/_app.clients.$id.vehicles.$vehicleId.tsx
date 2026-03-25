@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -96,7 +96,12 @@ export default function VehicleDetailPage() {
   const { currentLocationId } = useOutletContext<AuthOutletContext>();
   const { id, vehicleId } = useParams<{ id: string; vehicleId: string }>();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : `/clients/${id}`;
+  const currentRecordPath = `${location.pathname}${location.search}`;
+  const appointmentHref = `/appointments/new?clientId=${id}&vehicleId=${vehicleId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}&from=${encodeURIComponent(currentRecordPath)}`;
+  const newQuoteHref = `/quotes/new?clientId=${id}&vehicleId=${vehicleId}&from=${encodeURIComponent(currentRecordPath)}`;
+  const newInvoiceHref = `/invoices/new?clientId=${id}&vehicleId=${vehicleId}&from=${encodeURIComponent(currentRecordPath)}`;
   const navigate = useNavigate();
   const { setPageContext } = usePageContext();
 
@@ -365,19 +370,19 @@ export default function VehicleDetailPage() {
           actions={
             <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
               <Button asChild size="sm" className="w-full sm:w-auto">
-                <Link to={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}`}>
+                <Link to={appointmentHref}>
                   <CalendarPlus className="h-4 w-4 mr-2" />
                   Book Job
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-                <Link to={`/quotes/new?clientId=${id}&vehicleId=${vehicleId}`}>
+                <Link to={newQuoteHref}>
                   <Receipt className="h-4 w-4 mr-2" />
                   New Quote
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-                <Link to={`/invoices/new?clientId=${id}&vehicleId=${vehicleId}`}>
+                <Link to={newInvoiceHref}>
                   <FileText className="h-4 w-4 mr-2" />
                   New Invoice
                 </Link>
@@ -584,19 +589,19 @@ export default function VehicleDetailPage() {
                   icon={CalendarPlus}
                   title="Book appointment"
                   detail="Schedule the next visit for this vehicle"
-                  href={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}`}
+                  href={appointmentHref}
                 />
                 <QuickVehicleAction
                   icon={Receipt}
                   title="Create quote"
                   detail="Build an estimate tied to this vehicle"
-                  href={`/quotes/new?clientId=${id}&vehicleId=${vehicleId}`}
+                  href={newQuoteHref}
                 />
                 <QuickVehicleAction
                   icon={FileText}
                   title="Create invoice"
                   detail="Bill this vehicle directly"
-                  href={`/invoices/new?clientId=${id}&vehicleId=${vehicleId}`}
+                  href={newInvoiceHref}
                 />
                 <QuickVehicleAction
                   icon={Plus}
