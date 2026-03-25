@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Circle,
   Car,
+  Clock3,
   DollarSign,
   FileText,
   ShieldAlert,
@@ -82,6 +83,15 @@ type JobRecord = {
   client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
   vehicle?: { make?: string | null; model?: string | null; year?: number | null } | null;
   assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
+};
+
+type ClientRecord = {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  createdAt?: string | null;
 };
 
 type BusinessSetupRecord = {
@@ -182,6 +192,7 @@ export default function SignedIn() {
     const to = endOfDay(filterNow);
     return { apptStartGte: from.toISOString(), apptStartLte: to.toISOString() };
   }, [filterNow]);
+  const upcomingAppointmentsStart = useMemo(() => endOfDay(filterNow).toISOString(), [filterNow]);
 
   const [{ data: appointmentsRaw, fetching: fetchingAppts, error: apptsError }, refetchAppts] = useFindMany(
     api.appointment,
@@ -216,8 +227,23 @@ export default function SignedIn() {
     locationId: currentLocationId ?? undefined,
     pause: !businessId,
   } as any);
+  const [{ data: upcomingAppointmentsRaw, fetching: fetchingUpcomingAppointments, error: upcomingAppointmentsError }] = useFindMany(
+    api.appointment,
+    {
+      startGte: upcomingAppointmentsStart,
+      locationId: currentLocationId ?? undefined,
+      sort: { startTime: "Ascending" },
+      first: 6,
+      pause: !businessId,
+    }
+  );
   const [{ data: staffRaw, fetching: fetchingStaff, error: staffError }, refetchStaff] = useFindMany(api.staff, {
     first: 100,
+    pause: !businessId,
+  } as any);
+  const [{ data: recentClientsRaw, fetching: fetchingRecentClients, error: recentClientsError }] = useFindMany(api.client, {
+    first: 6,
+    sort: { createdAt: "Descending" },
     pause: !businessId,
   } as any);
   const [{ data: activityRaw, fetching: fetchingActivity, error: activityError }, refetchActivity] = useFindMany(
@@ -267,8 +293,10 @@ export default function SignedIn() {
   const unpaidInvoices = (invoicesRaw ?? []) as InvoiceRecord[];
   const pendingQuotes = (quotesRaw ?? []) as QuoteRecord[];
   const jobs = (jobsRaw ?? []) as JobRecord[];
+  const upcomingAppointments = (upcomingAppointmentsRaw ?? []) as AppointmentRecord[];
   const staffRecords = (staffRaw ?? []) as StaffRecord[];
   const activityRecords = (activityRaw ?? []) as ActivityRecord[];
+  const recentClients = (recentClientsRaw ?? []) as ClientRecord[];
   const locationRecords = (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>;
   const activationBusiness = ((activationBusinessRaw ?? [])[0] ?? null) as BusinessSetupRecord | null;
   const activeLocationName = useMemo(
@@ -349,6 +377,60 @@ export default function SignedIn() {
       depositsAwaitingPayment.length,
     [pendingQuotes.length, staleQuoteFollowUps.length, staleInvoiceCollections.length, depositsAwaitingPayment.length]
   );
+  const priorityActions = useMemo(() => {
+    const actions: Array<{
+      key: string;
+      label: string;
+      detail: string;
+      href: string;
+      cta: string;
+      tone: "urgent" | "attention";
+    }> = [];
+
+    if (depositsAwaitingPayment.length > 0) {
+      actions.push({
+        key: "deposits",
+        label: "Collect pending deposits",
+        detail: `${depositsAwaitingPayment.length} appointment${depositsAwaitingPayment.length === 1 ? "" : "s"} still need ${formatCurrency(depositDueValue)} in deposits.`,
+        href: "/appointments",
+        cta: "Review deposits",
+        tone: "urgent",
+      });
+    }
+    if (staleInvoiceCollections.length > 0) {
+      actions.push({
+        key: "collections",
+        label: "Follow up on unpaid invoices",
+        detail: `${staleInvoiceCollections.length} invoice${staleInvoiceCollections.length === 1 ? "" : "s"} need collection attention.`,
+        href: "/invoices?tab=stale",
+        cta: "Open collections",
+        tone: "urgent",
+      });
+    }
+    if (pendingQuotes.length > 0) {
+      actions.push({
+        key: "quotes",
+        label: "Close pending quotes",
+        detail: `${pendingQuotes.length} quote${pendingQuotes.length === 1 ? "" : "s"} are still waiting on approval.`,
+        href: "/quotes",
+        cta: "Open quotes",
+        tone: "attention",
+      });
+    }
+    if (todayAppointments.some((appointment) => !appointment.assignedStaff?.id)) {
+      const unassignedCount = todayAppointments.filter((appointment) => !appointment.assignedStaff?.id).length;
+      actions.push({
+        key: "assignments",
+        label: "Assign today's unowned work",
+        detail: `${unassignedCount} appointment${unassignedCount === 1 ? "" : "s"} still have no staff owner.`,
+        href: "/appointments",
+        cta: "Assign work",
+        tone: "attention",
+      });
+    }
+
+    return actions.slice(0, 4);
+  }, [depositDueValue, depositsAwaitingPayment, pendingQuotes, staleInvoiceCollections, todayAppointments]);
   const activationChecklist = useMemo(() => {
     const bookingBasicsReady = Boolean(
       activationBusiness?.operatingHours &&
@@ -901,6 +983,54 @@ export default function SignedIn() {
 
           <div className="space-y-5">
             <DashboardSection
+              title="Priority Actions"
+              seeAllHref={priorityActions[0]?.href ?? "/appointments"}
+              seeAllLabel="Open queue"
+              error={null}
+              isLoading={false}
+              isEmpty={priorityActions.length === 0}
+              emptyMessage="Nothing urgent is waiting right now."
+              emptyCta={{ href: scheduleJobHref, label: "New appointment" }}
+              skeletonRows={2}
+            >
+              <div className="space-y-3">
+                {priorityActions.map((action) => (
+                  <Link
+                    key={action.key}
+                    to={action.href}
+                    className={cn(
+                      "block rounded-2xl border px-4 py-4 transition-colors hover:bg-muted/30",
+                      action.tone === "urgent"
+                        ? "border-red-200 bg-red-50/70"
+                        : "border-amber-200 bg-amber-50/70"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground">{action.label}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{action.detail}</p>
+                      </div>
+                      <span
+                        className={cn(
+                          "inline-flex shrink-0 rounded-full px-2.5 py-1 text-xs font-medium",
+                          action.tone === "urgent"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-amber-100 text-amber-700"
+                        )}
+                      >
+                        {action.tone === "urgent" ? "Urgent" : "Needs attention"}
+                      </span>
+                    </div>
+                    <div className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-orange-700">
+                      {action.cta}
+                      <ChevronRight className="h-4 w-4" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </DashboardSection>
+
+            <DashboardSection
               title="Active Jobs In Progress"
               seeAllHref="/jobs"
               seeAllLabel="All jobs"
@@ -1123,10 +1253,100 @@ export default function SignedIn() {
                 </ul>
               </div>
             </DashboardSection>
+
+            <DashboardSection
+              title="Upcoming Work"
+              seeAllHref="/appointments"
+              seeAllLabel="Full calendar"
+              error={upcomingAppointmentsError}
+              isLoading={fetchingUpcomingAppointments && upcomingAppointmentsRaw === undefined}
+              isEmpty={
+                !(fetchingUpcomingAppointments && upcomingAppointmentsRaw === undefined) &&
+                !upcomingAppointmentsError &&
+                upcomingAppointments.length === 0
+              }
+              emptyMessage="No upcoming work is scheduled after today."
+              emptyCta={{ href: scheduleJobHref, label: "Book next job" }}
+              skeletonRows={3}
+              mobileCollapsed
+            >
+              <ul className="overflow-hidden rounded-2xl border divide-y divide-border bg-card">
+                {upcomingAppointments.slice(0, 5).map((appointment) => (
+                  <li key={appointment.id}>
+                    <Link
+                      to={`/appointments/${appointment.id}`}
+                      className="flex min-h-[64px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 active:bg-muted/70"
+                    >
+                      <div className="w-[90px] shrink-0">
+                        <p className="text-sm font-medium text-foreground">{formatSafe(appointment.startTime, "EEE, MMM d")}</p>
+                        <p className="mt-1 font-mono text-xs text-muted-foreground">{formatSafe(appointment.startTime, "h:mm a")}</p>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">
+                          {appointment.client
+                            ? `${appointment.client.firstName ?? ""} ${appointment.client.lastName ?? ""}`.trim()
+                            : appointment.title ?? "Appointment"}
+                        </p>
+                        <p className="truncate text-sm text-muted-foreground">
+                          {appointment.vehicle
+                            ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+                            : "No vehicle on file"}
+                        </p>
+                      </div>
+                      <StatusBadge status={appointment.status ?? "scheduled"} type="appointment" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </DashboardSection>
           </div>
         </div>
 
         <div className={cn("grid gap-5", showTeamAssignments ? "xl:grid-cols-3" : "xl:grid-cols-2")}>
+          <DashboardSection
+            title="Recent Clients"
+            seeAllHref="/clients"
+            seeAllLabel="All clients"
+            error={recentClientsError}
+            isLoading={fetchingRecentClients && recentClientsRaw === undefined}
+            isEmpty={
+              !(fetchingRecentClients && recentClientsRaw === undefined) &&
+              !recentClientsError &&
+              recentClients.length === 0
+            }
+            emptyMessage="No clients have been added yet."
+            emptyCta={{ href: "/clients/new", label: "Add client" }}
+            skeletonRows={3}
+            mobileCollapsed
+          >
+            <ul className="overflow-hidden rounded-2xl border divide-y divide-border bg-card">
+              {recentClients.map((client) => (
+                <li key={client.id}>
+                  <Link
+                    to={`/clients/${client.id}`}
+                    className="flex min-h-[60px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 active:bg-muted/70"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-700">
+                      <Users className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">
+                        {`${client.firstName ?? ""} ${client.lastName ?? ""}`.trim() || "Client"}
+                      </p>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {client.phone?.trim() || client.email?.trim() || "Recently added"}
+                      </p>
+                    </div>
+                    <div className="hidden text-right text-xs text-muted-foreground sm:block">
+                      {formatSafe(client.createdAt ?? null, "MMM d")}
+                    </div>
+                    <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </DashboardSection>
+
           <ActivityFeedCard title="Recent Activity" records={activityRecords} fetching={loadingActivity} />
 
           <DashboardSection
