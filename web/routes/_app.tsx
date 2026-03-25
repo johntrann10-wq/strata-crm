@@ -219,10 +219,10 @@ const SidebarNav = memo(function SidebarNav({
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <div className="space-y-5">
+        <div className="space-y-4">
           {visibleSections.map((section) => (
             <div key={section.id}>
-              <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30">
+              <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/28">
                 {section.label}
               </div>
               <div className="space-y-1">
@@ -399,8 +399,8 @@ function AppLayoutInner({
 
       {/* Main content area */}
       <div className="flex min-w-0 flex-1 flex-col md:pl-64">
-        <header className="sticky top-0 z-10 w-full border-b border-border/70 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/82">
-          <div className="flex flex-col gap-3 px-4 py-3 md:gap-4 md:px-6">
+        <header className="sticky top-0 z-10 w-full border-b border-border/70 bg-background/92 backdrop-blur supports-[backdrop-filter]:bg-background/86">
+          <div className="flex flex-col gap-3 px-4 py-3 md:gap-3 md:px-6">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div className="flex min-w-0 items-start gap-3">
                 <Button
@@ -413,34 +413,28 @@ function AppLayoutInner({
                   <Menu className="h-5 w-5" />
                 </Button>
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2.5 sm:text-[11px]">
                       {activeNavEntry.section.label}
                     </span>
-                    {businessName ? (
-                      <span className="hidden items-center gap-1.5 rounded-full border border-border/70 bg-background px-2.5 py-1 text-xs text-muted-foreground sm:inline-flex">
-                        <Building2 className="h-3.5 w-3.5" />
-                        {businessName}
-                      </span>
-                    ) : null}
-                    {activeLocationName ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background px-2 py-1 text-[11px] text-muted-foreground sm:px-2.5 sm:text-xs">
-                        <MapPin className="h-3.5 w-3.5" />
-                        {activeLocationName}
-                      </span>
-                    ) : null}
                   </div>
-                  <h1 className="mt-1.5 text-balance text-[22px] font-semibold tracking-tight text-foreground sm:mt-2 sm:text-[30px]">
+                  <h1 className="mt-1.5 text-balance text-[22px] font-semibold tracking-tight text-foreground sm:mt-2 sm:text-[28px]">
                     {activeNavEntry.item.label}
                   </h1>
-                  <p className="mt-1 hidden max-w-3xl text-[13px] leading-5 text-muted-foreground sm:block sm:text-sm sm:leading-6">
+                  <p className="mt-1 hidden max-w-3xl text-sm leading-5 text-muted-foreground sm:block">
                     {activeNavEntry.item.description}
                   </p>
+                  {(businessName || activeLocationName) ? (
+                    <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                      {businessName ? businessName : "No business selected"}
+                      {activeLocationName ? ` · ${activeLocationName}` : ""}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
-              <div className="flex min-w-0 flex-col gap-3 xl:items-end">
-                <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <div className="flex min-w-0 flex-col gap-2.5 xl:items-end">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                   <Button type="button" variant="outline" className="justify-start sm:w-auto" onClick={() => setOpen(true)}>
                     <SearchIcon className="h-4 w-4" />
                     Search
@@ -503,7 +497,7 @@ function AppLayoutInner({
               </div>
             </div>
 
-                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {activeSectionItems.map((item) => (
                 <NavLink
                   key={item.href}
@@ -511,7 +505,7 @@ function AppLayoutInner({
                   end={item.end}
                   className={({ isActive }) =>
                     cn(
-                      "inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
+                      "inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
                       isActive
                         ? "border-primary/20 bg-primary/8 text-primary"
                         : "border-border/70 bg-background/80 text-muted-foreground hover:bg-accent/60 hover:text-foreground"

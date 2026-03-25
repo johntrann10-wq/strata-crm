@@ -36,13 +36,13 @@ export function ListViewToolbar({
       ? `${resultCount} ${resultCount === 1 ? noun.replace(/s$/, "") : noun}`
       : null;
   const activeStateLabel = filtersLabel
-    ? `Filtered by ${filtersLabel}`
+    ? `Filtered: ${filtersLabel}`
     : trimmedSearch
       ? `Searching for "${trimmedSearch}"`
       : null;
 
   return (
-    <div className={cn("surface-panel flex flex-col gap-3 px-4 py-3 sm:px-5", className)}>
+    <div className={cn("surface-panel flex flex-col gap-2.5 px-4 py-3 sm:px-5", className)}>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
         <div className="relative flex-1">
           {loading ? (
@@ -70,18 +70,18 @@ export function ListViewToolbar({
         {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
       </div>
       <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           {resultLabel ? <span className="font-medium text-foreground">{resultLabel}</span> : null}
           {filtersLabel ? (
             <span className="rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs">
               {filtersLabel}
             </span>
           ) : null}
-          {activeStateLabel ? <span className="hidden text-xs text-muted-foreground/80 sm:inline">{activeStateLabel}</span> : null}
+          {activeStateLabel ? <span className="text-xs text-muted-foreground/80 sm:inline">{activeStateLabel}</span> : null}
         </div>
         {hasActiveState && onClear ? (
           <Button type="button" variant="ghost" size="sm" className="h-8 justify-start px-2 text-xs sm:justify-center" onClick={onClear}>
-            Reset
+            Clear
           </Button>
         ) : null}
       </div>
