@@ -4,13 +4,19 @@ import { format, parseISO, isSameDay, startOfDay, endOfDay } from "date-fns";
 import {
   AlertCircle,
   CalendarPlus,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Circle,
+  Car,
   DollarSign,
   FileText,
   ShieldAlert,
   Receipt,
   RefreshCw,
+  Settings2,
+  Wrench,
+  Users,
 } from "lucide-react";
 import { useFindMany } from "../hooks/useApi";
 import { api, ApiError } from "../api";
@@ -76,6 +82,13 @@ type JobRecord = {
   client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
   vehicle?: { make?: string | null; model?: string | null; year?: number | null } | null;
   assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
+};
+
+type BusinessSetupRecord = {
+  id: string;
+  operatingHours?: string | null;
+  appointmentBufferMinutes?: number | null;
+  defaultTaxRate?: number | string | null;
 };
 
 const ACTIVE_JOB = new Set(["scheduled", "confirmed", "in_progress"]);
@@ -224,6 +237,31 @@ export default function SignedIn() {
     first: 100,
     pause: !businessId,
   } as any);
+  const [{ data: activationBusinessRaw, fetching: fetchingActivationBusiness }] = useFindMany(api.business, {
+    first: 1,
+    select: { id: true, operatingHours: true, appointmentBufferMinutes: true, defaultTaxRate: true },
+    pause: !businessId,
+  } as any);
+  const [{ data: activationClientsRaw, fetching: fetchingActivationClients }] = useFindMany(api.client, {
+    first: 1,
+    pause: !businessId,
+  });
+  const [{ data: activationVehiclesRaw, fetching: fetchingActivationVehicles }] = useFindMany(api.vehicle, {
+    first: 1,
+    pause: !businessId,
+  });
+  const [{ data: activationServicesRaw, fetching: fetchingActivationServices }] = useFindMany(api.service, {
+    first: 1,
+    pause: !businessId,
+  });
+  const [{ data: activationAppointmentsRaw, fetching: fetchingActivationAppointments }] = useFindMany(api.appointment, {
+    first: 1,
+    pause: !businessId,
+  });
+  const [{ data: activationInvoicesRaw, fetching: fetchingActivationInvoices }] = useFindMany(api.invoice, {
+    first: 1,
+    pause: !businessId,
+  });
 
   const appointments = (appointmentsRaw ?? []) as AppointmentRecord[];
   const unpaidInvoices = (invoicesRaw ?? []) as InvoiceRecord[];
@@ -232,6 +270,7 @@ export default function SignedIn() {
   const staffRecords = (staffRaw ?? []) as StaffRecord[];
   const activityRecords = (activityRaw ?? []) as ActivityRecord[];
   const locationRecords = (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>;
+  const activationBusiness = ((activationBusinessRaw ?? [])[0] ?? null) as BusinessSetupRecord | null;
   const activeLocationName = useMemo(
     () => locationRecords.find((location) => location.id === currentLocationId)?.name?.trim() || null,
     [locationRecords, currentLocationId]
@@ -310,6 +349,94 @@ export default function SignedIn() {
       depositsAwaitingPayment.length,
     [pendingQuotes.length, staleQuoteFollowUps.length, staleInvoiceCollections.length, depositsAwaitingPayment.length]
   );
+  const activationChecklist = useMemo(() => {
+    const bookingBasicsReady = Boolean(
+      activationBusiness?.operatingHours &&
+        activationBusiness.appointmentBufferMinutes != null
+    );
+    const bufferMinutes = Number(activationBusiness?.appointmentBufferMinutes ?? 0);
+    const items = [
+      {
+        key: "client",
+        label: "Add your first client",
+        detail: "Start your CRM with the first real customer record.",
+        done: (activationClientsRaw?.length ?? 0) > 0,
+        href: "/clients/new",
+        actionLabel: "Add client",
+        icon: <Users className="h-4 w-4" />,
+      },
+      {
+        key: "vehicle",
+        label: "Add your first vehicle",
+        detail: "Attach a real vehicle so scheduling and history work correctly.",
+        done: (activationVehiclesRaw?.length ?? 0) > 0,
+        href: "/clients",
+        actionLabel: "Add vehicle",
+        icon: <Car className="h-4 w-4" />,
+      },
+      {
+        key: "services",
+        label: "Review loaded services",
+        detail: "Your starter menu is preloaded. Confirm the catalog before you start booking.",
+        done: (activationServicesRaw?.length ?? 0) > 0,
+        href: "/services",
+        actionLabel: "Open services",
+        icon: <Wrench className="h-4 w-4" />,
+      },
+      {
+        key: "appointment",
+        label: "Book your first appointment",
+        detail: "Put a real job on the board so the calendar becomes useful immediately.",
+        done: (activationAppointmentsRaw?.length ?? 0) > 0,
+        href: scheduleJobHref,
+        actionLabel: "New appointment",
+        icon: <CalendarPlus className="h-4 w-4" />,
+      },
+      {
+        key: "invoice",
+        label: "Generate your first invoice",
+        detail: "Turn completed work into a payable invoice so billing is ready from day one.",
+        done: (activationInvoicesRaw?.length ?? 0) > 0,
+        href: "/invoices/new",
+        actionLabel: "New invoice",
+        icon: <FileText className="h-4 w-4" />,
+      },
+      {
+        key: "booking_basics",
+        label: "Confirm booking basics",
+        detail: bookingBasicsReady
+          ? `Hours loaded and ${bufferMinutes} minute booking buffer ready.`
+          : "Verify hours, booking buffer, and default billing basics.",
+        done: bookingBasicsReady,
+        href: "/settings",
+        actionLabel: "Open settings",
+        icon: <Settings2 className="h-4 w-4" />,
+      },
+    ];
+    const completed = items.filter((item) => item.done).length;
+    return {
+      items,
+      completed,
+      total: items.length,
+      percent: Math.round((completed / items.length) * 100),
+    };
+  }, [
+    activationBusiness?.appointmentBufferMinutes,
+    activationBusiness?.operatingHours,
+    activationAppointmentsRaw?.length,
+    activationClientsRaw?.length,
+    activationInvoicesRaw?.length,
+    activationServicesRaw?.length,
+    activationVehiclesRaw?.length,
+    scheduleJobHref,
+  ]);
+  const loadingActivationChecklist =
+    (fetchingActivationBusiness && activationBusinessRaw === undefined) ||
+    (fetchingActivationClients && activationClientsRaw === undefined) ||
+    (fetchingActivationVehicles && activationVehiclesRaw === undefined) ||
+    (fetchingActivationServices && activationServicesRaw === undefined) ||
+    (fetchingActivationAppointments && activationAppointmentsRaw === undefined) ||
+    (fetchingActivationInvoices && activationInvoicesRaw === undefined);
   const teamLoad = useMemo(() => {
     const counts = new Map<
       string,
@@ -571,6 +698,30 @@ export default function SignedIn() {
             <QuickAction href="/quotes/new" label="New Quote" icon={<Receipt className="h-5 w-5 shrink-0" />} />
             <QuickAction href="/invoices/new" label="New Invoice" icon={<FileText className="h-5 w-5 shrink-0" />} />
           </div>
+        </section>
+
+        <section className="rounded-[28px] border border-border/70 bg-card px-4 py-5 shadow-sm sm:px-5 sm:py-6">
+          {loadingActivationChecklist ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-8 w-72" />
+                <Skeleton className="h-4 w-full max-w-2xl" />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <Skeleton key={index} className="h-28 rounded-2xl" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <ActivationChecklistCard
+              completed={activationChecklist.completed}
+              total={activationChecklist.total}
+              percent={activationChecklist.percent}
+              items={activationChecklist.items}
+            />
+          )}
         </section>
 
         {anyError ? (
@@ -1271,6 +1422,102 @@ function QuickAction({
       {icon}
       {label}
     </Link>
+  );
+}
+
+function ActivationChecklistCard({
+  completed,
+  total,
+  percent,
+  items,
+}: {
+  completed: number;
+  total: number;
+  percent: number;
+  items: Array<{
+    key: string;
+    label: string;
+    detail: string;
+    done: boolean;
+    href: string;
+    actionLabel: string;
+    icon: ReactNode;
+  }>;
+}) {
+  const allDone = completed === total;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Activation</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+            {allDone ? "Your workspace is operational" : "Get Strata useful in the next few minutes"}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">
+            {allDone
+              ? "The essentials are in place. Your CRM, scheduling, services, and billing workflow are ready for real daily use."
+              : "Finish the high-value setup steps below so the calendar, CRM, and billing flow start working like a real shop system."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3 lg:min-w-[220px]">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-muted-foreground">Progress</p>
+            <p className="text-lg font-semibold">{completed}/{total}</p>
+          </div>
+          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-orange-500 transition-[width]"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {allDone ? "Everything essential is complete." : `${total - completed} key step${total - completed === 1 ? "" : "s"} left.`}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {items.map((item) => (
+          <div
+            key={item.key}
+            className={cn(
+              "rounded-2xl border p-4 shadow-sm",
+              item.done ? "border-emerald-200 bg-emerald-50/70" : "border-border/70 bg-card"
+            )}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div
+                  className={cn(
+                    "mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl",
+                    item.done ? "bg-emerald-100 text-emerald-700" : "bg-orange-50 text-orange-600"
+                  )}
+                >
+                  {item.icon}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    {item.done ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <p className="font-medium">{item.label}</p>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4">
+              <Button asChild variant={item.done ? "outline" : "default"} className="min-h-[44px] w-full rounded-xl">
+                <Link to={item.href}>{item.done ? "Review" : item.actionLabel}</Link>
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
