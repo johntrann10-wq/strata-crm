@@ -6,6 +6,8 @@ import { eq, and, desc, asc, isNull, or, ilike, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { createRequestActivityLog } from "../lib/activity.js";
+import { logger } from "../lib/logger.js";
 
 export const vehiclesRouter = Router({ mergeParams: true });
 
@@ -149,10 +151,17 @@ vehiclesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res:
 vehiclesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  const bid = businessId(req);
+  const [client] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.id, parsed.data.clientId), eq(clients.businessId, bid), isNull(clients.deletedAt)))
+    .limit(1);
+  if (!client) throw new BadRequestError("Client not found or access denied.");
   const [created] = await db
     .insert(vehicles)
     .values({
-      businessId: businessId(req),
+      businessId: bid,
       clientId: parsed.data.clientId,
       make: parsed.data.make,
       model: parsed.data.model,
@@ -164,6 +173,19 @@ vehiclesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
       notes: parsed.data.notes ?? null,
     })
     .returning();
+  logger.info("Vehicle created", { vehicleId: created.id, businessId: bid, clientId: created.clientId });
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "vehicle.created",
+    entityType: "vehicle",
+    entityId: created.id,
+    metadata: {
+      clientId: created.clientId,
+      make: created.make,
+      model: created.model,
+      year: created.year,
+    },
+  });
   res.status(201).json(created);
 });
 
@@ -178,5 +200,18 @@ vehiclesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, re
     .set({ ...parsed.data, updatedAt: new Date() })
     .where(eq(vehicles.id, req.params.id))
     .returning();
+  logger.info("Vehicle updated", { vehicleId: updated.id, businessId: bid, clientId: updated.clientId });
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "vehicle.updated",
+    entityType: "vehicle",
+    entityId: updated.id,
+    metadata: {
+      clientId: updated.clientId,
+      make: updated.make,
+      model: updated.model,
+      year: updated.year,
+    },
+  });
   res.json(updated);
 });

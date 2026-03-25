@@ -6,6 +6,8 @@ import { eq, and, desc, asc, isNull, or, ilike, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { createRequestActivityLog } from "../lib/activity.js";
+import { logger } from "../lib/logger.js";
 
 export const clientsRouter = Router({ mergeParams: true });
 
@@ -105,10 +107,11 @@ clientsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: 
 clientsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  const bid = businessId(req);
   const [created] = await db
     .insert(clients)
     .values({
-      businessId: businessId(req),
+      businessId: bid,
       firstName: parsed.data.firstName,
       lastName: parsed.data.lastName,
       email: parsed.data.email ?? null,
@@ -122,6 +125,19 @@ clientsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Re
       marketingOptIn: parsed.data.marketingOptIn ?? true,
     })
     .returning();
+  logger.info("Client created", { clientId: created.id, businessId: bid });
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "client.created",
+    entityType: "client",
+    entityId: created.id,
+    metadata: {
+      firstName: created.firstName,
+      lastName: created.lastName,
+      email: created.email,
+      phone: created.phone,
+    },
+  });
   res.status(201).json(created);
 });
 
@@ -137,6 +153,19 @@ clientsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res
     .set({ ...patch, updatedAt: new Date() })
     .where(eq(clients.id, req.params.id))
     .returning();
+  logger.info("Client updated", { clientId: updated.id, businessId: bid });
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "client.updated",
+    entityType: "client",
+    entityId: updated.id,
+    metadata: {
+      firstName: updated.firstName,
+      lastName: updated.lastName,
+      email: updated.email,
+      phone: updated.phone,
+    },
+  });
   res.json(updated);
 });
 
@@ -151,5 +180,17 @@ clientsRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, re
     await tx.update(vehicles).set({ deletedAt: now, updatedAt: now }).where(eq(vehicles.clientId, req.params.id));
   });
   const [updated] = await db.select().from(clients).where(eq(clients.id, req.params.id)).limit(1);
+  logger.info("Client archived", { clientId: req.params.id, businessId: bid });
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "client.archived",
+    entityType: "client",
+    entityId: req.params.id,
+    metadata: {
+      firstName: existing.firstName,
+      lastName: existing.lastName,
+      deletedAt: now.toISOString(),
+    },
+  });
   res.json(updated ?? existing);
 });

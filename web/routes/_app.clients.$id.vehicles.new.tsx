@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
+import { toast } from "sonner";
 
 export default function NewVehiclePage() {
   const { id: clientId } = useParams<{ id: string }>();
@@ -29,7 +30,7 @@ export default function NewVehiclePage() {
         ? "Save this vehicle and continue straight into appointment booking."
         : "Save this vehicle and return to the client record.";
 
-  const [{ data: createdVehicle, fetching: creating, error: createError }, createVehicle] =
+  const [{ fetching: creating, error: createError }, createVehicle] =
     useAction(api.vehicle.create);
 
   const [year, setYear] = useState<string>(() => String(new Date().getFullYear()));
@@ -51,30 +52,11 @@ export default function NewVehiclePage() {
     return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    if (createdVehicle && clientId) {
-      const createdVehicleId = (createdVehicle as any)?.id;
-      if (submitMode === "quote" && createdVehicleId) {
-        navigate(`/quotes/new?clientId=${clientId}&vehicleId=${createdVehicleId}&from=${encodeURIComponent(returnTo)}`);
-        return;
-      }
-      if (submitMode === "appointment" && createdVehicleId) {
-        navigate(
-          `/appointments/new?clientId=${clientId}&vehicleId=${createdVehicleId}${
-            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-          }&from=${encodeURIComponent(returnTo)}`
-        );
-        return;
-      }
-      navigate(`${returnTo}`);
-    }
-  }, [createdVehicle, clientId, navigate, submitMode, currentLocationId, returnTo]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientId) return;
 
-    await createVehicle({
+    const result = await createVehicle({
       clientId,
       year: year ? parseInt(year, 10) : undefined,
       make,
@@ -85,6 +67,30 @@ export default function NewVehiclePage() {
       mileage: mileage ? parseInt(mileage, 10) : undefined,
       notes: notes || undefined,
     });
+
+    if (result.error) {
+      return;
+    }
+
+    const createdVehicleId = (result.data as any)?.id;
+    if (!createdVehicleId) {
+      return;
+    }
+
+    toast.success("Vehicle saved");
+    if (submitMode === "quote") {
+      navigate(`/quotes/new?clientId=${clientId}&vehicleId=${createdVehicleId}&from=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+    if (submitMode === "appointment") {
+      navigate(
+        `/appointments/new?clientId=${clientId}&vehicleId=${createdVehicleId}${
+          currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+        }&from=${encodeURIComponent(returnTo)}`
+      );
+      return;
+    }
+    navigate(`${returnTo}`);
   };
 
   return (

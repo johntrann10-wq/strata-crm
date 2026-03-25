@@ -541,6 +541,20 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
 
+  if (parsed.data.assignedStaffId != null) {
+    const [staffRow] = await db
+      .select({ id: staff.id })
+      .from(staff)
+      .where(and(eq(staff.id, parsed.data.assignedStaffId), eq(staff.businessId, bid)))
+      .limit(1);
+    if (!staffRow) throw new BadRequestError("Staff not found or access denied.");
+  }
+
+  if (parsed.data.locationId != null) {
+    const hasLocation = await locationExistsForBusiness(parsed.data.locationId, bid);
+    if (!hasLocation) throw new BadRequestError("Location not found or access denied.");
+  }
+
   const startTime = parsed.data.startTime != null ? new Date(parsed.data.startTime) : (existing.startTime as Date);
   const endTime = parsed.data.endTime != null ? new Date(parsed.data.endTime) : (existing.endTime as Date | null);
   const assignedStaffId = parsed.data.assignedStaffId ?? existing.assignedStaffId;

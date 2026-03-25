@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, Link, useSearchParams, useOutletContext } from "react-router";
 import { useFindFirst, useAction } from "../hooks/useApi";
 import { api } from "../api";
@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
+import { toast } from "sonner";
 
 interface FormData {
   firstName: string;
@@ -39,7 +40,7 @@ export default function NewClientPage() {
     select: { id: true },
   });
 
-  const [{ data, fetching, error }, createClient] = useAction(api.client.create);
+  const [{ fetching, error }, createClient] = useAction(api.client.create);
 
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
@@ -56,29 +57,6 @@ export default function NewClientPage() {
 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    const createdClientId = (data as any)?.id;
-    if (createdClientId) {
-      if (submitMode === "vehicle") {
-        navigate(`/clients/${createdClientId}/vehicles/new?next=client&from=${encodeURIComponent(returnTo)}`);
-        return;
-      }
-      if (submitMode === "quote") {
-        navigate(`/quotes/new?clientId=${createdClientId}&from=${encodeURIComponent(returnTo)}`);
-        return;
-      }
-      if (submitMode === "appointment") {
-        navigate(
-          `/appointments/new?clientId=${createdClientId}${
-            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-          }&from=${encodeURIComponent(returnTo)}`
-        );
-        return;
-      }
-      navigate(`/clients/${createdClientId}?from=${encodeURIComponent(returnTo)}`);
-    }
-  }, [data, navigate, submitMode, currentLocationId, returnTo]);
 
   const getFieldError = (fieldName: string): string | undefined => {
     if (localErrors[fieldName]) return localErrors[fieldName];
@@ -112,7 +90,7 @@ export default function NewClientPage() {
       return;
     }
 
-    await createClient({
+    const result = await createClient({
       firstName: formData.firstName.trim(),
       lastName: formData.lastName.trim(),
       ...(formData.phone.trim() ? { phone: formData.phone.trim() } : {}),
@@ -124,6 +102,35 @@ export default function NewClientPage() {
       marketingOptIn: formData.marketingOptIn,
       ...(formData.internalNotes.trim() ? { internalNotes: formData.internalNotes.trim() } : {}),
     });
+
+    if (result.error) {
+      return;
+    }
+
+    const createdClientId = (result.data as any)?.id;
+    if (!createdClientId) {
+      setLocalErrors({ general: "Client saved but no record ID was returned. Please refresh and check your client list." });
+      return;
+    }
+
+    toast.success("Client saved");
+    if (submitMode === "vehicle") {
+      navigate(`/clients/${createdClientId}/vehicles/new?next=client&from=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+    if (submitMode === "quote") {
+      navigate(`/quotes/new?clientId=${createdClientId}&from=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+    if (submitMode === "appointment") {
+      navigate(
+        `/appointments/new?clientId=${createdClientId}${
+          currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+        }&from=${encodeURIComponent(returnTo)}`
+      );
+      return;
+    }
+    navigate(`/clients/${createdClientId}?from=${encodeURIComponent(returnTo)}`);
   };
 
   const generalError =

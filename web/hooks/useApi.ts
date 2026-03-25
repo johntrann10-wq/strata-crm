@@ -277,6 +277,7 @@ export function useAction(actionFn: ActionFn) {
     async (params?: Record<string, unknown>) => {
       setFetching(true);
       setError(null);
+      setData(undefined);
       try {
         const result = await actionFn(params);
         const data = result ?? null;
