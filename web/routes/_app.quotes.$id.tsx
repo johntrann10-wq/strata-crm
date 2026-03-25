@@ -219,7 +219,12 @@ export default function QuoteDetailPage() {
     if (result.error) {
       toast.error("Failed to send quote: " + result.error.message);
     } else {
-      toast.success((result.data as any)?.deliveryStatus === "emailed" ? "Quote emailed to client" : "Quote recorded as sent");
+      const deliveryStatus = (result.data as any)?.deliveryStatus;
+      if (deliveryStatus === "emailed") {
+        toast.success("Quote emailed to client");
+      } else {
+        toast.warning("Quote was marked as sent, but email was not delivered");
+      }
       void refetch();
       void refetchActivity();
     }
@@ -231,7 +236,12 @@ export default function QuoteDetailPage() {
     if (result.error) {
       toast.error("Failed to send follow-up: " + result.error.message);
     } else {
-      toast.success((result.data as any)?.deliveryStatus === "emailed" ? "Follow-up emailed to client" : "Follow-up recorded");
+      const deliveryStatus = (result.data as any)?.deliveryStatus;
+      if (deliveryStatus === "emailed") {
+        toast.success("Follow-up emailed to client");
+      } else {
+        toast.warning("Follow-up was recorded, but email was not delivered");
+      }
       void refetchActivity();
     }
     return result;

@@ -21,9 +21,9 @@ import {
 } from "../components/CalendarViews";
 
 const VIEW_LABELS = {
-  month: "Plan the month",
+  month: "See the full month, then drill into one day at a time",
   week: "Balance staff and bay time",
-  day: "Run today's floor",
+  day: "Run the day with clean slots and obvious next actions",
 } as const;
 
 export default function CalendarPage() {
@@ -42,9 +42,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     const check = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobileLayout(mobile);
-      if (mobile) setView("day");
+      setIsMobileLayout(window.innerWidth < 768);
     };
     check();
     window.addEventListener("resize", check);
@@ -149,10 +147,8 @@ export default function CalendarPage() {
   }
 
   function handleDayClick(date: Date) {
-    const iso = date.toISOString().split("T")[0];
-    setQuickBookDate(iso);
-    setQuickBookTime(undefined);
-    setQuickBookOpen(true);
+    setCurrentDate(date);
+    setView("day");
   }
 
   function handleSlotClick(date: Date) {
@@ -173,6 +169,10 @@ export default function CalendarPage() {
     setQuickBookDate(iso);
     setQuickBookTime(undefined);
     setQuickBookOpen(true);
+  }
+
+  function handleBackToMonth() {
+    setView("month");
   }
 
   function handleBooked(id: string) {
@@ -255,7 +255,7 @@ export default function CalendarPage() {
                   </div>
 
                   <div className="inline-flex w-full items-center overflow-x-auto rounded-full border border-border/70 bg-background/80 p-1 shadow-sm sm:w-auto">
-                    {(["month", "week", "day"] as const).map((calendarView) => (
+                    {(["month", "day"] as const).map((calendarView) => (
                       <button
                         key={calendarView}
                         type="button"
@@ -267,11 +267,16 @@ export default function CalendarPage() {
                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
                         )}
                       >
-                        {calendarView}
-                      </button>
-                    ))}
+                          {calendarView === "month" ? "Month" : "Day"}
+                        </button>
+                      ))}
+                    </div>
+                    {view === "day" ? (
+                      <Button variant="ghost" size="sm" className="rounded-full" onClick={handleBackToMonth}>
+                        Back to month
+                      </Button>
+                    ) : null}
                   </div>
-                </div>
 
                 {isMobileLayout ? (
                   <div className="grid grid-cols-3 gap-2">

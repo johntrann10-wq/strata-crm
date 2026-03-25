@@ -550,11 +550,16 @@ export default function SignedIn() {
       setSendingQuoteId(quoteId);
       try {
         const result = await runSendQuote({ id: quoteId });
-        if (result?.error) {
-          toast.error(result.error.message ?? "Could not send quote");
-          return;
+          if (result?.error) {
+            toast.error(result.error.message ?? "Could not send quote");
+            return;
+          }
+        const deliveryStatus = (result?.data as { deliveryStatus?: string } | undefined)?.deliveryStatus;
+        if (deliveryStatus === "emailed") {
+          toast.success("Quote emailed to client");
+        } else {
+          toast.warning("Quote was marked as sent, but email was not delivered");
         }
-        toast.success("Quote send recorded");
         await refetchQuotes();
       } finally {
         setSendingQuoteId(null);
@@ -574,7 +579,12 @@ export default function SignedIn() {
           toast.error(result.error.message ?? "Could not follow up quote");
           return;
         }
-        toast.success("Quote follow-up recorded");
+          const deliveryStatus = (result?.data as { deliveryStatus?: string } | undefined)?.deliveryStatus;
+          if (deliveryStatus === "emailed") {
+            toast.success("Follow-up emailed to client");
+          } else {
+            toast.warning("Follow-up was recorded, but email was not delivered");
+          }
         await refetchQuotes();
       } finally {
         setFollowingUpQuoteId(null);
@@ -590,11 +600,16 @@ export default function SignedIn() {
       setSendingInvoiceId(invoiceId);
       try {
         const result = await runSendInvoice({ id: invoiceId });
-        if (result?.error) {
-          toast.error(result.error.message ?? "Could not send invoice");
-          return;
+          if (result?.error) {
+            toast.error(result.error.message ?? "Could not send invoice");
+            return;
+          }
+        const deliveryStatus = (result?.data as { deliveryStatus?: string } | undefined)?.deliveryStatus;
+        if (deliveryStatus === "emailed") {
+          toast.success("Invoice emailed to client");
+        } else {
+          toast.warning("Invoice was marked as sent, but email was not delivered");
         }
-        toast.success("Invoice send recorded");
         await refetchInvoices();
       } finally {
         setSendingInvoiceId(null);
@@ -630,7 +645,7 @@ export default function SignedIn() {
       event.stopPropagation();
       setUpdatingAppointmentId(appointmentId);
       try {
-        const result = await runUpdateAppointment({ id: appointmentId, assignedStaff: { _link: myStaffRecord.id } });
+          const result = await runUpdateAppointment({ id: appointmentId, assignedStaffId: myStaffRecord.id });
         if (result?.error) {
           toast.error(result.error.message ?? "Could not assign appointment");
           return;

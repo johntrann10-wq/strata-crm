@@ -109,7 +109,7 @@ export default function AppointmentsPage() {
     event.preventDefault();
     event.stopPropagation();
     if (!myStaffRecord?.id) return;
-    const result = await runUpdateAppointment({ id: appointmentId, assignedStaff: { _link: myStaffRecord.id } });
+    const result = await runUpdateAppointment({ id: appointmentId, assignedStaffId: myStaffRecord.id });
     if (result?.error) {
       toast.error("Failed: " + result.error.message);
     } else {

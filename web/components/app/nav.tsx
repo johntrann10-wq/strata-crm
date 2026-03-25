@@ -26,7 +26,8 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { NavDrawer } from "@/components/shared/NavDrawer";
 import { Home, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { clearAuthToken, emitAuthEvent } from "@/lib/auth";
+import { api } from "../../api";
+import { clearAuthToken, clearCurrentBusinessId, clearCurrentLocationId, emitAuthEvent } from "@/lib/auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -164,17 +165,28 @@ export const SecondaryNavigation = ({ icon }: { icon: ReactNode }) => {
 
 const SignOutOption = () => {
   const navigate = useNavigate();
-  const handleSignOut = () => {
-    // Clear token + notify the app so it can drop cached user state immediately.
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await api.user.signOut();
+    } catch {
+      // JWT sign-out is local-first; backend failure should not trap the user.
+    }
     clearAuthToken();
+    clearCurrentBusinessId();
+    clearCurrentLocationId();
     emitAuthEvent("auth:logout");
     navigate("/sign-in", { replace: true });
+    setSigningOut(false);
   };
 
   return (
-    <DropdownMenuItem onClick={handleSignOut} className="flex items-center text-red-600 focus:text-red-600 cursor-pointer">
+    <DropdownMenuItem onClick={handleSignOut} disabled={signingOut} className="flex items-center text-red-600 focus:text-red-600 cursor-pointer">
       <LogOut className="mr-2 h-4 w-4" />
-      Sign out
+      {signingOut ? "Signing out..." : "Sign out"}
     </DropdownMenuItem>
   );
 };

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useOutletContext, useSearchParams } from "react-router";
 import { useFindOne, useAction, useFindMany } from "../hooks/useApi";
-import { api } from "../api";
+import { API_BASE, api } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getAuthToken, getCurrentBusinessId } from "@/lib/auth";
 import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
@@ -102,6 +103,49 @@ function formatDate(value: string | Date | null | undefined): string {
 function capitalize(str: string | null | undefined): string {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+async function openPrintableInvoice(invoiceId: string, businessId?: string | null) {
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error("You need to sign in again before printing.");
+  }
+
+  const printWindow = window.open("", "_blank", "noopener,noreferrer");
+  if (!printWindow) {
+    throw new Error("Popup blocked. Allow popups for printing.");
+  }
+
+  printWindow.document.write(
+    "<!doctype html><html><head><title>Preparing invoice...</title></head><body style='font-family:system-ui;padding:24px;color:#111827'>Preparing invoice...</body></html>"
+  );
+  printWindow.document.close();
+
+  const headers: HeadersInit = {
+    Authorization: `Bearer ${token}`,
+  };
+  const activeBusinessId = businessId ?? getCurrentBusinessId();
+  if (activeBusinessId) {
+    (headers as Record<string, string>)["x-business-id"] = activeBusinessId;
+  }
+
+  const response = await fetch(`${API_BASE}/api/invoices/${encodeURIComponent(invoiceId)}/html`, {
+    headers,
+  });
+
+  if (!response.ok) {
+    printWindow.close();
+    throw new Error("Could not load printable invoice.");
+  }
+
+  const html = await response.text();
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+  }, 150);
 }
 
 /** Normalize line items from API (array or edges.node) */
@@ -411,7 +455,12 @@ export default function InvoiceDetailPage() {
     if (!invoice?.id) return;
     const result = await sendToClient({ id: invoice.id, message });
     if (!result.error) {
-      toast.success((result.data as any)?.deliveryStatus === "emailed" ? "Invoice emailed to client" : "Invoice recorded as sent");
+      const deliveryStatus = (result.data as any)?.deliveryStatus;
+      if (deliveryStatus === "emailed") {
+        toast.success("Invoice emailed to client");
+      } else {
+        toast.warning("Invoice was marked as sent, but email was not delivered");
+      }
       void refetch();
       void refetchActivity();
     } else {
@@ -606,7 +655,15 @@ export default function InvoiceDetailPage() {
           <div className="flex items-center justify-end gap-2">
             <div className="hidden sm:flex sm:flex-wrap sm:justify-end sm:gap-2">
               {status !== "void" && (
-                <Button onClick={() => window.print()} variant="ghost" size="sm">
+                <Button
+                  onClick={() =>
+                    void openPrintableInvoice(invoice.id, (invoice.business as { id?: string } | undefined)?.id).catch((error) => {
+                      toast.error(error instanceof Error ? error.message : "Could not print invoice");
+                    })
+                  }
+                  variant="ghost"
+                  size="sm"
+                >
                   <Printer className="h-4 w-4 mr-2" />
                   Print
                 </Button>
@@ -674,7 +731,13 @@ export default function InvoiceDetailPage() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
                   {status !== "void" ? (
-                    <DropdownMenuItem onClick={() => window.print()}>
+                    <DropdownMenuItem
+                      onClick={() =>
+                        void openPrintableInvoice(invoice.id, (invoice.business as { id?: string } | undefined)?.id).catch((error) => {
+                          toast.error(error instanceof Error ? error.message : "Could not print invoice");
+                        })
+                      }
+                    >
                       <Printer className="mr-2 h-4 w-4" />
                       Print invoice
                     </DropdownMenuItem>

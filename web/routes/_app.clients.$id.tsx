@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useOutletContext, useParams } from "react-router";
+import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -100,7 +100,9 @@ function statusPillClass(status: string): string {
 
 export default function ClientDetailPage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { currentLocationId } = useOutletContext<AuthOutletContext>();
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/clients";
   const appointmentHref = `/appointments/new?clientId=${id}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}`;
   const navigate = useNavigate();
   const [editMode, setEditMode] = useState(false);
@@ -343,7 +345,7 @@ export default function ClientDetailPage() {
     <div className="page-content">
       <div className="page-section space-y-6">
         <PageHeader
-          backTo="/clients"
+          backTo={returnTo}
           title={`${client.firstName} ${client.lastName}`}
           subtitle={`Client since ${new Date(client.createdAt).toLocaleDateString()}${client.email ? ` - ${client.email}` : ""}${client.phone ? ` - ${client.phone}` : ""}`}
           badge={<Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">CRM Record</Badge>}

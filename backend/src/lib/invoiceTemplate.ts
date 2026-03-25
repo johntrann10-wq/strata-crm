@@ -192,5 +192,5 @@ export function renderInvoiceHtml(data: InvoiceTemplateData): string {
     ${notes ? `<div class="notes">${notes}</div>` : ""}
   </div>
 </body>
-</html>`;
+</html>`.replaceAll("â€”", "-").replaceAll("âˆ’", "-");
 }

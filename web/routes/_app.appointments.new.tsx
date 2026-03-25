@@ -172,7 +172,7 @@ export default function NewAppointmentPage() {
     api.client,
     {
       filter: businessId
-        ? { business: { id: { equals: businessId } } }
+        ? { businessId: { equals: businessId } }
         : { id: { equals: "" } },
       search: debouncedClientQuery.length >= 2 ? debouncedClientQuery : undefined,
       select: {
@@ -192,7 +192,7 @@ export default function NewAppointmentPage() {
     api.service,
     {
       filter: {
-        business: { id: { equals: businessId ?? "" } },
+        businessId: { equals: businessId ?? "" },
         active: { equals: true },
       },
       select: {
@@ -217,7 +217,7 @@ export default function NewAppointmentPage() {
     api.staff,
     {
       filter: {
-        business: { id: { equals: businessId ?? "" } },
+        businessId: { equals: businessId ?? "" },
         active: { equals: true },
       },
       select: { id: true, firstName: true, lastName: true, role: true },
@@ -231,7 +231,7 @@ export default function NewAppointmentPage() {
     api.vehicle,
     {
       filter: selectedClientId
-        ? { client: { id: { equals: selectedClientId } } }
+        ? { clientId: { equals: selectedClientId } }
         : { id: { equals: "" } },
       select: {
         id: true,
@@ -404,11 +404,10 @@ export default function NewAppointmentPage() {
     setSavingVehicle(true);
     try {
       const result = await createVehicle({
+        clientId: selectedClientId,
         make: quickMake.trim(),
         model: quickModel.trim(),
         year: quickYear ? parseInt(quickYear) : undefined,
-        client: { _link: selectedClientId },
-        business: { _link: businessId },
       } as any);
       if ((result as any)?.data?.id) {
         setSelectedVehicleId((result as any).data.id);
@@ -672,7 +671,7 @@ export default function NewAppointmentPage() {
                 {selectedClientId && vehiclesData && vehicles.length === 0 && !showQuickAddVehicle && (
                   <Alert className="border-amber-200 bg-amber-50 text-amber-800">
                     <AlertDescription>
-                      This client has no vehicles on file. You can add one below or proceed without a vehicle.
+                      This client has no vehicles on file. Add one below before booking the appointment.
                     </AlertDescription>
                   </Alert>
                 )}

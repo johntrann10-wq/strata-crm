@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useOutletContext, useParams } from "react-router";
+import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -95,6 +95,8 @@ function invoiceBalance(invoice: Record<string, unknown>): number {
 export default function VehicleDetailPage() {
   const { currentLocationId } = useOutletContext<AuthOutletContext>();
   const { id, vehicleId } = useParams<{ id: string; vehicleId: string }>();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : `/clients/${id}`;
   const navigate = useNavigate();
   const { setPageContext } = usePageContext();
 
@@ -188,7 +190,7 @@ export default function VehicleDetailPage() {
   useEffect(() => {
     if (updateResult.data) {
       toast.success("Vehicle updated");
-      navigate(`/clients/${id}/vehicles/${vehicleId}`);
+      navigate(`/clients/${id}/vehicles/${vehicleId}${searchParams.has("from") ? `?from=${encodeURIComponent(returnTo)}` : ""}`);
     }
   }, [updateResult.data, navigate, id, vehicleId]);
 
@@ -201,7 +203,7 @@ export default function VehicleDetailPage() {
   useEffect(() => {
     if (deleteResult.data) {
       toast.success("Vehicle deleted");
-      navigate(`/clients/${id}`);
+      navigate(returnTo);
     }
   }, [deleteResult.data, navigate, id]);
 
@@ -345,7 +347,7 @@ export default function VehicleDetailPage() {
         <Button variant="outline" asChild>
           <Link to={`/clients/${id}`}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Client
+            Back
           </Link>
         </Button>
       </div>
@@ -356,7 +358,7 @@ export default function VehicleDetailPage() {
     <div className="page-content">
       <div className="page-section space-y-6">
         <PageHeader
-          backTo={`/clients/${id}`}
+          backTo={returnTo}
           title={pageTitle}
           subtitle={clientName}
           badge={<Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">Vehicle Record</Badge>}
@@ -539,7 +541,7 @@ export default function VehicleDetailPage() {
                 </div>
 
                 <div className="flex justify-end gap-3">
-                  <Button type="button" variant="outline" onClick={() => navigate(`/clients/${id}`)}>
+                  <Button type="button" variant="outline" onClick={() => navigate(returnTo)}>
                     Cancel
                   </Button>
                   <Button type="button" onClick={handleSave} disabled={updateResult.fetching || !make || !model}>

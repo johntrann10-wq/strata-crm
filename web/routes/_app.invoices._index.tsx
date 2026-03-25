@@ -171,7 +171,12 @@ export default function InvoicesIndexPage() {
         toast.error(result.error.message ?? "Could not send invoice");
         return;
       }
-      toast.success("Invoice send recorded");
+        const deliveryStatus = (result?.data as { deliveryStatus?: string } | undefined)?.deliveryStatus;
+        if (deliveryStatus === "emailed") {
+          toast.success("Invoice emailed to client");
+        } else {
+          toast.warning("Invoice was marked as sent, but email was not delivered");
+        }
       void refetchInvoices();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send invoice");

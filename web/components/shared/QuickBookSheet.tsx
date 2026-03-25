@@ -67,6 +67,13 @@ export function QuickBookSheet({
   businessId,
 }: QuickBookSheetProps) {
   const { currentLocationId } = useOutletContext<AuthOutletContext>();
+  const appointmentDraftHref = `${
+    currentLocationId
+      ? `/appointments/new?locationId=${encodeURIComponent(currentLocationId)}`
+      : "/appointments/new"
+  }${initialDate ? `${currentLocationId ? "&" : "?"}date=${encodeURIComponent(initialDate)}` : ""}${
+    initialTime ? `${currentLocationId || initialDate ? "&" : "?"}time=${encodeURIComponent(initialTime)}` : ""
+  }`;
 
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
@@ -76,10 +83,8 @@ export function QuickBookSheet({
   const [clientSearch, setClientSearch] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const fullFormHref = selectedClientId
-    ? `/clients/${selectedClientId}/vehicles/new`
-    : currentLocationId
-      ? `/appointments/new?locationId=${encodeURIComponent(currentLocationId)}`
-      : "/appointments/new";
+    ? `/clients/${selectedClientId}/vehicles/new?next=appointment&from=${encodeURIComponent(appointmentDraftHref)}`
+    : appointmentDraftHref;
 
   // Sync initialDate / initialTime prop changes
   useEffect(() => {
@@ -401,7 +406,7 @@ export function QuickBookSheet({
                     This client needs a vehicle on file before you can book the appointment.
                   </p>
                   <Button asChild variant="outline" size="sm" className="h-8">
-                    <Link to={`/clients/${selectedClientId}/vehicles/new`}>Add vehicle</Link>
+                    <Link to={`/clients/${selectedClientId}/vehicles/new?next=appointment&from=${encodeURIComponent(appointmentDraftHref)}`}>Add vehicle</Link>
                   </Button>
                 </div>
               ) : (
