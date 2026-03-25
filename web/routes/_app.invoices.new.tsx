@@ -18,7 +18,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { ArrowLeft, Check, ChevronsUpDown, FileText, Package, Plus, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronUp, ChevronsUpDown, FileText, Package, Plus, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
@@ -144,6 +144,8 @@ export default function NewInvoicePage() {
   ]);
   const [submitting, setSubmitting] = useState(false);
   const [submitMode, setSubmitMode] = useState<'draft' | 'sent'>('draft');
+  const [showMobileInvoiceDetails, setShowMobileInvoiceDetails] = useState(false);
+  const [showMobileNotes, setShowMobileNotes] = useState(false);
 
   // Pre-fill from linked quote
   useEffect(() => {
@@ -362,7 +364,7 @@ export default function NewInvoicePage() {
   };
 
   return (
-    <div className="container mx-auto py-6 max-w-4xl px-4">
+    <div className="container mx-auto max-w-4xl px-4 py-6 pb-28 sm:pb-6">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to invoices queue" /> : null}
       <PageHeader
         backTo={returnTo}
@@ -413,9 +415,21 @@ export default function NewInvoicePage() {
         {/* Invoice Details */}
         <Card>
           <CardHeader className="border-b border-border/70 pb-4">
-            <CardTitle className="text-base font-semibold">Invoice details</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-base font-semibold">Invoice details</CardTitle>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="lg:hidden"
+                onClick={() => setShowMobileInvoiceDetails((value) => !value)}
+              >
+                {showMobileInvoiceDetails ? "Hide" : "Show"}
+                {showMobileInvoiceDetails ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />}
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className={showMobileInvoiceDetails ? "space-y-4" : "hidden space-y-4 lg:block"}>
             {/* Client Combobox */}
             <div className="space-y-2">
               <Label>
@@ -695,9 +709,21 @@ export default function NewInvoicePage() {
         {/* Notes */}
           <Card>
             <CardHeader className="border-b border-border/70 pb-4">
-              <CardTitle className="text-base font-semibold">Notes</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-base font-semibold">Notes</CardTitle>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="lg:hidden"
+                  onClick={() => setShowMobileNotes((value) => !value)}
+                >
+                  {showMobileNotes ? "Hide" : "Show"}
+                  {showMobileNotes ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />}
+                </Button>
+              </div>
             </CardHeader>
-          <CardContent>
+          <CardContent className={showMobileNotes ? "" : "hidden lg:block"}>
             <Textarea
               id="notes"
               placeholder="Add any notes for this invoice..."
@@ -730,6 +756,33 @@ export default function NewInvoicePage() {
             <Send className="h-4 w-4 mr-2" />
             Create & Send
           </Button>
+        </div>
+
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
+          <div className="mx-auto flex max-w-4xl items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Invoice total</p>
+              <p className="text-lg font-semibold">${total.toFixed(2)}</p>
+            </div>
+            <Button
+              type="submit"
+              disabled={submitting}
+              onClick={() => setSubmitMode('draft')}
+              className="shrink-0"
+            >
+              {submitting ? "Saving..." : "Create"}
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              className="shrink-0 bg-green-600 hover:bg-green-700 text-white"
+              disabled={submitting}
+              onClick={() => doSubmit('sent')}
+            >
+              <Send className="h-4 w-4 mr-2" />
+              Send
+            </Button>
+          </div>
         </div>
       </form>
     </div>

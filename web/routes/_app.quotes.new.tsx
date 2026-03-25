@@ -86,6 +86,8 @@ export default function NewQuotePage() {
   ]);
   const [saving, setSaving] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
+  const [showMobileClientVehicle, setShowMobileClientVehicle] = useState(false);
+  const [showMobileApprovalSettings, setShowMobileApprovalSettings] = useState(false);
   const [clientComboOpen, setClientComboOpen] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
 
@@ -340,7 +342,7 @@ export default function NewQuotePage() {
   );
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6 pb-28 sm:pb-6">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to quotes queue" /> : null}
       <PageHeader
         backTo={returnTo}
@@ -590,9 +592,21 @@ export default function NewQuotePage() {
           {/* Client & Vehicle Card */}
           <Card>
             <CardHeader className="border-b border-border/70 pb-4">
-              <CardTitle className="text-base font-semibold">Client and vehicle</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-base font-semibold">Client and vehicle</CardTitle>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="lg:hidden"
+                  onClick={() => setShowMobileClientVehicle((value) => !value)}
+                >
+                  {showMobileClientVehicle ? "Hide" : "Show"}
+                  {showMobileClientVehicle ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />}
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className={showMobileClientVehicle ? "space-y-4" : "hidden space-y-4 lg:block"}>
               {clientIdParam && selectedClientId && (
                 <div className="bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded px-2 py-1 flex items-center gap-1">
                   <Check className="h-3 w-3" />
@@ -699,9 +713,21 @@ export default function NewQuotePage() {
           {/* Quote Details Card */}
           <Card>
             <CardHeader className="border-b border-border/70 pb-4">
-              <CardTitle className="text-base font-semibold">Approval settings</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-base font-semibold">Approval settings</CardTitle>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="lg:hidden"
+                  onClick={() => setShowMobileApprovalSettings((value) => !value)}
+                >
+                  {showMobileApprovalSettings ? "Hide" : "Show"}
+                  {showMobileApprovalSettings ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />}
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className={showMobileApprovalSettings ? "space-y-4" : "hidden space-y-4 lg:block"}>
               <div className="space-y-2">
                 <Label htmlFor="expiresAt">Expires At</Label>
                 <Input
@@ -775,6 +801,30 @@ export default function NewQuotePage() {
               </Button>
             </CardContent>
           </Card>
+        </div>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
+        <div className="mx-auto flex max-w-4xl items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Quote total</p>
+            <p className="text-lg font-semibold">{formatCurrency(total)}</p>
+          </div>
+          <Button
+            onClick={handleSubmit}
+            disabled={saving || !selectedClientId || !hasValidLineItems}
+            type="button"
+            className="shrink-0"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Create Quote"
+            )}
+          </Button>
         </div>
       </div>
     </div>
