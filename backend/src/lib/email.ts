@@ -198,7 +198,11 @@ export async function sendWeeklySummary(businessId: string, businessEmail: strin
   });
 }
 
-const fallback = (v: string | number | undefined | null) => (v !== undefined && v !== null && String(v).trim() !== "" ? String(v) : "—");
+const fallback = (v: string | number | undefined | null) =>
+  v !== undefined && v !== null && String(v).trim() !== "" ? String(v) : "-";
+
+const optionalValue = (v: string | number | undefined | null) =>
+  v !== undefined && v !== null && String(v).trim() !== "" ? String(v) : "";
 
 /** Send appointment confirmation. Vars: clientName, businessName, dateTime, vehicle?, address?, serviceSummary?, confirmationUrl? */
 export async function sendAppointmentConfirmation(options: {
@@ -223,7 +227,7 @@ export async function sendAppointmentConfirmation(options: {
       vehicle: fallback(options.vehicle),
       address: fallback(options.address),
       serviceSummary: fallback(options.serviceSummary),
-      confirmationUrl: fallback(options.confirmationUrl),
+      confirmationUrl: optionalValue(options.confirmationUrl),
     },
   });
 }
@@ -297,8 +301,8 @@ export async function sendQuoteEmail(options: {
       businessName: options.businessName,
       amount: options.amount,
       vehicle: fallback(options.vehicle),
-      quoteUrl: fallback(options.quoteUrl),
-      message: fallback(options.message),
+      quoteUrl: optionalValue(options.quoteUrl),
+      message: optionalValue(options.message),
     },
   });
 }
@@ -322,8 +326,8 @@ export async function sendQuoteFollowUpEmail(options: {
       businessName: options.businessName,
       amount: options.amount,
       vehicle: fallback(options.vehicle),
-      quoteUrl: fallback(options.quoteUrl),
-      message: fallback(options.message),
+      quoteUrl: optionalValue(options.quoteUrl),
+      message: optionalValue(options.message),
     },
   });
 }
@@ -347,8 +351,8 @@ export async function sendInvoiceEmail(options: {
       businessName: options.businessName,
       amount: options.amount,
       invoiceNumber: options.invoiceNumber,
-      invoiceUrl: fallback(options.invoiceUrl),
-      message: fallback(options.message),
+      invoiceUrl: optionalValue(options.invoiceUrl),
+      message: optionalValue(options.message),
     },
   });
 }
@@ -459,3 +463,5 @@ export async function retryFailedEmailNotifications(businessId: string): Promise
   }
   return { retried: failed.length, succeeded };
 }
+
+
