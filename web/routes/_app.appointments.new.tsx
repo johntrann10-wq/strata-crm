@@ -370,6 +370,26 @@ export default function NewAppointmentPage() {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   };
 
+  const notifyAppointmentConfirmation = (deliveryStatus?: string | null, deliveryError?: string | null) => {
+    if (deliveryStatus === "emailed") {
+      toast.success("Appointment created and confirmation emailed");
+      return;
+    }
+    if (deliveryStatus === "missing_email") {
+      toast.warning("Appointment created. Add a client email to send confirmations.");
+      return;
+    }
+    if (deliveryStatus === "smtp_disabled") {
+      toast.warning("Appointment created. Transactional email is not configured.");
+      return;
+    }
+    if (deliveryStatus === "email_failed") {
+      toast.warning(`Appointment created, but confirmation email failed${deliveryError ? `: ${deliveryError}` : "."}`);
+      return;
+    }
+    toast.success("Appointment created successfully!");
+  };
+
   // Handlers
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId === selectedClientId ? null : clientId);
@@ -495,7 +515,8 @@ export default function NewAppointmentPage() {
       }
 
       if (result.data) {
-        toast.success("Appointment created successfully!");
+        const payload = result.data as { id: string; deliveryStatus?: string | null; deliveryError?: string | null };
+        notifyAppointmentConfirmation(payload.deliveryStatus ?? null, payload.deliveryError ?? null);
         navigate(`/appointments/${result.data.id}?from=${encodeURIComponent(returnTo)}`);
       }
     } catch (err: unknown) {

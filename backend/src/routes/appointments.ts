@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { appointments, clients, vehicles, staff, locations, quotes, services, appointmentServices } from "../db/schema.js";
+import { appointments, clients, vehicles, staff, locations, quotes, services, appointmentServices, businesses } from "../db/schema.js";
 import { eq, and, or, desc, asc, gte, lte, ilike } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -11,6 +11,8 @@ import { hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
 import { ConflictError } from "../lib/errors.js";
 import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
 import { createRequestActivityLog } from "../lib/activity.js";
+import { sendAppointmentConfirmation } from "../lib/email.js";
+import { isSmtpConfigured } from "../lib/env.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
@@ -75,6 +77,110 @@ function parseIsoDate(s: string | undefined): Date | undefined {
   if (!s?.trim()) return undefined;
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+type AppointmentDeliveryStatus = "emailed" | "missing_email" | "smtp_disabled" | "email_failed";
+
+async function buildAppointmentConfirmationPayload(appointmentId: string, bid: string) {
+  const [appointmentRow] = await db
+    .select({
+      id: appointments.id,
+      startTime: appointments.startTime,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      clientEmail: clients.email,
+      businessName: businesses.name,
+      vehicleYear: vehicles.year,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
+      locationAddress: locations.address,
+    })
+    .from(appointments)
+    .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
+    .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
+    .leftJoin(businesses, eq(appointments.businessId, businesses.id))
+    .leftJoin(locations, and(eq(appointments.locationId, locations.id), eq(locations.businessId, bid)))
+    .where(and(eq(appointments.id, appointmentId), eq(appointments.businessId, bid)))
+    .limit(1);
+
+  if (!appointmentRow) return null;
+
+  const serviceRows = await db
+    .select({ name: services.name })
+    .from(appointmentServices)
+    .innerJoin(services, eq(appointmentServices.serviceId, services.id))
+    .where(eq(appointmentServices.appointmentId, appointmentId))
+    .orderBy(asc(services.name));
+
+  return {
+    appointmentId: appointmentRow.id,
+    recipient: appointmentRow.clientEmail?.trim() || null,
+    clientName:
+      `${appointmentRow.clientFirstName ?? ""} ${appointmentRow.clientLastName ?? ""}`.trim() || "Customer",
+    businessName: appointmentRow.businessName ?? "Your shop",
+    dateTime: appointmentRow.startTime
+      ? new Date(appointmentRow.startTime).toLocaleString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })
+      : "Scheduled appointment",
+    vehicle: [appointmentRow.vehicleYear, appointmentRow.vehicleMake, appointmentRow.vehicleModel]
+      .filter(Boolean)
+      .join(" ") || null,
+    address: appointmentRow.locationAddress ?? null,
+    serviceSummary:
+      serviceRows.length > 0 ? `Services: ${serviceRows.map((service) => service.name).join(", ")}` : null,
+    confirmationUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/appointments/${appointmentRow.id}`,
+  };
+}
+
+async function sendAppointmentConfirmationForRecord(
+  appointmentId: string,
+  bid: string
+): Promise<{ deliveryStatus: AppointmentDeliveryStatus; deliveryError: string | null; recipient: string | null }> {
+  const payload = await buildAppointmentConfirmationPayload(appointmentId, bid);
+  if (!payload) {
+    return {
+      deliveryStatus: "email_failed",
+      deliveryError: "Appointment confirmation context could not be loaded.",
+      recipient: null,
+    };
+  }
+  if (!payload.recipient) {
+    logger.warn("Appointment confirmation skipped: client email missing", { appointmentId, businessId: bid });
+    return { deliveryStatus: "missing_email", deliveryError: "Client does not have an email address.", recipient: null };
+  }
+  if (!isSmtpConfigured()) {
+    logger.error("Appointment confirmation blocked: SMTP is not configured", { appointmentId, businessId: bid });
+    return {
+      deliveryStatus: "smtp_disabled",
+      deliveryError: "Transactional email is not configured.",
+      recipient: payload.recipient,
+    };
+  }
+  try {
+    await sendAppointmentConfirmation({
+      to: payload.recipient,
+      businessId: bid,
+      clientName: payload.clientName,
+      businessName: payload.businessName,
+      dateTime: payload.dateTime,
+      vehicle: payload.vehicle,
+      address: payload.address,
+      serviceSummary: payload.serviceSummary,
+      confirmationUrl: payload.confirmationUrl,
+    });
+    return { deliveryStatus: "emailed", deliveryError: null, recipient: payload.recipient };
+  } catch (error) {
+    const deliveryError = error instanceof Error ? error.message : String(error);
+    logger.error("Appointment confirmation email failed", { appointmentId, businessId: bid, error: deliveryError });
+    return { deliveryStatus: "email_failed", deliveryError, recipient: payload.recipient };
+  }
 }
 
 appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
@@ -410,7 +516,22 @@ appointmentsRouter.post("/", requireAuth, requireTenant, async (req: Request, re
       vehicleId: created.vehicleId,
     },
   });
-  res.status(201).json(created);
+  const confirmationResult = await sendAppointmentConfirmationForRecord(created.id, bid);
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action:
+      confirmationResult.deliveryStatus === "emailed"
+        ? "appointment.confirmation_sent"
+        : "appointment.confirmation_failed",
+    entityType: "appointment",
+    entityId: created.id,
+    metadata: {
+      recipient: confirmationResult.recipient,
+      deliveryStatus: confirmationResult.deliveryStatus,
+      deliveryError: confirmationResult.deliveryError,
+    },
+  });
+  res.status(201).json({ ...created, ...confirmationResult });
 });
 
 appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
@@ -466,6 +587,44 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   res.json(updated);
 });
 
+appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const [existing] = await db
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .limit(1);
+  if (!existing) throw new NotFoundError("Appointment not found.");
+
+  const confirmationResult = await sendAppointmentConfirmationForRecord(existing.id, bid);
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action:
+      confirmationResult.deliveryStatus === "emailed"
+        ? "appointment.confirmation_sent"
+        : "appointment.confirmation_failed",
+    entityType: "appointment",
+    entityId: existing.id,
+    metadata: {
+      recipient: confirmationResult.recipient,
+      deliveryStatus: confirmationResult.deliveryStatus,
+      deliveryError: confirmationResult.deliveryError,
+    },
+  });
+
+  if (confirmationResult.deliveryStatus === "missing_email") {
+    throw new BadRequestError(confirmationResult.deliveryError ?? "Client does not have an email address.");
+  }
+  if (confirmationResult.deliveryStatus === "smtp_disabled") {
+    throw new BadRequestError(confirmationResult.deliveryError ?? "Transactional email is not configured.");
+  }
+  if (confirmationResult.deliveryStatus === "email_failed") {
+    throw new BadRequestError(confirmationResult.deliveryError ?? "Appointment confirmation email failed.");
+  }
+
+  res.json({ ok: true, ...confirmationResult });
+});
+
 appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const statusParsed = appointmentStatusSchema.safeParse(req.body?.status ?? "scheduled");
   if (!statusParsed.success) throw new BadRequestError("Invalid status.");
@@ -488,6 +647,31 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (
       },
     });
   }
+  if (!updated) {
+    res.json(updated);
+    return;
+  }
+
+  if (status === "confirmed") {
+    const confirmationResult = await sendAppointmentConfirmationForRecord(updated.id, bid);
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action:
+        confirmationResult.deliveryStatus === "emailed"
+          ? "appointment.confirmation_sent"
+          : "appointment.confirmation_failed",
+      entityType: "appointment",
+      entityId: updated.id,
+      metadata: {
+        recipient: confirmationResult.recipient,
+        deliveryStatus: confirmationResult.deliveryStatus,
+        deliveryError: confirmationResult.deliveryError,
+      },
+    });
+    res.json({ ...updated, ...confirmationResult });
+    return;
+  }
+
   res.json(updated);
 });
 

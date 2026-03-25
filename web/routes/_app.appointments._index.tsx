@@ -66,6 +66,30 @@ function formatStatus(status: string): string {
     .join(" ");
 }
 
+function notifyAppointmentConfirmation(
+  deliveryStatus?: string | null,
+  deliveryError?: string | null,
+  fallbackMessage = "Appointment confirmed"
+) {
+  if (deliveryStatus === "emailed") {
+    toast.success(`${fallbackMessage} and email sent`);
+    return;
+  }
+  if (deliveryStatus === "missing_email") {
+    toast.warning(`${fallbackMessage}, but the client has no email address.`);
+    return;
+  }
+  if (deliveryStatus === "smtp_disabled") {
+    toast.warning(`${fallbackMessage}, but transactional email is not configured.`);
+    return;
+  }
+  if (deliveryStatus === "email_failed") {
+    toast.warning(`${fallbackMessage}, but confirmation email failed${deliveryError ? `: ${deliveryError}` : "."}`);
+    return;
+  }
+  toast.success(fallbackMessage);
+}
+
 function matchesTab(status: string | null | undefined, tab: AppointmentStatusTab): boolean {
   if (tab === "all") return true;
   if (tab === "cancelled") return status === "cancelled" || status === "no-show";
@@ -100,7 +124,12 @@ export default function AppointmentsPage() {
     if (result?.error) {
       toast.error("Failed: " + result.error.message);
     } else {
-      toast.success("Status updated to " + formatStatus(newStatus));
+      const payload = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
+      if (newStatus === "confirmed") {
+        notifyAppointmentConfirmation(payload?.deliveryStatus ?? null, payload?.deliveryError ?? null);
+      } else {
+        toast.success("Status updated to " + formatStatus(newStatus));
+      }
       void refetch();
     }
   };

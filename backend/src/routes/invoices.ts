@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "../db/index.js";
 import { invoices, businesses, invoiceLineItems, clients, payments, appointments, vehicles, quotes, activityLogs } from "../db/schema.js";
 import { eq, and, or, desc, asc, isNull, sql, ilike } from "drizzle-orm";
-import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
+import { NotFoundError, ForbiddenError, BadRequestError, AppError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { logger } from "../lib/logger.js";
@@ -561,47 +561,59 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, async (req:
     .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, bid)))
     .limit(1);
   if (!existing) throw new NotFoundError("Invoice not found.");
-  const [updated] = await db.update(invoices).set({ status: "sent", updatedAt: new Date() }).where(eq(invoices.id, req.params.id)).returning();
-  if (updated) {
-    let deliveryStatus = "recorded";
-    let deliveryError: string | null = null;
-    if (existing.clientEmail && isSmtpConfigured()) {
-      try {
-        await sendInvoiceEmail({
-          to: existing.clientEmail,
-          businessId: bid,
-          clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
-          businessName: existing.businessName ?? "Your shop",
-          amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
-          invoiceNumber: existing.invoiceNumber ?? "Invoice",
-          invoiceUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/invoices/${updated.id}`,
-          message: parsed.data.message ?? null,
-        });
-        deliveryStatus = "emailed";
-      } catch (error) {
-        deliveryStatus = "email_failed";
-        deliveryError = error instanceof Error ? error.message : String(error);
-      }
-    } else if (!existing.clientEmail) {
-      deliveryStatus = "missing_email";
-    } else {
-      deliveryStatus = "smtp_disabled";
-    }
+  if (!existing.clientEmail?.trim()) {
+    throw new BadRequestError("Client does not have an email address.");
+  }
+  if (!isSmtpConfigured()) {
+    logger.error("Invoice send blocked: SMTP is not configured", { invoiceId: existing.id, businessId: bid });
+    throw new AppError("Transactional email is not configured. Set SMTP_* environment variables.", 503, "EMAIL_NOT_CONFIGURED");
+  }
+
+  let deliveryError: string | null = null;
+  try {
+    await sendInvoiceEmail({
+      to: existing.clientEmail.trim(),
+      businessId: bid,
+      clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
+      businessName: existing.businessName ?? "Your shop",
+      amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+      invoiceNumber: existing.invoiceNumber ?? "Invoice",
+      invoiceUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/invoices/${existing.id}`,
+      message: parsed.data.message ?? null,
+    });
+  } catch (error) {
+    deliveryError = error instanceof Error ? error.message : String(error);
+    logger.error("Invoice email send failed", { invoiceId: existing.id, businessId: bid, error: deliveryError });
     await createRequestActivityLog(req, {
       businessId: bid,
-      action: "invoice.sent",
+      action: "invoice.send_failed",
       entityType: "invoice",
-      entityId: updated.id,
+      entityId: existing.id,
       metadata: {
-        invoiceNumber: updated.invoiceNumber ?? null,
+        invoiceNumber: existing.invoiceNumber ?? null,
         recipient: existing.clientEmail ?? null,
         message: parsed.data.message ?? null,
-        deliveryStatus,
+        deliveryStatus: "email_failed",
         deliveryError,
       },
     });
-    res.json({ ...updated, deliveryStatus, deliveryError });
-    return;
+    throw new AppError(`Invoice email failed to send: ${deliveryError}`, 502, "EMAIL_SEND_FAILED");
   }
-  res.json(updated);
+
+  const [updated] = await db.update(invoices).set({ status: "sent", updatedAt: new Date() }).where(eq(invoices.id, req.params.id)).returning();
+  if (!updated) throw new NotFoundError("Invoice not found.");
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "invoice.sent",
+    entityType: "invoice",
+    entityId: updated.id,
+    metadata: {
+      invoiceNumber: updated.invoiceNumber ?? null,
+      recipient: existing.clientEmail ?? null,
+      message: parsed.data.message ?? null,
+      deliveryStatus: "emailed",
+      deliveryError: null,
+    },
+  });
+  res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null });
 });

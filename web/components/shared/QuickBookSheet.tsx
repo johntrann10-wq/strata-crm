@@ -241,7 +241,19 @@ export function QuickBookSheet({
         return;
       }
 
-      toast.success("Appointment booked!");
+      const confirmationStatus = (payload as { deliveryStatus?: string | null; deliveryError?: string | null } | null)?.deliveryStatus;
+      const confirmationError = (payload as { deliveryError?: string | null } | null)?.deliveryError;
+      if (confirmationStatus === "emailed") {
+        toast.success("Appointment booked and confirmation emailed");
+      } else if (confirmationStatus === "missing_email") {
+        toast.warning("Appointment booked. Add a client email to send confirmations.");
+      } else if (confirmationStatus === "smtp_disabled") {
+        toast.warning("Appointment booked. Transactional email is not configured.");
+      } else if (confirmationStatus === "email_failed") {
+        toast.warning(`Appointment booked, but confirmation email failed${confirmationError ? `: ${confirmationError}` : "."}`);
+      } else {
+        toast.success("Appointment booked!");
+      }
       onBooked?.(newId);
       onOpenChange(false);
     } catch (err) {

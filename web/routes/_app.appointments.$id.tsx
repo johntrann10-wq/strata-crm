@@ -465,6 +465,7 @@ export default function AppointmentDetail() {
   } as any);
 
   const [{ fetching: updatingStatus }, runUpdateStatus] = useAction(api.appointment.updateStatus);
+  const [{ fetching: sendingConfirmation }, runSendConfirmation] = useAction(api.appointment.sendConfirmation);
   const [{ fetching: completing }, runComplete] = useAction(api.appointment.complete);
   const [{ fetching: cancelling }, runCancel] = useAction(api.appointment.cancel);
   const [{ fetching: updatingNotes }, runUpdate] = useAction(api.appointment.update);
@@ -547,14 +548,57 @@ export default function AppointmentDetail() {
     ) as Map<string, boolean>).entries()
   );
 
+  const notifyConfirmationResult = (
+    deliveryStatus?: string | null,
+    deliveryError?: string | null,
+    successLabel = "Appointment confirmed"
+  ) => {
+    if (deliveryStatus === "emailed") {
+      toast.success(`${successLabel} and email sent`);
+      return;
+    }
+    if (deliveryStatus === "missing_email") {
+      toast.warning(`${successLabel}, but the client has no email address.`);
+      return;
+    }
+    if (deliveryStatus === "smtp_disabled") {
+      toast.warning(`${successLabel}, but transactional email is not configured.`);
+      return;
+    }
+    if (deliveryStatus === "email_failed") {
+      toast.warning(`${successLabel}, but confirmation email failed${deliveryError ? `: ${deliveryError}` : "."}`);
+      return;
+    }
+    toast.success(successLabel);
+  };
+
   const handleStatusChange = async (newStatus: string) => {
     if (!appointment) return;
     const result = await runUpdateStatus({ id: appointment.id, status: newStatus });
     if (result.error) {
       toast.error(`Failed to update status: ${result.error.message}`);
     } else {
-      toast.success(`Status updated to ${STATUS_LABELS[newStatus] ?? newStatus}`);
+      const payload = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
+      if (newStatus === "confirmed") {
+        notifyConfirmationResult(payload?.deliveryStatus ?? null, payload?.deliveryError ?? null);
+      } else {
+        toast.success(`Status updated to ${STATUS_LABELS[newStatus] ?? newStatus}`);
+      }
+      void refetchAppointment();
+      void refetchActivity();
     }
+  };
+
+  const handleSendConfirmation = async () => {
+    if (!appointment) return;
+    const result = await runSendConfirmation({ id: appointment.id });
+    if (result.error) {
+      toast.error(`Failed to send confirmation: ${result.error.message}`);
+      return;
+    }
+    const payload = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
+    notifyConfirmationResult(payload?.deliveryStatus ?? "emailed", payload?.deliveryError ?? null, "Confirmation sent");
+    void refetchActivity();
   };
 
   const handleComplete = async () => {
@@ -564,6 +608,8 @@ export default function AppointmentDetail() {
       toast.error(`Failed to complete appointment: ${result.error.message}`);
     } else {
       toast.success("Appointment marked as complete");
+      void refetchAppointment();
+      void refetchActivity();
     }
   };
 
@@ -575,6 +621,8 @@ export default function AppointmentDetail() {
     } else {
       toast.success("Appointment cancelled");
       setShowCancelDialog(false);
+      void refetchAppointment();
+      void refetchActivity();
     }
   };
 
@@ -735,7 +783,7 @@ export default function AppointmentDetail() {
       ? `${appointment.client.firstName} ${appointment.client.lastName}`
       : "Appointment");
 
-  const isActionLoading = updatingStatus || completing || cancelling;
+  const isActionLoading = updatingStatus || completing || cancelling || sendingConfirmation;
   const quoteNeedsFollowUp = !!quote && ["sent", "accepted"].includes(String((quote as any).status ?? "")) && (
     !safeDate((quote as any).followUpSentAt ?? null)
       ? isOlderThanDays((quote as any).sentAt ?? null, 2)
@@ -878,6 +926,17 @@ export default function AppointmentDetail() {
             </DropdownMenuContent>
           </DropdownMenu>
 
+          {appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
+            <Button variant="outline" size="sm" onClick={() => void handleSendConfirmation()} disabled={isActionLoading}>
+              {sendingConfirmation ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4 mr-2" />
+              )}
+              Send Confirmation
+            </Button>
+          ) : null}
+
           {appointment.status !== "completed" && appointment.status !== "cancelled" && appointment.status !== "no-show" && (
             <Button
               variant="outline"
@@ -1000,6 +1059,12 @@ export default function AppointmentDetail() {
                 <DropdownMenuItem onClick={handleOpenEditDialog}>
                   <Edit2 className="mr-2 h-4 w-4" />
                   Edit appointment
+                </DropdownMenuItem>
+              ) : null}
+              {appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
+                <DropdownMenuItem onClick={() => void handleSendConfirmation()}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Send confirmation
                 </DropdownMenuItem>
               ) : null}
               {!invoiceFetching && !invoice && appointment.status !== "cancelled" ? (

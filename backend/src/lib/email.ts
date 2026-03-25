@@ -14,10 +14,17 @@ import { isSmtpConfigured } from "./env.js";
 
 let transporter: nodemailer.Transporter | null = null;
 
+function resolveSmtpSecure(): boolean {
+  const configured = process.env.SMTP_SECURE?.trim().toLowerCase();
+  if (configured === "true" || configured === "1" || configured === "yes") return true;
+  if (configured === "false" || configured === "0" || configured === "no") return false;
+  return Number(process.env.SMTP_PORT ?? 0) === 465;
+}
+
 function getTransporter(): nodemailer.Transporter | null {
   if (!isSmtpConfigured()) return null;
   if (!transporter) {
-    const secure = process.env.SMTP_SECURE !== "false";
+    const secure = resolveSmtpSecure();
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST!,
       port: Number(process.env.SMTP_PORT!),

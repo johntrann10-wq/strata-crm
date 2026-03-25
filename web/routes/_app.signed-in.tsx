@@ -125,6 +125,30 @@ function invoiceBalance(invoice: InvoiceRecord): number {
   return Number.isFinite(raw) ? raw : 0;
 }
 
+function notifyAppointmentConfirmation(
+  deliveryStatus?: string | null,
+  deliveryError?: string | null,
+  fallbackMessage = "Appointment confirmed"
+) {
+  if (deliveryStatus === "emailed") {
+    toast.success(`${fallbackMessage} and email sent`);
+    return;
+  }
+  if (deliveryStatus === "missing_email") {
+    toast.warning(`${fallbackMessage}, but the client has no email address.`);
+    return;
+  }
+  if (deliveryStatus === "smtp_disabled") {
+    toast.warning(`${fallbackMessage}, but transactional email is not configured.`);
+    return;
+  }
+  if (deliveryStatus === "email_failed") {
+    toast.warning(`${fallbackMessage}, but confirmation email failed${deliveryError ? `: ${deliveryError}` : "."}`);
+    return;
+  }
+  toast.success(fallbackMessage);
+}
+
 function sectionErrorMessage(err: Error): string {
   if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
     return "Session expired. Sign in again.";
@@ -670,7 +694,12 @@ export default function SignedIn() {
           toast.error(result.error.message ?? "Could not update appointment");
           return;
         }
-        toast.success(successMessage);
+        const payload = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
+        if (status === "confirmed") {
+          notifyAppointmentConfirmation(payload?.deliveryStatus ?? null, payload?.deliveryError ?? null, successMessage);
+        } else {
+          toast.success(successMessage);
+        }
         await refetchAppts();
       } finally {
         setUpdatingAppointmentId(null);

@@ -350,12 +350,20 @@ export default function NewInvoicePage() {
       }
 
       if (mode === "sent") {
-        const sendResult = await api.invoice.sendToClient({ id: newInvoiceId });
-        const deliveryStatus = (sendResult as { deliveryStatus?: string } | null)?.deliveryStatus;
-        if (deliveryStatus === "emailed") {
-          toast.success("Invoice created and emailed");
-        } else {
-          toast.warning("Invoice created and marked as sent, but email was not delivered.");
+        try {
+          const sendResult = await api.invoice.sendToClient({ id: newInvoiceId });
+          const deliveryStatus = (sendResult as { deliveryStatus?: string } | null)?.deliveryStatus;
+          if (deliveryStatus === "emailed") {
+            toast.success("Invoice created and emailed");
+          } else {
+            toast.warning("Invoice created, but delivery state was unclear.");
+          }
+        } catch (sendError) {
+          toast.error(
+            sendError instanceof Error
+              ? `Invoice created, but email failed: ${sendError.message}`
+              : "Invoice created, but email failed."
+          );
         }
       } else {
         toast.success("Invoice created successfully");

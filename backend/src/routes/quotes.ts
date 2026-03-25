@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "../db/index.js";
 import { quotes, clients, vehicles, quoteLineItems, appointments, staff, locations, businesses } from "../db/schema.js";
 import { eq, and, desc, asc, isNull, lt, sql, ilike, or } from "drizzle-orm";
-import { NotFoundError, ForbiddenError, BadRequestError, ConflictError } from "../lib/errors.js";
+import { NotFoundError, ForbiddenError, BadRequestError, ConflictError, AppError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
@@ -11,6 +11,7 @@ import { recalculateQuoteTotals } from "../lib/revenueTotals.js";
 import { createRequestActivityLog } from "../lib/activity.js";
 import { isSmtpConfigured } from "../lib/env.js";
 import { sendQuoteEmail, sendQuoteFollowUpEmail } from "../lib/email.js";
+import { logger } from "../lib/logger.js";
 
 export const quotesRouter = Router({ mergeParams: true });
 
@@ -415,36 +416,50 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, async (req: Request, 
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
     .limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
+  if (!existing.clientEmail?.trim()) {
+    throw new BadRequestError("Client does not have an email address.");
+  }
+  if (!isSmtpConfigured()) {
+    logger.error("Quote send blocked: SMTP is not configured", { quoteId: existing.id, businessId: bid });
+    throw new AppError("Transactional email is not configured. Set SMTP_* environment variables.", 503, "EMAIL_NOT_CONFIGURED");
+  }
+
+  let deliveryError: string | null = null;
+  try {
+    await sendQuoteEmail({
+      to: existing.clientEmail.trim(),
+      businessId: bid,
+      clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
+      businessName: existing.businessName ?? "Your shop",
+      amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+      vehicle: [existing.vehicleYear, existing.vehicleMake, existing.vehicleModel].filter(Boolean).join(" "),
+      quoteUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/quotes/${existing.id}`,
+      message: parsed.data.message ?? null,
+    });
+  } catch (error) {
+    deliveryError = error instanceof Error ? error.message : String(error);
+    logger.error("Quote email send failed", { quoteId: existing.id, businessId: bid, error: deliveryError });
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "quote.send_failed",
+      entityType: "quote",
+      entityId: existing.id,
+      metadata: {
+        recipient: existing.clientEmail,
+        message: parsed.data.message ?? null,
+        deliveryStatus: "email_failed",
+        deliveryError,
+      },
+    });
+    throw new AppError(`Quote email failed to send: ${deliveryError}`, 502, "EMAIL_SEND_FAILED");
+  }
+
   const [updated] = await db
     .update(quotes)
     .set({ status: "sent", sentAt: new Date(), updatedAt: new Date() })
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
     .returning();
   if (!updated) throw new NotFoundError("Quote not found.");
-  let deliveryStatus = "recorded";
-  let deliveryError: string | null = null;
-  if (existing.clientEmail && isSmtpConfigured()) {
-    try {
-      await sendQuoteEmail({
-        to: existing.clientEmail,
-        businessId: bid,
-        clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
-        businessName: existing.businessName ?? "Your shop",
-        amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
-        vehicle: [existing.vehicleYear, existing.vehicleMake, existing.vehicleModel].filter(Boolean).join(" "),
-        quoteUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/quotes/${updated.id}`,
-        message: parsed.data.message ?? null,
-      });
-      deliveryStatus = "emailed";
-    } catch (error) {
-      deliveryStatus = "email_failed";
-      deliveryError = error instanceof Error ? error.message : String(error);
-    }
-  } else if (!existing.clientEmail) {
-    deliveryStatus = "missing_email";
-  } else {
-    deliveryStatus = "smtp_disabled";
-  }
   await createRequestActivityLog(req, {
     businessId: bid,
     action: "quote.sent",
@@ -454,11 +469,11 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, async (req: Request, 
       status: updated.status,
       recipient: existing.clientEmail ?? null,
       message: parsed.data.message ?? null,
-      deliveryStatus,
-      deliveryError,
+      deliveryStatus: "emailed",
+      deliveryError: null,
     },
   });
-  res.json({ ...updated, deliveryStatus, deliveryError });
+  res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null });
 });
 
 quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, async (req: Request, res: Response) => {
@@ -485,36 +500,50 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, async (req: R
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
     .limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
+  if (!existing.clientEmail?.trim()) {
+    throw new BadRequestError("Client does not have an email address.");
+  }
+  if (!isSmtpConfigured()) {
+    logger.error("Quote follow-up blocked: SMTP is not configured", { quoteId: existing.id, businessId: bid });
+    throw new AppError("Transactional email is not configured. Set SMTP_* environment variables.", 503, "EMAIL_NOT_CONFIGURED");
+  }
+
+  let deliveryError: string | null = null;
+  try {
+    await sendQuoteFollowUpEmail({
+      to: existing.clientEmail.trim(),
+      businessId: bid,
+      clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
+      businessName: existing.businessName ?? "Your shop",
+      amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+      vehicle: [existing.vehicleYear, existing.vehicleMake, existing.vehicleModel].filter(Boolean).join(" "),
+      quoteUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/quotes/${existing.id}`,
+      message: parsed.data.message ?? null,
+    });
+  } catch (error) {
+    deliveryError = error instanceof Error ? error.message : String(error);
+    logger.error("Quote follow-up email failed", { quoteId: existing.id, businessId: bid, error: deliveryError });
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "quote.follow_up_failed",
+      entityType: "quote",
+      entityId: existing.id,
+      metadata: {
+        recipient: existing.clientEmail,
+        message: parsed.data.message ?? null,
+        deliveryStatus: "email_failed",
+        deliveryError,
+      },
+    });
+    throw new AppError(`Quote follow-up email failed to send: ${deliveryError}`, 502, "EMAIL_SEND_FAILED");
+  }
+
   const [updated] = await db
     .update(quotes)
     .set({ followUpSentAt: new Date(), updatedAt: new Date() })
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
     .returning();
   if (!updated) throw new NotFoundError("Quote not found.");
-  let deliveryStatus = "recorded";
-  let deliveryError: string | null = null;
-  if (existing.clientEmail && isSmtpConfigured()) {
-    try {
-      await sendQuoteFollowUpEmail({
-        to: existing.clientEmail,
-        businessId: bid,
-        clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
-        businessName: existing.businessName ?? "Your shop",
-        amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
-        vehicle: [existing.vehicleYear, existing.vehicleMake, existing.vehicleModel].filter(Boolean).join(" "),
-        quoteUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/quotes/${updated.id}`,
-        message: parsed.data.message ?? null,
-      });
-      deliveryStatus = "emailed";
-    } catch (error) {
-      deliveryStatus = "email_failed";
-      deliveryError = error instanceof Error ? error.message : String(error);
-    }
-  } else if (!existing.clientEmail) {
-    deliveryStatus = "missing_email";
-  } else {
-    deliveryStatus = "smtp_disabled";
-  }
   await createRequestActivityLog(req, {
     businessId: bid,
     action: "quote.follow_up_recorded",
@@ -524,11 +553,11 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, async (req: R
       followUpSentAt: updated.followUpSentAt,
       recipient: existing.clientEmail ?? null,
       message: parsed.data.message ?? null,
-      deliveryStatus,
-      deliveryError,
+      deliveryStatus: "emailed",
+      deliveryError: null,
     },
   });
-  res.json({ ...updated, deliveryStatus, deliveryError });
+  res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null });
 });
 
 const scheduleFromQuoteSchema = z.object({
