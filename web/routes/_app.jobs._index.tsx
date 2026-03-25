@@ -143,12 +143,12 @@ export default function JobsIndexPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+    <div className="mx-auto max-w-6xl space-y-5 p-3 sm:p-4 md:p-6">
       <PageHeader
         title="Jobs"
         subtitle="Run active work orders, assign technicians, and move work from schedule to completion."
         right={
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center">
             <Select
               value={activeLocationId}
               onValueChange={(value) => {
@@ -156,7 +156,7 @@ export default function JobsIndexPage() {
                 setCurrentLocationId(value === "all" ? null : value);
               }}
             >
-              <SelectTrigger className="w-full sm:w-52">
+              <SelectTrigger className="w-full lg:w-52">
                 <SelectValue placeholder="All locations" />
               </SelectTrigger>
               <SelectContent>
@@ -168,7 +168,7 @@ export default function JobsIndexPage() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="relative w-full sm:w-80">
+            <div className="relative w-full lg:w-80">
               {fetching && records.length > 0 ? (
                 <Loader2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
               ) : (
@@ -261,7 +261,7 @@ export default function JobsIndexPage() {
             return (
               <Link key={job.id} to={`/jobs/${job.id}`}>
                 <Card className="transition-colors hover:bg-muted/30">
-                  <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+                  <CardContent className="flex flex-col gap-4 p-4">
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <StatusBadge status={job.status} type="job" />
@@ -274,14 +274,14 @@ export default function JobsIndexPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="grid flex-none gap-1 text-sm text-muted-foreground sm:grid-cols-2 sm:gap-x-6 lg:text-right">
+                    <div className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-2 sm:gap-x-6 lg:grid-cols-4">
                       <span>{formatDate(job.scheduledStart)}</span>
                       <span>{job.location?.name ?? "No location set"}</span>
                       <span>{staffName}</span>
                       <span className="font-medium text-foreground">{formatCurrency(job.totalPrice)}</span>
                     </div>
                     <div
-                      className="flex items-center gap-2"
+                      className="flex flex-wrap items-center gap-2"
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
@@ -291,7 +291,7 @@ export default function JobsIndexPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-7 px-2 text-xs"
+                          className="min-h-[36px] px-2 text-xs"
                           disabled={updatingJob}
                           onClick={(event) =>
                             void handleQuickJobUpdate(event, job.id, { assignedStaffId: myStaffRecord.id }, "Job assigned to you")
@@ -305,7 +305,7 @@ export default function JobsIndexPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-7 px-2 text-xs"
+                          className="min-h-[36px] px-2 text-xs"
                           disabled={updatingJob}
                           onClick={(event) =>
                             void handleQuickJobUpdate(event, job.id, { status: "in_progress" }, "Job marked in progress")
@@ -319,7 +319,7 @@ export default function JobsIndexPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-7 px-2 text-xs"
+                          className="min-h-[36px] px-2 text-xs"
                           disabled={updatingJob}
                           onClick={(event) =>
                             void handleQuickJobUpdate(event, job.id, { status: "completed" }, "Job completed")
@@ -329,14 +329,14 @@ export default function JobsIndexPage() {
                         </Button>
                       ) : null}
                       {invoiceHref ? (
-                        <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
+                        <Button asChild variant="outline" size="sm" className="min-h-[36px] px-2 text-xs">
                           <Link to={invoiceHref}>Invoice</Link>
                         </Button>
                       ) : null}
-                      <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                      <Button asChild variant="ghost" size="sm" className="min-h-[36px] px-2 text-xs">
                         <Link to={`/jobs/${job.id}`}>Open</Link>
                       </Button>
-                      <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                      <ChevronRight className="ml-auto h-5 w-5 shrink-0 text-muted-foreground" />
                     </div>
                   </CardContent>
                 </Card>

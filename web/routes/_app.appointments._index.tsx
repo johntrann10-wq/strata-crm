@@ -180,7 +180,7 @@ export default function AppointmentsPage() {
   }, [records, myStaffRecord]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-6">
+    <div className="mx-auto max-w-6xl space-y-5 p-3 sm:p-4 md:p-6">
       <PageHeader
         title="Appointments"
         subtitle="Run the schedule clearly, move work forward fast, and keep status changes close to the list."
@@ -205,7 +205,7 @@ export default function AppointmentsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="relative">
+            <div className="relative w-full lg:w-auto">
               {appointmentsFetching && records.length > 0 ? (
                 <Loader2 className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
               ) : (
@@ -215,14 +215,14 @@ export default function AppointmentsPage() {
                 placeholder="Search appointments, clients, vehicles, or techs..."
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                className="w-72 pl-8"
+                className="w-full pl-8 lg:w-72"
               />
             </div>
-            <Button variant="outline" onClick={() => setQuickBookOpen(true)}>
+            <Button variant="outline" onClick={() => setQuickBookOpen(true)} className="w-full lg:w-auto">
               <Zap className="mr-2 h-4 w-4" />
               Quick Book
             </Button>
-            <Button asChild>
+            <Button asChild className="w-full lg:w-auto">
               <Link to="/appointments/new">
                 <Plus className="mr-2 h-4 w-4" />
                 New Appointment
@@ -338,7 +338,7 @@ export default function AppointmentsPage() {
                 to={`/appointments/${appointment.id}`}
                 className="block rounded-lg border bg-white p-4 transition-colors hover:border-primary"
               >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-col gap-4">
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex items-center gap-2">
                       <StatusBadge status={appointment.status ?? ""} type="appointment" />
@@ -349,14 +349,14 @@ export default function AppointmentsPage() {
                       {vehicleLabel ? ` · ${vehicleLabel}` : ""}
                     </div>
                   </div>
-                  <div className="grid flex-none gap-1 text-sm text-muted-foreground sm:grid-cols-2 sm:gap-x-6 lg:text-right">
+                  <div className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-2 sm:gap-x-6 lg:grid-cols-4">
                     <span>{formattedTime || "Unscheduled"}</span>
                     <span>{appointment.location?.name ?? "No location set"}</span>
                     <span>{techName}</span>
                     <span>{appointment.endTime ? format(new Date(appointment.endTime), "h:mm a") : "No end time"}</span>
                   </div>
                   <div
-                    className="flex items-center gap-3"
+                    className="flex flex-wrap items-center gap-2"
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -366,7 +366,7 @@ export default function AppointmentsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2 text-xs"
+                        className="min-h-[36px] px-2 text-xs"
                         onClick={(event) => void handleAssignToMe(event, appointment.id)}
                       >
                         <UserPlus className="mr-1 h-3 w-3" />
@@ -376,7 +376,7 @@ export default function AppointmentsPage() {
                     {(QUICK_TRANSITIONS[appointment.status ?? ""]?.length ?? 0) > 0 ? (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                          <Button variant="outline" size="sm" className="min-h-[36px] px-2 text-xs">
                             Status
                             <ChevronDown className="ml-1 h-3 w-3" />
                           </Button>
@@ -391,19 +391,19 @@ export default function AppointmentsPage() {
                       </DropdownMenu>
                     ) : null}
                     {quoteHref ? (
-                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
+                      <Button asChild variant="outline" size="sm" className="min-h-[36px] px-2 text-xs">
                         <Link to={quoteHref}>Quote</Link>
                       </Button>
                     ) : null}
                     {invoiceHref ? (
-                      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs">
+                      <Button asChild variant="outline" size="sm" className="min-h-[36px] px-2 text-xs">
                         <Link to={invoiceHref}>Invoice</Link>
                       </Button>
                     ) : null}
-                    <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                    <Button asChild variant="ghost" size="sm" className="min-h-[36px] px-2 text-xs">
                       <Link to={`/appointments/${appointment.id}`}>Open</Link>
                     </Button>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
                   </div>
                 </div>
               </Link>
