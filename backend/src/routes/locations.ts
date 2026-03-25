@@ -49,19 +49,26 @@ const baseLocationSelection = {
   businessId: locations.businessId,
   name: locations.name,
   address: locations.address,
-  timezone: locations.timezone,
   active: locations.active,
   createdAt: locations.createdAt,
   updatedAt: locations.updatedAt,
 };
 
-const fullLocationSelection = {
+const timezoneLocationSelection = {
   ...baseLocationSelection,
+  timezone: locations.timezone,
+};
+
+const fullLocationSelection = {
+  ...timezoneLocationSelection,
   phone: locations.phone,
 };
 
-function withMissingPhone<T extends Omit<LocationRecord, "phone">>(row: T): LocationRecord {
-  return { ...row, phone: null };
+function withMissingFields<T extends Omit<LocationRecord, "phone" | "timezone">>(
+  row: T,
+  extras?: Partial<Pick<LocationRecord, "phone" | "timezone">>
+): LocationRecord {
+  return { ...row, phone: extras?.phone ?? null, timezone: extras?.timezone ?? null };
 }
 
 async function listLocationsForBusiness(bid: string): Promise<LocationRecord[]> {
@@ -73,16 +80,30 @@ async function listLocationsForBusiness(bid: string): Promise<LocationRecord[]> 
       .orderBy(asc(locations.name));
   } catch (error) {
     if (!isLocationSchemaDriftError(error)) throw error;
-    logger.warn("locations list falling back without phone column", {
+    logger.warn("locations list falling back without full schema", {
       businessId: bid,
       error: error instanceof Error ? error.message : String(error),
     });
-    const rows = await db
-      .select(baseLocationSelection)
-      .from(locations)
-      .where(eq(locations.businessId, bid))
-      .orderBy(asc(locations.name));
-    return rows.map(withMissingPhone);
+    try {
+      const rows = await db
+        .select(timezoneLocationSelection)
+        .from(locations)
+        .where(eq(locations.businessId, bid))
+        .orderBy(asc(locations.name));
+      return rows.map((row) => withMissingFields(row, { timezone: row.timezone }));
+    } catch (innerError) {
+      if (!isLocationSchemaDriftError(innerError)) throw innerError;
+      logger.warn("locations list falling back without timezone column", {
+        businessId: bid,
+        error: innerError instanceof Error ? innerError.message : String(innerError),
+      });
+      const rows = await db
+        .select(baseLocationSelection)
+        .from(locations)
+        .where(eq(locations.businessId, bid))
+        .orderBy(asc(locations.name));
+      return rows.map((row) => withMissingFields(row));
+    }
   }
 }
 
@@ -96,17 +117,32 @@ async function getLocationForBusiness(bid: string, id: string): Promise<Location
     return row ?? null;
   } catch (error) {
     if (!isLocationSchemaDriftError(error)) throw error;
-    logger.warn("location lookup falling back without phone column", {
+    logger.warn("location lookup falling back without full schema", {
       businessId: bid,
       locationId: id,
       error: error instanceof Error ? error.message : String(error),
     });
-    const [row] = await db
-      .select(baseLocationSelection)
-      .from(locations)
-      .where(and(eq(locations.id, id), eq(locations.businessId, bid)))
-      .limit(1);
-    return row ? withMissingPhone(row) : null;
+    try {
+      const [row] = await db
+        .select(timezoneLocationSelection)
+        .from(locations)
+        .where(and(eq(locations.id, id), eq(locations.businessId, bid)))
+        .limit(1);
+      return row ? withMissingFields(row, { timezone: row.timezone }) : null;
+    } catch (innerError) {
+      if (!isLocationSchemaDriftError(innerError)) throw innerError;
+      logger.warn("location lookup falling back without timezone column", {
+        businessId: bid,
+        locationId: id,
+        error: innerError instanceof Error ? innerError.message : String(innerError),
+      });
+      const [row] = await db
+        .select(baseLocationSelection)
+        .from(locations)
+        .where(and(eq(locations.id, id), eq(locations.businessId, bid)))
+        .limit(1);
+      return row ? withMissingFields(row) : null;
+    }
   }
 }
 

@@ -19,6 +19,40 @@ function businessId(req: Request): string {
   return req.businessId;
 }
 
+function isLocationSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: string }).code;
+  const message = String((error as { message?: string }).message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+async function locationExistsForBusiness(locationId: string, bid: string): Promise<boolean> {
+  try {
+    const [loc] = await db
+      .select({ id: locations.id })
+      .from(locations)
+      .where(and(eq(locations.id, locationId), eq(locations.businessId, bid)))
+      .limit(1);
+    return !!loc;
+  } catch (error) {
+    if (!isLocationSchemaDriftError(error)) throw error;
+    const [loc] = await db
+      .select({
+        id: locations.id,
+        businessId: locations.businessId,
+        name: locations.name,
+        address: locations.address,
+        active: locations.active,
+        createdAt: locations.createdAt,
+        updatedAt: locations.updatedAt,
+      })
+      .from(locations)
+      .where(and(eq(locations.id, locationId), eq(locations.businessId, bid)))
+      .limit(1);
+    return !!loc;
+  }
+}
+
 const appointmentStatusSchema = z.enum(["scheduled", "confirmed", "in_progress", "completed", "cancelled", "no-show"]);
 const createSchema = z.object({
   clientId: z.string().uuid(),
@@ -290,8 +324,8 @@ appointmentsRouter.post("/", requireAuth, requireTenant, async (req: Request, re
     if (!staffRow) throw new BadRequestError("Staff not found or access denied.");
   }
   if (parsed.data.locationId) {
-    const [loc] = await db.select().from(locations).where(and(eq(locations.id, parsed.data.locationId), eq(locations.businessId, bid))).limit(1);
-    if (!loc) throw new BadRequestError("Location not found or access denied.");
+    const hasLocation = await locationExistsForBusiness(parsed.data.locationId, bid);
+    if (!hasLocation) throw new BadRequestError("Location not found or access denied.");
   }
 
   const startTime = new Date(parsed.data.startTime);
