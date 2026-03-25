@@ -375,7 +375,7 @@ function AppLayoutInner({
   }, [setOpen]);
 
   return (
-    <div className="h-screen flex overflow-hidden">
+    <div className="flex min-h-dvh flex-col md:h-screen md:flex-row md:overflow-hidden">
       <CommandPalette enabledModules={enabledModules} hasBusiness={!!businessId} />
 
       {/* Desktop sidebar – fixed, visible on md+ screens */}
@@ -400,20 +400,20 @@ function AppLayoutInner({
       {/* Main content area */}
       <div className="flex min-w-0 flex-1 flex-col md:pl-64">
         <header className="sticky top-0 z-10 w-full border-b border-border/70 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/82">
-          <div className="flex flex-col gap-4 px-4 py-3 md:px-6">
+          <div className="flex flex-col gap-3 px-4 py-3 md:gap-4 md:px-6">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div className="flex min-w-0 items-start gap-3">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="md:hidden"
+                  className="mt-0.5 md:hidden"
                   onClick={() => setMobileOpen(true)}
                   aria-label="Open navigation menu"
                 >
                   <Menu className="h-5 w-5" />
                 </Button>
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                     <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/55 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                       {activeNavEntry.section.label}
                     </span>
@@ -430,36 +430,38 @@ function AppLayoutInner({
                       </span>
                     ) : null}
                   </div>
-                  <h1 className="mt-2 text-balance text-[24px] font-semibold tracking-tight text-foreground sm:text-[30px]">
+                  <h1 className="mt-1.5 text-balance text-[22px] font-semibold tracking-tight text-foreground sm:mt-2 sm:text-[30px]">
                     {activeNavEntry.item.label}
                   </h1>
-                  <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  <p className="mt-1 max-w-3xl text-[13px] leading-5 text-muted-foreground sm:text-sm sm:leading-6">
                     {activeNavEntry.item.description}
                   </p>
                 </div>
               </div>
 
               <div className="flex min-w-0 flex-col gap-3 xl:items-end">
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                   <Button type="button" variant="outline" className="justify-start sm:w-auto" onClick={() => setOpen(true)}>
                     <SearchIcon className="h-4 w-4" />
                     Search
                     <span className="ml-1 hidden text-xs text-muted-foreground sm:inline">Ctrl K</span>
                   </Button>
                   <QuickCreateMenu />
-                  <SecondaryNavigation
-                    icon={
-                      <>
-                        <UserIcon user={user as any} />
-                        <span className="hidden text-sm font-medium md:inline">
-                          {(user as any).firstName ?? (user as any).email}
-                        </span>
-                      </>
-                    }
-                  />
+                  <div className="justify-self-start sm:justify-self-auto">
+                    <SecondaryNavigation
+                      icon={
+                        <>
+                          <UserIcon user={user as any} />
+                          <span className="hidden text-sm font-medium md:inline">
+                            {(user as any).firstName ?? (user as any).email}
+                          </span>
+                        </>
+                      }
+                    />
+                  </div>
                 </div>
 
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap xl:justify-end">
+                <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-row sm:flex-wrap xl:justify-end">
                   {tenantBusinesses.length > 1 ? (
                     <label className="flex min-w-0 items-center sm:flex-1 xl:flex-none">
                       <span className="sr-only">Current business</span>
@@ -501,7 +503,7 @@ function AppLayoutInner({
               </div>
             </div>
 
-            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {activeSectionItems.map((item) => (
                 <NavLink
                   key={item.href}
@@ -524,7 +526,7 @@ function AppLayoutInner({
           </div>
         </header>
 
-        <main className="flex-1 overflow-x-hidden overflow-y-auto">
+        <main className="flex-1 overflow-x-hidden md:overflow-y-auto">
           <AppErrorBoundary>
             <div className="w-full min-h-full">
               <Outlet context={outletCtx} />
