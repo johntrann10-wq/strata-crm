@@ -9,6 +9,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { requirePermission } from "../middleware/permissions.js";
 import type { MembershipRole } from "../lib/permissions.js";
+import { logger } from "../lib/logger.js";
 
 export const staffRouter = Router({ mergeParams: true });
 
@@ -32,6 +33,13 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+function isStaffSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: string }).code;
+  const message = String((error as { message?: string }).message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
 const createStaffSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
@@ -47,17 +55,31 @@ const updateStaffSchema = createStaffSchema.partial().extend({
 });
 
 staffRouter.get("/", requireAuth, requireTenant, requirePermission("team.read"), async (req: Request, res: Response) => {
+  const tenantId = businessId(req);
   const list = await db
     .select()
     .from(staff)
-    .where(eq(staff.businessId, businessId(req)))
+    .where(eq(staff.businessId, tenantId))
     .orderBy(desc(staff.createdAt))
     .limit(100);
 
-  const memberships = await db
-    .select()
-    .from(businessMemberships)
-    .where(eq(businessMemberships.businessId, businessId(req)));
+  let memberships: Array<{ userId: string; role: MembershipRole; status: string }> = [];
+  try {
+    memberships = await db
+      .select({
+        userId: businessMemberships.userId,
+        role: businessMemberships.role,
+        status: businessMemberships.status,
+      })
+      .from(businessMemberships)
+      .where(eq(businessMemberships.businessId, tenantId));
+  } catch (error) {
+    if (!isStaffSchemaDriftError(error)) throw error;
+    logger.warn("staff list falling back without business memberships", {
+      businessId: tenantId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   const membershipByUserId = new Map(memberships.map((membership) => [membership.userId, membership]));
 
@@ -97,13 +119,22 @@ staffRouter.post("/", requireAuth, requireTenant, requirePermission("team.write"
   const user = existingUser[0] ?? null;
 
   if (user) {
-    const existingMembership = await db
-      .select()
-      .from(businessMemberships)
-      .where(and(eq(businessMemberships.businessId, tenantId), eq(businessMemberships.userId, user.id)))
-      .limit(1);
-    if (existingMembership[0]) {
-      throw new BadRequestError("That user is already part of this business.");
+    try {
+      const existingMembership = await db
+        .select()
+        .from(businessMemberships)
+        .where(and(eq(businessMemberships.businessId, tenantId), eq(businessMemberships.userId, user.id)))
+        .limit(1);
+      if (existingMembership[0]) {
+        throw new BadRequestError("That user is already part of this business.");
+      }
+    } catch (error) {
+      if (!isStaffSchemaDriftError(error)) throw error;
+      logger.warn("staff create skipping membership duplicate check due to schema drift", {
+        businessId: tenantId,
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -122,16 +153,25 @@ staffRouter.post("/", requireAuth, requireTenant, requirePermission("team.write"
     }
 
     if (newUserId) {
-      await tx.insert(businessMemberships).values({
-        id: randomUUID(),
-        businessId: tenantId,
-        userId: newUserId,
-        role,
-        status: membershipStatus,
-        invitedByUserId: req.userId,
-        invitedAt: new Date(),
-        joinedAt: membershipStatus === "active" ? new Date() : null,
-      });
+      try {
+        await tx.insert(businessMemberships).values({
+          id: randomUUID(),
+          businessId: tenantId,
+          userId: newUserId,
+          role,
+          status: membershipStatus,
+          invitedByUserId: req.userId,
+          invitedAt: new Date(),
+          joinedAt: membershipStatus === "active" ? new Date() : null,
+        });
+      } catch (error) {
+        if (!isStaffSchemaDriftError(error)) throw error;
+        logger.warn("staff create skipping membership insert due to schema drift", {
+          businessId: tenantId,
+          userId: newUserId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     return tx
@@ -169,11 +209,25 @@ staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.wr
   if (!existing) throw new NotFoundError("Staff not found.");
 
   if (existing.userId) {
-    const [membership] = await db
-      .select()
-      .from(businessMemberships)
-      .where(and(eq(businessMemberships.businessId, businessId(req)), eq(businessMemberships.userId, existing.userId)))
-      .limit(1);
+    let membership: { role?: MembershipRole; status?: string } | null = null;
+    try {
+      const [membershipRow] = await db
+        .select({
+          role: businessMemberships.role,
+          status: businessMemberships.status,
+        })
+        .from(businessMemberships)
+        .where(and(eq(businessMemberships.businessId, businessId(req)), eq(businessMemberships.userId, existing.userId)))
+        .limit(1);
+      membership = membershipRow ?? null;
+    } catch (error) {
+      if (!isStaffSchemaDriftError(error)) throw error;
+      logger.warn("staff update skipping membership owner check due to schema drift", {
+        businessId: businessId(req),
+        staffId: existing.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     if (membership?.role === "owner" && parsed.data.role && parsed.data.role !== "owner") {
       throw new BadRequestError("Owner role cannot be changed here.");
     }
@@ -198,26 +252,49 @@ staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.wr
       .returning();
 
     if (existing.userId) {
-      await tx
-        .update(businessMemberships)
-        .set({
-          role: parsed.data.role ?? undefined,
-          status: parsed.data.status ?? (parsed.data.active === false ? "suspended" : undefined),
-          updatedAt: new Date(),
-        })
-        .where(and(eq(businessMemberships.businessId, businessId(req)), eq(businessMemberships.userId, existing.userId)));
+      try {
+        await tx
+          .update(businessMemberships)
+          .set({
+            role: parsed.data.role ?? undefined,
+            status: parsed.data.status ?? (parsed.data.active === false ? "suspended" : undefined),
+            updatedAt: new Date(),
+          })
+          .where(and(eq(businessMemberships.businessId, businessId(req)), eq(businessMemberships.userId, existing.userId)));
+      } catch (error) {
+        if (!isStaffSchemaDriftError(error)) throw error;
+        logger.warn("staff update skipping membership sync due to schema drift", {
+          businessId: businessId(req),
+          staffId: existing.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     return [updatedStaff];
   });
 
-  const [membership] = existing.userId
-    ? await db
-        .select()
+  let membership: { role?: MembershipRole; status?: string } | null = null;
+  if (existing.userId) {
+    try {
+      const [membershipRow] = await db
+        .select({
+          role: businessMemberships.role,
+          status: businessMemberships.status,
+        })
         .from(businessMemberships)
         .where(and(eq(businessMemberships.businessId, businessId(req)), eq(businessMemberships.userId, existing.userId)))
-        .limit(1)
-    : [null];
+        .limit(1);
+      membership = membershipRow ?? null;
+    } catch (error) {
+      if (!isStaffSchemaDriftError(error)) throw error;
+      logger.warn("staff update response falling back without membership", {
+        businessId: businessId(req),
+        staffId: existing.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   res.json({
     ...updated,
@@ -236,11 +313,22 @@ staffRouter.delete("/:id", requireAuth, requireTenant, requirePermission("team.w
   if (!existing) throw new NotFoundError("Staff not found.");
 
   if (existing.userId) {
-    const [membership] = await db
-      .select()
-      .from(businessMemberships)
-      .where(and(eq(businessMemberships.businessId, businessId(req)), eq(businessMemberships.userId, existing.userId)))
-      .limit(1);
+    let membership: { role?: MembershipRole } | null = null;
+    try {
+      const [membershipRow] = await db
+        .select({ role: businessMemberships.role })
+        .from(businessMemberships)
+        .where(and(eq(businessMemberships.businessId, businessId(req)), eq(businessMemberships.userId, existing.userId)))
+        .limit(1);
+      membership = membershipRow ?? null;
+    } catch (error) {
+      if (!isStaffSchemaDriftError(error)) throw error;
+      logger.warn("staff delete skipping membership owner check due to schema drift", {
+        businessId: businessId(req),
+        staffId: existing.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     if (membership?.role === "owner") {
       throw new BadRequestError("Owner cannot be removed.");
     }
@@ -253,10 +341,19 @@ staffRouter.delete("/:id", requireAuth, requireTenant, requirePermission("team.w
       .where(eq(staff.id, existing.id));
 
     if (existing.userId) {
-      await tx
-        .update(businessMemberships)
-        .set({ status: "suspended", isDefault: false, updatedAt: new Date() })
-        .where(and(eq(businessMemberships.businessId, businessId(req)), eq(businessMemberships.userId, existing.userId)));
+      try {
+        await tx
+          .update(businessMemberships)
+          .set({ status: "suspended", isDefault: false, updatedAt: new Date() })
+          .where(and(eq(businessMemberships.businessId, businessId(req)), eq(businessMemberships.userId, existing.userId)));
+      } catch (error) {
+        if (!isStaffSchemaDriftError(error)) throw error;
+        logger.warn("staff delete skipping membership suspension due to schema drift", {
+          businessId: businessId(req),
+          staffId: existing.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   });
 
