@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
+import { PageHeader } from "../components/shared/PageHeader";
 
 type LineItem = {
   id: string;
@@ -341,15 +342,11 @@ export default function NewQuotePage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to quotes queue" /> : null}
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to={returnTo}>
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-bold">New Quote</h1>
-      </div>
+      <PageHeader
+        backTo={returnTo}
+        title="New Quote"
+        subtitle="Build a clear estimate, confirm the client and vehicle, and make approval easy to understand."
+      />
 
       {/* Two-column grid */}
       <div className="grid lg:grid-cols-3 gap-6">
@@ -357,8 +354,8 @@ export default function NewQuotePage() {
         <div className="lg:col-span-2 space-y-6">
           {/* Line Items Card */}
           <Card>
-            <CardHeader>
-              <CardTitle>Line Items</CardTitle>
+            <CardHeader className="border-b border-border/70 pb-4">
+              <CardTitle className="text-base font-semibold">Quoted services</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
@@ -592,8 +589,8 @@ export default function NewQuotePage() {
         <div className="space-y-4">
           {/* Client & Vehicle Card */}
           <Card>
-            <CardHeader>
-              <CardTitle>Client & Vehicle</CardTitle>
+            <CardHeader className="border-b border-border/70 pb-4">
+              <CardTitle className="text-base font-semibold">Client and vehicle</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {clientIdParam && selectedClientId && (
@@ -701,8 +698,8 @@ export default function NewQuotePage() {
 
           {/* Quote Details Card */}
           <Card>
-            <CardHeader>
-              <CardTitle>Quote Details</CardTitle>
+            <CardHeader className="border-b border-border/70 pb-4">
+              <CardTitle className="text-base font-semibold">Approval settings</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -732,10 +729,19 @@ export default function NewQuotePage() {
 
           {/* Summary Card */}
           <Card>
-            <CardHeader>
-              <CardTitle>Summary</CardTitle>
+            <CardHeader className="border-b border-border/70 pb-4">
+              <CardTitle className="text-base font-semibold">Quote summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+                <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Client-facing total</p>
+                <p className="mt-1 text-2xl font-semibold">{formatCurrency(total)}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {hasValidLineItems
+                    ? `${lineItems.filter((item) => item.description.trim()).length} line item${lineItems.filter((item) => item.description.trim()).length === 1 ? "" : "s"} ready to quote`
+                    : "Add services to see the final estimate"}
+                </p>
+              </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
                 <span>{formatCurrency(subtotal)}</span>

@@ -1,34 +1,86 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon } from "lucide-react";
 
-// ─── Module-level drag duration tracker ──────────────────────────────────────
 export let activeDragDurationMs = 3600000;
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 export const START_HOUR = 7;
 export const END_HOUR = 20;
-export const HOUR_HEIGHT = 64;
+export const HOUR_HEIGHT = 72;
 export const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
 
-// ─── Status Styles ────────────────────────────────────────────────────────────
-export const STATUS_STYLES: Record<string, { bg: string; text: string; border: string }> = {
-  scheduled: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" },
-  pending: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" },
-  confirmed: { bg: "bg-blue-100", text: "text-blue-800", border: "border-blue-300" },
-  in_progress: { bg: "bg-purple-100", text: "text-purple-800", border: "border-purple-300" },
-  "in-progress": { bg: "bg-purple-100", text: "text-purple-800", border: "border-purple-300" },
-  completed: { bg: "bg-green-100", text: "text-green-800", border: "border-green-300" },
-  cancelled: { bg: "bg-gray-100", text: "text-gray-500", border: "border-gray-300" },
-  "no-show": { bg: "bg-red-100", text: "text-red-800", border: "border-red-300" },
+type StatusStyle = {
+  surface: string;
+  text: string;
+  border: string;
+  accent: string;
+  pill: string;
 };
 
-export function getStatusStyle(status: string): { bg: string; text: string; border: string } {
-  return STATUS_STYLES[status] ?? STATUS_STYLES["scheduled"];
+export const STATUS_STYLES: Record<string, StatusStyle> = {
+  scheduled: {
+    surface: "bg-amber-50/95",
+    text: "text-amber-950",
+    border: "border-amber-200/90",
+    accent: "bg-amber-500",
+    pill: "bg-amber-100 text-amber-800",
+  },
+  pending: {
+    surface: "bg-amber-50/95",
+    text: "text-amber-950",
+    border: "border-amber-200/90",
+    accent: "bg-amber-500",
+    pill: "bg-amber-100 text-amber-800",
+  },
+  confirmed: {
+    surface: "bg-sky-50/95",
+    text: "text-sky-950",
+    border: "border-sky-200/90",
+    accent: "bg-sky-500",
+    pill: "bg-sky-100 text-sky-800",
+  },
+  in_progress: {
+    surface: "bg-violet-50/95",
+    text: "text-violet-950",
+    border: "border-violet-200/90",
+    accent: "bg-violet-500",
+    pill: "bg-violet-100 text-violet-800",
+  },
+  "in-progress": {
+    surface: "bg-violet-50/95",
+    text: "text-violet-950",
+    border: "border-violet-200/90",
+    accent: "bg-violet-500",
+    pill: "bg-violet-100 text-violet-800",
+  },
+  completed: {
+    surface: "bg-emerald-50/95",
+    text: "text-emerald-950",
+    border: "border-emerald-200/90",
+    accent: "bg-emerald-500",
+    pill: "bg-emerald-100 text-emerald-800",
+  },
+  cancelled: {
+    surface: "bg-slate-100/95",
+    text: "text-slate-600",
+    border: "border-slate-200/90",
+    accent: "bg-slate-400",
+    pill: "bg-slate-200 text-slate-700",
+  },
+  "no-show": {
+    surface: "bg-rose-50/95",
+    text: "text-rose-950",
+    border: "border-rose-200/90",
+    accent: "bg-rose-500",
+    pill: "bg-rose-100 text-rose-800",
+  },
+};
+
+export function getStatusStyle(status: string): StatusStyle {
+  return STATUS_STYLES[status] ?? STATUS_STYLES.scheduled;
 }
 
-// ─── Day / Month Names ────────────────────────────────────────────────────────
 export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const MONTH_NAMES = [
   "January",
@@ -45,7 +97,6 @@ export const MONTH_NAMES = [
   "December",
 ];
 
-// ─── Date Helpers ─────────────────────────────────────────────────────────────
 export function isSameDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -138,7 +189,7 @@ export function getHeaderTitle(date: Date, view: "month" | "week" | "day"): stri
     if (start.getMonth() === end.getMonth()) {
       return `${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
     }
-    return `${MONTH_NAMES[start.getMonth()]} – ${MONTH_NAMES[end.getMonth()]} ${end.getFullYear()}`;
+    return `${MONTH_NAMES[start.getMonth()]} - ${MONTH_NAMES[end.getMonth()]} ${end.getFullYear()}`;
   }
   return `${DAY_NAMES[date.getDay()]}, ${MONTH_NAMES[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
 }
@@ -159,7 +210,6 @@ export function navigateDate(
   return d;
 }
 
-// ─── ApptRecord Type ──────────────────────────────────────────────────────────
 export type ApptRecord = {
   id: string;
   title: string | null;
@@ -174,7 +224,6 @@ export type ApptRecord = {
   assignedStaff: { firstName: string; lastName: string } | null;
 };
 
-// ─── detectConflicts ──────────────────────────────────────────────────────────
 export function detectConflicts(appointments: ApptRecord[]): {
   staffConflictIds: Set<string>;
   businessConflictIds: Set<string>;
@@ -182,18 +231,17 @@ export function detectConflicts(appointments: ApptRecord[]): {
   const staffConflictIds = new Set<string>();
   const businessConflictIds = new Set<string>();
 
-  // Filter out cancelled and no-show appointments — they should never count as conflicts
   const activeAppointments = appointments.filter(
     (apt) => apt.status !== "cancelled" && apt.status !== "no-show" && apt.status !== "completed"
   );
 
-  // Per-staff conflict detection using sweep-line O(n log n)
   const groups = new Map<string, ApptRecord[]>();
   for (const apt of activeAppointments) {
     if (!apt.assignedStaffId) continue;
     if (!groups.has(apt.assignedStaffId)) groups.set(apt.assignedStaffId, []);
     groups.get(apt.assignedStaffId)!.push(apt);
   }
+
   for (const group of groups.values()) {
     group.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
     let maxEndTime = 0;
@@ -212,30 +260,26 @@ export function detectConflicts(appointments: ApptRecord[]): {
     }
   }
 
-  // Business-level conflict detection for unassigned appointments using sweep-line
   const unassigned = activeAppointments.filter((apt) => !apt.assignedStaffId);
   unassigned.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-  {
-    let maxEndTime = 0;
-    let maxEndAppt: ApptRecord | null = null;
-    for (const apt of unassigned) {
-      const startMs = new Date(apt.startTime).getTime();
-      const endMs = apt.endTime ? new Date(apt.endTime).getTime() : startMs + 3600000;
-      if (maxEndAppt !== null && startMs < maxEndTime) {
-        businessConflictIds.add(apt.id);
-        businessConflictIds.add(maxEndAppt.id);
-      }
-      if (endMs > maxEndTime) {
-        maxEndTime = endMs;
-        maxEndAppt = apt;
-      }
+  let maxEndTime = 0;
+  let maxEndAppt: ApptRecord | null = null;
+  for (const apt of unassigned) {
+    const startMs = new Date(apt.startTime).getTime();
+    const endMs = apt.endTime ? new Date(apt.endTime).getTime() : startMs + 3600000;
+    if (maxEndAppt !== null && startMs < maxEndTime) {
+      businessConflictIds.add(apt.id);
+      businessConflictIds.add(maxEndAppt.id);
+    }
+    if (endMs > maxEndTime) {
+      maxEndTime = endMs;
+      maxEndAppt = apt;
     }
   }
 
   return { staffConflictIds, businessConflictIds };
 }
 
-// ─── formatDuration ───────────────────────────────────────────────────────────
 export function formatDuration(startISO: string, endISO: string | null): string {
   if (!endISO) return "1h";
   const diffMs = new Date(endISO).getTime() - new Date(startISO).getTime();
@@ -247,39 +291,34 @@ export function formatDuration(startISO: string, endISO: string | null): string 
   return `${hours}h ${minutes}m`;
 }
 
-// ─── staffInitials ────────────────────────────────────────────────────────────
 export function staffInitials(staff: { firstName: string; lastName: string } | null): string {
   if (!staff) return "?";
   return `${staff.firstName.charAt(0)}${staff.lastName.charAt(0)}`.toUpperCase();
 }
 
-// ─── apptLabel ────────────────────────────────────────────────────────────────
 export function apptLabel(apt: ApptRecord): string {
   if (apt.title) return apt.title;
   if (apt.client) return `${apt.client.firstName} ${apt.client.lastName}`;
   return "Appointment";
 }
 
-// ─── TIME_HOURS ───────────────────────────────────────────────────────────────
 export const TIME_HOURS: number[] = Array.from(
   { length: END_HOUR - START_HOUR },
   (_, i) => START_HOUR + i
 );
 
-// ─── Staff color palette ──────────────────────────────────────────────────────
 const STAFF_COLORS = [
-  "bg-blue-500",
-  "bg-purple-500",
+  "bg-sky-500",
+  "bg-violet-500",
   "bg-teal-500",
   "bg-pink-500",
   "bg-indigo-500",
 ];
 
 function getStaffColorClass(name: string): string {
-  return STAFF_COLORS[name.charCodeAt(0) % 5];
+  return STAFF_COLORS[name.charCodeAt(0) % STAFF_COLORS.length];
 }
 
-// ─── CalendarNav ──────────────────────────────────────────────────────────────
 interface CalendarNavProps {
   title: string;
   onPrev: () => void;
@@ -290,7 +329,7 @@ interface CalendarNavProps {
 
 export function CalendarNav({ title, onPrev, onNext, onToday, onNew }: CalendarNavProps) {
   return (
-    <div className="flex items-center justify-between gap-2 px-4 py-2 border-b bg-background">
+    <div className="flex items-center justify-between gap-2 border-b bg-background px-4 py-2">
       <div className="flex items-center gap-1">
         <Button variant="outline" size="icon" onClick={onPrev} aria-label="Previous">
           <ChevronLeft className="h-4 w-4" />
@@ -302,22 +341,22 @@ export function CalendarNav({ title, onPrev, onNext, onToday, onNew }: CalendarN
           Today
         </Button>
       </div>
-      <h2 className="text-base font-semibold flex items-center gap-1.5">
+      <h2 className="flex items-center gap-1.5 text-base font-semibold">
         <CalendarIcon className="h-4 w-4 text-muted-foreground" />
         {title}
       </h2>
-      {onNew && (
+      {onNew ? (
         <Button size="sm" onClick={onNew}>
-          <Plus className="h-4 w-4 mr-1" />
+          <Plus className="mr-1 h-4 w-4" />
           New
         </Button>
+      ) : (
+        <div className="w-[88px]" />
       )}
-      {!onNew && <div className="w-[88px]" />}
     </div>
   );
 }
 
-// ─── AppointmentBlock ─────────────────────────────────────────────────────────
 interface AppointmentBlockProps {
   apt: ApptRecord;
   onClick: () => void;
@@ -337,17 +376,16 @@ export function AppointmentBlock({
   const [isDragging, setIsDragging] = useState(false);
 
   const start = new Date(apt.startTime);
-  const end = apt.endTime
-    ? new Date(apt.endTime)
-    : new Date(start.getTime() + 60 * 60 * 1000);
+  const end = apt.endTime ? new Date(apt.endTime) : new Date(start.getTime() + 60 * 60 * 1000);
 
   const startDecimal = Math.max(start.getHours() + start.getMinutes() / 60, START_HOUR);
   const endDecimal = Math.min(end.getHours() + end.getMinutes() / 60, END_HOUR);
 
   const top = (startDecimal - START_HOUR) * HOUR_HEIGHT;
-  const height = Math.max((endDecimal - startDecimal) * HOUR_HEIGHT, 20);
+  const height = Math.max((endDecimal - startDecimal) * HOUR_HEIGHT, 42);
 
   const style = getStatusStyle(apt.status);
+  const dense = height < 74;
 
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
@@ -366,18 +404,20 @@ export function AppointmentBlock({
   };
 
   return (
-    <div
+    <button
+      type="button"
       className={cn(
-        "absolute left-1 right-1 rounded px-1.5 py-0.5 border overflow-hidden transition-opacity select-none",
-        style.bg,
+        "absolute left-1.5 right-1.5 overflow-hidden rounded-xl border px-2.5 py-2 text-left shadow-sm transition-all select-none",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+        style.surface,
         style.text,
         style.border,
-        isConflict && "border-l-4 border-l-red-500",
-        hovered && !isDragging && "opacity-80",
-        isDragging ? "opacity-50 cursor-grabbing" : "cursor-grab"
+        hovered && !isDragging && "shadow-md -translate-y-px",
+        isDragging ? "cursor-grabbing opacity-50" : "cursor-grab",
+        isConflict && "ring-1 ring-rose-300"
       )}
       style={{ top: `${top}px`, height: `${height}px`, position: "absolute" }}
-      title={isConflict ? "⚠ Scheduling conflict" : undefined}
+      title={isConflict ? "Scheduling conflict" : undefined}
       draggable={draggableProp ?? true}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
@@ -385,46 +425,50 @@ export function AppointmentBlock({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex items-start justify-between gap-0.5 leading-tight">
-        <p className="text-xs font-semibold truncate flex-1">
-          {formatTime(start)}
-          {apt.isMobile ? " 📍" : ""}
-        </p>
-        <span className="text-[10px] shrink-0 opacity-70 font-mono">
-          {formatDuration(apt.startTime, apt.endTime)}
-        </span>
+      <div className="flex items-start gap-2">
+        <span className={cn("mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full", style.accent)} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className={cn("truncate font-semibold", dense ? "text-[11px]" : "text-xs")}>{apptLabel(apt)}</p>
+              <p className={cn("truncate opacity-80", dense ? "text-[10px]" : "text-[11px]")}>
+                {formatTime(start)}
+                {apt.endTime ? ` - ${formatTime(end)}` : ""}
+              </p>
+            </div>
+            <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 font-medium", style.pill, dense ? "text-[9px]" : "text-[10px]")}>
+              {formatDuration(apt.startTime, apt.endTime)}
+            </span>
+          </div>
+
+          {!dense && apt.vehicle ? (
+            <p className="mt-1 truncate text-[11px] opacity-75">
+              {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
+            </p>
+          ) : null}
+
+          {height > 92 ? (
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+              <p className="truncate text-[10px] uppercase tracking-[0.12em] opacity-60">
+                {apt.assignedStaff ? `${apt.assignedStaff.firstName} ${apt.assignedStaff.lastName}` : "Unassigned"}
+              </p>
+              {apt.isMobile ? <span className="text-[10px] font-medium opacity-70">Mobile</span> : null}
+            </div>
+          ) : null}
+        </div>
+        {isConflict ? <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-600" /> : null}
       </div>
-      <p className="text-xs leading-tight truncate font-medium">{apptLabel(apt)}</p>
-      {height > 48 && apt.vehicle && (
-        <p className="text-[10px] leading-tight truncate opacity-70">
-          {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
-        </p>
-      )}
-      {height > 64 && apt.assignedStaff && (
-        <div className="flex items-center gap-1 mt-0.5">
-          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-black/10 text-[9px] font-bold shrink-0">
-            {staffInitials(apt.assignedStaff)}
-          </span>
-          <span className="text-[10px] truncate opacity-70">{apt.assignedStaff.firstName}</span>
-        </div>
-      )}
-      {isConflict && (
-        <div style={{ position: "absolute", top: "2px", right: "2px" }} className="text-[10px] leading-none">
-          ⚠
-        </div>
-      )}
-    </div>
+    </button>
   );
 }
 
-// ─── StaffWorkloadBar ─────────────────────────────────────────────────────────
 interface StaffWorkloadBarProps {
   appointments: ApptRecord[];
 }
 
 export function StaffWorkloadBar({ appointments }: StaffWorkloadBarProps) {
   const staffMap = useMemo(() => {
-    const map = new Map<string, { name: string; bookedMinutes: number }>();
+    const map = new Map<string, { name: string; bookedMinutes: number; appointmentCount: number }>();
     for (const apt of appointments) {
       if (apt.status === "cancelled" || apt.status === "no-show") continue;
       if (!apt.assignedStaff) continue;
@@ -435,13 +479,14 @@ export function StaffWorkloadBar({ appointments }: StaffWorkloadBarProps) {
         map.set(id, {
           name: `${apt.assignedStaff.firstName} ${apt.assignedStaff.lastName}`,
           bookedMinutes: 0,
+          appointmentCount: 0,
         });
       }
       const startMs = new Date(apt.startTime).getTime();
-      const endMs = apt.endTime
-        ? new Date(apt.endTime).getTime()
-        : startMs + 3600000;
-      map.get(id)!.bookedMinutes += (endMs - startMs) / 60000;
+      const endMs = apt.endTime ? new Date(apt.endTime).getTime() : startMs + 3600000;
+      const staff = map.get(id)!;
+      staff.bookedMinutes += (endMs - startMs) / 60000;
+      staff.appointmentCount += 1;
     }
     return map;
   }, [appointments]);
@@ -449,80 +494,113 @@ export function StaffWorkloadBar({ appointments }: StaffWorkloadBarProps) {
   if (staffMap.size === 0) return null;
 
   return (
-    <div className="flex flex-wrap gap-2 px-4 py-2 border-b bg-muted/30">
-      {Array.from(staffMap.entries()).map(([id, { name, bookedMinutes }]) => {
-        const utilization = Math.min(bookedMinutes / 480, 1.0);
-        const barColor =
-          utilization < 0.5
-            ? "bg-green-500"
-            : utilization < 0.8
-            ? "bg-amber-500"
-            : "bg-red-500";
-        const dotColor = getStaffColorClass(name);
-        const totalMinutes = Math.round(bookedMinutes);
-        const h = Math.floor(totalMinutes / 60);
-        const m = totalMinutes % 60;
-        const formatted = m === 0 ? `${h}h` : `${h}h ${m}m`;
-        return (
-          <div
-            key={id}
-            className="flex flex-col min-w-[80px] max-w-[120px] bg-background rounded border px-2 py-1.5 text-xs"
-          >
-            <div className="flex items-center gap-1 mb-1">
-              <span className={cn("inline-block w-2 h-2 rounded-full shrink-0", dotColor)} />
-              <span className="truncate font-medium">{name.split(" ")[0]}</span>
-              <span className="ml-auto shrink-0 text-muted-foreground font-mono text-[10px]">
-                {formatted}
-              </span>
+    <div className="border-b border-border/70 bg-muted/25 px-3 py-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Team load</p>
+          <p className="text-xs text-muted-foreground">See booked time before reassigning or stacking work.</p>
+        </div>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {Array.from(staffMap.entries()).map(([id, { name, bookedMinutes, appointmentCount }]) => {
+          const utilization = Math.min(bookedMinutes / 480, 1.0);
+          const barColor =
+            utilization < 0.5
+              ? "bg-emerald-500"
+              : utilization < 0.8
+                ? "bg-amber-500"
+                : "bg-rose-500";
+          const dotColor = getStaffColorClass(name);
+          const totalMinutes = Math.round(bookedMinutes);
+          const h = Math.floor(totalMinutes / 60);
+          const m = totalMinutes % 60;
+          const formatted = m === 0 ? `${h}h` : `${h}h ${m}m`;
+
+          return (
+            <div
+              key={id}
+              className="min-w-[210px] rounded-xl border border-border/70 bg-background/95 px-3 py-3 shadow-sm"
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    "inline-flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold text-white shadow-sm",
+                    dotColor
+                  )}
+                >
+                  {name
+                    .split(" ")
+                    .map((part) => part[0])
+                    .slice(0, 2)
+                    .join("")
+                    .toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {appointmentCount} {appointmentCount === 1 ? "booking" : "bookings"} booked
+                  </p>
+                </div>
+                <span className="text-xs font-medium text-muted-foreground">{formatted}</span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn("h-full rounded-full transition-all", barColor)}
+                  style={{ width: `${Math.max(utilization * 100, 8)}%` }}
+                />
+              </div>
             </div>
-            <div className="h-1 rounded-full bg-muted overflow-hidden">
-              <div
-                className={cn("h-full rounded-full", barColor)}
-                style={{ width: `${utilization * 100}%` }}
-              />
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-// ─── ConflictBanner ───────────────────────────────────────────────────────────
 interface ConflictBannerProps {
   staffConflictCount: number;
   businessConflictCount: number;
   onDismiss: () => void;
 }
 
-export function ConflictBanner({ staffConflictCount, businessConflictCount, onDismiss }: ConflictBannerProps) {
+export function ConflictBanner({
+  staffConflictCount,
+  businessConflictCount,
+  onDismiss,
+}: ConflictBannerProps) {
   if (staffConflictCount === 0 && businessConflictCount === 0) return null;
+
   return (
-    <div className="flex items-start justify-between mx-4 mt-2 px-3 py-2 rounded-lg border border-red-200 bg-red-50 text-sm">
-      <div className="flex flex-col gap-1">
-        {staffConflictCount > 0 && (
-          <span className="text-red-700">
-            ⚠ {staffConflictCount} staff conflict{staffConflictCount > 1 ? "s" : ""} — staff member double-booked
-          </span>
-        )}
-        {businessConflictCount > 0 && (
-          <span className="text-amber-700">
-            ⚠ {businessConflictCount} time slot conflict{businessConflictCount > 1 ? "s" : ""} — overlapping unassigned appointments
-          </span>
-        )}
+    <div className="mx-4 mt-3 rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-3 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="rounded-full bg-rose-100 p-2 text-rose-700">
+            <AlertTriangle className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-rose-900">Scheduling conflicts need review</p>
+            <div className="mt-1 space-y-1 text-xs text-rose-800">
+              {staffConflictCount > 0 ? (
+                <p>
+                  {staffConflictCount} staff conflict{staffConflictCount > 1 ? "s" : ""} from double-booked technicians.
+                </p>
+              ) : null}
+              {businessConflictCount > 0 ? (
+                <p>
+                  {businessConflictCount} unassigned overlap{businessConflictCount > 1 ? "s" : ""} still need a slot or owner.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full" onClick={onDismiss}>
+          <X className="h-4 w-4" />
+        </Button>
       </div>
-      <button
-        className="ml-3 shrink-0 font-bold hover:opacity-70 text-lg leading-none"
-        onClick={onDismiss}
-        aria-label="Dismiss"
-      >
-        ×
-      </button>
     </div>
   );
 }
 
-// ─── MonthView ────────────────────────────────────────────────────────────────
 interface MonthViewProps {
   currentDate: Date;
   appointments: ApptRecord[];
@@ -542,98 +620,91 @@ export function MonthView({
   const today = useMemo(() => new Date(), []);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Day-of-week headers */}
-      <div className="grid grid-cols-7 border-b">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-border/70 bg-background/95 shadow-sm sm:rounded-[24px]">
+      <div className="grid grid-cols-7 border-b border-border/70 bg-muted/20 px-2 py-2">
         {DAY_NAMES.map((name) => (
-          <div
-            key={name}
-            className="text-center text-xs font-medium text-muted-foreground py-2"
-          >
+          <div key={name} className="px-2 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             {name}
           </div>
         ))}
       </div>
 
-      {/* 6-row month grid */}
-      <div className="flex-1 grid grid-rows-6 min-h-0 overflow-hidden">
+      <div className="grid min-w-0 flex-1 grid-rows-6 overflow-auto">
         {grid.map((week, wi) => (
-          <div key={wi} className="grid grid-cols-7 border-b last:border-b-0 min-h-0">
+          <div key={wi} className="grid min-h-0 grid-cols-7 border-b border-border/60 last:border-b-0">
             {week.map((day, di) => {
               const isCurrentMonth = day.getMonth() === currentDate.getMonth();
               const isToday = isSameDay(day, today);
-              const dayAppts = appointments.filter((a) =>
-                isSameDay(new Date(a.startTime), day)
-              );
-              const hasConflict =
-                !!conflictIds && dayAppts.some((a) => conflictIds.has(a.id));
-              const apptCount = dayAppts.length;
+              const dayAppts = appointments.filter((a) => isSameDay(new Date(a.startTime), day));
+              const hasConflict = !!conflictIds && dayAppts.some((a) => conflictIds.has(a.id));
 
               return (
-                <div
+                <button
                   key={di}
+                  type="button"
                   className={cn(
-                    "border-r last:border-r-0 p-1 cursor-pointer hover:bg-muted/50 transition-colors overflow-hidden flex flex-col",
-                    !isCurrentMonth && "opacity-40"
+                    "group flex min-h-0 flex-col border-r border-border/60 px-2 py-2 text-left transition-colors last:border-r-0",
+                    "hover:bg-muted/35",
+                    !isCurrentMonth && "bg-muted/10 text-muted-foreground",
+                    isToday && "bg-primary/[0.045]"
                   )}
                   onClick={() => onDayClick(day)}
                 >
-                  <div className="relative flex items-center justify-center mb-0.5 shrink-0">
+                  <div className="mb-2 flex items-center justify-between gap-2">
                     <span
                       className={cn(
-                        "text-xs w-6 h-6 flex items-center justify-center rounded-full",
-                        isToday && "bg-primary text-primary-foreground font-bold"
+                        "inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold",
+                        isToday ? "bg-primary text-primary-foreground" : "text-foreground"
                       )}
                     >
                       {day.getDate()}
                     </span>
-                    {hasConflict && (
-                      <span className="absolute right-0 top-0 text-[10px] leading-none text-red-500">
-                        ⚠
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {dayAppts.length > 0 ? (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          {dayAppts.length}
+                        </span>
+                      ) : null}
+                      {hasConflict ? <AlertTriangle className="h-3.5 w-3.5 text-rose-600" /> : null}
+                    </div>
                   </div>
-                  <div className="space-y-0.5 overflow-hidden">
+
+                  <div className="space-y-1 overflow-hidden">
                     {dayAppts.slice(0, 3).map((apt) => {
-                      const s = getStatusStyle(apt.status);
+                      const status = getStatusStyle(apt.status);
                       return (
-                        <div
+                        <button
                           key={apt.id}
+                          type="button"
                           className={cn(
-                            "text-xs px-1 rounded truncate cursor-pointer",
-                            s.bg,
-                            s.text
+                            "flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left shadow-sm transition-colors",
+                            "hover:opacity-95",
+                            status.surface,
+                            status.text,
+                            status.border
                           )}
                           onClick={(e) => {
                             e.stopPropagation();
                             onApptClick(apt);
                           }}
                         >
-                          {apptLabel(apt)}
-                        </div>
+                          <span className={cn("h-2 w-2 shrink-0 rounded-full", status.accent)} />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[11px] font-semibold">{apptLabel(apt)}</p>
+                            <p className="truncate text-[10px] opacity-75">
+                              {formatTime(new Date(apt.startTime))}
+                            </p>
+                          </div>
+                        </button>
                       );
                     })}
-                    {dayAppts.length > 3 && (
-                      <div className="text-xs text-muted-foreground px-1">
+                    {dayAppts.length > 3 ? (
+                      <p className="px-1 text-[11px] font-medium text-muted-foreground">
                         +{dayAppts.length - 3} more
-                      </div>
-                    )}
+                      </p>
+                    ) : null}
                   </div>
-                  {apptCount > 0 && (
-                    <div className="flex justify-center mt-0.5 shrink-0">
-                      <div
-                        className={cn(
-                          "h-1.5 w-1.5 rounded-full",
-                          apptCount <= 2
-                            ? "bg-green-400"
-                            : apptCount <= 4
-                            ? "bg-amber-400"
-                            : "bg-red-400"
-                        )}
-                      />
-                    </div>
-                  )}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -643,6 +714,5 @@ export function MonthView({
   );
 }
 
-// ─── Re-exports from separate component files ─────────────────────────────────
 export { WeekView } from "./WeekView";
 export { DayView } from "./DayView";

@@ -497,7 +497,7 @@ export default function ServicesPage() {
   const packageCandidatesWithoutAddons = packageSummaries.filter((summary) => summary.linkedAddons.length === 0);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Services"
         right={

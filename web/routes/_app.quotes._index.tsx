@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
+import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import { StatusBadge } from "../components/shared/StatusBadge";
 
 function safeDate(value: string | null | undefined): Date | null {
@@ -162,32 +163,52 @@ export default function QuotesIndexPage() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Quotes"
         actions={
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              {allFetching ? (
-                <Loader2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-              ) : (
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              )}
-              <Input
-                placeholder="Search clients, vehicles, quote id..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-72 pl-9"
-              />
-            </div>
-            <Button asChild>
-              <Link to="/quotes/new">
-                <Plus className="mr-2 h-4 w-4" />
-                New Quote
-              </Link>
-            </Button>
-          </div>
+          <Button asChild>
+            <Link to="/quotes/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New Quote
+            </Link>
+          </Button>
         }
+      />
+
+      <ListViewToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search clients, vehicles, or quote id..."
+        loading={allFetching && allRows.length > 0}
+        resultCount={
+          activeTab === "accepted"
+            ? allRows.filter((record) => String((record as Record<string, any>).status ?? "") === "accepted").length
+            : activeTab === "aging"
+              ? agingRows.length
+              : activeTab === "followup"
+                ? followUpRows.length
+                : activeTab === "lost"
+                  ? lostRows.length
+                  : allRows.length
+        }
+        noun="quotes"
+        filtersLabel={
+          [
+            activeTab !== "all" ? `View: ${activeTab}` : null,
+            debouncedSearch ? `Search: ${debouncedSearch}` : null,
+          ]
+            .filter(Boolean)
+            .join(" • ") || null
+        }
+        onClear={() => {
+          setSearch("");
+          setDebouncedSearch("");
+          const next = new URLSearchParams(searchParams);
+          next.delete("q");
+          next.set("tab", "all");
+          setSearchParams(next, { replace: true });
+        }}
       />
 
       <Tabs

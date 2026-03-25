@@ -67,8 +67,8 @@ interface VehiclesCardProps {
 
 export function VehiclesCard({ id, vehicles }: VehiclesCardProps) {
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-border/70 shadow-sm">
+      <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Car className="h-5 w-5 text-muted-foreground" />
@@ -82,32 +82,35 @@ export function VehiclesCard({ id, vehicles }: VehiclesCardProps) {
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-2">
         {vehicles && vehicles.length > 0 ? (
-          <div>
+          <div className="space-y-2">
             {vehicles.map((vehicle) => (
               <Link
                 key={vehicle.id}
                 to={`/clients/${id}/vehicles/${vehicle.id}`}
-                className="block rounded-md border p-3 my-1 hover:bg-muted/50 transition-colors"
+                className="block rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/40 hover:border-primary/30"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-medium">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <p className="text-sm font-semibold">
                       {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Unknown Vehicle"}
                     </p>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
                       {vehicle.color && (
-                        <span className="text-xs text-muted-foreground">{vehicle.color}</span>
+                        <span>{vehicle.color}</span>
                       )}
                       {vehicle.licensePlate && (
-                        <span className="text-xs text-muted-foreground">{vehicle.licensePlate}</span>
+                        <span>{vehicle.licensePlate}</span>
                       )}
                       {vehicle.mileage != null && (
-                        <span className="text-xs text-muted-foreground">{vehicle.mileage} mi</span>
+                        <span>{vehicle.mileage} mi</span>
                       )}
                     </div>
                   </div>
+                  <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Vehicle
+                  </span>
                 </div>
               </Link>
             ))}
@@ -305,8 +308,8 @@ interface AppointmentHistoryCardProps {
 
 export function AppointmentHistoryCard({ id, appointments, totalSpend }: AppointmentHistoryCardProps) {
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-border/70 shadow-sm">
+      <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
@@ -326,23 +329,23 @@ export function AppointmentHistoryCard({ id, appointments, totalSpend }: Appoint
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-2">
         {appointments && appointments.length > 0 ? (
-          <div>
+          <div className="space-y-2">
             {appointments.map((appt) => {
               const apptPrice = appt.totalPrice;
               return (
                 <Link
                   key={appt.id}
                   to={`/appointments/${appt.id}`}
-                  className="block rounded-md border p-3 my-1 hover:bg-muted/50 transition-colors"
+                  className="block rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/40 hover:border-primary/30"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex flex-col gap-0.5 min-w-0">
-                      <p className="text-sm font-medium truncate">{appt.title ?? "Appointment"}</p>
+                      <p className="text-sm font-semibold truncate">{appt.title ?? "Appointment"}</p>
                       <div className="flex items-center gap-2 flex-wrap">
                         {appt.status && (
-                          <Badge className={`text-xs capitalize ${statusClass(appt.status)}`}>
+                          <Badge className={`text-xs capitalize shadow-none ${statusClass(appt.status)}`}>
                             {appt.status}
                           </Badge>
                         )}

@@ -1,26 +1,31 @@
-import { useState, useEffect, useMemo, useRef } from "react";
-import { useOutletContext, useNavigate } from "react-router";
-import { useFindMany, useAction } from "../hooks/useApi";
-import { api } from "../api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, Users } from "lucide-react";
+import { api } from "../api";
+import { useAction, useFindMany } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
-import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { QuickBookSheet } from "../components/shared/QuickBookSheet";
 import {
   type ApptRecord,
-  getViewRange,
-  getHeaderTitle,
-  navigateDate,
+  ConflictBanner,
+  DayView,
   MonthView,
   WeekView,
-  DayView,
   detectConflicts,
-  ConflictBanner,
+  getHeaderTitle,
+  getViewRange,
+  navigateDate,
 } from "../components/CalendarViews";
-import { QuickBookSheet } from "../components/shared/QuickBookSheet";
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+const VIEW_LABELS = {
+  month: "Plan the month",
+  week: "Balance staff and bay time",
+  day: "Run today's floor",
+} as const;
+
 export default function CalendarPage() {
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
@@ -68,22 +73,24 @@ export default function CalendarPage() {
       status: true,
       totalPrice: true,
       assignedStaffId: true,
+      isMobile: true,
       client: { firstName: true, lastName: true },
-      vehicle: { make: true, model: true },
+      vehicle: { make: true, model: true, year: true },
       assignedStaff: { firstName: true, lastName: true },
     },
     first: 250,
   });
+
   const [{ data: locationsRaw }] = useFindMany(api.location, {
     first: 100,
     pause: !businessId,
   } as any);
+
   const activeLocationName = useMemo(() => {
     const locations = (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>;
     return locations.find((location) => location.id === currentLocationId)?.name?.trim() || null;
   }, [locationsRaw, currentLocationId]);
 
-  // Keep previous appointments visible during re-fetches (isFirstLoad pattern)
   const stableAppointmentsRef = useRef<ApptRecord[]>([]);
   if (appointmentsData !== undefined) {
     stableAppointmentsRef.current = appointmentsData as unknown as ApptRecord[];
@@ -115,12 +122,26 @@ export default function CalendarPage() {
 
   const isToday = currentDate.toDateString() === new Date().toDateString();
 
+  const activeAppointments = appointments.filter(
+    (appointment) => appointment.status !== "cancelled" && appointment.status !== "no-show"
+  );
+  const unassignedAppointments = activeAppointments.filter((appointment) => !appointment.assignedStaffId).length;
+  const mobileAppointments = activeAppointments.filter((appointment) => appointment.isMobile).length;
+  const nextUpcoming = activeAppointments.find((appointment) => new Date(appointment.startTime).getTime() >= Date.now()) ?? null;
+  const uniqueStaff = new Set(
+    activeAppointments
+      .filter((appointment) => appointment.assignedStaff)
+      .map((appointment) => appointment.assignedStaffId ?? `${appointment.assignedStaff?.firstName}-${appointment.assignedStaff?.lastName}`)
+  ).size;
+
   function handlePrev() {
     setCurrentDate((d) => navigateDate(d, view, -1));
   }
+
   function handleNext() {
     setCurrentDate((d) => navigateDate(d, view, 1));
   }
+
   function handleToday() {
     setCurrentDate(new Date());
   }
@@ -137,7 +158,7 @@ export default function CalendarPage() {
     const h = date.getHours().toString().padStart(2, "0");
     const m = date.getMinutes().toString().padStart(2, "0");
     setQuickBookDate(dateStr);
-    setQuickBookTime(h + ":" + m);
+    setQuickBookTime(`${h}:${m}`);
     setQuickBookOpen(true);
   }
 
@@ -153,92 +174,196 @@ export default function CalendarPage() {
   }
 
   function handleBooked(id: string) {
-    navigate("/appointments/" + id);
+    navigate(`/appointments/${id}`);
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* ── Header ── */}
-      <div className="relative flex items-center justify-between px-4 py-3 border-b border-border shrink-0 gap-2 flex-wrap">
-        {fetching && (
-          <div className="absolute top-2 right-2 z-10">
-            <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+    <div className="page-content flex h-full flex-col">
+      <div className="page-section space-y-4">
+        <div className="overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm sm:rounded-[28px]">
+          <div className="border-b border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.08),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] px-4 py-4 sm:px-6">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    Scheduling
+                  </span>
+                  {activeLocationName ? (
+                    <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {activeLocationName}
+                    </span>
+                  ) : null}
+                </div>
+
+                <div>
+                  <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                    {getHeaderTitle(currentDate, view)}
+                  </h1>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {VIEW_LABELS[view]}. Book faster, spot conflicts earlier, and keep the floor balanced.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <div className="inline-flex w-full items-center justify-between rounded-full border border-border/70 bg-background/80 p-1 shadow-sm sm:w-auto sm:justify-start">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={handlePrev} aria-label="Previous">
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant={isToday ? "default" : "secondary"}
+                      size="sm"
+                      className="rounded-full px-4"
+                      onClick={handleToday}
+                    >
+                      Today
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={handleNext} aria-label="Next">
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="inline-flex w-full items-center overflow-x-auto rounded-full border border-border/70 bg-background/80 p-1 shadow-sm sm:w-auto">
+                    {(["month", "week", "day"] as const).map((calendarView) => (
+                      <button
+                        key={calendarView}
+                        type="button"
+                        onClick={() => setView(calendarView)}
+                        className={cn(
+                          "shrink-0 rounded-full px-4 py-2 text-sm font-medium capitalize transition-colors",
+                          view === calendarView
+                            ? "bg-foreground text-background shadow-sm"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        {calendarView}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:min-w-[240px] sm:max-w-[280px] xl:w-[280px]">
+                <Button size="lg" className="justify-center rounded-2xl" onClick={handleNewAppointment}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New appointment
+                </Button>
+                <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Next up</p>
+                  {nextUpcoming ? (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        {nextUpcoming.title ||
+                          (nextUpcoming.client
+                            ? `${nextUpcoming.client.firstName} ${nextUpcoming.client.lastName}`
+                            : "Appointment")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(nextUpcoming.startTime).toLocaleString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">No upcoming appointments in this range.</p>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
-        )}
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={handlePrev} aria-label="Previous">
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-          <Button variant={isToday ? "default" : "outline"} size="sm" onClick={handleToday}>
-            Today
-          </Button>
-          <Button variant="outline" size="icon" onClick={handleNext} aria-label="Next">
-            <ChevronRight className="w-4 h-4" />
-          </Button>
-          <h2 className="text-base font-semibold text-foreground ml-1">
-            {getHeaderTitle(currentDate, view)}
-          </h2>
-          {activeLocationName ? (
-            <span className="hidden rounded-md border bg-muted/40 px-3 py-1 text-sm text-muted-foreground lg:inline-flex">
-              {activeLocationName}
-            </span>
-          ) : null}
+
+          <div className="grid gap-3 border-b border-border/70 bg-muted/15 px-4 py-4 sm:grid-cols-2 xl:grid-cols-4 xl:px-6">
+            <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Booked</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">{activeAppointments.length}</p>
+                </div>
+                <CalendarDays className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Appointments in the active {view} view.</p>
+            </div>
+
+            <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Coverage</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">{uniqueStaff}</p>
+                </div>
+                <Users className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {unassignedAppointments > 0 ? `${unassignedAppointments} appointments still need an owner.` : "All visible work has an owner."}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Conflicts</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">{activeConflicts.size}</p>
+                </div>
+                <AlertTriangle className={cn("h-5 w-5", activeConflicts.size > 0 ? "text-rose-600" : "text-muted-foreground")} />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {activeConflicts.size > 0 ? "Resolve overlaps before they create handoff problems." : "No overlaps in the current view."}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Field work</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">{mobileAppointments}</p>
+                </div>
+                <Clock3 className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Mobile appointments in the visible schedule.</p>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* View switcher */}
-          <div className="flex rounded-md border border-border overflow-hidden text-sm">
-            {(["month", "week", "day"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={cn(
-                  "px-3 py-1.5 capitalize transition-colors",
-                  view === v
-                    ? "bg-blue-600 text-white font-medium"
-                    : "bg-background text-muted-foreground hover:bg-muted/50"
-                )}
+        <ConflictBanner
+          staffConflictCount={conflictDismissed ? 0 : staffConflictIds.size}
+          businessConflictCount={conflictDismissed ? 0 : businessConflictIds.size}
+          onDismiss={() => setConflictDismissed(true)}
+        />
+
+        {error ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-rose-100 p-2 text-rose-700">
+                  <AlertTriangle className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-rose-900">Calendar could not load</p>
+                  <p className="mt-1 text-sm text-rose-800/90">{error.message}</p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                className="border-rose-300 bg-background text-rose-900 hover:bg-rose-100"
+                onClick={() => refetchAppointments()}
+                disabled={fetching}
               >
-                {v}
-              </button>
-            ))}
+                {fetching ? "Retrying..." : "Try again"}
+              </Button>
+            </div>
           </div>
+        ) : null}
 
-          <Button size="sm" onClick={handleNewAppointment} className="gap-1">
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">New Appointment</span>
-            <span className="sm:hidden">New</span>
-          </Button>
-        </div>
-      </div>
-
-      <ConflictBanner
-        staffConflictCount={conflictDismissed ? 0 : staffConflictIds.size}
-        businessConflictCount={conflictDismissed ? 0 : businessConflictIds.size}
-        onDismiss={() => setConflictDismissed(true)}
-      />
-
-      {/* ── Error with retry ── */}
-      {error && (
-        <div className="mx-4 mt-3 p-4 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <p className="text-sm text-red-700 dark:text-red-300">
-            Failed to load appointments: {error.message}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 border-red-300 text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/50"
-            onClick={() => refetchAppointments()}
-            disabled={fetching}
-          >
-            {fetching ? "Retrying…" : "Try again"}
-          </Button>
-        </div>
-      )}
-
-      {/* ── Calendar Body ── */}
-        <div className={cn("flex flex-col flex-1 overflow-hidden", isFirstLoad && "opacity-60 pointer-events-none")}>
-          {view === "month" && (
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col overflow-hidden pb-2",
+            (isFirstLoad || rescheduling) && "opacity-70 pointer-events-none"
+          )}
+        >
+          {view === "month" ? (
             <MonthView
               currentDate={currentDate}
               appointments={appointments}
@@ -246,8 +371,8 @@ export default function CalendarPage() {
               onApptClick={handleApptClick}
               conflictIds={activeConflicts}
             />
-          )}
-          {view === "week" && (
+          ) : null}
+          {view === "week" ? (
             <WeekView
               currentDate={currentDate}
               appointments={appointments}
@@ -256,8 +381,8 @@ export default function CalendarPage() {
               onReschedule={handleReschedule}
               conflictIds={activeConflicts}
             />
-          )}
-          {view === "day" && (
+          ) : null}
+          {view === "day" ? (
             <DayView
               currentDate={currentDate}
               appointments={appointments}
@@ -267,10 +392,11 @@ export default function CalendarPage() {
               onReschedule={handleReschedule}
               conflictIds={activeConflicts}
             />
-          )}
+          ) : null}
         </div>
+      </div>
 
-      {quickBookOpen && (
+      {quickBookOpen ? (
         <QuickBookSheet
           open={quickBookOpen}
           onOpenChange={setQuickBookOpen}
@@ -279,7 +405,7 @@ export default function CalendarPage() {
           onBooked={handleBooked}
           businessId={businessId ?? undefined}
         />
-      )}
+      ) : null}
     </div>
   );
 }

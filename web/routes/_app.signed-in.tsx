@@ -665,7 +665,7 @@ export default function SignedIn() {
 
   return (
     <div className="min-h-[calc(100dvh-4rem)] pb-24 md:pb-8">
-      <div className="mx-auto max-w-4xl space-y-6 px-4 py-4 sm:px-6 sm:py-6">
+      <div className="page-content page-section max-w-6xl">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">

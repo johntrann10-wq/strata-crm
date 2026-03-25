@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   START_HOUR,
@@ -44,7 +44,7 @@ export function WeekView({
       const currentHour = now.getHours();
       const currentMinute = now.getMinutes();
       const scrollOffset = ((currentHour - START_HOUR) + currentMinute / 60) * HOUR_HEIGHT;
-      container.scrollTop = Math.max(0, scrollOffset - 100);
+      container.scrollTop = Math.max(0, scrollOffset - 140);
     }
   }, []);
 
@@ -58,79 +58,93 @@ export function WeekView({
       finalHour += 1;
       snappedMinute = 0;
     }
-    finalHour = Math.max(START_HOUR, Math.min(END_HOUR - 1, finalHour));
+    finalHour = Math.max(START_HOUR, Math.min(19, finalHour));
     return { hour: finalHour, minute: snappedMinute };
   };
 
+  const nowLineTop = useMemo(() => {
+    if (!weekDays.some((day) => isSameDay(day, today))) return null;
+    const currentDecimal = today.getHours() + today.getMinutes() / 60;
+    if (currentDecimal < START_HOUR || currentDecimal > 20) return null;
+    return (currentDecimal - START_HOUR) * HOUR_HEIGHT;
+  }, [today, weekDays]);
+
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Sticky header row */}
-      <div className="sticky top-0 grid grid-cols-[56px_repeat(7,1fr)] border-b shrink-0 bg-background z-10">
-        <div className="border-r" />
+    <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm">
+      <div className="sticky top-0 z-10 grid grid-cols-[68px_repeat(7,minmax(0,1fr))] border-b border-border/70 bg-background/95 backdrop-blur-sm">
+        <div className="border-r border-border/60 px-3 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Hours</p>
+        </div>
         {weekDays.map((day, di) => {
           const isToday = isSameDay(day, today);
+          const bookedCount = appointments.filter((apt) => isSameDay(new Date(apt.startTime), day)).length;
+          const dayConflictCount = appointments.filter(
+            (apt) => isSameDay(new Date(apt.startTime), day) && conflictIds?.has(apt.id)
+          ).length;
+
           return (
             <div
               key={di}
               className={cn(
-                "py-2 text-center",
-                isToday && "bg-primary/5"
+                "border-r border-border/60 px-3 py-3 text-center last:border-r-0",
+                isToday && "bg-primary/[0.045]"
               )}
             >
-              <div className="text-xs text-muted-foreground uppercase tracking-wide">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {DAY_NAMES[di]}
-              </div>
-              <div className="mt-1 flex items-center justify-center">
+              </p>
+              <div className="mt-2 flex items-center justify-center gap-2">
                 <span
                   className={cn(
-                    "text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full",
-                    isToday
-                      ? "bg-primary text-primary-foreground"
-                      : "text-foreground"
+                    "inline-flex h-9 w-9 items-center justify-center rounded-full text-base font-semibold",
+                    isToday ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-foreground"
                   )}
                 >
                   {day.getDate()}
                 </span>
+              </div>
+              <div className="mt-2 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
+                <span>{bookedCount} booked</span>
+                {dayConflictCount > 0 ? <span className="font-semibold text-rose-700">{dayConflictCount} conflict</span> : null}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Staff workload bar */}
       <StaffWorkloadBar appointments={appointments} />
 
-      {/* Scrollable area */}
       <div id="week-scroll-container" className="flex-1 overflow-y-auto">
         <div
-          className="grid grid-cols-[56px_repeat(7,1fr)] relative"
+          className="grid grid-cols-[68px_repeat(7,minmax(0,1fr))] relative"
           style={{ height: TOTAL_HEIGHT }}
         >
-          {/* Hour label column */}
-          <div className="border-r">
+          <div className="relative border-r border-border/60 bg-muted/15">
             {TIME_HOURS.map((hour) => (
               <div
                 key={hour}
-                className="border-b border-border/40 flex items-start justify-end pr-2"
-                style={{ height: HOUR_HEIGHT }}
+                className="absolute inset-x-0 border-b border-border/40 px-3"
+                style={{ top: (hour - START_HOUR) * HOUR_HEIGHT, height: HOUR_HEIGHT }}
               >
-                <span className="text-xs text-muted-foreground -mt-2">
+                <span className="relative -top-3 text-[11px] font-medium text-muted-foreground">
                   {formatHour(hour)}
                 </span>
               </div>
             ))}
           </div>
 
-          {/* Day columns */}
           {weekDays.map((day, di) => {
-            const dayAppts = appointments.filter((apt) =>
-              isSameDay(new Date(apt.startTime), day)
-            );
+            const dayAppts = appointments.filter((apt) => isSameDay(new Date(apt.startTime), day));
+            const isTodayColumn = isSameDay(day, today);
 
             return (
               <div
                 key={di}
-                className="relative border-r"
+                className={cn(
+                  "relative border-r border-border/60 last:border-r-0",
+                  "bg-background hover:bg-muted/10",
+                  isTodayColumn && "bg-primary/[0.03]"
+                )}
                 style={{ height: TOTAL_HEIGHT }}
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
@@ -173,11 +187,10 @@ export function WeekView({
                   onReschedule?.(appointmentId, newStart, newEnd);
                 }}
               >
-                {/* Hour grid lines */}
                 {TIME_HOURS.map((hour) => (
                   <div
                     key={hour}
-                    className="absolute inset-x-0 border-b border-border/30 pointer-events-none"
+                    className="absolute inset-x-0 border-b border-border/35 pointer-events-none"
                     style={{
                       top: (hour - START_HOUR) * HOUR_HEIGHT,
                       height: HOUR_HEIGHT,
@@ -185,20 +198,40 @@ export function WeekView({
                   />
                 ))}
 
-                {/* Drag ghost */}
-                {dragOverInfo && dragOverInfo.dayIndex === di && (
+                {Array.from({ length: END_HOUR - START_HOUR }).map((_, index) => (
                   <div
-                    className="absolute inset-x-0 bg-blue-400/30 border-t-2 border-blue-500 pointer-events-none z-20"
+                    key={`half-${index}`}
+                    className="absolute inset-x-0 border-b border-dashed border-border/20 pointer-events-none"
+                    style={{
+                      top: index * HOUR_HEIGHT + HOUR_HEIGHT / 2,
+                    }}
+                  />
+                ))}
+
+                {dragOverInfo && dragOverInfo.dayIndex === di ? (
+                  <div
+                    className="absolute inset-x-1 rounded-xl border border-primary/35 bg-primary/12 pointer-events-none z-20"
                     style={{
                       top:
                         (dragOverInfo.hour - START_HOUR + dragOverInfo.minute / 60) *
                         HOUR_HEIGHT,
-                      height: (activeDragDurationMs / 3600000) * HOUR_HEIGHT,
+                      height: Math.max((activeDragDurationMs / 3600000) * HOUR_HEIGHT, 42),
                     }}
                   />
-                )}
+                ) : null}
 
-                {/* Appointments */}
+                {isTodayColumn && nowLineTop != null ? (
+                  <div
+                    className="absolute inset-x-0 z-10 pointer-events-none"
+                    style={{ top: nowLineTop }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="ml-1 h-2.5 w-2.5 rounded-full bg-rose-500 shadow-sm" />
+                      <div className="h-px flex-1 bg-rose-400/80" />
+                    </div>
+                  </div>
+                ) : null}
+
                 {dayAppts.map((apt) => (
                   <AppointmentBlock
                     key={apt.id}

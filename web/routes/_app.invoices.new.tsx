@@ -22,6 +22,7 @@ import { ArrowLeft, Check, ChevronsUpDown, FileText, Package, Plus, Send, Trash2
 import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
+import { PageHeader } from "../components/shared/PageHeader";
 
 interface LineItem {
   id: string;
@@ -363,17 +364,11 @@ export default function NewInvoicePage() {
   return (
     <div className="container mx-auto py-6 max-w-4xl px-4">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to invoices queue" /> : null}
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link to={returnTo}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Invoices
-          </Link>
-        </Button>
-      </div>
-
-      <h1 className="text-2xl font-bold mb-6">New Invoice</h1>
+      <PageHeader
+        backTo={returnTo}
+        title="New Invoice"
+        subtitle="Turn completed work into a clear bill with obvious totals, due date, and delivery intent."
+      />
 
       {clientIdParam && selectedClientId && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm mb-4">
@@ -417,8 +412,8 @@ export default function NewInvoicePage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Invoice Details */}
         <Card>
-          <CardHeader>
-            <CardTitle>Invoice Details</CardTitle>
+          <CardHeader className="border-b border-border/70 pb-4">
+            <CardTitle className="text-base font-semibold">Invoice details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Client Combobox */}
@@ -523,8 +518,8 @@ export default function NewInvoicePage() {
 
         {/* Line Items */}
         <Card>
-          <CardHeader>
-            <CardTitle>Line Items</CardTitle>
+          <CardHeader className="border-b border-border/70 pb-4">
+            <CardTitle className="text-base font-semibold">Billable items</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -634,7 +629,11 @@ export default function NewInvoicePage() {
             {/* Totals */}
             <Separator className="my-4" />
             <div className="flex flex-col items-end space-y-2">
-              <div className="w-full max-w-xs space-y-2">
+              <div className="w-full max-w-xs space-y-2 rounded-xl border border-border/70 bg-muted/20 p-4">
+                <div className="mb-2">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Invoice total</p>
+                  <p className="mt-1 text-2xl font-semibold">${total.toFixed(2)}</p>
+                </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="font-medium">${subtotal.toFixed(2)}</span>
@@ -694,10 +693,10 @@ export default function NewInvoicePage() {
         </Card>
 
         {/* Notes */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Notes (optional)</CardTitle>
-          </CardHeader>
+          <Card>
+            <CardHeader className="border-b border-border/70 pb-4">
+              <CardTitle className="text-base font-semibold">Notes</CardTitle>
+            </CardHeader>
           <CardContent>
             <Textarea
               id="notes"

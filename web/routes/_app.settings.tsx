@@ -58,6 +58,7 @@ import { Switch } from "@/components/ui/switch";
 import { formatBusinessPresetLabel } from "../lib/businessPresets";
 import type { BusinessPresetSummary } from "../lib/businessPresets";
 import { clearRuntimeErrors, listRuntimeErrors, type RuntimeErrorEntry } from "../lib/runtimeErrors";
+import { PageHeader } from "../components/shared/PageHeader";
 
 const BUSINESS_TYPES = [
   { value: "auto_detailing", label: "Auto Detailing" },
@@ -562,18 +563,18 @@ export default function SettingsPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-4xl px-3 py-4 pb-28 sm:px-4 sm:py-8 sm:pb-8">
-        <div className="mb-5 flex items-start gap-3 sm:mb-8 sm:items-center">
-          <div className="rounded-lg bg-primary/10 p-2">
-            <Settings className="h-6 w-6 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage your business profile, locations, and billing
-            </p>
-          </div>
-        </div>
+      <div className="page-content page-section max-w-5xl pb-28 sm:pb-8">
+        <PageHeader
+          title="Settings"
+          subtitle="Manage your business profile, locations, team access, starter presets, and billing."
+          badge={
+            business?.name ? (
+              <Badge variant="outline" className="hidden sm:inline-flex">
+                {business.name}
+              </Badge>
+            ) : undefined
+          }
+        />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0 sm:grid-cols-4">

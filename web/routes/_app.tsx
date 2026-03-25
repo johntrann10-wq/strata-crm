@@ -13,7 +13,7 @@
 import { UserIcon } from "@/components/shared/UserIcon";
 import { SecondaryNavigation } from "@/components/app/nav";
 import { QuickCreateMenu } from "../components/shared/QuickCreateMenu";
-import { Outlet, useOutletContext, NavLink, useNavigate, useLocation } from "react-router";
+import { Outlet, useOutletContext, NavLink, useNavigate, useLocation, Link } from "react-router";
 import type { RootOutletContext } from "../root";
 import type { Route } from "./+types/_app";
 import {
@@ -27,7 +27,10 @@ import {
   Menu,
   AlertCircle,
   Car,
-  ShieldCheck,
+  Search as SearchIcon,
+  Building2,
+  MapPin,
+  Plus,
 } from "lucide-react";
 import React, { useState, useEffect, memo, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
@@ -73,23 +76,57 @@ export type AuthOutletContext = RootOutletContext & {
   enabledModules: Set<string>;
 };
 
-const primaryNavItems: { icon: React.ElementType; label: string; href: string; end: boolean; module?: string }[] = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/signed-in", end: true },
-  { icon: Calendar, label: "Calendar", href: "/calendar", end: false, module: "calendar" },
-  { icon: Calendar, label: "Schedule", href: "/appointments", end: false, module: "appointments" },
-  { icon: ClipboardList, label: "Jobs", href: "/jobs", end: false, module: "jobs" },
-  { icon: Users, label: "Clients", href: "/clients", end: false, module: "clients" },
-  { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices" },
-  { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes" },
+type NavSectionId = "operations" | "sales" | "crm" | "setup";
+type AppNavItem = {
+  icon: React.ElementType;
+  label: string;
+  href: string;
+  end: boolean;
+  module?: string;
+  description: string;
+};
+
+const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] }> = [
+  {
+    id: "operations",
+    label: "Operations",
+    items: [
+      { icon: LayoutDashboard, label: "Dashboard", href: "/signed-in", end: true, description: "Run today's operation from one command surface." },
+      { icon: Calendar, label: "Calendar", href: "/calendar", end: false, module: "calendar", description: "Plan the schedule and see the shop at a glance." },
+      { icon: Calendar, label: "Schedule", href: "/appointments", end: false, module: "appointments", description: "Work the appointment queue and move bookings forward." },
+      { icon: ClipboardList, label: "Jobs", href: "/jobs", end: false, module: "jobs", description: "Track live work orders, staffing, and completion." },
+    ],
+  },
+  {
+    id: "sales",
+    label: "Sales & Billing",
+    items: [
+      { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes", description: "Turn estimates into approved work faster." },
+      { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices", description: "Stay on top of collections, sends, and cash flow." },
+    ],
+  },
+  {
+    id: "crm",
+    label: "CRM",
+    items: [
+      { icon: Users, label: "Clients", href: "/clients", end: false, module: "clients", description: "Find customers quickly and act from their history." },
+      { icon: Car, label: "Vehicles", href: "/vehicles", end: false, module: "vehicles", description: "Keep vehicles, history, and service context connected." },
+    ],
+  },
+  {
+    id: "setup",
+    label: "Catalog & Admin",
+    items: [
+      { icon: Wrench, label: "Services", href: "/services", end: false, module: "services", description: "Manage services, packages, and starter presets." },
+      { icon: Settings, label: "Settings", href: "/settings", end: false, description: "Update team, locations, business profile, and billing." },
+    ],
+  },
 ];
 
-const managementNavItems: { icon: React.ElementType; label: string; href: string; end: boolean; module?: string }[] = [
-  { icon: Car, label: "Vehicles", href: "/vehicles", end: false, module: "vehicles" },
-  { icon: Wrench, label: "Services", href: "/services", end: false, module: "services" },
-  { icon: ShieldCheck, label: "Team", href: "/settings", end: false },
-];
-
-const bottomNavItems = [{ icon: Settings, label: "Settings", href: "/settings", end: false }];
+function isNavItemActive(pathname: string, item: Pick<AppNavItem, "href" | "end">): boolean {
+  if (item.end) return pathname === item.href;
+  return pathname === item.href || pathname.startsWith(`${item.href}/`);
+}
 
 interface AppErrorBoundaryState {
   hasError: boolean;
@@ -135,100 +172,87 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
 const SidebarNav = memo(function SidebarNav({
   onItemClick,
   enabledModules,
+  onOpenCommandPalette,
 }: {
   onItemClick?: () => void;
   enabledModules: Set<string>;
+  onOpenCommandPalette: () => void;
 }) {
-  const visiblePrimaryItems = primaryNavItems.filter(
-    (item) => !item.module || enabledModules.has(item.module)
-  );
-  const visibleManagementItems = managementNavItems.filter(
-    (item) => !item.module || enabledModules.has(item.module)
-  );
+  const location = useLocation();
+  const visibleSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => !item.module || enabledModules.has(item.module)),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <div className="flex flex-col h-full bg-[hsl(220,20%,10%)]">
-      {/* Logo area */}
-      <div className="flex items-center gap-2.5 px-5 py-[18px] border-b border-white/8">
-        <Wrench className="h-5 w-5 text-orange-400 shrink-0" />
-        <span className="text-[15px] font-semibold text-white tracking-tight">Strata</span>
+      <div className="border-b border-white/8 px-5 py-4">
+        <Link to="/signed-in" className="flex items-center gap-2.5" onClick={onItemClick}>
+          <Wrench className="h-5 w-5 shrink-0 text-orange-400" />
+          <div className="min-w-0">
+            <div className="text-[15px] font-semibold tracking-tight text-white">Strata</div>
+            <div className="text-[11px] uppercase tracking-[0.12em] text-white/38">Shop OS</div>
+          </div>
+        </Link>
+        <div className="mt-4 grid gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full justify-start border border-white/8 bg-white/6 text-white hover:bg-white/10"
+            onClick={() => {
+              onOpenCommandPalette();
+              onItemClick?.();
+            }}
+          >
+            <SearchIcon className="h-4 w-4" />
+            Search or jump
+          </Button>
+          <Button asChild className="w-full justify-start">
+            <Link to="/appointments/new" onClick={onItemClick}>
+              <Plus className="h-4 w-4" />
+              New appointment
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      {/* Main navigation */}
-      <nav className="flex-1 px-3 py-3 overflow-y-auto">
-        <div className="space-y-0.5">
-          {visiblePrimaryItems.map(({ icon: Icon, label, href, end }) => (
-            <NavLink
-              key={href}
-              to={href}
-              end={end}
-              onClick={onItemClick}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 px-3 py-[7px] rounded-[6px] text-[13px] font-medium transition-all duration-150 w-full",
-                  isActive
-                    ? "bg-white/10 text-white"
-                    : "text-white/45 hover:bg-white/6 hover:text-white/80"
-                )
-              }
-            >
-              <Icon className="h-[15px] w-[15px] shrink-0" />
-              {label}
-            </NavLink>
-          ))}
-        </div>
-
-        {visibleManagementItems.length > 0 && (
-          <div className="text-white/25 text-[10px] font-semibold px-3 mt-4 mb-1 tracking-[0.08em] uppercase border-t border-white/8 pt-3">
-            TOOLS
-          </div>
-        )}
-
-        <div className="space-y-0.5">
-          {visibleManagementItems.map(({ icon: Icon, label, href, end }) => (
-            <NavLink
-              key={href}
-              to={href}
-              end={end}
-              onClick={onItemClick}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 px-3 py-[7px] rounded-[6px] text-[13px] font-medium transition-all duration-150 w-full",
-                  isActive
-                    ? "bg-white/10 text-white"
-                    : "text-white/45 hover:bg-white/6 hover:text-white/80"
-                )
-              }
-            >
-              <Icon className="h-[15px] w-[15px] shrink-0" />
-              {label}
-            </NavLink>
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <div className="space-y-5">
+          {visibleSections.map((section) => (
+            <div key={section.id}>
+              <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30">
+                {section.label}
+              </div>
+              <div className="space-y-1">
+                {section.items.map(({ icon: Icon, label, href, end }) => (
+                  <NavLink
+                    key={href}
+                    to={href}
+                    end={end}
+                    onClick={onItemClick}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-150",
+                        isActive
+                          ? "bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                          : "text-white/50 hover:bg-white/6 hover:text-white/85"
+                      )
+                    }
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 truncate">{label}</span>
+                    {isNavItemActive(location.pathname, { href, end }) ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                    ) : null}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       </nav>
-
-      {/* Bottom navigation */}
-      <div className="px-3 pb-4 pt-2 border-t border-white/8 space-y-0.5">
-        {bottomNavItems.map(({ icon: Icon, label, href, end }) => (
-          <NavLink
-            key={href}
-            to={href}
-            end={end}
-            onClick={onItemClick}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 px-3 py-[7px] rounded-[6px] text-[13px] font-medium transition-all duration-150 w-full",
-                isActive
-                  ? "bg-white/10 text-white"
-                  : "text-white/45 hover:bg-white/6 hover:text-white/80"
-              )
-            }
-          >
-            <Icon className="h-[15px] w-[15px] shrink-0" />
-            {label}
-          </NavLink>
-        ))}
-      </div>
     </div>
   );
 });
@@ -252,6 +276,7 @@ function AppLayoutInner({
   onBusinessChange: (businessId: string) => void;
   rootOutletContext: RootOutletContext;
 }) {
+  const location = useLocation();
   const businessName = (business?.name as string) ?? null;
   const businessId = (business?.id as string) ?? null;
   const businessType = (business?.type as string) ?? null;
@@ -273,6 +298,25 @@ function AppLayoutInner({
   const locationRecords = useMemo(
     () => (((locations ?? []) as Array<{ id: string; name?: string | null }>).filter(Boolean)),
     [locations]
+  );
+  const activeNavEntry = useMemo(() => {
+    for (const section of navSections) {
+      for (const item of section.items) {
+        if (item.module && !enabledModules.has(item.module)) continue;
+        if (isNavItemActive(location.pathname, item)) {
+          return { item, section };
+        }
+      }
+    }
+    return { item: navSections[0].items[0], section: navSections[0] };
+  }, [enabledModules, location.pathname]);
+  const activeSectionItems = useMemo(
+    () => activeNavEntry.section.items.filter((item) => !item.module || enabledModules.has(item.module)),
+    [activeNavEntry.section.items, enabledModules]
+  );
+  const activeLocationName = useMemo(
+    () => locationRecords.find((entry) => entry.id === currentLocationId)?.name?.trim() || null,
+    [locationRecords, currentLocationId]
   );
   const outletCtx = useMemo(
     () =>
@@ -336,7 +380,7 @@ function AppLayoutInner({
 
       {/* Desktop sidebar – fixed, visible on md+ screens */}
       <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:w-64 z-20">
-        <SidebarNav enabledModules={enabledModules} />
+        <SidebarNav enabledModules={enabledModules} onOpenCommandPalette={() => setOpen(true)} />
       </aside>
 
       {/* Mobile sidebar – Sheet that slides in from the left */}
@@ -345,122 +389,144 @@ function AppLayoutInner({
           side="left"
           className="p-0 w-64 bg-zinc-900 border-zinc-700 [&>button]:text-zinc-400 [&>button]:hover:text-white"
         >
-          <SidebarNav onItemClick={() => setMobileOpen(false)} enabledModules={enabledModules} />
+          <SidebarNav
+            onItemClick={() => setMobileOpen(false)}
+            enabledModules={enabledModules}
+            onOpenCommandPalette={() => setOpen(true)}
+          />
         </SheetContent>
       </Sheet>
 
       {/* Main content area */}
-      <div className="flex-1 flex flex-col md:pl-64 min-w-0">
-        <header className="min-h-16 flex flex-wrap items-center justify-between gap-2 border-b bg-background px-4 py-3 md:px-6 z-10 w-full">
-          {/* Mobile hamburger button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={() => setMobileOpen(true)}
-            aria-label="Open navigation menu"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-
-          <div className="flex items-center gap-2 ml-auto">
-            <QuickCreateMenu />
-            <div className="flex items-center">
-              {locationRecords.length > 1 ? (
-                <label className="hidden md:flex items-center mr-2">
-                  <span className="sr-only">Current location</span>
-                  <select
-                    value={currentLocationId ?? ""}
-                    onChange={(e) => onLocationChange(e.target.value || null)}
-                    className="h-9 min-w-[180px] rounded-md border bg-background px-3 text-sm text-foreground"
-                  >
-                    <option value="">All locations</option>
-                    {locationRecords.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.name?.trim() || "Unnamed location"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              {tenantBusinesses.length > 1 ? (
-                <label className="hidden md:flex items-center mr-4">
-                  <span className="sr-only">Current business</span>
-                  <select
-                    value={businessId ?? ""}
-                    onChange={(e) => e.target.value && onBusinessChange(e.target.value)}
-                    className="h-9 min-w-[220px] rounded-md border bg-background px-3 text-sm text-foreground"
-                  >
-                    {tenantBusinesses.map((tenantBusiness) => (
-                      <option key={tenantBusiness.id} value={tenantBusiness.id}>
-                        {tenantBusiness.name ?? "Untitled business"} ({tenantBusiness.role})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : businessName ? (
-                <div className="hidden md:block mr-4 text-right">
-                  <span className="block text-sm font-semibold text-foreground">{businessName}</span>
-                  {membershipRole ? (
-                    <span className="block text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
-                      {membershipRole.replace(/_/g, " ")}
+      <div className="flex min-w-0 flex-1 flex-col md:pl-64">
+        <header className="sticky top-0 z-10 w-full border-b border-border/70 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/82">
+          <div className="flex flex-col gap-4 px-4 py-3 md:px-6">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden"
+                  onClick={() => setMobileOpen(true)}
+                  aria-label="Open navigation menu"
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/55 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      {activeNavEntry.section.label}
                     </span>
+                    {businessName ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                        <Building2 className="h-3.5 w-3.5" />
+                        {businessName}
+                      </span>
+                    ) : null}
+                    {activeLocationName ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5" />
+                        {activeLocationName}
+                      </span>
+                    ) : null}
+                  </div>
+                  <h1 className="mt-2 text-balance text-[24px] font-semibold tracking-tight text-foreground sm:text-[30px]">
+                    {activeNavEntry.item.label}
+                  </h1>
+                  <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                    {activeNavEntry.item.description}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex min-w-0 flex-col gap-3 xl:items-end">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  <Button type="button" variant="outline" className="justify-start sm:w-auto" onClick={() => setOpen(true)}>
+                    <SearchIcon className="h-4 w-4" />
+                    Search
+                    <span className="ml-1 hidden text-xs text-muted-foreground sm:inline">Ctrl K</span>
+                  </Button>
+                  <QuickCreateMenu />
+                  <SecondaryNavigation
+                    icon={
+                      <>
+                        <UserIcon user={user as any} />
+                        <span className="hidden text-sm font-medium md:inline">
+                          {(user as any).firstName ?? (user as any).email}
+                        </span>
+                      </>
+                    }
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap xl:justify-end">
+                  {tenantBusinesses.length > 1 ? (
+                    <label className="flex min-w-0 items-center sm:flex-1 xl:flex-none">
+                      <span className="sr-only">Current business</span>
+                      <select
+                        value={businessId ?? ""}
+                        onChange={(e) => e.target.value && onBusinessChange(e.target.value)}
+                        className="h-10 w-full min-w-0 rounded-xl border border-border/80 bg-background px-3.5 text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] sm:min-w-[220px]"
+                      >
+                        {tenantBusinesses.map((tenantBusiness) => (
+                          <option key={tenantBusiness.id} value={tenantBusiness.id}>
+                            {tenantBusiness.name ?? "Untitled business"} ({tenantBusiness.role})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : membershipRole ? (
+                    <div className="hidden rounded-xl border border-border/70 bg-muted/35 px-3 py-2 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground sm:block">
+                      {membershipRole.replace(/_/g, " ")}
+                    </div>
+                  ) : null}
+                  {locationRecords.length > 1 ? (
+                    <label className="flex min-w-0 items-center sm:flex-1 xl:flex-none">
+                      <span className="sr-only">Current location</span>
+                      <select
+                        value={currentLocationId ?? ""}
+                        onChange={(e) => onLocationChange(e.target.value || null)}
+                        className="h-10 w-full min-w-0 rounded-xl border border-border/80 bg-background px-3.5 text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] sm:min-w-[180px]"
+                      >
+                        <option value="">All locations</option>
+                        {locationRecords.map((location) => (
+                          <option key={location.id} value={location.id}>
+                            {location.name?.trim() || "Unnamed location"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   ) : null}
                 </div>
-              ) : null}
-              <SecondaryNavigation
-                icon={
-                  <>
-                    <UserIcon user={user as any} />
-                    <span className="text-sm font-medium">{(user as any).firstName ?? (user as any).email}</span>
-                  </>
-                }
-              />
+              </div>
+            </div>
+
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              {activeSectionItems.map((item) => (
+                <NavLink
+                  key={item.href}
+                  to={item.href}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    cn(
+                      "inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "border-primary/20 bg-primary/8 text-primary"
+                        : "border-border/70 bg-background/80 text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                    )
+                  }
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </NavLink>
+              ))}
             </div>
           </div>
-
-          {locationRecords.length > 1 || tenantBusinesses.length > 1 ? (
-            <div className="flex w-full gap-2 md:hidden">
-              {locationRecords.length > 1 ? (
-                <label className="flex min-w-0 flex-1 items-center">
-                  <span className="sr-only">Current location</span>
-                  <select
-                    value={currentLocationId ?? ""}
-                    onChange={(e) => onLocationChange(e.target.value || null)}
-                    className="h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground"
-                  >
-                    <option value="">All locations</option>
-                    {locationRecords.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.name?.trim() || "Unnamed location"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              {tenantBusinesses.length > 1 ? (
-                <label className="flex min-w-0 flex-1 items-center">
-                  <span className="sr-only">Current business</span>
-                  <select
-                    value={businessId ?? ""}
-                    onChange={(e) => e.target.value && onBusinessChange(e.target.value)}
-                    className="h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground"
-                  >
-                    {tenantBusinesses.map((tenantBusiness) => (
-                      <option key={tenantBusiness.id} value={tenantBusiness.id}>
-                        {tenantBusiness.name ?? "Untitled business"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-            </div>
-          ) : null}
         </header>
 
-        <main className="flex-1 overflow-y-auto overflow-x-auto">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto">
           <AppErrorBoundary>
-            <div className="w-full">
+            <div className="w-full min-h-full">
               <Outlet context={outletCtx} />
             </div>
           </AppErrorBoundary>

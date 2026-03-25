@@ -3,15 +3,15 @@ import { Link, useOutletContext, useParams, useSearchParams } from "react-router
 import { toast } from "sonner";
 import {
   AlertCircle,
-  ArrowLeft,
   CalendarClock,
   CheckCircle2,
+  CircleDot,
   ClipboardList,
-  Receipt,
   FileText,
   Loader2,
   MapPin,
   Plus,
+  Receipt,
   Save,
   Trash2,
   UserRound,
@@ -132,6 +132,16 @@ function isOlderThanDays(value: string | Date | null | undefined, days: number):
   return Date.now() - parsed.getTime() >= days * 24 * 60 * 60 * 1000;
 }
 
+function getProgressStages(record: JobRecord) {
+  return [
+    { key: "booked", label: "Booked", complete: Boolean(record.appointmentId), active: ["scheduled", "confirmed"].includes(record.status) },
+    { key: "assigned", label: "Assigned", complete: Boolean(record.assignedStaff?.id), active: ["scheduled", "confirmed"].includes(record.status) && !record.assignedStaff?.id },
+    { key: "in_service", label: "In Service", complete: ["in_progress", "completed"].includes(record.status), active: record.status === "in_progress" },
+    { key: "billed", label: "Billed", complete: Boolean(record.invoice?.id), active: record.status === "completed" && !record.invoice?.id },
+    { key: "pickup", label: "Ready", complete: record.status === "completed" && Boolean(record.invoice?.id), active: record.status === "completed" && Boolean(record.invoice?.id) },
+  ];
+}
+
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -182,7 +192,6 @@ export default function JobDetailPage() {
   const [{ fetching: reopeningService }, runReopenService] = useAction(api.appointmentService.reopen);
 
   const record = (job ?? null) as JobRecord | null;
-
   const [form, setForm] = useState({
     title: "",
     status: "scheduled",
@@ -261,20 +270,24 @@ export default function JobDetailPage() {
     isOlderThanDays((invoiceFreshness as any)?.lastSentAt ?? null, 3);
   const completedServiceIds = useMemo(() => {
     const latest = new Map<string, boolean>();
-    for (const record of ((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>)) {
+    for (const item of ((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>)) {
       let appointmentServiceId: string | null = null;
       try {
-        const parsed = record.metadata ? (JSON.parse(record.metadata) as { appointmentServiceId?: string }) : null;
+        const parsed = item.metadata ? (JSON.parse(item.metadata) as { appointmentServiceId?: string }) : null;
         appointmentServiceId = parsed?.appointmentServiceId ?? null;
       } catch {
         appointmentServiceId = null;
       }
       if (!appointmentServiceId || latest.has(appointmentServiceId)) continue;
-      if (record.type === "job.service_completed") latest.set(appointmentServiceId, true);
-      if (record.type === "job.service_reopened") latest.set(appointmentServiceId, false);
+      if (item.type === "job.service_completed") latest.set(appointmentServiceId, true);
+      if (item.type === "job.service_reopened") latest.set(appointmentServiceId, false);
     }
     return latest;
   }, [activityLogs]);
+
+  const progressStages = record ? getProgressStages(record) : [];
+  const completedServiceCount = (record?.services ?? []).filter((service) => completedServiceIds.get(service.id) === true).length;
+  const pickupReady = record?.status === "completed" && completedServiceCount === (record?.services ?? []).length && Boolean(record?.invoice?.id);
 
   const handleSave = async () => {
     if (!record) return;
@@ -349,11 +362,7 @@ export default function JobDetailPage() {
   };
 
   if (!id) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <p className="text-sm text-muted-foreground">Invalid job id.</p>
-      </div>
-    );
+    return <div className="flex min-h-[50vh] items-center justify-center"><p className="text-sm text-muted-foreground">Invalid job id.</p></div>;
   }
 
   if (fetching && !record) {
@@ -376,448 +385,236 @@ export default function JobDetailPage() {
           <h1 className="text-lg font-semibold">Job not available</h1>
           <p className="text-sm text-muted-foreground">{error?.message ?? "The requested job could not be loaded."}</p>
         </div>
-        <Button asChild variant="outline">
-          <Link to={returnTo}>Back to jobs</Link>
-        </Button>
+        <Button asChild variant="outline"><Link to={returnTo}>Back to jobs</Link></Button>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-      {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to jobs queue" /> : null}
-      <PageHeader
-        backTo={returnTo}
-        title={record.title?.trim() || record.jobNumber}
-        badge={<StatusBadge status={record.status} type="job" />}
-        subtitle={`Work order ${record.jobNumber}`}
-        right={
-          canEdit ? (
-            <Button onClick={() => void handleSave()} disabled={saving}>
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Save job
-            </Button>
-          ) : null
-        }
-      />
+    <div className="page-content">
+      <div className="page-section max-w-6xl space-y-6">
+        {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to jobs queue" /> : null}
+        <PageHeader
+          backTo={returnTo}
+          title={record.title?.trim() || record.jobNumber}
+          badge={<StatusBadge status={record.status} type="job" />}
+          subtitle={`Work order ${record.jobNumber}`}
+          right={
+            canEdit ? (
+              <Button onClick={() => void handleSave()} disabled={saving}>
+                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save job
+              </Button>
+            ) : null
+          }
+        />
 
-      <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Operational status</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <FieldBlock icon={ClipboardList} label="Status" value={null}>
-                <Select
-                  value={form.status}
-                  onValueChange={(value) => setForm((current) => ({ ...current, status: value }))}
-                  disabled={!canEdit}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FieldBlock>
-              <FieldBlock
-                icon={CalendarClock}
-                label="Schedule"
-                value={formatDateRange(record.scheduledStart, record.scheduledEnd)}
-              />
-              <FieldBlock icon={UserRound} label="Assigned technician" value={null}>
-                <Select
-                  value={form.assignedStaffId}
-                  onValueChange={(value) => setForm((current) => ({ ...current, assignedStaffId: value }))}
-                  disabled={!canEdit}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Unassigned" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__unassigned__">Unassigned</SelectItem>
-                    {((staff ?? []) as any[]).map((member) => (
-                      <SelectItem key={member.id} value={member.id}>
-                        {member.firstName} {member.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FieldBlock>
-              <FieldBlock icon={MapPin} label="Location" value={null}>
-                <Select
-                  value={form.locationId}
-                  onValueChange={(value) => setForm((current) => ({ ...current, locationId: value }))}
-                  disabled={!canEdit}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="No location" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__unassigned__">No location</SelectItem>
-                    {((locations ?? []) as any[]).map((location) => (
-                      <SelectItem key={location.id} value={location.id}>
-                        {location.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FieldBlock>
-            </CardContent>
-          </Card>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <TopMetric label="Schedule" value={formatDateRange(record.scheduledStart, record.scheduledEnd)} />
+          <TopMetric label="Technician" value={formatName(record.assignedStaff)} />
+          <TopMetric label="Revenue" value={formatCurrency(record.totalPrice)} />
+          <TopMetric label="Services" value={`${completedServiceCount}/${(record.services ?? []).length} complete`} />
+          <TopMetric label="Pickup readiness" value={pickupReady ? "Ready" : record.status === "completed" ? "Needs wrap-up" : "In progress"} />
+        </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Job details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {canEdit ? (
-                <div className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center">
-                  <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
-                    <SelectTrigger className="sm:flex-1">
-                      <SelectValue placeholder={servicesFetching ? "Loading services..." : "Add a service from your catalog"} />
-                    </SelectTrigger>
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader className="pb-4"><CardTitle>Workflow Progress</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-5">
+              {progressStages.map((stage) => (
+                <div key={stage.key} className="rounded-xl border border-border/70 bg-background/95 p-4">
+                  <div className="flex items-center gap-3">
+                    <span className={stage.complete ? "inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-700" : stage.active ? "inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary" : "inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground"}>
+                      {stage.complete ? <CheckCircle2 className="h-4 w-4" /> : <CircleDot className="h-4 w-4" />}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold">{stage.label}</p>
+                      <p className="text-xs text-muted-foreground">{stage.complete ? "Done" : stage.active ? "Current focus" : "Up next"}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-6 xl:grid-cols-[1.55fr_1fr]">
+          <div className="space-y-6">
+            <Card className="border-border/70 shadow-sm">
+              <CardHeader className="pb-4"><CardTitle>Operations Control</CardTitle></CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-2">
+                <FieldBlock icon={ClipboardList} label="Status">
+                  <Select value={form.status} onValueChange={(value) => setForm((current) => ({ ...current, status: value }))} disabled={!canEdit}>
+                    <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                    <SelectContent>{STATUS_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </FieldBlock>
+                <FieldBlock icon={CalendarClock} label="Appointment handoff" value={formatDateRange(record.scheduledStart, record.scheduledEnd)} />
+                <FieldBlock icon={UserRound} label="Assigned technician">
+                  <Select value={form.assignedStaffId} onValueChange={(value) => setForm((current) => ({ ...current, assignedStaffId: value }))} disabled={!canEdit}>
+                    <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">Select a service</SelectItem>
-                      {availableServices.map((service) => (
-                        <SelectItem key={service.id} value={service.id}>
-                          {service.name ?? "Service"}
-                          {service.category ? ` - ${service.category}` : ""}
-                          {service.price != null ? ` - ${formatCurrency(service.price)}` : ""}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="__unassigned__">Unassigned</SelectItem>
+                      {((staff ?? []) as any[]).map((member) => <SelectItem key={member.id} value={member.id}>{member.firstName} {member.lastName}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Button onClick={() => void handleAddService()} disabled={addingService || selectedServiceId === "__none__"}>
-                    {addingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                    Add service
-                  </Button>
-                </div>
-              ) : null}
-              <div className="space-y-2">
-                <Label htmlFor="job-title">Display title</Label>
-                <Input
-                  id="job-title"
-                  value={form.title}
-                  onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                  disabled={!canEdit}
-                  placeholder="Use a clear label for the crew and front desk"
-                />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
+                </FieldBlock>
+                <FieldBlock icon={MapPin} label="Location">
+                  <Select value={form.locationId} onValueChange={(value) => setForm((current) => ({ ...current, locationId: value }))} disabled={!canEdit}>
+                    <SelectTrigger><SelectValue placeholder="No location" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__unassigned__">No location</SelectItem>
+                      {((locations ?? []) as any[]).map((location) => <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </FieldBlock>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 shadow-sm">
+              <CardHeader className="pb-4"><CardTitle>Service Execution</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                {canEdit ? (
+                  <div className="flex flex-col gap-2 rounded-xl border border-border/70 p-3 sm:flex-row sm:items-center">
+                    <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
+                      <SelectTrigger className="sm:flex-1">
+                        <SelectValue placeholder={servicesFetching ? "Loading services..." : "Add a service from your catalog"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Select a service</SelectItem>
+                        {availableServices.map((service) => (
+                          <SelectItem key={service.id} value={service.id}>
+                            {service.name ?? "Service"}{service.category ? ` - ${service.category}` : ""}{service.price != null ? ` - ${formatCurrency(service.price)}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button onClick={() => void handleAddService()} disabled={addingService || selectedServiceId === "__none__"}>
+                      {addingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                      Add service
+                    </Button>
+                  </div>
+                ) : null}
+
+                {(record.services ?? []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No services attached yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {(record.services ?? []).map((service) => {
+                      const isCompleted = completedServiceIds.get(service.id) === true;
+                      return (
+                        <div key={service.id} className="rounded-xl border border-border/70 p-4">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0 space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className={isCompleted ? "font-semibold line-through text-muted-foreground" : "font-semibold"}>{service.name ?? "Service"}</p>
+                                {isCompleted ? <StatusBadge status="completed" type="job" /> : <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">{service.category ?? "General"}</span>}
+                              </div>
+                              <p className="text-sm text-muted-foreground">Qty {service.quantity ?? 1}{service.durationMinutes ? ` - ${service.durationMinutes} min` : ""}</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full border border-border/70 px-3 py-1 text-sm font-semibold text-foreground">{formatCurrency(service.unitPrice)}</span>
+                              {canEdit ? (
+                                <Button variant="outline" size="sm" className="h-9" onClick={() => void (isCompleted ? handleReopenService(service.id) : handleCompleteService(service.id))} disabled={completingService || reopeningService}>
+                                  {completingService || reopeningService ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1 h-4 w-4" />}
+                                  {isCompleted ? "Reopen" : "Complete"}
+                                </Button>
+                              ) : null}
+                              {canEdit ? (
+                                <Button variant="ghost" size="sm" className="h-9 px-2 text-muted-foreground hover:text-destructive" onClick={() => void handleRemoveService(service.id)} disabled={removingService}>
+                                  {removingService ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 shadow-sm">
+              <CardHeader className="pb-4"><CardTitle>Job Notes</CardTitle></CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <Label htmlFor="job-notes">Customer-visible notes</Label>
-                    {canEdit ? (
-                      <Button type="button" variant="ghost" size="sm" onClick={() => applyIntakeTemplate("notes")}>
-                        Apply {intakePreset.label}
-                      </Button>
-                    ) : null}
+                    {canEdit ? <Button type="button" variant="ghost" size="sm" onClick={() => applyIntakeTemplate("notes")}>Apply {intakePreset.label}</Button> : null}
                   </div>
-                  <Textarea
-                    id="job-notes"
-                    value={form.notes}
-                    onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-                    disabled={!canEdit}
-                    rows={5}
-                    placeholder="Arrival notes, access instructions, customer requests..."
-                  />
+                  <Textarea id="job-notes" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} disabled={!canEdit} rows={6} placeholder="Arrival notes, access instructions, customer requests..." />
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <Label htmlFor="job-internal-notes">Internal notes</Label>
-                    {canEdit ? (
-                      <Button type="button" variant="ghost" size="sm" onClick={() => applyIntakeTemplate("internalNotes")}>
-                        Apply {intakePreset.label}
-                      </Button>
-                    ) : null}
+                    {canEdit ? <Button type="button" variant="ghost" size="sm" onClick={() => applyIntakeTemplate("internalNotes")}>Apply {intakePreset.label}</Button> : null}
                   </div>
-                  <Textarea
-                    id="job-internal-notes"
-                    value={form.internalNotes}
-                    onChange={(event) => setForm((current) => ({ ...current, internalNotes: event.target.value }))}
-                    disabled={!canEdit}
-                    rows={5}
-                    placeholder="Crew notes, blockers, quality control, handoff info..."
-                  />
+                  <Textarea id="job-internal-notes" value={form.internalNotes} onChange={(event) => setForm((current) => ({ ...current, internalNotes: event.target.value }))} disabled={!canEdit} rows={6} placeholder="Crew notes, blockers, quality control, handoff info..." />
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Services on this job</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {(record.services ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">No services attached yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  {(record.services ?? []).map((service) => {
-                    const isCompleted = completedServiceIds.get(service.id) === true;
-                    return (
-                    <div key={service.id} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className={isCompleted ? "font-medium line-through text-muted-foreground" : "font-medium"}>
-                            {service.name ?? "Service"}
-                          </p>
-                          {isCompleted ? <StatusBadge status="completed" type="job" /> : null}
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {service.category ?? "General"} · Qty {service.quantity ?? 1}
-                          {service.durationMinutes ? ` · ${service.durationMinutes} min` : ""}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-sm font-medium text-foreground">{formatCurrency(service.unitPrice)}</div>
-                        {canEdit ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            onClick={() => void (isCompleted ? handleReopenService(service.id) : handleCompleteService(service.id))}
-                            disabled={completingService || reopeningService}
-                          >
-                            {completingService || reopeningService ? (
-                              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                            ) : (
-                              <CheckCircle2 className="mr-1 h-4 w-4" />
-                            )}
-                            {isCompleted ? "Reopen" : "Complete"}
-                          </Button>
-                        ) : null}
-                        {canEdit ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-muted-foreground hover:text-destructive"
-                            onClick={() => void handleRemoveService(service.id)}
-                            disabled={removingService}
-                          >
-                            {removingService ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                  )})}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Next action</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <WorkflowStep
-                label="Quote"
-                status={record.quote ? `Linked · ${record.quote.status}` : "No quote attached"}
-                actionHref={
-                  record.quote
-                    ? withReturn(`/quotes/${record.quote.id}`)
-                    : canWriteQuotes && record.client?.id
-                      ? withReturn(`/quotes/new?clientId=${record.client.id}&appointmentId=${record.appointmentId}`)
-                      : null
-                }
-                actionLabel={record.quote ? "Open quote" : "Create quote"}
-                icon={Receipt}
-              />
-              <WorkflowStep
-                label="Invoice"
-                status={record.invoice ? `${record.invoice.status} · ${formatCurrency(record.invoice.total)}` : "No invoice created"}
-                actionHref={
-                  record.invoice
-                    ? withReturn(`/invoices/${record.invoice.id}`)
-                    : canWriteInvoices && record.client?.id
-                      ? withReturn(`/invoices/new?appointmentId=${record.appointmentId}&clientId=${record.client.id}`)
-                      : null
-                }
-                actionLabel={record.invoice ? "Open invoice" : "Create invoice"}
-                icon={FileText}
-              />
-              <WorkflowStep
-                label="Schedule"
-                status={formatDateRange(record.scheduledStart, record.scheduledEnd)}
-                actionHref={record.appointmentId ? withReturn(`/appointments/${record.appointmentId}`) : null}
-                actionLabel="Open appointment"
-                icon={CalendarClock}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>At a glance</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <MiniStat label="Estimated revenue" value={formatCurrency(record.totalPrice)} />
-              <MiniStat label="Services" value={String(serviceSummary.count)} />
-              <MiniStat label="Estimated labor" value={serviceSummary.minutes > 0 ? `${serviceSummary.minutes} min` : "-"} />
-              <MiniStat label="Completed at" value={record.completedAt ? new Date(record.completedAt).toLocaleString() : "-"} />
-              <MiniStat label="Quote linked" value={record.quote ? "Yes" : "No"} />
-              <MiniStat label="Invoice linked" value={record.invoice ? "Yes" : "No"} />
-            </CardContent>
-          </Card>
-
-          <VerticalWorkflowCard businessType={businessType} mode="job" />
-
-          <ChecklistCard
-            entityType="job"
-            entityId={record.id}
-            businessType={businessType}
-            records={(activityLogs as any[]) ?? []}
-            canWrite={canEdit}
-            onChanged={() => {
-              void refetchActivity();
-            }}
-          />
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Customer</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <InfoRow icon={UserRound} label="Client" value={formatName(record.client)} />
-              <InfoRow icon={AlertCircle} label="Email" value={record.client?.email ?? "-"} />
-              <InfoRow icon={AlertCircle} label="Phone" value={record.client?.phone ?? "-"} />
-              {record.client ? (
-                <Button asChild variant="outline" className="w-full">
-                  <Link to={withReturn(`/clients/${record.client.id}`)}>Open customer record</Link>
-                </Button>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Vehicle</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <InfoRow
-                icon={Car}
-                label="Vehicle"
-                value={
-                  record.vehicle
-                    ? [record.vehicle.year, record.vehicle.make, record.vehicle.model].filter(Boolean).join(" ")
-                    : "-"
-                }
-              />
-              <InfoRow icon={Car} label="Color" value={record.vehicle?.color ?? "-"} />
-              <InfoRow icon={Car} label="Plate" value={record.vehicle?.licensePlate ?? "-"} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Related records</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <RelatedAction
-                href={record.quote ? withReturn(`/quotes/${record.quote.id}`) : null}
-                icon={FileText}
-                label="Quote"
-                value={record.quote ? `${record.quote.status} · ${formatCurrency(record.quote.total)}` : "No quote linked"}
-              />
-              <RelatedAction
-                href={record.invoice ? withReturn(`/invoices/${record.invoice.id}`) : record.appointmentId ? withReturn(`/invoices/new?appointmentId=${record.appointmentId}`) : null}
-                icon={FileText}
-                label="Invoice"
-                value={
-                  record.invoice
-                    ? `${record.invoice.invoiceNumber ?? "Invoice"} · ${record.invoice.status}`
-                    : "Create invoice"
-                }
-              />
-              <RelatedAction
-                href={record.appointmentId ? withReturn(`/appointments/${record.appointmentId}`) : null}
-                icon={CheckCircle2}
-                label="Schedule record"
-                value="Open original appointment"
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Follow-up freshness</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <MiniStat
-                label="Quote follow-up"
-                value={
-                  record.quote
-                    ? [
-                        formatFreshness((quoteFreshness as any)?.sentAt ?? null, "Sent"),
-                        formatFreshness((quoteFreshness as any)?.followUpSentAt ?? null, "Followed up"),
-                      ]
-                        .filter(Boolean)
-                        .join(" · ") || "No quote outreach yet"
-                    : "No quote linked"
-                }
-              />
-              <MiniStat
-                label="Invoice collection"
-                value={
-                  record.invoice
-                    ? [
-                        formatFreshness((invoiceFreshness as any)?.lastSentAt ?? null, "Sent"),
-                        formatFreshness((invoiceFreshness as any)?.lastPaidAt ?? null, "Paid"),
-                      ]
-                        .filter(Boolean)
-                        .join(" · ") || "No invoice activity yet"
-                    : "No invoice linked"
-                }
-              />
-            </CardContent>
-          </Card>
-
-          {(quoteNeedsFollowUp || invoiceNeedsFollowUp) && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Action needed</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {quoteNeedsFollowUp ? (
-                  <WorkflowWarningCard
-                    title="Quote follow-up is stale"
-                    detail="This job is tied to a quote that likely needs another touch."
-                    href={record.quote ? withReturn(`/quotes/${record.quote.id}`) : null}
-                    actionLabel="Open quote"
-                  />
-                ) : null}
-                {invoiceNeedsFollowUp ? (
-                  <WorkflowWarningCard
-                    title="Invoice collection is stale"
-                    detail="The linked invoice has not been paid and has not been sent recently."
-                    href={record.invoice ? withReturn(`/invoices/${record.invoice.id}`) : null}
-                    actionLabel="Open invoice"
-                  />
-                ) : null}
               </CardContent>
             </Card>
-          )}
+          </div>
 
-          <EntityCollaborationCard
-            entityType="job"
-            entityId={record.id}
-            records={(activityLogs as any[]) ?? []}
-            fetching={activityFetching}
-            canWrite={canEdit}
-            onCreated={() => {
-              void refetchActivity();
-            }}
-          />
+          <div className="space-y-6">
+            <Card className="border-border/70 shadow-sm">
+              <CardHeader className="pb-4"><CardTitle>Next Actions</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <WorkflowStep label="Quote" status={record.quote ? `Linked - ${record.quote.status}` : "No quote attached"} actionHref={record.quote ? withReturn(`/quotes/${record.quote.id}`) : canWriteQuotes && record.client?.id ? withReturn(`/quotes/new?clientId=${record.client.id}&appointmentId=${record.appointmentId}`) : null} actionLabel={record.quote ? "Open quote" : "Create quote"} icon={Receipt} />
+                <WorkflowStep label="Invoice" status={record.invoice ? `${record.invoice.status} - ${formatCurrency(record.invoice.total)}` : "No invoice created"} actionHref={record.invoice ? withReturn(`/invoices/${record.invoice.id}`) : canWriteInvoices && record.client?.id ? withReturn(`/invoices/new?appointmentId=${record.appointmentId}&clientId=${record.client.id}`) : null} actionLabel={record.invoice ? "Open invoice" : "Create invoice"} icon={FileText} />
+                <WorkflowStep label="Appointment" status={formatDateRange(record.scheduledStart, record.scheduledEnd)} actionHref={record.appointmentId ? withReturn(`/appointments/${record.appointmentId}`) : null} actionLabel="Open appointment" icon={CalendarClock} />
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 shadow-sm">
+              <CardHeader className="pb-4"><CardTitle>Pickup Readiness</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <ReadinessRow label="All services complete" ready={(record.services ?? []).length > 0 && completedServiceCount === (record.services ?? []).length} />
+                <ReadinessRow label="Invoice prepared" ready={Boolean(record.invoice?.id)} />
+                <ReadinessRow label="Job marked complete" ready={record.status === "completed"} />
+                <div className="rounded-xl border border-border/70 bg-background/90 px-3 py-3">
+                  <p className="text-sm font-medium">{pickupReady ? "Ready for pickup" : "Needs more work before handoff"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{pickupReady ? "Technician work is complete and billing is linked." : "Complete service lines, finish the work order, and link billing before delivery."}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <VerticalWorkflowCard businessType={businessType} mode="job" />
+
+            <ChecklistCard entityType="job" entityId={record.id} businessType={businessType} records={(activityLogs as any[]) ?? []} canWrite={canEdit} onChanged={() => { void refetchActivity(); }} />
+
+            <Card className="border-border/70 shadow-sm">
+              <CardHeader className="pb-4"><CardTitle>Customer and Vehicle</CardTitle></CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <InfoRow icon={UserRound} label="Client" value={formatName(record.client)} />
+                <InfoRow icon={AlertCircle} label="Email" value={record.client?.email ?? "-"} />
+                <InfoRow icon={AlertCircle} label="Phone" value={record.client?.phone ?? "-"} />
+                <InfoRow icon={Car} label="Vehicle" value={record.vehicle ? [record.vehicle.year, record.vehicle.make, record.vehicle.model].filter(Boolean).join(" ") : "-"} />
+                <InfoRow icon={Car} label="Plate" value={record.vehicle?.licensePlate ?? "-"} />
+                {record.client ? <Button asChild variant="outline" className="w-full"><Link to={withReturn(`/clients/${record.client.id}`)}>Open customer record</Link></Button> : null}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 shadow-sm">
+              <CardHeader className="pb-4"><CardTitle>Follow-up Freshness</CardTitle></CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <MiniStat label="Quote follow-up" value={record.quote ? [formatFreshness((quoteFreshness as any)?.sentAt ?? null, "Sent"), formatFreshness((quoteFreshness as any)?.followUpSentAt ?? null, "Followed up")].filter(Boolean).join(" - ") || "No quote outreach yet" : "No quote linked"} />
+                <MiniStat label="Invoice collection" value={record.invoice ? [formatFreshness((invoiceFreshness as any)?.lastSentAt ?? null, "Sent"), formatFreshness((invoiceFreshness as any)?.lastPaidAt ?? null, "Paid")].filter(Boolean).join(" - ") || "No invoice activity yet" : "No invoice linked"} />
+              </CardContent>
+            </Card>
+
+            {(quoteNeedsFollowUp || invoiceNeedsFollowUp) ? (
+              <Card className="border-border/70 shadow-sm">
+                <CardHeader className="pb-4"><CardTitle>Action Needed</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  {quoteNeedsFollowUp ? <WorkflowWarningCard title="Quote follow-up is stale" detail="This job is tied to a quote that likely needs another touch." href={record.quote ? withReturn(`/quotes/${record.quote.id}`) : null} actionLabel="Open quote" /> : null}
+                  {invoiceNeedsFollowUp ? <WorkflowWarningCard title="Invoice collection is stale" detail="The linked invoice has not been paid and has not been sent recently." href={record.invoice ? withReturn(`/invoices/${record.invoice.id}`) : null} actionLabel="Open invoice" /> : null}
+                </CardContent>
+              </Card>
+            ) : null}
+
+            <EntityCollaborationCard entityType="job" entityId={record.id} records={(activityLogs as any[]) ?? []} fetching={activityFetching} canWrite={canEdit} onCreated={() => { void refetchActivity(); }} />
+          </div>
         </div>
       </div>
     </div>
@@ -832,11 +629,11 @@ function FieldBlock({
 }: {
   icon: typeof CalendarClock;
   label: string;
-  value: string | null;
+  value?: string | null;
   children?: React.ReactNode;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 rounded-xl border border-border/70 bg-background/90 p-4">
       <div className="flex items-center gap-2 text-sm font-medium">
         <Icon className="h-4 w-4 text-muted-foreground" />
         <span>{label}</span>
@@ -846,11 +643,22 @@ function FieldBlock({
   );
 }
 
+function TopMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <Card className="border-border/70 shadow-sm">
+      <CardContent className="p-4">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="mt-1 text-base font-semibold text-foreground">{value}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4">
       <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-foreground">{value}</span>
+      <span className="text-right font-medium text-foreground">{value}</span>
     </div>
   );
 }
@@ -869,7 +677,7 @@ function WorkflowStep({
   icon: typeof FileText;
 }) {
   return (
-    <div className="rounded-lg border p-3">
+    <div className="rounded-xl border border-border/70 p-3">
       <div className="flex items-start gap-3">
         <Icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
         <div className="min-w-0 flex-1">
@@ -906,32 +714,15 @@ function InfoRow({
   );
 }
 
-function RelatedAction({
-  href,
-  icon: Icon,
-  label,
-  value,
-}: {
-  href: string | null;
-  icon: typeof FileText;
-  label: string;
-  value: string;
-}) {
-  const content = (
-    <div className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/40">
-      <Icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
-      <div className="min-w-0">
-        <p className="text-xs uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
-        <p className="text-sm font-medium text-foreground">{value}</p>
-      </div>
+function ReadinessRow({ label, ready }: { label: string; ready: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 bg-background/90 px-3 py-3">
+      <span className="text-sm text-foreground">{label}</span>
+      <span className={ready ? "rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-medium text-emerald-800" : "rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground"}>
+        {ready ? "Ready" : "Pending"}
+      </span>
     </div>
   );
-
-  if (!href) {
-    return content;
-  }
-
-  return <Link to={href}>{content}</Link>;
 }
 
 function WorkflowWarningCard({
@@ -946,13 +737,13 @@ function WorkflowWarningCard({
   actionLabel: string;
 }) {
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4">
+    <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{title}</p>
           <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
         </div>
-        <AlertCircle className="h-4 w-4 text-amber-700 shrink-0" />
+        <AlertCircle className="h-4 w-4 shrink-0 text-amber-700" />
       </div>
       {href ? (
         <Button asChild size="sm" variant="outline" className="mt-3">

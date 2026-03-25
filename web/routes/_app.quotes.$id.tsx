@@ -10,6 +10,7 @@ import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { CommunicationCard } from "../components/shared/CommunicationCard";
 import { ActivityFeedCard } from "../components/shared/ActivityFeedCard";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
+import { PageHeader } from "../components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -375,25 +376,26 @@ export default function QuoteDetailPage() {
   }
 
   const clientName = `${quote.client.firstName} ${quote.client.lastName}`;
+  const totalLineItems = quote.lineItems.edges.length;
+  const expiresSoon =
+    !!quote.expiresAt &&
+    new Date(quote.expiresAt).getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000 &&
+    !["accepted", "declined", "expired"].includes(quote.status);
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-3 py-4 sm:px-4 sm:py-6">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to quotes queue" /> : null}
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to={returnTo}>
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
-          <Separator orientation="vertical" className="mt-1 hidden h-6 sm:block" />
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <h1 className="min-w-0 text-xl font-semibold sm:text-2xl">Quote for {clientName}</h1>
-            <StatusBadge status={quote.status} />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+      <PageHeader
+        backTo={returnTo}
+        title={`Quote for ${clientName}`}
+        badge={<StatusBadge status={quote.status} />}
+        subtitle={
+          quote.vehicle
+            ? `${quote.vehicle.year} ${quote.vehicle.make} ${quote.vehicle.model} - ${totalLineItems} line item${totalLineItems === 1 ? "" : "s"} - ${formatCurrency(quote.total)}`
+            : `${totalLineItems} line item${totalLineItems === 1 ? "" : "s"} - ${formatCurrency(quote.total)}`
+        }
+        right={
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
           {(quote.status === "draft" || quote.status === "sent") && (
             <Button
               onClick={() => void handleSend()}
@@ -427,7 +429,43 @@ export default function QuoteDetailPage() {
           >
             Delete
           </Button>
-        </div>
+          </div>
+        }
+      />
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <Card className="border-border/70">
+          <CardContent className="space-y-1 p-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Quote total</p>
+            <p className="text-2xl font-semibold">{formatCurrency(quote.total)}</p>
+            <p className="text-sm text-muted-foreground">All proposed services and tax included</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/70">
+          <CardContent className="space-y-1 p-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Approval state</p>
+            <p className="text-lg font-semibold capitalize">{quote.status}</p>
+            <p className="text-sm text-muted-foreground">
+              {quote.acceptedAt ? `Accepted on ${formatDate(quote.acceptedAt)}` : quote.sentAt ? `Sent on ${formatDate(quote.sentAt)}` : "Not sent to the client yet"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/70">
+          <CardContent className="space-y-1 p-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Expires</p>
+            <p className="text-lg font-semibold">{quote.expiresAt ? formatDate(quote.expiresAt) : "No expiry"}</p>
+            <p className={cn("text-sm", expiresSoon ? "text-amber-700" : "text-muted-foreground")}>
+              {expiresSoon ? "Needs follow-up soon before it goes cold" : "Use expiry to keep approvals moving"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/70">
+          <CardContent className="space-y-1 p-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Client</p>
+            <p className="truncate text-lg font-semibold">{clientName}</p>
+            <p className="truncate text-sm text-muted-foreground">{quote.client.email || quote.client.phone || "No direct contact on file"}</p>
+          </CardContent>
+        </Card>
       </div>
 
       <ContextualNextStep
@@ -443,8 +481,13 @@ export default function QuoteDetailPage() {
         <div className="lg:col-span-2 space-y-6">
           {/* Line Items Card */}
           <Card>
-            <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-base">Line Items</CardTitle>
+            <CardHeader className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1">
+                <CardTitle className="text-base font-semibold">Proposed services</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Make the scope and pricing easy for the client to review before approving.
+                </p>
+              </div>
               {quote.status === "draft" && (
                 <Button
                   size="icon"
@@ -456,7 +499,7 @@ export default function QuoteDetailPage() {
                 </Button>
               )}
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="space-y-4 p-0">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/40">
@@ -549,12 +592,19 @@ export default function QuoteDetailPage() {
                         </tr>
                       ) : (
                         <tr key={node.id} className="border-b last:border-0">
-                          <td className="px-4 py-2">{node.description}</td>
+                          <td className="px-4 py-3">
+                            <div className="space-y-1">
+                              <div className="font-medium text-foreground">{node.description}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {node.taxable ? "Taxable line item" : "Non-taxable line item"}
+                              </div>
+                            </div>
+                          </td>
                           <td className="text-right px-4 py-2">{node.quantity}</td>
                           <td className="text-right px-4 py-2">
                             {formatCurrency(node.unitPrice)}
                           </td>
-                          <td className="text-right px-4 py-2">
+                          <td className="text-right px-4 py-2 font-semibold">
                             {formatCurrency(node.total)}
                           </td>
                           <td className="px-2 py-2">
@@ -630,17 +680,20 @@ export default function QuoteDetailPage() {
                   </tr>
                 </tfoot>
               </table>
+              <div className="px-4 pb-4 text-xs text-muted-foreground">
+                {totalLineItems} line item{totalLineItems === 1 ? "" : "s"} total
+              </div>
             </CardContent>
           </Card>
 
           {/* Notes Card */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Notes</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Client notes</CardTitle>
             </CardHeader>
             <CardContent>
               {quote.notes ? (
-                <p className="text-sm whitespace-pre-wrap">{quote.notes}</p>
+                <p className="whitespace-pre-wrap text-sm leading-6">{quote.notes}</p>
               ) : (
                 <p className="text-sm text-muted-foreground italic">No notes</p>
               )}
@@ -709,7 +762,47 @@ export default function QuoteDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Quote Details Card */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-semibold">Approval flow</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {quote.status === "accepted" ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
+                  <div className="flex items-center gap-2 font-medium">
+                    <Check className="h-4 w-4" />
+                    Approved by the client
+                  </div>
+                  <p className="mt-1 text-sm text-emerald-700">
+                    {quote.acceptedAt ? `Accepted on ${formatDate(quote.acceptedAt)}.` : "Accepted and ready for scheduling or billing."}
+                  </p>
+                </div>
+              ) : quote.status === "declined" ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
+                  <div className="flex items-center gap-2 font-medium">
+                    <X className="h-4 w-4" />
+                    Declined by the client
+                  </div>
+                  <p className="mt-1 text-sm text-red-700">
+                    Review and revise if you want to re-open the sale.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+                  <div className="flex items-center gap-2 font-medium">
+                    <Send className="h-4 w-4" />
+                    Waiting on client approval
+                  </div>
+                  <p className="mt-1 text-sm text-amber-700">
+                    {quote.sentAt
+                      ? `Last sent ${formatDate(quote.sentAt)}. Follow up before the estimate goes stale.`
+                      : "Send this quote once the scope and pricing are locked."}
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -764,12 +857,11 @@ export default function QuoteDetailPage() {
             fetching={activityFetching}
           />
 
-          {/* Actions Card */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
                 <DollarSign className="h-4 w-4" />
-                Actions
+                Next actions
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">

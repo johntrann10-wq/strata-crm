@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router";
-import { User, Car, FileText, CalendarClock, Receipt, ClipboardList } from "lucide-react";
+import { User, Car, FileText, CalendarClock, Receipt, ClipboardList, ArrowUpRight } from "lucide-react";
 
 export interface RelatedRecord {
   type: "client" | "vehicle" | "invoice" | "appointment" | "job" | "quote";
@@ -67,29 +67,36 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
   }
 
   return (
-    <div>
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-        Related
-      </p>
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+    <div className="rounded-2xl border border-border/70 bg-card/95 p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Related Records
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Jump across work, billing, and client history without losing context.
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
         {records.map((record) => {
           const { icon: Icon, colorClass } = typeConfig[record.type];
           return (
             <div
               key={`${record.type}-${record.id}`}
-              className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm shrink-0"
+              className="flex min-w-[240px] items-center gap-3 rounded-xl border border-border/70 bg-background/95 px-3 py-3 text-sm shadow-sm shrink-0"
             >
               <Link
                 to={withReturn(record.href)}
-                className="flex min-w-0 flex-1 items-center gap-2 no-underline transition-colors hover:text-foreground/90"
+                className="flex min-w-0 flex-1 items-center gap-3 no-underline transition-colors hover:text-foreground/90"
               >
-                <span className={`flex items-center justify-center rounded-md p-1 ${colorClass}`}>
-                  <Icon className="h-3.5 w-3.5" />
+                <span className={`flex items-center justify-center rounded-lg p-2 ${colorClass}`}>
+                  <Icon className="h-4 w-4" />
                 </span>
                 <span className="flex min-w-0 flex-col">
                   <span className="font-medium leading-none">{record.label}</span>
                   {record.sublabel && (
-                    <span className="mt-0.5 text-xs leading-none text-muted-foreground">
+                    <span className="mt-1 text-xs leading-tight text-muted-foreground">
                       {record.sublabel}
                     </span>
                   )}
@@ -104,9 +111,10 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
               {record.actionHref && record.actionLabel ? (
                 <Link
                   to={withReturn(record.actionHref)}
-                  className="rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="inline-flex items-center gap-1 rounded-lg border border-border/70 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   {record.actionLabel}
+                  <ArrowUpRight className="h-3 w-3" />
                 </Link>
               ) : null}
             </div>

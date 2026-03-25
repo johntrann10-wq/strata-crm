@@ -26,7 +26,7 @@ export function QuickCreateMenu() {
   const location = useLocation();
   const navigate = useNavigate();
   const { setOpen } = useCommandPalette();
-  const [shortcut, setShortcut] = useState("⌘K");
+  const [shortcut, setShortcut] = useState("Cmd K");
 
   useEffect(() => {
     if (!navigator.platform.includes("Mac")) {
@@ -41,15 +41,9 @@ export function QuickCreateMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="default"
-          size="sm"
-          className={cn(
-            "gap-2 h-8 px-3 bg-orange-500 hover:bg-orange-500/90 text-white border-0 shadow-none text-[13px] font-medium"
-          )}
-        >
+        <Button variant="default" size="sm" className={cn("h-9 gap-2 px-3.5 text-[13px]")}>
           <Plus className="h-3.5 w-3.5" />
-          New
+          Quick create
           <ChevronDown className="h-3.5 w-3.5 text-white/70" />
         </Button>
       </DropdownMenuTrigger>

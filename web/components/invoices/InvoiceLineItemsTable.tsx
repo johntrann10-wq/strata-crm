@@ -81,8 +81,13 @@ export function InvoiceLineItemsTable({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Line Items</CardTitle>
+      <CardHeader className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <CardTitle className="text-base font-semibold">Line Items</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Keep invoice scope, pricing, and balance details easy to confirm before collection.
+          </p>
+        </div>
         {canEditLineItems ? (
           <Button variant="outline" size="sm" onClick={onAddClick}>
             <Plus className="h-4 w-4 mr-1" />
@@ -93,7 +98,7 @@ export function InvoiceLineItemsTable({
         )}
       </CardHeader>
 
-      <CardContent className="p-0">
+      <CardContent className="space-y-4 p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -189,13 +194,20 @@ export function InvoiceLineItemsTable({
                   </TableRow>
                 ) : (
                   <TableRow key={item.id}>
-                    <TableCell className="pl-6">{item.description}</TableCell>
+                    <TableCell className="pl-6">
+                      <div className="space-y-1">
+                        <div className="font-medium text-foreground">{item.description}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatCurrency(item.unitPrice)} each
+                        </div>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right">{item.quantity}</TableCell>
                     <TableCell className="text-right">
                       {formatCurrency(item.unitPrice)}
                     </TableCell>
-                    <TableCell className="text-right pr-6">
-                      {formatCurrency(item.total)}
+                    <TableCell className="pr-6 text-right">
+                      <div className="font-semibold text-foreground">{formatCurrency(item.total)}</div>
                     </TableCell>
                     <TableCell>
                       {canEditLineItems && (
@@ -226,10 +238,34 @@ export function InvoiceLineItemsTable({
             )}
           </TableBody>
         </Table>
+
+        <div className="px-6 pb-1 text-xs text-muted-foreground">
+          {lineItems.length > 0
+            ? `${lineItems.length} line item${lineItems.length === 1 ? "" : "s"} on this invoice`
+            : "Add services or charges to build this invoice"}
+        </div>
       </CardContent>
 
-      <CardFooter className="flex justify-end pt-4 pb-4">
-        <div className="w-full max-w-xs space-y-2">
+      <CardFooter className="flex justify-end border-t border-border/70 bg-muted/20 px-6 py-5">
+        <div className="w-full max-w-sm rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Invoice totals
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Confirm charges and balance before recording payment.
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Total
+              </p>
+              <p className="text-xl font-semibold text-foreground">{formatCurrency(total)}</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Subtotal</span>
             <span>{formatCurrency(subtotal)}</span>
@@ -276,6 +312,7 @@ export function InvoiceLineItemsTable({
               </div>
             </>
           )}
+          </div>
         </div>
       </CardFooter>
     </Card>

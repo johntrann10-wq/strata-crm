@@ -40,7 +40,7 @@ export default function ClientsPage() {
   const isRefetching = fetchingClients && !!clients;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Clients"
         right={

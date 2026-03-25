@@ -23,6 +23,7 @@ import { QuickBookSheet } from "../components/shared/QuickBookSheet";
 import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EmptyState } from "../components/shared/EmptyState";
+import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 
 type AppointmentStatusTab = "all" | "scheduled" | "confirmed" | "in_progress" | "completed" | "cancelled";
 type AppointmentView = AppointmentStatusTab | "mine";
@@ -180,7 +181,7 @@ export default function AppointmentsPage() {
   }, [records, myStaffRecord]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 p-3 sm:p-4 md:p-6">
+    <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Appointments"
         subtitle="Run the schedule clearly, move work forward fast, and keep status changes close to the list."
@@ -205,19 +206,6 @@ export default function AppointmentsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="relative w-full lg:w-auto">
-              {appointmentsFetching && records.length > 0 ? (
-                <Loader2 className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-              ) : (
-                <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              )}
-              <Input
-                placeholder="Search appointments, clients, vehicles, or techs..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="w-full pl-8 lg:w-72"
-              />
-            </div>
             <Button variant="outline" onClick={() => setQuickBookOpen(true)} className="w-full lg:w-auto">
               <Zap className="mr-2 h-4 w-4" />
               Quick Book
@@ -230,6 +218,33 @@ export default function AppointmentsPage() {
             </Button>
           </div>
         }
+      />
+
+      <ListViewToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search appointments, clients, vehicles, or techs..."
+        loading={appointmentsFetching && records.length > 0}
+        resultCount={filteredAppointments.length}
+        noun="appointments"
+        filtersLabel={
+          [
+            activeTab !== "all" ? `View: ${activeTab === "mine" ? "my queue" : activeTab}` : null,
+            activeLocationId !== "all"
+              ? `Location: ${locationRecords.find((record) => record.id === activeLocationId)?.name ?? "Selected"}`
+              : null,
+            debouncedSearch ? `Search: ${debouncedSearch}` : null,
+          ]
+            .filter(Boolean)
+            .join(" • ") || null
+        }
+        onClear={() => {
+          setSearch("");
+          setDebouncedSearch("");
+          setActiveTab("all");
+          setActiveLocationId("all");
+          setCurrentLocationId(null);
+        }}
       />
 
       <QuickBookSheet

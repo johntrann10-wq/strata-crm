@@ -15,6 +15,7 @@ import { useAction } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 
 const FILTER_TABS = ["all", "overdue", "stale", "draft", "sent", "paid", "partial", "void"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
@@ -180,7 +181,7 @@ export default function InvoicesIndexPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-6">
+    <div className="page-content page-section max-w-6xl">
       <PageHeader
         title={
           <span className="flex items-center gap-2">
@@ -190,28 +191,35 @@ export default function InvoicesIndexPage() {
         }
         subtitle="Manage billing, search invoice history fast, and stay on top of cash flow."
         right={
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              {isRefetching ? (
-                <Loader2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-              ) : (
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              )}
-              <Input
-                placeholder="Search invoice #, client, or vehicle..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="w-72 pl-9"
-              />
-            </div>
-            <Button asChild>
-              <Link to={linkWithQueueState("/invoices/new")}>
-                <PlusCircle className="mr-2 h-4 w-4" />
-                New Invoice
-              </Link>
-            </Button>
-          </div>
+          <Button asChild>
+            <Link to={linkWithQueueState("/invoices/new")}>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              New Invoice
+            </Link>
+          </Button>
         }
+      />
+
+      <ListViewToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search invoice #, client, or vehicle..."
+        loading={isRefetching}
+        resultCount={displayedInvoices.length}
+        noun="invoices"
+        filtersLabel={
+          [
+            activeTab !== "all" ? `View: ${activeTab}` : null,
+            debouncedSearch ? `Search: ${debouncedSearch}` : null,
+          ]
+            .filter(Boolean)
+            .join(" • ") || null
+        }
+        onClear={() => {
+          setSearch("");
+          setDebouncedSearch("");
+          setActiveTab("all");
+        }}
       />
 
       {pageError && !isLoading ? (

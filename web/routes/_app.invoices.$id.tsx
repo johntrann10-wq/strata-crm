@@ -59,6 +59,7 @@ import {
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
@@ -67,6 +68,7 @@ import { InvoiceLineItemsTable } from "../components/invoices/InvoiceLineItemsTa
 import { CommunicationCard } from "../components/shared/CommunicationCard";
 import { ActivityFeedCard } from "../components/shared/ActivityFeedCard";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
+import { PageHeader } from "../components/shared/PageHeader";
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700 border-gray-200",
@@ -576,14 +578,125 @@ export default function InvoiceDetailPage() {
   return (
     <div className="container mx-auto max-w-5xl space-y-5 px-3 py-4 sm:p-6">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to invoices queue" /> : null}
-      {/* Back link */}
-      <Link
-        to={returnTo}
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to Invoices
-      </Link>
+      <PageHeader
+        backTo={returnTo}
+        title={`Invoice ${invoiceLabel}`}
+        badge={
+          <Badge
+            variant="outline"
+            className={STATUS_STYLES[status] ?? STATUS_STYLES["draft"]}
+          >
+            {capitalize(status)}
+          </Badge>
+        }
+        subtitle={
+          clientData
+            ? `${clientData.firstName} ${clientData.lastName} - ${formatCurrency(invoice.total)} total`
+            : `${formatCurrency(invoice.total)} total`
+        }
+        right={
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+            {status !== "void" && (
+              <Button onClick={() => window.print()} variant="ghost" size="sm" className="w-full sm:w-auto">
+                <Printer className="h-4 w-4 mr-2" />
+                Print
+              </Button>
+            )}
+            {(status === "draft" || status === "sent" || status === "partial") && (
+              <Button
+                onClick={() => void handleMarkAsSent()}
+                disabled={sendingToClient}
+                variant="outline"
+                size="sm"
+                className="w-full sm:w-auto"
+              >
+                {sendingToClient ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Mark as sent
+              </Button>
+            )}
+            {invoiceAllowsPayment(status) && canWritePayments && (
+              <Button onClick={handleOpenPaymentDialog} size="sm" className="w-full sm:w-auto">
+                <CreditCard className="h-4 w-4 mr-2" />
+                Record Payment
+              </Button>
+            )}
+            {status !== "void" && status !== "paid" && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button disabled={voidingInvoice} variant="destructive" size="sm" className="w-full sm:w-auto">
+                    {voidingInvoice ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Ban className="h-4 w-4 mr-2" />
+                    )}
+                    Void
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Void Invoice?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This cannot be undone. The invoice will be permanently voided.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={handleVoid}
+                    >
+                      Void
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+        }
+      />
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <Card className="border-border/70">
+          <CardContent className="space-y-1 p-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Balance due</p>
+            <p className={cn("text-2xl font-semibold", remainingBalance > 0 ? "text-foreground" : "text-emerald-700")}>
+              {formatCurrency(remainingBalance)}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {remainingBalance > 0 ? "Outstanding amount to collect" : "Fully collected"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/70">
+          <CardContent className="space-y-1 p-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Invoice total</p>
+            <p className="text-2xl font-semibold">{formatCurrency(invoice.total)}</p>
+            <p className="text-sm text-muted-foreground">Subtotal, tax, and discount already included</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/70">
+          <CardContent className="space-y-1 p-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Due date</p>
+            <p className="text-lg font-semibold">{invoice.dueDate ? formatDate(invoice.dueDate) : "No due date"}</p>
+            <p className={cn("text-sm", isOverdue ? "text-red-700" : "text-muted-foreground")}>
+              {isOverdue ? "Past due and needs collection follow-up" : invoice.paidAt ? `Paid ${formatDate(invoice.paidAt)}` : "Track payment timing here"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/70">
+          <CardContent className="space-y-1 p-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Client</p>
+            <p className="truncate text-lg font-semibold">
+              {clientData ? `${clientData.firstName} ${clientData.lastName}` : "No client"}
+            </p>
+            <p className="truncate text-sm text-muted-foreground">{clientData?.email || clientData?.phone || "No direct contact on file"}</p>
+          </CardContent>
+        </Card>
+      </div>
 
       <ContextualNextStep
         entityType="invoice"
@@ -593,87 +706,6 @@ export default function InvoiceDetailPage() {
       />
 
       <RelatedRecordsPanel records={relatedRecords} loading={fetching} />
-
-      {/* Invoice Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight">Invoice {invoiceLabel}</h1>
-            <Badge
-              variant="outline"
-              className={STATUS_STYLES[status] ?? STATUS_STYLES["draft"]}
-            >
-              {capitalize(status)}
-            </Badge>
-          </div>
-          {clientData && (
-            <p className="text-muted-foreground">
-              {clientData.firstName} {clientData.lastName}
-            </p>
-          )}
-        </div>
-        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-          {status !== "void" && (
-            <Button onClick={() => window.print()} variant="ghost" size="sm" className="w-full sm:w-auto">
-              <Printer className="h-4 w-4 mr-2" />
-              Print
-            </Button>
-          )}
-          {(status === "draft" || status === "sent" || status === "partial") && (
-            <Button
-              onClick={() => void handleMarkAsSent()}
-              disabled={sendingToClient}
-              variant="outline"
-              size="sm"
-              className="w-full sm:w-auto"
-            >
-              {sendingToClient ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4 mr-2" />
-              )}
-              Mark as sent
-            </Button>
-          )}
-          {invoiceAllowsPayment(status) && canWritePayments && (
-            <Button onClick={handleOpenPaymentDialog} size="sm" className="w-full sm:w-auto">
-              <CreditCard className="h-4 w-4 mr-2" />
-              Record Payment
-            </Button>
-          )}
-          {status !== "void" && status !== "paid" && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button disabled={voidingInvoice} variant="destructive" size="sm" className="w-full sm:w-auto">
-                  {voidingInvoice ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Ban className="h-4 w-4 mr-2" />
-                  )}
-                  Void
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Void Invoice?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This cannot be undone. The invoice will be permanently voided.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    onClick={handleVoid}
-                  >
-                    Void
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </div>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}

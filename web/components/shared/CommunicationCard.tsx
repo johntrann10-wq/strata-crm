@@ -3,6 +3,7 @@ import { Mail, Loader2, SendHorizonal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -53,6 +54,20 @@ function formatDeliveryStatus(status: string | undefined) {
   }
 }
 
+function deliveryTone(status: string | undefined) {
+  switch (status) {
+    case "emailed":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "smtp_disabled":
+      return "border-slate-200 bg-slate-50 text-slate-700";
+    case "missing_email":
+    case "email_failed":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-700";
+  }
+}
+
 export function CommunicationCard({
   title,
   recipient,
@@ -92,29 +107,45 @@ export function CommunicationCard({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold">{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-1 text-sm">
-          <div className="flex items-center gap-2 text-muted-foreground">
+        <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Mail className="h-4 w-4" />
             <span>{recipient?.trim() || "No client email on file"}</span>
           </div>
-          {latestPrimary ? (
-            <p className="text-muted-foreground">
-              Last send: {formatWhen(latestPrimary.createdAt)} | {formatDeliveryStatus(latestPrimaryMeta.deliveryStatus)}
-            </p>
-          ) : (
-            <p className="text-muted-foreground">No communication recorded yet.</p>
-          )}
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-border/70 bg-background px-3 py-2.5">
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Last send
+              </p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                {latestPrimary ? formatWhen(latestPrimary.createdAt) : "Not sent yet"}
+              </p>
+              <div className="mt-2">
+                <Badge className={deliveryTone(latestPrimaryMeta.deliveryStatus)}>
+                  {formatDeliveryStatus(latestPrimaryMeta.deliveryStatus)}
+                </Badge>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border/70 bg-background px-3 py-2.5">
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Last follow-up
+              </p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                {latestFollowUp ? formatWhen(latestFollowUp.createdAt) : "No follow-up yet"}
+              </p>
+              <div className="mt-2">
+                <Badge className={deliveryTone(latestFollowUpMeta.deliveryStatus)}>
+                  {latestFollowUp ? formatDeliveryStatus(latestFollowUpMeta.deliveryStatus) : "Waiting"}
+                </Badge>
+              </div>
+            </div>
+          </div>
           {latestPrimaryMeta.deliveryError ? (
-            <p className="text-destructive">{latestPrimaryMeta.deliveryError}</p>
-          ) : null}
-          {latestFollowUp ? (
-            <p className="text-muted-foreground">
-              Last follow-up: {formatWhen(latestFollowUp.createdAt)} | {formatDeliveryStatus(latestFollowUpMeta.deliveryStatus)}
-            </p>
+            <p className="mt-3 text-sm text-destructive">{latestPrimaryMeta.deliveryError}</p>
           ) : null}
         </div>
 
@@ -130,7 +161,7 @@ export function CommunicationCard({
                 placeholder="Optional context to include with the message..."
               />
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button onClick={() => void handlePrimary()} disabled={sending}>
                 {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SendHorizonal className="mr-2 h-4 w-4" />}
                 {primaryLabel}

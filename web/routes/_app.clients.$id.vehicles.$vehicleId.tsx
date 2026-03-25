@@ -1,29 +1,6 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link, useOutletContext } from "react-router";
-import { useFindOne, useFindMany, useAction } from "../hooks/useApi";
-import { api } from "../api";
-import type { AuthOutletContext } from "./_app";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useOutletContext, useParams } from "react-router";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
-import { ContextualNextStep } from "../components/shared/ContextualNextStep";
-import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
-import { usePageContext } from "../components/shared/CommandPaletteContext";
 import {
   ArrowLeft,
   CalendarPlus,
@@ -36,6 +13,30 @@ import {
   Plus,
   Receipt,
 } from "lucide-react";
+import { api } from "../api";
+import { useAction, useFindMany, useFindOne } from "../hooks/useApi";
+import type { AuthOutletContext } from "./_app";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { PageHeader } from "../components/shared/PageHeader";
+import { ContextualNextStep } from "../components/shared/ContextualNextStep";
+import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
+import { usePageContext } from "../components/shared/CommandPaletteContext";
 
 function formatCurrency(amount: number | string | null | undefined): string {
   const value = Number(amount ?? 0);
@@ -254,7 +255,6 @@ export default function VehicleDetailPage() {
   const clientName = (vehicle as any)?.client
     ? `${(vehicle as any).client.firstName} ${(vehicle as any).client.lastName}`.trim()
     : "Client";
-
   const pageTitle =
     (vehicle as any)?.year && (vehicle as any)?.make && (vehicle as any)?.model
       ? `${(vehicle as any).year} ${(vehicle as any).make} ${(vehicle as any).model}`
@@ -285,7 +285,7 @@ export default function VehicleDetailPage() {
           formatFreshness((quote as any).followUpSentAt ?? null, "Followed up"),
         ]
           .filter(Boolean)
-          .join(" · ") || formatCurrency((quote as any).total),
+          .join(" - ") || formatCurrency((quote as any).total),
       status: (quote as any).status ?? undefined,
       href: `/quotes/${(quote as any).id}`,
       actionHref:
@@ -305,7 +305,7 @@ export default function VehicleDetailPage() {
           formatFreshness((invoice as any).lastPaidAt ?? null, "Paid"),
         ]
           .filter(Boolean)
-          .join(" · ") || formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
+          .join(" - ") || formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
       status: (invoice as any).status ?? undefined,
       href: `/invoices/${(invoice as any).id}`,
       actionHref: ["sent", "partial"].includes(String((invoice as any).status ?? ""))
@@ -353,301 +353,324 @@ export default function VehicleDetailPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-5xl space-y-5 px-3 py-4 sm:px-4 sm:py-6">
-      <div className="flex flex-col gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-        <Button variant="ghost" size="sm" asChild>
-          <Link to={`/clients/${id}`}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to {clientName}
-          </Link>
-        </Button>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold">{pageTitle}</h1>
-          <span className="text-sm text-muted-foreground">{clientName}</span>
-        </div>
-        </div>
-        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
-        <Button asChild size="sm" className="w-full sm:w-auto">
-          <Link to={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}`}>
-            <CalendarPlus className="h-4 w-4 mr-2" />
-            Book Job
-          </Link>
-        </Button>
-        <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-          <Link to={`/quotes/new?clientId=${id}&vehicleId=${vehicleId}`}>
-            <Receipt className="h-4 w-4 mr-2" />
-            New Quote
-          </Link>
-        </Button>
-        <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-          <Link to={`/invoices/new?clientId=${id}&vehicleId=${vehicleId}`}>
-            <FileText className="h-4 w-4 mr-2" />
-            New Invoice
-          </Link>
-        </Button>
-        </div>
-      </div>
+    <div className="page-content">
+      <div className="page-section space-y-6">
+        <PageHeader
+          backTo={`/clients/${id}`}
+          title={pageTitle}
+          subtitle={clientName}
+          badge={<Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">Vehicle Record</Badge>}
+          actions={
+            <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+              <Button asChild size="sm" className="w-full sm:w-auto">
+                <Link to={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}`}>
+                  <CalendarPlus className="h-4 w-4 mr-2" />
+                  Book Job
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
+                <Link to={`/quotes/new?clientId=${id}&vehicleId=${vehicleId}`}>
+                  <Receipt className="h-4 w-4 mr-2" />
+                  New Quote
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
+                <Link to={`/invoices/new?clientId=${id}&vehicleId=${vehicleId}`}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  New Invoice
+                </Link>
+              </Button>
+            </div>
+          }
+        />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <QuickVehicleAction
-          icon={CalendarPlus}
-          title="Book appointment"
-          detail="Schedule the next visit for this vehicle"
-          href={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}`}
-        />
-        <QuickVehicleAction
-          icon={Receipt}
-          title="Create quote"
-          detail="Build an estimate tied to this vehicle"
-          href={`/quotes/new?clientId=${id}&vehicleId=${vehicleId}`}
-        />
-        <QuickVehicleAction
-          icon={FileText}
-          title="Create invoice"
-          detail="Bill this vehicle directly"
-          href={`/invoices/new?clientId=${id}&vehicleId=${vehicleId}`}
-        />
-        <QuickVehicleAction
-          icon={Plus}
-          title="Add another vehicle"
-          detail="Capture another unit for this client"
-          href={`/clients/${id}/vehicles/new?next=client`}
-        />
-      </div>
-
-      {(overdueInvoices.length > 0 || agingQuotes.length > 0) && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {overdueInvoices.length > 0 ? (
-            <VehicleRevenueCard
-              tone="danger"
-              title="Overdue invoices on this vehicle"
-              detail={`${overdueInvoices.length} invoice${overdueInvoices.length === 1 ? "" : "s"} need collection`}
-              amount={formatCurrency(
-                overdueInvoices.reduce(
-                  (sum, invoice) => sum + invoiceBalance(invoice as Record<string, unknown>),
-                  0
-                )
-              )}
-              href={`/invoices/${(overdueInvoices[0] as any).id}`}
-              actionLabel="Open overdue invoice"
-            />
-          ) : null}
-          {agingQuotes.length > 0 ? (
-            <VehicleRevenueCard
-              tone="warn"
-              title="Quotes are cooling off"
-              detail={`${agingQuotes.length} quote${agingQuotes.length === 1 ? "" : "s"} older than 3 days`}
-              amount={formatCurrency(agingQuotes.reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0))}
-              href={`/quotes/${(agingQuotes[0] as any).id}`}
-              actionLabel="Open aging quote"
-            />
-          ) : null}
-        </div>
-      )}
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <VehicleMetricCard
-          icon={ClipboardList}
-          label="Active jobs"
-          value={String(activeJobs.length)}
-          detail={activeJobs.length > 0 ? "Running on this vehicle" : "No active jobs"}
-        />
-        <VehicleMetricCard
-          icon={Receipt}
-          label="Open quotes"
-          value={formatCurrency(openQuotes.reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0))}
-          detail={`${openQuotes.length} awaiting action`}
-        />
-        <VehicleMetricCard
-          icon={FileText}
-          label="Unpaid invoices"
-          value={formatCurrency(
-            unpaidInvoices.reduce(
-              (sum, invoice) => sum + invoiceBalance(invoice as Record<string, unknown>),
-              0
-            )
-          )}
-          detail={`${unpaidInvoices.length} awaiting payment`}
-        />
-      </div>
-
-      {(appointmentsError || quotesError || invoicesError || jobsError) && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          Could not load full vehicle workflow history.
-        </div>
-      )}
-
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="space-y-6">
-          <ContextualNextStep
-            entityType="client"
-            status={null}
-            data={{
-              id: id,
-              lastAppointmentDate: appointmentList[0] ? (appointmentList[0] as any).startTime : null,
-            }}
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <VehicleMetricCard
+            icon={ClipboardList}
+            label="Active jobs"
+            value={String(activeJobs.length)}
+            detail={activeJobs.length > 0 ? "Running on this vehicle" : "No active jobs"}
           />
-
-          <RelatedRecordsPanel
-            records={relatedRecords}
-            loading={appointmentsFetching || quotesFetching || invoicesFetching || jobsFetching}
+          <VehicleMetricCard
+            icon={Receipt}
+            label="Open quotes"
+            value={formatCurrency(openQuotes.reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0))}
+            detail={`${openQuotes.length} awaiting action`}
           />
+          <VehicleMetricCard
+            icon={FileText}
+            label="Unpaid invoices"
+            value={formatCurrency(
+              unpaidInvoices.reduce(
+                (sum, invoice) => sum + invoiceBalance(invoice as Record<string, unknown>),
+                0
+              )
+            )}
+            detail={`${unpaidInvoices.length} awaiting payment`}
+          />
+          <VehicleMetricCard
+            icon={CalendarPlus}
+            label="Appointments"
+            value={String(appointmentList.length)}
+            detail={appointmentList.length > 0 ? "Visits on this vehicle" : "No visits yet"}
+          />
+        </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Vehicle workflow history</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {relatedRecords.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No workflow history yet for this vehicle.</p>
-              ) : (
-                relatedRecords.map((record) => (
-                  <Link
-                    key={`${record.type}-${record.id}`}
-                    to={record.href}
-                    className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/40"
+        {(overdueInvoices.length > 0 || agingQuotes.length > 0) ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {overdueInvoices.length > 0 ? (
+              <VehicleRevenueCard
+                tone="danger"
+                title="Overdue invoices on this vehicle"
+                detail={`${overdueInvoices.length} invoice${overdueInvoices.length === 1 ? "" : "s"} need collection`}
+                amount={formatCurrency(
+                  overdueInvoices.reduce(
+                    (sum, invoice) => sum + invoiceBalance(invoice as Record<string, unknown>),
+                    0
+                  )
+                )}
+                href={`/invoices/${(overdueInvoices[0] as any).id}`}
+                actionLabel="Open overdue invoice"
+              />
+            ) : null}
+            {agingQuotes.length > 0 ? (
+              <VehicleRevenueCard
+                tone="warn"
+                title="Quotes are cooling off"
+                detail={`${agingQuotes.length} quote${agingQuotes.length === 1 ? "" : "s"} older than 3 days`}
+                amount={formatCurrency(agingQuotes.reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0))}
+                href={`/quotes/${(agingQuotes[0] as any).id}`}
+                actionLabel="Open aging quote"
+              />
+            ) : null}
+          </div>
+        ) : null}
+
+        {(appointmentsError || quotesError || invoicesError || jobsError) ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            Could not load full vehicle workflow history.
+          </div>
+        ) : null}
+
+        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+          <div className="space-y-6">
+            <Card className="border-border/70 shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle>Vehicle Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <SummaryField label="Owner" value={clientName} />
+                  <SummaryField label="License Plate" value={licensePlate || "Not provided"} />
+                  <SummaryField label="VIN" value={vin || "Not provided"} />
+                  <SummaryField label="Mileage" value={mileage ? `${mileage} mi` : "Not provided"} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="vin">VIN</Label>
+                  <Input
+                    id="vin"
+                    value={vin}
+                    onChange={(e) => setVin(e.target.value)}
+                    placeholder="Vehicle Identification Number (optional)"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="year">Year</Label>
+                    <Input id="year" type="number" value={year} onChange={(e) => setYear(e.target.value)} placeholder="2022" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="make">Make</Label>
+                    <Input id="make" value={make} onChange={(e) => setMake(e.target.value)} placeholder="Toyota" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="model">Model</Label>
+                    <Input id="model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Camry" />
+                  </div>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    className="mb-4 flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setShowMoreDetails((v) => !v)}
                   >
-                    <div className="min-w-0">
-                      <p className="font-medium">{record.label}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {record.sublabel ?? record.type}
-                      </p>
-                    </div>
-                    {record.status ? (
-                      <Badge className={statusClass(record.status)}>{record.status}</Badge>
-                    ) : null}
-                  </Link>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                    {showMoreDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    More details
+                  </button>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Vehicle Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="vin">VIN</Label>
-                <Input
-                  id="vin"
-                  value={vin}
-                  onChange={(e) => setVin(e.target.value)}
-                  placeholder="Vehicle Identification Number (optional)"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="year">Year</Label>
-                  <Input id="year" type="number" value={year} onChange={(e) => setYear(e.target.value)} placeholder="2022" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="make">Make</Label>
-                  <Input id="make" value={make} onChange={(e) => setMake(e.target.value)} placeholder="Toyota" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="model">Model</Label>
-                  <Input id="model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Camry" />
-                </div>
-              </div>
-
-              <div>
-                <button
-                  type="button"
-                  className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors mb-4"
-                  onClick={() => setShowMoreDetails((v) => !v)}
-                >
-                  {showMoreDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  More Details
-                </button>
-
-                {showMoreDetails && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="color">Color</Label>
-                        <Input id="color" value={color} onChange={(e) => setColor(e.target.value)} placeholder="Black" />
+                  {showMoreDetails ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="color">Color</Label>
+                          <Input id="color" value={color} onChange={(e) => setColor(e.target.value)} placeholder="Black" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="licensePlate">License Plate</Label>
+                          <Input
+                            id="licensePlate"
+                            value={licensePlate}
+                            onChange={(e) => setLicensePlate(e.target.value)}
+                            placeholder="ABC-1234"
+                          />
+                        </div>
                       </div>
+
                       <div className="space-y-2">
-                        <Label htmlFor="licensePlate">License Plate</Label>
-                        <Input
-                          id="licensePlate"
-                          value={licensePlate}
-                          onChange={(e) => setLicensePlate(e.target.value)}
-                          placeholder="ABC-1234"
+                        <Label htmlFor="mileage">Mileage</Label>
+                        <Input id="mileage" type="number" value={mileage} onChange={(e) => setMileage(e.target.value)} placeholder="35000" />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="notes">Notes</Label>
+                        <Textarea
+                          id="notes"
+                          value={notes}
+                          onChange={(e) => setNotes(e.target.value)}
+                          placeholder="Additional notes about this vehicle..."
+                          rows={4}
                         />
                       </div>
                     </div>
+                  ) : null}
+                </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="mileage">Mileage</Label>
-                      <Input id="mileage" type="number" value={mileage} onChange={(e) => setMileage(e.target.value)} placeholder="35000" />
-                    </div>
+                <div className="flex justify-end gap-3">
+                  <Button type="button" variant="outline" onClick={() => navigate(`/clients/${id}`)}>
+                    Cancel
+                  </Button>
+                  <Button type="button" onClick={handleSave} disabled={updateResult.fetching || !make || !model}>
+                    {updateResult.fetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Pencil className="h-4 w-4 mr-2" />}
+                    Save Changes
+                  </Button>
+                </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="notes">Notes</Label>
-                      <Textarea
-                        id="notes"
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Additional notes about this vehicle..."
-                        rows={4}
-                      />
-                    </div>
-                  </div>
+                <Separator />
+                <div className="flex justify-start">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                    onClick={() => setShowDeleteDialog(true)}
+                  >
+                    Delete Vehicle
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <ContextualNextStep
+              entityType="client"
+              status={null}
+              data={{
+                id: id,
+                lastAppointmentDate: appointmentList[0] ? (appointmentList[0] as any).startTime : null,
+              }}
+            />
+          </div>
+
+          <div className="space-y-6">
+            <Card className="border-border/70 shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle>Vehicle Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <QuickVehicleAction
+                  icon={CalendarPlus}
+                  title="Book appointment"
+                  detail="Schedule the next visit for this vehicle"
+                  href={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}`}
+                />
+                <QuickVehicleAction
+                  icon={Receipt}
+                  title="Create quote"
+                  detail="Build an estimate tied to this vehicle"
+                  href={`/quotes/new?clientId=${id}&vehicleId=${vehicleId}`}
+                />
+                <QuickVehicleAction
+                  icon={FileText}
+                  title="Create invoice"
+                  detail="Bill this vehicle directly"
+                  href={`/invoices/new?clientId=${id}&vehicleId=${vehicleId}`}
+                />
+                <QuickVehicleAction
+                  icon={Plus}
+                  title="Add another vehicle"
+                  detail="Capture another unit for this client"
+                  href={`/clients/${id}/vehicles/new?next=client`}
+                />
+              </CardContent>
+            </Card>
+
+            <RelatedRecordsPanel
+              records={relatedRecords}
+              loading={appointmentsFetching || quotesFetching || invoicesFetching || jobsFetching}
+            />
+
+            <Card className="border-border/70 shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle>Vehicle workflow history</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {relatedRecords.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No workflow history yet for this vehicle.</p>
+                ) : (
+                  relatedRecords.map((record) => (
+                    <Link
+                      key={`${record.type}-${record.id}`}
+                      to={record.href}
+                      className="flex items-center justify-between rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/40"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium">{record.label}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {record.sublabel ?? record.type}
+                        </p>
+                      </div>
+                      {record.status ? (
+                        <Badge className={`text-xs capitalize ${statusClass(record.status)}`}>{record.status}</Badge>
+                      ) : null}
+                    </Link>
+                  ))
                 )}
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <Button type="button" variant="outline" onClick={() => navigate(`/clients/${id}`)}>
-                  Cancel
-                </Button>
-                <Button type="button" onClick={handleSave} disabled={updateResult.fetching || !make || !model}>
-                  {updateResult.fetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Pencil className="h-4 w-4 mr-2" />}
-                  Save Changes
-                </Button>
-              </div>
-
-              <Separator />
-              <div className="flex justify-start">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                  onClick={() => setShowDeleteDialog(true)}
-                >
-                  Delete Vehicle
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Vehicle?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove this vehicle. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteConfirm}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteResult.fetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Vehicle?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently remove this vehicle. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteConfirm}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleteResult.fetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </div>
+  );
+}
+
+function SummaryField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border/70 bg-background/90 px-3 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
     </div>
   );
 }
@@ -664,7 +687,7 @@ function VehicleMetricCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="rounded-2xl border border-border/70 bg-card/95 p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{label}</p>
         <Icon className="h-4 w-4 text-muted-foreground" />
@@ -689,10 +712,10 @@ function QuickVehicleAction({
   return (
     <Link
       to={href}
-      className="rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/30"
+      className="block rounded-xl border border-border/70 bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/30"
     >
       <div className="flex items-start gap-3">
-        <div className="rounded-md bg-primary/10 p-2 text-primary">
+        <div className="rounded-lg bg-primary/10 p-2 text-primary">
           <Icon className="h-4 w-4" />
         </div>
         <div className="space-y-1">
@@ -723,8 +746,9 @@ function VehicleRevenueCard({
     tone === "danger"
       ? "border-red-200 bg-red-50/80"
       : "border-amber-200 bg-amber-50/80";
+
   return (
-    <div className={`rounded-lg border p-4 ${toneClass}`}>
+    <div className={`rounded-xl border p-4 ${toneClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{title}</p>

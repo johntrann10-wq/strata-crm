@@ -1,6 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router";
-import { AlertCircle, ChevronRight, ClipboardList, Loader2, Play, Search, UserPlus } from "lucide-react";
+import {
+  AlertCircle,
+  CalendarClock,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardList,
+  Loader2,
+  MapPin,
+  Play,
+  Receipt,
+  Search,
+  UserPlus,
+  UserRound,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +28,7 @@ import type { AuthOutletContext } from "./_app";
 import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EmptyState } from "../components/shared/EmptyState";
-import { toast } from "sonner";
+import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 
 type JobStatusTab = "all" | "scheduled" | "in_progress" | "completed" | "cancelled";
 type JobView = JobStatusTab | "mine";
@@ -66,6 +80,14 @@ function matchesTab(job: JobListRecord, tab: JobStatusTab): boolean {
   if (tab === "scheduled") return ["scheduled", "confirmed"].includes(job.status);
   if (tab === "cancelled") return ["cancelled", "no-show"].includes(job.status);
   return job.status === tab;
+}
+
+function getWorkflowStage(status: string): string {
+  if (["scheduled", "confirmed"].includes(status)) return "Ready to start";
+  if (status === "in_progress") return "In service";
+  if (status === "completed") return "Ready to invoice";
+  if (["cancelled", "no-show"].includes(status)) return "Closed";
+  return "Queued";
 }
 
 export default function JobsIndexPage() {
@@ -143,10 +165,10 @@ export default function JobsIndexPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 p-3 sm:p-4 md:p-6">
+    <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Jobs"
-        subtitle="Run active work orders, assign technicians, and move work from schedule to completion."
+        subtitle="Run work orders with cleaner handoffs, technician clarity, and faster progression from arrival to invoice."
         right={
           <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center">
             <Select
@@ -168,41 +190,53 @@ export default function JobsIndexPage() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="relative w-full lg:w-80">
-              {fetching && records.length > 0 ? (
-                <Loader2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-              ) : (
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              )}
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search jobs, techs, locations, clients, vehicles..."
-                className="pl-9"
-              />
-            </div>
           </div>
         }
       />
 
+      <ListViewToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search jobs, techs, locations, clients, or vehicles..."
+        loading={fetching && records.length > 0}
+        resultCount={visibleRecords.length}
+        noun="jobs"
+        filtersLabel={
+          [
+            activeTab !== "all" ? `View: ${activeTab === "mine" ? "my queue" : activeTab}` : null,
+            activeLocationId !== "all"
+              ? `Location: ${locationRecords.find((record) => record.id === activeLocationId)?.name ?? "Selected"}`
+              : null,
+            debouncedSearch ? `Search: ${debouncedSearch}` : null,
+          ]
+            .filter(Boolean)
+            .join(" • ") || null
+        }
+        onClear={() => {
+          setSearch("");
+          setDebouncedSearch("");
+          setActiveTab("all");
+          setActiveLocationId("all");
+          setCurrentLocationId(null);
+        }}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Scheduled" value={String(stats.scheduled)} />
-        <MetricCard label="In progress" value={String(stats.inProgress)} />
-        <MetricCard label="Completed" value={String(stats.completed)} />
-        <MetricCard label="My queue" value={myStaffRecord ? String(stats.myQueue) : "-"} />
-        <MetricCard label="Open revenue" value={formatCurrency(stats.openRevenue)} />
+        <MetricCard label="Scheduled" value={String(stats.scheduled)} detail="Queued and confirmed work" />
+        <MetricCard label="In progress" value={String(stats.inProgress)} detail="Currently on the floor" />
+        <MetricCard label="Completed" value={String(stats.completed)} detail="Ready to bill or deliver" />
+        <MetricCard label="My queue" value={myStaffRecord ? String(stats.myQueue) : "-"} detail={myStaffRecord ? "Assigned to this account" : "No linked staff profile"} />
+        <MetricCard label="Open revenue" value={formatCurrency(stats.openRevenue)} detail="Value tied to active jobs" />
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as JobView)}>
         <TabsList className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-6">
           <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="mine" disabled={!myStaffRecord}>
-            My Queue
-          </TabsTrigger>
-          <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+          <TabsTrigger value="mine" disabled={!myStaffRecord}>My Queue</TabsTrigger>
+          <TabsTrigger value="scheduled">Ready</TabsTrigger>
           <TabsTrigger value="in_progress">In Progress</TabsTrigger>
-          <TabsTrigger value="completed">Completed</TabsTrigger>
-          <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
+          <TabsTrigger value="completed">Ready to Bill</TabsTrigger>
+          <TabsTrigger value="cancelled">Closed</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -238,11 +272,11 @@ export default function JobsIndexPage() {
                 ? "Link this user to a staff profile to unlock an assigned queue."
                 : activeTab === "mine"
                   ? "No jobs are assigned to this staff account right now."
-              : "Jobs appear here from scheduled appointments, so the crew always has a clean operational queue."
+                  : "Jobs appear here from scheduled appointments, so the crew always has a clean operational queue."
           }
         />
       ) : (
-        <div className={fetching ? "space-y-2 opacity-70" : "space-y-2"}>
+        <div className={fetching ? "space-y-3 opacity-70" : "space-y-3"}>
           {visibleRecords.map((job) => {
             const clientName = job.client
               ? `${job.client.firstName ?? ""} ${job.client.lastName ?? ""}`.trim()
@@ -260,38 +294,43 @@ export default function JobsIndexPage() {
 
             return (
               <Link key={job.id} to={`/jobs/${job.id}`}>
-                <Card className="transition-colors hover:bg-muted/30">
-                  <CardContent className="flex flex-col gap-4 p-4">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <StatusBadge status={job.status} type="job" />
-                        <span className="text-sm font-medium text-muted-foreground">{job.jobNumber}</span>
+                <Card className="border-border/70 shadow-sm transition-colors hover:bg-muted/25">
+                  <CardContent className="space-y-4 p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StatusBadge status={job.status} type="job" />
+                          <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                            {job.jobNumber}
+                          </span>
+                          <span className="rounded-full border border-border/70 px-2.5 py-1 text-[11px] font-medium text-foreground">
+                            {getWorkflowStage(job.status)}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="truncate text-base font-semibold">{job.title?.trim() || clientName}</p>
+                          <p className="truncate text-sm text-muted-foreground">
+                            {clientName} - {vehicleLabel}
+                          </p>
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <p className="truncate text-base font-medium">{job.title?.trim() || clientName}</p>
-                        <p className="truncate text-sm text-muted-foreground">
-                          {clientName} · {vehicleLabel}
-                        </p>
+                      <div className="grid gap-2 text-sm sm:grid-cols-2 lg:min-w-[320px] lg:text-right">
+                        <DetailChip icon={CalendarClock} label={formatDate(job.scheduledStart)} />
+                        <DetailChip icon={MapPin} label={job.location?.name ?? "No location set"} />
+                        <DetailChip icon={UserRound} label={staffName} />
+                        <DetailChip icon={Receipt} label={formatCurrency(job.totalPrice)} strong />
                       </div>
                     </div>
-                    <div className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-2 sm:gap-x-6 lg:grid-cols-4">
-                      <span>{formatDate(job.scheduledStart)}</span>
-                      <span>{job.location?.name ?? "No location set"}</span>
-                      <span>{staffName}</span>
-                      <span className="font-medium text-foreground">{formatCurrency(job.totalPrice)}</span>
-                    </div>
-                    <div
-                      className="flex flex-wrap items-center gap-2"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }}
-                    >
+
+                    <div className="flex flex-wrap items-center gap-2" onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}>
                       {myStaffRecord && !job.assignedStaff?.id ? (
                         <Button
                           variant="outline"
                           size="sm"
-                          className="min-h-[36px] px-2 text-xs"
+                          className="min-h-[36px] px-3 text-xs"
                           disabled={updatingJob}
                           onClick={(event) =>
                             void handleQuickJobUpdate(event, job.id, { assignedStaffId: myStaffRecord.id }, "Job assigned to you")
@@ -305,32 +344,33 @@ export default function JobsIndexPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="min-h-[36px] px-2 text-xs"
+                          className="min-h-[36px] px-3 text-xs"
                           disabled={updatingJob}
                           onClick={(event) =>
                             void handleQuickJobUpdate(event, job.id, { status: "in_progress" }, "Job marked in progress")
                           }
                         >
                           <Play className="mr-1 h-3 w-3" />
-                          Start
+                          Start work
                         </Button>
                       ) : null}
                       {job.status === "in_progress" ? (
                         <Button
                           variant="outline"
                           size="sm"
-                          className="min-h-[36px] px-2 text-xs"
+                          className="min-h-[36px] px-3 text-xs"
                           disabled={updatingJob}
                           onClick={(event) =>
                             void handleQuickJobUpdate(event, job.id, { status: "completed" }, "Job completed")
                           }
                         >
-                          Complete
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          Mark complete
                         </Button>
                       ) : null}
                       {invoiceHref ? (
-                        <Button asChild variant="outline" size="sm" className="min-h-[36px] px-2 text-xs">
-                          <Link to={invoiceHref}>Invoice</Link>
+                        <Button asChild variant="outline" size="sm" className="min-h-[36px] px-3 text-xs">
+                          <Link to={invoiceHref}>Create invoice</Link>
                         </Button>
                       ) : null}
                       <Button asChild variant="ghost" size="sm" className="min-h-[36px] px-2 text-xs">
@@ -349,14 +389,32 @@ export default function JobsIndexPage() {
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <Card>
+    <Card className="border-border/70 shadow-sm">
       <CardContent className="p-4">
         <p className="text-sm text-muted-foreground">{label}</p>
         <p className="mt-1 text-2xl font-semibold">{value}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function DetailChip({
+  icon: Icon,
+  label,
+  strong,
+}: {
+  icon: typeof CalendarClock;
+  label: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-background/90 px-3 py-2">
+      <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+      <span className={strong ? "text-sm font-semibold text-foreground" : "text-sm text-muted-foreground"}>{label}</span>
+    </div>
   );
 }
 
