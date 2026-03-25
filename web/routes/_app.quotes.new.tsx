@@ -314,10 +314,11 @@ export default function NewQuotePage() {
         return;
       }
 
+      let lineItemFailure: string | null = null;
       for (const item of validLineItems) {
         const qty = parseInt(item.quantity, 10) || 1;
         const price = parseFloat(item.unitPrice) || 0;
-        await runCreateLineItem({
+        const lineItemResult = await runCreateLineItem({
           quote: { _link: quoteId },
           description: item.description,
           quantity: qty,
@@ -325,6 +326,16 @@ export default function NewQuotePage() {
           total: qty * price,
           taxable: item.taxable,
         });
+        if (lineItemResult.error) {
+          lineItemFailure = lineItemResult.error.message ?? "One or more line items could not be added.";
+          break;
+        }
+      }
+
+      if (lineItemFailure) {
+        toast.error(`Quote created, but line items failed: ${lineItemFailure}`);
+        navigate(`/quotes/${quoteId}?from=${encodeURIComponent(returnTo)}`);
+        return;
       }
 
       toast.success("Quote created");
