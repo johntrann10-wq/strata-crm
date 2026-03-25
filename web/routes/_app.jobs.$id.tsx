@@ -125,6 +125,12 @@ function formatFreshness(value: string | Date | null | undefined, label: string)
   return parsed ? `${label} ${parsed.toLocaleDateString()}` : null;
 }
 
+function isOlderThanDays(value: string | Date | null | undefined, days: number): boolean {
+  const parsed = safeDate(value);
+  if (!parsed) return false;
+  return Date.now() - parsed.getTime() >= days * 24 * 60 * 60 * 1000;
+}
+
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { businessId, businessType, permissions } = useOutletContext<AuthOutletContext>();
@@ -236,6 +242,17 @@ export default function JobDetailPage() {
     [serviceCatalog, existingServiceIds]
   );
   const intakePreset = useMemo(() => getIntakePreset(businessType), [businessType]);
+  const quoteNeedsFollowUp =
+    !!record?.quote &&
+    ["sent", "accepted"].includes(String(record.quote.status ?? "")) &&
+    (!safeDate((quoteFreshness as any)?.followUpSentAt ?? null)
+      ? isOlderThanDays((quoteFreshness as any)?.sentAt ?? null, 2)
+      : isOlderThanDays((quoteFreshness as any)?.followUpSentAt ?? null, 5));
+  const invoiceNeedsFollowUp =
+    !!record?.invoice &&
+    ["sent", "partial"].includes(String(record.invoice.status ?? "")) &&
+    !safeDate((invoiceFreshness as any)?.lastPaidAt ?? null) &&
+    isOlderThanDays((invoiceFreshness as any)?.lastSentAt ?? null, 3);
   const completedServiceIds = useMemo(() => {
     const latest = new Map<string, boolean>();
     for (const record of ((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>)) {
@@ -758,6 +775,32 @@ export default function JobDetailPage() {
             </CardContent>
           </Card>
 
+          {(quoteNeedsFollowUp || invoiceNeedsFollowUp) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Action needed</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {quoteNeedsFollowUp ? (
+                  <WorkflowWarningCard
+                    title="Quote follow-up is stale"
+                    detail="This job is tied to a quote that likely needs another touch."
+                    href={record.quote ? `/quotes/${record.quote.id}` : null}
+                    actionLabel="Open quote"
+                  />
+                ) : null}
+                {invoiceNeedsFollowUp ? (
+                  <WorkflowWarningCard
+                    title="Invoice collection is stale"
+                    detail="The linked invoice has not been paid and has not been sent recently."
+                    href={record.invoice ? `/invoices/${record.invoice.id}` : null}
+                    actionLabel="Open invoice"
+                  />
+                ) : null}
+              </CardContent>
+            </Card>
+          )}
+
           <EntityCollaborationCard
             entityType="job"
             entityId={record.id}
@@ -882,6 +925,35 @@ function RelatedAction({
   }
 
   return <Link to={href}>{content}</Link>;
+}
+
+function WorkflowWarningCard({
+  title,
+  detail,
+  href,
+  actionLabel,
+}: {
+  title: string;
+  detail: string;
+  href: string | null;
+  actionLabel: string;
+}) {
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">{title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        </div>
+        <AlertCircle className="h-4 w-4 text-amber-700 shrink-0" />
+      </div>
+      {href ? (
+        <Button asChild size="sm" variant="outline" className="mt-3">
+          <Link to={href}>{actionLabel}</Link>
+        </Button>
+      ) : null}
+    </div>
+  );
 }
 
 export { RouteErrorBoundary as ErrorBoundary };

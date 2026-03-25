@@ -158,6 +158,12 @@ function formatFreshness(value: string | Date | null | undefined, label: string)
   return parsed ? `${label} ${parsed.toLocaleDateString()}` : null;
 }
 
+function isOlderThanDays(value: string | Date | null | undefined, days: number): boolean {
+  const parsed = safeDate(value);
+  if (!parsed) return false;
+  return Date.now() - parsed.getTime() >= days * 24 * 60 * 60 * 1000;
+}
+
 function JobLifecycleStepper({
   status,
   invoicedAt,
@@ -274,6 +280,35 @@ function JobLifecycleStepper({
           Step {currentStageIndex + 1} of {stages.length}
         </span>
       </div>
+    </div>
+  );
+}
+
+function WorkflowWarningCard({
+  title,
+  detail,
+  href,
+  actionLabel,
+}: {
+  title: string;
+  detail: string;
+  href: string | null;
+  actionLabel: string;
+}) {
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">{title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        </div>
+        <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0" />
+      </div>
+      {href ? (
+        <Button asChild size="sm" variant="outline" className="mt-3">
+          <Link to={href}>{actionLabel}</Link>
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -690,6 +725,16 @@ export default function AppointmentDetail() {
       : "Appointment");
 
   const isActionLoading = updatingStatus || completing || cancelling;
+  const quoteNeedsFollowUp = !!quote && ["sent", "accepted"].includes(String((quote as any).status ?? "")) && (
+    !safeDate((quote as any).followUpSentAt ?? null)
+      ? isOlderThanDays((quote as any).sentAt ?? null, 2)
+      : isOlderThanDays((quote as any).followUpSentAt ?? null, 5)
+  );
+  const invoiceNeedsFollowUp =
+    !!invoice &&
+    ["sent", "partial"].includes(String((invoice as any).status ?? "")) &&
+    !safeDate((invoice as any).lastPaidAt ?? null) &&
+    isOlderThanDays((invoice as any).lastSentAt ?? null, 3);
 
   const relatedRecords: RelatedRecord[] = [];
   if (appointment) {
@@ -937,6 +982,27 @@ export default function AppointmentDetail() {
       )}
 
       <RelatedRecordsPanel records={relatedRecords} loading={fetching} />
+
+      {(quoteNeedsFollowUp || invoiceNeedsFollowUp) && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {quoteNeedsFollowUp ? (
+            <WorkflowWarningCard
+              title="Quote follow-up is stale"
+              detail="This appointment is linked to a quote that likely needs another touch."
+              href={quote ? `/quotes/${quote.id}` : null}
+              actionLabel="Open quote"
+            />
+          ) : null}
+          {invoiceNeedsFollowUp ? (
+            <WorkflowWarningCard
+              title="Invoice collection is stale"
+              detail="The linked invoice has not been paid and has not been sent recently."
+              href={invoice ? `/invoices/${invoice.id}` : null}
+              actionLabel="Open invoice"
+            />
+          ) : null}
+        </div>
+      )}
 
       <div className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
