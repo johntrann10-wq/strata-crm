@@ -42,6 +42,7 @@ export default function VehiclesPage() {
   const returnTo = `${location.pathname}${location.search}`;
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [showMobileStats, setShowMobileStats] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -74,7 +75,7 @@ export default function VehiclesPage() {
     <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Vehicles"
-        subtitle="Search by customer, vehicle details, or plate and jump straight into the service history."
+        subtitle="Find the right vehicle fast and jump straight into its owner, history, and next step."
         badge={
           <Badge variant="secondary" className="text-sm font-medium">
             {isSearching ? `${vehicles.length} ${vehicles.length === 1 ? "result" : "results"}` : "Recent"}
@@ -83,7 +84,19 @@ export default function VehiclesPage() {
       />
 
       {!error && businessId ? (
-        <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <section className="mb-5 space-y-3">
+          <div className="mobile-support-card flex items-center justify-between gap-3 md:hidden">
+            <div>
+              <p className="text-sm font-semibold text-foreground">{vehicles.length} visible vehicles</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {isSearching ? "Search is active" : "Recent vehicles on file"}
+              </p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => setShowMobileStats((open) => !open)}>
+              {showMobileStats ? "Hide details" : "More details"}
+            </Button>
+          </div>
+          <div className={`grid gap-3 md:grid-cols-2 xl:grid-cols-4 ${showMobileStats ? "grid" : "hidden md:grid"}`}>
           <div className="surface-panel px-4 py-3 sm:px-5">
             <p className="text-sm font-medium text-muted-foreground">Visible vehicles</p>
             <div className="mt-3 flex items-end justify-between gap-3">
@@ -121,6 +134,7 @@ export default function VehiclesPage() {
               <CalendarClock className="h-5 w-5 text-primary" />
             </div>
             <p className="mt-1 text-xs text-muted-foreground">Fresh vehicle intake added this month</p>
+          </div>
           </div>
         </section>
       ) : null}
@@ -219,13 +233,13 @@ export default function VehiclesPage() {
             );
 
             return clientId ? (
-              <div key={vehicle.id} className="rounded-xl border bg-card transition-colors hover:bg-accent/40">
+              <div key={vehicle.id} className="rounded-[1.1rem] border bg-card transition-colors hover:bg-accent/40">
                 <Link to={`/clients/${clientId}/vehicles/${vehicle.id}?from=${encodeURIComponent(returnTo)}`} className="block">
                   {cardInner}
                 </Link>
               </div>
             ) : (
-              <div key={vehicle.id} className="rounded-xl border bg-card">
+              <div key={vehicle.id} className="rounded-[1.1rem] border bg-card">
                 {cardInner}
               </div>
             );

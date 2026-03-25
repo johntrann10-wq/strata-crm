@@ -42,7 +42,7 @@ export function ListViewToolbar({
       : null;
 
   return (
-    <div className={cn("surface-panel flex flex-col gap-2.5 px-4 py-3 sm:px-5", className)}>
+    <div className={cn("surface-panel flex flex-col gap-2.5 px-3.5 py-3 sm:px-5", className)}>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
         <div className="relative flex-1">
           {loading ? (
@@ -67,11 +67,11 @@ export function ListViewToolbar({
             </button>
           ) : null}
         </div>
-        {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
+        {actions ? <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap">{actions}</div> : null}
       </div>
       <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          {resultLabel ? <span className="font-medium text-foreground">{resultLabel}</span> : null}
+          {resultLabel ? <span className="rounded-full bg-muted/55 px-2.5 py-1 text-xs font-semibold text-foreground">{resultLabel}</span> : null}
           {filtersLabel ? (
             <span className="rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs">
               {filtersLabel}

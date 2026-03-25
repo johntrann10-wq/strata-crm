@@ -633,7 +633,7 @@ export default function SettingsPage() {
       <div className="page-content page-section max-w-5xl pb-28 sm:pb-8">
         <PageHeader
           title="Settings"
-          subtitle="Manage your business profile, locations, team access, starter presets, and billing."
+          subtitle="Set up your shop, team, starter services, billing, and diagnostics without digging through separate tools."
           badge={
             business?.name ? (
               <Badge variant="outline" className="hidden sm:inline-flex">
@@ -644,28 +644,28 @@ export default function SettingsPage() {
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0 sm:grid-cols-4">
+          <TabsList className="flex h-auto w-full gap-2 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-4 sm:overflow-visible">
             <TabsTrigger
               value="profile"
-              className="justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5"
+              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
             >
               Business Profile
             </TabsTrigger>
             <TabsTrigger
               value="billing"
-              className="justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5"
+              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
             >
               Billing
             </TabsTrigger>
             <TabsTrigger
               value="locations"
-              className="justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5"
+              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
             >
               Locations
             </TabsTrigger>
             <TabsTrigger
               value="team"
-              className="justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5"
+              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
             >
               Team
             </TabsTrigger>

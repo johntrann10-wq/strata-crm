@@ -281,6 +281,7 @@ function AppLayoutInner({
   const businessId = (business?.id as string) ?? null;
   const businessType = (business?.type as string) ?? null;
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
   const { setOpen } = useCommandPalette();
   const enabledModules = useMemo(
     () => getEnabledModules(businessType) as Set<string>,
@@ -400,34 +401,34 @@ function AppLayoutInner({
       {/* Main content area */}
       <div className="flex min-w-0 flex-1 flex-col md:pl-64">
         <header className="sticky top-0 z-10 w-full border-b border-border/70 bg-background/92 backdrop-blur supports-[backdrop-filter]:bg-background/86">
-          <div className="flex flex-col gap-3 px-4 py-3 md:gap-3 md:px-6">
+          <div className="flex flex-col gap-2.5 px-3 py-2.5 md:gap-3 md:px-6 md:py-3">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div className="flex min-w-0 items-start gap-3">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="mt-0.5 md:hidden"
+                    className="mt-0.5 h-9 w-9 shrink-0 md:hidden"
                   onClick={() => setMobileOpen(true)}
                   aria-label="Open navigation menu"
                 >
                   <Menu className="h-5 w-5" />
                 </Button>
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
                     <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2.5 sm:text-[11px]">
                       {activeNavEntry.section.label}
                     </span>
                   </div>
-                  <h1 className="mt-1.5 text-balance text-[22px] font-semibold tracking-tight text-foreground sm:mt-2 sm:text-[28px]">
+                  <h1 className="mt-0.5 text-balance text-[19px] font-semibold tracking-tight text-foreground sm:mt-2 sm:text-[28px]">
                     {activeNavEntry.item.label}
                   </h1>
                   <p className="mt-1 hidden max-w-3xl text-sm leading-5 text-muted-foreground sm:block">
                     {activeNavEntry.item.description}
                   </p>
                   {(businessName || activeLocationName) ? (
-                    <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                    <p className="mt-1 text-[11px] text-muted-foreground sm:text-sm">
                       {businessName ? businessName : "No business selected"}
-                      {activeLocationName ? ` Â· ${activeLocationName}` : ""}
+                      {activeLocationName ? ` · ${activeLocationName}` : ""}
                     </p>
                   ) : null}
                 </div>
@@ -455,7 +456,7 @@ function AppLayoutInner({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-row sm:flex-wrap xl:justify-end">
+                <div className="hidden grid-cols-1 gap-2 sm:flex sm:flex-row sm:flex-wrap xl:justify-end">
                   {tenantBusinesses.length > 1 ? (
                     <label className="flex min-w-0 items-center sm:flex-1 xl:flex-none">
                       <span className="sr-only">Current business</span>
@@ -494,6 +495,70 @@ function AppLayoutInner({
                     </label>
                   ) : null}
                 </div>
+                {(tenantBusinesses.length > 1 || locationRecords.length > 1 || membershipRole) ? (
+                  <div className="sm:hidden">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 w-full justify-between rounded-xl border border-border/70 bg-background/80 px-3 text-sm"
+                      onClick={() => setMobileWorkspaceOpen((open) => !open)}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        Workspace
+                      </span>
+                      <span className="text-xs text-muted-foreground">{mobileWorkspaceOpen ? "Hide" : "Show"}</span>
+                    </Button>
+                    {mobileWorkspaceOpen ? (
+                      <div className="mt-2 space-y-2 rounded-2xl border border-border/70 bg-card/96 p-3">
+                        {tenantBusinesses.length > 1 ? (
+                          <label className="block">
+                            <span className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                              <Building2 className="h-3.5 w-3.5" />
+                              Business
+                            </span>
+                            <select
+                              value={businessId ?? ""}
+                              onChange={(e) => e.target.value && onBusinessChange(e.target.value)}
+                              className="h-10 w-full rounded-xl border border-border/80 bg-background px-3.5 text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+                            >
+                              {tenantBusinesses.map((tenantBusiness) => (
+                                <option key={tenantBusiness.id} value={tenantBusiness.id}>
+                                  {tenantBusiness.name ?? "Untitled business"} ({tenantBusiness.role})
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                        {locationRecords.length > 1 ? (
+                          <label className="block">
+                            <span className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                              <MapPin className="h-3.5 w-3.5" />
+                              Location
+                            </span>
+                            <select
+                              value={currentLocationId ?? ""}
+                              onChange={(e) => onLocationChange(e.target.value || null)}
+                              className="h-10 w-full rounded-xl border border-border/80 bg-background px-3.5 text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+                            >
+                              <option value="">All locations</option>
+                              {locationRecords.map((location) => (
+                                <option key={location.id} value={location.id}>
+                                  {location.name?.trim() || "Unnamed location"}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                        {membershipRole ? (
+                          <div className="mobile-support-card text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                            {membershipRole.replace(/_/g, " ")}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -505,7 +570,7 @@ function AppLayoutInner({
                   end={item.end}
                   className={({ isActive }) =>
                     cn(
-                      "inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
+                      "inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-medium transition-colors",
                       isActive
                         ? "border-primary/20 bg-primary/8 text-primary"
                         : "border-border/70 bg-background/80 text-muted-foreground hover:bg-accent/60 hover:text-foreground"
@@ -766,3 +831,4 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     </CommandPaletteProvider>
   );
 }
+

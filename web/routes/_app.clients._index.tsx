@@ -19,6 +19,7 @@ export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [pageSize, setPageSize] = useState(25);
+  const [showMobileStats, setShowMobileStats] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -52,7 +53,7 @@ export default function ClientsPage() {
     <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Clients"
-        subtitle="Search quickly, review contact coverage, and move into customer records without extra clicks."
+        subtitle="Find people fast, keep contact info organized, and jump into the next action without digging."
         right={
           <Button asChild>
             <Link to="/clients/new">
@@ -64,7 +65,19 @@ export default function ClientsPage() {
       />
 
       {!isLoading && !clientsError ? (
-        <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <section className="mb-5 space-y-3">
+          <div className="mobile-support-card flex items-center justify-between gap-3 md:hidden">
+            <div>
+              <p className="text-sm font-semibold text-foreground">{visibleClients.length} visible clients</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {search ? "Search is active" : "Recent people in your CRM"}
+              </p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => setShowMobileStats((open) => !open)}>
+              {showMobileStats ? "Hide details" : "More details"}
+            </Button>
+          </div>
+          <div className={`grid gap-3 md:grid-cols-2 xl:grid-cols-4 ${showMobileStats ? "grid" : "hidden md:grid"}`}>
           <div className="surface-panel px-4 py-3 sm:px-5">
             <p className="text-sm font-medium text-muted-foreground">Visible clients</p>
             <div className="mt-3 flex items-end justify-between gap-3">
@@ -102,6 +115,7 @@ export default function ClientsPage() {
               <CalendarClock className="h-5 w-5 text-primary" />
             </div>
             <p className="mt-1 text-xs text-muted-foreground">Fresh intake added to the CRM this month</p>
+          </div>
           </div>
         </section>
       ) : null}
@@ -215,16 +229,17 @@ export default function ClientsPage() {
               <Link
                 key={client.id}
                 to={`/clients/${client.id}?from=${encodeURIComponent(returnTo)}`}
-                className="block rounded-xl border bg-card p-4 shadow-sm transition-colors hover:bg-muted/30"
+                className="block rounded-[1.1rem] border bg-card p-4 shadow-sm transition-colors hover:bg-muted/30"
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-foreground">
                       {client.firstName} {client.lastName}
                     </p>
-                    {client.phone ? <p className="mt-0.5 text-sm text-muted-foreground">{client.phone}</p> : null}
-                    {client.email ? <p className="text-sm text-muted-foreground">{client.email}</p> : null}
+                    {client.phone ? <p className="mt-1 text-sm text-muted-foreground">{client.phone}</p> : null}
+                    {client.email ? <p className="mt-0.5 text-sm text-muted-foreground">{client.email}</p> : null}
                   </div>
+                  <span className="rounded-full bg-muted/55 px-2 py-1 text-[11px] font-medium text-muted-foreground">Open</span>
                 </div>
                 <p className="mt-3 text-xs text-muted-foreground">Client since {format(new Date(client.createdAt), "MMM d, yyyy")}</p>
               </Link>

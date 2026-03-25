@@ -165,6 +165,7 @@ export default function SignedIn() {
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null);
   const [updatingJobId, setUpdatingJobId] = useState<string | null>(null);
   const [updatingAppointmentId, setUpdatingAppointmentId] = useState<string | null>(null);
+  const [showMobileInsights, setShowMobileInsights] = useState(false);
 
   const { apptStartGte, apptStartLte } = useMemo(() => {
     const from = startOfDay(filterNow);
@@ -810,7 +811,23 @@ export default function SignedIn() {
           />
         </div>
 
-        <section className="space-y-3">
+        <div className="sm:hidden">
+          <button
+            type="button"
+            onClick={() => setShowMobileInsights((open) => !open)}
+            className="mobile-support-card flex w-full items-center justify-between text-left"
+          >
+            <div>
+              <p className="text-sm font-semibold text-foreground">Business insights</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {showMobileInsights ? "Hide deeper sales and cash signals" : "Show quote conversion, cash, and momentum"}
+              </p>
+            </div>
+            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", showMobileInsights ? "rotate-180" : "")} />
+          </button>
+        </div>
+
+        <section className={cn("space-y-3", !showMobileInsights && "hidden sm:block")}>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Pipeline snapshot</h2>
             <span className="text-sm text-muted-foreground">Sales, cash, and billing momentum at a glance</span>
@@ -855,7 +872,7 @@ export default function SignedIn() {
           </div>
         </section>
 
-        <section className="space-y-3">
+        <section className={cn("space-y-3", !showMobileInsights && "hidden sm:block")}>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Performance signals</h2>
             <span className="text-sm text-muted-foreground">Useful planning context for the next few hours</span>
