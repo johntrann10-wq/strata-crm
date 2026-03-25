@@ -51,6 +51,7 @@ type InvoiceRecord = {
   invoiceNumber?: string | null;
   status: string;
   total: number | string | null | undefined;
+  remainingBalance?: number | string | null;
 };
 
 type QuoteRecord = {
@@ -98,6 +99,14 @@ function sumCurrency(values: Array<number | string | null | undefined>): number 
     const n = Number(value ?? 0);
     return Number.isFinite(n) ? total + n : total;
   }, 0);
+}
+
+function invoiceBalance(invoice: InvoiceRecord): number {
+  const raw =
+    invoice.remainingBalance != null && invoice.remainingBalance !== ""
+      ? Number(invoice.remainingBalance)
+      : Number(invoice.total ?? 0);
+  return Number.isFinite(raw) ? raw : 0;
 }
 
 function sectionErrorMessage(err: Error): string {
@@ -238,7 +247,7 @@ export default function SignedIn() {
   );
 
   const openQuoteValue = useMemo(() => sumCurrency(pendingQuotes.map((quote) => quote.total)), [pendingQuotes]);
-  const unpaidRevenue = useMemo(() => sumCurrency(unpaidInvoices.map((invoice) => invoice.total)), [unpaidInvoices]);
+  const unpaidRevenue = useMemo(() => sumCurrency(unpaidInvoices.map((invoice) => invoiceBalance(invoice))), [unpaidInvoices]);
   const activeJobValue = useMemo(() => sumCurrency(activeJobs.map((job) => job.totalPrice)), [activeJobs]);
   const myActiveJobValue = useMemo(() => sumCurrency(myActiveJobs.map((job) => job.totalPrice)), [myActiveJobs]);
   const todayBookedValue = useMemo(
@@ -262,6 +271,7 @@ export default function SignedIn() {
       }),
     [unpaidInvoices, filterNow]
   );
+  const overdueRevenue = useMemo(() => sumCurrency(overdueInvoices.map((invoice) => invoiceBalance(invoice))), [overdueInvoices]);
   const unassignedActiveJobs = useMemo(
     () => activeJobs.filter((job) => !job.assignedStaff?.id),
     [activeJobs]
@@ -723,7 +733,7 @@ export default function SignedIn() {
               </div>
               <p className="text-2xl font-semibold tracking-tight">{overdueInvoices.length}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {overdueInvoices.length > 0 ? formatCurrency(unpaidRevenue) : "No overdue cash right now"}
+                {overdueInvoices.length > 0 ? formatCurrency(overdueRevenue) : "No overdue cash right now"}
               </p>
             </Link>
           </div>
@@ -1360,7 +1370,7 @@ export default function SignedIn() {
                       </Button>
                     ) : null}
                   </div>
-                  <span className="font-semibold tabular-nums">{formatCurrency(invoice.total)}</span>
+                  <span className="font-semibold tabular-nums">{formatCurrency(invoiceBalance(invoice))}</span>
                   <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
                 </Link>
               </li>

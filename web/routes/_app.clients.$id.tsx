@@ -55,6 +55,20 @@ function safeDate(value: string | null | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function formatCurrency(amount: number | string | null | undefined): string {
+  const value = Number(amount ?? 0);
+  if (!Number.isFinite(value)) return "$0.00";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+}
+
+function invoiceBalance(invoice: Record<string, unknown>): number {
+  const raw =
+    invoice.remainingBalance != null && invoice.remainingBalance !== ""
+      ? Number(invoice.remainingBalance)
+      : Number(invoice.total ?? 0);
+  return Number.isFinite(raw) ? raw : 0;
+}
+
 export default function ClientDetailPage() {
   const { id } = useParams();
   const { currentLocationId } = useOutletContext<AuthOutletContext>();
@@ -177,7 +191,7 @@ export default function ClientDetailPage() {
     .reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0);
   const unpaidInvoiceValue = invoiceList
     .filter((invoice) => ["sent", "partial"].includes(String((invoice as any).status ?? "")))
-    .reduce((sum, invoice) => sum + Number((invoice as any).total ?? 0), 0);
+    .reduce((sum, invoice) => sum + invoiceBalance(invoice as Record<string, unknown>), 0);
   const activeJobsCount = jobList.filter((job) =>
     ["scheduled", "confirmed", "in_progress"].includes(String((job as any).status ?? ""))
   ).length;
@@ -214,7 +228,7 @@ export default function ClientDetailPage() {
       type: "invoice" as const,
       id: (invoice as any).id,
       label: (invoice as any).invoiceNumber ?? "Invoice",
-      sublabel: (invoice as any).total != null ? `$${Number((invoice as any).total).toFixed(2)}` : undefined,
+      sublabel: formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
       status: (invoice as any).status ?? undefined,
       href: `/invoices/${(invoice as any).id}`,
       actionHref: ["sent", "partial"].includes(String((invoice as any).status ?? ""))
@@ -405,7 +419,12 @@ export default function ClientDetailPage() {
                   tone="danger"
                   title="Overdue invoices need follow-up"
                   detail={`${overdueInvoices.length} overdue invoice${overdueInvoices.length === 1 ? "" : "s"} for ${client.firstName}`}
-                  amount={`$${overdueInvoices.reduce((sum, invoice) => sum + Number((invoice as any).total ?? 0), 0).toFixed(2)}`}
+                  amount={formatCurrency(
+                    overdueInvoices.reduce(
+                      (sum, invoice) => sum + invoiceBalance(invoice as Record<string, unknown>),
+                      0
+                    )
+                  )}
                   href={`/invoices/${(overdueInvoices[0] as any).id}`}
                   actionLabel="Open overdue invoice"
                 />
@@ -439,7 +458,7 @@ export default function ClientDetailPage() {
             <WorkflowMetricCard
               icon={FileText}
               label="Unpaid invoices"
-              value={`$${unpaidInvoiceValue.toFixed(2)}`}
+              value={formatCurrency(unpaidInvoiceValue)}
               detail={`${invoiceList.filter((invoice) => ["sent", "partial"].includes(String((invoice as any).status ?? ""))).length} awaiting payment`}
             />
           </div>

@@ -78,6 +78,14 @@ function safeDate(value: string | null | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function invoiceBalance(invoice: Record<string, unknown>): number {
+  const raw =
+    invoice.remainingBalance != null && invoice.remainingBalance !== ""
+      ? Number(invoice.remainingBalance)
+      : Number(invoice.total ?? 0);
+  return Number.isFinite(raw) ? raw : 0;
+}
+
 export default function VehicleDetailPage() {
   const { currentLocationId } = useOutletContext<AuthOutletContext>();
   const { id, vehicleId } = useParams<{ id: string; vehicleId: string }>();
@@ -278,7 +286,7 @@ export default function VehicleDetailPage() {
       type: "invoice" as const,
       id: (invoice as any).id,
       label: (invoice as any).invoiceNumber ?? "Invoice",
-      sublabel: formatCurrency((invoice as any).total),
+      sublabel: formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
       status: (invoice as any).status ?? undefined,
       href: `/invoices/${(invoice as any).id}`,
       actionHref: ["sent", "partial"].includes(String((invoice as any).status ?? ""))
@@ -396,7 +404,12 @@ export default function VehicleDetailPage() {
               tone="danger"
               title="Overdue invoices on this vehicle"
               detail={`${overdueInvoices.length} invoice${overdueInvoices.length === 1 ? "" : "s"} need collection`}
-              amount={formatCurrency(overdueInvoices.reduce((sum, invoice) => sum + Number((invoice as any).total ?? 0), 0))}
+              amount={formatCurrency(
+                overdueInvoices.reduce(
+                  (sum, invoice) => sum + invoiceBalance(invoice as Record<string, unknown>),
+                  0
+                )
+              )}
               href={`/invoices/${(overdueInvoices[0] as any).id}`}
               actionLabel="Open overdue invoice"
             />
@@ -430,7 +443,12 @@ export default function VehicleDetailPage() {
         <VehicleMetricCard
           icon={FileText}
           label="Unpaid invoices"
-          value={formatCurrency(unpaidInvoices.reduce((sum, invoice) => sum + Number((invoice as any).total ?? 0), 0))}
+          value={formatCurrency(
+            unpaidInvoices.reduce(
+              (sum, invoice) => sum + invoiceBalance(invoice as Record<string, unknown>),
+              0
+            )
+          )}
           detail={`${unpaidInvoices.length} awaiting payment`}
         />
       </div>
