@@ -686,7 +686,7 @@ export default function SignedIn() {
   }
 
   return (
-    <div className="min-h-[calc(100dvh-4rem)] pb-24 md:pb-8">
+    <div className="pb-6 md:pb-8">
       <div className="page-content page-section max-w-6xl">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -912,7 +912,7 @@ export default function SignedIn() {
             <h2 className="text-lg font-semibold">Quick actions</h2>
             <span className="text-sm text-muted-foreground">Most-used workflows</span>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
             <QuickAction href="/clients/new" label="New client" icon={<Users className="h-5 w-5 shrink-0" />} />
             <QuickAction
               href={scheduleJobHref}
@@ -1564,18 +1564,6 @@ export default function SignedIn() {
         </DashboardSection>
       </div>
 
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden"
-        style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
-        aria-label="Quick actions"
-      >
-        <div className="mx-auto flex max-w-4xl gap-2 px-3 pt-2">
-          <MobileQuickAction href="/clients/new" label="Client" icon={<Users className="h-5 w-5" />} />
-          <MobileQuickAction href={scheduleJobHref} label="Job" icon={<CalendarPlus className="h-5 w-5" />} primary />
-          <MobileQuickAction href="/jobs" label="Queue" icon={<ClipboardList className="h-5 w-5" />} />
-          <MobileQuickAction href="/quotes/new" label="Quote" icon={<Receipt className="h-5 w-5" />} />
-        </div>
-      </nav>
     </div>
   );
 }
@@ -1736,31 +1724,6 @@ function QuickAction({
         primary
           ? "bg-orange-500 text-sm text-white shadow-sm hover:bg-orange-600 sm:text-base"
           : "border-2 border-border bg-card text-sm hover:bg-muted/80 sm:text-base"
-      )}
-    >
-      {icon}
-      {label}
-    </Link>
-  );
-}
-
-function MobileQuickAction({
-  href,
-  label,
-  icon,
-  primary = false,
-}: {
-  href: string;
-  label: string;
-  icon: ReactNode;
-  primary?: boolean;
-}) {
-  return (
-    <Link
-      to={href}
-      className={cn(
-        "flex flex-1 flex-col items-center justify-center gap-1 rounded-xl text-sm font-semibold active:scale-[0.98] min-h-[52px]",
-        primary ? "bg-orange-500 text-white shadow-sm" : "border-2 border-border bg-card"
       )}
     >
       {icon}
