@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link, useOutletContext } from "react-router";
+import { useParams, Link, useOutletContext, useSearchParams } from "react-router";
 import { useFindOne, useAction, useFindMany } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
@@ -199,8 +199,12 @@ function CollectionActionCard({
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const { permissions, currentLocationId } = useOutletContext<AuthOutletContext>();
   const canWritePayments = permissions.has("payments.write") || permissions.has("invoices.write");
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/invoices";
+  const withReturn = (pathname: string) =>
+    `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(returnTo)}`;
 
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [addLineItemOpen, setAddLineItemOpen] = useState(false);
@@ -481,7 +485,7 @@ export default function InvoiceDetailPage() {
     return (
       <div className="container mx-auto p-6 max-w-5xl">
         <p className="text-muted-foreground">Invalid invoice ID.</p>
-        <Link to="/invoices" className="text-sm text-primary mt-2 inline-block">Back to Invoices</Link>
+        <Link to={returnTo} className="text-sm text-primary mt-2 inline-block">Back to Invoices</Link>
       </div>
     );
   }
@@ -571,7 +575,7 @@ export default function InvoiceDetailPage() {
     <div className="container mx-auto max-w-5xl space-y-5 px-3 py-4 sm:p-6">
       {/* Back link */}
       <Link
-        to="/invoices"
+        to={returnTo}
         className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -802,14 +806,14 @@ export default function InvoiceDetailPage() {
                     ? `${capitalize(quoteData.status)} · ${formatCurrency(Number(quoteData.total ?? 0))}`
                     : "No quote linked"
                 }
-                href={quoteData ? `/quotes/${quoteData.id}` : null}
+                href={quoteData ? withReturn(`/quotes/${quoteData.id}`) : null}
                 actionLabel="Open quote"
               />
               <WorkflowLinkCard
                 icon={CalendarClock}
                 label="Schedule"
                 value={appointmentData ? formatDate(appointmentData.startTime) : "No appointment linked"}
-                href={appointmentData ? `/appointments/${appointmentData.id}` : null}
+                href={appointmentData ? withReturn(`/appointments/${appointmentData.id}`) : null}
                 actionLabel="Open appointment"
               />
             </CardContent>

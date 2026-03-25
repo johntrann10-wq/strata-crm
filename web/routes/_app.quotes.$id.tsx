@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link, useNavigate, useOutletContext } from "react-router";
+import { useParams, Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { useFindOne, useAction, useFindMany } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
@@ -90,8 +90,12 @@ const formatDate = (date: Date | string | null | undefined): string => {
 export default function QuoteDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { permissions, currentLocationId } = useOutletContext<AuthOutletContext>();
   const canWriteQuotes = permissions.has("quotes.write");
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/quotes";
+  const withReturn = (pathname: string) =>
+    `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(returnTo)}`;
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDeclineDialog, setShowDeclineDialog] = useState(false);
@@ -241,7 +245,7 @@ export default function QuoteDetailPage() {
       return;
     }
     toast.success("Quote deleted");
-    navigate("/quotes");
+    navigate(returnTo);
   };
 
   const handleMarkAccepted = async () => {
@@ -376,7 +380,7 @@ export default function QuoteDetailPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <Button variant="ghost" size="icon" asChild>
-            <Link to="/quotes">
+            <Link to={returnTo}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -799,9 +803,9 @@ export default function QuoteDetailPage() {
                   className="w-full"
                   onClick={() =>
                     navigate(
-                      `/appointments/new?quoteId=${id}&clientId=${quote.client.id}${
-                        currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-                      }`
+                        `/appointments/new?quoteId=${id}&clientId=${quote.client.id}${
+                          currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+                      }&from=${encodeURIComponent(returnTo)}`
                     )
                   }
                   disabled={Boolean((quote as any).appointmentId)}
@@ -812,14 +816,14 @@ export default function QuoteDetailPage() {
               )}
               {(quote as any).appointmentId && (
                 <Button variant="outline" className="w-full" asChild>
-                  <Link to={`/appointments/${(quote as any).appointmentId}`}>
+                  <Link to={withReturn(`/appointments/${(quote as any).appointmentId}`)}>
                     <Calendar className="mr-2 h-4 w-4" />
                     Open Scheduled Job
                   </Link>
                 </Button>
               )}
               <Button variant="outline" className="w-full" asChild>
-                <Link to={`/invoices/new?clientId=${quote.client.id}&quoteId=${quote.id}`}>
+                <Link to={withReturn(`/invoices/new?clientId=${quote.client.id}&quoteId=${quote.id}`)}>
                   <FileText className="mr-2 h-4 w-4" />
                   Create Invoice
                 </Link>

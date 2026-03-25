@@ -52,6 +52,7 @@ export default function NewInvoicePage() {
   const appointmentIdParam = searchParams.get("appointmentId");
   const clientIdParam = searchParams.get("clientId");
   const quoteIdParam = searchParams.get("quoteId");
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/invoices";
 
   const [{ data: businessRecord }] = useFindFirst(api.business, {
     filter: businessId ? { id: { equals: businessId } } : { id: { equals: "" } },
@@ -344,7 +345,7 @@ export default function NewInvoicePage() {
       }
 
       toast.success(mode === "sent" ? "Invoice created and marked as sent" : "Invoice created successfully");
-      navigate(`/invoices/${newInvoiceId}`);
+      navigate(`/invoices/${newInvoiceId}?from=${encodeURIComponent(returnTo)}`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create invoice");
     } finally {
@@ -362,7 +363,7 @@ export default function NewInvoicePage() {
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <Button variant="ghost" size="sm" asChild>
-          <Link to="/invoices">
+          <Link to={returnTo}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Invoices
           </Link>
@@ -708,7 +709,7 @@ export default function NewInvoicePage() {
         {/* Actions */}
         <div className="flex justify-end gap-3 pb-6">
           <Button type="button" variant="outline" asChild>
-            <Link to="/invoices">Cancel</Link>
+            <Link to={returnTo}>Cancel</Link>
           </Button>
           <Button
             type="submit"

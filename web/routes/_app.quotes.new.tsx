@@ -63,6 +63,7 @@ export default function NewQuotePage() {
   const [searchParams] = useSearchParams();
   const clientIdParam = searchParams.get("clientId");
   const vehicleIdParam = searchParams.get("vehicleId");
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/quotes";
 
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
@@ -322,7 +323,7 @@ export default function NewQuotePage() {
       }
 
       toast.success("Quote created");
-      navigate(`/quotes/${quoteId}`);
+      navigate(`/quotes/${quoteId}?from=${encodeURIComponent(returnTo)}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to create quote";
       toast.error(message);
@@ -340,7 +341,7 @@ export default function NewQuotePage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link to="/quotes">
+          <Link to={returnTo}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
