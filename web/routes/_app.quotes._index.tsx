@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, CheckCircle, Search, Send, Loader2, FileText, AlertCircle } from "lucide-react";
-import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import type { AuthOutletContext } from "./_app";
 import { api } from "../api";
 import { useFindMany, useAction } from "../hooks/useApi";
@@ -35,21 +35,47 @@ const QUOTE_TABS = ["all", "accepted", "aging", "followup", "lost"] as const;
 type QuoteTab = (typeof QUOTE_TABS)[number];
 
 export default function QuotesIndexPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const initialSearch = searchParams.get("q") ?? "";
+  const [search, setSearch] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
   const activeTab = (QUOTE_TABS as readonly string[]).includes(searchParams.get("tab") ?? "")
     ? (searchParams.get("tab") as QuoteTab)
     : "all";
 
   useEffect(() => {
+    const nextSearch = searchParams.get("q") ?? "";
+    if (nextSearch !== search) {
+      setSearch(nextSearch);
+      setDebouncedSearch(nextSearch);
+    }
+  }, [searchParams, search]);
+
+  useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
     return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (debouncedSearch) {
+      next.set("q", debouncedSearch);
+    } else {
+      next.delete("q");
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [debouncedSearch, searchParams, setSearchParams]);
+
+  const currentQueuePath = `${location.pathname}${location.search}`;
+  const linkWithQueueState = (pathname: string) =>
+    `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(currentQueuePath)}`;
 
   const [{ data: lostQuotes, fetching: lostFetching, error: lostError }, refetchLost] = useFindMany(api.quote, {
     lost: true,
@@ -276,18 +302,20 @@ export default function QuotesIndexPage() {
                       .filter(Boolean)
                       .join(" · ");
                     const bookHref = canBook
-                      ? `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
-                          currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-                        }`
+                      ? linkWithQueueState(
+                          `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
+                            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+                          }`
+                        )
                       : null;
                     const invoiceHref = canInvoice
-                      ? `/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`
+                      ? linkWithQueueState(`/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`)
                       : null;
                     return (
                       <TableRow
                         key={qid}
                         className={cn("cursor-pointer", agingRows.some((quote) => String((quote as any).id) === qid) && "bg-amber-50/50")}
-                        onClick={() => navigate(`/quotes/${qid}`)}
+                        onClick={() => navigate(linkWithQueueState(`/quotes/${qid}`))}
                       >
                         <TableCell>
                           {row.clientId ? (
@@ -374,7 +402,7 @@ export default function QuotesIndexPage() {
                             ) : null}
                             <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
                               <Link
-                                to={`/quotes/${qid}`}
+                                to={linkWithQueueState(`/quotes/${qid}`)}
                                 onClick={(event) => event.stopPropagation()}
                               >
                                 Open
@@ -435,7 +463,7 @@ export default function QuotesIndexPage() {
                         ? `/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`
                         : null;
                       return (
-                        <TableRow key={qid} className="cursor-pointer bg-green-50/40" onClick={() => navigate(`/quotes/${qid}`)}>
+                        <TableRow key={qid} className="cursor-pointer bg-green-50/40" onClick={() => navigate(linkWithQueueState(`/quotes/${qid}`))}>
                           <TableCell>
                             {row.clientId ? (
                               <Link
@@ -456,20 +484,20 @@ export default function QuotesIndexPage() {
                             <div className="flex justify-end gap-2">
                               {bookHref ? (
                                 <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
-                                  <Link to={bookHref} onClick={(event) => event.stopPropagation()}>
-                                    Book
-                                  </Link>
+                                <Link to={bookHref} onClick={(event) => event.stopPropagation()}>
+                                  Book
+                                </Link>
                                 </Button>
                               ) : null}
                               {invoiceHref ? (
                                 <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
-                                  <Link to={invoiceHref} onClick={(event) => event.stopPropagation()}>
-                                    Invoice
-                                  </Link>
+                                <Link to={invoiceHref} onClick={(event) => event.stopPropagation()}>
+                                  Invoice
+                                </Link>
                                 </Button>
                               ) : null}
                               <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
-                                <Link to={`/quotes/${qid}`} onClick={(event) => event.stopPropagation()}>
+                                <Link to={linkWithQueueState(`/quotes/${qid}`)} onClick={(event) => event.stopPropagation()}>
                                   Open
                                 </Link>
                               </Button>
@@ -521,7 +549,7 @@ export default function QuotesIndexPage() {
                       .filter(Boolean)
                       .join(" · ");
                     return (
-                      <TableRow key={qid} className="cursor-pointer bg-amber-50/50" onClick={() => navigate(`/quotes/${qid}`)}>
+                      <TableRow key={qid} className="cursor-pointer bg-amber-50/50" onClick={() => navigate(linkWithQueueState(`/quotes/${qid}`))}>
                         <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
                         <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
                         <TableCell><StatusBadge status={String(row.status ?? "")} type="quote" /></TableCell>
@@ -598,7 +626,7 @@ export default function QuotesIndexPage() {
                       .filter(Boolean)
                       .join(" · ");
                     return (
-                      <TableRow key={qid} className="cursor-pointer bg-amber-50/40" onClick={() => navigate(`/quotes/${qid}`)}>
+                      <TableRow key={qid} className="cursor-pointer bg-amber-50/40" onClick={() => navigate(linkWithQueueState(`/quotes/${qid}`))}>
                         <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
                         <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
                         <TableCell><StatusBadge status={String(row.status ?? "")} type="quote" /></TableCell>
@@ -620,7 +648,7 @@ export default function QuotesIndexPage() {
                               Follow up
                             </Button>
                             <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
-                              <Link to={`/quotes/${qid}`} onClick={(event) => event.stopPropagation()}>
+                              <Link to={linkWithQueueState(`/quotes/${qid}`)} onClick={(event) => event.stopPropagation()}>
                                 Open
                               </Link>
                             </Button>

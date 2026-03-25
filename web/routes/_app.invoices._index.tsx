@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useOutletContext, useSearchParams } from "react-router";
+import { Link, useLocation, useOutletContext, useSearchParams } from "react-router";
 import { AlertCircle, Clock, DollarSign, FileText, Loader2, PlusCircle, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,15 +80,17 @@ function paidAmount(invoice: { totalPaid?: number | string | null }) {
 }
 
 export default function InvoicesIndexPage() {
+  const location = useLocation();
   const { businessId } = useOutletContext<AuthOutletContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = (FILTER_TABS as readonly string[]).includes(searchParams.get("tab") ?? "")
     ? (searchParams.get("tab") as FilterTab)
     : "all";
+  const initialSearch = searchParams.get("q") ?? "";
   const [activeTab, setActiveTab] = useState<FilterTab>(initialTab);
   const [pageSize, setPageSize] = useState(25);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null);
   const hasLoadedMetrics = useRef(false);
 
@@ -108,10 +110,25 @@ export default function InvoicesIndexPage() {
   }, [activeTab, debouncedSearch]);
 
   useEffect(() => {
+    const nextSearch = searchParams.get("q") ?? "";
+    if (nextSearch !== search) {
+      setSearch(nextSearch);
+      setDebouncedSearch(nextSearch);
+    }
+  }, [searchParams, search]);
+
+  useEffect(() => {
     const next = new URLSearchParams(searchParams);
     next.set("tab", activeTab);
-    setSearchParams(next, { replace: true });
-  }, [activeTab, searchParams, setSearchParams]);
+    if (debouncedSearch) {
+      next.set("q", debouncedSearch);
+    } else {
+      next.delete("q");
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [activeTab, debouncedSearch, searchParams, setSearchParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -141,6 +158,9 @@ export default function InvoicesIndexPage() {
   );
   const displayedInvoices = activeTab === "overdue" ? overdueInvoices : activeTab === "stale" ? staleInvoices : baseInvoices;
   const pageError = metricsError ?? invoicesError;
+  const currentQueuePath = `${location.pathname}${location.search}`;
+  const linkWithQueueState = (pathname: string) =>
+    `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(currentQueuePath)}`;
 
   const handleSendInvoice = async (invoiceId: string) => {
     setSendingInvoiceId(invoiceId);
@@ -185,7 +205,7 @@ export default function InvoicesIndexPage() {
               />
             </div>
             <Button asChild>
-              <Link to="/invoices/new">
+              <Link to={linkWithQueueState("/invoices/new")}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 New Invoice
               </Link>
@@ -389,7 +409,7 @@ export default function InvoicesIndexPage() {
                               )}
                             >
                               <td className="px-4 py-3">
-                                <Link to={`/invoices/${invoice.id}`} className="font-bold text-primary hover:underline">
+                                <Link to={linkWithQueueState(`/invoices/${invoice.id}`)} className="font-bold text-primary hover:underline">
                                   {invoice.invoiceNumber ?? `#${invoice.id.slice(0, 8)}`}
                                 </Link>
                               </td>
@@ -448,11 +468,11 @@ export default function InvoicesIndexPage() {
                                     </Button>
                                   ) : null}
                                   <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
-                                    <Link to={`/invoices/${invoice.id}`}>Open</Link>
+                                      <Link to={linkWithQueueState(`/invoices/${invoice.id}`)}>Open</Link>
                                   </Button>
                                   {["sent", "partial"].includes(String(invoice.status ?? "")) ? (
                                     <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
-                                      <Link to={`/invoices/${invoice.id}`}>
+                                      <Link to={linkWithQueueState(`/invoices/${invoice.id}`)}>
                                         {outstanding > 0 ? `Collect ${formatCurrency(outstanding)}` : "Collect"}
                                       </Link>
                                     </Button>
