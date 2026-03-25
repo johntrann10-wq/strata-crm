@@ -15,8 +15,14 @@ import {
 } from "drizzle-orm/pg-core";
 
 const businessTypeEnum = pgEnum("business_type", [
-  "auto_detailing", "mobile_detailing", "ppf_ceramic", "tint_shop", "mechanic",
-  "tire_shop", "car_wash", "wrap_shop", "dealership_service", "body_shop", "other_auto_service",
+  "auto_detailing",
+  "mobile_detailing",
+  "wrap_ppf",
+  "window_tinting",
+  "performance",
+  "mechanic",
+  "tire_shop",
+  "muffler_shop",
 ]);
 const appointmentStatusEnum = pgEnum("appointment_status", [
   "scheduled", "confirmed", "in_progress", "completed", "cancelled", "no-show",

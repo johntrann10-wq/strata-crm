@@ -19,7 +19,7 @@ const GUIDES: Record<string, VerticalWorkflowGuide> = {
     title: "Detail workflow",
     summary: "Capture condition up front, keep add-ons explicit, and finish with strong QC before delivery.",
     intakeFields: ["Package and add-ons", "Paint and interior condition", "Pickup or delivery timing"],
-    executionFocus: ["Wash/decon sequence", "Correction scope", "Final touch-up and QC"],
+    executionFocus: ["Wash/decon sequence", "Correction or coating scope", "Final touch-up and QC"],
     deliveryFocus: ["Before/after photos", "Care advice", "Maintenance rebook"],
   },
   mobile_detailing: {
@@ -29,33 +29,26 @@ const GUIDES: Record<string, VerticalWorkflowGuide> = {
     executionFocus: ["Crew assignment", "Supply readiness", "Weather or access constraints"],
     deliveryFocus: ["Site cleanup", "Payment collection", "Maintenance rebook"],
   },
-  ppf_ceramic: {
-    title: "PPF / coating workflow",
-    summary: "This workflow depends on prep quality, material accuracy, and disciplined final inspection.",
-    intakeFields: ["Coverage areas", "Film/coating package", "Paint correction needs"],
-    executionFocus: ["Surface prep", "Edge and seam quality", "Cure and contamination control"],
+  wrap_ppf: {
+    title: "Wrap & PPF workflow",
+    summary: "Prep quality, material accuracy, and disciplined final inspection matter more than speed.",
+    intakeFields: ["Coverage areas", "Material / finish", "Removal or prep needs"],
+    executionFocus: ["Surface prep", "Edge and seam quality", "Cure, trim, and contamination control"],
     deliveryFocus: ["Warranty notes", "Care instructions", "Final panel inspection"],
   },
-  tint_shop: {
+  window_tinting: {
     title: "Tint workflow",
-    summary: "Keep film selection, legal fit, and edge quality explicit so the install and handoff stay clean.",
+    summary: "Keep film selection, legal fit, and edge quality explicit so install and handoff stay clean.",
     intakeFields: ["Film type", "Shade percentages", "Windows included"],
     executionFocus: ["Glass prep", "Heat-shrink accuracy", "Edge and contamination check"],
     deliveryFocus: ["Cure instructions", "Warranty details", "Visual QC with customer"],
   },
-  wrap_shop: {
-    title: "Wrap workflow",
-    summary: "Make scope, materials, and seam expectations obvious early so production and install stay aligned.",
-    intakeFields: ["Coverage scope", "Material/finish", "Design approval status"],
-    executionFocus: ["Panel prep", "Alignment and seams", "Post-heat and recessed areas"],
-    deliveryFocus: ["Final photo set", "Care guidance", "Touch-up follow-up"],
-  },
-  tire_shop: {
-    title: "Tire workflow",
-    summary: "Operational clarity comes from size/spec accuracy and a clean closeout on torque, pressures, and TPMS.",
-    intakeFields: ["Tire size/spec", "Mount/balance/alignment scope", "TPMS needs"],
-    executionFocus: ["Inventory readiness", "Balance quality", "Torque and pressure verification"],
-    deliveryFocus: ["Torque confirmation", "TPMS/reset status", "Alignment or rotation recommendations"],
+  performance: {
+    title: "Performance workflow",
+    summary: "A strong performance order keeps parts, fitment, test plans, and alignment/tune steps obvious.",
+    intakeFields: ["Upgrade scope", "Performance goal", "Approval limit"],
+    executionFocus: ["Fitment checks", "Install quality", "Test / tune / alignment verification"],
+    deliveryFocus: ["Installed parts summary", "Break-in or usage notes", "Next upgrade recommendations"],
   },
   mechanic: {
     title: "Repair workflow",
@@ -64,21 +57,20 @@ const GUIDES: Record<string, VerticalWorkflowGuide> = {
     executionFocus: ["Diagnosis progress", "Parts status", "Repair verification and test"],
     deliveryFocus: ["Completed repair summary", "Open recommendations", "Follow-up timing"],
   },
-  car_wash: {
-    title: "Wash workflow",
-    summary: "Speed matters, but the queue still needs package clarity and a consistent final touch before handoff.",
-    intakeFields: ["Wash package", "Add-ons", "Timing expectation"],
-    executionFocus: ["Queue priority", "Exterior/interior finish", "Final touch-up"],
-    deliveryFocus: ["Upsell opportunity", "Membership or return timing", "Spot-check before release"],
+  tire_shop: {
+    title: "Tire workflow",
+    summary: "Operational clarity comes from size/spec accuracy and a clean closeout on torque, pressures, and TPMS.",
+    intakeFields: ["Tire size/spec", "Mount/balance/alignment scope", "TPMS needs"],
+    executionFocus: ["Inventory readiness", "Balance quality", "Torque and pressure verification"],
+    deliveryFocus: ["Torque confirmation", "TPMS/reset status", "Alignment or rotation recommendations"],
   },
-  dealership_service: {
-    title: "Dealer service workflow",
-    summary: "Advisor handoff, parts status, and customer updates must stay tight to avoid churn and missed revenue.",
-    intakeFields: ["RO summary", "Transportation needs", "Completion promise"],
-    executionFocus: ["Advisor-tech handoff", "Parts/warranty status", "Inspection findings"],
-    deliveryFocus: ["RO closeout", "Recommendations", "Customer communication"],
+  muffler_shop: {
+    title: "Muffler workflow",
+    summary: "Exhaust work needs scope clarity on sound, fabrication, leaks, and fitment from start to finish.",
+    intakeFields: ["Requested exhaust scope", "Sound goal", "Fabrication / replacement notes"],
+    executionFocus: ["Parts or fabrication readiness", "Leak and clearance checks", "Hanger and weld quality"],
+    deliveryFocus: ["Sound verification", "Final leak check", "Performance recommendations"],
   },
-  other_auto_service: GENERAL_GUIDE,
 };
 
 export function getVerticalWorkflowGuide(businessType: string | null | undefined): VerticalWorkflowGuide {

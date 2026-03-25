@@ -39,22 +39,22 @@ const PRESETS: Record<string, IntakePreset> = {
       "QC focus before wrap-up:"
     ),
   },
-  ppf_ceramic: {
-    label: "PPF / coating intake",
+  wrap_ppf: {
+    label: "Wrap & PPF intake",
     clientNotes: lines(
-      "Coverage areas approved:",
-      "Film / coating package:",
-      "Warranty expectations:",
-      "Delivery timing:"
+      "Coverage scope / panels:",
+      "Material or finish selected:",
+      "Warranty / durability expectations:",
+      "Delivery deadline:"
     ),
     internalNotes: lines(
-      "Paint correction needed:",
-      "Film / coating inventory reserved:",
-      "Edge-wrap / pattern notes:",
-      "Final cure and QC notes:"
+      "Removal / prep needs:",
+      "Material reserved:",
+      "Edge-wrap / seam notes:",
+      "QC and photo deliverables:"
     ),
   },
-  tint_shop: {
+  window_tinting: {
     label: "Tint intake",
     clientNotes: lines(
       "Film type and shade percentages:",
@@ -69,19 +69,19 @@ const PRESETS: Record<string, IntakePreset> = {
       "Post-install cure reminders:"
     ),
   },
-  wrap_shop: {
-    label: "Wrap intake",
+  performance: {
+    label: "Performance intake",
     clientNotes: lines(
-      "Coverage scope:",
-      "Finish / material selected:",
-      "Design approval status:",
-      "Delivery deadline:"
+      "Requested upgrades / parts:",
+      "Performance goal:",
+      "Approval limit:",
+      "Completion timing:"
     ),
     internalNotes: lines(
-      "Template / print status:",
-      "Trim removal needs:",
-      "Panel / seam risks:",
-      "QC and photo deliverables:"
+      "Fitment concerns:",
+      "Parts status:",
+      "Tech assignment:",
+      "Tune / alignment follow-up:"
     ),
   },
   tire_shop: {
@@ -114,48 +114,23 @@ const PRESETS: Record<string, IntakePreset> = {
       "Open recommendations / follow-up:"
     ),
   },
-  car_wash: {
-    label: "Wash intake",
+  muffler_shop: {
+    label: "Exhaust intake",
     clientNotes: lines(
-      "Wash package:",
-      "Add-ons approved:",
-      "Customer timing notes:"
+      "Requested exhaust work:",
+      "Sound goal:",
+      "Parts / fabrication expectations:",
+      "Pickup timing:"
     ),
     internalNotes: lines(
-      "Queue priority:",
-      "Condition notes:",
-      "Final touch-up focus:"
-    ),
-  },
-  dealership_service: {
-    label: "Dealer service intake",
-    clientNotes: lines(
-      "RO summary:",
-      "Requested completion time:",
-      "Transportation / shuttle needs:"
-    ),
-    internalNotes: lines(
-      "Advisor handoff notes:",
-      "Parts / warranty status:",
-      "Tech assignment:",
-      "Open follow-up items:"
-    ),
-  },
-  other_auto_service: {
-    label: "Service intake",
-    clientNotes: lines(
-      "Requested service:",
-      "Customer timing notes:",
-      "Special instructions:"
-    ),
-    internalNotes: lines(
-      "Scope notes:",
-      "Assigned technician:",
-      "QC / delivery notes:"
+      "Lift assignment:",
+      "Fabrication materials:",
+      "Clearance / hanger notes:",
+      "Leak-test plan:"
     ),
   },
 };
 
 export function getIntakePreset(businessType: string | null | undefined): IntakePreset {
-  return PRESETS[businessType ?? ""] ?? PRESETS.other_auto_service;
+  return PRESETS[businessType ?? ""] ?? PRESETS.mechanic;
 }

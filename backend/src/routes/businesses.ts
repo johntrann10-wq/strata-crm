@@ -13,8 +13,14 @@ export const businessesRouter = Router({ mergeParams: true });
 const createSchema = z.object({
   name: z.string().min(1),
   type: z.enum([
-    "auto_detailing", "mobile_detailing", "ppf_ceramic", "tint_shop", "mechanic",
-    "tire_shop", "car_wash", "wrap_shop", "dealership_service", "body_shop", "other_auto_service",
+    "auto_detailing",
+    "mobile_detailing",
+    "wrap_ppf",
+    "window_tinting",
+    "performance",
+    "mechanic",
+    "tire_shop",
+    "muffler_shop",
   ]),
   email: z.string().email().optional(),
   phone: z.string().optional(),

@@ -12,9 +12,9 @@ import {
   ArrowRight,
   CircleDot,
   Droplets,
+  Gauge,
   PaintBucket,
   Shield,
-  Store,
   Truck,
   Wrench,
 } from "lucide-react";
@@ -24,14 +24,12 @@ const ONBOARDING_FORM_ID = "onboarding-business-form";
 const businessTypes = [
   { value: "auto_detailing", label: "Auto Detailing", icon: Droplets, description: "Premium car cleaning, polishing and paint correction" },
   { value: "mobile_detailing", label: "Mobile Detailing", icon: Truck, description: "On-location detailing services at the customer's site" },
-  { value: "ppf_ceramic", label: "PPF & Ceramic", icon: Shield, description: "Paint protection film and ceramic coating installation" },
-  { value: "tint_shop", label: "Tint Shop", icon: CircleDot, description: "Window tinting for vehicles, homes, and commercial spaces" },
+  { value: "wrap_ppf", label: "Wrap & PPF", icon: Shield, description: "Paint protection film, wraps, chrome delete, and ceramic protection" },
+  { value: "window_tinting", label: "Window Tinting", icon: CircleDot, description: "Automotive tint installs, replacements, and heat rejection packages" },
+  { value: "performance", label: "Performance", icon: Gauge, description: "Suspension, exhaust, tuning, brakes, and track prep services" },
   { value: "mechanic", label: "Mechanic", icon: Wrench, description: "General automotive repair and maintenance services" },
   { value: "tire_shop", label: "Tire Shop", icon: CircleDot, description: "Tire sales, mounting, balancing, and alignment" },
-  { value: "car_wash", label: "Car Wash", icon: Droplets, description: "Automated or hand-wash car cleaning services" },
-  { value: "wrap_shop", label: "Wrap Shop", icon: PaintBucket, description: "Full and partial vehicle wraps and vinyl graphics" },
-  { value: "dealership_service", label: "Dealership Service", icon: Store, description: "New and used vehicle dealership service department" },
-  { value: "other_auto_service", label: "Other Auto Service", icon: Wrench, description: "Other automotive services and specialties" },
+  { value: "muffler_shop", label: "Muffler Shop", icon: PaintBucket, description: "Exhaust replacement, fabrication, repair, and sound tuning" },
 ] as const;
 
 interface FormData {

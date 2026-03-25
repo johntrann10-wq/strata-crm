@@ -12,41 +12,36 @@ import { logger } from "./logger.js";
 const REMINDER_TYPES = new Set([
   "auto_detailing",
   "mobile_detailing",
-  "ppf_ceramic",
-  "tint_shop",
+  "wrap_ppf",
+  "window_tinting",
+  "performance",
   "mechanic",
   "tire_shop",
-  "car_wash",
-  "wrap_shop",
-  "dealership_service",
-  "body_shop",
-  "other_auto_service",
+  "muffler_shop",
 ]);
 
 /** Business types that get lapsed client detection and outreach */
 const LAPSED_TYPES = new Set([
   "auto_detailing",
   "mobile_detailing",
-  "ppf_ceramic",
-  "tint_shop",
+  "wrap_ppf",
+  "window_tinting",
+  "performance",
   "mechanic",
-  "wrap_shop",
-  "dealership_service",
-  "body_shop",
-  "other_auto_service",
+  "tire_shop",
+  "muffler_shop",
 ]);
 
 /** Business types that get post-visit review requests */
 const REVIEW_REQUEST_TYPES = new Set([
   "auto_detailing",
   "mobile_detailing",
-  "ppf_ceramic",
-  "tint_shop",
-  "car_wash",
-  "wrap_shop",
-  "dealership_service",
-  "body_shop",
-  "other_auto_service",
+  "wrap_ppf",
+  "window_tinting",
+  "performance",
+  "mechanic",
+  "tire_shop",
+  "muffler_shop",
 ]);
 
 function getBusinessTimezone(business: { timezone?: string | null }): string {

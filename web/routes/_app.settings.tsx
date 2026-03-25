@@ -62,14 +62,12 @@ import { clearRuntimeErrors, listRuntimeErrors, type RuntimeErrorEntry } from ".
 const BUSINESS_TYPES = [
   { value: "auto_detailing", label: "Auto Detailing" },
   { value: "mobile_detailing", label: "Mobile Detailing" },
-  { value: "ppf_ceramic", label: "PPF & Ceramic" },
-  { value: "tint_shop", label: "Tint Shop" },
+  { value: "wrap_ppf", label: "Wrap & PPF" },
+  { value: "window_tinting", label: "Window Tinting" },
+  { value: "performance", label: "Performance" },
   { value: "mechanic", label: "Mechanic" },
   { value: "tire_shop", label: "Tire Shop" },
-  { value: "car_wash", label: "Car Wash" },
-  { value: "wrap_shop", label: "Wrap Shop" },
-  { value: "dealership_service", label: "Dealership Service" },
-  { value: "other_auto_service", label: "Other Auto Service" },
+  { value: "muffler_shop", label: "Muffler Shop" },
 ];
 
 const TIMEZONES = [

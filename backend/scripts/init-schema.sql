@@ -2,8 +2,8 @@
 -- Enums
 DO $$ BEGIN
   CREATE TYPE business_type AS ENUM (
-    'auto_detailing', 'mobile_detailing', 'ppf_ceramic', 'tint_shop', 'mechanic',
-    'tire_shop', 'car_wash', 'wrap_shop', 'dealership_service', 'body_shop', 'other_auto_service'
+    'auto_detailing', 'mobile_detailing', 'wrap_ppf', 'window_tinting',
+    'performance', 'mechanic', 'tire_shop', 'muffler_shop'
   );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
