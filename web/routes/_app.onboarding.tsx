@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   ArrowRight,
@@ -240,9 +241,13 @@ export default function OnboardingPage() {
       setCurrentBusinessId(saved.id);
       await api.business.completeOnboarding(saved.id);
       try {
-        await applyBusinessPreset();
+        const presetResult = await applyBusinessPreset();
+        if (presetResult.data && typeof presetResult.data === "object" && "ok" in presetResult.data && presetResult.data.ok === false) {
+          toast.warning(presetResult.data.message);
+        }
       } catch {
         // Starter services are useful, but onboarding should still complete if seeding fails.
+        toast.warning("Starter services could not be fully applied yet.");
       }
       navigate("/signed-in", { replace: true });
     } catch (submitError) {

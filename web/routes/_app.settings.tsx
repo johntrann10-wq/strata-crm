@@ -130,6 +130,9 @@ type StaffRecord = {
 };
 
 type BusinessPresetActionResult = BusinessPresetSummary;
+type ApplyBusinessPresetResult =
+  | { ok: true; created: number; skipped: number; group: string }
+  | { ok: false; message: string };
 
 const STAFF_ROLES = [
   { value: "owner", label: "Owner" },
@@ -524,8 +527,17 @@ export default function SettingsPage() {
     try {
       const result = await applyBusinessPreset();
       await getBusinessPreset();
-      if ((result.data?.created ?? 0) > 0) {
-        toast.success(`Added ${result.data?.created} starter services`);
+      const payload = result.data as ApplyBusinessPresetResult | null | undefined;
+      if (!payload) {
+        toast.error("Could not apply starter services.");
+        return;
+      }
+      if (payload.ok === false) {
+        toast.warning(payload.message);
+        return;
+      }
+      if ((payload.created ?? 0) > 0) {
+        toast.success(`Added ${payload.created} starter services`);
       } else {
         toast.success("Starter services are already applied");
       }

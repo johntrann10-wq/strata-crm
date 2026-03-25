@@ -446,7 +446,10 @@ export const api = {
       body: JSON.stringify({}),
     }),
   applyBusinessPreset: () =>
-    request<{ ok: true; created: number; skipped: number; group: string }>("/actions/applyBusinessPreset", {
+    request<
+      | { ok: true; created: number; skipped: number; group: string }
+      | { ok: false; message: string }
+    >("/actions/applyBusinessPreset", {
       method: "POST",
       body: JSON.stringify({}),
     }),
