@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Calendar,
   CheckCircle2,
+  ChevronRight,
   CreditCard,
   FileText,
   Gauge,
@@ -136,6 +137,12 @@ const objections = [
     answer:
       "No. The point of Strata is to reduce tool sprawl by keeping customer records, scheduling, jobs, invoices, and payments in one operating system.",
   },
+];
+
+const previewAppointments = [
+  { time: "8:00 AM", title: "Full interior + exterior detail", customer: "Alex R. · 2022 Tesla Model 3", status: "Confirmed" },
+  { time: "10:30 AM", title: "Front two windows tint", customer: "Monica S. · 2021 Honda Accord", status: "Scheduled" },
+  { time: "1:00 PM", title: "Brake pad and rotor replacement", customer: "Chris M. · 2018 F-150", status: "In progress" },
 ];
 
 export default function LandingPage() {
@@ -289,6 +296,71 @@ export default function LandingPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+          <div className="rounded-[30px] border border-orange-100 bg-white/96 p-5 shadow-[0_16px_60px_rgba(15,23,42,0.05)] sm:p-6">
+            <div className="flex items-center justify-between gap-3 border-b border-orange-100 pb-4">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Product preview</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950">A calmer daily schedule view</h2>
+              </div>
+              <div className="rounded-2xl border border-orange-100 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-700">
+                March 25
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3">
+              {previewAppointments.map((item) => (
+                <div
+                  key={`${item.time}-${item.title}`}
+                  className="flex flex-col gap-3 rounded-2xl border border-orange-100 bg-[linear-gradient(180deg,#fffdfb_0%,#fff7f1_100%)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-gray-950 shadow-sm">
+                      {item.time}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-950">{item.title}</p>
+                      <p className="mt-1 text-sm text-gray-600">{item.customer}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="rounded-full border border-orange-200 bg-white px-3 py-1.5 font-medium text-orange-700">
+                      {item.status}
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[30px] border border-orange-100 bg-gray-950 p-5 text-white shadow-[0_16px_60px_rgba(15,23,42,0.12)] sm:p-6">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-300">What that means in practice</p>
+            <div className="mt-4 space-y-4">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-lg font-semibold">Less hunting</p>
+                <p className="mt-1 text-sm leading-6 text-white/72">
+                  Front-desk staff can see the day, the customer, the vehicle, and the job type without bouncing between views.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-lg font-semibold">Less clutter</p>
+                <p className="mt-1 text-sm leading-6 text-white/72">
+                  The product is designed to keep the next important action visible instead of burying it under admin noise.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-lg font-semibold">Less second-guessing</p>
+                <p className="mt-1 text-sm leading-6 text-white/72">
+                  Client, vehicle, schedule, and billing context stay connected so the workflow feels more obvious.
+                </p>
+              </div>
             </div>
           </div>
         </div>
