@@ -30,6 +30,7 @@ import { ActivityFeedCard, type ActivityRecord } from "../components/shared/Acti
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { toast } from "sonner";
+import { getBusinessTypeWorkspaceDefaults } from "../lib/businessTypeWorkspaceDefaults";
 
 type AppointmentRecord = {
   id: string;
@@ -96,6 +97,8 @@ type ClientRecord = {
 
 type BusinessSetupRecord = {
   id: string;
+  name?: string | null;
+  type?: string | null;
   operatingHours?: string | null;
   appointmentBufferMinutes?: number | null;
   defaultTaxRate?: number | string | null;
@@ -265,7 +268,7 @@ export default function SignedIn() {
   } as any);
   const [{ data: activationBusinessRaw, fetching: fetchingActivationBusiness }] = useFindMany(api.business, {
     first: 1,
-    select: { id: true, operatingHours: true, appointmentBufferMinutes: true, defaultTaxRate: true },
+    select: { id: true, name: true, type: true, operatingHours: true, appointmentBufferMinutes: true, defaultTaxRate: true },
     pause: !businessId,
   } as any);
   const [{ data: activationClientsRaw, fetching: fetchingActivationClients }] = useFindMany(api.client, {
@@ -299,6 +302,10 @@ export default function SignedIn() {
   const recentClients = (recentClientsRaw ?? []) as ClientRecord[];
   const locationRecords = (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>;
   const activationBusiness = ((activationBusinessRaw ?? [])[0] ?? null) as BusinessSetupRecord | null;
+  const workspaceDefaults = useMemo(
+    () => getBusinessTypeWorkspaceDefaults(activationBusiness?.type),
+    [activationBusiness?.type]
+  );
   const activeLocationName = useMemo(
     () => locationRecords.find((location) => location.id === currentLocationId)?.name?.trim() || null,
     [locationRecords, currentLocationId]
@@ -816,6 +823,12 @@ export default function SignedIn() {
           staleFollowUps={staleQuoteFollowUps.length + staleInvoiceCollections.length}
           depositCount={depositsAwaitingPayment.length}
           scheduleJobHref={scheduleJobHref}
+        />
+
+        <ShopTypePlaybookCard
+          businessName={activationBusiness?.name ?? businessName ?? null}
+          defaults={workspaceDefaults}
+          activationChecklist={activationChecklist}
         />
 
         {anyError ? (
@@ -1939,6 +1952,112 @@ function OperatingLane({
       <Button asChild variant="ghost" className="mt-3 h-auto px-0 text-sm font-semibold text-slate-900 hover:bg-transparent hover:text-slate-700">
         <Link to={href}>{actionLabel}</Link>
       </Button>
+    </div>
+  );
+}
+
+function ShopTypePlaybookCard({
+  businessName,
+  defaults,
+  activationChecklist,
+}: {
+  businessName: string | null;
+  defaults: ReturnType<typeof getBusinessTypeWorkspaceDefaults>;
+  activationChecklist: {
+    completed: number;
+    total: number;
+  };
+}) {
+  const isOperational = activationChecklist.completed >= 4;
+
+  return (
+    <section className="rounded-[28px] border border-border/70 bg-card px-4 py-5 shadow-sm sm:px-5 sm:py-6">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Built for {defaults.label}
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+            {businessName?.trim() ? `${businessName} should feel ready on day one` : `${defaults.label} workflow, already loaded`}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm text-slate-600">
+            {defaults.workflowSummary}
+          </p>
+        </div>
+        <div className="grid shrink-0 gap-2 sm:grid-cols-2 lg:w-[320px]">
+          <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Starter services</p>
+            <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{defaults.starterCount}</p>
+            <p className="mt-1 text-xs text-slate-600">Preloaded for quoting and booking</p>
+          </div>
+          <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Booking defaults</p>
+            <p className="mt-2 text-sm font-semibold text-slate-950">{defaults.defaultDays}</p>
+            <p className="mt-1 text-xs text-slate-600">
+              {defaults.defaultOpen}-{defaults.defaultClose} with {defaults.appointmentBufferMinutes} min buffer
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-[1.5rem] border border-border/70 bg-white/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Operating rhythm</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <PlaybookStep
+              title="Book with confidence"
+              detail={defaults.bookingSettingsLabel}
+            />
+            <PlaybookStep
+              title="Sell the work clearly"
+              detail={defaults.estimateTemplateSummary}
+            />
+            <PlaybookStep
+              title="Close with consistency"
+              detail={defaults.invoiceTemplateSummary}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-[1.5rem] border border-border/70 bg-white/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">What makes this sticky</p>
+          <div className="mt-3 space-y-3">
+            <p className="text-sm text-slate-700">
+              Once clients, vehicles, appointments, and invoices live here, Strata becomes the running memory of the shop, not just another tool.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {defaults.sampleServices.map((service) => (
+                <span key={service} className="rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-xs font-medium text-slate-700">
+                  {service}
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant={isOperational ? "outline" : "default"} className="rounded-xl">
+                <Link to={isOperational ? "/appointments" : "/services"}>{isOperational ? "Open schedule" : "Review starter services"}</Link>
+              </Button>
+              <Button asChild variant="outline" className="rounded-xl">
+                <Link to="/settings">Adjust shop defaults</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PlaybookStep({
+  title,
+  detail,
+}: {
+  title: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-border/70 bg-muted/15 p-4">
+      <p className="text-sm font-semibold text-slate-950">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{detail}</p>
     </div>
   );
 }
