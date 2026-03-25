@@ -371,27 +371,27 @@ export default function QuoteDetailPage() {
   const clientName = `${quote.client.firstName} ${quote.client.lastName}`;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+    <div className="mx-auto max-w-5xl space-y-5 px-3 py-4 sm:px-4 sm:py-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
           <Button variant="ghost" size="icon" asChild>
             <Link to="/quotes">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <Separator orientation="vertical" className="h-6" />
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold">Quote for {clientName}</h1>
+          <Separator orientation="vertical" className="mt-1 hidden h-6 sm:block" />
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <h1 className="min-w-0 text-xl font-semibold sm:text-2xl">Quote for {clientName}</h1>
             <StatusBadge status={quote.status} />
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
           {(quote.status === "draft" || quote.status === "sent") && (
             <Button
               onClick={() => void handleSend()}
               disabled={sending}
-              className="bg-orange-500 hover:bg-orange-600 text-white"
+              className="w-full bg-orange-500 text-white hover:bg-orange-600 sm:w-auto"
             >
               {sending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -406,6 +406,7 @@ export default function QuoteDetailPage() {
               variant="outline"
               onClick={() => setShowDeclineDialog(true)}
               disabled={updating}
+              className="w-full sm:w-auto"
             >
               <X className="mr-2 h-4 w-4" />
               Mark Declined
@@ -413,7 +414,7 @@ export default function QuoteDetailPage() {
           )}
           <Button
             variant="outline"
-            className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+            className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground sm:w-auto"
             onClick={() => setShowDeleteDialog(true)}
             disabled={deleting}
           >
@@ -435,13 +436,13 @@ export default function QuoteDetailPage() {
         <div className="lg:col-span-2 space-y-6">
           {/* Line Items Card */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-base">Line Items</CardTitle>
               {quote.status === "draft" && (
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-7 w-7"
+                  className="h-9 w-9 self-start sm:h-7 sm:w-7"
                   onClick={() => setAddQliOpen(true)}
                 >
                   <Plus className="h-4 w-4" />

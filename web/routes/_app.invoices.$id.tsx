@@ -131,13 +131,13 @@ function WorkflowLinkCard({
 }) {
   return (
     <div className="rounded-lg border p-3">
-      <div className="flex items-start gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <Icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <p className="text-xs uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
           <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
           {href ? (
-            <Button asChild variant="link" className="mt-1 h-auto px-0 text-sm">
+            <Button asChild variant="link" className="mt-1 h-auto justify-start px-0 text-sm">
               <Link to={href}>{actionLabel}</Link>
             </Button>
           ) : null}
@@ -568,7 +568,7 @@ export default function InvoiceDetailPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-5xl space-y-6">
+    <div className="container mx-auto max-w-5xl space-y-5 px-3 py-4 sm:p-6">
       {/* Back link */}
       <Link
         to="/invoices"
@@ -588,7 +588,7 @@ export default function InvoiceDetailPage() {
       <RelatedRecordsPanel records={relatedRecords} loading={fetching} />
 
       {/* Invoice Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold tracking-tight">Invoice {invoiceLabel}</h1>
@@ -605,9 +605,9 @@ export default function InvoiceDetailPage() {
             </p>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
           {status !== "void" && (
-            <Button onClick={() => window.print()} variant="ghost" size="sm">
+            <Button onClick={() => window.print()} variant="ghost" size="sm" className="w-full sm:w-auto">
               <Printer className="h-4 w-4 mr-2" />
               Print
             </Button>
@@ -618,6 +618,7 @@ export default function InvoiceDetailPage() {
               disabled={sendingToClient}
               variant="outline"
               size="sm"
+              className="w-full sm:w-auto"
             >
               {sendingToClient ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -628,7 +629,7 @@ export default function InvoiceDetailPage() {
             </Button>
           )}
           {invoiceAllowsPayment(status) && canWritePayments && (
-            <Button onClick={handleOpenPaymentDialog} size="sm">
+            <Button onClick={handleOpenPaymentDialog} size="sm" className="w-full sm:w-auto">
               <CreditCard className="h-4 w-4 mr-2" />
               Record Payment
             </Button>
@@ -636,7 +637,7 @@ export default function InvoiceDetailPage() {
           {status !== "void" && status !== "paid" && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button disabled={voidingInvoice} variant="destructive" size="sm">
+                <Button disabled={voidingInvoice} variant="destructive" size="sm" className="w-full sm:w-auto">
                   {voidingInvoice ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
