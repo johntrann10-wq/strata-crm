@@ -85,6 +85,7 @@ export default function OnboardingPage() {
   const [staffCount, setStaffCount] = useState("1");
   const [operatingHours, setOperatingHours] = useState({ days: "Mon-Fri", open: "09:00", close: "17:00" });
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showOptionalBasics, setShowOptionalBasics] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({ name: "", phone: "", email: "", address: "", city: "", state: "", zip: "" });
 
@@ -217,7 +218,7 @@ export default function OnboardingPage() {
             <div>
               <div className="mb-6">
                 <h1 className="mb-3 text-2xl font-bold sm:text-4xl">Choose your shop type</h1>
-                <p className="text-sm text-[#9ca3af] sm:text-lg">Strata will preload the right starter services, default schedule, and workflow structure for your business.</p>
+                <p className="text-sm text-[#9ca3af] sm:text-lg">Pick the kind of shop you run. Strata will load the right services, booking defaults, and workflow structure automatically.</p>
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -332,57 +333,65 @@ export default function OnboardingPage() {
             <div>
               <div className="mb-6">
                 <h1 className="mb-3 text-2xl font-bold sm:text-4xl">Launch your workspace</h1>
-                <p className="text-sm text-[#9ca3af] sm:text-lg">Only your business name is required. Everything else can be refined later from settings.</p>
+                <p className="text-sm text-[#9ca3af] sm:text-lg">Only your business name is required to get operational. Everything else can wait until after you start booking work.</p>
               </div>
 
               <form id={ONBOARDING_FORM_ID} onSubmit={handleSubmit} className="space-y-5 rounded-3xl border border-[#232323] bg-[#141414] p-5 sm:p-6">
-                <div className="grid gap-4 sm:grid-cols-[1.1fr_0.9fr]">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="name" className="text-sm font-medium text-[#d1d5db]">Business name <span className="text-orange-500">*</span></Label>
-                    <Input id="name" value={formData.name} onChange={handleFieldChange("name")} placeholder={selectedTypeMeta?.exampleName ?? "Your business name"} required className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-medium text-[#d1d5db]">Business type</Label>
-                    <div className="flex h-11 items-center rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 text-sm text-white">{selectedTypeMeta?.label ?? "Not selected"}</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="phone" className="text-sm font-medium text-[#d1d5db]">Phone</Label>
-                    <Input id="phone" type="tel" value={formData.phone} onChange={handleFieldChange("phone")} placeholder="(555) 000-0000" className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="email" className="text-sm font-medium text-[#d1d5db]">Email</Label>
-                    <Input id="email" type="email" value={formData.email} onChange={handleFieldChange("email")} placeholder="hello@yourbusiness.com" className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
-                  </div>
-                </div>
-
                 <div className="space-y-1.5">
-                  <Label htmlFor="address" className="text-sm font-medium text-[#d1d5db]">Address</Label>
-                  <Input id="address" value={formData.address} onChange={handleFieldChange("address")} placeholder="123 Main St" className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
+                  <Label htmlFor="name" className="text-sm font-medium text-[#d1d5db]">Business name <span className="text-orange-500">*</span></Label>
+                  <Input id="name" value={formData.name} onChange={handleFieldChange("name")} placeholder={selectedTypeMeta?.exampleName ?? "Your business name"} required className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
+                  <p className="text-xs text-[#8b929f]">This is the only thing you need to enter right now.</p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="city" className="text-sm font-medium text-[#d1d5db]">City</Label>
-                    <Input id="city" value={formData.city} onChange={handleFieldChange("city")} placeholder="Los Angeles" className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="state" className="text-sm font-medium text-[#d1d5db]">State</Label>
-                    <Input id="state" value={formData.state} onChange={handleFieldChange("state")} placeholder="CA" maxLength={2} className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="zip" className="text-sm font-medium text-[#d1d5db]">Zip</Label>
-                    <Input id="zip" value={formData.zip} onChange={handleFieldChange("zip")} placeholder="90210" className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
-                  </div>
+                <div className="rounded-2xl border border-[#262626] bg-[#111111]">
+                  <button type="button" onClick={() => setShowOptionalBasics((current) => !current)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
+                    <div>
+                      <p className="text-sm font-medium text-white">Contact and shop address</p>
+                      <p className="mt-1 text-xs text-[#8b929f]">Optional for now. Add this later if you just want to get into the product.</p>
+                    </div>
+                    {showOptionalBasics ? <ChevronUp className="h-4 w-4 text-[#8b929f]" /> : <ChevronDown className="h-4 w-4 text-[#8b929f]" />}
+                  </button>
+                  {showOptionalBasics ? (
+                    <div className="space-y-4 border-t border-[#262626] px-4 pb-4 pt-3">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="phone" className="text-sm font-medium text-[#d1d5db]">Phone</Label>
+                          <Input id="phone" type="tel" value={formData.phone} onChange={handleFieldChange("phone")} placeholder="(555) 000-0000" className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="email" className="text-sm font-medium text-[#d1d5db]">Email</Label>
+                          <Input id="email" type="email" value={formData.email} onChange={handleFieldChange("email")} placeholder="hello@yourbusiness.com" className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="address" className="text-sm font-medium text-[#d1d5db]">Address</Label>
+                        <Input id="address" value={formData.address} onChange={handleFieldChange("address")} placeholder="123 Main St" className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="city" className="text-sm font-medium text-[#d1d5db]">City</Label>
+                          <Input id="city" value={formData.city} onChange={handleFieldChange("city")} placeholder="Los Angeles" className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="state" className="text-sm font-medium text-[#d1d5db]">State</Label>
+                          <Input id="state" value={formData.state} onChange={handleFieldChange("state")} placeholder="CA" maxLength={2} className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="zip" className="text-sm font-medium text-[#d1d5db]">Zip</Label>
+                          <Input id="zip" value={formData.zip} onChange={handleFieldChange("zip")} placeholder="90210" className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="rounded-2xl border border-[#262626] bg-[#111111]">
                   <button type="button" onClick={() => setShowAdvanced((current) => !current)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
                     <div>
                       <p className="text-sm font-medium text-white">Advanced startup defaults</p>
-                      <p className="mt-1 text-xs text-[#8b929f]">Team size and hours are already prefilled for your shop type.</p>
+                      <p className="mt-1 text-xs text-[#8b929f]">Optional. Team size and hours are already prefilled for your shop type.</p>
                     </div>
                     {showAdvanced ? <ChevronUp className="h-4 w-4 text-[#8b929f]" /> : <ChevronDown className="h-4 w-4 text-[#8b929f]" />}
                   </button>
@@ -437,6 +446,10 @@ export default function OnboardingPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+                <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                  <p className="text-sm font-medium text-white">You can change all of this later</p>
+                  <p className="mt-1 text-sm text-[#9ca3af]">Hours, taxes, booking rules, and contact details all stay editable in settings after setup.</p>
                 </div>
               </div>
 
