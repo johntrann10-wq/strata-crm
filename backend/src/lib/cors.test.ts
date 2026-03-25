@@ -88,4 +88,38 @@ describe("corsMiddleware", () => {
     expect(headers["Access-Control-Allow-Origin"]).toBeUndefined();
     expect(nextCalled).toBe(true);
   });
+
+  it("allows the production custom domain by default", () => {
+    const allowed = new Set<string>();
+    const mw = corsMiddleware(allowed);
+    const headers: Record<string, string> = {};
+    const req = {
+      method: "GET",
+      headers: { origin: "https://stratacrm.app" },
+    } as unknown as import("express").Request;
+    const res = {
+      setHeader(k: string, v: string) {
+        headers[k] = v;
+      },
+    } as unknown as import("express").Response;
+    mw(req, res, () => {});
+    expect(headers["Access-Control-Allow-Origin"]).toBe("https://stratacrm.app");
+  });
+
+  it("allows Vercel deployment origins by default", () => {
+    const allowed = new Set<string>();
+    const mw = corsMiddleware(allowed);
+    const headers: Record<string, string> = {};
+    const req = {
+      method: "GET",
+      headers: { origin: "https://strata-preview.vercel.app" },
+    } as unknown as import("express").Request;
+    const res = {
+      setHeader(k: string, v: string) {
+        headers[k] = v;
+      },
+    } as unknown as import("express").Response;
+    mw(req, res, () => {});
+    expect(headers["Access-Control-Allow-Origin"]).toBe("https://strata-preview.vercel.app");
+  });
 });

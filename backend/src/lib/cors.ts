@@ -8,6 +8,36 @@ export function normalizeOrigin(raw: string | undefined): string {
   return s.replace(/\/+$/, "");
 }
 
+function hostnameOf(origin: string): string {
+  try {
+    return new URL(origin).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isTrustedFrontendOrigin(origin: string, allowedOrigins: Set<string>): boolean {
+  if (!origin) return false;
+  if (allowedOrigins.has(origin)) return true;
+
+  const hostname = hostnameOf(origin);
+  if (!hostname) return false;
+
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return true;
+  }
+
+  if (hostname === "stratacrm.app" || hostname === "www.stratacrm.app") {
+    return true;
+  }
+
+  if (hostname.endsWith(".vercel.app")) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * Exact origins allowed for CORS (Vercel → Railway, local dev, optional extras).
  * - Always includes `FRONTEND_URL` (canonical URL for OAuth/Stripe redirects).
@@ -44,7 +74,7 @@ export function buildCorsAllowedOrigins(): Set<string> {
 export function corsMiddleware(allowedOrigins: Set<string>) {
   return (req: Request, res: Response, next: NextFunction) => {
     const requestOrigin = normalizeOrigin(req.headers.origin as string | undefined);
-    const isAllowed = Boolean(requestOrigin && allowedOrigins.has(requestOrigin));
+    const isAllowed = Boolean(requestOrigin && isTrustedFrontendOrigin(requestOrigin, allowedOrigins));
 
     if (isAllowed && requestOrigin) {
       res.setHeader("Access-Control-Allow-Origin", requestOrigin);
