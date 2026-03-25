@@ -44,14 +44,18 @@ type LocationRecord = {
   updatedAt: Date;
 };
 
-const baseLocationSelection = {
+const legacyLocationSelection = {
   id: locations.id,
   businessId: locations.businessId,
   name: locations.name,
   address: locations.address,
-  active: locations.active,
   createdAt: locations.createdAt,
   updatedAt: locations.updatedAt,
+};
+
+const baseLocationSelection = {
+  ...legacyLocationSelection,
+  active: locations.active,
 };
 
 const timezoneLocationSelection = {
@@ -64,11 +68,16 @@ const fullLocationSelection = {
   phone: locations.phone,
 };
 
-function withMissingFields<T extends Omit<LocationRecord, "phone" | "timezone">>(
+function withMissingFields<T extends Omit<LocationRecord, "phone" | "timezone" | "active">>(
   row: T,
-  extras?: Partial<Pick<LocationRecord, "phone" | "timezone">>
+  extras?: Partial<Pick<LocationRecord, "phone" | "timezone" | "active">>
 ): LocationRecord {
-  return { ...row, phone: extras?.phone ?? null, timezone: extras?.timezone ?? null };
+  return {
+    ...row,
+    phone: extras?.phone ?? null,
+    timezone: extras?.timezone ?? null,
+    active: extras?.active ?? true,
+  };
 }
 
 async function listLocationsForBusiness(bid: string): Promise<LocationRecord[]> {
@@ -97,12 +106,26 @@ async function listLocationsForBusiness(bid: string): Promise<LocationRecord[]> 
         businessId: bid,
         error: innerError instanceof Error ? innerError.message : String(innerError),
       });
-      const rows = await db
-        .select(baseLocationSelection)
-        .from(locations)
-        .where(eq(locations.businessId, bid))
-        .orderBy(asc(locations.name));
-      return rows.map((row) => withMissingFields(row));
+      try {
+        const rows = await db
+          .select(baseLocationSelection)
+          .from(locations)
+          .where(eq(locations.businessId, bid))
+          .orderBy(asc(locations.name));
+        return rows.map((row) => withMissingFields(row, { active: row.active }));
+      } catch (legacyError) {
+        if (!isLocationSchemaDriftError(legacyError)) throw legacyError;
+        logger.warn("locations list falling back without active column", {
+          businessId: bid,
+          error: legacyError instanceof Error ? legacyError.message : String(legacyError),
+        });
+        const rows = await db
+          .select(legacyLocationSelection)
+          .from(locations)
+          .where(eq(locations.businessId, bid))
+          .orderBy(asc(locations.name));
+        return rows.map((row) => withMissingFields(row));
+      }
     }
   }
 }
@@ -136,12 +159,27 @@ async function getLocationForBusiness(bid: string, id: string): Promise<Location
         locationId: id,
         error: innerError instanceof Error ? innerError.message : String(innerError),
       });
-      const [row] = await db
-        .select(baseLocationSelection)
-        .from(locations)
-        .where(and(eq(locations.id, id), eq(locations.businessId, bid)))
-        .limit(1);
-      return row ? withMissingFields(row) : null;
+      try {
+        const [row] = await db
+          .select(baseLocationSelection)
+          .from(locations)
+          .where(and(eq(locations.id, id), eq(locations.businessId, bid)))
+          .limit(1);
+        return row ? withMissingFields(row, { active: row.active }) : null;
+      } catch (legacyError) {
+        if (!isLocationSchemaDriftError(legacyError)) throw legacyError;
+        logger.warn("location lookup falling back without active column", {
+          businessId: bid,
+          locationId: id,
+          error: legacyError instanceof Error ? legacyError.message : String(legacyError),
+        });
+        const [row] = await db
+          .select(legacyLocationSelection)
+          .from(locations)
+          .where(and(eq(locations.id, id), eq(locations.businessId, bid)))
+          .limit(1);
+        return row ? withMissingFields(row) : null;
+      }
     }
   }
 }
@@ -182,17 +220,34 @@ locationsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: 
       businessId: bid,
       error: error instanceof Error ? error.message : String(error),
     });
-    const [created] = await db
-      .insert(locations)
-      .values({
+    try {
+      const [created] = await db
+        .insert(locations)
+        .values({
+          businessId: bid,
+          name: parsed.data.name,
+          address: parsed.data.address ?? null,
+          timezone: parsed.data.timezone ?? null,
+          active: parsed.data.active ?? true,
+        })
+        .returning({ id: locations.id });
+      createdId = created?.id ?? null;
+    } catch (innerError) {
+      if (!isLocationSchemaDriftError(innerError)) throw innerError;
+      logger.warn("location create falling back without timezone/active columns", {
         businessId: bid,
-        name: parsed.data.name,
-        address: parsed.data.address ?? null,
-        timezone: parsed.data.timezone ?? null,
-        active: parsed.data.active ?? true,
-      })
-      .returning({ id: locations.id });
-    createdId = created?.id ?? null;
+        error: innerError instanceof Error ? innerError.message : String(innerError),
+      });
+      const [created] = await db
+        .insert(locations)
+        .values({
+          businessId: bid,
+          name: parsed.data.name,
+          address: parsed.data.address ?? null,
+        })
+        .returning({ id: locations.id });
+      createdId = created?.id ?? null;
+    }
   }
   if (!createdId) throw new BadRequestError("Failed to create location.");
   const created = await getLocationForBusiness(bid, createdId);
@@ -227,16 +282,33 @@ locationsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, r
       locationId: req.params.id,
       error: error instanceof Error ? error.message : String(error),
     });
-    await db
-      .update(locations)
-      .set({
-        ...(data.name !== undefined ? { name: data.name } : {}),
-        ...(data.address !== undefined ? { address: data.address } : {}),
-        ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
-        ...(data.active !== undefined ? { active: data.active } : {}),
-        updatedAt: new Date(),
-      })
-      .where(and(eq(locations.id, req.params.id), eq(locations.businessId, bid)));
+    try {
+      await db
+        .update(locations)
+        .set({
+          ...(data.name !== undefined ? { name: data.name } : {}),
+          ...(data.address !== undefined ? { address: data.address } : {}),
+          ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
+          ...(data.active !== undefined ? { active: data.active } : {}),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(locations.id, req.params.id), eq(locations.businessId, bid)));
+    } catch (innerError) {
+      if (!isLocationSchemaDriftError(innerError)) throw innerError;
+      logger.warn("location update falling back without timezone/active columns", {
+        businessId: bid,
+        locationId: req.params.id,
+        error: innerError instanceof Error ? innerError.message : String(innerError),
+      });
+      await db
+        .update(locations)
+        .set({
+          ...(data.name !== undefined ? { name: data.name } : {}),
+          ...(data.address !== undefined ? { address: data.address } : {}),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(locations.id, req.params.id), eq(locations.businessId, bid)));
+    }
   }
   const updated = await getLocationForBusiness(bid, req.params.id);
   res.json(updated);
