@@ -6,6 +6,7 @@ import { eq, and, asc } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { logger } from "../lib/logger.js";
 
 export const locationsRouter = Router({ mergeParams: true });
 
@@ -24,22 +25,99 @@ const createSchema = z.object({
 
 const updateSchema = createSchema.partial();
 
+function isLocationSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: string }).code;
+  const message = String((error as { message?: string }).message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+type LocationRecord = {
+  id: string;
+  businessId: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  timezone: string | null;
+  active: boolean | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const baseLocationSelection = {
+  id: locations.id,
+  businessId: locations.businessId,
+  name: locations.name,
+  address: locations.address,
+  timezone: locations.timezone,
+  active: locations.active,
+  createdAt: locations.createdAt,
+  updatedAt: locations.updatedAt,
+};
+
+const fullLocationSelection = {
+  ...baseLocationSelection,
+  phone: locations.phone,
+};
+
+function withMissingPhone<T extends Omit<LocationRecord, "phone">>(row: T): LocationRecord {
+  return { ...row, phone: null };
+}
+
+async function listLocationsForBusiness(bid: string): Promise<LocationRecord[]> {
+  try {
+    return await db
+      .select(fullLocationSelection)
+      .from(locations)
+      .where(eq(locations.businessId, bid))
+      .orderBy(asc(locations.name));
+  } catch (error) {
+    if (!isLocationSchemaDriftError(error)) throw error;
+    logger.warn("locations list falling back without phone column", {
+      businessId: bid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const rows = await db
+      .select(baseLocationSelection)
+      .from(locations)
+      .where(eq(locations.businessId, bid))
+      .orderBy(asc(locations.name));
+    return rows.map(withMissingPhone);
+  }
+}
+
+async function getLocationForBusiness(bid: string, id: string): Promise<LocationRecord | null> {
+  try {
+    const [row] = await db
+      .select(fullLocationSelection)
+      .from(locations)
+      .where(and(eq(locations.id, id), eq(locations.businessId, bid)))
+      .limit(1);
+    return row ?? null;
+  } catch (error) {
+    if (!isLocationSchemaDriftError(error)) throw error;
+    logger.warn("location lookup falling back without phone column", {
+      businessId: bid,
+      locationId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const [row] = await db
+      .select(baseLocationSelection)
+      .from(locations)
+      .where(and(eq(locations.id, id), eq(locations.businessId, bid)))
+      .limit(1);
+    return row ? withMissingPhone(row) : null;
+  }
+}
+
 locationsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
-  const list = await db
-    .select()
-    .from(locations)
-    .where(eq(locations.businessId, businessId(req)))
-    .orderBy(asc(locations.name));
+  const list = await listLocationsForBusiness(businessId(req));
   res.json({ records: list });
 });
 
 locationsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const [row] = await db
-    .select()
-    .from(locations)
-    .where(and(eq(locations.id, req.params.id), eq(locations.businessId, bid)))
-    .limit(1);
+  const row = await getLocationForBusiness(bid, req.params.id);
   if (!row) throw new NotFoundError("Location not found.");
   res.json(row);
 });
@@ -48,55 +126,90 @@ locationsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: 
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
   const bid = businessId(req);
-  const [created] = await db
-    .insert(locations)
-    .values({
+  let createdId: string | null = null;
+  try {
+    const [created] = await db
+      .insert(locations)
+      .values({
+        businessId: bid,
+        name: parsed.data.name,
+        address: parsed.data.address ?? null,
+        phone: parsed.data.phone ?? null,
+        timezone: parsed.data.timezone ?? null,
+        active: parsed.data.active ?? true,
+      })
+      .returning({ id: locations.id });
+    createdId = created?.id ?? null;
+  } catch (error) {
+    if (!isLocationSchemaDriftError(error)) throw error;
+    logger.warn("location create falling back without phone column", {
       businessId: bid,
-      name: parsed.data.name,
-      address: parsed.data.address ?? null,
-      phone: parsed.data.phone ?? null,
-      timezone: parsed.data.timezone ?? null,
-      active: parsed.data.active ?? true,
-    })
-    .returning();
-  if (!created) throw new BadRequestError("Failed to create location.");
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const [created] = await db
+      .insert(locations)
+      .values({
+        businessId: bid,
+        name: parsed.data.name,
+        address: parsed.data.address ?? null,
+        timezone: parsed.data.timezone ?? null,
+        active: parsed.data.active ?? true,
+      })
+      .returning({ id: locations.id });
+    createdId = created?.id ?? null;
+  }
+  if (!createdId) throw new BadRequestError("Failed to create location.");
+  const created = await getLocationForBusiness(bid, createdId);
+  if (!created) throw new BadRequestError("Failed to load created location.");
   res.status(201).json(created);
 });
 
 locationsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const [existing] = await db
-    .select()
-    .from(locations)
-    .where(and(eq(locations.id, req.params.id), eq(locations.businessId, bid)))
-    .limit(1);
+  const existing = await getLocationForBusiness(bid, req.params.id);
   if (!existing) throw new NotFoundError("Location not found.");
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
   const data = parsed.data;
-  const [updated] = await db
-    .update(locations)
-    .set({
-      ...(data.name !== undefined ? { name: data.name } : {}),
-      ...(data.address !== undefined ? { address: data.address } : {}),
-      ...(data.phone !== undefined ? { phone: data.phone } : {}),
-      ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
-      ...(data.active !== undefined ? { active: data.active } : {}),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(locations.id, req.params.id), eq(locations.businessId, bid)))
-    .returning();
+  const fullUpdateData = {
+    ...(data.name !== undefined ? { name: data.name } : {}),
+    ...(data.address !== undefined ? { address: data.address } : {}),
+    ...(data.phone !== undefined ? { phone: data.phone } : {}),
+    ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
+    ...(data.active !== undefined ? { active: data.active } : {}),
+    updatedAt: new Date(),
+  };
+  try {
+    await db
+      .update(locations)
+      .set(fullUpdateData)
+      .where(and(eq(locations.id, req.params.id), eq(locations.businessId, bid)));
+  } catch (error) {
+    if (!isLocationSchemaDriftError(error)) throw error;
+    logger.warn("location update falling back without phone column", {
+      businessId: bid,
+      locationId: req.params.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await db
+      .update(locations)
+      .set({
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.address !== undefined ? { address: data.address } : {}),
+        ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
+        ...(data.active !== undefined ? { active: data.active } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(locations.id, req.params.id), eq(locations.businessId, bid)));
+  }
+  const updated = await getLocationForBusiness(bid, req.params.id);
   res.json(updated);
 });
 
 locationsRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
   const id = req.params.id;
-  const [existing] = await db
-    .select()
-    .from(locations)
-    .where(and(eq(locations.id, id), eq(locations.businessId, bid)))
-    .limit(1);
+  const existing = await getLocationForBusiness(bid, id);
   if (!existing) throw new NotFoundError("Location not found.");
 
   await db.transaction(async (tx) => {
