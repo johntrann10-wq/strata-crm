@@ -38,6 +38,7 @@ import { StatusBadge } from "../components/shared/StatusBadge";
 import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import { ChecklistCard } from "../components/shared/ChecklistCard";
 import { VerticalWorkflowCard } from "../components/shared/VerticalWorkflowCard";
+import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { getIntakePreset } from "../lib/intakePresets";
 import {
   ClientCard,
@@ -321,6 +322,7 @@ export default function AppointmentDetail() {
   const { setPageContext } = usePageContext();
   const intakePreset = getIntakePreset(businessType);
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/appointments";
+  const hasQueueReturn = searchParams.has("from");
   const withReturn = (pathname: string) =>
     `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(returnTo)}`;
 
@@ -812,6 +814,7 @@ export default function AppointmentDetail() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to appointments queue" /> : null}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">

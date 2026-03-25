@@ -26,6 +26,7 @@ import { StatusBadge } from "../components/shared/StatusBadge";
 import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import { ChecklistCard } from "../components/shared/ChecklistCard";
 import { VerticalWorkflowCard } from "../components/shared/VerticalWorkflowCard";
+import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { getIntakePreset } from "../lib/intakePresets";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { Button } from "@/components/ui/button";
@@ -140,6 +141,7 @@ export default function JobDetailPage() {
   const canWriteInvoices = permissions.has("invoices.write");
   const { setPageContext } = usePageContext();
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/jobs";
+  const hasQueueReturn = searchParams.has("from");
   const withReturn = (pathname: string) =>
     `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(returnTo)}`;
 
@@ -383,6 +385,7 @@ export default function JobDetailPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+      {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to jobs queue" /> : null}
       <PageHeader
         backTo={returnTo}
         title={record.title?.trim() || record.jobNumber}

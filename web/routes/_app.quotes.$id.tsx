@@ -9,6 +9,7 @@ import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/Re
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { CommunicationCard } from "../components/shared/CommunicationCard";
 import { ActivityFeedCard } from "../components/shared/ActivityFeedCard";
+import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,7 @@ export default function QuoteDetailPage() {
   const { permissions, currentLocationId } = useOutletContext<AuthOutletContext>();
   const canWriteQuotes = permissions.has("quotes.write");
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/quotes";
+  const hasQueueReturn = searchParams.has("from");
   const withReturn = (pathname: string) =>
     `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(returnTo)}`;
 
@@ -376,6 +378,7 @@ export default function QuoteDetailPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-3 py-4 sm:px-4 sm:py-6">
+      {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to quotes queue" /> : null}
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">

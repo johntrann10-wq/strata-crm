@@ -66,6 +66,7 @@ import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { InvoiceLineItemsTable } from "../components/invoices/InvoiceLineItemsTable";
 import { CommunicationCard } from "../components/shared/CommunicationCard";
 import { ActivityFeedCard } from "../components/shared/ActivityFeedCard";
+import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700 border-gray-200",
@@ -203,6 +204,7 @@ export default function InvoiceDetailPage() {
   const { permissions, currentLocationId } = useOutletContext<AuthOutletContext>();
   const canWritePayments = permissions.has("payments.write") || permissions.has("invoices.write");
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/invoices";
+  const hasQueueReturn = searchParams.has("from");
   const withReturn = (pathname: string) =>
     `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(returnTo)}`;
 
@@ -573,6 +575,7 @@ export default function InvoiceDetailPage() {
 
   return (
     <div className="container mx-auto max-w-5xl space-y-5 px-3 py-4 sm:p-6">
+      {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to invoices queue" /> : null}
       {/* Back link */}
       <Link
         to={returnTo}
