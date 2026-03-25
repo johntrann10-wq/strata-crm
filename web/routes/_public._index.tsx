@@ -120,6 +120,24 @@ const proofStats = [
   { value: "$29/mo", label: "with the first month free" },
 ];
 
+const objections = [
+  {
+    question: "Will this feel too complicated for my staff?",
+    answer:
+      "The product is built around obvious next steps: create the client, add the vehicle, book the work, run the job, and get paid. The goal is less training overhead, not more.",
+  },
+  {
+    question: "Is this only for one type of shop?",
+    answer:
+      "No. Strata is designed for mixed automotive service businesses, including detailing, tint, wrap, PPF, mobile service, tires, and mechanical work.",
+  },
+  {
+    question: "Do I need multiple tools to handle scheduling, CRM, and billing?",
+    answer:
+      "No. The point of Strata is to reduce tool sprawl by keeping customer records, scheduling, jobs, invoices, and payments in one operating system.",
+  },
+];
+
 export default function LandingPage() {
   const location = useLocation();
 
@@ -374,6 +392,26 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <div className="mx-auto max-w-5xl rounded-[30px] border border-orange-100 bg-white/94 p-6 shadow-[0_12px_50px_rgba(15,23,42,0.05)] sm:p-8 lg:p-10">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Common concerns</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
+              Clear enough for a first-time user. Strong enough for a real shop.
+            </h2>
+          </div>
+
+          <div className="mt-10 grid gap-4">
+            {objections.map((item) => (
+              <div key={item.question} className="rounded-2xl border border-orange-100 bg-orange-50/45 px-5 py-5">
+                <h3 className="text-lg font-semibold tracking-tight text-gray-950">{item.question}</h3>
+                <p className="mt-2 text-sm leading-7 text-gray-600">{item.answer}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section id="pricing" className="px-5 py-16 sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto max-w-5xl rounded-[32px] bg-[linear-gradient(135deg,#f97316_0%,#ea580c_100%)] px-6 py-10 text-center text-white shadow-[0_20px_70px_rgba(249,115,22,0.18)] sm:px-10 sm:py-14">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-100">Start simple</p>
@@ -382,6 +420,9 @@ export default function LandingPage() {
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-orange-50">
             Strata helps your team book faster, stay organized, and keep work moving without the clutter of heavier legacy systems.
+          </p>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-orange-100/90">
+            Start with the first month free, get your workspace set up, and see whether the day-to-day flow feels better for your team.
           </p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <Link
