@@ -36,9 +36,7 @@ const app = express();
 // CORS: Vercel → Railway (or local Vite → local API). Exact origins only — see `buildCorsAllowedOrigins`.
 // JWT uses `Authorization`; preflight OPTIONS is answered before routes.
 const corsAllowedOrigins = buildCorsAllowedOrigins();
-if (corsAllowedOrigins.size > 0) {
-  app.use(corsMiddleware(corsAllowedOrigins));
-}
+app.use(corsMiddleware(corsAllowedOrigins));
 
 // Stripe webhook needs raw body (must be before express.json())
 app.post(
