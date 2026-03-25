@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router";
-import { useFindMany, useFindFirst } from "../hooks/useApi";
-import { api } from "../api";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Loader2, Car } from "lucide-react";
+import { Car, CalendarClock, Gauge, Loader2, Search, UserRound } from "lucide-react";
+import { useFindFirst, useFindMany } from "../hooks/useApi";
+import { api } from "../api";
 import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
+import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 
 type AuthOutletContext = {
   user: {
@@ -29,19 +30,21 @@ const AVATAR_COLORS = [
 
 function getMakeColor(make: string): string {
   let hash = 0;
-  for (let i = 0; i < make.length; i++) {
-    hash = make.charCodeAt(i) + ((hash << 5) - hash);
+  for (let index = 0; index < make.length; index += 1) {
+    hash = make.charCodeAt(index) + ((hash << 5) - hash);
   }
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
 function formatMileage(mileage: number | null | undefined): string {
-  if (mileage == null) return "";
-  return mileage.toLocaleString() + " mi";
+  if (mileage == null) return "No mileage";
+  return `${mileage.toLocaleString()} mi`;
 }
 
 export default function VehiclesPage() {
   const { user } = useOutletContext<AuthOutletContext>();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
 
   const [{ data: businessData, fetching: businessFetching }] = useFindFirst(api.business, {
     filter: { owner: { id: { equals: user?.id ?? "" } } },
@@ -51,9 +54,6 @@ export default function VehiclesPage() {
 
   const businessId = businessData?.id;
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
@@ -61,7 +61,7 @@ export default function VehiclesPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const isSearching = debouncedQuery.length >= 2;
+  const isSearching = debouncedQuery.trim().length >= 2;
 
   const [{ data, fetching, error }] = useFindMany(api.vehicle as any, {
     search: isSearching ? debouncedQuery : undefined,
@@ -71,48 +71,88 @@ export default function VehiclesPage() {
   } as any);
 
   const vehicles = (data as any[]) ?? [];
-  const resultCount = vehicles.length;
+  const ownedVehicles = useMemo(() => vehicles.filter((vehicle) => Boolean(vehicle.client?.id)).length, [vehicles]);
+  const vehiclesWithMileage = useMemo(() => vehicles.filter((vehicle) => vehicle.mileage != null).length, [vehicles]);
+  const newThisMonth = useMemo(() => {
+    const now = new Date();
+    return vehicles.filter((vehicle) => {
+      const createdAt = vehicle.createdAt ? new Date(vehicle.createdAt) : null;
+      return createdAt && createdAt.getMonth() === now.getMonth() && createdAt.getFullYear() === now.getFullYear();
+    }).length;
+  }, [vehicles]);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Vehicles"
+        subtitle="Search by customer, vehicle details, or plate and jump straight into the service history."
         badge={
           <Badge variant="secondary" className="text-sm font-medium">
-            {isSearching
-              ? `${resultCount} ${resultCount === 1 ? "result" : "results"}`
-              : "Recent"}
+            {isSearching ? `${vehicles.length} ${vehicles.length === 1 ? "result" : "results"}` : "Recent"}
           </Badge>
-        }
-        right={
-          <div className="relative">
-            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-              {fetching ? (
-                <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
-              ) : (
-                <Search className="h-4 w-4 text-muted-foreground" />
-              )}
-            </div>
-            <Input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search make, model, year, plate, color, or owner name…"
-              className="pl-9 w-64"
-            />
-          </div>
         }
       />
 
-      {/* Business Loading Skeleton */}
-      {businessFetching && !businessData && (
+      {!businessFetching && !error ? (
+        <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="surface-panel px-4 py-3 sm:px-5">
+            <p className="text-sm font-medium text-muted-foreground">Visible vehicles</p>
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <p className="text-2xl font-semibold tracking-tight">{vehicles.length}</p>
+              <Car className="h-5 w-5 text-primary" />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {isSearching ? "Current search results" : "Most recent vehicles on file"}
+            </p>
+          </div>
+          <div className="surface-panel px-4 py-3 sm:px-5">
+            <p className="text-sm font-medium text-muted-foreground">Assigned owners</p>
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <p className="text-2xl font-semibold tracking-tight">{ownedVehicles}</p>
+              <UserRound className="h-5 w-5 text-primary" />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {vehicles.length > 0 ? `${Math.round((ownedVehicles / vehicles.length) * 100)}% linked to a client record` : "No vehicles loaded"}
+            </p>
+          </div>
+          <div className="surface-panel px-4 py-3 sm:px-5">
+            <p className="text-sm font-medium text-muted-foreground">Mileage captured</p>
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <p className="text-2xl font-semibold tracking-tight">{vehiclesWithMileage}</p>
+              <Gauge className="h-5 w-5 text-primary" />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {vehicles.length > 0 ? `${Math.round((vehiclesWithMileage / vehicles.length) * 100)}% have mileage on file` : "No vehicles loaded"}
+            </p>
+          </div>
+          <div className="surface-panel px-4 py-3 sm:px-5">
+            <p className="text-sm font-medium text-muted-foreground">New this month</p>
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <p className="text-2xl font-semibold tracking-tight">{newThisMonth}</p>
+              <CalendarClock className="h-5 w-5 text-primary" />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">Fresh vehicle intake added this month</p>
+          </div>
+        </section>
+      ) : null}
+
+      <ListViewToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        placeholder="Search make, model, year, plate, color, or owner name..."
+        loading={fetching}
+        resultCount={!error && !businessFetching ? vehicles.length : null}
+        noun="vehicles"
+        filtersLabel={isSearching ? "search active" : null}
+        onClear={searchQuery ? () => setSearchQuery("") : undefined}
+        className="mb-5"
+      />
+
+      {businessFetching && !businessData ? (
         <div className="space-y-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-4 rounded-lg border bg-card p-4"
-            >
-              <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="flex items-center gap-4 rounded-xl border bg-card p-4">
+              <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
               <div className="flex-1 space-y-2">
                 <Skeleton className="h-4 w-48" />
                 <Skeleton className="h-3 w-32" />
@@ -125,24 +165,19 @@ export default function VehiclesPage() {
             </div>
           ))}
         </div>
-      )}
+      ) : null}
 
-      {/* Error State */}
-      {error && !fetching && (
+      {error && !fetching ? (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
           Error loading vehicles: {error.message}
         </div>
-      )}
+      ) : null}
 
-      {/* Loading Skeleton */}
-      {fetching && !vehicles.length && (
+      {fetching && !vehicles.length ? (
         <div className="space-y-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-4 rounded-lg border bg-card p-4"
-            >
-              <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="flex items-center gap-4 rounded-xl border bg-card p-4">
+              <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
               <div className="flex-1 space-y-2">
                 <Skeleton className="h-4 w-48" />
                 <Skeleton className="h-3 w-32" />
@@ -155,10 +190,9 @@ export default function VehiclesPage() {
             </div>
           ))}
         </div>
-      )}
+      ) : null}
 
-      {/* Vehicle Cards */}
-      {!fetching && vehicles.length > 0 && (
+      {!fetching && vehicles.length > 0 ? (
         <div className="space-y-3">
           {vehicles.map((vehicle: any) => {
             const make = vehicle.make ?? "";
@@ -171,92 +205,65 @@ export default function VehiclesPage() {
 
             const cardInner = (
               <div className="flex items-center gap-4 p-4">
-                {/* Avatar */}
                 <div
-                  className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 text-white font-semibold text-sm ${avatarColor}`}
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white ${avatarColor}`}
                 >
                   {initial}
                 </div>
-
-                {/* Center Info */}
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm truncate">
-                  {[vehicle.year, vehicle.make, vehicle.model]
-                    .filter(Boolean)
-                    .join(" ")}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-sm">
+                    {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">
-                    {[vehicle.color, vehicle.licensePlate]
-                      .filter(Boolean)
-                      .join(" · ")}
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {[vehicle.color, vehicle.licensePlate].filter(Boolean).join(" • ")}
                   </p>
-                  {ownerName && (
-                    <p className="text-xs mt-0.5">
-                      <span className="text-primary underline-offset-2 hover:underline">
-                        {ownerName}
-                      </span>
-                    </p>
-                  )}
-                  {!ownerName && (
-                    <p className="text-xs text-muted-foreground mt-0.5 italic">
-                      No owner on file
-                    </p>
+                  {ownerName ? (
+                    <p className="mt-0.5 text-xs text-primary">{ownerName}</p>
+                  ) : (
+                    <p className="mt-0.5 text-xs italic text-muted-foreground">No owner on file</p>
                   )}
                 </div>
-
-                {/* Right Side */}
-                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                  {vehicle.mileage != null && (
-                    <span className="text-xs text-muted-foreground">
-                      {formatMileage(vehicle.mileage)}
-                    </span>
-                  )}
+                <div className="shrink-0 text-right">
+                  <span className="text-xs text-muted-foreground">{formatMileage(vehicle.mileage)}</span>
                 </div>
               </div>
             );
 
-            if (clientId) {
-              return (
-                <div key={vehicle.id} className="rounded-lg border bg-card hover:bg-accent/50 transition-colors">
-                  <Link
-                    to={`/clients/${clientId}/vehicles/${vehicle.id}`}
-                    className="block"
-                  >
-                    {cardInner}
-                  </Link>
-                </div>
-              );
-            }
-
-            return (
-              <div
-                key={vehicle.id}
-                className="block rounded-lg border bg-card cursor-default"
-              >
+            return clientId ? (
+              <div key={vehicle.id} className="rounded-xl border bg-card transition-colors hover:bg-accent/40">
+                <Link to={`/clients/${clientId}/vehicles/${vehicle.id}`} className="block">
+                  {cardInner}
+                </Link>
+              </div>
+            ) : (
+              <div key={vehicle.id} className="rounded-xl border bg-card">
                 {cardInner}
               </div>
             );
           })}
         </div>
-      )}
+      ) : null}
 
-      {/* Empty State — searching with no results */}
-      {!fetching && !error && vehicles.length === 0 && isSearching && (
+      {!fetching && !error && vehicles.length === 0 && isSearching ? (
         <EmptyState
           icon={Car}
           title="No vehicles found"
-          description="Try a different make, model, year, plate, or owner name"
+          description="Try a different make, model, year, plate, or owner name."
         />
-      )}
+      ) : null}
 
-      {/* Empty State — no query, no vehicles */}
-      {!fetching && !error && vehicles.length === 0 && !isSearching && (
+      {!fetching && !error && vehicles.length === 0 && !isSearching ? (
         <EmptyState
           icon={Car}
           title="No vehicles on file yet"
-          description="Vehicles are added from a client's profile page"
+          description="Vehicles are added from a client's profile page."
+          action={
+            <Button asChild variant="outline">
+              <Link to="/clients">Open clients</Link>
+            </Button>
+          }
         />
-      )}
+      ) : null}
     </div>
   );
 }
