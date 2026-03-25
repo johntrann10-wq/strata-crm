@@ -103,6 +103,12 @@ function formatFreshness(iso: string | undefined | null, label: string): string 
   return parsed ? `${label} ${format(parsed, "MMM d")}` : null;
 }
 
+function isOlderThanDays(iso: string | undefined | null, days: number): boolean {
+  const parsed = safeParseISO(iso);
+  if (!parsed) return false;
+  return Date.now() - parsed.getTime() >= days * 24 * 60 * 60 * 1000;
+}
+
 function sumCurrency(values: Array<number | string | null | undefined>): number {
   return values.reduce<number>((total, value) => {
     const n = Number(value ?? 0);
@@ -257,6 +263,25 @@ export default function SignedIn() {
 
   const openQuoteValue = useMemo(() => sumCurrency(pendingQuotes.map((quote) => quote.total)), [pendingQuotes]);
   const unpaidRevenue = useMemo(() => sumCurrency(unpaidInvoices.map((invoice) => invoiceBalance(invoice))), [unpaidInvoices]);
+  const staleQuoteFollowUps = useMemo(
+    () =>
+      pendingQuotes.filter((quote) =>
+        ["sent", "accepted"].includes(String(quote.status ?? "")) &&
+        (!safeParseISO(quote.followUpSentAt ?? null)
+          ? isOlderThanDays(quote.sentAt ?? null, 2)
+          : isOlderThanDays(quote.followUpSentAt ?? null, 5))
+      ),
+    [pendingQuotes]
+  );
+  const staleInvoiceCollections = useMemo(
+    () =>
+      unpaidInvoices.filter((invoice) =>
+        ["sent", "partial"].includes(String(invoice.status ?? "")) &&
+        !safeParseISO(invoice.lastPaidAt ?? null) &&
+        isOlderThanDays(invoice.lastSentAt ?? null, 3)
+      ),
+    [unpaidInvoices]
+  );
   const activeJobValue = useMemo(() => sumCurrency(activeJobs.map((job) => job.totalPrice)), [activeJobs]);
   const myActiveJobValue = useMemo(() => sumCurrency(myActiveJobs.map((job) => job.totalPrice)), [myActiveJobs]);
   const todayBookedValue = useMemo(
@@ -381,6 +406,24 @@ export default function SignedIn() {
         tone: "info",
       });
     }
+    if (staleQuoteFollowUps.length > 0) {
+      items.push({
+        title: "Sales follow-up is stale",
+        detail: `${staleQuoteFollowUps.length} quote${staleQuoteFollowUps.length === 1 ? "" : "s"} need another touch`,
+        href: "/quotes",
+        icon: <Receipt className="h-4 w-4" />,
+        tone: "warn",
+      });
+    }
+    if (staleInvoiceCollections.length > 0) {
+      items.push({
+        title: "Collections follow-up is stale",
+        detail: `${staleInvoiceCollections.length} invoice${staleInvoiceCollections.length === 1 ? "" : "s"} have gone cold`,
+        href: "/invoices",
+        icon: <DollarSign className="h-4 w-4" />,
+        tone: "danger",
+      });
+    }
     if (items.length === 0) {
       items.push({
         title: "Operations look healthy",
@@ -391,7 +434,14 @@ export default function SignedIn() {
       });
     }
     return items.slice(0, 4);
-  }, [overdueInvoices, unassignedActiveJobs, unassignedTodayAppointments, agingPendingQuotes]);
+  }, [
+    overdueInvoices,
+    unassignedActiveJobs,
+    unassignedTodayAppointments,
+    agingPendingQuotes,
+    staleQuoteFollowUps,
+    staleInvoiceCollections,
+  ]);
 
   const priorityActions = useMemo(() => {
     const actions: Array<{ title: string; detail: string; href: string; cta: string }> = [];
