@@ -45,6 +45,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   ArrowLeft,
   Ban,
   CreditCard,
@@ -57,6 +63,7 @@ import {
   Receipt,
   RotateCcw,
   Send,
+  MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -213,6 +220,7 @@ export default function InvoiceDetailPage() {
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [addLineItemOpen, setAddLineItemOpen] = useState(false);
   const [paymentToReverse, setPaymentToReverse] = useState<string | null>(null);
+  const [showVoidDialog, setShowVoidDialog] = useState(false);
 
   // Payment form state
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -595,69 +603,123 @@ export default function InvoiceDetailPage() {
             : `${formatCurrency(invoice.total)} total`
         }
         right={
-          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-            {status !== "void" && (
-              <Button onClick={() => window.print()} variant="ghost" size="sm" className="w-full sm:w-auto">
-                <Printer className="h-4 w-4 mr-2" />
-                Print
-              </Button>
-            )}
-            {(status === "draft" || status === "sent" || status === "partial") && (
-              <Button
-                onClick={() => void handleMarkAsSent()}
-                disabled={sendingToClient}
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto"
-              >
-                {sendingToClient ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4 mr-2" />
-                )}
-                Mark as sent
-              </Button>
-            )}
-            {invoiceAllowsPayment(status) && canWritePayments && (
-              <Button onClick={handleOpenPaymentDialog} size="sm" className="w-full sm:w-auto">
-                <CreditCard className="h-4 w-4 mr-2" />
-                Record Payment
-              </Button>
-            )}
-            {status !== "void" && status !== "paid" && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button disabled={voidingInvoice} variant="destructive" size="sm" className="w-full sm:w-auto">
-                    {voidingInvoice ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Ban className="h-4 w-4 mr-2" />
-                    )}
-                    Void
+          <div className="flex items-center justify-end gap-2">
+            <div className="hidden sm:flex sm:flex-wrap sm:justify-end sm:gap-2">
+              {status !== "void" && (
+                <Button onClick={() => window.print()} variant="ghost" size="sm">
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print
+                </Button>
+              )}
+              {(status === "draft" || status === "sent" || status === "partial") && (
+                <Button
+                  onClick={() => void handleMarkAsSent()}
+                  disabled={sendingToClient}
+                  variant="outline"
+                  size="sm"
+                >
+                  {sendingToClient ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  Mark as sent
+                </Button>
+              )}
+              {invoiceAllowsPayment(status) && canWritePayments && (
+                <Button onClick={handleOpenPaymentDialog} size="sm">
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Record Payment
+                </Button>
+              )}
+              {status !== "void" && status !== "paid" ? (
+                <Button disabled={voidingInvoice} variant="destructive" size="sm" onClick={() => setShowVoidDialog(true)}>
+                  {voidingInvoice ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Ban className="h-4 w-4 mr-2" />
+                  )}
+                  Void
+                </Button>
+              ) : null}
+            </div>
+
+            <div className="flex w-full items-center gap-2 sm:hidden">
+              {invoiceAllowsPayment(status) && canWritePayments ? (
+                <Button onClick={handleOpenPaymentDialog} className="flex-1">
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Record Payment
+                </Button>
+              ) : (status === "draft" || status === "sent" || status === "partial") ? (
+                <Button
+                  onClick={() => void handleMarkAsSent()}
+                  disabled={sendingToClient}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  {sendingToClient ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  Mark as sent
+                </Button>
+              ) : null}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label="More invoice actions">
+                    <MoreHorizontal className="h-4 w-4" />
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Void Invoice?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This cannot be undone. The invoice will be permanently voided.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={handleVoid}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  {status !== "void" ? (
+                    <DropdownMenuItem onClick={() => window.print()}>
+                      <Printer className="mr-2 h-4 w-4" />
+                      Print invoice
+                    </DropdownMenuItem>
+                  ) : null}
+                  {(status === "draft" || status === "sent" || status === "partial") && !invoiceAllowsPayment(status) ? (
+                    <DropdownMenuItem onClick={() => void handleMarkAsSent()} disabled={sendingToClient}>
+                      <Send className="mr-2 h-4 w-4" />
+                      Mark as sent
+                    </DropdownMenuItem>
+                  ) : null}
+                  {status !== "void" && status !== "paid" ? (
+                    <DropdownMenuItem
+                      className="text-red-700 focus:text-red-700"
+                      onClick={() => setShowVoidDialog(true)}
                     >
-                      Void
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
+                      <Ban className="mr-2 h-4 w-4" />
+                      Void invoice
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         }
       />
+
+      <AlertDialog open={showVoidDialog} onOpenChange={setShowVoidDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Void Invoice?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The invoice will be permanently voided.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleVoid}
+            >
+              Void
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="grid gap-3 md:grid-cols-4">
         <Card className="border-border/70">

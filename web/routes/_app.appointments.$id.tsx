@@ -62,6 +62,7 @@ import {
   AlertTriangle,
   Plus,
   Trash2,
+  MoreHorizontal,
 } from "lucide-react";
 
 const APPOINTMENT_STATUSES = [
@@ -816,7 +817,7 @@ export default function AppointmentDetail() {
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to appointments queue" /> : null}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <Button variant="ghost" size="sm" asChild>
             <Link to={returnTo}>
@@ -836,7 +837,7 @@ export default function AppointmentDetail() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
+        <div className="hidden shrink-0 items-center gap-2 sm:flex sm:flex-wrap">
           {/* Edit Appointment Button */}
           {appointment.status !== "completed" &&
             appointment.status !== "cancelled" &&
@@ -956,6 +957,106 @@ export default function AppointmentDetail() {
               </Link>
             </Button>
           )}
+        </div>
+
+        <div className="flex items-center gap-2 sm:hidden">
+          {appointment.status !== "completed" && appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
+            <Button
+              className="flex-1"
+              onClick={() => {
+                const hasServices = appointmentServices && appointmentServices.length > 0;
+                const hasTotalPrice = appointment.totalPrice != null && appointment.totalPrice > 0;
+                if (!hasServices && !hasTotalPrice) {
+                  setShowCompleteWarningDialog(true);
+                } else {
+                  void handleComplete();
+                }
+              }}
+              disabled={isActionLoading}
+            >
+              {completing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle className="h-4 w-4 mr-2" />
+              )}
+              Mark Complete
+            </Button>
+          ) : null}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" aria-label="More appointment actions">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {appointment.status !== "completed" &&
+              appointment.status !== "cancelled" &&
+              appointment.status !== "no-show" ? (
+                <DropdownMenuItem onClick={handleOpenEditDialog}>
+                  <Edit2 className="mr-2 h-4 w-4" />
+                  Edit appointment
+                </DropdownMenuItem>
+              ) : null}
+              {!invoiceFetching && !invoice && appointment.status !== "cancelled" ? (
+                <DropdownMenuItem asChild>
+                  <Link
+                    to={`/invoices/new?appointmentId=${appointment.id}${
+                      appointment.client?.id ? `&clientId=${appointment.client.id}` : ""
+                    }`}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Create invoice
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
+              {!quoteFetching && !quote && appointment.status !== "cancelled" && appointment.client?.id ? (
+                <DropdownMenuItem asChild>
+                  <Link to={`/quotes/new?appointmentId=${appointment.id}&clientId=${appointment.client.id}`}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Create quote
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
+              {invoice ? (
+                <DropdownMenuItem asChild>
+                  <Link to={`/invoices/${invoice.id}`}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    View invoice
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
+              {quote ? (
+                <DropdownMenuItem asChild>
+                  <Link to={`/quotes/${quote.id}`}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    View quote
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
+              {(VALID_TRANSITIONS[appointment.status] ?? []).map((status) => (
+                <DropdownMenuItem
+                  key={status}
+                  onClick={() => void handleStatusChange(status)}
+                  className="capitalize"
+                >
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Mark {status.replace("-", " ")}
+                </DropdownMenuItem>
+              ))}
+              {appointment.status !== "cancelled" &&
+              appointment.status !== "completed" &&
+              appointment.status !== "no-show" ? (
+                <DropdownMenuItem
+                  className="text-red-700 focus:text-red-700"
+                  onClick={() => setShowCancelDialog(true)}
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Cancel appointment
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

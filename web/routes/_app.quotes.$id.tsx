@@ -16,6 +16,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -51,6 +57,7 @@ import {
   Pencil,
   Trash2,
   Plus,
+  MoreHorizontal,
 } from "lucide-react";
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -395,40 +402,76 @@ export default function QuoteDetailPage() {
             : `${totalLineItems} line item${totalLineItems === 1 ? "" : "s"} - ${formatCurrency(quote.total)}`
         }
         right={
-          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-          {(quote.status === "draft" || quote.status === "sent") && (
-            <Button
-              onClick={() => void handleSend()}
-              disabled={sending}
-              className="w-full bg-orange-500 text-white hover:bg-orange-600 sm:w-auto"
-            >
-              {sending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="mr-2 h-4 w-4" />
+          <div className="flex items-center justify-end gap-2">
+            <div className="hidden sm:flex sm:flex-wrap sm:justify-end sm:gap-2">
+              {(quote.status === "draft" || quote.status === "sent") && (
+                <Button
+                  onClick={() => void handleSend()}
+                  disabled={sending}
+                  className="bg-orange-500 text-white hover:bg-orange-600"
+                >
+                  {sending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+                  Mark as sent
+                </Button>
               )}
-              Mark as sent
-            </Button>
-          )}
-          {quote.status === "sent" && (
-            <Button
-              variant="outline"
-              onClick={() => setShowDeclineDialog(true)}
-              disabled={updating}
-              className="w-full sm:w-auto"
-            >
-              <X className="mr-2 h-4 w-4" />
-              Mark Declined
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground sm:w-auto"
-            onClick={() => setShowDeleteDialog(true)}
-            disabled={deleting}
-          >
-            Delete
-          </Button>
+              {quote.status === "sent" && (
+                <Button variant="outline" onClick={() => setShowDeclineDialog(true)} disabled={updating}>
+                  <X className="mr-2 h-4 w-4" />
+                  Mark Declined
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                onClick={() => setShowDeleteDialog(true)}
+                disabled={deleting}
+              >
+                Delete
+              </Button>
+            </div>
+
+            <div className="flex w-full items-center gap-2 sm:hidden">
+              {(quote.status === "draft" || quote.status === "sent") ? (
+                <Button
+                  onClick={() => void handleSend()}
+                  disabled={sending}
+                  className="flex-1 bg-orange-500 text-white hover:bg-orange-600"
+                >
+                  {sending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+                  Mark as sent
+                </Button>
+              ) : null}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label="More quote actions">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  {quote.status === "sent" ? (
+                    <DropdownMenuItem onClick={() => setShowDeclineDialog(true)}>
+                      <X className="mr-2 h-4 w-4" />
+                      Mark declined
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuItem
+                    className="text-red-700 focus:text-red-700"
+                    onClick={() => setShowDeleteDialog(true)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete quote
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         }
       />
