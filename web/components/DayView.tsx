@@ -68,7 +68,7 @@ export function DayView({
   if (isMobileLayout) {
     return (
       <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm">
-        <div className="border-b border-border/70 bg-muted/20 px-4 py-4">
+        <div className="border-b border-border/70 bg-white/80 px-4 py-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-foreground">
@@ -114,7 +114,7 @@ export function DayView({
                     key={apt.id}
                     type="button"
                     className={cn(
-                      "w-full rounded-2xl border px-4 py-4 text-left shadow-sm transition-all hover:-translate-y-px hover:shadow-md",
+                      "w-full rounded-2xl border bg-white px-4 py-4 text-left shadow-sm transition-all hover:-translate-y-px hover:shadow-md",
                       style.surface,
                       style.text,
                       style.border,
@@ -125,7 +125,7 @@ export function DayView({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-base font-semibold">{apptLabel(apt)}</p>
-                        <p className="mt-1 text-sm opacity-80">
+                        <p className="mt-1 text-sm text-muted-foreground">
                           {formatTime(new Date(apt.startTime))}
                           {apt.endTime ? ` - ${formatTime(new Date(apt.endTime))}` : ""}
                         </p>
@@ -136,7 +136,7 @@ export function DayView({
                     </div>
 
                     {apt.vehicle ? (
-                      <p className="mt-3 text-sm opacity-75">
+                      <p className="mt-3 text-sm text-muted-foreground">
                         {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
                       </p>
                     ) : null}
@@ -214,7 +214,7 @@ export function DayView({
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm">
-      <div className="border-b border-border/70 bg-muted/20 px-4 py-4">
+      <div className="border-b border-border/70 bg-white/80 px-4 py-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold text-foreground">

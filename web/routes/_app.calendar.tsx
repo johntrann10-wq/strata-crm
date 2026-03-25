@@ -177,11 +177,35 @@ export default function CalendarPage() {
     navigate(`/appointments/${id}`);
   }
 
+  const selectedDayAppointments = useMemo(
+    () => activeAppointments.filter((appointment) => new Date(appointment.startTime).toDateString() === currentDate.toDateString()),
+    [activeAppointments, currentDate]
+  );
+  const selectedDayRevenue = selectedDayAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
+  const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
+  const selectedDayConflicts = selectedDayAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
+  const teamOnDeck = Array.from(
+    selectedDayAppointments.reduce((map, appointment) => {
+      const key =
+        appointment.assignedStaffId ??
+        (appointment.assignedStaff ? `${appointment.assignedStaff.firstName}-${appointment.assignedStaff.lastName}` : "__unassigned__");
+      const existing = map.get(key) ?? {
+        label: appointment.assignedStaff
+          ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+          : "Unassigned",
+        count: 0,
+      };
+      existing.count += 1;
+      map.set(key, existing);
+      return map;
+    }, new Map<string, { label: string; count: number }>())
+  );
+
   return (
     <div className="page-content flex h-full flex-col">
       <div className="page-section space-y-4">
         <div className="overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm sm:rounded-[28px]">
-          <div className="border-b border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.08),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] px-4 py-4 sm:px-6">
+          <div className="border-b border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.06),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] px-4 py-4 sm:px-6">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -202,7 +226,7 @@ export default function CalendarPage() {
                     {getHeaderTitle(currentDate, view)}
                   </h1>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {VIEW_LABELS[view]}. Book faster, spot conflicts earlier, and keep the floor balanced.
+                    {VIEW_LABELS[view]}. Clean time-slot planning, clear workload visibility, and faster booking decisions.
                   </p>
                 </div>
 
@@ -244,85 +268,54 @@ export default function CalendarPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 sm:min-w-[240px] sm:max-w-[280px] xl:w-[280px]">
+              <div className="flex flex-col gap-3 sm:min-w-[240px] sm:max-w-[320px] xl:w-[320px]">
                 <Button size="lg" className="justify-center rounded-2xl" onClick={handleNewAppointment}>
                   <Plus className="mr-2 h-4 w-4" />
                   New appointment
                 </Button>
-                <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Next up</p>
-                  {nextUpcoming ? (
-                    <div className="mt-2 space-y-1">
-                      <p className="text-sm font-semibold text-foreground">
-                        {nextUpcoming.title ||
-                          (nextUpcoming.client
-                            ? `${nextUpcoming.client.firstName} ${nextUpcoming.client.lastName}`
-                            : "Appointment")}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(nextUpcoming.startTime).toLocaleString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </p>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Next up</p>
+                    {nextUpcoming ? (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-sm font-semibold text-foreground">
+                          {nextUpcoming.title ||
+                            (nextUpcoming.client
+                              ? `${nextUpcoming.client.firstName} ${nextUpcoming.client.lastName}`
+                              : "Appointment")}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(nextUpcoming.startTime).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">No upcoming appointments in this range.</p>
+                    )}
+                  </div>
+                  <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Today at a glance</p>
+                    <div className="mt-2 grid grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <p className="text-xl font-semibold text-foreground">{activeAppointments.length}</p>
+                        <p className="text-xs text-muted-foreground">Booked</p>
+                      </div>
+                      <div>
+                        <p className="text-xl font-semibold text-foreground">{unassignedAppointments}</p>
+                        <p className="text-xs text-muted-foreground">Open</p>
+                      </div>
+                      <div>
+                        <p className="text-xl font-semibold text-foreground">{activeConflicts.size}</p>
+                        <p className="text-xs text-muted-foreground">Conflicts</p>
+                      </div>
                     </div>
-                  ) : (
-                    <p className="mt-2 text-sm text-muted-foreground">No upcoming appointments in this range.</p>
-                  )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="grid gap-3 border-b border-border/70 bg-muted/15 px-4 py-4 sm:grid-cols-2 xl:grid-cols-4 xl:px-6">
-            <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Booked</p>
-                  <p className="mt-2 text-2xl font-semibold text-foreground">{activeAppointments.length}</p>
-                </div>
-                <CalendarDays className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">Appointments in the active {view} view.</p>
-            </div>
-
-            <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Coverage</p>
-                  <p className="mt-2 text-2xl font-semibold text-foreground">{uniqueStaff}</p>
-                </div>
-                <Users className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {unassignedAppointments > 0 ? `${unassignedAppointments} appointments still need an owner.` : "All visible work has an owner."}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Conflicts</p>
-                  <p className="mt-2 text-2xl font-semibold text-foreground">{activeConflicts.size}</p>
-                </div>
-                <AlertTriangle className={cn("h-5 w-5", activeConflicts.size > 0 ? "text-rose-600" : "text-muted-foreground")} />
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {activeConflicts.size > 0 ? "Resolve overlaps before they create handoff problems." : "No overlaps in the current view."}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Field work</p>
-                  <p className="mt-2 text-2xl font-semibold text-foreground">{mobileAppointments}</p>
-                </div>
-                <Clock3 className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">Mobile appointments in the visible schedule.</p>
             </div>
           </div>
         </div>
@@ -357,42 +350,155 @@ export default function CalendarPage() {
           </div>
         ) : null}
 
-        <div
-          className={cn(
-            "flex min-h-0 flex-1 flex-col overflow-hidden pb-2",
-            (isFirstLoad || rescheduling) && "opacity-70 pointer-events-none"
-          )}
-        >
-          {view === "month" ? (
-            <MonthView
-              currentDate={currentDate}
-              appointments={appointments}
-              onDayClick={handleDayClick}
-              onApptClick={handleApptClick}
-              conflictIds={activeConflicts}
-            />
-          ) : null}
-          {view === "week" ? (
-            <WeekView
-              currentDate={currentDate}
-              appointments={appointments}
-              onSlotClick={handleSlotClick}
-              onApptClick={handleApptClick}
-              onReschedule={handleReschedule}
-              conflictIds={activeConflicts}
-            />
-          ) : null}
-          {view === "day" ? (
-            <DayView
-              currentDate={currentDate}
-              appointments={appointments}
-              onSlotClick={handleSlotClick}
-              onApptClick={handleApptClick}
-              isMobileLayout={isMobileLayout}
-              onReschedule={handleReschedule}
-              conflictIds={activeConflicts}
-            />
-          ) : null}
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col overflow-hidden pb-2",
+              (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
+            )}
+          >
+            {view === "month" ? (
+              <MonthView
+                currentDate={currentDate}
+                appointments={appointments}
+                onDayClick={handleDayClick}
+                onApptClick={handleApptClick}
+                conflictIds={activeConflicts}
+              />
+            ) : null}
+            {view === "week" ? (
+              <WeekView
+                currentDate={currentDate}
+                appointments={appointments}
+                onSlotClick={handleSlotClick}
+                onApptClick={handleApptClick}
+                onReschedule={handleReschedule}
+                conflictIds={activeConflicts}
+              />
+            ) : null}
+            {view === "day" ? (
+              <DayView
+                currentDate={currentDate}
+                appointments={appointments}
+                onSlotClick={handleSlotClick}
+                onApptClick={handleApptClick}
+                isMobileLayout={isMobileLayout}
+                onReschedule={handleReschedule}
+                conflictIds={activeConflicts}
+              />
+            ) : null}
+          </div>
+
+          <aside className="space-y-4">
+            <div className="rounded-[24px] border border-border/70 bg-background/95 p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected day</p>
+                  <h2 className="mt-1 text-lg font-semibold text-foreground">
+                    {currentDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                  </h2>
+                </div>
+                <Button size="sm" variant="outline" className="rounded-full" onClick={() => handleDayClick(currentDate)}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Book
+                </Button>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">{selectedDayAppointments.length}</p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Revenue</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">
+                    {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(selectedDayRevenue)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                  {selectedDayUnassigned} unassigned
+                </span>
+                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                  {selectedDayConflicts} conflicts
+                </span>
+                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                  {teamOnDeck.length} owners on deck
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-border/70 bg-background/95 p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Agenda</p>
+                  <p className="mt-1 text-sm text-muted-foreground">What this day actually looks like.</p>
+                </div>
+                <Clock3 className="h-4 w-4 text-muted-foreground" />
+              </div>
+              {selectedDayAppointments.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {selectedDayAppointments.slice(0, 6).map((appointment) => (
+                    <button
+                      key={appointment.id}
+                      type="button"
+                      onClick={() => handleApptClick(appointment)}
+                      className="flex w-full items-start gap-3 rounded-2xl border border-border/70 bg-muted/15 px-3 py-3 text-left transition-colors hover:bg-muted/30"
+                    >
+                      <div className="min-w-[54px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        {new Date(appointment.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {appointment.title ||
+                            (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {appointment.vehicle
+                            ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+                            : appointment.assignedStaff
+                              ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+                              : "Unassigned"}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                  {selectedDayAppointments.length > 6 ? (
+                    <p className="px-1 text-xs text-muted-foreground">+{selectedDayAppointments.length - 6} more on this day</p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-6 text-center">
+                  <p className="text-sm font-medium text-foreground">No appointments on this day</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Use Book to place something into this slot.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-[24px] border border-border/70 bg-background/95 p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Team on deck</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Keep visibility on who owns the day.</p>
+                </div>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="mt-3 space-y-2">
+                {teamOnDeck.length > 0 ? (
+                  teamOnDeck.slice(0, 5).map(([key, entry]) => (
+                    <div key={key} className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/10 px-3 py-2.5">
+                      <span className="text-sm font-medium text-foreground">{entry.label}</span>
+                      <span className="text-xs text-muted-foreground">{entry.count} booked</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
+                    Nobody is assigned on this day yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
 

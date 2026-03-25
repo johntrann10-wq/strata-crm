@@ -20,57 +20,57 @@ type StatusStyle = {
 
 export const STATUS_STYLES: Record<string, StatusStyle> = {
   scheduled: {
-    surface: "bg-amber-50/95",
-    text: "text-amber-950",
+    surface: "bg-white",
+    text: "text-slate-900",
     border: "border-amber-200/90",
     accent: "bg-amber-500",
     pill: "bg-amber-100 text-amber-800",
   },
   pending: {
-    surface: "bg-amber-50/95",
-    text: "text-amber-950",
+    surface: "bg-white",
+    text: "text-slate-900",
     border: "border-amber-200/90",
     accent: "bg-amber-500",
     pill: "bg-amber-100 text-amber-800",
   },
   confirmed: {
-    surface: "bg-sky-50/95",
-    text: "text-sky-950",
+    surface: "bg-white",
+    text: "text-slate-900",
     border: "border-sky-200/90",
     accent: "bg-sky-500",
     pill: "bg-sky-100 text-sky-800",
   },
   in_progress: {
-    surface: "bg-violet-50/95",
-    text: "text-violet-950",
+    surface: "bg-white",
+    text: "text-slate-900",
     border: "border-violet-200/90",
     accent: "bg-violet-500",
     pill: "bg-violet-100 text-violet-800",
   },
   "in-progress": {
-    surface: "bg-violet-50/95",
-    text: "text-violet-950",
+    surface: "bg-white",
+    text: "text-slate-900",
     border: "border-violet-200/90",
     accent: "bg-violet-500",
     pill: "bg-violet-100 text-violet-800",
   },
   completed: {
-    surface: "bg-emerald-50/95",
-    text: "text-emerald-950",
+    surface: "bg-white",
+    text: "text-slate-900",
     border: "border-emerald-200/90",
     accent: "bg-emerald-500",
     pill: "bg-emerald-100 text-emerald-800",
   },
   cancelled: {
-    surface: "bg-slate-100/95",
+    surface: "bg-slate-50/95",
     text: "text-slate-600",
     border: "border-slate-200/90",
     accent: "bg-slate-400",
     pill: "bg-slate-200 text-slate-700",
   },
   "no-show": {
-    surface: "bg-rose-50/95",
-    text: "text-rose-950",
+    surface: "bg-white",
+    text: "text-slate-900",
     border: "border-rose-200/90",
     accent: "bg-rose-500",
     pill: "bg-rose-100 text-rose-800",
@@ -407,7 +407,7 @@ export function AppointmentBlock({
     <button
       type="button"
       className={cn(
-        "absolute left-1.5 right-1.5 overflow-hidden rounded-xl border px-2.5 py-2 text-left shadow-sm transition-all select-none",
+        "absolute left-1.5 right-1.5 overflow-hidden rounded-xl border bg-white/98 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all select-none",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
         style.surface,
         style.text,
@@ -430,8 +430,8 @@ export function AppointmentBlock({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className={cn("truncate font-semibold", dense ? "text-[11px]" : "text-xs")}>{apptLabel(apt)}</p>
-              <p className={cn("truncate opacity-80", dense ? "text-[10px]" : "text-[11px]")}>
+              <p className={cn("truncate font-semibold", dense ? "text-[11px]" : "text-[12px]")}>{apptLabel(apt)}</p>
+              <p className={cn("truncate text-muted-foreground", dense ? "text-[10px]" : "text-[11px]")}>
                 {formatTime(start)}
                 {apt.endTime ? ` - ${formatTime(end)}` : ""}
               </p>
@@ -442,17 +442,17 @@ export function AppointmentBlock({
           </div>
 
           {!dense && apt.vehicle ? (
-            <p className="mt-1 truncate text-[11px] opacity-75">
+            <p className="mt-1 truncate text-[11px] text-muted-foreground">
               {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
             </p>
           ) : null}
 
           {height > 92 ? (
             <div className="mt-1.5 flex items-center justify-between gap-2">
-              <p className="truncate text-[10px] uppercase tracking-[0.12em] opacity-60">
+              <p className="truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                 {apt.assignedStaff ? `${apt.assignedStaff.firstName} ${apt.assignedStaff.lastName}` : "Unassigned"}
               </p>
-              {apt.isMobile ? <span className="text-[10px] font-medium opacity-70">Mobile</span> : null}
+              {apt.isMobile ? <span className="text-[10px] font-medium text-muted-foreground">Mobile</span> : null}
             </div>
           ) : null}
         </div>
