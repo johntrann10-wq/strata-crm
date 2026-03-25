@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { businesses, serviceAddonLinks, services } from "../db/schema.js";
+import { logger } from "./logger.js";
 
 type ServiceCategory = "detail" | "tint" | "ppf" | "mechanical" | "tire" | "body" | "other";
 type PriceType = "fixed" | "starting_at" | "hourly";
@@ -279,6 +280,84 @@ function getPresetForBusinessType(type: string | null | undefined) {
   return PRESETS[type ?? ""] ?? PRESETS.auto_detailing;
 }
 
+function isPresetSchemaDriftError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "");
+  return (
+    code === "42P01" ||
+    code === "42703" ||
+    message.includes('relation "service_addon_links" does not exist') ||
+    message.includes('relation "services" does not exist') ||
+    message.includes('column "category" does not exist') ||
+    message.includes('column "duration_minutes" does not exist') ||
+    message.includes('column "taxable" does not exist') ||
+    message.includes('column "is_addon" does not exist') ||
+    message.includes('column "active" does not exist')
+  );
+}
+
+async function loadExistingServiceNames(businessId: string, names: string[]) {
+  try {
+    const existing = await db
+      .select({ name: services.name, category: services.category })
+      .from(services)
+      .where(and(eq(services.businessId, businessId), inArray(services.name, names)));
+    return new Set(existing.map((item) => `${item.name}::${item.category}`));
+  } catch (error) {
+    if (!isPresetSchemaDriftError(error)) throw error;
+    logger.warn("Business preset seeding falling back without full services schema", { businessId, error });
+    const existing = await db
+      .select({ name: services.name })
+      .from(services)
+      .where(and(eq(services.businessId, businessId), inArray(services.name, names)));
+    return new Set(existing.map((item) => item.name));
+  }
+}
+
+async function insertPresetServices(businessId: string, rows: PresetService[]) {
+  if (rows.length === 0) return;
+  try {
+    await db.insert(services).values(
+      rows.map((item) => ({
+        businessId,
+        name: item.name,
+        category: item.category,
+        price: String(item.startingPrice),
+        durationMinutes: item.estimatedMinutes,
+        notes: serializePresetNotes(item),
+        taxable: item.taxable,
+        isAddon: item.isAddon ?? false,
+        active: true,
+      }))
+    );
+  } catch (error) {
+    if (!isPresetSchemaDriftError(error)) throw error;
+    logger.warn("Business preset seeding inserting with legacy services schema", { businessId, error });
+    await db.insert(services).values(
+      rows.map((item) => ({
+        businessId,
+        name: item.name,
+        price: String(item.startingPrice),
+        notes: serializePresetNotes(item),
+      }))
+    );
+  }
+}
+
+async function loadSeededServiceIds(businessId: string, names: string[]) {
+  const seeded = await db
+    .select({ id: services.id, name: services.name })
+    .from(services)
+    .where(and(eq(services.businessId, businessId), inArray(services.name, names)));
+  return new Map(seeded.map((item) => [item.name, item.id]));
+}
+
 export function getPresetSummaryForBusinessType(type: string | null | undefined) {
   const presetType = type ?? "auto_detailing";
   const preset = getPresetForBusinessType(type);
@@ -301,36 +380,16 @@ export async function applyBusinessPreset(businessId: string) {
   const presetType = business.type;
   const combined = [...COMMON_ADDONS, ...preset.services];
   const names = combined.map((item) => item.name);
+  const existingKeys = await loadExistingServiceNames(businessId, names);
+  const toInsert = combined.filter((item) => {
+    if (existingKeys.has(`${item.name}::${item.category}`)) return false;
+    if (existingKeys.has(item.name)) return false;
+    return true;
+  });
 
-  const existing = await db
-    .select({ id: services.id, name: services.name, category: services.category })
-    .from(services)
-    .where(and(eq(services.businessId, businessId), inArray(services.name, names)));
-  const existingKeys = new Set(existing.map((item) => `${item.name}::${item.category}`));
+  await insertPresetServices(businessId, toInsert);
 
-  const toInsert = combined.filter((item) => !existingKeys.has(`${item.name}::${item.category}`));
-
-  if (toInsert.length > 0) {
-    await db.insert(services).values(
-      toInsert.map((item) => ({
-        businessId,
-        name: item.name,
-        category: item.category,
-        price: String(item.startingPrice),
-        durationMinutes: item.estimatedMinutes,
-        notes: serializePresetNotes(item),
-        taxable: item.taxable,
-        isAddon: item.isAddon ?? false,
-        active: true,
-      }))
-    );
-  }
-
-  const allSeededServices = await db
-    .select({ id: services.id, name: services.name })
-    .from(services)
-    .where(and(eq(services.businessId, businessId), inArray(services.name, names)));
-  const serviceIdByName = new Map(allSeededServices.map((item) => [item.name, item.id]));
+  const serviceIdByName = await loadSeededServiceIds(businessId, names);
 
   const addonNameByKey = new Map(COMMON_ADDONS.map((item) => [item.key, item.name]));
   const desiredLinks = preset.services.flatMap((item) => {
@@ -345,27 +404,32 @@ export async function applyBusinessPreset(businessId: string) {
   });
 
   if (desiredLinks.length > 0) {
-    const existingLinks = await db
-      .select({
-        parentServiceId: serviceAddonLinks.parentServiceId,
-        addonServiceId: serviceAddonLinks.addonServiceId,
-      })
-      .from(serviceAddonLinks)
-      .where(eq(serviceAddonLinks.businessId, businessId));
-    const existingLinkKeys = new Set(existingLinks.map((item) => `${item.parentServiceId}::${item.addonServiceId}`));
-    const linksToInsert = desiredLinks.filter(
-      (item) => !existingLinkKeys.has(`${item.parentServiceId}::${item.addonServiceId}`)
-    );
-
-    if (linksToInsert.length > 0) {
-      await db.insert(serviceAddonLinks).values(
-        linksToInsert.map((item) => ({
-          businessId,
-          parentServiceId: item.parentServiceId,
-          addonServiceId: item.addonServiceId,
-          sortOrder: item.sortOrder,
-        }))
+    try {
+      const existingLinks = await db
+        .select({
+          parentServiceId: serviceAddonLinks.parentServiceId,
+          addonServiceId: serviceAddonLinks.addonServiceId,
+        })
+        .from(serviceAddonLinks)
+        .where(eq(serviceAddonLinks.businessId, businessId));
+      const existingLinkKeys = new Set(existingLinks.map((item) => `${item.parentServiceId}::${item.addonServiceId}`));
+      const linksToInsert = desiredLinks.filter(
+        (item) => !existingLinkKeys.has(`${item.parentServiceId}::${item.addonServiceId}`)
       );
+
+      if (linksToInsert.length > 0) {
+        await db.insert(serviceAddonLinks).values(
+          linksToInsert.map((item) => ({
+            businessId,
+            parentServiceId: item.parentServiceId,
+            addonServiceId: item.addonServiceId,
+            sortOrder: item.sortOrder,
+          }))
+        );
+      }
+    } catch (error) {
+      if (!isPresetSchemaDriftError(error)) throw error;
+      logger.warn("Business preset seeding skipping addon links on legacy schema", { businessId, error });
     }
   }
 

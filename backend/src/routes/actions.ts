@@ -260,8 +260,13 @@ actionsRouter.post("/getBusinessPreset", requireAuth, requireTenant, async (req:
 
 actionsRouter.post("/applyBusinessPreset", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const result = await applyBusinessPreset(bid);
-  res.json({ ok: true, ...result });
+  try {
+    const result = await applyBusinessPreset(bid);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    logger.warn("Business preset apply failed; returning safe fallback", { businessId: bid, error });
+    res.json({ ok: false, message: "Starter services could not be fully applied until production services schema is migrated." });
+  }
 });
 
 /** Cron endpoint: run business-type-aware automations (reminders, lapsed clients, review requests). Optional CRON_SECRET. */
