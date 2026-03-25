@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,6 +66,10 @@ interface VehiclesCardProps {
 }
 
 export function VehiclesCard({ id, vehicles }: VehiclesCardProps) {
+  const location = useLocation();
+  const currentPath = `${location.pathname}${location.search}`;
+  const addVehicleHref = `/clients/${id}/vehicles/new?next=client&from=${encodeURIComponent(currentPath)}`;
+
   return (
     <Card className="border-border/70 shadow-sm">
       <CardHeader className="pb-4">
@@ -75,7 +79,7 @@ export function VehiclesCard({ id, vehicles }: VehiclesCardProps) {
             <CardTitle>Vehicles</CardTitle>
           </div>
           <Button asChild size="sm" variant="outline">
-            <Link to={`/clients/${id}/vehicles/new`}>
+            <Link to={addVehicleHref}>
               <Plus className="h-4 w-4 mr-1" />
               Add Vehicle
             </Link>
@@ -88,7 +92,7 @@ export function VehiclesCard({ id, vehicles }: VehiclesCardProps) {
             {vehicles.map((vehicle) => (
               <Link
                 key={vehicle.id}
-                to={`/clients/${id}/vehicles/${vehicle.id}`}
+                to={`/clients/${id}/vehicles/${vehicle.id}?from=${encodeURIComponent(currentPath)}`}
                 className="block rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/40 hover:border-primary/30"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -120,7 +124,7 @@ export function VehiclesCard({ id, vehicles }: VehiclesCardProps) {
             <Car className="h-10 w-10 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">No vehicles on record</p>
             <Button asChild size="sm" variant="outline">
-              <Link to={`/clients/${id}/vehicles/new`}>
+              <Link to={addVehicleHref}>
                 <Plus className="h-4 w-4 mr-1" />
                 Add Vehicle
               </Link>
@@ -307,6 +311,10 @@ interface AppointmentHistoryCardProps {
 }
 
 export function AppointmentHistoryCard({ id, appointments, totalSpend }: AppointmentHistoryCardProps) {
+  const location = useLocation();
+  const currentPath = `${location.pathname}${location.search}`;
+  const newAppointmentHref = `/appointments/new?clientId=${id}&from=${encodeURIComponent(currentPath)}`;
+
   return (
     <Card className="border-border/70 shadow-sm">
       <CardHeader className="pb-4">
@@ -322,7 +330,7 @@ export function AppointmentHistoryCard({ id, appointments, totalSpend }: Appoint
             </div>
           </div>
           <Button asChild size="sm">
-            <Link to={`/appointments/new?clientId=${id}`}>
+            <Link to={newAppointmentHref}>
               <Plus className="h-4 w-4 mr-1" />
               New Appointment
             </Link>
@@ -337,7 +345,7 @@ export function AppointmentHistoryCard({ id, appointments, totalSpend }: Appoint
               return (
                 <Link
                   key={appt.id}
-                  to={`/appointments/${appt.id}`}
+                  to={`/appointments/${appt.id}?from=${encodeURIComponent(currentPath)}`}
                   className="block rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/40 hover:border-primary/30"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -378,7 +386,7 @@ export function AppointmentHistoryCard({ id, appointments, totalSpend }: Appoint
             <CalendarDays className="h-10 w-10 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">No appointments yet</p>
             <Button asChild size="sm">
-              <Link to={`/appointments/new?clientId=${id}`}>
+              <Link to={newAppointmentHref}>
                 <Plus className="h-4 w-4 mr-1" />
                 Book Appointment
               </Link>
