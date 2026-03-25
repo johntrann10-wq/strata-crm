@@ -324,7 +324,7 @@ export default function NewInvoicePage() {
         clientId: selectedClientId,
         appointmentId: appointmentIdParam ?? undefined,
         quoteId: quoteIdParam ?? undefined,
-        status: mode,
+        status: "draft",
         lineItems: lineItems.map((item) => ({
           description: item.description,
           quantity: item.qty,
@@ -349,7 +349,17 @@ export default function NewInvoicePage() {
         return;
       }
 
-      toast.success(mode === "sent" ? "Invoice created and marked as sent" : "Invoice created successfully");
+      if (mode === "sent") {
+        const sendResult = await api.invoice.sendToClient({ id: newInvoiceId });
+        const deliveryStatus = (sendResult as { deliveryStatus?: string } | null)?.deliveryStatus;
+        if (deliveryStatus === "emailed") {
+          toast.success("Invoice created and emailed");
+        } else {
+          toast.warning("Invoice created and marked as sent, but email was not delivered.");
+        }
+      } else {
+        toast.success("Invoice created successfully");
+      }
       navigate(`/invoices/${newInvoiceId}?from=${encodeURIComponent(returnTo)}`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create invoice");
