@@ -9,12 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 
 export default function NewVehiclePage() {
   const { id: clientId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { currentLocationId } = useOutletContext<AuthOutletContext>();
   const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : `/clients/${clientId}`;
+  const hasQueueReturn = searchParams.has("from");
   const [submitMode, setSubmitMode] = useState<"client" | "quote" | "appointment">(() => {
     const next = searchParams.get("next");
     return next === "quote" || next === "appointment" ? next : "client";
@@ -52,20 +55,20 @@ export default function NewVehiclePage() {
     if (createdVehicle && clientId) {
       const createdVehicleId = (createdVehicle as any)?.id;
       if (submitMode === "quote" && createdVehicleId) {
-        navigate(`/quotes/new?clientId=${clientId}&vehicleId=${createdVehicleId}`);
+        navigate(`/quotes/new?clientId=${clientId}&vehicleId=${createdVehicleId}&from=${encodeURIComponent(returnTo)}`);
         return;
       }
       if (submitMode === "appointment" && createdVehicleId) {
         navigate(
           `/appointments/new?clientId=${clientId}&vehicleId=${createdVehicleId}${
             currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-          }`
+          }&from=${encodeURIComponent(returnTo)}`
         );
         return;
       }
-      navigate(`/clients/${clientId}`);
+      navigate(`${returnTo}`);
     }
-  }, [createdVehicle, clientId, navigate, submitMode]);
+  }, [createdVehicle, clientId, navigate, submitMode, currentLocationId, returnTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,8 +89,9 @@ export default function NewVehiclePage() {
 
   return (
     <div className="container mx-auto py-6 max-w-2xl">
+      {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to clients queue" /> : null}
       <div className="mb-6">
-        <Button variant="ghost" onClick={() => navigate(`/clients/${clientId}`)}>
+        <Button variant="ghost" onClick={() => navigate(returnTo)}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Client
         </Button>
@@ -260,7 +264,7 @@ export default function NewVehiclePage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate(`/clients/${clientId}`)}
+                onClick={() => navigate(returnTo)}
               >
                 Cancel
               </Button>

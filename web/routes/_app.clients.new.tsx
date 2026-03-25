@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 
 interface FormData {
   firstName: string;
@@ -27,6 +28,8 @@ export default function NewClientPage() {
   const navigate = useNavigate();
   const { currentLocationId } = useOutletContext<AuthOutletContext>();
   const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/clients";
+  const hasQueueReturn = searchParams.has("from");
   const [submitMode, setSubmitMode] = useState<"client" | "vehicle" | "quote" | "appointment">(() => {
     const next = searchParams.get("next");
     return next === "vehicle" || next === "quote" || next === "appointment" ? next : "client";
@@ -58,24 +61,24 @@ export default function NewClientPage() {
     const createdClientId = (data as any)?.id;
     if (createdClientId) {
       if (submitMode === "vehicle") {
-        navigate(`/clients/${createdClientId}/vehicles/new?next=client`);
+        navigate(`/clients/${createdClientId}/vehicles/new?next=client&from=${encodeURIComponent(returnTo)}`);
         return;
       }
       if (submitMode === "quote") {
-        navigate(`/quotes/new?clientId=${createdClientId}`);
+        navigate(`/quotes/new?clientId=${createdClientId}&from=${encodeURIComponent(returnTo)}`);
         return;
       }
       if (submitMode === "appointment") {
         navigate(
           `/appointments/new?clientId=${createdClientId}${
             currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-          }`
+          }&from=${encodeURIComponent(returnTo)}`
         );
         return;
       }
-      navigate(`/clients/${createdClientId}`);
+      navigate(`/clients/${createdClientId}?from=${encodeURIComponent(returnTo)}`);
     }
-  }, [data, navigate, submitMode]);
+  }, [data, navigate, submitMode, currentLocationId, returnTo]);
 
   const getFieldError = (fieldName: string): string | undefined => {
     if (localErrors[fieldName]) return localErrors[fieldName];
@@ -148,10 +151,11 @@ export default function NewClientPage() {
 
   return (
     <div className="max-w-2xl mx-auto p-6 pb-12">
+      {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to clients queue" /> : null}
       {/* Back button */}
       <div className="mb-6">
         <Button variant="ghost" size="sm" asChild>
-          <Link to="/clients" className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
+          <Link to={returnTo} className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" />
             Back to Clients
           </Link>
@@ -391,7 +395,7 @@ export default function NewClientPage() {
               Save Client
             </Button>
           <Button type="button" variant="outline" asChild>
-            <Link to="/clients">Cancel</Link>
+            <Link to={returnTo}>Cancel</Link>
           </Button>
           </div>
         </div>
