@@ -430,6 +430,26 @@ export default function OnboardingPage() {
             </div>
 
             <div className="space-y-4">
+              <div className="rounded-3xl border border-orange-500/20 bg-[linear-gradient(180deg,rgba(249,115,22,0.08),rgba(23,23,23,0.95))] p-5 sm:p-6">
+                <p className="text-xs uppercase tracking-[0.12em] text-orange-300">First-session win</p>
+                <h2 className="mt-3 text-xl font-semibold">You should be able to do something real in the first session</h2>
+                <div className="mt-4 space-y-3">
+                  {[
+                    "Add one client and their vehicle",
+                    "Book the first appointment on the calendar",
+                    "Generate the first invoice from real work",
+                  ].map((item) => (
+                    <div key={item} className="flex items-start gap-3 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-300" />
+                      <p className="text-sm text-[#dbe0e7]">{item}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-4 text-sm text-[#aab2bf]">
+                  Strata will point you to the best next step after setup so you do not land in a blank workspace wondering what to do next.
+                </p>
+              </div>
+
               <div className="rounded-3xl border border-[#272727] bg-[linear-gradient(180deg,#171717_0%,#111111_100%)] p-5 sm:p-6">
                 <h2 className="text-lg font-semibold">What you get immediately</h2>
                 <div className="mt-4 space-y-3">

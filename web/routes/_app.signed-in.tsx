@@ -1665,6 +1665,31 @@ function ActivationChecklistCard({
   }>;
 }) {
   const allDone = completed === total;
+  const nextItem = items.find((item) => !item.done) ?? items[0];
+  const quickWinLabel =
+    nextItem?.key === "clients"
+      ? "Add one real client so Strata has someone to track."
+      : nextItem?.key === "vehicles"
+        ? "Attach the vehicle so history, scheduling, and billing stay connected."
+        : nextItem?.key === "services"
+          ? "Review the starter menu so quoting and booking feel real immediately."
+          : nextItem?.key === "appointments"
+            ? "Book one real appointment so the calendar becomes useful today."
+            : nextItem?.key === "invoices"
+              ? "Generate one invoice so billing and payment tracking start working."
+              : "Confirm booking basics so scheduling behaves correctly from day one.";
+  const quickWinOutcome =
+    nextItem?.key === "clients"
+      ? "Once this is done, you can book work and keep customer history in one place."
+      : nextItem?.key === "vehicles"
+        ? "Once this is done, appointments, quotes, and invoices will stay tied to the right vehicle."
+        : nextItem?.key === "services"
+          ? "Once this is done, quotes and appointments can be created without manual setup friction."
+          : nextItem?.key === "appointments"
+            ? "Once this is done, today’s dashboard and schedule start feeling like a real operating system."
+            : nextItem?.key === "invoices"
+              ? "Once this is done, Strata starts carrying real money workflow, not just organization."
+              : "Once this is done, you can take bookings without second-guessing your setup.";
 
   return (
     <div className="space-y-5">
@@ -1696,6 +1721,29 @@ function ActivationChecklistCard({
           </p>
         </div>
       </div>
+
+      {!allDone && nextItem ? (
+        <div className="rounded-[1.75rem] border border-orange-200/70 bg-[linear-gradient(135deg,rgba(255,247,237,0.98),rgba(255,255,255,0.96))] p-5 shadow-[0_18px_50px_rgba(249,115,22,0.12)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Best next step</p>
+              <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
+                {nextItem.label}
+              </h3>
+              <p className="mt-2 text-sm text-slate-600">{quickWinLabel}</p>
+              <p className="mt-2 text-sm font-medium text-slate-800">{quickWinOutcome}</p>
+            </div>
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+              <Button asChild className="min-h-[46px] rounded-xl bg-orange-500 px-5 text-white hover:bg-orange-600">
+                <Link to={nextItem.href}>{nextItem.actionLabel}</Link>
+              </Button>
+              <Button asChild variant="outline" className="min-h-[46px] rounded-xl">
+                <Link to="/onboarding">Review setup</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => (
