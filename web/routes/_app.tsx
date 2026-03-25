@@ -763,21 +763,21 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   if (!authCheckDone) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loadingâ€¦</div>
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
   }
   if (!effectiveUserId) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Redirectingâ€¦</div>
+        <div className="animate-pulse text-muted-foreground">Redirecting...</div>
       </div>
     );
   }
   if (userFetching) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loadingâ€¦</div>
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
   }
@@ -794,7 +794,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     }
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loadingâ€¦</div>
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
   }
@@ -819,7 +819,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     }
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Preparing your workspaceâ€¦</div>
+        <div className="animate-pulse text-muted-foreground">Preparing your workspace...</div>
       </div>
     );
   }
@@ -830,7 +830,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   ) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Finishing setupâ€¦</div>
+        <div className="animate-pulse text-muted-foreground">Finishing setup...</div>
       </div>
     );
   }

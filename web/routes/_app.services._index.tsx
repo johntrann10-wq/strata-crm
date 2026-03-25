@@ -444,6 +444,7 @@ export default function ServicesPage() {
       toast.error("Failed to remove add-on: " + result.error.message);
       return;
     }
+    toast.success("Add-on removed");
     void refetchAddonLinks();
   };
 

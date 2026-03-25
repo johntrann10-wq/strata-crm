@@ -123,7 +123,14 @@ export default function QuotesIndexPage() {
       if (result.error) {
         toast.error(result.error.message ?? "Failed to send quote");
       } else {
-        toast.success("Quote send recorded");
+        const payload = result.data as { deliveryStatus?: string; deliveryError?: string | null } | undefined;
+        if (payload?.deliveryStatus === "emailed") {
+          toast.success("Quote emailed to client");
+        } else if (payload?.deliveryStatus === "email_failed") {
+          toast.warning(`Quote was updated, but email failed${payload.deliveryError ? `: ${payload.deliveryError}` : "."}`);
+        } else {
+          toast.success("Quote updated");
+        }
       }
     } catch (err: any) {
       toast.error(err?.message ?? "Failed to send quote");
@@ -139,7 +146,14 @@ export default function QuotesIndexPage() {
       if (result.error) {
         toast.error(result.error.message ?? "Failed to record follow-up");
       } else {
-        toast.success("Follow-up recorded");
+        const payload = result.data as { deliveryStatus?: string; deliveryError?: string | null } | undefined;
+        if (payload?.deliveryStatus === "emailed") {
+          toast.success("Follow-up emailed to client");
+        } else if (payload?.deliveryStatus === "email_failed") {
+          toast.warning(`Follow-up was recorded, but email failed${payload.deliveryError ? `: ${payload.deliveryError}` : "."}`);
+        } else {
+          toast.success("Follow-up recorded");
+        }
       }
     } catch (err: any) {
       toast.error(err?.message ?? "Failed to record follow-up");
