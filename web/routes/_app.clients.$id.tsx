@@ -61,6 +61,11 @@ function formatCurrency(amount: number | string | null | undefined): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 }
 
+function formatFreshness(value: string | null | undefined, label: string): string | null {
+  const parsed = safeDate(value);
+  return parsed ? `${label} ${parsed.toLocaleDateString()}` : null;
+}
+
 function invoiceBalance(invoice: Record<string, unknown>): number {
   const raw =
     invoice.remainingBalance != null && invoice.remainingBalance !== ""
@@ -228,7 +233,14 @@ export default function ClientDetailPage() {
       type: "invoice" as const,
       id: (invoice as any).id,
       label: (invoice as any).invoiceNumber ?? "Invoice",
-      sublabel: formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
+      sublabel:
+        [
+          formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
+          formatFreshness((invoice as any).lastSentAt ?? null, "Sent"),
+          formatFreshness((invoice as any).lastPaidAt ?? null, "Paid"),
+        ]
+          .filter(Boolean)
+          .join(" · ") || formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
       status: (invoice as any).status ?? undefined,
       href: `/invoices/${(invoice as any).id}`,
       actionHref: ["sent", "partial"].includes(String((invoice as any).status ?? ""))
@@ -240,7 +252,14 @@ export default function ClientDetailPage() {
       type: "quote" as const,
       id: (quote as any).id,
       label: "Quote",
-      sublabel: (quote as any).total != null ? `$${Number((quote as any).total).toFixed(2)}` : undefined,
+      sublabel:
+        [
+          (quote as any).total != null ? `$${Number((quote as any).total).toFixed(2)}` : null,
+          formatFreshness((quote as any).sentAt ?? null, "Sent"),
+          formatFreshness((quote as any).followUpSentAt ?? null, "Followed up"),
+        ]
+          .filter(Boolean)
+          .join(" · ") || undefined,
       status: (quote as any).status ?? undefined,
       href: `/quotes/${(quote as any).id}`,
       actionHref:

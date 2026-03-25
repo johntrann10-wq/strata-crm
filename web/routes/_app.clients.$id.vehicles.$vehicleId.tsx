@@ -52,6 +52,11 @@ function formatDate(value: string | Date | null | undefined): string {
   });
 }
 
+function formatFreshness(value: string | null | undefined, label: string): string | null {
+  const parsed = safeDate(value);
+  return parsed ? `${label} ${formatDate(parsed)}` : null;
+}
+
 function statusClass(status: string): string {
   switch (status) {
     case "completed":
@@ -273,7 +278,14 @@ export default function VehicleDetailPage() {
       type: "quote" as const,
       id: (quote as any).id,
       label: "Quote",
-      sublabel: formatCurrency((quote as any).total),
+      sublabel:
+        [
+          formatCurrency((quote as any).total),
+          formatFreshness((quote as any).sentAt ?? null, "Sent"),
+          formatFreshness((quote as any).followUpSentAt ?? null, "Followed up"),
+        ]
+          .filter(Boolean)
+          .join(" · ") || formatCurrency((quote as any).total),
       status: (quote as any).status ?? undefined,
       href: `/quotes/${(quote as any).id}`,
       actionHref:
@@ -286,7 +298,14 @@ export default function VehicleDetailPage() {
       type: "invoice" as const,
       id: (invoice as any).id,
       label: (invoice as any).invoiceNumber ?? "Invoice",
-      sublabel: formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
+      sublabel:
+        [
+          formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
+          formatFreshness((invoice as any).lastSentAt ?? null, "Sent"),
+          formatFreshness((invoice as any).lastPaidAt ?? null, "Paid"),
+        ]
+          .filter(Boolean)
+          .join(" · ") || formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
       status: (invoice as any).status ?? undefined,
       href: `/invoices/${(invoice as any).id}`,
       actionHref: ["sent", "partial"].includes(String((invoice as any).status ?? ""))
