@@ -147,6 +147,17 @@ function formatCurrency(amount: number | null | undefined): string {
   }).format(amount);
 }
 
+function safeDate(value: string | Date | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatFreshness(value: string | Date | null | undefined, label: string): string | null {
+  const parsed = safeDate(value);
+  return parsed ? `${label} ${parsed.toLocaleDateString()}` : null;
+}
+
 function JobLifecycleStepper({
   status,
   invoicedAt,
@@ -372,6 +383,8 @@ export default function AppointmentDetail() {
       invoiceNumber: true,
       status: true,
       total: true,
+      lastSentAt: true,
+      lastPaidAt: true,
     },
   });
   const [{ data: activityLogs, fetching: activityFetching }, refetchActivity] = useFindMany(api.activityLog, {
@@ -388,6 +401,8 @@ export default function AppointmentDetail() {
       id: true,
       status: true,
       total: true,
+      sentAt: true,
+      followUpSentAt: true,
     },
   });
 
@@ -699,6 +714,13 @@ export default function AppointmentDetail() {
         type: "invoice",
         id: invoice.id,
         label: invoice.invoiceNumber ?? "Invoice",
+        sublabel:
+          [
+            formatFreshness((invoice as any).lastSentAt ?? null, "Sent"),
+            formatFreshness((invoice as any).lastPaidAt ?? null, "Paid"),
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined,
         status: invoice.status,
         href: `/invoices/${invoice.id}`,
       });
@@ -708,6 +730,14 @@ export default function AppointmentDetail() {
         type: "quote",
         id: quote.id,
         label: "Quote",
+        sublabel:
+          [
+            quote.total != null ? formatCurrency(Number(quote.total)) : null,
+            formatFreshness((quote as any).sentAt ?? null, "Sent"),
+            formatFreshness((quote as any).followUpSentAt ?? null, "Followed up"),
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined,
         status: quote.status,
         href: `/quotes/${quote.id}`,
       });

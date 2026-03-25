@@ -18,7 +18,7 @@ import {
   Car,
 } from "lucide-react";
 import { api } from "../api";
-import { useAction, useFindMany, useFindOne } from "../hooks/useApi";
+import { useAction, useFindFirst, useFindMany, useFindOne } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { PageHeader } from "../components/shared/PageHeader";
@@ -114,6 +114,17 @@ function formatName(person?: { firstName?: string | null; lastName?: string | nu
   return value || "-";
 }
 
+function safeDate(value: string | Date | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatFreshness(value: string | Date | null | undefined, label: string): string | null {
+  const parsed = safeDate(value);
+  return parsed ? `${label} ${parsed.toLocaleDateString()}` : null;
+}
+
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { businessId, businessType, permissions } = useOutletContext<AuthOutletContext>();
@@ -136,6 +147,18 @@ export default function JobDetailPage() {
     entityType: "job",
     entityId: id,
     first: 8,
+    pause: !businessId || !id,
+  } as any);
+  const [{ data: invoiceFreshness }] = useFindFirst(api.invoice, {
+    live: true,
+    filter: { appointmentId: { equals: id } },
+    select: { id: true, lastSentAt: true, lastPaidAt: true },
+    pause: !businessId || !id,
+  } as any);
+  const [{ data: quoteFreshness }] = useFindFirst(api.quote, {
+    live: true,
+    filter: { appointmentId: { equals: id } },
+    select: { id: true, sentAt: true, followUpSentAt: true },
     pause: !businessId || !id,
   } as any);
   const [{ fetching: saving }, runUpdateJob] = useAction(api.job.update);
@@ -697,6 +720,40 @@ export default function JobDetailPage() {
                 icon={CheckCircle2}
                 label="Schedule record"
                 value="Open original appointment"
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Follow-up freshness</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <MiniStat
+                label="Quote follow-up"
+                value={
+                  record.quote
+                    ? [
+                        formatFreshness((quoteFreshness as any)?.sentAt ?? null, "Sent"),
+                        formatFreshness((quoteFreshness as any)?.followUpSentAt ?? null, "Followed up"),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "No quote outreach yet"
+                    : "No quote linked"
+                }
+              />
+              <MiniStat
+                label="Invoice collection"
+                value={
+                  record.invoice
+                    ? [
+                        formatFreshness((invoiceFreshness as any)?.lastSentAt ?? null, "Sent"),
+                        formatFreshness((invoiceFreshness as any)?.lastPaidAt ?? null, "Paid"),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "No invoice activity yet"
+                    : "No invoice linked"
+                }
               />
             </CardContent>
           </Card>
