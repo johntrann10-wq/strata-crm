@@ -7,6 +7,7 @@ import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { randomUUID } from "crypto";
+import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
 
 export const businessesRouter = Router({ mergeParams: true });
 
@@ -92,6 +93,7 @@ businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  const typeDefaults = getBusinessTypeDefaults(parsed.data.type);
   const businessId = randomUUID();
   const membershipId = randomUUID();
   const [created] = await db.transaction(async (tx) => {
@@ -108,12 +110,14 @@ businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
         city: parsed.data.city ?? null,
         state: parsed.data.state ?? null,
         zip: parsed.data.zip ?? null,
-        staffCount: parsed.data.staffCount ?? null,
-        operatingHours: parsed.data.operatingHours ?? null,
-        timezone: parsed.data.timezone ?? "America/Los_Angeles",
-        currency: parsed.data.currency ?? "USD",
-        defaultTaxRate: parsed.data.defaultTaxRate != null ? String(parsed.data.defaultTaxRate) : "0",
-        appointmentBufferMinutes: parsed.data.appointmentBufferMinutes ?? 15,
+        staffCount: parsed.data.staffCount ?? typeDefaults.defaultStaffCount,
+        operatingHours: parsed.data.operatingHours ?? typeDefaults.operatingHours,
+        timezone: parsed.data.timezone ?? typeDefaults.timezone,
+        currency: parsed.data.currency ?? typeDefaults.currency,
+        defaultTaxRate:
+          parsed.data.defaultTaxRate != null ? String(parsed.data.defaultTaxRate) : String(typeDefaults.defaultTaxRate),
+        appointmentBufferMinutes:
+          parsed.data.appointmentBufferMinutes ?? typeDefaults.appointmentBufferMinutes,
       })
       .returning();
 

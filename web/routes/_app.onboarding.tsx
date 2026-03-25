@@ -3,6 +3,10 @@ import { useNavigate } from "react-router";
 import { useAction, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
 import { setCurrentBusinessId } from "../lib/auth";
+import {
+  BUSINESS_TYPE_WORKSPACE_DEFAULTS,
+  getBusinessTypeWorkspaceDefaults,
+} from "../lib/businessTypeWorkspaceDefaults";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -18,6 +22,7 @@ import {
   CircleDot,
   Droplets,
   Gauge,
+  Layers3,
   Receipt,
   Shield,
   Truck,
@@ -37,30 +42,16 @@ type BusinessTypeValue =
   | "tire_shop"
   | "muffler_shop";
 
-type BusinessTypeMeta = {
-  value: BusinessTypeValue;
-  label: string;
-  icon: typeof Droplets;
-  description: string;
-  exampleName: string;
-  starterCount: number;
-  sampleServices: string[];
-  defaultStaffCount: string;
-  defaultDays: string;
-  defaultOpen: string;
-  defaultClose: string;
+const businessTypeIcons: Record<BusinessTypeValue, typeof Droplets> = {
+  auto_detailing: Droplets,
+  mobile_detailing: Truck,
+  wrap_ppf: Shield,
+  window_tinting: CircleDot,
+  performance: Gauge,
+  mechanic: Wrench,
+  tire_shop: CircleDot,
+  muffler_shop: Wrench,
 };
-
-const businessTypes: BusinessTypeMeta[] = [
-  { value: "auto_detailing", label: "Auto Detailing", icon: Droplets, description: "Premium car cleaning, polishing, and correction services.", exampleName: "Elite Auto Detailing", starterCount: 26, sampleServices: ["Full Detail", "Paint Correction", "Ceramic Coating"], defaultStaffCount: "1", defaultDays: "Mon-Sat", defaultOpen: "08:00", defaultClose: "18:00" },
-  { value: "mobile_detailing", label: "Mobile Detailing", icon: Truck, description: "On-site detailing at homes, offices, or fleet locations.", exampleName: "Roadside Detail Co.", starterCount: 25, sampleServices: ["Mobile Full Detail", "Maintenance Wash", "Seat Extraction"], defaultStaffCount: "1", defaultDays: "Mon-Sat", defaultOpen: "08:00", defaultClose: "17:00" },
-  { value: "wrap_ppf", label: "Wrap & PPF", icon: Shield, description: "PPF, wraps, trim blackout, and protection work.", exampleName: "Precision Wrap Studio", starterCount: 26, sampleServices: ["Front-End PPF", "Color Change Wrap", "Chrome Delete"], defaultStaffCount: "2", defaultDays: "Mon-Fri", defaultOpen: "09:00", defaultClose: "18:00" },
-  { value: "window_tinting", label: "Window Tinting", icon: CircleDot, description: "Automotive tint installs, upgrades, and film replacements.", exampleName: "Clear Shade Tint", starterCount: 26, sampleServices: ["Full Vehicle Tint", "Ceramic Film Tint", "Windshield Tint"], defaultStaffCount: "2", defaultDays: "Mon-Sat", defaultOpen: "09:00", defaultClose: "18:00" },
-  { value: "performance", label: "Performance", icon: Gauge, description: "Bolt-ons, suspension, tuning, brakes, and track prep.", exampleName: "Apex Performance Garage", starterCount: 26, sampleServices: ["Coilover Install", "ECU Tune", "Brake Upgrade"], defaultStaffCount: "2", defaultDays: "Mon-Fri", defaultOpen: "09:00", defaultClose: "18:00" },
-  { value: "mechanic", label: "Mechanic", icon: Wrench, description: "General repair, maintenance, diagnostics, and inspections.", exampleName: "Main Street Auto Repair", starterCount: 26, sampleServices: ["Synthetic Oil Change", "Brake Service", "Diagnostic"], defaultStaffCount: "2", defaultDays: "Mon-Fri", defaultOpen: "08:00", defaultClose: "17:00" },
-  { value: "tire_shop", label: "Tire Shop", icon: CircleDot, description: "Tire mounting, balancing, repair, and alignment.", exampleName: "Fast Lane Tire", starterCount: 25, sampleServices: ["Mount & Balance", "Flat Repair", "Alignment"], defaultStaffCount: "2", defaultDays: "Mon-Sat", defaultOpen: "08:00", defaultClose: "17:00" },
-  { value: "muffler_shop", label: "Muffler Shop", icon: Wrench, description: "Exhaust repair, fabrication, upgrades, and sound tuning.", exampleName: "Street Tone Exhaust", starterCount: 26, sampleServices: ["Muffler Replacement", "Custom Exhaust", "Leak Repair"], defaultStaffCount: "2", defaultDays: "Mon-Fri", defaultOpen: "09:00", defaultClose: "17:00" },
-];
 
 type FormData = { name: string; phone: string; email: string; address: string; city: string; state: string; zip: string };
 
@@ -127,7 +118,10 @@ export default function OnboardingPage() {
     if (match) setOperatingHours({ days: match[1], open: match[2], close: match[3] });
   }, [existingBusiness, navigate]);
 
-  const selectedTypeMeta = useMemo(() => businessTypes.find((item) => item.value === selectedType) ?? null, [selectedType]);
+  const selectedTypeMeta = useMemo(
+    () => (selectedType ? getBusinessTypeWorkspaceDefaults(selectedType) : null),
+    [selectedType]
+  );
 
   useEffect(() => {
     if (!selectedTypeMeta || existingBusiness?.id) return;
@@ -147,6 +141,7 @@ export default function OnboardingPage() {
       setStep(1);
       return;
     }
+    const typeDefaults = getBusinessTypeWorkspaceDefaults(selectedType);
     if (!formData.name.trim()) {
       setValidationError("Business name is required.");
       return;
@@ -163,6 +158,8 @@ export default function OnboardingPage() {
       zip: formData.zip.trim() || undefined,
       staffCount: Math.max(0, parseInt(staffCount, 10) || 0),
       operatingHours: `${operatingHours.days.trim() || "Mon-Fri"} ${operatingHours.open}-${operatingHours.close}`,
+      defaultTaxRate: typeDefaults.defaultTaxRate,
+      appointmentBufferMinutes: typeDefaults.appointmentBufferMinutes,
     };
 
     const result = existingBusiness?.id ? await updateBusiness({ id: existingBusiness.id, ...payload }) : await createBusiness(payload);
@@ -224,7 +221,9 @@ export default function OnboardingPage() {
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {businessTypes.map((type) => (
+                {BUSINESS_TYPE_WORKSPACE_DEFAULTS.map((type) => {
+                  const Icon = businessTypeIcons[type.value];
+                  return (
                   <button
                     key={type.value}
                     type="button"
@@ -237,11 +236,11 @@ export default function OnboardingPage() {
                       selectedType === type.value ? "border-orange-500 bg-[#1f1a16] shadow-lg shadow-orange-500/10" : "border-[#2a2a2a] bg-[#141414] hover:border-orange-500/60 hover:bg-[#1a1714]"
                     )}
                   >
-                    <type.icon className="mb-3 h-8 w-8 text-orange-300" />
+                    <Icon className="mb-3 h-8 w-8 text-orange-300" />
                     <p className={cn("mb-1 text-sm font-semibold sm:text-base", selectedType === type.value ? "text-orange-300" : "text-white")}>{type.label}</p>
                     <p className="text-xs leading-snug text-[#8b929f] sm:text-sm">{type.description}</p>
                   </button>
-                ))}
+                )})}
               </div>
               {validationError ? <p className="mt-4 text-sm text-red-400">{validationError}</p> : null}
               <div className="hidden pt-4 sm:flex">
@@ -257,11 +256,14 @@ export default function OnboardingPage() {
                 <div className="space-y-5">
                   <div>
                     <div className="inline-flex items-center gap-2 rounded-full border border-orange-500/25 bg-orange-500/10 px-3 py-1 text-xs font-medium text-orange-200">
-                      <selectedTypeMeta.icon className="h-3.5 w-3.5" />
+                      {(() => {
+                        const Icon = businessTypeIcons[selectedTypeMeta.value];
+                        return <Icon className="h-3.5 w-3.5" />;
+                      })()}
                       {selectedTypeMeta.label}
                     </div>
                     <h2 className="mt-4 text-xl font-semibold">You will start with a usable workspace</h2>
-                    <p className="mt-2 text-sm text-[#9ca3af]">No blank setup. Strata will preload services, a working schedule, and your core operating screens.</p>
+                    <p className="mt-2 text-sm text-[#9ca3af]">No blank setup. Strata will preload services, workflow defaults, booking settings, and day-one language for this shop type.</p>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
@@ -275,10 +277,45 @@ export default function OnboardingPage() {
                     </div>
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                    <div className="flex items-start gap-3">
+                      <Layers3 className="mt-0.5 h-4 w-4 text-orange-300" />
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Default workflow</p>
+                        <p className="mt-2 text-sm font-medium text-white">{selectedTypeMeta.workflowTitle}</p>
+                        <p className="mt-1 text-sm text-[#9ca3af]">{selectedTypeMeta.workflowSummary}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                    <div className="flex items-start gap-3">
+                      <CalendarDays className="mt-0.5 h-4 w-4 text-orange-300" />
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Booking defaults</p>
+                        <p className="mt-2 text-sm text-white">{selectedTypeMeta.bookingSettingsLabel}</p>
+                        <p className="mt-1 text-sm text-[#9ca3af]">Default appointment buffer: {selectedTypeMeta.appointmentBufferMinutes} minutes</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                     <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Starter menu preview</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {selectedTypeMeta.sampleServices.map((service) => (
                         <span key={service} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-white/85">{service}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                    <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Estimate and invoice defaults</p>
+                    <div className="mt-3 space-y-2 text-sm text-[#d4d8de]">
+                      <p>{selectedTypeMeta.estimateTemplateSummary}</p>
+                      <p className="text-[#9ca3af]">{selectedTypeMeta.invoiceTemplateSummary}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                    <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Day-one status language</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {selectedTypeMeta.statusLabels.map((label) => (
+                        <span key={label} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-white/85">{label}</span>
                       ))}
                     </div>
                   </div>
@@ -418,6 +455,14 @@ export default function OnboardingPage() {
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-[#9ca3af]">Default hours</span>
                       <span className="font-medium text-white">{operatingHours.days} {operatingHours.open}-{operatingHours.close}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[#9ca3af]">Booking buffer</span>
+                      <span className="font-medium text-white">{selectedTypeMeta.appointmentBufferMinutes} min</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[#9ca3af]">Workflow</span>
+                      <span className="font-medium text-white">{selectedTypeMeta.workflowTitle}</span>
                     </div>
                   </div>
                 </div>

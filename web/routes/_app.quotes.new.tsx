@@ -70,7 +70,7 @@ export default function NewQuotePage() {
 
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(() => creationPreset.quoteNotes);
   const [expiresAt, setExpiresAt] = useState(
     () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   );

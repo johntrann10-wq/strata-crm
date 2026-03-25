@@ -21,6 +21,7 @@ import {
 import { ArrowLeft, Check, ChevronDown, ChevronUp, ChevronsUpDown, FileText, Package, Plus, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
+import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { PageHeader } from "../components/shared/PageHeader";
 
@@ -47,8 +48,9 @@ type AddonLinkRecord = {
 
 export default function NewInvoicePage() {
   const navigate = useNavigate();
-  const { user, businessId } = useOutletContext<AuthOutletContext>();
+  const { user, businessId, businessType } = useOutletContext<AuthOutletContext>();
   const userId = (user as any)?.id as string | undefined;
+  const creationPreset = getWorkflowCreationPreset(businessType);
 
   const [searchParams] = useSearchParams();
   const appointmentIdParam = searchParams.get("appointmentId");
@@ -136,7 +138,7 @@ export default function NewInvoicePage() {
   // Form state
   const [clientComboOpen, setClientComboOpen] = useState(false);
   const [dueDate, setDueDate] = useState(() => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(() => creationPreset.invoiceNotes);
   const [taxRate, setTaxRate] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [lineItems, setLineItems] = useState<LineItem[]>([
