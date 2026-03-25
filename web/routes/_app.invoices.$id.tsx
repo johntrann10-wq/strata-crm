@@ -184,7 +184,7 @@ function WorkflowLinkCard({
   actionLabel: string;
 }) {
   return (
-    <div className="rounded-lg border p-3">
+    <div className="rounded-[1rem] border border-white/65 bg-white/78 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <Icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
         <div className="min-w-0 flex-1">
@@ -225,7 +225,7 @@ function CollectionActionCard({
   primaryLoading?: boolean;
 }) {
   return (
-    <Card>
+    <Card className="border-white/65">
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-semibold">{title}</CardTitle>
       </CardHeader>
@@ -785,7 +785,7 @@ export default function InvoiceDetailPage() {
       </AlertDialog>
 
       <div className="grid gap-3 md:grid-cols-4">
-        <Card className="border-border/70">
+        <Card className="border-white/65">
           <CardContent className="space-y-1 p-4">
             <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Balance due</p>
             <p className={cn("text-2xl font-semibold", remainingBalance > 0 ? "text-foreground" : "text-emerald-700")}>
@@ -796,14 +796,14 @@ export default function InvoiceDetailPage() {
             </p>
           </CardContent>
         </Card>
-        <Card className="border-border/70">
+        <Card className="border-white/65">
           <CardContent className="space-y-1 p-4">
             <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Invoice total</p>
             <p className="text-2xl font-semibold">{formatCurrency(invoice.total)}</p>
             <p className="text-sm text-muted-foreground">Subtotal, tax, and discount already included</p>
           </CardContent>
         </Card>
-        <Card className="border-border/70">
+        <Card className="border-white/65">
           <CardContent className="space-y-1 p-4">
             <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Due date</p>
             <p className="text-lg font-semibold">{invoice.dueDate ? formatDate(invoice.dueDate) : "No due date"}</p>
@@ -812,7 +812,7 @@ export default function InvoiceDetailPage() {
             </p>
           </CardContent>
         </Card>
-        <Card className="border-border/70">
+        <Card className="border-white/65">
           <CardContent className="space-y-1 p-4">
             <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Client</p>
             <p className="truncate text-lg font-semibold">

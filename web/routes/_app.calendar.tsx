@@ -206,8 +206,8 @@ export default function CalendarPage() {
   return (
     <div className="page-content flex h-full flex-col">
       <div className="page-section space-y-4">
-        <div className="overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm sm:rounded-[28px]">
-          <div className="border-b border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.06),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] px-4 py-4 sm:px-6">
+        <div className="surface-panel overflow-hidden sm:rounded-[1.75rem]">
+          <div className="border-b border-white/60 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.09),transparent_34%),radial-gradient(circle_at_top_right,rgba(15,23,42,0.05),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.92),rgba(250,248,244,0.82))] px-4 py-4 sm:px-6">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -237,7 +237,7 @@ export default function CalendarPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                  <div className="inline-flex w-full items-center justify-between rounded-full border border-border/70 bg-background/80 p-1 shadow-sm sm:w-auto sm:justify-start">
+                  <div className="inline-flex w-full items-center justify-between rounded-full border border-white/70 bg-white/72 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_10px_24px_rgba(15,23,42,0.05)] sm:w-auto sm:justify-start">
                     <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={handlePrev} aria-label="Previous">
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -254,7 +254,7 @@ export default function CalendarPage() {
                     </Button>
                   </div>
 
-                  <div className="inline-flex w-full items-center overflow-x-auto rounded-full border border-border/70 bg-background/80 p-1 shadow-sm sm:w-auto">
+                  <div className="inline-flex w-full items-center overflow-x-auto rounded-full border border-white/70 bg-white/72 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_10px_24px_rgba(15,23,42,0.05)] sm:w-auto">
                     {(["month", "day"] as const).map((calendarView) => (
                       <button
                         key={calendarView}
@@ -263,7 +263,7 @@ export default function CalendarPage() {
                         className={cn(
                           "shrink-0 rounded-full px-4 py-2 text-sm font-medium capitalize transition-colors",
                           view === calendarView
-                            ? "bg-foreground text-background shadow-sm"
+                            ? "bg-foreground text-background shadow-[0_8px_20px_rgba(15,23,42,0.18)]"
                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
                         )}
                       >
@@ -280,15 +280,15 @@ export default function CalendarPage() {
 
                 {isMobileLayout ? (
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-2xl border border-border/70 bg-background/85 px-3 py-3 text-center shadow-sm">
+                    <div className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-center shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
                       <p className="text-lg font-semibold text-foreground">{activeAppointments.length}</p>
                       <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Booked</p>
                     </div>
-                    <div className="rounded-2xl border border-border/70 bg-background/85 px-3 py-3 text-center shadow-sm">
+                    <div className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-center shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
                       <p className="text-lg font-semibold text-foreground">{unassignedAppointments}</p>
                       <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Open</p>
                     </div>
-                    <div className="rounded-2xl border border-border/70 bg-background/85 px-3 py-3 text-center shadow-sm">
+                    <div className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-center shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
                       <p className="text-lg font-semibold text-foreground">{activeConflicts.size}</p>
                       <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Conflicts</p>
                     </div>
@@ -302,7 +302,7 @@ export default function CalendarPage() {
                   New appointment
                 </Button>
                 <div className={cn("grid gap-3 sm:grid-cols-2 xl:grid-cols-1", isMobileLayout && "hidden sm:grid")}>
-                  <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
+                  <div className="rounded-2xl border border-white/70 bg-white/78 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Next up</p>
                     {nextUpcoming ? (
                       <div className="mt-2 space-y-1">
@@ -325,7 +325,7 @@ export default function CalendarPage() {
                       <p className="mt-2 text-sm text-muted-foreground">No upcoming appointments in this range.</p>
                     )}
                   </div>
-                  <div className="rounded-2xl border border-border/70 bg-background/85 p-4 shadow-sm">
+                  <div className="rounded-2xl border border-white/70 bg-white/78 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Today at a glance</p>
                     <div className="mt-2 grid grid-cols-3 gap-3 text-sm">
                       <div>
@@ -418,7 +418,7 @@ export default function CalendarPage() {
           </div>
 
           <aside className={cn("space-y-4", isMobileLayout && "space-y-3")}>
-            <div className="rounded-[24px] border border-border/70 bg-background/95 p-4 shadow-sm">
+            <div className="surface-panel rounded-[1.5rem] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected day</p>
@@ -432,11 +432,11 @@ export default function CalendarPage() {
                 </Button>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
+                <div className="rounded-2xl border border-white/60 bg-white/72 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
                   <p className="mt-2 text-2xl font-semibold text-foreground">{selectedDayAppointments.length}</p>
                 </div>
-                <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
+                <div className="rounded-2xl border border-white/60 bg-white/72 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Revenue</p>
                   <p className="mt-2 text-2xl font-semibold text-foreground">
                     {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(selectedDayRevenue)}
@@ -456,7 +456,7 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            <div className="rounded-[24px] border border-border/70 bg-background/95 p-4 shadow-sm">
+            <div className="surface-panel rounded-[1.5rem] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Agenda</p>
@@ -484,7 +484,7 @@ export default function CalendarPage() {
                       key={appointment.id}
                       type="button"
                       onClick={() => handleApptClick(appointment)}
-                      className="flex w-full items-start gap-3 rounded-2xl border border-border/70 bg-muted/15 px-3 py-3 text-left transition-colors hover:bg-muted/30"
+                      className="flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88"
                     >
                       <div className="min-w-[54px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                         {new Date(appointment.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
@@ -520,7 +520,7 @@ export default function CalendarPage() {
               ) : null}
             </div>
 
-            <div className="rounded-[24px] border border-border/70 bg-background/95 p-4 shadow-sm">
+            <div className="surface-panel rounded-[1.5rem] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Team on deck</p>
@@ -545,7 +545,7 @@ export default function CalendarPage() {
                 <div className="mt-3 space-y-2">
                   {teamOnDeck.length > 0 ? (
                   teamOnDeck.slice(0, 5).map(([key, entry]) => (
-                    <div key={key} className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/10 px-3 py-2.5">
+                    <div key={key} className="flex items-center justify-between rounded-2xl border border-white/65 bg-white/72 px-3 py-2.5">
                       <span className="text-sm font-medium text-foreground">{entry.label}</span>
                       <span className="text-xs text-muted-foreground">{entry.count} booked</span>
                     </div>

@@ -430,7 +430,7 @@ export default function ClientDetailPage() {
 
         <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
           <div className="space-y-6">
-            <Card className="border-border/70 shadow-sm">
+            <Card className="border-white/65">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -530,7 +530,7 @@ export default function ClientDetailPage() {
           </div>
 
           <div className="space-y-6">
-            <Card className="border-border/70 shadow-sm">
+            <Card className="border-white/65">
               <CardHeader className="pb-4">
                 <CardTitle>Client Quick Actions</CardTitle>
               </CardHeader>
@@ -557,7 +557,7 @@ export default function ClientDetailPage() {
             ) : null}
             <VehiclesCard id={id} vehicles={vehicleList} />
 
-            <Card className="border-border/70 shadow-sm">
+            <Card className="border-white/65">
               <CardHeader className="pb-4">
                 <CardTitle>Workflow Snapshot</CardTitle>
               </CardHeader>
@@ -566,7 +566,7 @@ export default function ClientDetailPage() {
                   <Link
                     key={(job as any).id}
                     to={`/jobs/${(job as any).id}`}
-                    className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-3 transition-colors hover:bg-muted/40"
+                    className="flex items-center justify-between rounded-[1rem] border border-white/65 bg-white/70 px-3 py-3 transition-colors hover:bg-white/88"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{(job as any).title ?? (job as any).jobNumber ?? "Job"}</p>
@@ -593,7 +593,7 @@ export default function ClientDetailPage() {
 
 function SummaryField({ label, value }: { label: string; value?: string | null }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-background/90 px-3 py-3">
+    <div className="rounded-[1rem] border border-white/65 bg-white/76 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
       <p className="mt-1 text-sm font-medium text-foreground">{value || "Not provided"}</p>
     </div>
@@ -610,7 +610,7 @@ function NotesPanel({
   empty: string;
 }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-background/90 p-4">
+    <div className="rounded-[1rem] border border-white/65 bg-white/76 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
       <p className="mt-2 text-sm leading-6 text-foreground/90">{body || empty}</p>
     </div>
@@ -629,7 +629,7 @@ function WorkflowMetricCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-card/95 p-4 shadow-sm">
+    <div className="rounded-[1.35rem] border border-white/65 bg-white/82 p-4 shadow-[0_14px_32px_rgba(15,23,42,0.06)]">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{label}</p>
         <Icon className="h-4 w-4 text-muted-foreground" />
@@ -652,7 +652,7 @@ function QuickWorkflowAction({
   href: string;
 }) {
   return (
-    <Link to={href} className="block rounded-xl border border-border/70 bg-card px-4 py-4 transition-colors hover:border-primary/40 hover:bg-muted/30">
+    <Link to={href} className="block rounded-[1rem] border border-white/65 bg-white/82 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)] transition-colors hover:border-primary/30 hover:bg-white">
       <div className="flex items-start gap-3">
         <div className="rounded-lg bg-primary/10 p-2 text-primary">
           <Icon className="h-4 w-4" />
@@ -684,7 +684,7 @@ function RevenueFollowupCard({
   const toneClass = tone === "danger" ? "border-red-200 bg-red-50/80" : "border-amber-200 bg-amber-50/80";
 
   return (
-    <div className={`rounded-xl border p-4 ${toneClass}`}>
+    <div className={`rounded-[1rem] border p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)] ${toneClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{title}</p>
