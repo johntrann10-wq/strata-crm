@@ -340,6 +340,14 @@ export default function SignedIn() {
     if (denominator === 0) return 0;
     return Math.round((acceptedQuotes.length / denominator) * 100);
   }, [acceptedQuotes.length, pendingQuotes.length]);
+  const averageActiveJobValue = useMemo(
+    () => (activeJobs.length > 0 ? activeJobValue / activeJobs.length : 0),
+    [activeJobValue, activeJobs.length]
+  );
+  const averageBookedValue = useMemo(
+    () => (todayAppointments.length > 0 ? todayBookedValue / todayAppointments.length : 0),
+    [todayAppointments.length, todayBookedValue]
+  );
   const nextJob = activeJobs[0] ?? null;
   const myNextJob = myActiveJobs[0] ?? null;
   const teamLoad = useMemo(() => {
@@ -476,7 +484,7 @@ export default function SignedIn() {
         : nextJob.title ?? "Open job";
       actions.push({
         title: "Next job on deck",
-        detail: `${formatSafe(nextJob.scheduledStart, "h:mm a")} · ${nextJobClient}`,
+        detail: `${formatSafe(nextJob.scheduledStart, "h:mm a")} - ${nextJobClient}`,
         href: `/jobs/${nextJob.id}`,
         cta: "Open job",
       });
@@ -485,7 +493,7 @@ export default function SignedIn() {
     if (unpaidInvoices.length > 0) {
       actions.push({
         title: "Collect outstanding cash",
-        detail: `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length === 1 ? "" : "s"} · ${formatCurrency(unpaidRevenue)}`,
+        detail: `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length === 1 ? "" : "s"} - ${formatCurrency(unpaidRevenue)}`,
         href: `/invoices/${unpaidInvoices[0].id}`,
         cta: "Review invoices",
       });
@@ -498,7 +506,7 @@ export default function SignedIn() {
         : "Open quote";
       actions.push({
         title: "Close pending work",
-        detail: `${pendingQuotes.length} quote${pendingQuotes.length === 1 ? "" : "s"} awaiting action · ${quoteClient}`,
+        detail: `${pendingQuotes.length} quote${pendingQuotes.length === 1 ? "" : "s"} awaiting action - ${quoteClient}`,
         href: `/quotes/${quote.id}`,
         cta: "Open quote",
       });
@@ -798,6 +806,48 @@ export default function SignedIn() {
                   : "No active quote pipeline"
               }
               tone="ops"
+            />
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">Performance signals</h2>
+            <span className="text-sm text-muted-foreground">Useful planning context for the next few hours</span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <PipelineCard
+              href="/jobs"
+              label="Average active job value"
+              value={formatCurrency(averageActiveJobValue)}
+              detail={
+                activeJobs.length > 0
+                  ? `${activeJobs.length} active job${activeJobs.length === 1 ? "" : "s"} in progress`
+                  : "No active jobs in queue"
+              }
+              tone="ops"
+            />
+            <PipelineCard
+              href="/appointments"
+              label="Average booked ticket"
+              value={formatCurrency(averageBookedValue)}
+              detail={
+                todayAppointments.length > 0
+                  ? `${todayAppointments.length} appointment${todayAppointments.length === 1 ? "" : "s"} on today's board`
+                  : "Nothing booked today"
+              }
+              tone="sales"
+            />
+            <PipelineCard
+              href="/invoices"
+              label="Overdue share of receivables"
+              value={unpaidRevenue > 0 ? `${Math.round((overdueRevenue / unpaidRevenue) * 100)}%` : "0%"}
+              detail={
+                overdueInvoices.length > 0
+                  ? `${overdueInvoices.length} overdue invoice${overdueInvoices.length === 1 ? "" : "s"} need collection`
+                  : "No overdue invoices in receivables"
+              }
+              tone="risk"
             />
           </div>
         </section>
