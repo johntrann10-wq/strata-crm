@@ -11,6 +11,7 @@ import {
 } from "react-router";
 import { Suspense, useState, useEffect } from "react";
 import "./app.css";
+import faviconHref from "./favicon.svg";
 import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
 import { setAuthToken } from "./lib/auth";
@@ -78,7 +79,10 @@ function BrowserErrorReporter() {
 
 const isProduction = import.meta.env.PROD;
 
-export const links = () => [];
+export const links = () => [
+  { rel: "icon", href: faviconHref, type: "image/svg+xml" },
+  { rel: "shortcut icon", href: faviconHref, type: "image/svg+xml" },
+];
 
 export const meta = () => [
   { charset: "utf-8" },
