@@ -4,6 +4,7 @@ import { db } from "../db/index.js";
 import { services, appointmentServices } from "../db/schema.js";
 import { eq, and, asc, desc, count } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
+import { logger } from "../lib/logger.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 
@@ -29,6 +30,119 @@ function parseFilter(req: Request): Record<string, unknown> | undefined {
     return req.query.filter ? (JSON.parse(String(req.query.filter)) as Record<string, unknown>) : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function isServiceSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+type ServiceRecord = {
+  id: string;
+  businessId: string;
+  name: string;
+  notes: string | null;
+  price: string | null;
+  durationMinutes: number | null;
+  category: (typeof CATEGORY_VALUES)[number] | null;
+  taxable: boolean | null;
+  isAddon: boolean | null;
+  active: boolean | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const legacyServiceSelection = {
+  id: services.id,
+  businessId: services.businessId,
+  name: services.name,
+  price: services.price,
+  createdAt: services.createdAt,
+  updatedAt: services.updatedAt,
+};
+
+const fullServiceSelection = {
+  ...legacyServiceSelection,
+  notes: services.notes,
+  durationMinutes: services.durationMinutes,
+  category: services.category,
+  taxable: services.taxable,
+  isAddon: services.isAddon,
+  active: services.active,
+};
+
+function withMissingServiceFields<T extends Omit<ServiceRecord, "notes" | "durationMinutes" | "category" | "taxable" | "isAddon" | "active">>(
+  row: T
+): ServiceRecord {
+  return {
+    ...row,
+    notes: null,
+    durationMinutes: null,
+    category: "other",
+    taxable: true,
+    isAddon: false,
+    active: true,
+  };
+}
+
+async function listServicesForBusiness(bid: string, activeFilter?: boolean, first = 100): Promise<ServiceRecord[]> {
+  const conditions = [eq(services.businessId, bid)];
+  if (typeof activeFilter === "boolean") {
+    conditions.push(eq(services.active, activeFilter));
+  }
+
+  try {
+    return await db
+      .select(fullServiceSelection)
+      .from(services)
+      .where(and(...conditions))
+      .orderBy(asc(services.category), asc(services.name), desc(services.createdAt))
+      .limit(first);
+  } catch (error) {
+    if (!isServiceSchemaDriftError(error)) throw error;
+    logger.warn("services list falling back without full schema", {
+      businessId: bid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const rows = await db
+      .select(legacyServiceSelection)
+      .from(services)
+      .where(eq(services.businessId, bid))
+      .orderBy(asc(services.name), desc(services.createdAt))
+      .limit(first);
+    return rows.map((row) => withMissingServiceFields(row));
+  }
+}
+
+async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRecord | null> {
+  try {
+    const [row] = await db
+      .select(fullServiceSelection)
+      .from(services)
+      .where(and(eq(services.id, id), eq(services.businessId, bid)))
+      .limit(1);
+    return row ?? null;
+  } catch (error) {
+    if (!isServiceSchemaDriftError(error)) throw error;
+    logger.warn("service lookup falling back without full schema", {
+      businessId: bid,
+      serviceId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const [row] = await db
+      .select(legacyServiceSelection)
+      .from(services)
+      .where(and(eq(services.id, id), eq(services.businessId, bid)))
+      .limit(1);
+    return row ? withMissingServiceFields(row) : null;
   }
 }
 
@@ -62,32 +176,16 @@ const patchSchema = z
 servicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
   const filter = parseFilter(req);
-  const conditions = [eq(services.businessId, bid)];
 
   const activeEquals = (filter as { active?: { equals?: boolean } } | undefined)?.active?.equals;
-  if (typeof activeEquals === "boolean") {
-    conditions.push(eq(services.active, activeEquals));
-  }
-
   const first = req.query.first != null ? Math.min(Number(req.query.first), 200) : 100;
-
-  const list = await db
-    .select()
-    .from(services)
-    .where(and(...conditions))
-    .orderBy(asc(services.category), asc(services.name), desc(services.createdAt))
-    .limit(first);
-
+  const list = await listServicesForBusiness(bid, activeEquals, first);
   res.json({ records: list });
 });
 
 servicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
-  const [row] = await db
-    .select()
-    .from(services)
-    .where(eq(services.id, req.params.id))
-    .limit(1);
-  if (!row || row.businessId !== req.businessId) throw new NotFoundError("Service not found.");
+  const row = await getServiceForBusiness(req.params.id, businessId(req));
+  if (!row) throw new NotFoundError("Service not found.");
   res.json(row);
 });
 
@@ -100,30 +198,48 @@ servicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
     throw new BadRequestError("Business mismatch.");
   }
 
-  const [created] = await db
-    .insert(services)
-    .values({
+  let createdId: string | null = null;
+  try {
+    const [created] = await db
+      .insert(services)
+      .values({
+        businessId: bid,
+        name: body.name,
+        price: String(body.price),
+        durationMinutes: body.durationMinutes ?? null,
+        category: body.category,
+        notes: body.notes ?? null,
+        taxable: body.taxable ?? true,
+        isAddon: body.isAddon ?? false,
+        active: body.active ?? true,
+      })
+      .returning({ id: services.id });
+    createdId = created?.id ?? null;
+  } catch (error) {
+    if (!isServiceSchemaDriftError(error)) throw error;
+    logger.warn("service create falling back without full schema", {
       businessId: bid,
-      name: body.name,
-      price: String(body.price),
-      durationMinutes: body.durationMinutes ?? null,
-      category: body.category,
-      notes: body.notes ?? null,
-      taxable: body.taxable ?? true,
-      isAddon: body.isAddon ?? false,
-      active: body.active ?? true,
-    })
-    .returning();
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const [created] = await db
+      .insert(services)
+      .values({
+        businessId: bid,
+        name: body.name,
+        price: String(body.price),
+      })
+      .returning({ id: services.id });
+    createdId = created?.id ?? null;
+  }
+  if (!createdId) throw new BadRequestError("Unable to create service.");
+  const created = await getServiceForBusiness(createdId, bid);
+  if (!created) throw new NotFoundError("Service not found after create.");
   res.status(201).json(created);
 });
 
 servicesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const [existing] = await db
-    .select()
-    .from(services)
-    .where(and(eq(services.id, req.params.id), eq(services.businessId, bid)))
-    .limit(1);
+  const existing = await getServiceForBusiness(req.params.id, bid);
   if (!existing) throw new NotFoundError("Service not found.");
 
   const parsed = patchSchema.safeParse(req.body);
@@ -134,21 +250,39 @@ servicesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, re
     return;
   }
 
-  const [updated] = await db
-    .update(services)
-    .set({
-      ...(body.name != null ? { name: body.name } : {}),
-      ...(body.price != null ? { price: String(body.price) } : {}),
-      ...(body.durationMinutes !== undefined ? { durationMinutes: body.durationMinutes } : {}),
-      ...(body.category != null ? { category: body.category } : {}),
-      ...(body.notes !== undefined ? { notes: body.notes } : {}),
-      ...(body.taxable !== undefined ? { taxable: body.taxable } : {}),
-      ...(body.isAddon !== undefined ? { isAddon: body.isAddon } : {}),
-      ...(body.active !== undefined ? { active: body.active } : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(services.id, req.params.id))
-    .returning();
+  try {
+    await db
+      .update(services)
+      .set({
+        ...(body.name != null ? { name: body.name } : {}),
+        ...(body.price != null ? { price: String(body.price) } : {}),
+        ...(body.durationMinutes !== undefined ? { durationMinutes: body.durationMinutes } : {}),
+        ...(body.category != null ? { category: body.category } : {}),
+        ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        ...(body.taxable !== undefined ? { taxable: body.taxable } : {}),
+        ...(body.isAddon !== undefined ? { isAddon: body.isAddon } : {}),
+        ...(body.active !== undefined ? { active: body.active } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(services.id, req.params.id));
+  } catch (error) {
+    if (!isServiceSchemaDriftError(error)) throw error;
+    logger.warn("service update falling back without full schema", {
+      businessId: bid,
+      serviceId: req.params.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await db
+      .update(services)
+      .set({
+        ...(body.name != null ? { name: body.name } : {}),
+        ...(body.price != null ? { price: String(body.price) } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(services.id, req.params.id));
+  }
+  const updated = await getServiceForBusiness(req.params.id, bid);
+  if (!updated) throw new NotFoundError("Service not found after update.");
   res.json(updated);
 });
 

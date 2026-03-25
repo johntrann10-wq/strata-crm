@@ -4,6 +4,7 @@ import { db } from "../db/index.js";
 import { serviceAddonLinks, services } from "../db/schema.js";
 import { eq, and, asc } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
+import { logger } from "../lib/logger.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 
@@ -20,6 +21,18 @@ function parseFilter(req: Request): Record<string, unknown> | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isServiceAddonSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
 const createSchema = z.object({
@@ -42,11 +55,21 @@ serviceAddonLinksRouter.get("/", requireAuth, requireTenant, async (req: Request
     conditions.push(eq(serviceAddonLinks.parentServiceId, parentId));
   }
 
-  const rows = await db
-    .select()
-    .from(serviceAddonLinks)
-    .where(and(...conditions))
-    .orderBy(asc(serviceAddonLinks.sortOrder), asc(serviceAddonLinks.createdAt));
+  let rows: unknown[] = [];
+  try {
+    rows = await db
+      .select()
+      .from(serviceAddonLinks)
+      .where(and(...conditions))
+      .orderBy(asc(serviceAddonLinks.sortOrder), asc(serviceAddonLinks.createdAt));
+  } catch (error) {
+    if (!isServiceAddonSchemaDriftError(error)) throw error;
+    logger.warn("service addon links list falling back without schema", {
+      businessId: bid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    rows = [];
+  }
 
   res.json({ records: rows });
 });
@@ -74,27 +97,60 @@ serviceAddonLinksRouter.post("/", requireAuth, requireTenant, async (req: Reques
 
   if (!parent || !addon) throw new BadRequestError("Parent and add-on must belong to your business.");
 
-  const [created] = await db
-    .insert(serviceAddonLinks)
-    .values({
+  let created: unknown;
+  try {
+    [created] = await db
+      .insert(serviceAddonLinks)
+      .values({
+        businessId: bid,
+        parentServiceId,
+        addonServiceId,
+        sortOrder: sortOrder ?? 0,
+      })
+      .returning();
+  } catch (error) {
+    if (!isServiceAddonSchemaDriftError(error)) throw error;
+    logger.warn("service addon link create skipped due to schema drift", {
       businessId: bid,
       parentServiceId,
       addonServiceId,
-      sortOrder: sortOrder ?? 0,
-    })
-    .returning();
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new BadRequestError("Add-on links are not supported on this database schema yet.");
+  }
 
   res.status(201).json(created);
 });
 
 serviceAddonLinksRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const [existing] = await db
-    .select()
-    .from(serviceAddonLinks)
-    .where(and(eq(serviceAddonLinks.id, req.params.id), eq(serviceAddonLinks.businessId, bid)))
-    .limit(1);
+  let existing: unknown;
+  try {
+    [existing] = await db
+      .select()
+      .from(serviceAddonLinks)
+      .where(and(eq(serviceAddonLinks.id, req.params.id), eq(serviceAddonLinks.businessId, bid)))
+      .limit(1);
+  } catch (error) {
+    if (!isServiceAddonSchemaDriftError(error)) throw error;
+    logger.warn("service addon link delete skipped due to schema drift", {
+      businessId: bid,
+      linkId: req.params.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(204).end();
+    return;
+  }
   if (!existing) throw new NotFoundError("Add-on link not found.");
-  await db.delete(serviceAddonLinks).where(eq(serviceAddonLinks.id, req.params.id));
+  try {
+    await db.delete(serviceAddonLinks).where(eq(serviceAddonLinks.id, req.params.id));
+  } catch (error) {
+    if (!isServiceAddonSchemaDriftError(error)) throw error;
+    logger.warn("service addon link delete falling back without schema", {
+      businessId: bid,
+      linkId: req.params.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
   res.status(204).end();
 });
