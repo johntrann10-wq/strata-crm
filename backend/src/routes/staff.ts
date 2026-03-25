@@ -35,8 +35,10 @@ function normalizeEmail(email: string): string {
 
 function isStaffSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
-  const code = (error as { code?: string }).code;
-  const message = String((error as { message?: string }).message ?? "").toLowerCase();
+  const cause = "cause" in error ? (error as { cause?: unknown }).cause : error;
+  if (!cause || typeof cause !== "object") return false;
+  const code = (cause as { code?: string }).code;
+  const message = String((cause as { message?: string }).message ?? "").toLowerCase();
   return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
