@@ -99,6 +99,9 @@ export default function NewAppointmentPage() {
   const [savingVehicle, setSavingVehicle] = useState(false);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(currentLocationId);
   const [showAdditionalDetails, setShowAdditionalDetails] = useState(false);
+  const [showMobileClientVehicle, setShowMobileClientVehicle] = useState(false);
+  const [showMobileServices, setShowMobileServices] = useState(false);
+  const [showMobileSchedule, setShowMobileSchedule] = useState(false);
   const [showQuotePrefilledBadge, setShowQuotePrefilledBadge] = useState(false);
   const hasPrefilledFromQuote = useRef(false);
   const [clientSearchQuery, setClientSearchQuery] = useState<string>("");
@@ -532,7 +535,7 @@ export default function NewAppointmentPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="max-w-3xl mx-auto p-4 pb-28 sm:p-6 sm:pb-6 lg:p-8">
         {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to appointments queue" /> : null}
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
@@ -570,11 +573,28 @@ export default function NewAppointmentPage() {
           {/* Section: Client & Vehicle */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">
-                Client &amp; Vehicle
-              </CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-base font-semibold">
+                  Client &amp; Vehicle
+                </CardTitle>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="lg:hidden"
+                  onClick={() => setShowMobileClientVehicle((value) => !value)}
+                >
+                  {showMobileClientVehicle ? "Hide" : "Show"}
+                  <ChevronDown
+                    className={cn(
+                      "ml-1 h-4 w-4 transition-transform",
+                      showMobileClientVehicle && "rotate-180"
+                    )}
+                  />
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className={showMobileClientVehicle ? "space-y-4" : "hidden space-y-4 lg:block"}>
               {/* Client searchable select */}
               <div className="space-y-2">
                 <Label>
@@ -723,9 +743,26 @@ export default function NewAppointmentPage() {
           {/* Section: Services */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Services</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-base font-semibold">Services</CardTitle>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="lg:hidden"
+                  onClick={() => setShowMobileServices((value) => !value)}
+                >
+                  {showMobileServices ? "Hide" : "Show"}
+                  <ChevronDown
+                    className={cn(
+                      "ml-1 h-4 w-4 transition-transform",
+                      showMobileServices && "rotate-180"
+                    )}
+                  />
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className={showMobileServices ? "" : "hidden lg:block"}>
               <div className="mb-4 rounded-xl border border-border/70 bg-muted/30 p-4">
                 <div className="space-y-2">
                   <p className="text-sm font-medium">{creationPreset.title}</p>
@@ -907,9 +944,26 @@ export default function NewAppointmentPage() {
           {/* Section: Schedule */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Schedule</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-base font-semibold">Schedule</CardTitle>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="lg:hidden"
+                  onClick={() => setShowMobileSchedule((value) => !value)}
+                >
+                  {showMobileSchedule ? "Hide" : "Show"}
+                  <ChevronDown
+                    className={cn(
+                      "ml-1 h-4 w-4 transition-transform",
+                      showMobileSchedule && "rotate-180"
+                    )}
+                  />
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className={showMobileSchedule ? "space-y-4" : "hidden space-y-4 lg:block"}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Date picker */}
                 <div className="space-y-2">
@@ -1269,6 +1323,25 @@ export default function NewAppointmentPage() {
                 "Save Appointment"
               )}
             </Button>
+          </div>
+
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
+            <div className="mx-auto flex max-w-3xl items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Estimated total</p>
+                <p className="text-lg font-semibold">${totalPrice.toFixed(2)}</p>
+              </div>
+              <Button type="submit" disabled={isLoading} className="shrink-0">
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save"
+                )}
+              </Button>
+            </div>
           </div>
         </form>
       </div>
