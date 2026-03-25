@@ -20,6 +20,11 @@ function safeDate(value: string | null | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function formatFreshness(value: string | null | undefined, label: string): string | null {
+  const parsed = safeDate(value);
+  return parsed ? `${label} ${parsed.toLocaleDateString()}` : null;
+}
+
 export default function QuotesIndexPage() {
   const navigate = useNavigate();
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
@@ -226,6 +231,12 @@ export default function QuotesIndexPage() {
                     const canFollowUp = ["sent"].includes(quoteStatus);
                     const canBook = quoteStatus === "accepted" && !!row.clientId;
                     const canInvoice = quoteStatus === "accepted" && !!row.clientId;
+                    const freshness = [
+                      formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
+                      formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
                     const bookHref = canBook
                       ? `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
                           currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
@@ -258,7 +269,12 @@ export default function QuotesIndexPage() {
                           <StatusBadge status={String(row.status ?? "")} type="quote" />
                         </TableCell>
                         <TableCell>{formatCurrency(row.total)}</TableCell>
-                        <TableCell>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "—"}</TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "—"}</div>
+                            {freshness ? <div className="text-xs text-muted-foreground">{freshness}</div> : null}
+                          </div>
+                        </TableCell>
                         <TableCell>{row.expiresAt ? new Date(row.expiresAt as string).toLocaleDateString() : "—"}</TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-2">
@@ -460,13 +476,24 @@ export default function QuotesIndexPage() {
                     const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "—";
                     const qid = String(row.id);
                     const isLoading = sendingId === qid;
+                    const freshness = [
+                      formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
+                      formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
                     return (
                       <TableRow key={qid} className="cursor-pointer bg-amber-50/50" onClick={() => navigate(`/quotes/${qid}`)}>
                         <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
                         <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
                         <TableCell><StatusBadge status={String(row.status ?? "")} type="quote" /></TableCell>
                         <TableCell>{formatCurrency(row.total)}</TableCell>
-                        <TableCell>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "—"}</TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "—"}</div>
+                            {freshness ? <div className="text-xs text-muted-foreground">{freshness}</div> : null}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-between gap-2">
                             <span>{getDaysAgo(row.createdAt as string)}</span>

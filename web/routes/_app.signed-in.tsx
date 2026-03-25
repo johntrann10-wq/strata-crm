@@ -61,6 +61,8 @@ type QuoteRecord = {
   status: string;
   total: number | string | null | undefined;
   createdAt?: string;
+  sentAt?: string | null;
+  followUpSentAt?: string | null;
   client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
 };
 
@@ -1267,6 +1269,16 @@ export default function SignedIn() {
                         : `Quote - ${String(quote.id).slice(0, 8)}...`}
                     </p>
                     <p className="text-sm capitalize text-muted-foreground">{String(quote.status ?? "-")}</p>
+                    {(quote.sentAt || quote.followUpSentAt) ? (
+                      <p className="text-xs text-muted-foreground">
+                        {[
+                          formatFreshness(quote.sentAt ?? null, "Sent"),
+                          formatFreshness(quote.followUpSentAt ?? null, "Followed up"),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    ) : null}
                   </div>
                   <div
                     className="flex items-center gap-2"
