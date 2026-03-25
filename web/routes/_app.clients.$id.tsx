@@ -266,30 +266,35 @@ export default function ClientDetailPage() {
   );
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <Link to="/clients"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
-        <h1 className="text-2xl font-bold">{client.firstName} {client.lastName}</h1>
-        <span className="text-sm text-muted-foreground ml-auto">Client since {new Date(client.createdAt).toLocaleDateString()}</span>
-        <Button asChild variant="outline" size="sm">
+    <div className="mx-auto max-w-6xl space-y-5 px-3 py-4 sm:p-6">
+      <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <Link to="/clients"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold">{client.firstName} {client.lastName}</h1>
+            <span className="text-sm text-muted-foreground">Client since {new Date(client.createdAt).toLocaleDateString()}</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+        <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
           <Link to={`/clients/${id}/vehicles/new?next=client`}>
             <Car className="h-4 w-4 mr-1.5" />
             Add Vehicle
           </Link>
         </Button>
-        <Button asChild variant="default" size="sm">
+        <Button asChild variant="default" size="sm" className="w-full sm:w-auto">
           <Link to={appointmentHref}>
             <CalendarPlus className="h-4 w-4 mr-1.5" />
             Book Appointment
           </Link>
         </Button>
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
           <Link to={`/invoices/new?clientId=${id}`}>
             <FileText className="h-4 w-4 mr-1.5" />
             New Invoice
           </Link>
         </Button>
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
           <Link to={`/quotes/new?clientId=${id}`}>
             <Receipt className="h-4 w-4 mr-1.5" />
             New Quote
@@ -297,7 +302,7 @@ export default function ClientDetailPage() {
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="More actions">
+            <Button variant="ghost" size="icon" aria-label="More actions" className="justify-self-start sm:justify-self-auto">
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -311,6 +316,7 @@ export default function ClientDetailPage() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
@@ -365,7 +371,7 @@ export default function ClientDetailPage() {
           <VehiclesCard id={id} vehicles={vehicleList} />
         </div>
         <div className="lg:col-span-3">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 mb-4">
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <QuickWorkflowAction
               icon={CalendarPlus}
               title="Book appointment"
@@ -417,7 +423,7 @@ export default function ClientDetailPage() {
             </div>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-3 mb-4">
+          <div className="mb-4 grid gap-3 sm:grid-cols-3">
             <WorkflowMetricCard
               icon={ClipboardList}
               label="Active jobs"

@@ -326,34 +326,40 @@ export default function VehicleDetailPage() {
   }
 
   return (
-    <div className="container max-w-5xl mx-auto py-6 px-4 space-y-6">
-      <div className="flex items-center gap-3 flex-wrap">
+    <div className="container mx-auto max-w-5xl space-y-5 px-3 py-4 sm:px-4 sm:py-6">
+      <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 items-start gap-3">
         <Button variant="ghost" size="sm" asChild>
           <Link to={`/clients/${id}`}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to {clientName}
           </Link>
         </Button>
-        <h1 className="text-2xl font-bold">{pageTitle}</h1>
-        <span className="ml-auto text-sm text-muted-foreground">{clientName}</span>
-        <Button asChild size="sm">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold">{pageTitle}</h1>
+          <span className="text-sm text-muted-foreground">{clientName}</span>
+        </div>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+        <Button asChild size="sm" className="w-full sm:w-auto">
           <Link to={`/appointments/new?clientId=${id}&vehicleId=${vehicleId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}`}>
             <CalendarPlus className="h-4 w-4 mr-2" />
             Book Job
           </Link>
         </Button>
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
           <Link to={`/quotes/new?clientId=${id}&vehicleId=${vehicleId}`}>
             <Receipt className="h-4 w-4 mr-2" />
             New Quote
           </Link>
         </Button>
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
           <Link to={`/invoices/new?clientId=${id}&vehicleId=${vehicleId}`}>
             <FileText className="h-4 w-4 mr-2" />
             New Invoice
           </Link>
         </Button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
