@@ -414,17 +414,17 @@ function AppLayoutInner({
                 </Button>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                    <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/55 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2.5 sm:text-[11px]">
                       {activeNavEntry.section.label}
                     </span>
                     {businessName ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                      <span className="hidden items-center gap-1.5 rounded-full border border-border/70 bg-background px-2.5 py-1 text-xs text-muted-foreground sm:inline-flex">
                         <Building2 className="h-3.5 w-3.5" />
                         {businessName}
                       </span>
                     ) : null}
                     {activeLocationName ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background px-2 py-1 text-[11px] text-muted-foreground sm:px-2.5 sm:text-xs">
                         <MapPin className="h-3.5 w-3.5" />
                         {activeLocationName}
                       </span>
@@ -433,7 +433,7 @@ function AppLayoutInner({
                   <h1 className="mt-1.5 text-balance text-[22px] font-semibold tracking-tight text-foreground sm:mt-2 sm:text-[30px]">
                     {activeNavEntry.item.label}
                   </h1>
-                  <p className="mt-1 max-w-3xl text-[13px] leading-5 text-muted-foreground sm:text-sm sm:leading-6">
+                  <p className="mt-1 hidden max-w-3xl text-[13px] leading-5 text-muted-foreground sm:block sm:text-sm sm:leading-6">
                     {activeNavEntry.item.description}
                   </p>
                 </div>

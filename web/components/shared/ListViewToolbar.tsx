@@ -77,11 +77,11 @@ export function ListViewToolbar({
               {filtersLabel}
             </span>
           ) : null}
-          {activeStateLabel ? <span className="text-xs text-muted-foreground/80">{activeStateLabel}</span> : null}
+          {activeStateLabel ? <span className="hidden text-xs text-muted-foreground/80 sm:inline">{activeStateLabel}</span> : null}
         </div>
         {hasActiveState && onClear ? (
           <Button type="button" variant="ghost" size="sm" className="h-8 justify-start px-2 text-xs sm:justify-center" onClick={onClear}>
-            Clear search and filters
+            Reset
           </Button>
         ) : null}
       </div>

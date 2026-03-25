@@ -43,7 +43,8 @@ export function QuickCreateMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="default" size="sm" className={cn("h-9 gap-2 px-3.5 text-[13px]")}>
           <Plus className="h-3.5 w-3.5" />
-          Quick create
+          <span className="sm:hidden">Create</span>
+          <span className="hidden sm:inline">Quick create</span>
           <ChevronDown className="h-3.5 w-3.5 text-white/70" />
         </Button>
       </DropdownMenuTrigger>

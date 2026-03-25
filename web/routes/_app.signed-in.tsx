@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Navigate, useOutletContext } from "react-router";
 import { format, parseISO, isSameDay, startOfDay, endOfDay } from "date-fns";
 import {
   AlertCircle,
   ArrowUpRight,
   CalendarPlus,
+  ChevronDown,
   ChevronRight,
   ClipboardList,
   Clock3,
@@ -996,6 +997,7 @@ export default function SignedIn() {
           emptyMessage="No technician load is showing yet."
           emptyCta={{ href: "/settings", label: "Set up team" }}
           skeletonRows={3}
+          mobileCollapsed
         >
           <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
             {teamLoad.map((entry) => {
@@ -1290,6 +1292,7 @@ export default function SignedIn() {
           emptyMessage="No accepted quotes are waiting to be booked."
           emptyCta={{ href: "/quotes", label: "Review quotes" }}
           skeletonRows={2}
+          mobileCollapsed
         >
           <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
             {acceptedQuotes.map((quote) => (
@@ -1355,6 +1358,7 @@ export default function SignedIn() {
           emptyMessage="No completed work is waiting for invoicing."
           emptyCta={{ href: "/jobs", label: "Review jobs" }}
           skeletonRows={2}
+          mobileCollapsed
         >
           <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
             {readyToInvoiceJobs.map((job) => (
@@ -1412,6 +1416,7 @@ export default function SignedIn() {
           emptyMessage="No open quotes."
           emptyCta={{ href: "/quotes/new", label: "New quote" }}
           skeletonRows={2}
+          mobileCollapsed
         >
           <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
             {pendingQuotes.map((quote) => (
@@ -1501,6 +1506,7 @@ export default function SignedIn() {
           emptyMessage="No unpaid invoices."
           emptyCta={{ href: "/invoices/new", label: "New invoice" }}
           skeletonRows={2}
+          mobileCollapsed
         >
           <ul className="overflow-hidden rounded-xl border divide-y divide-border bg-card">
             {unpaidInvoices.map((invoice) => (
@@ -1578,6 +1584,7 @@ function DashboardSection({
   emptyMessage,
   emptyCta,
   skeletonRows,
+  mobileCollapsed = false,
   children,
 }: {
   title: string;
@@ -1589,12 +1596,39 @@ function DashboardSection({
   emptyMessage: string;
   emptyCta: { href: string; label: string };
   skeletonRows: number;
+  mobileCollapsed?: boolean;
   children: ReactNode;
 }) {
+  const [isCompactMobile, setIsCompactMobile] = useState(false);
+  const [collapsed, setCollapsed] = useState(mobileCollapsed);
+
+  useEffect(() => {
+    const sync = () => {
+      const mobile = window.innerWidth < 768;
+      setIsCompactMobile(mobile);
+      setCollapsed(mobile ? mobileCollapsed : false);
+    };
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+  }, [mobileCollapsed]);
+
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">{title}</h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          {isCompactMobile ? (
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground"
+              aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+              onClick={() => setCollapsed((current) => !current)}
+            >
+              <ChevronDown className={cn("h-4 w-4 transition-transform", collapsed ? "-rotate-90" : "rotate-0")} />
+            </button>
+          ) : null}
+        </div>
         <Link
           to={seeAllHref}
           className="inline-flex min-h-[44px] items-center py-2 text-sm font-medium text-orange-600 hover:text-orange-700"
@@ -1602,23 +1636,28 @@ function DashboardSection({
           {seeAllLabel}
         </Link>
       </div>
-      {error ? (
+      {collapsed ? (
+        <div className="rounded-xl border border-dashed bg-muted/10 px-4 py-3 text-sm text-muted-foreground">
+          Tap to expand this section.
+        </div>
+      ) : null}
+      {!collapsed && error ? (
         <div className="flex gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-4 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
           <p>{sectionErrorMessage(error)}</p>
         </div>
-      ) : isLoading ? (
+      ) : !collapsed && isLoading ? (
         <ListSkeleton rows={skeletonRows} />
-      ) : isEmpty ? (
+      ) : !collapsed && isEmpty ? (
         <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center">
           <p className="mb-4 text-sm text-muted-foreground">{emptyMessage}</p>
           <Button asChild size="lg" className="min-h-[48px] rounded-xl">
             <Link to={emptyCta.href}>{emptyCta.label}</Link>
           </Button>
         </div>
-      ) : (
+      ) : !collapsed ? (
         children
-      )}
+      ) : null}
     </section>
   );
 }
