@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router";
 import type { AuthOutletContext } from "./_app";
 import { useAction, useFindFirst, useFindMany, useFindOne } from "../hooks/useApi";
-import { api } from "../api";
+import { API_BASE, api } from "../api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +30,8 @@ import {
   ExternalLink,
   Loader2,
   MapPin,
+  RefreshCw,
+  Server,
   Shield,
   PenLine,
   Plus,
@@ -134,6 +136,12 @@ type BusinessPresetActionResult = BusinessPresetSummary;
 type ApplyBusinessPresetResult =
   | { ok: true; created: number; skipped: number; group: string }
   | { ok: false; message: string };
+
+type SystemStatus = {
+  status: "idle" | "checking" | "healthy" | "degraded";
+  message: string;
+  checkedAt: number | null;
+};
 
 const STAFF_ROLES = [
   { value: "owner", label: "Owner" },
@@ -305,6 +313,11 @@ export default function SettingsPage() {
     active: true,
   });
   const [runtimeErrors, setRuntimeErrors] = useState<RuntimeErrorEntry[]>([]);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus>({
+    status: "idle",
+    message: "Not checked yet.",
+    checkedAt: null,
+  });
   const canManageTeam =
     permissions.has("team.write") ||
     membershipRole === "owner" ||
@@ -369,6 +382,38 @@ export default function SettingsPage() {
     syncErrors();
     window.addEventListener("focus", syncErrors);
     return () => window.removeEventListener("focus", syncErrors);
+  }, [canViewDiagnostics]);
+
+  useEffect(() => {
+    if (!canViewDiagnostics) return;
+    let cancelled = false;
+    const run = async () => {
+      setSystemStatus((current) => ({ ...current, status: "checking", message: "Checking API reachability..." }));
+      try {
+        const response = await fetch(`${API_BASE}/api/health`);
+        if (!response.ok) {
+          throw new Error(`Health check returned ${response.status}`);
+        }
+        const payload = (await response.json()) as { ok?: boolean };
+        if (cancelled) return;
+        setSystemStatus({
+          status: payload?.ok ? "healthy" : "degraded",
+          message: payload?.ok ? "API is reachable and responding." : "Health endpoint responded unexpectedly.",
+          checkedAt: Date.now(),
+        });
+      } catch (error) {
+        if (cancelled) return;
+        setSystemStatus({
+          status: "degraded",
+          message: error instanceof Error ? error.message : "Could not reach the API health endpoint.",
+          checkedAt: Date.now(),
+        });
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [canViewDiagnostics]);
 
   const handleFieldChange = (field: keyof FormData, value: string | number) => {
@@ -551,6 +596,28 @@ export default function SettingsPage() {
     clearRuntimeErrors();
     setRuntimeErrors([]);
     toast.success("Runtime diagnostics cleared");
+  };
+
+  const handleRefreshSystemStatus = async () => {
+    setSystemStatus((current) => ({ ...current, status: "checking", message: "Checking API reachability..." }));
+    try {
+      const response = await fetch(`${API_BASE}/api/health`);
+      if (!response.ok) {
+        throw new Error(`Health check returned ${response.status}`);
+      }
+      const payload = (await response.json()) as { ok?: boolean };
+      setSystemStatus({
+        status: payload?.ok ? "healthy" : "degraded",
+        message: payload?.ok ? "API is reachable and responding." : "Health endpoint responded unexpectedly.",
+        checkedAt: Date.now(),
+      });
+    } catch (error) {
+      setSystemStatus({
+        status: "degraded",
+        message: error instanceof Error ? error.message : "Could not reach the API health endpoint.",
+        checkedAt: Date.now(),
+      });
+    }
   };
 
   if (businessFetching) {
@@ -811,6 +878,73 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+            {canViewDiagnostics ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>System Status</CardTitle>
+                  <CardDescription>
+                    Quick reachability check for the current API and deployment context.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={systemStatus.status === "healthy" ? "default" : systemStatus.status === "degraded" ? "destructive" : "secondary"}>
+                          {systemStatus.status === "healthy"
+                            ? "Healthy"
+                            : systemStatus.status === "degraded"
+                              ? "Degraded"
+                              : systemStatus.status === "checking"
+                                ? "Checking"
+                                : "Idle"}
+                        </Badge>
+                        {systemStatus.checkedAt ? (
+                          <span className="text-xs text-muted-foreground">
+                            Checked {new Date(systemStatus.checkedAt).toLocaleTimeString()}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-2 text-sm font-medium">{systemStatus.message}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        API base: {API_BASE || "same-origin /api"} {businessId ? "• Business context loaded" : "• No business context"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      onClick={() => void handleRefreshSystemStatus()}
+                      disabled={systemStatus.status === "checking"}
+                    >
+                      {systemStatus.status === "checking" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                      Recheck
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-lg border bg-background p-3">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Server className="h-4 w-4 text-primary" />
+                        API health
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Confirms whether this browser can currently reach the backend health endpoint.
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-background p-3">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Settings className="h-4 w-4 text-primary" />
+                        Client diagnostics
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Use the runtime diagnostics card below to inspect browser-side crashes and failed promises.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
             {canViewDiagnostics ? (
               <Card>
                 <CardHeader>
