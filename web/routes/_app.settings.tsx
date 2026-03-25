@@ -57,6 +57,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { formatBusinessPresetLabel } from "../lib/businessPresets";
 import type { BusinessPresetSummary } from "../lib/businessPresets";
+import { clearRuntimeErrors, listRuntimeErrors, type RuntimeErrorEntry } from "../lib/runtimeErrors";
 
 const BUSINESS_TYPES = [
   { value: "auto_detailing", label: "Auto Detailing" },
@@ -301,12 +302,14 @@ export default function SettingsPage() {
     role: "technician",
     active: true,
   });
+  const [runtimeErrors, setRuntimeErrors] = useState<RuntimeErrorEntry[]>([]);
   const canManageTeam =
     permissions.has("team.write") ||
     membershipRole === "owner" ||
     membershipRole === "admin" ||
     membershipRole === "manager";
   const canEditSettings = permissions.has("settings.write");
+  const canViewDiagnostics = membershipRole === "owner" || membershipRole === "admin" || permissions.has("settings.write");
 
   const [{ data: business, fetching: businessFetching }] = useFindOne(api.business, businessId ?? "", {
     pause: !businessId,
@@ -357,6 +360,14 @@ export default function SettingsPage() {
     if (!businessId) return;
     void getBusinessPreset();
   }, [businessId, getBusinessPreset]);
+
+  useEffect(() => {
+    if (!canViewDiagnostics) return;
+    const syncErrors = () => setRuntimeErrors(listRuntimeErrors());
+    syncErrors();
+    window.addEventListener("focus", syncErrors);
+    return () => window.removeEventListener("focus", syncErrors);
+  }, [canViewDiagnostics]);
 
   const handleFieldChange = (field: keyof FormData, value: string | number) => {
     setFormData((current) => ({ ...current, [field]: value }));
@@ -525,6 +536,12 @@ export default function SettingsPage() {
     }
   };
 
+  const handleClearDiagnostics = () => {
+    clearRuntimeErrors();
+    setRuntimeErrors([]);
+    toast.success("Runtime diagnostics cleared");
+  };
+
   if (businessFetching) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -577,7 +594,7 @@ export default function SettingsPage() {
           </TabsList>
 
           <TabsContent value="profile" className="space-y-6">
-          <Card>
+            <Card>
               <CardHeader>
                 <CardTitle>Business Information</CardTitle>
                 <CardDescription>
@@ -783,6 +800,65 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+            {canViewDiagnostics ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Runtime Diagnostics</CardTitle>
+                  <CardDescription>
+                    Recent browser-side crashes and unhandled promise failures captured during this session.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        {runtimeErrors.length > 0
+                          ? `${runtimeErrors.length} runtime issue${runtimeErrors.length === 1 ? "" : "s"} captured`
+                          : "No runtime issues captured"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Refresh this page after reproducing a bug to review the latest client-side failures without opening devtools.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      onClick={handleClearDiagnostics}
+                      disabled={runtimeErrors.length === 0}
+                    >
+                      Clear diagnostics
+                    </Button>
+                  </div>
+                  {runtimeErrors.length === 0 ? null : (
+                    <div className="space-y-3">
+                      {runtimeErrors.map((entry) => (
+                        <div key={entry.id} className="rounded-lg border bg-background p-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="secondary">{entry.source}</Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(entry.timestamp).toLocaleString()}
+                                </span>
+                              </div>
+                              <p className="break-words text-sm font-medium">{entry.message}</p>
+                              <p className="break-all text-xs text-muted-foreground">{entry.path}</p>
+                            </div>
+                          </div>
+                          {entry.detail ? (
+                            <pre className="mt-3 overflow-x-auto rounded-md bg-muted p-3 text-xs text-muted-foreground">
+                              <code>{entry.detail}</code>
+                            </pre>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
             <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:hidden">
               <div className="mx-auto max-w-4xl">
                 <Button onClick={handleSave} disabled={saving || !canEditSettings} className="w-full">

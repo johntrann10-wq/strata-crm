@@ -1,4 +1,4 @@
-type RuntimeErrorEntry = {
+export type RuntimeErrorEntry = {
   id: string;
   source: "window.error" | "window.unhandledrejection" | "react.boundary";
   message: string;
@@ -50,3 +50,15 @@ export function recordRuntimeError(params: {
   console.error("[Strata runtime]", entry);
 }
 
+export function listRuntimeErrors(): RuntimeErrorEntry[] {
+  return readEntries();
+}
+
+export function clearRuntimeErrors(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore storage failures in private mode / quota edge cases.
+  }
+}
