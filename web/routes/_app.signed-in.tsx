@@ -262,6 +262,7 @@ export default function SignedIn() {
   );
 
   const openQuoteValue = useMemo(() => sumCurrency(pendingQuotes.map((quote) => quote.total)), [pendingQuotes]);
+  const acceptedQuoteValue = useMemo(() => sumCurrency(acceptedQuotes.map((quote) => quote.total)), [acceptedQuotes]);
   const unpaidRevenue = useMemo(() => sumCurrency(unpaidInvoices.map((invoice) => invoiceBalance(invoice))), [unpaidInvoices]);
   const staleQuoteFollowUps = useMemo(
     () =>
@@ -284,6 +285,14 @@ export default function SignedIn() {
   );
   const activeJobValue = useMemo(() => sumCurrency(activeJobs.map((job) => job.totalPrice)), [activeJobs]);
   const myActiveJobValue = useMemo(() => sumCurrency(myActiveJobs.map((job) => job.totalPrice)), [myActiveJobs]);
+  const readyToInvoiceValue = useMemo(
+    () => sumCurrency(readyToInvoiceJobs.map((job) => job.totalPrice)),
+    [readyToInvoiceJobs]
+  );
+  const averageOutstandingInvoice = useMemo(
+    () => (unpaidInvoices.length > 0 ? unpaidRevenue / unpaidInvoices.length : 0),
+    [unpaidInvoices.length, unpaidRevenue]
+  );
   const todayBookedValue = useMemo(
     () => sumCurrency(todayAppointments.map((appointment) => (appointment as AppointmentRecord & { totalPrice?: number | string | null }).totalPrice)),
     [todayAppointments]
@@ -326,6 +335,11 @@ export default function SignedIn() {
       }),
     [pendingQuotes, filterNow]
   );
+  const quoteConversionRate = useMemo(() => {
+    const denominator = pendingQuotes.length + acceptedQuotes.length;
+    if (denominator === 0) return 0;
+    return Math.round((acceptedQuotes.length / denominator) * 100);
+  }, [acceptedQuotes.length, pendingQuotes.length]);
   const nextJob = activeJobs[0] ?? null;
   const myNextJob = myActiveJobs[0] ?? null;
   const teamLoad = useMemo(() => {
@@ -745,6 +759,51 @@ export default function SignedIn() {
 
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">Pipeline snapshot</h2>
+            <span className="text-sm text-muted-foreground">Sales, cash, and billing momentum at a glance</span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <PipelineCard
+              href="/quotes?tab=ready-to-book"
+              label="Ready to book"
+              value={String(acceptedQuotes.length)}
+              detail={acceptedQuoteValue > 0 ? formatCurrency(acceptedQuoteValue) : "No accepted quote value yet"}
+              tone="sales"
+            />
+            <PipelineCard
+              href="/jobs"
+              label="Ready to invoice"
+              value={String(readyToInvoiceJobs.length)}
+              detail={readyToInvoiceValue > 0 ? formatCurrency(readyToInvoiceValue) : "No completed unbilled work"}
+              tone="billing"
+            />
+            <PipelineCard
+              href="/invoices?tab=stale"
+              label="Average unpaid balance"
+              value={formatCurrency(averageOutstandingInvoice)}
+              detail={
+                unpaidInvoices.length > 0
+                  ? `${unpaidInvoices.length} invoice${unpaidInvoices.length === 1 ? "" : "s"} in queue`
+                  : "No unpaid invoices"
+              }
+              tone="risk"
+            />
+            <PipelineCard
+              href="/quotes"
+              label="Quote conversion"
+              value={`${quoteConversionRate}%`}
+              detail={
+                acceptedQuotes.length + pendingQuotes.length > 0
+                  ? `${acceptedQuotes.length} accepted vs ${pendingQuotes.length} still open`
+                  : "No active quote pipeline"
+              }
+              tone="ops"
+            />
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Today's operating pulse</h2>
             <span className="text-sm text-muted-foreground">
               {activeLocationName ? "Focused on current location" : "Across the current business"}
@@ -777,8 +836,8 @@ export default function SignedIn() {
               <p className="mt-1 text-sm text-muted-foreground">
                 {assignedTodayAppointments.length}/{todayAppointments.length} assigned
                 {unassignedTodayAppointments.length > 0
-                  ? ` · ${unassignedTodayAppointments.length} still open`
-                  : " · fully staffed"}
+                  ? ` - ${unassignedTodayAppointments.length} still open`
+                  : " - fully staffed"}
               </p>
             </Link>
 
@@ -1564,6 +1623,47 @@ function MetricCard({
       <p className={cn("font-semibold tracking-tight", compactValue ? "text-lg" : "text-2xl")}>{value}</p>
       <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
     </div>
+  );
+}
+
+function PipelineCard({
+  href,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  href: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: "sales" | "billing" | "risk" | "ops";
+}) {
+  const toneClasses =
+    tone === "sales"
+      ? "bg-sky-500/10 text-sky-700"
+      : tone === "billing"
+        ? "bg-emerald-500/10 text-emerald-700"
+        : tone === "risk"
+          ? "bg-amber-500/10 text-amber-700"
+          : "bg-violet-500/10 text-violet-700";
+
+  return (
+    <Link
+      to={href}
+      className="rounded-2xl border bg-card p-4 transition-colors hover:bg-muted/40"
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+        </div>
+        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", toneClasses)}>
+          <ArrowUpRight className="h-5 w-5" />
+        </div>
+      </div>
+      <p className="text-sm text-muted-foreground">{detail}</p>
+    </Link>
   );
 }
 
