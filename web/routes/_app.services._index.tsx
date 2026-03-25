@@ -43,6 +43,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
+import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import {
   SERVICE_CATEGORY_VALUES,
   SERVICE_CATEGORY_LABELS,
@@ -270,6 +271,8 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
 
 export default function ServicesPage() {
   const { businessId } = useOutletContext<AuthOutletContext>();
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   const businessIdFilter = useMemo(
     () => (businessId ? { businessId: { equals: businessId } } : undefined),
@@ -449,18 +452,27 @@ export default function ServicesPage() {
 
   const allServices: ServiceRecord[] = (services ?? []) as ServiceRecord[];
   const allAddonLinks: AddonLinkRecord[] = (packageAddonLinks ?? []) as AddonLinkRecord[];
+  const normalizedSearch = search.trim().toLowerCase();
 
   // Separate addons from regular services
   const regularServices = allServices.filter((s) => !s.isAddon);
   const addonServices = allServices.filter((s) => s.isAddon);
 
   // Filter by active tab
-  const filteredRegular = regularServices.filter((s) =>
-    activeTab === "active" ? s.active !== false : s.active === false
-  );
-  const filteredAddons = addonServices.filter((s) =>
-    activeTab === "active" ? s.active !== false : s.active === false
-  );
+  const filteredRegular = regularServices.filter((service) => {
+    const matchesActive = activeTab === "active" ? service.active !== false : service.active === false;
+    const matchesCategory = categoryFilter === "all" ? true : (service.category ?? "other") === categoryFilter;
+    const haystack = [service.name, service.notes, formatServiceCategory(service.category)].filter(Boolean).join(" ").toLowerCase();
+    const matchesSearch = normalizedSearch ? haystack.includes(normalizedSearch) : true;
+    return matchesActive && matchesCategory && matchesSearch;
+  });
+  const filteredAddons = addonServices.filter((service) => {
+    const matchesActive = activeTab === "active" ? service.active !== false : service.active === false;
+    const matchesCategory = categoryFilter === "all" ? true : (service.category ?? "other") === categoryFilter;
+    const haystack = [service.name, service.notes, formatServiceCategory(service.category)].filter(Boolean).join(" ").toLowerCase();
+    const matchesSearch = normalizedSearch ? haystack.includes(normalizedSearch) : true;
+    return matchesActive && matchesCategory && matchesSearch;
+  });
 
   // Group regular services by category
   const groupedByCategory = filteredRegular.reduce<
@@ -495,6 +507,8 @@ export default function ServicesPage() {
 
   const packagesWithStructure = packageSummaries.filter((summary) => summary.linkedAddons.length > 0);
   const packageCandidatesWithoutAddons = packageSummaries.filter((summary) => summary.linkedAddons.length === 0);
+  const activeServicesCount = regularServices.filter((service) => service.active !== false).length;
+  const activeAddonCount = addonServices.filter((service) => service.active !== false).length;
 
   return (
     <div className="page-content page-section max-w-6xl">
@@ -505,6 +519,65 @@ export default function ServicesPage() {
             <Plus className="h-4 w-4 mr-2" />
             Add Service
           </Button>
+        }
+      />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm font-medium text-muted-foreground">Core services</p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight">{activeServicesCount}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Active catalog services customers can book</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm font-medium text-muted-foreground">Package templates</p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight">{packagesWithStructure.length}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Services with linked add-ons ready to reuse</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm font-medium text-muted-foreground">Add-on services</p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight">{activeAddonCount}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Optional extras available across the catalog</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <ListViewToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search services, notes, or categories..."
+        loading={isRefetching}
+        resultCount={filteredRegular.length + filteredAddons.length}
+        noun="services"
+        filtersLabel={[
+          activeTab === "active" ? "Active only" : "Inactive only",
+          categoryFilter !== "all" ? `Category: ${formatServiceCategory(categoryFilter)}` : null,
+        ]
+          .filter(Boolean)
+          .join(" • ")}
+        onClear={() => {
+          setSearch("");
+          setCategoryFilter("all");
+          setActiveTab("active");
+        }}
+        actions={
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="min-w-[180px]">
+              <SelectValue placeholder="All categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {SERVICE_CATEGORY_VALUES.map((cat) => (
+                <SelectItem key={cat} value={cat}>
+                  {SERVICE_CATEGORY_LABELS[cat]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         }
       />
 
