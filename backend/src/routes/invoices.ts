@@ -37,6 +37,200 @@ const sendInvoiceSchema = z.object({
 
 const INVOICE_STATUSES = ["draft", "sent", "paid", "partial", "void"] as const;
 
+function isPaymentSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const cause = "cause" in error ? (error as { cause?: unknown }).cause : error;
+  if (!cause || typeof cause !== "object") return false;
+  const code = "code" in cause ? String((cause as { code?: unknown }).code ?? "") : "";
+  const message = "message" in cause ? String((cause as { message?: unknown }).message ?? "") : "";
+  return (
+    code === "42P01" ||
+    code === "42703" ||
+    message.includes('relation "payments" does not exist') ||
+    message.includes('column "reversed_at" does not exist') ||
+    message.includes('column "notes" does not exist') ||
+    message.includes('column "reference_number" does not exist')
+  );
+}
+
+async function listInvoicePayments(invoiceId: string) {
+  try {
+    return await db.select().from(payments).where(eq(payments.invoiceId, invoiceId));
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected on invoice payment list; falling back to legacy selection", { invoiceId, error });
+    const rows = await db
+      .select({
+        id: payments.id,
+        businessId: payments.businessId,
+        invoiceId: payments.invoiceId,
+        amount: payments.amount,
+        method: payments.method,
+        paidAt: payments.paidAt,
+        idempotencyKey: payments.idempotencyKey,
+        createdAt: payments.createdAt,
+        updatedAt: payments.updatedAt,
+      })
+      .from(payments)
+      .where(eq(payments.invoiceId, invoiceId));
+    return rows.map((row) => ({ ...row, reversedAt: null, notes: null, referenceNumber: null }));
+  }
+}
+
+async function listActiveInvoicePayments(invoiceId: string) {
+  try {
+    return await db.select().from(payments).where(and(eq(payments.invoiceId, invoiceId), isNull(payments.reversedAt)));
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected on active invoice payment list; falling back to legacy selection", { invoiceId, error });
+    return await listInvoicePayments(invoiceId);
+  }
+}
+
+async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and>, orderByClause: ReturnType<typeof desc>, first: number, bid: string) {
+  try {
+    return await db
+      .select({
+        id: invoices.id,
+        businessId: invoices.businessId,
+        clientId: invoices.clientId,
+        appointmentId: invoices.appointmentId,
+        invoiceNumber: invoices.invoiceNumber,
+        status: invoices.status,
+        subtotal: invoices.subtotal,
+        taxRate: invoices.taxRate,
+        taxAmount: invoices.taxAmount,
+        discountAmount: invoices.discountAmount,
+        total: invoices.total,
+        dueDate: invoices.dueDate,
+        paidAt: invoices.paidAt,
+        notes: invoices.notes,
+        createdAt: invoices.createdAt,
+        updatedAt: invoices.updatedAt,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+        aptStart: appointments.startTime,
+        vehicleYear: vehicles.year,
+        vehicleMake: vehicles.make,
+        vehicleModel: vehicles.model,
+        totalPaid: sql<string>`coalesce(sum(case when ${payments.reversedAt} is null then ${payments.amount} else 0 end), 0)`,
+        lastPaidAt: sql<Date | null>`max(case when ${payments.reversedAt} is null then ${payments.paidAt} else null end)`,
+        lastSentAt: sql<Date | null>`max(case when ${activityLogs.action} = 'invoice.sent' then ${activityLogs.createdAt} else null end)`,
+      })
+      .from(invoices)
+      .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
+      .leftJoin(appointments, eq(invoices.appointmentId, appointments.id))
+      .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
+      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+      .leftJoin(
+        activityLogs,
+        and(
+          eq(activityLogs.businessId, bid),
+          eq(activityLogs.entityType, "invoice"),
+          eq(activityLogs.entityId, invoices.id)
+        )
+      )
+      .where(whereClause)
+      .groupBy(
+        invoices.id,
+        invoices.businessId,
+        invoices.clientId,
+        invoices.appointmentId,
+        invoices.invoiceNumber,
+        invoices.status,
+        invoices.subtotal,
+        invoices.taxRate,
+        invoices.taxAmount,
+        invoices.discountAmount,
+        invoices.total,
+        invoices.dueDate,
+        invoices.paidAt,
+        invoices.notes,
+        invoices.createdAt,
+        invoices.updatedAt,
+        clients.firstName,
+        clients.lastName,
+        appointments.startTime,
+        vehicles.year,
+        vehicles.make,
+        vehicles.model
+      )
+      .orderBy(orderByClause)
+      .limit(first);
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected on invoice list; falling back to legacy invoice metrics", { businessId: bid, error });
+    return await db
+      .select({
+        id: invoices.id,
+        businessId: invoices.businessId,
+        clientId: invoices.clientId,
+        appointmentId: invoices.appointmentId,
+        invoiceNumber: invoices.invoiceNumber,
+        status: invoices.status,
+        subtotal: invoices.subtotal,
+        taxRate: invoices.taxRate,
+        taxAmount: invoices.taxAmount,
+        discountAmount: invoices.discountAmount,
+        total: invoices.total,
+        dueDate: invoices.dueDate,
+        paidAt: invoices.paidAt,
+        notes: invoices.notes,
+        createdAt: invoices.createdAt,
+        updatedAt: invoices.updatedAt,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+        aptStart: appointments.startTime,
+        vehicleYear: vehicles.year,
+        vehicleMake: vehicles.make,
+        vehicleModel: vehicles.model,
+        totalPaid: sql<string>`coalesce(sum(${payments.amount}), 0)`,
+        lastPaidAt: sql<Date | null>`max(${payments.paidAt})`,
+        lastSentAt: sql<Date | null>`max(case when ${activityLogs.action} = 'invoice.sent' then ${activityLogs.createdAt} else null end)`,
+      })
+      .from(invoices)
+      .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
+      .leftJoin(appointments, eq(invoices.appointmentId, appointments.id))
+      .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
+      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+      .leftJoin(
+        activityLogs,
+        and(
+          eq(activityLogs.businessId, bid),
+          eq(activityLogs.entityType, "invoice"),
+          eq(activityLogs.entityId, invoices.id)
+        )
+      )
+      .where(whereClause)
+      .groupBy(
+        invoices.id,
+        invoices.businessId,
+        invoices.clientId,
+        invoices.appointmentId,
+        invoices.invoiceNumber,
+        invoices.status,
+        invoices.subtotal,
+        invoices.taxRate,
+        invoices.taxAmount,
+        invoices.discountAmount,
+        invoices.total,
+        invoices.dueDate,
+        invoices.paidAt,
+        invoices.notes,
+        invoices.createdAt,
+        invoices.updatedAt,
+        clients.firstName,
+        clients.lastName,
+        appointments.startTime,
+        vehicles.year,
+        vehicles.make,
+        vehicles.model
+      )
+      .orderBy(orderByClause)
+      .limit(first);
+  }
+}
+
 invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
   const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 100) : 50;
@@ -87,74 +281,7 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
         )!
       : and(...conditions)!;
 
-  const rows = await db
-    .select({
-      id: invoices.id,
-      businessId: invoices.businessId,
-      clientId: invoices.clientId,
-      appointmentId: invoices.appointmentId,
-      invoiceNumber: invoices.invoiceNumber,
-      status: invoices.status,
-      subtotal: invoices.subtotal,
-      taxRate: invoices.taxRate,
-      taxAmount: invoices.taxAmount,
-      discountAmount: invoices.discountAmount,
-      total: invoices.total,
-      dueDate: invoices.dueDate,
-      paidAt: invoices.paidAt,
-      notes: invoices.notes,
-      createdAt: invoices.createdAt,
-      updatedAt: invoices.updatedAt,
-      clientFirstName: clients.firstName,
-      clientLastName: clients.lastName,
-      aptStart: appointments.startTime,
-      vehicleYear: vehicles.year,
-      vehicleMake: vehicles.make,
-      vehicleModel: vehicles.model,
-      totalPaid: sql<string>`coalesce(sum(case when ${payments.reversedAt} is null then ${payments.amount} else 0 end), 0)`,
-      lastPaidAt: sql<Date | null>`max(case when ${payments.reversedAt} is null then ${payments.paidAt} else null end)`,
-      lastSentAt: sql<Date | null>`max(case when ${activityLogs.action} = 'invoice.sent' then ${activityLogs.createdAt} else null end)`,
-    })
-    .from(invoices)
-    .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
-    .leftJoin(appointments, eq(invoices.appointmentId, appointments.id))
-    .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
-    .leftJoin(payments, eq(payments.invoiceId, invoices.id))
-    .leftJoin(
-      activityLogs,
-      and(
-        eq(activityLogs.businessId, bid),
-        eq(activityLogs.entityType, "invoice"),
-        eq(activityLogs.entityId, invoices.id)
-      )
-    )
-    .where(whereClause)
-    .groupBy(
-      invoices.id,
-      invoices.businessId,
-      invoices.clientId,
-      invoices.appointmentId,
-      invoices.invoiceNumber,
-      invoices.status,
-      invoices.subtotal,
-      invoices.taxRate,
-      invoices.taxAmount,
-      invoices.discountAmount,
-      invoices.total,
-      invoices.dueDate,
-      invoices.paidAt,
-      invoices.notes,
-      invoices.createdAt,
-      invoices.updatedAt,
-      clients.firstName,
-      clients.lastName,
-      appointments.startTime,
-      vehicles.year,
-      vehicles.make,
-      vehicles.model
-    )
-    .orderBy(orderBy)
-    .limit(first);
+  const rows = await listInvoicesWithPaymentMetrics(whereClause, orderBy, first, bid);
 
   const records = rows.map((r) => {
     const totalAmount = Number(r.total ?? 0);
@@ -211,7 +338,7 @@ invoicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res:
     .limit(1);
   if (!row) throw new NotFoundError("Invoice not found.");
   const lineItemsRows = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, row.id));
-  const paymentsList = await db.select().from(payments).where(eq(payments.invoiceId, row.id));
+  const paymentsList = await listInvoicePayments(row.id);
   const [clientRow] = await db.select({ id: clients.id, firstName: clients.firstName, lastName: clients.lastName, email: clients.email, phone: clients.phone }).from(clients).where(eq(clients.id, row.clientId)).limit(1);
   let appointmentData: { id: string; startTime: Date | null; vehicle?: { year: number | null; make: string; model: string } } | null = null;
   let quoteData: { id: string; status: string; total: string | null } | null = null;
@@ -261,7 +388,7 @@ invoicesRouter.get("/:id/html", requireAuth, requireTenant, async (req: Request,
     .where(eq(clients.id, row.clientId))
     .limit(1);
   const lineItemsRows = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, row.id));
-  const paymentsList = await db.select().from(payments).where(and(eq(payments.invoiceId, row.id), isNull(payments.reversedAt)));
+  const paymentsList = await listActiveInvoicePayments(row.id);
   const totalPaid = paymentsList.reduce((sum, p) => sum + Number(p.amount ?? 0), 0);
   const templateData: InvoiceTemplateData = {
     invoiceNumber: row.invoiceNumber,

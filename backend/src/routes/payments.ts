@@ -27,18 +27,108 @@ const createSchema = z.object({
   paidAt: z.union([z.string(), z.date()]).optional(),
 });
 
+function isPaymentSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const cause = "cause" in error ? (error as { cause?: unknown }).cause : error;
+  if (!cause || typeof cause !== "object") return false;
+  const code = "code" in cause ? String((cause as { code?: unknown }).code ?? "") : "";
+  const message = "message" in cause ? String((cause as { message?: unknown }).message ?? "") : "";
+  return (
+    code === "42P01" ||
+    code === "42703" ||
+    message.includes('relation "payments" does not exist') ||
+    message.includes('column "reversed_at" does not exist') ||
+    message.includes('column "notes" does not exist') ||
+    message.includes('column "reference_number" does not exist')
+  );
+}
+
+function normalizeLegacyPayment<T extends object>(row: T): T & { notes: string | null; referenceNumber: string | null; reversedAt: Date | null } {
+  return {
+    ...row,
+    notes: "notes" in row ? ((row as { notes?: string | null }).notes ?? null) : null,
+    referenceNumber: "referenceNumber" in row ? ((row as { referenceNumber?: string | null }).referenceNumber ?? null) : null,
+    reversedAt: "reversedAt" in row ? ((row as { reversedAt?: Date | null }).reversedAt ?? null) : null,
+  };
+}
+
+async function listPaymentsForBusiness(bid: string) {
+  try {
+    const rows = await db.select().from(payments).where(eq(payments.businessId, bid));
+    return rows.map(normalizeLegacyPayment);
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected on list; falling back to legacy selection", { businessId: bid, error });
+    const rows = await db
+      .select({
+        id: payments.id,
+        businessId: payments.businessId,
+        invoiceId: payments.invoiceId,
+        amount: payments.amount,
+        method: payments.method,
+        paidAt: payments.paidAt,
+        idempotencyKey: payments.idempotencyKey,
+        createdAt: payments.createdAt,
+        updatedAt: payments.updatedAt,
+      })
+      .from(payments)
+      .where(eq(payments.businessId, bid));
+    return rows.map(normalizeLegacyPayment);
+  }
+}
+
+async function getPaymentById(id: string, bid: string) {
+  try {
+    const [row] = await db.select().from(payments).where(and(eq(payments.id, id), eq(payments.businessId, bid))).limit(1);
+    return row ? normalizeLegacyPayment(row) : null;
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected on get; falling back to legacy selection", { paymentId: id, businessId: bid, error });
+    const [row] = await db
+      .select({
+        id: payments.id,
+        businessId: payments.businessId,
+        invoiceId: payments.invoiceId,
+        amount: payments.amount,
+        method: payments.method,
+        paidAt: payments.paidAt,
+        idempotencyKey: payments.idempotencyKey,
+        createdAt: payments.createdAt,
+        updatedAt: payments.updatedAt,
+      })
+      .from(payments)
+      .where(and(eq(payments.id, id), eq(payments.businessId, bid)))
+      .limit(1);
+    return row ? normalizeLegacyPayment(row) : null;
+  }
+}
+
+async function getActivePaymentTotal(invoiceId: string, tx: any = db) {
+  try {
+    const [sumRow] = await tx
+      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+      .from(payments)
+      .where(and(eq(payments.invoiceId, invoiceId), sql`${payments.reversedAt} is null`));
+    return Number(sumRow?.total ?? 0);
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected on total aggregation; falling back to legacy sum", { invoiceId, error });
+    const [sumRow] = await tx
+      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+      .from(payments)
+      .where(eq(payments.invoiceId, invoiceId));
+    return Number(sumRow?.total ?? 0);
+  }
+}
+
 paymentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const list = await db.select().from(payments).where(eq(payments.businessId, bid));
+  const list = await listPaymentsForBusiness(bid);
   res.json({ records: list });
 });
 
 paymentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
-  const [row] = await db
-    .select()
-    .from(payments)
-    .where(and(eq(payments.id, req.params.id), eq(payments.businessId, businessId(req))))
-    .limit(1);
+  const row = await getPaymentById(req.params.id, businessId(req));
   if (!row) throw new NotFoundError("Payment not found.");
   res.json(row);
 });
@@ -56,11 +146,7 @@ paymentsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
       if (inv.status === "void") throw new BadRequestError("Cannot add payment to a void invoice.");
 
       const invoiceTotal = Number(inv.total ?? 0);
-      const [sumRow] = await tx
-        .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
-        .from(payments)
-        .where(and(eq(payments.invoiceId, data.invoiceId), sql`${payments.reversedAt} is null`));
-      const paidSoFar = Number(sumRow?.total ?? 0);
+      const paidSoFar = await getActivePaymentTotal(data.invoiceId, tx);
       const newTotal = paidSoFar + data.amount;
       if (newTotal > invoiceTotal) {
         throw new BadRequestError(`Payment total would exceed invoice total (${invoiceTotal}). Already paid: ${paidSoFar}.`);
@@ -68,19 +154,36 @@ paymentsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
 
       const amount = String(data.amount);
       const paidAt = data.paidAt ? new Date(data.paidAt) : new Date();
-      const [payment] = await tx
-        .insert(payments)
-        .values({
-          businessId: bid,
-          invoiceId: data.invoiceId,
-          amount,
-          method: data.method,
-          paidAt,
-          idempotencyKey: data.idempotencyKey ?? null,
-          notes: data.notes ?? null,
-          referenceNumber: data.referenceNumber ?? null,
-        })
-        .returning();
+      let payment;
+      try {
+        [payment] = await tx
+          .insert(payments)
+          .values({
+            businessId: bid,
+            invoiceId: data.invoiceId,
+            amount,
+            method: data.method,
+            paidAt,
+            idempotencyKey: data.idempotencyKey ?? null,
+            notes: data.notes ?? null,
+            referenceNumber: data.referenceNumber ?? null,
+          })
+          .returning();
+      } catch (error) {
+        if (!isPaymentSchemaDriftError(error)) throw error;
+        logger.warn("Payments schema drift detected on create; falling back to legacy insert", { invoiceId: data.invoiceId, businessId: bid, error });
+        [payment] = await tx
+          .insert(payments)
+          .values({
+            businessId: bid,
+            invoiceId: data.invoiceId,
+            amount,
+            method: data.method,
+            paidAt,
+            idempotencyKey: data.idempotencyKey ?? null,
+          })
+          .returning();
+      }
       if (!payment) throw new BadRequestError("Failed to create payment.");
 
       const newStatus = newTotal >= invoiceTotal ? "paid" : "partial";
@@ -109,26 +212,30 @@ paymentsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
 
 paymentsRouter.post("/:id/reverse", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const [existing] = await db.select().from(payments).where(and(eq(payments.id, req.params.id), eq(payments.businessId, bid))).limit(1);
+  const existing = await getPaymentById(req.params.id, bid);
   if (!existing) throw new NotFoundError("Payment not found.");
   if (existing.reversedAt) {
     res.json(existing);
     return;
   }
-  const [updated] = await db
-    .update(payments)
-    .set({ reversedAt: new Date(), updatedAt: new Date() })
-    .where(eq(payments.id, req.params.id))
-    .returning();
+  let updated;
+  try {
+    [updated] = await db
+      .update(payments)
+      .set({ reversedAt: new Date(), updatedAt: new Date() })
+      .where(eq(payments.id, req.params.id))
+      .returning();
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected on reverse; skipping reverse for legacy schema", { paymentId: req.params.id, businessId: bid, error });
+    res.json(existing);
+    return;
+  }
   if (!updated) throw new NotFoundError("Payment not found.");
   // Recompute invoice status after reversal
   const [inv] = await db.select().from(invoices).where(eq(invoices.id, updated.invoiceId)).limit(1);
   if (inv && inv.status !== "void") {
-    const [sumRow] = await db
-      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
-      .from(payments)
-      .where(and(eq(payments.invoiceId, inv.id), sql`${payments.reversedAt} is null`));
-    const paidNow = Number(sumRow?.total ?? 0);
+    const paidNow = await getActivePaymentTotal(inv.id);
     const invTotal = Number(inv.total ?? 0);
     const newStatus = paidNow <= 0 ? "sent" : paidNow >= invTotal ? "paid" : "partial";
     await db.update(invoices).set({ status: newStatus, paidAt: paidNow >= invTotal ? inv.paidAt : null, updatedAt: new Date() }).where(eq(invoices.id, inv.id));

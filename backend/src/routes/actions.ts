@@ -26,6 +26,40 @@ function businessId(req: Request): string {
 
 const idParamSchema = z.object({ id: z.string().uuid() });
 
+function isPaymentSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const cause = "cause" in error ? (error as { cause?: unknown }).cause : error;
+  if (!cause || typeof cause !== "object") return false;
+  const code = "code" in cause ? String((cause as { code?: unknown }).code ?? "") : "";
+  const message = "message" in cause ? String((cause as { message?: unknown }).message ?? "") : "";
+  return (
+    code === "42P01" ||
+    code === "42703" ||
+    message.includes('relation "payments" does not exist') ||
+    message.includes('column "reversed_at" does not exist')
+  );
+}
+
+async function getOpenInvoicePaidTotal(bid: string) {
+  try {
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+      .from(payments)
+      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('sent', 'partial')`, sql`${payments.reversedAt} is null`));
+    return Number(row?.total ?? 0);
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected in dashboard metrics; falling back to legacy payment totals", { businessId: bid, error });
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+      .from(payments)
+      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('sent', 'partial')`));
+    return Number(row?.total ?? 0);
+  }
+}
+
 actionsRouter.post("/getDashboardStats", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
   const now = new Date();
@@ -46,7 +80,6 @@ actionsRouter.post("/getDashboardStats", requireAuth, requireTenant, async (req:
     monthRevenueRows,
     openInvoicesRows,
     openInvoicesTotalRows,
-    openPaidRows,
   ] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(appointments).where(and(eq(appointments.businessId, bid), gte(appointments.startTime, startOfWeek))),
     db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"))),
@@ -56,11 +89,10 @@ actionsRouter.post("/getDashboardStats", requireAuth, requireTenant, async (req:
     db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), gte(invoices.paidAt ?? invoices.updatedAt, startOfMonth), lte(invoices.paidAt ?? invoices.updatedAt, endOfMonth))),
     db.select({ count: sql<number>`count(*)::int` }).from(invoices).where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('draft', 'sent', 'partial')`)),
     db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('sent', 'partial')`)),
-    db.select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` }).from(payments).innerJoin(invoices, eq(payments.invoiceId, invoices.id)).where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('sent', 'partial')`, sql`${payments.reversedAt} is null`)),
   ]);
+  const openPaid = await getOpenInvoicePaidTotal(bid);
 
   const openTotal = Number(openInvoicesTotalRows[0]?.total ?? 0);
-  const openPaid = Number(openPaidRows[0]?.total ?? 0);
   const outstandingBalance = Math.max(0, openTotal - openPaid);
 
   res.json({
@@ -104,22 +136,11 @@ actionsRouter.post("/getInvoiceMetrics", requireAuth, requireTenant, async (req:
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-  const [openTotals, openPaidTotals, revenueMonthRows, invoicesCreatedRows] = await Promise.all([
+  const [openTotals, revenueMonthRows, invoicesCreatedRows] = await Promise.all([
     db
       .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
       .from(invoices)
       .where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('draft', 'sent', 'partial')`)),
-    db
-      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
-      .from(payments)
-      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
-      .where(
-        and(
-          eq(invoices.businessId, bid),
-          sql`${invoices.status} in ('sent', 'partial')`,
-          sql`${payments.reversedAt} is null`
-        )
-      ),
     db
       .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
       .from(invoices)
@@ -136,9 +157,9 @@ actionsRouter.post("/getInvoiceMetrics", requireAuth, requireTenant, async (req:
       .from(invoices)
       .where(and(eq(invoices.businessId, bid), gte(invoices.createdAt, startOfMonth), lte(invoices.createdAt, endOfMonth))),
   ]);
+  const openPaid = await getOpenInvoicePaidTotal(bid);
 
   const openTotal = Number(openTotals[0]?.total ?? 0);
-  const openPaid = Number(openPaidTotals[0]?.total ?? 0);
   const outstandingBalance = Math.max(0, openTotal - openPaid);
 
   const revenueThisMonth = Number(revenueMonthRows[0]?.total ?? 0);
@@ -207,10 +228,17 @@ actionsRouter.post("/reversePayment", requireAuth, requireTenant, async (req: Re
   const parsed = idParamSchema.safeParse(req.body);
   const id = parsed.success ? parsed.data.id : undefined;
   if (!id) throw new NotFoundError("id required");
-  const [p] = await db.select().from(payments).where(and(eq(payments.id, id), eq(payments.businessId, businessId(req)))).limit(1);
-  if (!p || p.reversedAt) throw new NotFoundError("Payment not found or already reversed.");
-  const [updated] = await db.update(payments).set({ reversedAt: new Date(), updatedAt: new Date() }).where(eq(payments.id, id)).returning();
-  res.json(updated);
+  const bid = businessId(req);
+  try {
+    const [p] = await db.select().from(payments).where(and(eq(payments.id, id), eq(payments.businessId, bid))).limit(1);
+    if (!p || p.reversedAt) throw new NotFoundError("Payment not found or already reversed.");
+    const [updated] = await db.update(payments).set({ reversedAt: new Date(), updatedAt: new Date() }).where(eq(payments.id, id)).returning();
+    res.json(updated);
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected on reversePayment action; returning safe fallback", { paymentId: id, businessId: bid, error });
+    res.json({ ok: false, message: "Payment reversal is unavailable until production payments schema is migrated." });
+  }
 });
 
 actionsRouter.post("/retryFailedNotifications", requireAuth, requireTenant, async (req: Request, res: Response) => {
