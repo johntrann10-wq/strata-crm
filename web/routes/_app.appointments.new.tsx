@@ -65,6 +65,7 @@ export default function NewAppointmentPage() {
   const [searchParams] = useSearchParams();
   const quoteIdParam = searchParams.get("quoteId");
   const clientIdParam = searchParams.get("clientId");
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/appointments";
 
   // Form state
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -481,7 +482,7 @@ export default function NewAppointmentPage() {
 
       if (result.data) {
         toast.success("Appointment created successfully!");
-        navigate(`/appointments/${result.data.id}`);
+        navigate(`/appointments/${result.data.id}?from=${encodeURIComponent(returnTo)}`);
       }
     } catch (err: unknown) {
       const message =
@@ -536,7 +537,7 @@ export default function NewAppointmentPage() {
             type="button"
             variant="ghost"
             size="icon"
-            onClick={() => navigate("/appointments")}
+            onClick={() => navigate(returnTo)}
             className="shrink-0"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -1249,7 +1250,7 @@ export default function NewAppointmentPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => navigate("/appointments")}
+              onClick={() => navigate(returnTo)}
               disabled={isLoading}
             >
               <ChevronLeft className="mr-1 h-4 w-4" />

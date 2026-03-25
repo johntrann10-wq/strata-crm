@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from "react";
-import { useParams, Link, useOutletContext } from "react-router";
+import { useParams, Link, useOutletContext, useSearchParams } from "react-router";
 import { useFindOne, useFindFirst, useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
@@ -315,10 +315,14 @@ function WorkflowWarningCard({
 
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
-  const { user, businessType, permissions } = useOutletContext<AuthOutletContext>();
+  const [searchParams] = useSearchParams();
+  const { user, businessType, permissions, currentLocationId } = useOutletContext<AuthOutletContext>();
   const canEditCollaboration = permissions.has("appointments.write");
   const { setPageContext } = usePageContext();
   const intakePreset = getIntakePreset(businessType);
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/appointments";
+  const withReturn = (pathname: string) =>
+    `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(returnTo)}`;
 
   const [isEditing, setIsEditing] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -688,7 +692,7 @@ export default function AppointmentDetail() {
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <p className="text-muted-foreground">Invalid appointment ID.</p>
         <Button variant="outline" asChild>
-          <Link to="/appointments">Back to Appointments</Link>
+          <Link to={returnTo}>Back to Appointments</Link>
         </Button>
       </div>
     );
@@ -709,7 +713,7 @@ export default function AppointmentDetail() {
           {error ? `Error: ${error.message}` : "Appointment not found"}
         </p>
         <Button variant="outline" asChild>
-          <Link to="/appointments">
+          <Link to={returnTo}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Appointments
           </Link>
@@ -743,7 +747,7 @@ export default function AppointmentDetail() {
         type: "client",
         id: appointment.client.id,
         label: `${appointment.client.firstName} ${appointment.client.lastName}`,
-        href: `/clients/${appointment.client.id}`,
+        href: withReturn(`/clients/${appointment.client.id}`),
       });
     }
     if (appointment.vehicle) {
@@ -751,7 +755,7 @@ export default function AppointmentDetail() {
         type: "vehicle",
         id: appointment.vehicle.id,
         label: `${appointment.vehicle.year ?? ""} ${appointment.vehicle.make} ${appointment.vehicle.model}`.trim(),
-        href: `/clients/${appointment.client?.id ?? ""}`,
+        href: withReturn(`/clients/${appointment.client?.id ?? ""}`),
       });
     }
     if (invoice) {
@@ -767,7 +771,7 @@ export default function AppointmentDetail() {
             .filter(Boolean)
             .join(" · ") || undefined,
         status: invoice.status,
-        href: `/invoices/${invoice.id}`,
+        href: withReturn(`/invoices/${invoice.id}`),
       });
     }
     if (quote) {
@@ -784,7 +788,7 @@ export default function AppointmentDetail() {
             .filter(Boolean)
             .join(" · ") || undefined,
         status: quote.status,
-        href: `/quotes/${quote.id}`,
+        href: withReturn(`/quotes/${quote.id}`),
       });
     }
   }
@@ -812,7 +816,7 @@ export default function AppointmentDetail() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/appointments">
+            <Link to={returnTo}>
               <ArrowLeft className="h-4 w-4 mr-1" />
               Back
             </Link>

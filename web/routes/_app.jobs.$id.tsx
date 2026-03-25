@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useOutletContext, useParams } from "react-router";
+import { Link, useOutletContext, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   AlertCircle,
@@ -133,11 +133,15 @@ function isOlderThanDays(value: string | Date | null | undefined, days: number):
 
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const { businessId, businessType, permissions } = useOutletContext<AuthOutletContext>();
   const canEdit = permissions.has("jobs.write");
   const canWriteQuotes = permissions.has("quotes.write");
   const canWriteInvoices = permissions.has("invoices.write");
   const { setPageContext } = usePageContext();
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/jobs";
+  const withReturn = (pathname: string) =>
+    `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(returnTo)}`;
 
   const [{ data: job, fetching, error }, refetchJob] = useFindOne(api.job, id ?? "", {
     pause: !businessId || !id,
@@ -371,7 +375,7 @@ export default function JobDetailPage() {
           <p className="text-sm text-muted-foreground">{error?.message ?? "The requested job could not be loaded."}</p>
         </div>
         <Button asChild variant="outline">
-          <Link to="/jobs">Back to jobs</Link>
+          <Link to={returnTo}>Back to jobs</Link>
         </Button>
       </div>
     );
@@ -380,7 +384,7 @@ export default function JobDetailPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
       <PageHeader
-        backTo="/jobs"
+        backTo={returnTo}
         title={record.title?.trim() || record.jobNumber}
         badge={<StatusBadge status={record.status} type="job" />}
         subtitle={`Work order ${record.jobNumber}`}
@@ -618,9 +622,9 @@ export default function JobDetailPage() {
                 status={record.quote ? `Linked · ${record.quote.status}` : "No quote attached"}
                 actionHref={
                   record.quote
-                    ? `/quotes/${record.quote.id}`
+                    ? withReturn(`/quotes/${record.quote.id}`)
                     : canWriteQuotes && record.client?.id
-                      ? `/quotes/new?clientId=${record.client.id}&appointmentId=${record.appointmentId}`
+                      ? withReturn(`/quotes/new?clientId=${record.client.id}&appointmentId=${record.appointmentId}`)
                       : null
                 }
                 actionLabel={record.quote ? "Open quote" : "Create quote"}
@@ -631,9 +635,9 @@ export default function JobDetailPage() {
                 status={record.invoice ? `${record.invoice.status} · ${formatCurrency(record.invoice.total)}` : "No invoice created"}
                 actionHref={
                   record.invoice
-                    ? `/invoices/${record.invoice.id}`
+                    ? withReturn(`/invoices/${record.invoice.id}`)
                     : canWriteInvoices && record.client?.id
-                      ? `/invoices/new?appointmentId=${record.appointmentId}&clientId=${record.client.id}`
+                      ? withReturn(`/invoices/new?appointmentId=${record.appointmentId}&clientId=${record.client.id}`)
                       : null
                 }
                 actionLabel={record.invoice ? "Open invoice" : "Create invoice"}
@@ -642,7 +646,7 @@ export default function JobDetailPage() {
               <WorkflowStep
                 label="Schedule"
                 status={formatDateRange(record.scheduledStart, record.scheduledEnd)}
-                actionHref={record.appointmentId ? `/appointments/${record.appointmentId}` : null}
+                actionHref={record.appointmentId ? withReturn(`/appointments/${record.appointmentId}`) : null}
                 actionLabel="Open appointment"
                 icon={CalendarClock}
               />
@@ -686,7 +690,7 @@ export default function JobDetailPage() {
               <InfoRow icon={AlertCircle} label="Phone" value={record.client?.phone ?? "-"} />
               {record.client ? (
                 <Button asChild variant="outline" className="w-full">
-                  <Link to={`/clients/${record.client.id}`}>Open customer record</Link>
+                  <Link to={withReturn(`/clients/${record.client.id}`)}>Open customer record</Link>
                 </Button>
               ) : null}
             </CardContent>
@@ -717,13 +721,13 @@ export default function JobDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <RelatedAction
-                href={record.quote ? `/quotes/${record.quote.id}` : null}
+                href={record.quote ? withReturn(`/quotes/${record.quote.id}`) : null}
                 icon={FileText}
                 label="Quote"
                 value={record.quote ? `${record.quote.status} · ${formatCurrency(record.quote.total)}` : "No quote linked"}
               />
               <RelatedAction
-                href={record.invoice ? `/invoices/${record.invoice.id}` : record.appointmentId ? `/invoices/new?appointmentId=${record.appointmentId}` : null}
+                href={record.invoice ? withReturn(`/invoices/${record.invoice.id}`) : record.appointmentId ? withReturn(`/invoices/new?appointmentId=${record.appointmentId}`) : null}
                 icon={FileText}
                 label="Invoice"
                 value={
@@ -733,7 +737,7 @@ export default function JobDetailPage() {
                 }
               />
               <RelatedAction
-                href={record.appointmentId ? `/appointments/${record.appointmentId}` : null}
+                href={record.appointmentId ? withReturn(`/appointments/${record.appointmentId}`) : null}
                 icon={CheckCircle2}
                 label="Schedule record"
                 value="Open original appointment"
@@ -785,7 +789,7 @@ export default function JobDetailPage() {
                   <WorkflowWarningCard
                     title="Quote follow-up is stale"
                     detail="This job is tied to a quote that likely needs another touch."
-                    href={record.quote ? `/quotes/${record.quote.id}` : null}
+                    href={record.quote ? withReturn(`/quotes/${record.quote.id}`) : null}
                     actionLabel="Open quote"
                   />
                 ) : null}
@@ -793,7 +797,7 @@ export default function JobDetailPage() {
                   <WorkflowWarningCard
                     title="Invoice collection is stale"
                     detail="The linked invoice has not been paid and has not been sent recently."
-                    href={record.invoice ? `/invoices/${record.invoice.id}` : null}
+                    href={record.invoice ? withReturn(`/invoices/${record.invoice.id}`) : null}
                     actionLabel="Open invoice"
                   />
                 ) : null}
