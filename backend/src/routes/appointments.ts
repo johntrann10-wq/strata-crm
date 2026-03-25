@@ -62,6 +62,9 @@ const createSchema = z.object({
   title: z.string().optional(),
   assignedStaffId: z.string().uuid().optional(),
   locationId: z.string().uuid().optional(),
+  depositAmount: z.coerce.number().min(0).optional(),
+  notes: z.string().optional(),
+  internalNotes: z.string().optional(),
   /** When set, links quote → appointment and marks quote accepted (client/vehicle must match quote). */
   quoteId: z.string().uuid().optional(),
   /** Catalog services to attach (prices from service catalog). */
@@ -363,6 +366,9 @@ appointmentsRouter.post("/", requireAuth, requireTenant, async (req: Request, re
         title: parsed.data.title ?? null,
         assignedStaffId: parsed.data.assignedStaffId ?? null,
         locationId: parsed.data.locationId ?? null,
+        depositAmount: parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0",
+        notes: parsed.data.notes?.trim() ? parsed.data.notes.trim() : null,
+        internalNotes: parsed.data.internalNotes?.trim() ? parsed.data.internalNotes.trim() : null,
         totalPrice: totalPriceInit,
       })
       .returning();
@@ -441,6 +447,9 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   if (parsed.data.title != null) updates.title = parsed.data.title;
   if (parsed.data.assignedStaffId != null) updates.assignedStaffId = parsed.data.assignedStaffId;
   if (parsed.data.locationId != null) updates.locationId = parsed.data.locationId;
+  if (parsed.data.depositAmount != null) updates.depositAmount = String(parsed.data.depositAmount);
+  if (parsed.data.notes != null) updates.notes = parsed.data.notes.trim() || null;
+  if (parsed.data.internalNotes != null) updates.internalNotes = parsed.data.internalNotes.trim() || null;
   const [updated] = await db.update(appointments).set(updates as Record<string, unknown>).where(eq(appointments.id, req.params.id)).returning();
   if (updated) {
     await createRequestActivityLog(req, {

@@ -449,6 +449,10 @@ export default function NewAppointmentPage() {
       setFormError("Invalid date/time combination.");
       return;
     }
+    if (isMobile && !mobileAddress.trim()) {
+      setFormError("Please enter the service address for this mobile appointment.");
+      return;
+    }
 
     if (selectedClientId && !selectedVehicleId) {
       setVehicleError("Please select a vehicle for this appointment. If the client has no vehicles, use the 'Add Vehicle Now' button above.");
@@ -462,6 +466,9 @@ export default function NewAppointmentPage() {
 
     setIsSubmitting(true);
     try {
+      const clientNotes = notes.trim();
+      const mobileAddressNote = isMobile && mobileAddress.trim() ? `Mobile service address: ${mobileAddress.trim()}` : "";
+      const persistedNotes = [mobileAddressNote, clientNotes].filter(Boolean).join("\n\n") || undefined;
       const autoTitle = selectedServiceIds
         .map((id) => servicesData?.find((s) => s.id === id)?.name)
         .filter(Boolean)
@@ -474,6 +481,9 @@ export default function NewAppointmentPage() {
         title: autoTitle || undefined,
         assignedStaffId: selectedStaffId ?? undefined,
         locationId: selectedLocationId ?? undefined,
+        depositAmount: depositAmount ? Number(depositAmount) : undefined,
+        notes: persistedNotes,
+        internalNotes: internalNotes.trim() || undefined,
         ...(quoteIdParam ? { quoteId: quoteIdParam } : {}),
         ...(selectedServiceIds.length > 0 ? { serviceIds: selectedServiceIds } : {}),
       } as Record<string, unknown>);
