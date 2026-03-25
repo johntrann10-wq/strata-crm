@@ -140,9 +140,9 @@ const objections = [
 ];
 
 const previewAppointments = [
-  { time: "8:00 AM", title: "Full interior + exterior detail", customer: "Alex R. · 2022 Tesla Model 3", status: "Confirmed" },
-  { time: "10:30 AM", title: "Front two windows tint", customer: "Monica S. · 2021 Honda Accord", status: "Scheduled" },
-  { time: "1:00 PM", title: "Brake pad and rotor replacement", customer: "Chris M. · 2018 F-150", status: "In progress" },
+  { time: "8:00 AM", title: "Full interior + exterior detail", customer: "Alex R. | 2022 Tesla Model 3", status: "Confirmed" },
+  { time: "10:30 AM", title: "Front two windows tint", customer: "Monica S. | 2021 Honda Accord", status: "Scheduled" },
+  { time: "1:00 PM", title: "Brake pad and rotor replacement", customer: "Chris M. | 2018 F-150", status: "In progress" },
 ];
 
 export default function LandingPage() {
@@ -159,6 +159,35 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
+      <header className="sticky top-0 z-20 border-b border-orange-100/80 bg-white/88 backdrop-blur supports-[backdrop-filter]:bg-white/72">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3 sm:px-6 lg:px-8">
+          <Link to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-gray-950">
+            <Wrench className="h-4 w-4 text-orange-500" />
+            Strata CRM
+          </Link>
+          <nav className="hidden items-center gap-5 text-sm text-gray-600 md:flex">
+            <a href="#product" className="transition-colors hover:text-gray-950">Product</a>
+            <a href="#features" className="transition-colors hover:text-gray-950">Features</a>
+            <a href="#industries" className="transition-colors hover:text-gray-950">Who it's for</a>
+            <a href="#pricing" className="transition-colors hover:text-gray-950">Pricing</a>
+          </nav>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/sign-in"
+              className={cn(buttonVariants({ variant: "ghost" }), "h-10 px-3 text-sm text-gray-700 hover:text-gray-950")}
+            >
+              Sign in
+            </Link>
+            <Link
+              to="/sign-up"
+              className={cn(buttonVariants(), "h-10 rounded-xl bg-orange-500 px-4 text-sm text-white hover:bg-orange-600")}
+            >
+              Start free
+            </Link>
+          </div>
+        </div>
+      </header>
+
       <section id="product" className="relative overflow-hidden px-5 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-18 lg:px-8 lg:pb-24 lg:pt-24">
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] opacity-90"
@@ -266,6 +295,27 @@ export default function LandingPage() {
               </Link>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-4 sm:px-6 sm:py-6 lg:px-8">
+        <div className="mx-auto flex max-w-5xl flex-col items-start justify-between gap-4 rounded-[28px] border border-orange-100 bg-orange-50/80 px-5 py-5 shadow-[0_10px_40px_rgba(249,115,22,0.08)] sm:flex-row sm:items-center sm:px-6">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">See the flow clearly</p>
+            <p className="mt-1 max-w-2xl text-base leading-7 text-gray-700">
+              Strata is built to make scheduling, intake, jobs, and billing feel more obvious for the person actually running the day.
+            </p>
+          </div>
+          <Link
+            to="/sign-up"
+            className={cn(
+              buttonVariants({ size: "lg" }),
+              "min-h-[50px] rounded-2xl bg-gray-950 px-6 text-sm font-semibold text-white hover:bg-gray-800"
+            )}
+          >
+            Create workspace
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Link>
         </div>
       </section>
 
