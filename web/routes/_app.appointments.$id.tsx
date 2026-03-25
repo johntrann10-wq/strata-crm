@@ -630,15 +630,15 @@ export default function AppointmentDetail() {
     const endTime =
       editDate && editEndTime ? new Date(`${editDate}T${editEndTime}`) : undefined;
 
-    const result = await runUpdate({
-      id: appointment.id,
-      title: editTitle || null,
-      startTime,
-      endTime,
-      assignedStaff: editStaffId ? { _link: editStaffId } : null,
-      notes: editNotes,
-      internalNotes: editInternalNotes,
-    });
+      const result = await runUpdate({
+        id: appointment.id,
+        title: editTitle || null,
+        startTime,
+        endTime,
+        assignedStaffId: editStaffId || undefined,
+        notes: editNotes,
+        internalNotes: editInternalNotes,
+      });
 
     if (result.error) {
       toast.error(`Failed to update appointment: ${result.error.message}`);

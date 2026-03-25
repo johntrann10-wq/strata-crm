@@ -1,22 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useOutletContext } from "react-router";
+import { Link, useLocation, useOutletContext } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Car, CalendarClock, Gauge, Loader2, Search, UserRound } from "lucide-react";
-import { useFindFirst, useFindMany } from "../hooks/useApi";
+import { useFindMany } from "../hooks/useApi";
 import { api } from "../api";
 import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 
 type AuthOutletContext = {
-  user: {
-    id: string;
-    firstName?: string | null;
-    lastName?: string | null;
-    email: string;
-  };
+  businessId: string | null;
 };
 
 const AVATAR_COLORS = [
@@ -42,17 +37,11 @@ function formatMileage(mileage: number | null | undefined): string {
 }
 
 export default function VehiclesPage() {
-  const { user } = useOutletContext<AuthOutletContext>();
+  const { businessId } = useOutletContext<AuthOutletContext>();
+  const location = useLocation();
+  const returnTo = `${location.pathname}${location.search}`;
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-
-  const [{ data: businessData, fetching: businessFetching }] = useFindFirst(api.business, {
-    filter: { owner: { id: { equals: user?.id ?? "" } } },
-    select: { id: true },
-    pause: !user?.id,
-  } as any);
-
-  const businessId = businessData?.id;
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -93,7 +82,7 @@ export default function VehiclesPage() {
         }
       />
 
-      {!businessFetching && !error ? (
+      {!error && businessId ? (
         <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="surface-panel px-4 py-3 sm:px-5">
             <p className="text-sm font-medium text-muted-foreground">Visible vehicles</p>
@@ -141,14 +130,14 @@ export default function VehiclesPage() {
         onSearchChange={setSearchQuery}
         placeholder="Search make, model, year, plate, color, or owner name..."
         loading={fetching}
-        resultCount={!error && !businessFetching ? vehicles.length : null}
+        resultCount={!error && businessId ? vehicles.length : null}
         noun="vehicles"
         filtersLabel={isSearching ? "search active" : null}
         onClear={searchQuery ? () => setSearchQuery("") : undefined}
         className="mb-5"
       />
 
-      {businessFetching && !businessData ? (
+      {!businessId ? (
         <div className="space-y-3">
           {Array.from({ length: 6 }).map((_, index) => (
             <div key={index} className="flex items-center gap-4 rounded-xl border bg-card p-4">
@@ -231,7 +220,7 @@ export default function VehiclesPage() {
 
             return clientId ? (
               <div key={vehicle.id} className="rounded-xl border bg-card transition-colors hover:bg-accent/40">
-                <Link to={`/clients/${clientId}/vehicles/${vehicle.id}`} className="block">
+                <Link to={`/clients/${clientId}/vehicles/${vehicle.id}?from=${encodeURIComponent(returnTo)}`} className="block">
                   {cardInner}
                 </Link>
               </div>

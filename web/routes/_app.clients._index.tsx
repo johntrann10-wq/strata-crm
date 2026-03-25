@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useOutletContext } from "react-router";
+import { Link, useLocation, useOutletContext } from "react-router";
 import { format, isSameMonth } from "date-fns";
 import { AlertCircle, CalendarClock, Loader2, Mail, Phone, Search, UserPlus, Users } from "lucide-react";
 import { useFindMany } from "../hooks/useApi";
@@ -14,6 +14,8 @@ import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 
 export default function ClientsPage() {
   const { businessId } = useOutletContext<AuthOutletContext>();
+  const location = useLocation();
+  const returnTo = `${location.pathname}${location.search}`;
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [pageSize, setPageSize] = useState(25);
@@ -188,7 +190,10 @@ export default function ClientsPage() {
                 {visibleClients.map((client) => (
                   <tr key={client.id} className="border-b transition-colors last:border-0 hover:bg-muted/30">
                     <td className="px-4 py-3">
-                      <Link to={`/clients/${client.id}`} className="font-semibold text-foreground hover:underline">
+                      <Link
+                        to={`/clients/${client.id}?from=${encodeURIComponent(returnTo)}`}
+                        className="font-semibold text-foreground hover:underline"
+                      >
                         {client.firstName} {client.lastName}
                       </Link>
                     </td>
@@ -209,7 +214,7 @@ export default function ClientsPage() {
             {visibleClients.map((client) => (
               <Link
                 key={client.id}
-                to={`/clients/${client.id}`}
+                to={`/clients/${client.id}?from=${encodeURIComponent(returnTo)}`}
                 className="block rounded-xl border bg-card p-4 shadow-sm transition-colors hover:bg-muted/30"
               >
                 <div className="flex items-start justify-between gap-2">
