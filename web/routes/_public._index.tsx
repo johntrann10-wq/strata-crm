@@ -90,6 +90,36 @@ const workflowSteps = [
   },
 ];
 
+const productProof = [
+  {
+    eyebrow: "Scheduling",
+    title: "See the month. Open the day. Book the work.",
+    description:
+      "The calendar is built to help a front-desk user understand availability and move into the exact day view that matters.",
+    bullets: ["Monthly overview first", "Clean day drill-down", "Client + vehicle context attached"],
+  },
+  {
+    eyebrow: "CRM",
+    title: "Keep customer context where the team actually needs it.",
+    description:
+      "Clients, vehicles, notes, quotes, appointments, jobs, invoices, and payments stay connected instead of living in separate tools.",
+    bullets: ["Vehicle history tied to the customer", "Quick next actions from records", "Less back-and-forth between screens"],
+  },
+  {
+    eyebrow: "Billing",
+    title: "Make approvals, invoicing, and collection less messy.",
+    description:
+      "Move from estimate to invoice with clearer states, better visibility, and a cleaner print-friendly document for customers.",
+    bullets: ["Quote to invoice handoff", "Cleaner payment visibility", "Proper printable invoice layout"],
+  },
+];
+
+const proofStats = [
+  { value: "1 system", label: "for scheduling, CRM, jobs, and billing" },
+  { value: "0 guesswork", label: "about the next step in the workflow" },
+  { value: "$29/mo", label: "with the first month free" },
+];
+
 export default function LandingPage() {
   const location = useLocation();
 
@@ -246,6 +276,17 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className="px-5 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <div className="mx-auto grid max-w-6xl gap-3 rounded-[28px] border border-orange-100 bg-gray-950 px-5 py-5 text-white shadow-[0_18px_60px_rgba(15,23,42,0.12)] sm:grid-cols-3 sm:px-6 sm:py-6">
+          {proofStats.map((stat) => (
+            <div key={stat.label} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+              <p className="text-2xl font-semibold tracking-tight text-white">{stat.value}</p>
+              <p className="mt-1 text-sm leading-6 text-white/72">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section id="features" className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-3xl text-center">
@@ -274,6 +315,41 @@ export default function LandingPage() {
                   </div>
                 </CardContent>
               </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">What shop owners actually care about</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
+              A clearer operating flow, not just more software.
+            </h2>
+            <p className="mt-4 text-lg leading-8 text-gray-600">
+              The product is designed around the moments that slow real shops down: intake, scheduling, job handoff, and getting paid.
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-5 lg:grid-cols-3">
+            {productProof.map((item) => (
+              <div
+                key={item.eyebrow}
+                className="rounded-[26px] border border-orange-100 bg-[linear-gradient(180deg,#ffffff_0%,#fff8f3_100%)] p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]"
+              >
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">{item.eyebrow}</p>
+                <h3 className="mt-3 text-xl font-semibold tracking-tight text-gray-950">{item.title}</h3>
+                <p className="mt-3 text-sm leading-6 text-gray-600">{item.description}</p>
+                <div className="mt-5 space-y-2.5">
+                  {item.bullets.map((bullet) => (
+                    <div key={bullet} className="flex items-start gap-2.5 rounded-2xl border border-orange-100/80 bg-white/85 px-3.5 py-3">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-500" />
+                      <p className="text-sm leading-6 text-gray-700">{bullet}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>
