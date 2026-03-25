@@ -344,6 +344,10 @@ export default function AppointmentDetail() {
   const [editInternalNotes, setEditInternalNotes] = useState("");
   const [editVehicleId, setEditVehicleId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("__none__");
+  const [showMobileAppointmentInfo, setShowMobileAppointmentInfo] = useState(false);
+  const [showMobileServices, setShowMobileServices] = useState(false);
+  const [showMobileNotes, setShowMobileNotes] = useState(false);
+  const [showMobileWorkflowTools, setShowMobileWorkflowTools] = useState(false);
   const [editServiceIds, setEditServiceIds] = useState<string[]>([]);
 
   const [{ data: appointment, fetching, error }, refetchAppointment] = useFindOne(
@@ -1119,9 +1123,21 @@ export default function AppointmentDetail() {
               {/* Appointment Info Card */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Appointment Info</CardTitle>
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-base">Appointment Info</CardTitle>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="lg:hidden"
+                      onClick={() => setShowMobileAppointmentInfo((value) => !value)}
+                    >
+                      {showMobileAppointmentInfo ? "Hide" : "Show"}
+                      <ChevronDown className={showMobileAppointmentInfo ? "ml-1 h-4 w-4 rotate-180" : "ml-1 h-4 w-4"} />
+                    </Button>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className={showMobileAppointmentInfo ? "space-y-4" : "hidden space-y-4 lg:block"}>
                   <div className="flex items-start gap-3">
                     <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                     <div>
@@ -1205,9 +1221,21 @@ export default function AppointmentDetail() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Services</CardTitle>
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-base">Services</CardTitle>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="lg:hidden"
+                      onClick={() => setShowMobileServices((value) => !value)}
+                    >
+                      {showMobileServices ? "Hide" : "Show"}
+                      <ChevronDown className={showMobileServices ? "ml-1 h-4 w-4 rotate-180" : "ml-1 h-4 w-4"} />
+                    </Button>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className={showMobileServices ? "space-y-4" : "hidden space-y-4 lg:block"}>
                   <div className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center">
                     <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
                       <SelectTrigger className="sm:flex-1">
@@ -1289,19 +1317,34 @@ export default function AppointmentDetail() {
               {/* Notes Card */}
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-base">Notes</CardTitle>
+                  <div className="flex items-center gap-3">
+                    <CardTitle className="text-base">Notes</CardTitle>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="lg:hidden"
+                      onClick={() => setShowMobileNotes((value) => !value)}
+                    >
+                      {showMobileNotes ? "Hide" : "Show"}
+                      <ChevronDown className={showMobileNotes ? "ml-1 h-4 w-4 rotate-180" : "ml-1 h-4 w-4"} />
+                    </Button>
+                  </div>
                   {!isEditing && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setIsEditing(true)}
+                      onClick={() => {
+                        setShowMobileNotes(true);
+                        setIsEditing(true);
+                      }}
                     >
                       <Edit2 className="h-4 w-4 mr-1" />
                       Edit
                     </Button>
                   )}
                 </CardHeader>
-                <CardContent>
+                <CardContent className={showMobileNotes || isEditing ? "" : "hidden lg:block"}>
                   {isEditing ? (
                     <div className="space-y-4">
                       <div className="space-y-2">
@@ -1403,29 +1446,71 @@ export default function AppointmentDetail() {
                 depositPaid={appointment.depositPaid}
               />
 
-              <VerticalWorkflowCard businessType={businessType} mode="appointment" />
+              <Card className="lg:hidden">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-base">Workflow Tools</CardTitle>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowMobileWorkflowTools((value) => !value)}
+                    >
+                      {showMobileWorkflowTools ? "Hide" : "Show"}
+                      <ChevronDown className={showMobileWorkflowTools ? "ml-1 h-4 w-4 rotate-180" : "ml-1 h-4 w-4"} />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className={showMobileWorkflowTools ? "space-y-4" : "hidden"}>
+                  <VerticalWorkflowCard businessType={businessType} mode="appointment" />
+                  <ChecklistCard
+                    entityType="appointment"
+                    entityId={appointment.id}
+                    businessType={businessType}
+                    records={(activityLogs as any[]) ?? []}
+                    canWrite={canEditCollaboration}
+                    onChanged={() => {
+                      void refetchActivity();
+                    }}
+                  />
+                  <EntityCollaborationCard
+                    entityType="appointment"
+                    entityId={appointment.id}
+                    records={(activityLogs as any[]) ?? []}
+                    fetching={activityFetching}
+                    canWrite={canEditCollaboration}
+                    onCreated={() => {
+                      void refetchActivity();
+                    }}
+                  />
+                </CardContent>
+              </Card>
 
-              <ChecklistCard
-                entityType="appointment"
-                entityId={appointment.id}
-                businessType={businessType}
-                records={(activityLogs as any[]) ?? []}
-                canWrite={canEditCollaboration}
-                onChanged={() => {
-                  void refetchActivity();
-                }}
-              />
+              <div className="hidden lg:block lg:space-y-4">
+                <VerticalWorkflowCard businessType={businessType} mode="appointment" />
 
-              <EntityCollaborationCard
-                entityType="appointment"
-                entityId={appointment.id}
-                records={(activityLogs as any[]) ?? []}
-                fetching={activityFetching}
-                canWrite={canEditCollaboration}
-                onCreated={() => {
-                  void refetchActivity();
-                }}
-              />
+                <ChecklistCard
+                  entityType="appointment"
+                  entityId={appointment.id}
+                  businessType={businessType}
+                  records={(activityLogs as any[]) ?? []}
+                  canWrite={canEditCollaboration}
+                  onChanged={() => {
+                    void refetchActivity();
+                  }}
+                />
+
+                <EntityCollaborationCard
+                  entityType="appointment"
+                  entityId={appointment.id}
+                  records={(activityLogs as any[]) ?? []}
+                  fetching={activityFetching}
+                  canWrite={canEditCollaboration}
+                  onCreated={() => {
+                    void refetchActivity();
+                  }}
+                />
+              </div>
 
             </div>
           </div>
