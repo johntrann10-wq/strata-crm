@@ -274,7 +274,7 @@ export default function OnboardingPage() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-12 pb-28 sm:pb-12">
+      <div className="max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-12 pb-32 sm:pb-12">
         <ProgressIndicator step={step} />
 
         {step === 1 ? (
@@ -314,6 +314,17 @@ export default function OnboardingPage() {
               ))}
             </div>
             {validationError ? <p className="text-red-400 text-sm">{validationError}</p> : null}
+            <div className="hidden sm:flex gap-3 pt-2">
+              <Button
+                type="button"
+                onClick={handleNext}
+                disabled={!selectedType}
+                className="bg-orange-500 hover:bg-orange-400 text-white font-semibold h-11 px-8 rounded-lg shadow-lg shadow-orange-500/20 disabled:opacity-50"
+              >
+                Continue
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
           </section>
         ) : null}
 
@@ -376,6 +387,20 @@ export default function OnboardingPage() {
               </div>
             </div>
             {validationError ? <p className="text-red-400 text-sm mt-4">{validationError}</p> : null}
+            <div className="hidden sm:flex gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={handleBack} className="border-[#2a2a2a] text-zinc-300 hover:bg-[#1a1a1a] hover:text-white h-11 px-6 rounded-lg">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
+              <Button
+                type="button"
+                onClick={handleNext}
+                className="bg-orange-500 hover:bg-orange-400 text-white font-semibold h-11 px-8 rounded-lg shadow-lg shadow-orange-500/20"
+              >
+                Continue
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
           </section>
         ) : null}
 
@@ -493,7 +518,10 @@ export default function OnboardingPage() {
         ) : null}
       </div>
 
-      <div className="sm:hidden fixed inset-x-0 bottom-0 border-t border-[#1f1f1f] bg-[#0f0f0f]/95 backdrop-blur px-4 py-3">
+      <div
+        className="sm:hidden fixed inset-x-0 bottom-0 border-t border-[#1f1f1f] bg-[#0f0f0f]/95 backdrop-blur px-4 py-3"
+        style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+      >
         <div className="max-w-4xl mx-auto flex gap-3">
           {step > 1 ? (
             <Button type="button" variant="outline" onClick={handleBack} className="flex-1 border-[#2a2a2a] text-zinc-300 hover:bg-[#1a1a1a] hover:text-white h-11">
