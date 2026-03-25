@@ -45,6 +45,11 @@ function formatDate(dateStr: string | Date | null | undefined): string {
   });
 }
 
+function formatFreshness(dateStr: string | Date | null | undefined, label: string): string | null {
+  if (!dateStr) return null;
+  return `${label} ${formatDate(dateStr)}`;
+}
+
 function isOverdueInvoice(invoice: { status?: string | null; dueDate?: string | Date | null | undefined }) {
   const dueDate = safeDate(invoice.dueDate);
   return ["sent", "partial"].includes(String(invoice.status ?? "")) && !!dueDate && dueDate.getTime() < Date.now();
@@ -350,6 +355,8 @@ export default function InvoicesIndexPage() {
                           const outstanding = balanceAmount(invoice);
                           const paid = paidAmount(invoice);
                           const hasPaymentHistory = paid > 0;
+                          const lastSent = formatFreshness((invoice as any).lastSentAt, "Sent");
+                          const lastPaid = formatFreshness((invoice as any).lastPaidAt, "Paid");
 
                           return (
                             <tr
@@ -381,6 +388,11 @@ export default function InvoicesIndexPage() {
                                     Total {formatCurrency(invoice.total)}
                                     {hasPaymentHistory ? ` · Paid ${formatCurrency(paid)}` : ""}
                                   </div>
+                                  {lastSent || lastPaid ? (
+                                    <div className="text-xs text-muted-foreground">
+                                      {[lastSent, lastPaid].filter(Boolean).join(" · ")}
+                                    </div>
+                                  ) : null}
                                 </div>
                               </td>
                               <td className="px-4 py-3">

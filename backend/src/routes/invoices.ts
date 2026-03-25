@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { invoices, businesses, invoiceLineItems, clients, payments, appointments, vehicles, quotes } from "../db/schema.js";
+import { invoices, businesses, invoiceLineItems, clients, payments, appointments, vehicles, quotes, activityLogs } from "../db/schema.js";
 import { eq, and, or, desc, asc, isNull, sql, ilike } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -113,12 +113,21 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
       vehicleModel: vehicles.model,
       totalPaid: sql<string>`coalesce(sum(case when ${payments.reversedAt} is null then ${payments.amount} else 0 end), 0)`,
       lastPaidAt: sql<Date | null>`max(case when ${payments.reversedAt} is null then ${payments.paidAt} else null end)`,
+      lastSentAt: sql<Date | null>`max(case when ${activityLogs.action} = 'invoice.sent' then ${activityLogs.createdAt} else null end)`,
     })
     .from(invoices)
     .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
     .leftJoin(appointments, eq(invoices.appointmentId, appointments.id))
     .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
     .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+    .leftJoin(
+      activityLogs,
+      and(
+        eq(activityLogs.businessId, bid),
+        eq(activityLogs.entityType, "invoice"),
+        eq(activityLogs.entityId, invoices.id)
+      )
+    )
     .where(whereClause)
     .groupBy(
       invoices.id,
@@ -167,6 +176,7 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
       dueDate: r.dueDate,
       paidAt: r.paidAt,
       lastPaidAt: r.lastPaidAt,
+      lastSentAt: r.lastSentAt,
       notes: r.notes,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,

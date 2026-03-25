@@ -52,6 +52,8 @@ type InvoiceRecord = {
   status: string;
   total: number | string | null | undefined;
   remainingBalance?: number | string | null;
+  lastSentAt?: string | null;
+  lastPaidAt?: string | null;
 };
 
 type QuoteRecord = {
@@ -92,6 +94,11 @@ function safeParseISO(iso: string | undefined | null): Date | null {
 function formatSafe(iso: string | undefined | null, fmt: string): string {
   const parsed = safeParseISO(iso);
   return parsed ? format(parsed, fmt) : "-";
+}
+
+function formatFreshness(iso: string | undefined | null, label: string): string | null {
+  const parsed = safeParseISO(iso);
+  return parsed ? `${label} ${format(parsed, "MMM d")}` : null;
 }
 
 function sumCurrency(values: Array<number | string | null | undefined>): number {
@@ -1339,6 +1346,13 @@ export default function SignedIn() {
                     <p className="text-sm capitalize text-muted-foreground">
                       {String(invoice.status ?? "").replace(/-/g, " ") || "-"}
                     </p>
+                    {(invoice.lastSentAt || invoice.lastPaidAt) ? (
+                      <p className="text-xs text-muted-foreground">
+                        {[formatFreshness(invoice.lastSentAt ?? null, "Sent"), formatFreshness(invoice.lastPaidAt ?? null, "Paid")]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    ) : null}
                   </div>
                   <div
                     className="flex items-center gap-2"
