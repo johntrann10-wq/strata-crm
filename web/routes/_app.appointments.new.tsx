@@ -56,6 +56,7 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 
 export default function NewAppointmentPage() {
   const { user, businessId, businessType, currentLocationId } = useOutletContext<AuthOutletContext>();
@@ -66,6 +67,7 @@ export default function NewAppointmentPage() {
   const quoteIdParam = searchParams.get("quoteId");
   const clientIdParam = searchParams.get("clientId");
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/appointments";
+  const hasQueueReturn = searchParams.has("from");
 
   // Form state
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -531,6 +533,7 @@ export default function NewAppointmentPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8">
+        {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to appointments queue" /> : null}
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <Button

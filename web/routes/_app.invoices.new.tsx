@@ -21,6 +21,7 @@ import {
 import { ArrowLeft, Check, ChevronsUpDown, FileText, Package, Plus, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
+import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 
 interface LineItem {
   id: string;
@@ -53,6 +54,7 @@ export default function NewInvoicePage() {
   const clientIdParam = searchParams.get("clientId");
   const quoteIdParam = searchParams.get("quoteId");
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/invoices";
+  const hasQueueReturn = searchParams.has("from");
 
   const [{ data: businessRecord }] = useFindFirst(api.business, {
     filter: businessId ? { id: { equals: businessId } } : { id: { equals: "" } },
@@ -360,6 +362,7 @@ export default function NewInvoicePage() {
 
   return (
     <div className="container mx-auto py-6 max-w-4xl px-4">
+      {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to invoices queue" /> : null}
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <Button variant="ghost" size="sm" asChild>

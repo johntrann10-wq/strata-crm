@@ -29,6 +29,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 
 type LineItem = {
   id: string;
@@ -64,6 +65,7 @@ export default function NewQuotePage() {
   const clientIdParam = searchParams.get("clientId");
   const vehicleIdParam = searchParams.get("vehicleId");
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/quotes";
+  const hasQueueReturn = searchParams.has("from");
 
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
@@ -338,6 +340,7 @@ export default function NewQuotePage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+      {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to quotes queue" /> : null}
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
