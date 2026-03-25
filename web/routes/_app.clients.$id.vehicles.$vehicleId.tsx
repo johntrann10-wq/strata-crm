@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  Clock3,
   FileText,
   Loader2,
   Pencil,
@@ -82,6 +83,17 @@ function safeDate(value: string | null | undefined): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatTimelineWhen(value: string | null | undefined): string {
+  const parsed = safeDate(value);
+  if (!parsed) return "No date";
+  return parsed.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function invoiceBalance(invoice: Record<string, unknown>): number {
@@ -334,6 +346,82 @@ export default function VehicleDetailPage() {
       actionLabel: String((appointment as any).status ?? "") === "completed" ? "Invoice" : "Quote",
     })),
   ];
+  const nextAppointment = [...appointmentList]
+    .filter((appointment) => {
+      const start = safeDate((appointment as any).startTime ?? null);
+      return !!start && start.getTime() >= Date.now();
+    })
+    .sort(
+      (a, b) =>
+        (safeDate((a as any).startTime ?? null)?.getTime() ?? Number.MAX_SAFE_INTEGER) -
+        (safeDate((b as any).startTime ?? null)?.getTime() ?? Number.MAX_SAFE_INTEGER)
+    )[0];
+  const lastVisit = [...appointmentList]
+    .filter((appointment) => {
+      const start = safeDate((appointment as any).startTime ?? null);
+      return !!start && start.getTime() < Date.now();
+    })
+    .sort(
+      (a, b) =>
+        (safeDate((b as any).startTime ?? null)?.getTime() ?? 0) -
+        (safeDate((a as any).startTime ?? null)?.getTime() ?? 0)
+    )[0];
+  const latestInvoice = [...invoiceList].sort(
+    (a, b) =>
+      (safeDate(((b as any).lastPaidAt ?? (b as any).lastSentAt ?? (b as any).createdAt ?? null) as string | null)?.getTime() ?? 0) -
+      (safeDate(((a as any).lastPaidAt ?? (a as any).lastSentAt ?? (a as any).createdAt ?? null) as string | null)?.getTime() ?? 0)
+  )[0];
+  const latestQuote = [...quoteList].sort(
+    (a, b) =>
+      (safeDate(((b as any).followUpSentAt ?? (b as any).sentAt ?? (b as any).createdAt ?? null) as string | null)?.getTime() ?? 0) -
+      (safeDate(((a as any).followUpSentAt ?? (a as any).sentAt ?? (a as any).createdAt ?? null) as string | null)?.getTime() ?? 0)
+  )[0];
+  const vehicleTimeline = [
+    ...appointmentList.map((appointment) => ({
+      id: `appointment-${String((appointment as any).id)}`,
+      label: (appointment as any).title ?? "Appointment",
+      detail: "Scheduled vehicle visit",
+      when: ((appointment as any).startTime as string | null | undefined) ?? null,
+      status: (appointment as any).status ?? "scheduled",
+      href: `/appointments/${(appointment as any).id}`,
+      tone: "appointment" as const,
+    })),
+    ...jobList.map((job) => ({
+      id: `job-${String((job as any).id)}`,
+      label: (job as any).title ?? (job as any).jobNumber ?? "Job",
+      detail: (job as any).scheduledStart ? "Execution in progress" : "Workflow job",
+      when: ((job as any).scheduledStart as string | null | undefined) ?? ((job as any).createdAt as string | null | undefined) ?? null,
+      status: (job as any).status ?? "scheduled",
+      href: `/jobs/${(job as any).id}`,
+      tone: "job" as const,
+    })),
+    ...quoteList.map((quote) => ({
+      id: `quote-${String((quote as any).id)}`,
+      label: "Quote",
+      detail:
+        [formatCurrency((quote as any).total), formatFreshness((quote as any).followUpSentAt ?? (quote as any).sentAt ?? null, "Touched")]
+          .filter(Boolean)
+          .join(" - ") || "Estimate recorded",
+      when: ((quote as any).followUpSentAt as string | null | undefined) ?? ((quote as any).sentAt as string | null | undefined) ?? ((quote as any).createdAt as string | null | undefined) ?? null,
+      status: (quote as any).status ?? "draft",
+      href: `/quotes/${(quote as any).id}`,
+      tone: "quote" as const,
+    })),
+    ...invoiceList.map((invoice) => ({
+      id: `invoice-${String((invoice as any).id)}`,
+      label: (invoice as any).invoiceNumber ?? "Invoice",
+      detail:
+        [formatCurrency(invoiceBalance(invoice as Record<string, unknown>)), formatFreshness((invoice as any).lastPaidAt ?? (invoice as any).lastSentAt ?? null, "Updated")]
+          .filter(Boolean)
+          .join(" - ") || "Billing record",
+      when: ((invoice as any).lastPaidAt as string | null | undefined) ?? ((invoice as any).lastSentAt as string | null | undefined) ?? ((invoice as any).createdAt as string | null | undefined) ?? null,
+      status: (invoice as any).status ?? "draft",
+      href: `/invoices/${(invoice as any).id}`,
+      tone: "invoice" as const,
+    })),
+  ]
+    .sort((a, b) => (safeDate(b.when)?.getTime() ?? 0) - (safeDate(a.when)?.getTime() ?? 0))
+    .slice(0, 6);
 
   if (fetching) {
     return (
@@ -580,6 +668,18 @@ export default function VehicleDetailPage() {
           </div>
 
           <div className="space-y-6">
+            <VehicleMemoryCard
+              nextAppointment={nextAppointment as Record<string, unknown> | undefined}
+              lastVisit={lastVisit as Record<string, unknown> | undefined}
+              latestInvoice={latestInvoice as Record<string, unknown> | undefined}
+              latestQuote={latestQuote as Record<string, unknown> | undefined}
+              openInvoiceValue={unpaidInvoices.reduce(
+                (sum, invoice) => sum + invoiceBalance(invoice as Record<string, unknown>),
+                0
+              )}
+              openQuoteValue={openQuotes.reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0)}
+            />
+
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle>Vehicle Quick Actions</CardTitle>
@@ -622,20 +722,19 @@ export default function VehicleDetailPage() {
                 <CardTitle>Vehicle workflow history</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {relatedRecords.length === 0 ? (
+                {vehicleTimeline.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No workflow history yet for this vehicle.</p>
                 ) : (
-                  relatedRecords.map((record) => (
+                  vehicleTimeline.map((record) => (
                     <Link
-                      key={`${record.type}-${record.id}`}
+                      key={record.id}
                       to={record.href}
                       className="flex items-center justify-between rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/40"
                     >
                       <div className="min-w-0">
                         <p className="font-medium">{record.label}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {record.sublabel ?? record.type}
-                        </p>
+                        <p className="text-sm text-muted-foreground">{record.detail}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{formatTimelineWhen(record.when)}</p>
                       </div>
                       {record.status ? (
                         <Badge className={`text-xs capitalize ${statusClass(record.status)}`}>{record.status}</Badge>
@@ -679,6 +778,70 @@ function SummaryField({ label, value }: { label: string; value: string }) {
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
       <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
     </div>
+  );
+}
+
+function VehicleMemoryCard({
+  nextAppointment,
+  lastVisit,
+  latestInvoice,
+  latestQuote,
+  openInvoiceValue,
+  openQuoteValue,
+}: {
+  nextAppointment?: Record<string, unknown>;
+  lastVisit?: Record<string, unknown>;
+  latestInvoice?: Record<string, unknown>;
+  latestQuote?: Record<string, unknown>;
+  openInvoiceValue: number;
+  openQuoteValue: number;
+}) {
+  return (
+    <Card className="border-border/70 shadow-sm">
+      <CardHeader className="pb-4">
+        <CardTitle>Vehicle Service Snapshot</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <SummaryField
+          label="Next visit"
+          value={
+            nextAppointment
+              ? `${formatTimelineWhen((nextAppointment.startTime as string | null | undefined) ?? null)}${nextAppointment.status ? ` - ${String(nextAppointment.status).replace("_", " ")}` : ""}`
+              : "Nothing scheduled"
+          }
+        />
+        <SummaryField
+          label="Last visit"
+          value={lastVisit ? formatTimelineWhen((lastVisit.startTime as string | null | undefined) ?? null) : "No completed visit yet"}
+        />
+        <SummaryField
+          label="Money tied to this vehicle"
+          value={openInvoiceValue > 0 ? formatCurrency(openInvoiceValue) : openQuoteValue > 0 ? `${formatCurrency(openQuoteValue)} in open quotes` : "No open balances"}
+        />
+        <SummaryField
+          label="Latest billing touch"
+          value={
+            latestInvoice
+              ? [
+                  (latestInvoice.invoiceNumber as string | undefined) ?? "Invoice",
+                  formatFreshness((latestInvoice.lastPaidAt as string | null | undefined) ?? null, "Paid"),
+                  formatFreshness((latestInvoice.lastSentAt as string | null | undefined) ?? null, "Sent"),
+                ]
+                  .filter(Boolean)
+                  .join(" - ") || "Invoice activity recorded"
+              : latestQuote
+                ? [
+                    formatCurrency(latestQuote.total as number | string | null | undefined),
+                    formatFreshness((latestQuote.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
+                    formatFreshness((latestQuote.sentAt as string | null | undefined) ?? null, "Sent"),
+                  ]
+                    .filter(Boolean)
+                    .join(" - ") || "Quote activity recorded"
+                : "No quote or invoice history yet"
+          }
+        />
+      </CardContent>
+    </Card>
   );
 }
 

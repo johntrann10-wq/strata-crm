@@ -6,6 +6,7 @@ import {
   CalendarPlus,
   Car,
   ClipboardList,
+  Clock3,
   FileText,
   Loader2,
   MoreVertical,
@@ -96,6 +97,27 @@ function statusPillClass(status: string): string {
   if (normalized === "in_progress" || normalized === "partial") return "bg-amber-100 text-amber-800";
   if (normalized === "cancelled" || normalized === "void" || normalized === "no-show") return "bg-rose-100 text-rose-800";
   return "bg-muted text-muted-foreground";
+}
+
+function eventDateValue(record: Record<string, unknown>): number {
+  const source =
+    (record.startTime as string | undefined | null) ??
+    (record.scheduledStart as string | undefined | null) ??
+    (record.createdAt as string | undefined | null) ??
+    null;
+  const parsed = safeDate(source);
+  return parsed?.getTime() ?? 0;
+}
+
+function formatTimelineWhen(value: string | null | undefined): string {
+  const parsed = safeDate(value);
+  if (!parsed) return "No date";
+  return parsed.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export default function ClientDetailPage() {
@@ -250,6 +272,74 @@ export default function ClientDetailPage() {
   });
   const displayedAppointments = showAllAppointments ? apptList : apptList.slice(0, 5);
   const lastAppointmentDate = apptList.length > 0 ? apptList[0].startTime : null;
+  const nextAppointment = [...apptList]
+    .filter((appointment) => {
+      const start = safeDate(appointment.startTime);
+      return !!start && start.getTime() >= Date.now();
+    })
+    .sort((a, b) => {
+      const aTime = safeDate(a.startTime)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const bTime = safeDate(b.startTime)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    })[0];
+  const lastCompletedAppointment = [...apptList]
+    .filter((appointment) => {
+      const start = safeDate(appointment.startTime);
+      return !!start && start.getTime() < Date.now();
+    })
+    .sort((a, b) => {
+      const aTime = safeDate(a.startTime)?.getTime() ?? 0;
+      const bTime = safeDate(b.startTime)?.getTime() ?? 0;
+      return bTime - aTime;
+    })[0];
+  const latestInvoice = [...invoiceList].sort((a, b) => eventDateValue(b as Record<string, unknown>) - eventDateValue(a as Record<string, unknown>))[0];
+  const latestQuote = [...quoteList].sort((a, b) => eventDateValue(b as Record<string, unknown>) - eventDateValue(a as Record<string, unknown>))[0];
+  const clientTimeline = [
+    ...apptList.map((appointment) => ({
+      id: `appointment-${appointment.id}`,
+      label: appointment.title ?? "Appointment",
+      detail: appointment.vehicle
+        ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+        : "Appointment activity",
+      when: appointment.startTime,
+      status: appointment.status ?? "scheduled",
+      href: `/appointments/${appointment.id}`,
+      tone: "appointment" as const,
+    })),
+    ...jobList.map((job) => ({
+      id: `job-${String((job as any).id)}`,
+      label: (job as any).title ?? (job as any).jobNumber ?? "Job",
+      detail: (job as any).scheduledStart ? "Job created from scheduled work" : "Workflow job",
+      when: (job as any).scheduledStart ?? (job as any).createdAt ?? null,
+      status: (job as any).status ?? "scheduled",
+      href: `/jobs/${(job as any).id}`,
+      tone: "job" as const,
+    })),
+    ...quoteList.map((quote) => ({
+      id: `quote-${String((quote as any).id)}`,
+      label: "Quote",
+      detail: [formatCurrency((quote as any).total), formatFreshness((quote as any).followUpSentAt ?? (quote as any).sentAt ?? null, "Touched")]
+        .filter(Boolean)
+        .join(" - ") || "Estimate in progress",
+      when: ((quote as any).followUpSentAt as string | null | undefined) ?? ((quote as any).sentAt as string | null | undefined) ?? ((quote as any).createdAt as string | null | undefined) ?? null,
+      status: (quote as any).status ?? "draft",
+      href: `/quotes/${(quote as any).id}`,
+      tone: "quote" as const,
+    })),
+    ...invoiceList.map((invoice) => ({
+      id: `invoice-${String((invoice as any).id)}`,
+      label: (invoice as any).invoiceNumber ?? "Invoice",
+      detail: [formatCurrency(invoiceBalance(invoice as Record<string, unknown>)), formatFreshness((invoice as any).lastPaidAt ?? (invoice as any).lastSentAt ?? null, "Updated")]
+        .filter(Boolean)
+        .join(" - ") || "Billing record",
+      when: ((invoice as any).lastPaidAt as string | null | undefined) ?? ((invoice as any).lastSentAt as string | null | undefined) ?? ((invoice as any).createdAt as string | null | undefined) ?? null,
+      status: (invoice as any).status ?? "draft",
+      href: `/invoices/${(invoice as any).id}`,
+      tone: "invoice" as const,
+    })),
+  ]
+    .sort((a, b) => (safeDate(b.when)?.getTime() ?? 0) - (safeDate(a.when)?.getTime() ?? 0))
+    .slice(0, 6);
 
   const relatedRecords = [
     ...jobList.slice(0, 4).map((job) => ({
@@ -530,6 +620,15 @@ export default function ClientDetailPage() {
           </div>
 
           <div className="space-y-6">
+            <RelationshipSnapshotCard
+              nextAppointment={nextAppointment}
+              lastAppointment={lastCompletedAppointment}
+              latestInvoice={latestInvoice as Record<string, unknown> | undefined}
+              latestQuote={latestQuote as Record<string, unknown> | undefined}
+              openInvoiceValue={unpaidInvoiceValue}
+              openQuoteValue={openQuoteValue}
+            />
+
             <Card className="border-white/65">
               <CardHeader className="pb-4">
                 <CardTitle>Client Quick Actions</CardTitle>
@@ -556,6 +655,8 @@ export default function ClientDetailPage() {
               </div>
             ) : null}
             <VehiclesCard id={id} vehicles={vehicleList} />
+
+            <TimelineCard title="Client timeline" items={clientTimeline} empty="No client history recorded yet." />
 
             <Card className="border-white/65">
               <CardHeader className="pb-4">
@@ -588,6 +689,115 @@ export default function ClientDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function RelationshipSnapshotCard({
+  nextAppointment,
+  lastAppointment,
+  latestInvoice,
+  latestQuote,
+  openInvoiceValue,
+  openQuoteValue,
+}: {
+  nextAppointment?: Record<string, unknown>;
+  lastAppointment?: Record<string, unknown>;
+  latestInvoice?: Record<string, unknown>;
+  latestQuote?: Record<string, unknown>;
+  openInvoiceValue: number;
+  openQuoteValue: number;
+}) {
+  return (
+    <Card className="border-white/65">
+      <CardHeader className="pb-4">
+        <CardTitle>Relationship Snapshot</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <SummaryField
+          label="Next appointment"
+          value={nextAppointment ? `${formatTimelineWhen((nextAppointment.startTime as string | null | undefined) ?? null)}${nextAppointment.status ? ` - ${String(nextAppointment.status).replace("_", " ")}` : ""}` : "Nothing scheduled"}
+        />
+        <SummaryField
+          label="Last visit"
+          value={lastAppointment ? formatTimelineWhen((lastAppointment.startTime as string | null | undefined) ?? null) : "No completed visit yet"}
+        />
+        <SummaryField
+          label="Money still open"
+          value={openInvoiceValue > 0 ? formatCurrency(openInvoiceValue) : openQuoteValue > 0 ? `${formatCurrency(openQuoteValue)} in open quotes` : "No open balances"}
+        />
+        <SummaryField
+          label="Latest billing touch"
+          value={
+            latestInvoice
+              ? [latestInvoice.invoiceNumber as string | undefined, formatFreshness(latestInvoice.lastPaidAt as string | null | undefined, "Paid"), formatFreshness(latestInvoice.lastSentAt as string | null | undefined, "Sent")]
+                  .filter(Boolean)
+                  .join(" - ") || "Invoice activity recorded"
+              : latestQuote
+                ? [formatCurrency(latestQuote.total as number | string | null | undefined), formatFreshness(latestQuote.followUpSentAt as string | null | undefined, "Followed up"), formatFreshness(latestQuote.sentAt as string | null | undefined, "Sent")]
+                    .filter(Boolean)
+                    .join(" - ") || "Quote activity recorded"
+                : "No quote or invoice history yet"
+          }
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function TimelineCard({
+  title,
+  items,
+  empty,
+}: {
+  title: string;
+  items: Array<{ id: string; label: string; detail: string; when: string | null | undefined; status?: string; href: string; tone: "appointment" | "job" | "quote" | "invoice" }>;
+  empty: string;
+}) {
+  const toneClass: Record<string, string> = {
+    appointment: "bg-blue-50 text-blue-700",
+    job: "bg-amber-50 text-amber-700",
+    quote: "bg-violet-50 text-violet-700",
+    invoice: "bg-emerald-50 text-emerald-700",
+  };
+
+  return (
+    <Card className="border-white/65">
+      <CardHeader className="pb-4">
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{empty}</p>
+        ) : (
+          items.map((item) => (
+            <Link
+              key={item.id}
+              to={item.href}
+              className="flex items-start gap-3 rounded-[1rem] border border-white/65 bg-white/76 px-3 py-3 transition-colors hover:bg-white/90"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
+                <Clock3 className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">{item.label}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${toneClass[item.tone]}`}>
+                    {item.tone}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {formatTimelineWhen(item.when)}
+                  {item.status ? ` - ${String(item.status).replace("_", " ")}` : ""}
+                </p>
+              </div>
+            </Link>
+          ))
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
