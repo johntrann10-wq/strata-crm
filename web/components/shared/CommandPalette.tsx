@@ -1,6 +1,6 @@
 import React from "react";
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { useFindMany } from "../../hooks/useApi";
 import { api } from "../../api";
 import { useCommandPalette, usePageContext } from "./CommandPaletteContext";
@@ -136,6 +136,7 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
   const hasBusiness = _props?.hasBusiness ?? true;
   const { open, setOpen } = useCommandPalette();
   const { pageContext } = usePageContext();
+  const location = useLocation();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -288,8 +289,11 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
     });
   }
 
-  const go = (path: string) => {
-    navigate(path);
+  const currentPath = `${location.pathname}${location.search}`;
+  const withReturn = (path: string) =>
+    `${path}${path.includes("?") ? "&" : "?"}from=${encodeURIComponent(currentPath)}`;
+  const go = (path: string, options?: { preserveReturn?: boolean }) => {
+    navigate(options?.preserveReturn === false ? path : withReturn(path));
     setOpen(false);
   };
   const currentLocationId = getCurrentLocationId();

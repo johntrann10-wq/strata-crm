@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { User, Car, FileText, CalendarClock, Receipt, ClipboardList } from "lucide-react";
 
 export interface RelatedRecord {
@@ -39,6 +39,11 @@ function statusDotColor(status: string): string {
 }
 
 export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelProps) {
+  const location = useLocation();
+  const currentPath = `${location.pathname}${location.search}`;
+  const withReturn = (href: string) =>
+    `${href}${href.includes("?") ? "&" : "?"}from=${encodeURIComponent(currentPath)}`;
+
   if (loading) {
     return (
       <div>
@@ -75,7 +80,7 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
               className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm shrink-0"
             >
               <Link
-                to={record.href}
+                to={withReturn(record.href)}
                 className="flex min-w-0 flex-1 items-center gap-2 no-underline transition-colors hover:text-foreground/90"
               >
                 <span className={`flex items-center justify-center rounded-md p-1 ${colorClass}`}>
@@ -98,7 +103,7 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
               </Link>
               {record.actionHref && record.actionLabel ? (
                 <Link
-                  to={record.actionHref}
+                  to={withReturn(record.actionHref)}
                   className="rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   {record.actionLabel}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { CalendarPlus, ChevronDown, FileText, Plus, Receipt, Search, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +23,7 @@ function withLocation(path: string): string {
 }
 
 export function QuickCreateMenu() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { setOpen } = useCommandPalette();
   const [shortcut, setShortcut] = useState("⌘K");
@@ -33,7 +34,9 @@ export function QuickCreateMenu() {
     }
   }, []);
 
-  const go = (path: string) => navigate(path);
+  const currentPath = `${location.pathname}${location.search}`;
+  const go = (path: string) =>
+    navigate(`${path}${path.includes("?") ? "&" : "?"}from=${encodeURIComponent(currentPath)}`);
 
   return (
     <DropdownMenu>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { AlertTriangle, CheckCircle, Lightbulb, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCurrentLocationId } from "../../lib/auth";
@@ -233,7 +233,11 @@ export function ContextualNextStep({
   data,
   onActionClick,
 }: ContextualNextStepProps) {
+  const location = useLocation();
   const [dismissed, setDismissed] = useState(false);
+  const currentPath = `${location.pathname}${location.search}`;
+  const withReturn = (href: string) =>
+    `${href}${href.includes("?") ? "&" : "?"}from=${encodeURIComponent(currentPath)}`;
 
   useEffect(() => {
     setDismissed(false);
@@ -257,7 +261,7 @@ export function ContextualNextStep({
         {step.cta &&
           (step.cta.type === "link" && step.cta.href ? (
             <Button asChild size="sm" variant="outline">
-              <Link to={step.cta.href}>{step.cta.label}</Link>
+              <Link to={withReturn(step.cta.href)}>{step.cta.label}</Link>
             </Button>
           ) : (
             <Button size="sm" variant="outline" onClick={() => onActionClick?.(step.cta?.actionKey)}>
