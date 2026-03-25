@@ -535,8 +535,8 @@ export default function SettingsPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-4xl px-4 py-6 pb-24 sm:py-8 sm:pb-8">
-        <div className="mb-6 flex items-start gap-3 sm:mb-8 sm:items-center">
+      <div className="mx-auto max-w-4xl px-3 py-4 pb-28 sm:px-4 sm:py-8 sm:pb-8">
+        <div className="mb-5 flex items-start gap-3 sm:mb-8 sm:items-center">
           <div className="rounded-lg bg-primary/10 p-2">
             <Settings className="h-6 w-6 text-primary" />
           </div>
@@ -549,7 +549,7 @@ export default function SettingsPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid h-auto w-full grid-cols-1 gap-2 bg-transparent p-0 sm:grid-cols-4">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0 sm:grid-cols-4">
             <TabsTrigger
               value="profile"
               className="justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5"
@@ -775,7 +775,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-2">
+                <div className="hidden justify-end pt-2 sm:flex">
                   <Button onClick={handleSave} disabled={saving || !canEditSettings} className="w-full sm:w-auto sm:min-w-[130px]">
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     {saving ? "Saving..." : "Save Changes"}
@@ -783,6 +783,14 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:hidden">
+              <div className="mx-auto max-w-4xl">
+                <Button onClick={handleSave} disabled={saving || !canEditSettings} className="w-full">
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {saving ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="locations" className="space-y-6">
