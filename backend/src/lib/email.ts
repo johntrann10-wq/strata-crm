@@ -13,8 +13,6 @@ import { getBuiltinTemplate } from "./emailTemplates.js";
 import { isSmtpConfigured } from "./env.js";
 
 let transporter: nodemailer.Transporter | null = null;
-let transporterVerified = false;
-let transporterVerifyPromise: Promise<void> | null = null;
 
 function isEmailSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -43,13 +41,14 @@ function getTransporter(): nodemailer.Transporter | null {
       host: process.env.SMTP_HOST!,
       port: Number(process.env.SMTP_PORT!),
       secure,
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
       auth: {
         user: process.env.SMTP_USER!,
         pass: process.env.SMTP_PASS!,
       },
     });
-    transporterVerified = false;
-    transporterVerifyPromise = null;
   }
   return transporter;
 }
@@ -60,37 +59,6 @@ function getFromAddress(): string {
   const fallback = process.env.SMTP_USER?.trim();
   if (fallback) return fallback;
   throw new Error("SMTP sender address is not configured");
-}
-
-async function ensureTransporterReady(t: nodemailer.Transporter): Promise<void> {
-  if (transporterVerified) return;
-  if (!transporterVerifyPromise) {
-    transporterVerifyPromise = t
-      .verify()
-      .then(() => {
-        transporterVerified = true;
-        logger.info("SMTP transporter verified", {
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT ?? 0),
-          secure: resolveSmtpSecure(),
-          from: process.env.SMTP_FROM?.trim() || process.env.SMTP_USER?.trim() || null,
-        });
-      })
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        transporter = null;
-        transporterVerified = false;
-        transporterVerifyPromise = null;
-        logger.error("SMTP transporter verification failed", {
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT ?? 0),
-          secure: resolveSmtpSecure(),
-          error: message,
-        });
-        throw new Error(`SMTP connection failed: ${message}`);
-      });
-  }
-  await transporterVerifyPromise;
 }
 
 export type TemplateVars = Record<string, string | number | undefined>;
@@ -153,7 +121,6 @@ export async function sendTemplatedEmailInternal(
   if (!recipient) {
     throw new Error("Recipient email address is required");
   }
-  await ensureTransporterReady(t);
   await t.sendMail({
     from: getFromAddress(),
     to: recipient,

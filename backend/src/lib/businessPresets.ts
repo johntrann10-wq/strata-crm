@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { and, eq, inArray } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { businesses, serviceAddonLinks, services } from "../db/schema.js";
 import { logger } from "./logger.js";
@@ -344,17 +345,12 @@ async function insertPresetServices(businessId: string, rows: PresetService[]) {
   } catch (error) {
     if (!isPresetSchemaDriftError(error)) throw error;
     logger.warn("Business preset seeding inserting with legacy services schema", { businessId, error });
-    await db.insert(services).values(
-      rows.map((item) => ({
-        id: randomUUID(),
-        businessId,
-        name: item.name,
-        price: String(item.startingPrice),
-        notes: serializePresetNotes(item),
-        createdAt: now,
-        updatedAt: now,
-      }))
-    );
+    for (const item of rows) {
+      await db.execute(sql`
+        insert into "services" ("id", "business_id", "name", "price", "notes", "created_at", "updated_at")
+        values (${randomUUID()}, ${businessId}, ${item.name}, ${String(item.startingPrice)}, ${serializePresetNotes(item)}, ${now}, ${now})
+      `);
+    }
   }
 }
 

@@ -101,6 +101,58 @@ async function getServiceColumns(): Promise<Set<string>> {
   return cachedServiceColumns;
 }
 
+async function insertLegacyServiceRecord(
+  bid: string,
+  serviceId: string,
+  body: z.infer<typeof createSchema>
+): Promise<string | null> {
+  const columns = await getServiceColumns();
+  const insertColumns = ["id", "business_id", "name", "price"];
+  const insertValues: unknown[] = [serviceId, bid, body.name, String(body.price)];
+  const now = new Date();
+
+  if (columns.has("duration_minutes")) {
+    insertColumns.push("duration_minutes");
+    insertValues.push(body.durationMinutes ?? null);
+  }
+  if (columns.has("category")) {
+    insertColumns.push("category");
+    insertValues.push(body.category ?? "other");
+  }
+  if (columns.has("notes")) {
+    insertColumns.push("notes");
+    insertValues.push(body.notes ?? null);
+  }
+  if (columns.has("taxable")) {
+    insertColumns.push("taxable");
+    insertValues.push(body.taxable ?? true);
+  }
+  if (columns.has("is_addon")) {
+    insertColumns.push("is_addon");
+    insertValues.push(body.isAddon ?? false);
+  }
+  if (columns.has("active")) {
+    insertColumns.push("active");
+    insertValues.push(body.active ?? true);
+  }
+  if (columns.has("created_at")) {
+    insertColumns.push("created_at");
+    insertValues.push(now);
+  }
+  if (columns.has("updated_at")) {
+    insertColumns.push("updated_at");
+    insertValues.push(now);
+  }
+
+  const query = sql`insert into "services" (${sql.join(
+    insertColumns.map((column) => sql.raw(`"${column}"`)),
+    sql`, `
+  )}) values (${sql.join(insertValues.map((value) => sql`${value}`), sql`, `)}) returning "id"`;
+  const result = await db.execute(query);
+  const rows = (result as { rows?: Array<{ id?: string }> }).rows ?? [];
+  return rows[0]?.id ?? null;
+}
+
 function withMissingServiceFields<T extends Omit<ServiceRecord, "notes" | "durationMinutes" | "category" | "taxable" | "isAddon" | "active">>(
   row: T
 ): ServiceRecord {
@@ -247,27 +299,7 @@ servicesRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: Reque
       businessId: bid,
       error: error instanceof Error ? error.message : String(error),
     });
-    const columns = await getServiceColumns();
-    const now = new Date();
-    const fallbackValues: Record<string, unknown> = {
-      id: serviceId,
-      businessId: bid,
-      name: body.name,
-      price: String(body.price),
-    };
-    if (columns.has("duration_minutes")) fallbackValues.durationMinutes = body.durationMinutes ?? null;
-    if (columns.has("category")) fallbackValues.category = body.category ?? "other";
-    if (columns.has("notes")) fallbackValues.notes = body.notes ?? null;
-    if (columns.has("taxable")) fallbackValues.taxable = body.taxable ?? true;
-    if (columns.has("is_addon")) fallbackValues.isAddon = body.isAddon ?? false;
-    if (columns.has("active")) fallbackValues.active = body.active ?? true;
-    if (columns.has("created_at")) fallbackValues.createdAt = now;
-    if (columns.has("updated_at")) fallbackValues.updatedAt = now;
-    const [created] = await db
-      .insert(services)
-      .values(fallbackValues as typeof services.$inferInsert)
-      .returning({ id: services.id });
-    createdId = created?.id ?? null;
+    createdId = await insertLegacyServiceRecord(bid, serviceId, body);
   }
   if (!createdId) throw new BadRequestError("Unable to create service.");
   let created: ServiceRecord | null = null;
