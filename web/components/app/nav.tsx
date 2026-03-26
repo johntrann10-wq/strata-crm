@@ -174,13 +174,17 @@ const SignOutOption = () => {
       await api.user.signOut();
     } catch {
       // JWT sign-out is local-first; backend failure should not trap the user.
+    } finally {
+      clearAuthToken();
+      clearCurrentBusinessId();
+      clearCurrentLocationId();
+      emitAuthEvent("auth:logout");
+      if (typeof window !== "undefined") {
+        window.location.replace("/sign-in");
+        return;
+      }
+      navigate("/sign-in", { replace: true });
     }
-    clearAuthToken();
-    clearCurrentBusinessId();
-    clearCurrentLocationId();
-    emitAuthEvent("auth:logout");
-    navigate("/sign-in", { replace: true });
-    setSigningOut(false);
   };
 
   return (

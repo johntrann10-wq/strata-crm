@@ -6,6 +6,13 @@ const password = process.env.PLAYWRIGHT_SMOKE_PASSWORD ?? "";
 test.describe.configure({ mode: "serial" });
 
 test.describe("Live auth smoke", () => {
+  async function expectMainHeading(
+    page: import("@playwright/test").Page,
+    name: string | RegExp
+  ) {
+    await expect(page.locator("main").getByRole("heading", { level: 1, name })).toBeVisible();
+  }
+
   async function completeOnboardingIfNeeded(page: import("@playwright/test").Page) {
     const onboardingHeading = page.getByRole("heading", { name: /choose your shop type/i });
     if (!(await onboardingHeading.isVisible().catch(() => false))) return;
@@ -49,6 +56,17 @@ test.describe("Live auth smoke", () => {
       // eslint-disable-next-line no-console
       console.log("API failure", response.status(), response.url(), body);
     });
+    page.on("requestfailed", (request) => {
+      if (!request.url().includes("/api/")) return;
+      // eslint-disable-next-line no-console
+      console.log("API request failed", request.method(), request.url(), request.failure()?.errorText);
+    });
+    page.on("console", (message) => {
+      if (message.type() === "error" || /failed|cors|fetch/i.test(message.text())) {
+        // eslint-disable-next-line no-console
+        console.log("browser console", message.type(), message.text());
+      }
+    });
 
     await page.goto("/sign-in");
     await expect(page.locator("#email")).toBeVisible();
@@ -63,37 +81,40 @@ test.describe("Live auth smoke", () => {
     await completeOnboardingIfNeeded(page);
 
     await expect(page).toHaveURL(/\/signed-in/);
-    await expect(page.getByRole("heading", { name: /dashboard/i })).toBeVisible();
+    await expect(
+      page.locator("main").getByRole("heading", { level: 2, name: /^today's schedule$/i })
+    ).toBeVisible();
 
     await page.goto("/clients");
     await page.waitForLoadState("networkidle");
     await completeOnboardingIfNeeded(page);
     await expect(page).toHaveURL(/\/clients/);
-    await expect(page.getByRole("heading", { name: /clients/i })).toBeVisible();
+    await expectMainHeading(page, /^clients$/i);
 
     await page.goto("/vehicles");
     await expect(page).toHaveURL(/\/vehicles/);
-    await expect(page.getByRole("heading", { name: /vehicles/i })).toBeVisible();
+    await expectMainHeading(page, /^vehicles$/i);
 
     await page.goto("/appointments");
     await expect(page).toHaveURL(/\/appointments/);
-    await expect(page.getByRole("heading", { name: /schedule/i })).toBeVisible();
+    await expectMainHeading(page, /^appointments$/i);
 
     await page.goto("/calendar");
     await expect(page).toHaveURL(/\/calendar/);
-    await expect(page.getByRole("heading", { name: /calendar/i })).toBeVisible();
+    await expect(page.locator("main").getByRole("button", { name: /^month$/i })).toBeVisible();
+    await expect(page.locator("main").getByRole("button", { name: /^day$/i })).toBeVisible();
 
     await page.goto("/invoices");
     await expect(page).toHaveURL(/\/invoices/);
-    await expect(page.getByRole("heading", { name: /invoices/i })).toBeVisible();
+    await expectMainHeading(page, /^invoices$/i);
 
     await page.goto("/settings");
     await expect(page).toHaveURL(/\/settings/);
-    await expect(page.getByRole("heading", { name: /settings/i })).toBeVisible();
+    await expectMainHeading(page, /^settings$/i);
 
     await page.reload();
     await expect(page).toHaveURL(/\/settings/);
-    await expect(page.getByRole("heading", { name: /settings/i })).toBeVisible();
+    await expectMainHeading(page, /^settings$/i);
 
     await page.getByRole("button", { name: new RegExp(email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") }).click();
     await page.getByRole("menuitem", { name: /sign out/i }).click();
