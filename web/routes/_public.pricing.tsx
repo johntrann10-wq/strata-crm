@@ -14,16 +14,27 @@ const pricingSchema = {
   "@graph": [
     {
       "@type": "WebPage",
+      "@id": "https://stratacrm.app/pricing#webpage",
       name: pricingTitle,
       description: pricingDescription,
       url: "https://stratacrm.app/pricing",
+      isPartOf: {
+        "@id": "https://stratacrm.app/#website",
+      },
     },
     {
       "@type": "SoftwareApplication",
+      "@id": "https://stratacrm.app/pricing#software",
       name: "Strata CRM",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
       description: pricingDescription,
+      provider: {
+        "@id": "https://stratacrm.app/#organization",
+      },
+      brand: {
+        "@id": "https://stratacrm.app/#organization",
+      },
       offers: {
         "@type": "Offer",
         price: "29",
@@ -31,6 +42,23 @@ const pricingSchema = {
         availability: "https://schema.org/InStock",
         url: "https://stratacrm.app/pricing",
       },
+    },
+    {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "Home",
+          item: "https://stratacrm.app/",
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: "Pricing",
+          item: "https://stratacrm.app/pricing",
+        },
+      ],
     },
     {
       "@type": "FAQPage",

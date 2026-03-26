@@ -108,22 +108,50 @@ const featuresSchema = {
   "@graph": [
     {
       "@type": "WebPage",
+      "@id": "https://stratacrm.app/features#webpage",
       name: featuresTitle,
       description: featuresDescription,
       url: "https://stratacrm.app/features",
+      isPartOf: {
+        "@id": "https://stratacrm.app/#website",
+      },
     },
     {
       "@type": "SoftwareApplication",
+      "@id": "https://stratacrm.app/features#software",
       name: "Strata CRM",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
       description: featuresDescription,
+      provider: {
+        "@id": "https://stratacrm.app/#organization",
+      },
+      brand: {
+        "@id": "https://stratacrm.app/#organization",
+      },
       featureList: featureSections.map((section) => section.title),
       offers: {
         "@type": "Offer",
         price: "29",
         priceCurrency: "USD",
       },
+    },
+    {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "Home",
+          item: "https://stratacrm.app/",
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: "Features",
+          item: "https://stratacrm.app/features",
+        },
+      ],
     },
     {
       "@type": "ItemList",

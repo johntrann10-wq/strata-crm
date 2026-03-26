@@ -39,16 +39,27 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
     "@graph": [
       {
         "@type": "WebPage",
+        "@id": `https://stratacrm.app${page.path}#webpage`,
         name: page.seoTitle,
         description: page.seoDescription,
         url: `https://stratacrm.app${page.path}`,
+        isPartOf: {
+          "@id": "https://stratacrm.app/#website",
+        },
       },
       {
         "@type": "SoftwareApplication",
+        "@id": `https://stratacrm.app${page.path}#software`,
         name: "Strata CRM",
         applicationCategory: "BusinessApplication",
         operatingSystem: "Web",
         description: page.seoDescription,
+        provider: {
+          "@id": "https://stratacrm.app/#organization",
+        },
+        brand: {
+          "@id": "https://stratacrm.app/#organization",
+        },
         audience: {
           "@type": "Audience",
           audienceType: page.audience,

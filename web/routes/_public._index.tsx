@@ -155,13 +155,24 @@ const homeSchema = {
   "@graph": [
     {
       "@type": "Organization",
+      "@id": "https://stratacrm.app/#organization",
       name: "Strata CRM",
       url: "https://stratacrm.app",
       logo: "https://stratacrm.app/social-preview.png",
       sameAs: [],
     },
     {
+      "@type": "WebSite",
+      "@id": "https://stratacrm.app/#website",
+      url: "https://stratacrm.app/",
+      name: "Strata CRM",
+      publisher: {
+        "@id": "https://stratacrm.app/#organization",
+      },
+    },
+    {
       "@type": "SoftwareApplication",
+      "@id": "https://stratacrm.app/#software",
       name: "Strata CRM",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
@@ -172,6 +183,12 @@ const homeSchema = {
       },
       description: homeDescription,
       url: "https://stratacrm.app/",
+      provider: {
+        "@id": "https://stratacrm.app/#organization",
+      },
+      brand: {
+        "@id": "https://stratacrm.app/#organization",
+      },
       audience: {
         "@type": "Audience",
         audienceType: "Automotive service businesses",
@@ -182,6 +199,17 @@ const homeSchema = {
         "Quotes and estimates",
         "Invoices and payment tracking",
         "Job workflow visibility",
+      ],
+    },
+    {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "Home",
+          item: "https://stratacrm.app/",
+        },
       ],
     },
     {
