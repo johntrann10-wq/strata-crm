@@ -137,6 +137,10 @@ test.describe("Live business workflow smoke", () => {
     const failures: string[] = [];
     const notes: string[] = [];
     const stamp = Date.now();
+    const appointmentSlot = new Date(stamp + 48 * 60 * 60 * 1000);
+    appointmentSlot.setSeconds(0, 0);
+    const appointmentDate = appointmentSlot.toISOString().slice(0, 10);
+    const appointmentTime = appointmentSlot.toTimeString().slice(0, 5);
     const clientFirst = "Smoke";
     const clientLast = `Flow${String(stamp).slice(-6)}`;
     const clientEmail = `smoke+${stamp}@example.com`;
@@ -199,6 +203,9 @@ test.describe("Live business workflow smoke", () => {
       const url = new URL(page.url());
       vehicleId = url.searchParams.get("vehicleId") ?? "";
       expect(vehicleId).not.toBe("");
+      url.searchParams.set("date", appointmentDate);
+      url.searchParams.set("time", appointmentTime);
+      await page.goto(url.pathname + url.search);
     });
 
     let appointmentDeliveryStatus: string | null = null;
@@ -209,6 +216,7 @@ test.describe("Live business workflow smoke", () => {
       if (servicesAvailable) {
         await clickFirstService(page);
       }
+      await page.locator("#startTime").fill(appointmentTime);
       const createResponsePromise = page.waitForResponse((response) =>
         response.url().includes("/api/appointments") &&
         response.request().method() === "POST"
@@ -246,7 +254,7 @@ test.describe("Live business workflow smoke", () => {
         response.url().includes(`/api/quotes/${quoteId}/send`) &&
         response.request().method() === "POST"
       );
-      await page.getByRole("button", { name: /^send quote$/i }).click();
+      await page.getByRole("button", { name: /^mark as sent$/i }).first().click();
       const sendResponse = await sendResponsePromise;
       const sendPayload = await sendResponse.json().catch(() => ({}));
       quoteDeliveryStatus = sendPayload?.deliveryStatus ?? null;
@@ -271,7 +279,7 @@ test.describe("Live business workflow smoke", () => {
         response.url().includes(`/api/invoices/${invoiceId}/sendToClient`) &&
         response.request().method() === "POST"
       );
-      await page.getByRole("button", { name: /^send invoice$/i }).click();
+      await page.getByRole("button", { name: /^mark as sent$/i }).first().click();
       const sendResponse = await sendResponsePromise;
       const sendPayload = await sendResponse.json().catch(() => ({}));
       invoiceDeliveryStatus = sendPayload?.deliveryStatus ?? null;

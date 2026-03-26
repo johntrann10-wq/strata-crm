@@ -13,6 +13,20 @@ import { getBuiltinTemplate } from "./emailTemplates.js";
 import { isSmtpConfigured } from "./env.js";
 
 let transporter: nodemailer.Transporter | null = null;
+let transporterVerified = false;
+let transporterVerifyPromise: Promise<void> | null = null;
+
+function isEmailSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
 
 function resolveSmtpSecure(): boolean {
   const configured = process.env.SMTP_SECURE?.trim().toLowerCase();
@@ -34,8 +48,49 @@ function getTransporter(): nodemailer.Transporter | null {
         pass: process.env.SMTP_PASS!,
       },
     });
+    transporterVerified = false;
+    transporterVerifyPromise = null;
   }
   return transporter;
+}
+
+function getFromAddress(): string {
+  const from = process.env.SMTP_FROM?.trim();
+  if (from) return from;
+  const fallback = process.env.SMTP_USER?.trim();
+  if (fallback) return fallback;
+  throw new Error("SMTP sender address is not configured");
+}
+
+async function ensureTransporterReady(t: nodemailer.Transporter): Promise<void> {
+  if (transporterVerified) return;
+  if (!transporterVerifyPromise) {
+    transporterVerifyPromise = t
+      .verify()
+      .then(() => {
+        transporterVerified = true;
+        logger.info("SMTP transporter verified", {
+          host: process.env.SMTP_HOST,
+          port: Number(process.env.SMTP_PORT ?? 0),
+          secure: resolveSmtpSecure(),
+          from: process.env.SMTP_FROM?.trim() || process.env.SMTP_USER?.trim() || null,
+        });
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        transporter = null;
+        transporterVerified = false;
+        transporterVerifyPromise = null;
+        logger.error("SMTP transporter verification failed", {
+          host: process.env.SMTP_HOST,
+          port: Number(process.env.SMTP_PORT ?? 0),
+          secure: resolveSmtpSecure(),
+          error: message,
+        });
+        throw new Error(`SMTP connection failed: ${message}`);
+      });
+  }
+  await transporterVerifyPromise;
 }
 
 export type TemplateVars = Record<string, string | number | undefined>;
@@ -54,20 +109,28 @@ export async function getTemplate(
   slug: string,
   businessId: string | null
 ): Promise<{ subject: string; bodyHtml: string; bodyText: string | null } | null> {
-  if (businessId) {
-    const [t] = await db
+  try {
+    if (businessId) {
+      const [t] = await db
+        .select()
+        .from(emailTemplates)
+        .where(and(eq(emailTemplates.slug, slug), eq(emailTemplates.businessId, businessId)))
+        .limit(1);
+      if (t) return { subject: t.subject, bodyHtml: t.bodyHtml, bodyText: t.bodyText };
+    }
+    const [sys] = await db
       .select()
       .from(emailTemplates)
-      .where(and(eq(emailTemplates.slug, slug), eq(emailTemplates.businessId, businessId)))
+      .where(and(eq(emailTemplates.slug, slug), isNull(emailTemplates.businessId)))
       .limit(1);
-    if (t) return { subject: t.subject, bodyHtml: t.bodyHtml, bodyText: t.bodyText };
+    if (sys) return { subject: sys.subject, bodyHtml: sys.bodyHtml, bodyText: sys.bodyText };
+  } catch (error) {
+    if (!isEmailSchemaDriftError(error)) throw error;
+    logger.warn("Email templates schema unavailable; using built-in template fallback", {
+      slug,
+      businessId: businessId ?? undefined,
+    });
   }
-  const [sys] = await db
-    .select()
-    .from(emailTemplates)
-    .where(and(eq(emailTemplates.slug, slug), isNull(emailTemplates.businessId)))
-    .limit(1);
-  if (sys) return { subject: sys.subject, bodyHtml: sys.bodyHtml, bodyText: sys.bodyText };
   const builtin = getBuiltinTemplate(slug);
   if (builtin) return { subject: builtin.subject, bodyHtml: builtin.bodyHtml, bodyText: null };
   return null;
@@ -86,9 +149,14 @@ export async function sendTemplatedEmailInternal(
   if (!t) {
     throw new Error("SMTP is not configured");
   }
+  const recipient = options.to.trim();
+  if (!recipient) {
+    throw new Error("Recipient email address is required");
+  }
+  await ensureTransporterReady(t);
   await t.sendMail({
-    from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
-    to: options.to,
+    from: getFromAddress(),
+    to: recipient,
     subject,
     html: bodyHtml,
     text: bodyText,
@@ -110,24 +178,42 @@ export async function sendTemplatedEmail(
 
   const logToDb = async (errorMessage: string | null) => {
     if (!options.businessId) return;
-    await db.insert(notificationLogs).values({
-      businessId: options.businessId,
-      channel: "email",
-      recipient: options.to,
-      subject,
-      error: errorMessage,
-      metadata: JSON.stringify({ templateSlug: options.templateSlug, vars: options.vars ?? {} }),
-    });
+    try {
+      await db.insert(notificationLogs).values({
+        businessId: options.businessId,
+        channel: "email",
+        recipient: options.to,
+        subject,
+        error: errorMessage,
+        metadata: JSON.stringify({ templateSlug: options.templateSlug, vars: options.vars ?? {} }),
+      });
+    } catch (error) {
+      if (!isEmailSchemaDriftError(error)) throw error;
+      logger.warn("Notification log schema unavailable; skipping email log persistence", {
+        templateSlug: options.templateSlug,
+        businessId: options.businessId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   };
 
   try {
     await sendTemplatedEmailInternal(options);
     await logToDb(null);
-    logger.info("Email sent", { to: options.to, templateSlug: options.templateSlug });
+    logger.info("Email sent", {
+      to: options.to,
+      templateSlug: options.templateSlug,
+      businessId: options.businessId ?? undefined,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await logToDb(message);
-    logger.warn("Email send failed", { to: options.to, templateSlug: options.templateSlug, error: message });
+    logger.warn("Email send failed", {
+      to: options.to,
+      templateSlug: options.templateSlug,
+      businessId: options.businessId ?? undefined,
+      error: message,
+    });
     throw err;
   }
 }
