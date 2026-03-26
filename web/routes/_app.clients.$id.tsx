@@ -124,7 +124,8 @@ export default function ClientDetailPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const location = useLocation();
-  const { currentLocationId } = useOutletContext<AuthOutletContext>();
+  const authContext = useOutletContext<AuthOutletContext>();
+  const { currentLocationId } = authContext;
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/clients";
   const currentRecordPath = `${location.pathname}${location.search}`;
   const appointmentHref = `/appointments/new?clientId=${id}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}&from=${encodeURIComponent(currentRecordPath)}`;
@@ -221,7 +222,7 @@ export default function ClientDetailPage() {
   }, [client, id, setPageContext]);
 
   if (isNestedVehicleRoute) {
-    return <Outlet />;
+    return <Outlet context={authContext} />;
   }
 
   const handleSave = async () => {
