@@ -237,26 +237,28 @@ servicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
       .returning({ id: services.id });
     createdId = created?.id ?? null;
   } catch (error) {
-    if (!isServiceSchemaDriftError(error)) throw error;
     warnOnce("services:create:full-schema", "service create falling back without full schema", {
       businessId: bid,
       error: error instanceof Error ? error.message : String(error),
     });
     const columns = await getServiceColumns();
-    const fallbackValues: Partial<typeof services.$inferInsert> = {
+    const now = new Date();
+    const fallbackValues: Record<string, unknown> = {
       businessId: bid,
       name: body.name,
       price: String(body.price),
     };
     if (columns.has("duration_minutes")) fallbackValues.durationMinutes = body.durationMinutes ?? null;
-    if (columns.has("category")) fallbackValues.category = body.category ?? "other";
+    if (columns.has("category")) fallbackValues.category = "other";
     if (columns.has("notes")) fallbackValues.notes = body.notes ?? null;
     if (columns.has("taxable")) fallbackValues.taxable = body.taxable ?? true;
     if (columns.has("is_addon")) fallbackValues.isAddon = body.isAddon ?? false;
     if (columns.has("active")) fallbackValues.active = body.active ?? true;
+    if (columns.has("created_at")) fallbackValues.createdAt = now;
+    if (columns.has("updated_at")) fallbackValues.updatedAt = now;
     const [created] = await db
       .insert(services)
-      .values(fallbackValues)
+      .values(fallbackValues as typeof services.$inferInsert)
       .returning({ id: services.id });
     createdId = created?.id ?? null;
   }
