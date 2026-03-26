@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { services, appointmentServices } from "../db/schema.js";
@@ -6,6 +7,7 @@ import { eq, and, asc, desc, count, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { warnOnce } from "../lib/warnOnce.js";
+import { wrapAsync } from "../lib/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 
@@ -89,9 +91,8 @@ async function getServiceColumns(): Promise<Set<string>> {
     from information_schema.columns
     where table_schema = 'public' and table_name = 'services'
   `);
-  const rows = Array.isArray((result as { rows?: unknown[] }).rows)
-    ? ((result as { rows: Array<{ column_name?: string }> }).rows)
-    : ((result as Array<{ column_name?: string }>) ?? []);
+  const resultWithRows = result as unknown as { rows?: Array<{ column_name?: string }> };
+  const rows = Array.isArray(resultWithRows.rows) ? resultWithRows.rows : [];
   cachedServiceColumns = new Set(
     rows
       .map((row) => row?.column_name)
@@ -172,7 +173,7 @@ const createSchema = z.object({
   price: z.coerce.number().min(0),
   /** null first so null is not coerced to 0 by z.coerce. */
   durationMinutes: z.union([z.null(), z.coerce.number().int().min(0)]).optional(),
-  category: z.enum(CATEGORY_VALUES),
+  category: z.enum(CATEGORY_VALUES).optional(),
   notes: z.string().nullable().optional(),
   taxable: z.boolean().optional(),
   isAddon: z.boolean().optional(),
@@ -194,7 +195,7 @@ const patchSchema = z
   })
   .strict();
 
-servicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+servicesRouter.get("/", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const filter = parseFilter(req);
 
@@ -202,15 +203,15 @@ servicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
   const first = req.query.first != null ? Math.min(Number(req.query.first), 200) : 100;
   const list = await listServicesForBusiness(bid, activeEquals, first);
   res.json({ records: list });
-});
+}));
 
-servicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+servicesRouter.get("/:id", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const row = await getServiceForBusiness(req.params.id, businessId(req));
   if (!row) throw new NotFoundError("Service not found.");
   res.json(row);
-});
+}));
 
-servicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+servicesRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -220,19 +221,24 @@ servicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
   }
 
   let createdId: string | null = null;
+  const createdAt = new Date();
+  const serviceId = randomUUID();
   try {
     const [created] = await db
       .insert(services)
       .values({
+        id: serviceId,
         businessId: bid,
         name: body.name,
         price: String(body.price),
         durationMinutes: body.durationMinutes ?? null,
-        category: body.category,
+        category: body.category ?? "other",
         notes: body.notes ?? null,
         taxable: body.taxable ?? true,
         isAddon: body.isAddon ?? false,
         active: body.active ?? true,
+        createdAt,
+        updatedAt: createdAt,
       })
       .returning({ id: services.id });
     createdId = created?.id ?? null;
@@ -244,12 +250,13 @@ servicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
     const columns = await getServiceColumns();
     const now = new Date();
     const fallbackValues: Record<string, unknown> = {
+      id: serviceId,
       businessId: bid,
       name: body.name,
       price: String(body.price),
     };
     if (columns.has("duration_minutes")) fallbackValues.durationMinutes = body.durationMinutes ?? null;
-    if (columns.has("category")) fallbackValues.category = "other";
+    if (columns.has("category")) fallbackValues.category = body.category ?? "other";
     if (columns.has("notes")) fallbackValues.notes = body.notes ?? null;
     if (columns.has("taxable")) fallbackValues.taxable = body.taxable ?? true;
     if (columns.has("is_addon")) fallbackValues.isAddon = body.isAddon ?? false;
@@ -274,7 +281,6 @@ servicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
     });
   }
   if (!created) {
-    const now = new Date();
     created = {
       id: createdId,
       businessId: bid,
@@ -286,14 +292,14 @@ servicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
       taxable: body.taxable ?? true,
       isAddon: body.isAddon ?? false,
       active: body.active ?? true,
-      createdAt: now,
-      updatedAt: now,
+      createdAt,
+      updatedAt: createdAt,
     };
   }
   res.status(201).json(created);
-});
+}));
 
-servicesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+servicesRouter.patch("/:id", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const existing = await getServiceForBusiness(req.params.id, bid);
   if (!existing) throw new NotFoundError("Service not found.");
@@ -340,9 +346,9 @@ servicesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, re
   const updated = await getServiceForBusiness(req.params.id, bid);
   if (!updated) throw new NotFoundError("Service not found after update.");
   res.json(updated);
-});
+}));
 
-servicesRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+servicesRouter.delete("/:id", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
     .select()
@@ -361,4 +367,4 @@ servicesRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, r
 
   await db.delete(services).where(eq(services.id, req.params.id));
   res.status(204).end();
-});
+}));
