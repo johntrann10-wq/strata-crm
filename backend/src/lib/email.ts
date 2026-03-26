@@ -13,6 +13,7 @@ import { getBuiltinTemplate } from "./emailTemplates.js";
 import { isSmtpConfigured } from "./env.js";
 
 let transporter: nodemailer.Transporter | null = null;
+let fallbackTransporter: nodemailer.Transporter | null = null;
 
 function isEmailSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -36,21 +37,48 @@ function resolveSmtpSecure(): boolean {
 function getTransporter(): nodemailer.Transporter | null {
   if (!isSmtpConfigured()) return null;
   if (!transporter) {
-    const secure = resolveSmtpSecure();
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST!,
-      port: Number(process.env.SMTP_PORT!),
-      secure,
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 15_000,
-      auth: {
-        user: process.env.SMTP_USER!,
-        pass: process.env.SMTP_PASS!,
-      },
-    });
+    transporter = nodemailer.createTransport(buildTransportOptions(Number(process.env.SMTP_PORT!), resolveSmtpSecure()));
   }
   return transporter;
+}
+
+function buildTransportOptions(port: number, secure: boolean) {
+  return {
+    host: process.env.SMTP_HOST!,
+    port,
+    secure,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
+    auth: {
+      user: process.env.SMTP_USER!,
+      pass: process.env.SMTP_PASS!,
+    },
+  };
+}
+
+function isGmailSmtpHost(): boolean {
+  const host = process.env.SMTP_HOST?.trim().toLowerCase();
+  return host === "smtp.gmail.com";
+}
+
+function shouldRetryWithGmailStartTls(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("econnreset") ||
+    message.includes("econnrefused") ||
+    message.includes("socket closed") ||
+    message.includes("greeting never received")
+  );
+}
+
+function getFallbackTransporter(): nodemailer.Transporter {
+  if (!fallbackTransporter) {
+    fallbackTransporter = nodemailer.createTransport(buildTransportOptions(587, false));
+  }
+  return fallbackTransporter;
 }
 
 function getFromAddress(): string {
@@ -121,13 +149,32 @@ export async function sendTemplatedEmailInternal(
   if (!recipient) {
     throw new Error("Recipient email address is required");
   }
-  await t.sendMail({
+  const payload = {
     from: getFromAddress(),
     to: recipient,
     subject,
     html: bodyHtml,
     text: bodyText,
-  });
+  };
+  try {
+    await t.sendMail(payload);
+  } catch (error) {
+    if (
+      isGmailSmtpHost() &&
+      Number(process.env.SMTP_PORT ?? 0) === 465 &&
+      resolveSmtpSecure() &&
+      shouldRetryWithGmailStartTls(error)
+    ) {
+      logger.warn("Primary Gmail SMTP transport failed; retrying with STARTTLS fallback", {
+        host: process.env.SMTP_HOST,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      transporter = null;
+      await getFallbackTransporter().sendMail(payload);
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function sendTemplatedEmail(
