@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { businessMemberships, businesses } from "../db/schema.js";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
@@ -224,55 +224,52 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
   const typeDefaults = getBusinessTypeDefaults(parsed.data.type);
   const businessId = randomUUID();
   const membershipId = randomUUID();
-  const [created] = await db.transaction(async (tx) => {
-    const [newBusiness] = await tx
-      .insert(businesses)
-      .values({
-        id: businessId,
-        ownerId: req.userId!,
-        name: parsed.data.name,
-        type: parsed.data.type,
-        email: parsed.data.email ?? null,
-        phone: parsed.data.phone ?? null,
-        address: parsed.data.address ?? null,
-        city: parsed.data.city ?? null,
-        state: parsed.data.state ?? null,
-        zip: parsed.data.zip ?? null,
-        staffCount: parsed.data.staffCount ?? typeDefaults.defaultStaffCount,
-        operatingHours: parsed.data.operatingHours ?? typeDefaults.operatingHours,
-        timezone: parsed.data.timezone ?? typeDefaults.timezone,
-        currency: parsed.data.currency ?? typeDefaults.currency,
-        defaultTaxRate:
-          parsed.data.defaultTaxRate != null ? String(parsed.data.defaultTaxRate) : String(typeDefaults.defaultTaxRate),
-        appointmentBufferMinutes:
-          parsed.data.appointmentBufferMinutes ?? typeDefaults.appointmentBufferMinutes,
-      })
-      .returning();
-
-    if (!newBusiness) return [];
-
-    try {
-      await tx.insert(businessMemberships).values({
-        id: membershipId,
-        businessId,
-        userId: req.userId!,
-        role: "owner",
-        status: "active",
-        isDefault: true,
-        joinedAt: new Date(),
-      });
-    } catch (error) {
-      if (!isBusinessSchemaDriftError(error)) throw error;
-      warnOnce("businesses:create:membership-schema", "business membership schema unavailable during business create", {
-        userId: req.userId,
-        businessId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-
-    return [newBusiness];
-  });
+  const [created] = await db
+    .insert(businesses)
+    .values({
+      id: businessId,
+      ownerId: req.userId!,
+      name: parsed.data.name,
+      type: parsed.data.type,
+      email: parsed.data.email ?? null,
+      phone: parsed.data.phone ?? null,
+      address: parsed.data.address ?? null,
+      city: parsed.data.city ?? null,
+      state: parsed.data.state ?? null,
+      zip: parsed.data.zip ?? null,
+      staffCount: parsed.data.staffCount ?? typeDefaults.defaultStaffCount,
+      operatingHours: parsed.data.operatingHours ?? typeDefaults.operatingHours,
+      timezone: parsed.data.timezone ?? typeDefaults.timezone,
+      currency: parsed.data.currency ?? typeDefaults.currency,
+      defaultTaxRate:
+        parsed.data.defaultTaxRate != null ? String(parsed.data.defaultTaxRate) : String(typeDefaults.defaultTaxRate),
+      appointmentBufferMinutes:
+        parsed.data.appointmentBufferMinutes ?? typeDefaults.appointmentBufferMinutes,
+    })
+    .returning();
   if (!created) throw new BadRequestError("Failed to create business.");
+
+  // Legacy production schemas can be missing business_memberships entirely.
+  // Keep business creation durable and treat membership creation as best-effort.
+  try {
+    await db.insert(businessMemberships).values({
+      id: membershipId,
+      businessId,
+      userId: req.userId!,
+      role: "owner",
+      status: "active",
+      isDefault: true,
+      joinedAt: new Date(),
+    });
+  } catch (error) {
+    if (!isBusinessSchemaDriftError(error)) throw error;
+    warnOnce("businesses:create:membership-schema", "business membership schema unavailable during business create", {
+      userId: req.userId,
+      businessId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   res.status(201).json(serializeBusiness(created));
 }));
 
