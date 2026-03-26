@@ -24,7 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -68,6 +67,22 @@ const toMoneyNumber = (value: unknown): number => {
   const numeric = Number(value ?? 0);
   return Number.isFinite(numeric) ? numeric : 0;
 };
+
+function SelectionIndicator({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
+        checked
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-input bg-background"
+      )}
+    >
+      {checked ? <Check className="size-3 text-secondary" /> : null}
+    </span>
+  );
+}
 
 export default function NewAppointmentPage() {
   const { user, businessId, businessType, currentLocationId } = useOutletContext<AuthOutletContext>();
@@ -932,10 +947,7 @@ export default function NewAppointmentPage() {
                           )}
                           onClick={() => toggleService(service.id)}
                         >
-                          <Checkbox
-                            checked={isSelected}
-                            className="shrink-0 pointer-events-none"
-                          />
+                          <SelectionIndicator checked={isSelected} />
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm">{service.name}</p>
                             {service.notes && (
@@ -1203,11 +1215,7 @@ export default function NewAppointmentPage() {
                   if (isMobile) setMobileAddress("");
                 }}
               >
-                <Checkbox
-                  id="isMobile"
-                  checked={isMobile}
-                  className="mt-0.5 shrink-0 pointer-events-none"
-                />
+                <SelectionIndicator checked={isMobile} />
                 <div>
                   <Label
                     htmlFor="isMobile"
