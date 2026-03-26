@@ -12,6 +12,7 @@ import { roleHasPermission } from "../lib/permissions.js";
 import { warnOnce } from "../lib/warnOnce.js";
 
 export const businessesRouter = Router({ mergeParams: true });
+type BusinessRecord = typeof businesses.$inferSelect;
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -52,7 +53,40 @@ const updateSchema = createSchema
   })
   .strict();
 
-function serializeBusiness(record: typeof businesses.$inferSelect) {
+function coerceBusinessRecord(
+  record: Pick<BusinessRecord, "id" | "ownerId" | "name" | "type"> &
+    Partial<BusinessRecord>
+): BusinessRecord {
+  return {
+    id: record.id,
+    ownerId: record.ownerId,
+    name: record.name,
+    type: record.type,
+    email: record.email ?? null,
+    phone: record.phone ?? null,
+    address: record.address ?? null,
+    city: record.city ?? null,
+    state: record.state ?? null,
+    zip: record.zip ?? null,
+    timezone: record.timezone ?? "America/Los_Angeles",
+    currency: record.currency ?? "USD",
+    defaultTaxRate: record.defaultTaxRate ?? "0",
+    appointmentBufferMinutes: record.appointmentBufferMinutes ?? 15,
+    nextInvoiceNumber: record.nextInvoiceNumber ?? 1,
+    onboardingComplete: record.onboardingComplete ?? null,
+    staffCount: record.staffCount ?? null,
+    operatingHours: record.operatingHours ?? null,
+    stripeCustomerId: record.stripeCustomerId ?? null,
+    stripeSubscriptionId: record.stripeSubscriptionId ?? null,
+    subscriptionStatus: record.subscriptionStatus ?? null,
+    trialEndsAt: record.trialEndsAt ?? null,
+    currentPeriodEnd: record.currentPeriodEnd ?? null,
+    createdAt: record.createdAt ?? new Date(),
+    updatedAt: record.updatedAt ?? new Date(),
+  };
+}
+
+function serializeBusiness(record: BusinessRecord) {
   return {
     ...record,
     website: null,
@@ -88,13 +122,79 @@ function isBusinessSchemaDriftError(error: unknown): boolean {
   return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
+async function loadBusinessById(id: string): Promise<BusinessRecord | null> {
+  try {
+    const [business] = await db.select().from(businesses).where(eq(businesses.id, id)).limit(1);
+    return business ?? null;
+  } catch (error) {
+    if (!isBusinessSchemaDriftError(error)) throw error;
+    warnOnce("businesses:get:schema", "business read falling back without full schema", {
+      businessId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const [legacyBusiness] = await db
+      .select({
+        id: businesses.id,
+        ownerId: businesses.ownerId,
+        name: businesses.name,
+        type: businesses.type,
+        email: businesses.email,
+        phone: businesses.phone,
+        address: businesses.address,
+        city: businesses.city,
+        state: businesses.state,
+        zip: businesses.zip,
+        staffCount: businesses.staffCount,
+        operatingHours: businesses.operatingHours,
+        createdAt: businesses.createdAt,
+      })
+      .from(businesses)
+      .where(eq(businesses.id, id))
+      .limit(1);
+    return legacyBusiness ? coerceBusinessRecord(legacyBusiness) : null;
+  }
+}
+
+async function loadBusinessByOwner(ownerId: string): Promise<BusinessRecord | null> {
+  try {
+    const [business] = await db.select().from(businesses).where(eq(businesses.ownerId, ownerId)).limit(1);
+    return business ?? null;
+  } catch (error) {
+    if (!isBusinessSchemaDriftError(error)) throw error;
+    warnOnce("businesses:list:schema", "business list falling back without full schema", {
+      ownerId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const [legacyBusiness] = await db
+      .select({
+        id: businesses.id,
+        ownerId: businesses.ownerId,
+        name: businesses.name,
+        type: businesses.type,
+        email: businesses.email,
+        phone: businesses.phone,
+        address: businesses.address,
+        city: businesses.city,
+        state: businesses.state,
+        zip: businesses.zip,
+        staffCount: businesses.staffCount,
+        operatingHours: businesses.operatingHours,
+        createdAt: businesses.createdAt,
+      })
+      .from(businesses)
+      .where(eq(businesses.ownerId, ownerId))
+      .limit(1);
+    return legacyBusiness ? coerceBusinessRecord(legacyBusiness) : null;
+  }
+}
+
 businessesRouter.get("/", requireAuth, async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   if (req.businessId) {
     if (!req.membershipRole || !roleHasPermission(req.membershipRole, "settings.read")) {
       throw new ForbiddenError("You do not have permission to perform this action.");
     }
-    const [currentBusiness] = await db.select().from(businesses).where(eq(businesses.id, req.businessId)).limit(1);
+    const currentBusiness = await loadBusinessById(req.businessId);
     res.json({ records: currentBusiness ? [serializeBusiness(currentBusiness)] : [] });
     return;
   }
@@ -108,7 +208,7 @@ businessesRouter.get("/", requireAuth, async (req: Request, res: Response) => {
     }
   }
   if (ownerId !== req.userId) throw new ForbiddenError("Access denied.");
-  const [business] = await db.select().from(businesses).where(eq(businesses.ownerId, ownerId)).limit(1);
+  const business = await loadBusinessByOwner(ownerId);
   if (!business) {
     res.json({ records: [] });
     return;
@@ -177,11 +277,7 @@ businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
 
 businessesRouter.get("/:id", requireAuth, async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
-  const [business] = await db
-    .select()
-    .from(businesses)
-    .where(eq(businesses.id, req.params.id))
-    .limit(1);
+  const business = await loadBusinessById(req.params.id);
   if (!business) throw new NotFoundError("Business not found.");
   if (!canAccessBusiness(req, business, "settings.read")) {
     throw new ForbiddenError("You do not have permission to perform this action.");
@@ -193,11 +289,7 @@ businessesRouter.patch("/:id", requireAuth, async (req: Request, res: Response) 
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
-  const [existing] = await db
-    .select()
-    .from(businesses)
-    .where(eq(businesses.id, req.params.id))
-    .limit(1);
+  const existing = await loadBusinessById(req.params.id);
   if (!existing) throw new NotFoundError("Business not found.");
   if (!canAccessBusiness(req, existing, "settings.write")) {
     throw new ForbiddenError("You do not have permission to perform this action.");
@@ -221,18 +313,60 @@ businessesRouter.patch("/:id", requireAuth, async (req: Request, res: Response) 
     updates.appointmentBufferMinutes = parsed.data.appointmentBufferMinutes ?? 15;
   }
 
-  const [updated] = await db
-    .update(businesses)
-    .set(updates)
-    .where(eq(businesses.id, req.params.id))
-    .returning();
+  let updated: BusinessRecord | undefined;
+  try {
+    [updated] = await db
+      .update(businesses)
+      .set(updates)
+      .where(eq(businesses.id, req.params.id))
+      .returning();
+  } catch (error) {
+    if (!isBusinessSchemaDriftError(error)) throw error;
+    warnOnce("businesses:update:schema", "business update falling back without full schema", {
+      businessId: req.params.id,
+      userId: req.userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const legacyUpdates: Record<string, unknown> = {};
+    if (parsed.data.name !== undefined) legacyUpdates.name = parsed.data.name;
+    if (parsed.data.type !== undefined) legacyUpdates.type = parsed.data.type;
+    if (parsed.data.email !== undefined) legacyUpdates.email = parsed.data.email ?? null;
+    if (parsed.data.phone !== undefined) legacyUpdates.phone = parsed.data.phone ?? null;
+    if (parsed.data.address !== undefined) legacyUpdates.address = parsed.data.address ?? null;
+    if (parsed.data.city !== undefined) legacyUpdates.city = parsed.data.city ?? null;
+    if (parsed.data.state !== undefined) legacyUpdates.state = parsed.data.state ?? null;
+    if (parsed.data.zip !== undefined) legacyUpdates.zip = parsed.data.zip ?? null;
+    if (parsed.data.staffCount !== undefined) legacyUpdates.staffCount = parsed.data.staffCount ?? null;
+    if (parsed.data.operatingHours !== undefined) legacyUpdates.operatingHours = parsed.data.operatingHours ?? null;
+
+    const [legacyUpdated] = await db
+      .update(businesses)
+      .set(legacyUpdates)
+      .where(eq(businesses.id, req.params.id))
+      .returning({
+        id: businesses.id,
+        ownerId: businesses.ownerId,
+        name: businesses.name,
+        type: businesses.type,
+        email: businesses.email,
+        phone: businesses.phone,
+        address: businesses.address,
+        city: businesses.city,
+        state: businesses.state,
+        zip: businesses.zip,
+        staffCount: businesses.staffCount,
+        operatingHours: businesses.operatingHours,
+        createdAt: businesses.createdAt,
+      });
+    updated = legacyUpdated ? coerceBusinessRecord(legacyUpdated) : undefined;
+  }
   if (!updated) throw new NotFoundError("Business not found.");
   res.json(serializeBusiness(updated));
 });
 
 businessesRouter.post("/:id/completeOnboarding", requireAuth, async (req: Request, res: Response) => {
   const id = req.params.id;
-  const [b] = await db.select().from(businesses).where(eq(businesses.id, id)).limit(1);
+  const b = await loadBusinessById(id);
   if (!b) throw new NotFoundError("Business not found.");
   if (!canAccessBusiness(req, b, "settings.write")) {
     throw new ForbiddenError("You do not have permission to perform this action.");
