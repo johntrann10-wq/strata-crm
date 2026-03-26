@@ -91,7 +91,7 @@ async function attachServiceToAppointment(
     serviceId: string;
     unitPrice: string | null;
   }
-) {
+): Promise<boolean> {
   const now = new Date();
   try {
     await tx.insert(appointmentServices).values({
@@ -102,10 +102,17 @@ async function attachServiceToAppointment(
       createdAt: now,
       updatedAt: now,
     });
-    return;
+    return true;
   } catch (error) {
     if (!isAppointmentSchemaDriftError(error)) throw error;
     const columns = await getAppointmentServiceColumns();
+    if (!columns.has("appointment_id") || !columns.has("service_id")) {
+      logger.warn("Skipping appointment service link on legacy schema", {
+        appointmentId,
+        serviceId,
+      });
+      return false;
+    }
     const fallbackValues: Partial<typeof appointmentServices.$inferInsert> = {};
     if (columns.has("id")) fallbackValues.id = randomUUID();
     if (columns.has("appointment_id")) fallbackValues.appointmentId = appointmentId;
@@ -115,6 +122,7 @@ async function attachServiceToAppointment(
     if (columns.has("created_at")) fallbackValues.createdAt = now;
     if (columns.has("updated_at")) fallbackValues.updatedAt = now;
     await tx.insert(appointmentServices).values(fallbackValues as typeof appointmentServices.$inferInsert);
+    return true;
   }
 }
 
@@ -206,12 +214,22 @@ async function buildAppointmentConfirmationPayload(appointmentId: string, bid: s
 
   if (!appointmentRow) return null;
 
-  const serviceRows = await db
-    .select({ name: services.name })
-    .from(appointmentServices)
-    .innerJoin(services, eq(appointmentServices.serviceId, services.id))
-    .where(eq(appointmentServices.appointmentId, appointmentId))
-    .orderBy(asc(services.name));
+  let serviceRows: Array<{ name: string | null }> = [];
+  try {
+    serviceRows = await db
+      .select({ name: services.name })
+      .from(appointmentServices)
+      .innerJoin(services, eq(appointmentServices.serviceId, services.id))
+      .where(eq(appointmentServices.appointmentId, appointmentId))
+      .orderBy(asc(services.name));
+  } catch (error) {
+    if (!isAppointmentSchemaDriftError(error)) throw error;
+    logger.warn("Appointment confirmation service summary unavailable on legacy schema", {
+      appointmentId,
+      businessId: bid,
+      error,
+    });
+  }
 
   return {
     appointmentId: appointmentRow.id,
@@ -584,6 +602,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   const appointmentId = randomUUID();
   const created = await db.transaction(async (tx) => {
     let selectedServicesTotal = 0;
+    let attachedAnyService = false;
     let apt: typeof appointments.$inferSelect | undefined;
     try {
       [apt] = await tx
@@ -646,21 +665,35 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
         const [svc] = await tx.select().from(services).where(and(eq(services.id, sid), eq(services.businessId, bid))).limit(1);
         if (!svc) continue;
         selectedServicesTotal += Number(svc.price ?? 0);
-        await attachServiceToAppointment(tx, {
+        const attached = await attachServiceToAppointment(tx, {
           appointmentId: apt.id,
           serviceId: sid,
           unitPrice: svc.price ?? null,
         });
+        attachedAnyService ||= attached;
       }
-      try {
-        await recalculateAppointmentTotal(tx, apt.id);
-      } catch (error) {
-        if (!isAppointmentSchemaDriftError(error)) throw error;
-        logger.warn("Appointment total recalculation falling back on legacy schema", {
-          appointmentId: apt.id,
-          businessId: bid,
-          error,
-        });
+      if (attachedAnyService) {
+        try {
+          await recalculateAppointmentTotal(tx, apt.id);
+        } catch (error) {
+          if (!isAppointmentSchemaDriftError(error)) throw error;
+          logger.warn("Appointment total recalculation falling back on legacy schema", {
+            appointmentId: apt.id,
+            businessId: bid,
+            error,
+          });
+          const appointmentColumns = await getAppointmentColumns();
+          if (appointmentColumns.has("total_price")) {
+            await tx
+              .update(appointments)
+              .set({
+                totalPrice: selectedServicesTotal.toFixed(2),
+                updatedAt: new Date(),
+              })
+              .where(eq(appointments.id, apt.id));
+          }
+        }
+      } else {
         const appointmentColumns = await getAppointmentColumns();
         if (appointmentColumns.has("total_price")) {
           await tx
