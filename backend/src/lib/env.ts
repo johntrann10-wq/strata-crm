@@ -23,6 +23,31 @@ export function isSmtpConfigured(): boolean {
   return !!(host && port && user && pass);
 }
 
+/** True when Resend env is set enough to send mail over HTTPS. */
+export function isResendConfigured(): boolean {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.RESEND_FROM?.trim() || process.env.SMTP_FROM?.trim();
+  return !!(apiKey && from);
+}
+
+export function isEmailConfigured(): boolean {
+  return isResendConfigured() || isSmtpConfigured();
+}
+
+export function getConfiguredSmtpSender(): string | null {
+  const from = process.env.SMTP_FROM?.trim();
+  if (from) return from;
+  const user = process.env.SMTP_USER?.trim();
+  if (user) return user;
+  return null;
+}
+
+export function getConfiguredEmailSender(): string | null {
+  const resendFrom = process.env.RESEND_FROM?.trim();
+  if (resendFrom) return resendFrom;
+  return getConfiguredSmtpSender();
+}
+
 /** True when Stripe secret key looks like a real key (sk_…). */
 export function isStripeConfigured(): boolean {
   const key = process.env.STRIPE_SECRET_KEY?.trim();
@@ -63,8 +88,21 @@ function logOptionalServices(): void {
   if (!isStripeConfigured()) {
     logger.info("Stripe disabled");
   }
-  if (!isSmtpConfigured()) {
-    logger.info("SMTP disabled");
+  if (!isEmailConfigured()) {
+    logger.info("Transactional email disabled");
+  } else {
+    if (isResendConfigured()) {
+      logger.info("Resend enabled", {
+        sender: getConfiguredEmailSender(),
+      });
+    }
+    if (isSmtpConfigured()) {
+      logger.info("SMTP enabled", {
+        host: process.env.SMTP_HOST?.trim() ?? null,
+        port: process.env.SMTP_PORT?.trim() ?? null,
+        sender: getConfiguredSmtpSender(),
+      });
+    }
   }
   const cron = process.env.CRON_SECRET?.trim();
   if (!cron) {

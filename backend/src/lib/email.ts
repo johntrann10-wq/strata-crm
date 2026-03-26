@@ -10,7 +10,7 @@ import { eq, and, isNull, isNotNull, sql } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { escapeHtml } from "./escape.js";
 import { getBuiltinTemplate } from "./emailTemplates.js";
-import { isSmtpConfigured } from "./env.js";
+import { getConfiguredEmailSender, isEmailConfigured, isResendConfigured, isSmtpConfigured } from "./env.js";
 
 let transporter: nodemailer.Transporter | null = null;
 let fallbackTransporter: nodemailer.Transporter | null = null;
@@ -88,10 +88,8 @@ function getFallbackTransporter(): nodemailer.Transporter {
 }
 
 function getFromAddress(): string {
-  const from = process.env.SMTP_FROM?.trim();
-  if (from) return from;
-  const fallback = process.env.SMTP_USER?.trim();
-  if (fallback) return fallback;
+  const configured = getConfiguredEmailSender();
+  if (configured) return configured;
   throw new Error("SMTP sender address is not configured");
 }
 
@@ -177,10 +175,6 @@ export async function sendTemplatedEmailInternal(
   const subject = options.subject ?? (template ? replaceVars(template.subject, vars, false) : "Notification");
   const bodyHtml = template ? replaceVars(template.bodyHtml, vars, true) : "<p>No template found.</p>";
   const bodyText = template?.bodyText ? replaceVars(template.bodyText, vars, false) : undefined;
-  const t = getTransporter();
-  if (!t) {
-    throw new Error("SMTP is not configured");
-  }
   const recipient = options.to.trim();
   if (!recipient) {
     throw new Error("Recipient email address is required");
@@ -192,6 +186,14 @@ export async function sendTemplatedEmailInternal(
     html: bodyHtml,
     text: bodyText,
   };
+  if (isResendConfigured()) {
+    await sendViaResend(payload);
+    return;
+  }
+  const t = getTransporter();
+  if (!t) {
+    throw new Error("Transactional email is not configured");
+  }
   try {
     await sendMailWithTimeout(t, payload, PRIMARY_SEND_TIMEOUT_MS);
   } catch (error) {
@@ -211,6 +213,43 @@ export async function sendTemplatedEmailInternal(
     }
     throw error;
   }
+}
+
+async function sendViaResend(payload: {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("Resend is not configured");
+  }
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: payload.from,
+      to: [payload.to],
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+    }),
+  });
+  if (response.ok) return;
+  const bodyText = await response.text().catch(() => "");
+  let detail = bodyText;
+  try {
+    const parsed = JSON.parse(bodyText) as { message?: string; error?: { message?: string } };
+    detail = parsed.error?.message ?? parsed.message ?? bodyText;
+  } catch {
+    // keep raw body text
+  }
+  throw new Error(`Resend request failed (${response.status}): ${detail || response.statusText}`);
 }
 
 export async function sendTemplatedEmail(
@@ -543,8 +582,8 @@ const MAX_RETRIES = 5;
 
 /** Retry failed email notifications for a business. Updates log rows with retry count and last retry time. */
 export async function retryFailedEmailNotifications(businessId: string): Promise<{ retried: number; succeeded: number }> {
-  if (!isSmtpConfigured()) {
-    logger.debug("SMTP disabled: skip notification retries", { businessId });
+  if (!isEmailConfigured()) {
+    logger.debug("Transactional email disabled: skip notification retries", { businessId });
     return { retried: 0, succeeded: 0 };
   }
   const failed = await db

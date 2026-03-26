@@ -13,7 +13,7 @@ import { ConflictError } from "../lib/errors.js";
 import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
 import { createRequestActivityLog } from "../lib/activity.js";
 import { sendAppointmentConfirmation } from "../lib/email.js";
-import { isSmtpConfigured } from "../lib/env.js";
+import { isEmailConfigured } from "../lib/env.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
@@ -199,7 +199,7 @@ async function sendAppointmentConfirmationForRecord(
     logger.warn("Appointment confirmation skipped: client email missing", { appointmentId, businessId: bid });
     return { deliveryStatus: "missing_email", deliveryError: "Client does not have an email address.", recipient: null };
   }
-  if (!isSmtpConfigured()) {
+  if (!isEmailConfigured()) {
     logger.error("Appointment confirmation blocked: SMTP is not configured", { appointmentId, businessId: bid });
     return {
       deliveryStatus: "smtp_disabled",

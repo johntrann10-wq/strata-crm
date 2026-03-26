@@ -9,7 +9,7 @@ import { requireTenant } from "../middleware/tenant.js";
 import { logger } from "../lib/logger.js";
 import { renderInvoiceHtml, type InvoiceTemplateData } from "../lib/invoiceTemplate.js";
 import { createRequestActivityLog } from "../lib/activity.js";
-import { isSmtpConfigured } from "../lib/env.js";
+import { isEmailConfigured } from "../lib/env.js";
 import { sendInvoiceEmail } from "../lib/email.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 
@@ -622,7 +622,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
     });
     return;
   }
-  if (!isSmtpConfigured()) {
+  if (!isEmailConfigured()) {
     logger.error("Invoice send blocked: SMTP is not configured", { invoiceId: existing.id, businessId: bid });
     await createRequestActivityLog(req, {
       businessId: bid,
@@ -639,7 +639,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
     });
     res.json({
       ok: false,
-      message: "Transactional email is not configured. Set SMTP_* environment variables.",
+      message: "Transactional email is not configured. Set RESEND_* or SMTP_* environment variables.",
       code: "EMAIL_NOT_CONFIGURED",
       deliveryStatus: "smtp_disabled",
       deliveryError: "Transactional email is not configured.",
