@@ -150,6 +150,54 @@ const previewAppointments = [
   { time: "1:00 PM", title: "Brake pad and rotor replacement", customer: "Chris M. | 2018 F-150", status: "In progress" },
 ];
 
+const homeSchema = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      name: "Strata CRM",
+      url: "https://stratacrm.app",
+      logo: "https://stratacrm.app/social-preview.png",
+      sameAs: [],
+    },
+    {
+      "@type": "SoftwareApplication",
+      name: "Strata CRM",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      offers: {
+        "@type": "Offer",
+        price: "29",
+        priceCurrency: "USD",
+      },
+      description: homeDescription,
+      url: "https://stratacrm.app/",
+      audience: {
+        "@type": "Audience",
+        audienceType: "Automotive service businesses",
+      },
+      featureList: [
+        "Appointment scheduling",
+        "Client and vehicle CRM",
+        "Quotes and estimates",
+        "Invoices and payment tracking",
+        "Job workflow visibility",
+      ],
+    },
+    {
+      "@type": "FAQPage",
+      mainEntity: objections.map((item) => ({
+        "@type": "Question",
+        name: item.question,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: item.answer,
+        },
+      })),
+    },
+  ],
+};
+
 export function meta() {
   return [
     { title: homeTitle },
@@ -176,6 +224,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeSchema) }} />
       <header className="sticky top-0 z-20 border-b border-orange-100/80 bg-white/88 backdrop-blur supports-[backdrop-filter]:bg-white/72">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3 sm:px-6 lg:px-8">
           <Link to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-gray-950">
@@ -526,6 +575,38 @@ export default function LandingPage() {
               >
                 {type}
               </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <div className="mx-auto max-w-6xl rounded-[30px] border border-orange-100 bg-white/94 p-6 shadow-[0_12px_50px_rgba(15,23,42,0.05)] sm:p-8 lg:p-10">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Compare use cases and alternatives</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
+              Research the exact software category or comparison that matches your search.
+            </h2>
+            <p className="mt-4 text-lg leading-8 text-gray-600">
+              If you are comparing software by business type, workflow, or alternative, start with the pages below and then move into the route that best matches your shop.
+            </p>
+          </div>
+          <div className="mt-10 flex flex-wrap justify-center gap-3 text-sm">
+            {[
+              { to: "/strata-vs-orbisx", label: "Strata vs OrbisX" },
+              { to: "/orbisx-alternative", label: "OrbisX Alternative" },
+              { to: "/best-crm-for-auto-detailing-shops", label: "Best CRM for Auto Detailing Shops" },
+              { to: "/best-window-tint-shop-software", label: "Best Window Tint Shop Software" },
+              { to: "/best-ppf-shop-software", label: "Best PPF Shop Software" },
+              { to: "/best-shop-scheduling-software-for-automotive-businesses", label: "Best Shop Scheduling Software" },
+            ].map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className="rounded-full border border-orange-200 bg-orange-50 px-4 py-2 font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-100"
+              >
+                {item.label}
+              </Link>
             ))}
           </div>
         </div>

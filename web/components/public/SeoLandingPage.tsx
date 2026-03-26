@@ -15,6 +15,7 @@ export function buildSeoMeta(page: SeoPageConfig) {
   return [
     { title: page.seoTitle },
     { name: "description", content: page.seoDescription },
+    { name: "robots", content: "index,follow" },
     { property: "og:title", content: page.seoTitle },
     { property: "og:description", content: page.seoDescription },
     { property: "og:url", content: url },
@@ -25,8 +26,54 @@ export function buildSeoMeta(page: SeoPageConfig) {
 }
 
 export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
+  const pageSchema = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        name: page.seoTitle,
+        description: page.seoDescription,
+        url: `https://stratacrm.app${page.path}`,
+      },
+      {
+        "@type": "SoftwareApplication",
+        name: "Strata CRM",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        description: page.seoDescription,
+        audience: {
+          "@type": "Audience",
+          audienceType: page.audience,
+        },
+        offers: {
+          "@type": "Offer",
+          price: "29",
+          priceCurrency: "USD",
+        },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: "https://stratacrm.app/",
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: page.navLabel,
+            item: `https://stratacrm.app${page.path}`,
+          },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }} />
       <section className="relative overflow-hidden px-5 pb-14 pt-14 sm:px-6 sm:pb-18 lg:px-8 lg:pb-24 lg:pt-20">
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] opacity-90"
@@ -122,6 +169,9 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
               Software that helps the shop move from intake to payment with less friction.
             </h2>
+            <p className="mt-4 text-lg leading-8 text-gray-600">
+              This page is designed for buyers actively evaluating software, so the focus stays on day-to-day workflow fit, not generic feature fluff.
+            </p>
           </div>
           <div className="mt-10 grid gap-5 lg:grid-cols-3">
             {page.workflowSteps.map((step, index) => (

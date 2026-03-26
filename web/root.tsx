@@ -162,12 +162,16 @@ export const loader = async ({ context }: Route.LoaderArgs) => {
 
 export default function App({ loaderData }: Route.ComponentProps) {
   const { gadgetConfig, csrfToken } = loaderData;
+  const location = useLocation();
+  const canonicalPath = location.pathname === "/" ? "/" : location.pathname.replace(/\/+$/, "");
+  const canonicalUrl = `${siteUrl}${canonicalPath || "/"}`;
 
   return (
     <html lang="en" className="light">
       <head>
         <Meta />
         <Links />
+        <link rel="canonical" href={canonicalUrl} />
         {!isProduction && <script type="module" src="/@vite/client" async />}
       </head>
       <body>
