@@ -11,6 +11,7 @@ import { renderInvoiceHtml, type InvoiceTemplateData } from "../lib/invoiceTempl
 import { createRequestActivityLog } from "../lib/activity.js";
 import { isSmtpConfigured } from "../lib/env.js";
 import { sendInvoiceEmail } from "../lib/email.js";
+import { wrapAsync } from "../lib/asyncHandler.js";
 
 export const invoicesRouter = Router({ mergeParams: true });
 
@@ -25,7 +26,9 @@ const createSchema = z.object({
   /** Optional: validated against clientId (does not auto-copy lines — UI sends lineItems). */
   quoteId: z.string().uuid().optional(),
   status: z.enum(["draft", "sent"]).optional(),
-  lineItems: z.array(z.object({ description: z.string(), quantity: z.number(), unitPrice: z.number() })).optional(),
+  lineItems: z
+    .array(z.object({ description: z.string().trim().min(1), quantity: z.number(), unitPrice: z.number() }))
+    .optional(),
   discountAmount: z.number().min(0).optional(),
   taxRate: z.coerce.number().min(0).max(100).optional(),
   notes: z.string().optional(),
@@ -431,6 +434,21 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
+  let appointment:
+    | {
+        id: string;
+        clientId: string;
+        vehicleId: string | null;
+      }
+    | undefined;
+  let quote:
+    | {
+        id: string;
+        clientId: string;
+        vehicleId: string | null;
+        appointmentId: string | null;
+      }
+    | undefined;
 
   // Tenancy: client must belong to this business
   const [client] = await db.select().from(clients).where(and(eq(clients.id, parsed.data.clientId), eq(clients.businessId, bid))).limit(1);
@@ -444,12 +462,32 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
       .limit(1);
     if (!apt) throw new BadRequestError("Appointment not found.");
     if (apt.clientId !== parsed.data.clientId) throw new BadRequestError("Invoice client must match the appointment client.");
+    appointment = {
+      id: apt.id,
+      clientId: apt.clientId,
+      vehicleId: apt.vehicleId,
+    };
   }
 
   if (parsed.data.quoteId) {
     const [q] = await db.select().from(quotes).where(and(eq(quotes.id, parsed.data.quoteId), eq(quotes.businessId, bid))).limit(1);
     if (!q) throw new BadRequestError("Quote not found.");
     if (q.clientId !== parsed.data.clientId) throw new BadRequestError("Invoice client must match the quote client.");
+    quote = {
+      id: q.id,
+      clientId: q.clientId,
+      vehicleId: q.vehicleId,
+      appointmentId: q.appointmentId,
+    };
+  }
+
+  if (appointment && quote) {
+    if (quote.appointmentId && quote.appointmentId !== appointment.id) {
+      throw new BadRequestError("Invoice quote must match the linked appointment.");
+    }
+    if (quote.vehicleId && appointment.vehicleId && quote.vehicleId !== appointment.vehicleId) {
+      throw new BadRequestError("Invoice quote vehicle must match the linked appointment vehicle.");
+    }
   }
 
   const lineItems = parsed.data.lineItems ?? [];
@@ -541,7 +579,7 @@ invoicesRouter.post("/:id/void", requireAuth, requireTenant, async (req: Request
   res.json(updated);
 });
 
-invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, async (req: Request, res: Response) => {
+invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const parsed = sendInvoiceSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -562,10 +600,37 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, async (req:
     .limit(1);
   if (!existing) throw new NotFoundError("Invoice not found.");
   if (!existing.clientEmail?.trim()) {
-    throw new BadRequestError("Client does not have an email address.");
+    logger.warn("Invoice send blocked: client email missing", { invoiceId: existing.id, businessId: bid });
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "invoice.send_failed",
+      entityType: "invoice",
+      entityId: existing.id,
+      metadata: {
+        invoiceNumber: existing.invoiceNumber ?? null,
+        recipient: null,
+        message: parsed.data.message ?? null,
+        deliveryStatus: "missing_email",
+        deliveryError: "Client does not have an email address.",
+      },
+    });
+    throw new AppError("Client does not have an email address.", 400, "EMAIL_MISSING_RECIPIENT");
   }
   if (!isSmtpConfigured()) {
     logger.error("Invoice send blocked: SMTP is not configured", { invoiceId: existing.id, businessId: bid });
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "invoice.send_failed",
+      entityType: "invoice",
+      entityId: existing.id,
+      metadata: {
+        invoiceNumber: existing.invoiceNumber ?? null,
+        recipient: existing.clientEmail.trim(),
+        message: parsed.data.message ?? null,
+        deliveryStatus: "smtp_disabled",
+        deliveryError: "Transactional email is not configured.",
+      },
+    });
     throw new AppError("Transactional email is not configured. Set SMTP_* environment variables.", 503, "EMAIL_NOT_CONFIGURED");
   }
 
@@ -616,4 +681,4 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, async (req:
     },
   });
   res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null });
-});
+}));

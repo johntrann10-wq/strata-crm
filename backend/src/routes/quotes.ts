@@ -12,6 +12,8 @@ import { createRequestActivityLog } from "../lib/activity.js";
 import { isSmtpConfigured } from "../lib/env.js";
 import { sendQuoteEmail, sendQuoteFollowUpEmail } from "../lib/email.js";
 import { logger } from "../lib/logger.js";
+import { renderQuoteHtml, type QuoteTemplateData } from "../lib/quoteTemplate.js";
+import { wrapAsync } from "../lib/asyncHandler.js";
 
 export const quotesRouter = Router({ mergeParams: true });
 
@@ -247,6 +249,103 @@ quotesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: R
   });
 });
 
+quotesRouter.get("/:id/html", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const [row] = await db
+    .select()
+    .from(quotes)
+    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
+    .limit(1);
+  if (!row) throw new NotFoundError("Quote not found.");
+
+  const [businessRow] = await db
+    .select({
+      name: businesses.name,
+      email: businesses.email,
+      phone: businesses.phone,
+      address: businesses.address,
+      city: businesses.city,
+      state: businesses.state,
+      zip: businesses.zip,
+      timezone: businesses.timezone,
+    })
+    .from(businesses)
+    .where(eq(businesses.id, bid))
+    .limit(1);
+
+  const [clientRow] = await db
+    .select({
+      firstName: clients.firstName,
+      lastName: clients.lastName,
+      email: clients.email,
+      phone: clients.phone,
+      address: clients.address,
+    })
+    .from(clients)
+    .where(eq(clients.id, row.clientId))
+    .limit(1);
+
+  let vehicleRow: QuoteTemplateData["vehicle"] = null;
+  if (row.vehicleId) {
+    const [vehicle] = await db
+      .select({
+        year: vehicles.year,
+        make: vehicles.make,
+        model: vehicles.model,
+        color: vehicles.color,
+        licensePlate: vehicles.licensePlate,
+      })
+      .from(vehicles)
+      .where(and(eq(vehicles.id, row.vehicleId), eq(vehicles.businessId, bid)))
+      .limit(1);
+    vehicleRow = vehicle ?? null;
+  }
+
+  const lineItemsRows = await db
+    .select()
+    .from(quoteLineItems)
+    .where(eq(quoteLineItems.quoteId, row.id))
+    .orderBy(desc(quoteLineItems.createdAt));
+
+  const html = renderQuoteHtml({
+    status: row.status,
+    subtotal: row.subtotal,
+    taxRate: row.taxRate,
+    taxAmount: row.taxAmount,
+    total: row.total,
+    notes: row.notes,
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt,
+    business: {
+      name: businessRow?.name,
+      email: businessRow?.email,
+      phone: businessRow?.phone,
+      address: [businessRow?.address, businessRow?.city, businessRow?.state, businessRow?.zip].filter(Boolean).join(", "),
+      city: businessRow?.city,
+      state: businessRow?.state,
+      zip: businessRow?.zip,
+      timezone: businessRow?.timezone,
+    },
+    client: {
+      firstName: clientRow?.firstName,
+      lastName: clientRow?.lastName,
+      email: clientRow?.email,
+      phone: clientRow?.phone,
+      address: clientRow?.address,
+    },
+    vehicle: vehicleRow,
+    lineItems: lineItemsRows.map((item) => ({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total,
+    })),
+  });
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
+});
+
 const createQuoteSchema = z.object({
   clientId: z.string().uuid().optional(),
   client: z.object({ _link: z.string().uuid() }).optional(),
@@ -260,6 +359,15 @@ const createQuoteSchema = z.object({
   taxAmount: z.coerce.number().optional(),
   total: z.coerce.number().optional(),
   status: z.enum(QUOTE_STATUSES).optional(),
+  lineItems: z
+    .array(
+      z.object({
+        description: z.string().trim().min(1),
+        quantity: z.coerce.number().positive(),
+        unitPrice: z.coerce.number().min(0),
+      })
+    )
+    .optional(),
 });
 
 quotesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
@@ -291,21 +399,42 @@ quotesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Res
     if (!Number.isNaN(d.getTime())) expiresAt = d;
   }
 
-  const [created] = await db
-    .insert(quotes)
-    .values({
-      businessId: bid,
-      clientId,
-      vehicleId,
-      notes: parsed.data.notes ?? null,
-      expiresAt,
-      taxRate: String(taxRate),
-      subtotal: "0",
-      taxAmount: "0",
-      total: "0",
-      status: parsed.data.status ?? "draft",
-    })
-    .returning();
+  const created = await db.transaction(async (tx) => {
+    const [quote] = await tx
+      .insert(quotes)
+      .values({
+        businessId: bid,
+        clientId,
+        vehicleId,
+        notes: parsed.data.notes ?? null,
+        expiresAt,
+        taxRate: String(taxRate),
+        subtotal: "0",
+        taxAmount: "0",
+        total: "0",
+        status: parsed.data.status ?? "draft",
+      })
+      .returning();
+    if (!quote) throw new BadRequestError("Failed to create quote.");
+
+    for (const item of parsed.data.lineItems ?? []) {
+      await tx.insert(quoteLineItems).values({
+        quoteId: quote.id,
+        description: item.description.trim(),
+        quantity: String(item.quantity),
+        unitPrice: String(item.unitPrice),
+        total: String(item.quantity * item.unitPrice),
+      });
+    }
+
+    if ((parsed.data.lineItems?.length ?? 0) > 0) {
+      await recalculateQuoteTotals(tx, quote.id);
+    }
+
+    const [freshQuote] = await tx.select().from(quotes).where(eq(quotes.id, quote.id)).limit(1);
+    if (!freshQuote) throw new BadRequestError("Failed to load created quote.");
+    return freshQuote;
+  });
   if (!created) throw new BadRequestError("Failed to create quote.");
   await createRequestActivityLog(req, {
     businessId: bid,
@@ -344,14 +473,39 @@ quotesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res:
     const [c] = await db.select().from(clients).where(and(eq(clients.id, patch.clientId), eq(clients.businessId, bid))).limit(1);
     if (!c) throw new BadRequestError("Client not found.");
   }
-  if (patch.vehicleId) {
-    const cid = patch.clientId ?? existing.clientId;
+
+  const effectiveClientId = patch.clientId ?? existing.clientId;
+  const effectiveVehicleId = patch.vehicleId !== undefined ? patch.vehicleId : existing.vehicleId;
+  const effectiveAppointmentId = patch.appointmentId !== undefined ? patch.appointmentId : existing.appointmentId;
+
+  if (effectiveVehicleId) {
     const [v] = await db
       .select()
       .from(vehicles)
-      .where(and(eq(vehicles.id, patch.vehicleId), eq(vehicles.businessId, bid), eq(vehicles.clientId, cid)))
+      .where(and(eq(vehicles.id, effectiveVehicleId), eq(vehicles.businessId, bid), eq(vehicles.clientId, effectiveClientId)))
       .limit(1);
     if (!v) throw new BadRequestError("Vehicle not found for this client.");
+  }
+  if (effectiveAppointmentId) {
+    if (!effectiveVehicleId) {
+      throw new BadRequestError("Appointment-linked quotes must keep a vehicle attached.");
+    }
+    const [appointment] = await db
+      .select({
+        id: appointments.id,
+        clientId: appointments.clientId,
+        vehicleId: appointments.vehicleId,
+      })
+      .from(appointments)
+      .where(and(eq(appointments.id, effectiveAppointmentId), eq(appointments.businessId, bid)))
+      .limit(1);
+    if (!appointment) throw new BadRequestError("Appointment not found.");
+    if (appointment.clientId !== effectiveClientId) {
+      throw new BadRequestError("Quote client must match the linked appointment client.");
+    }
+    if (!appointment.vehicleId || appointment.vehicleId !== effectiveVehicleId) {
+      throw new BadRequestError("Quote vehicle must match the linked appointment vehicle.");
+    }
   }
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (patch.status != null) updates.status = patch.status;
@@ -391,7 +545,7 @@ quotesRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res
   res.status(204).end();
 });
 
-quotesRouter.post("/:id/send", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const parsed = sendQuoteSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -417,10 +571,35 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, async (req: Request, 
     .limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
   if (!existing.clientEmail?.trim()) {
-    throw new BadRequestError("Client does not have an email address.");
+    logger.warn("Quote send blocked: client email missing", { quoteId: existing.id, businessId: bid });
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "quote.send_failed",
+      entityType: "quote",
+      entityId: existing.id,
+      metadata: {
+        recipient: null,
+        message: parsed.data.message ?? null,
+        deliveryStatus: "missing_email",
+        deliveryError: "Client does not have an email address.",
+      },
+    });
+    throw new AppError("Client does not have an email address.", 400, "EMAIL_MISSING_RECIPIENT");
   }
   if (!isSmtpConfigured()) {
     logger.error("Quote send blocked: SMTP is not configured", { quoteId: existing.id, businessId: bid });
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "quote.send_failed",
+      entityType: "quote",
+      entityId: existing.id,
+      metadata: {
+        recipient: existing.clientEmail.trim(),
+        message: parsed.data.message ?? null,
+        deliveryStatus: "smtp_disabled",
+        deliveryError: "Transactional email is not configured.",
+      },
+    });
     throw new AppError("Transactional email is not configured. Set SMTP_* environment variables.", 503, "EMAIL_NOT_CONFIGURED");
   }
 
@@ -474,9 +653,9 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, async (req: Request, 
     },
   });
   res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null });
-});
+}));
 
-quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const parsed = sendQuoteSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -501,10 +680,35 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, async (req: R
     .limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
   if (!existing.clientEmail?.trim()) {
-    throw new BadRequestError("Client does not have an email address.");
+    logger.warn("Quote follow-up blocked: client email missing", { quoteId: existing.id, businessId: bid });
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "quote.follow_up_failed",
+      entityType: "quote",
+      entityId: existing.id,
+      metadata: {
+        recipient: null,
+        message: parsed.data.message ?? null,
+        deliveryStatus: "missing_email",
+        deliveryError: "Client does not have an email address.",
+      },
+    });
+    throw new AppError("Client does not have an email address.", 400, "EMAIL_MISSING_RECIPIENT");
   }
   if (!isSmtpConfigured()) {
     logger.error("Quote follow-up blocked: SMTP is not configured", { quoteId: existing.id, businessId: bid });
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "quote.follow_up_failed",
+      entityType: "quote",
+      entityId: existing.id,
+      metadata: {
+        recipient: existing.clientEmail.trim(),
+        message: parsed.data.message ?? null,
+        deliveryStatus: "smtp_disabled",
+        deliveryError: "Transactional email is not configured.",
+      },
+    });
     throw new AppError("Transactional email is not configured. Set SMTP_* environment variables.", 503, "EMAIL_NOT_CONFIGURED");
   }
 
@@ -558,7 +762,7 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, async (req: R
     },
   });
   res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null });
-});
+}));
 
 const scheduleFromQuoteSchema = z.object({
   startTime: z.string().datetime(),
