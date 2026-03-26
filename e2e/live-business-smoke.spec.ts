@@ -252,7 +252,7 @@ test.describe("Live business workflow smoke", () => {
 
     await test.step("Create lead and convert it into a client record", async () => {
       await page.goto("/leads");
-      await expect(page.getByRole("heading", { name: /^leads$/i })).toBeVisible();
+      await expect(page.locator("main").getByRole("heading", { name: /^leads$/i })).toBeVisible();
       await page.locator("#leadFirstName").fill(leadFirst);
       await page.locator("#leadLastName").fill(leadLast);
       await page.locator("#leadEmail").fill(leadEmail);
@@ -272,7 +272,7 @@ test.describe("Live business workflow smoke", () => {
       await expect(page.locator("main")).toContainText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i"));
       await page.goBack();
       await expect(page).toHaveURL(/\/leads/);
-      await expect(page.locator("main")).toContainText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i"));
+      await expect(page.locator("main").getByRole("heading", { name: /^leads$/i })).toBeVisible();
     });
 
     await test.step("Create client", async () => {

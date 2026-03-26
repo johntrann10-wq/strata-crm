@@ -43,8 +43,21 @@ function isAppointmentSchemaDriftError(error: unknown): boolean {
   return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
+function isServiceSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
 let cachedAppointmentColumns: Set<string> | null = null;
 let cachedAppointmentServiceColumns: Set<string> | null = null;
+let cachedServiceColumns: Set<string> | null = null;
 
 async function getAppointmentColumns(): Promise<Set<string>> {
   if (cachedAppointmentColumns) return cachedAppointmentColumns;
@@ -78,6 +91,63 @@ async function getAppointmentServiceColumns(): Promise<Set<string>> {
       .filter((value): value is string => typeof value === "string")
   );
   return cachedAppointmentServiceColumns;
+}
+
+async function getServiceColumns(): Promise<Set<string>> {
+  if (cachedServiceColumns) return cachedServiceColumns;
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'services'
+  `);
+  const resultWithRows = result as unknown as { rows?: Array<{ column_name?: string }> };
+  const rows = Array.isArray(resultWithRows.rows) ? resultWithRows.rows : [];
+  cachedServiceColumns = new Set(
+    rows
+      .map((row) => row?.column_name)
+      .filter((value): value is string => typeof value === "string")
+  );
+  return cachedServiceColumns;
+}
+
+async function getServiceForBusinessSafe(
+  tx: any,
+  serviceId: string,
+  bid: string
+): Promise<{ id: string; name: string; price: string | null } | null> {
+  try {
+    const [service] = await tx
+      .select({
+        id: services.id,
+        name: services.name,
+        price: services.price,
+      })
+      .from(services)
+      .where(and(eq(services.id, serviceId), eq(services.businessId, bid)))
+      .limit(1);
+    return service ?? null;
+  } catch (error) {
+    if (!isServiceSchemaDriftError(error)) throw error;
+    const columns = await getServiceColumns();
+    if (!columns.has("id") || !columns.has("business_id") || !columns.has("name")) {
+      logger.warn("Appointment service lookup unavailable on legacy schema", {
+        businessId: bid,
+        serviceId,
+        error,
+      });
+      return null;
+    }
+    const [service] = await tx
+      .select({
+        id: services.id,
+        name: services.name,
+        price: services.price,
+      })
+      .from(services)
+      .where(and(eq(services.id, serviceId), eq(services.businessId, bid)))
+      .limit(1);
+    return service ?? null;
+  }
 }
 
 async function attachServiceToAppointment(
@@ -681,7 +751,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
 
     if (parsed.data.serviceIds && parsed.data.serviceIds.length > 0) {
       for (const sid of parsed.data.serviceIds) {
-        const [svc] = await tx.select().from(services).where(and(eq(services.id, sid), eq(services.businessId, bid))).limit(1);
+        const svc = await getServiceForBusinessSafe(tx, sid, bid);
         if (!svc) continue;
         selectedServicesTotal += Number(svc.price ?? 0);
         const attached = await attachServiceToAppointment(tx, {
