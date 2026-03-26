@@ -606,7 +606,8 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
         deliveryError: "Transactional email is not configured.",
       },
     });
-    res.status(503).json({
+    res.json({
+      ok: false,
       message: "Transactional email is not configured. Set SMTP_* environment variables.",
       code: "EMAIL_NOT_CONFIGURED",
       deliveryStatus: "smtp_disabled",
@@ -642,7 +643,8 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
         deliveryError,
       },
     });
-    res.status(502).json({
+    res.json({
+      ok: false,
       message: `Quote email failed to send: ${deliveryError}`,
       code: "EMAIL_SEND_FAILED",
       deliveryStatus: "email_failed",
@@ -733,7 +735,8 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
         deliveryError: "Transactional email is not configured.",
       },
     });
-    res.status(503).json({
+    res.json({
+      ok: false,
       message: "Transactional email is not configured. Set SMTP_* environment variables.",
       code: "EMAIL_NOT_CONFIGURED",
       deliveryStatus: "smtp_disabled",
@@ -769,7 +772,8 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
         deliveryError,
       },
     });
-    res.status(502).json({
+    res.json({
+      ok: false,
       message: `Quote follow-up email failed to send: ${deliveryError}`,
       code: "EMAIL_SEND_FAILED",
       deliveryStatus: "email_failed",

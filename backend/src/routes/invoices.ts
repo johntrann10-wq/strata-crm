@@ -637,7 +637,8 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
         deliveryError: "Transactional email is not configured.",
       },
     });
-    res.status(503).json({
+    res.json({
+      ok: false,
       message: "Transactional email is not configured. Set SMTP_* environment variables.",
       code: "EMAIL_NOT_CONFIGURED",
       deliveryStatus: "smtp_disabled",
@@ -674,7 +675,8 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
         deliveryError,
       },
     });
-    res.status(502).json({
+    res.json({
+      ok: false,
       message: `Invoice email failed to send: ${deliveryError}`,
       code: "EMAIL_SEND_FAILED",
       deliveryStatus: "email_failed",
