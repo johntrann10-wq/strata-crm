@@ -9,7 +9,12 @@ export type SeoPageKey =
   | "mufflerExhaustSoftware"
   | "shopSchedulingSoftware"
   | "detailingCrm"
-  | "orbisxAlternative";
+  | "orbisxAlternative"
+  | "strataVsOrbisx"
+  | "bestCrmAutoDetailing"
+  | "bestWindowTintSoftware"
+  | "bestPpfSoftware"
+  | "bestAutomotiveShopScheduling";
 
 export type SeoPageConfig = {
   key: SeoPageKey;
@@ -360,6 +365,236 @@ const pages: SeoPageConfig[] = [
     ctaTitle: "See whether Strata is the better fit for your shop.",
     ctaBody: "Start free, choose your business type, and compare how the day-to-day workflow feels in practice.",
     related: ["mechanicSoftware", "windowTintSoftware", "shopSchedulingSoftware"],
+  },
+  {
+    key: "strataVsOrbisx",
+    path: "/strata-vs-orbisx",
+    navLabel: "Strata vs OrbisX",
+    seoTitle: "Strata vs OrbisX for smaller automotive service businesses",
+    seoDescription:
+      "Compare Strata vs OrbisX for smaller automotive service businesses. See how Strata positions on clarity, onboarding, daily workflow, and operational fit.",
+    eyebrow: "Strata vs OrbisX",
+    h1: "Strata vs OrbisX for shops that want a clearer daily workflow.",
+    intro:
+      "This page is for buyers actively comparing shop software. Strata is positioning toward smaller and growing automotive service businesses that want strong operational depth without a system that feels heavy, cluttered, or harder than it should be to run every day.",
+    audience:
+      "Best for owners comparing modern shop software for detailing, tint, wrap, mechanic, tire, or mixed automotive operations.",
+    pains: [
+      "A lot of buyers want serious shop functionality but do not want to feel buried under the software.",
+      "The deciding factor is often not feature count alone. It is how clear the workflow feels in daily use.",
+      "Smaller teams usually care about onboarding speed, front-desk clarity, and customer-facing polish as much as depth.",
+    ],
+    benefits: [
+      {
+        title: "Strata is built around clarity first",
+        description: "The product is being shaped to make scheduling, client and vehicle records, jobs, invoices, and follow-up easier to understand at a glance.",
+      },
+      {
+        title: "Faster time to value for smaller shops",
+        description: "Onboarding, starter defaults, activation, and dashboard guidance are tuned so a new shop reaches useful work quickly.",
+      },
+      {
+        title: "A more premium day-to-day feel",
+        description: "Strata is aiming to feel modern, presentable, and lighter on mobile while still preserving real operational capability.",
+      },
+    ],
+    workflowSteps: [
+      { title: "Get operational faster", description: "Choose the shop type, preload starter data, and move into a guided first session instead of a blank setup burden." },
+      { title: "Run the core workflow daily", description: "Manage clients, vehicles, appointments, quotes, invoices, and jobs from one command center." },
+      { title: "Build records that become hard to leave", description: "As customer and vehicle history deepens, Strata becomes the system of record for the shop." },
+    ],
+    fitPoints: [
+      "Smaller teams that want less software friction",
+      "Owners who care about mobile clarity and public-facing polish",
+      "Shops comparing alternatives and valuing workflow quality over admin complexity",
+    ],
+    ctaTitle: "See whether Strata is the better everyday fit for your shop.",
+    ctaBody: "Start free, load your shop type, and compare the day-to-day workflow in a real workspace instead of only reading feature lists.",
+    related: ["orbisxAlternative", "mechanicSoftware", "shopSchedulingSoftware"],
+  },
+  {
+    key: "bestCrmAutoDetailing",
+    path: "/best-crm-for-auto-detailing-shops",
+    navLabel: "Best CRM for Auto Detailing Shops",
+    seoTitle: "Best CRM for Auto Detailing Shops that need clients, vehicles, appointments, and invoices",
+    seoDescription:
+      "Looking for the best CRM for auto detailing shops? Strata is built for detailing businesses that need customer records, vehicle history, scheduling, quotes, invoices, and repeat-service memory.",
+    eyebrow: "Best CRM for Auto Detailing Shops",
+    h1: "What the best CRM for an auto detailing shop actually needs to do.",
+    intro:
+      "For a detailing shop, the best CRM is not just a contact database. It has to remember the client, the vehicle, the service history, the appointment trail, and the invoice trail in one place.",
+    audience:
+      "Built for detailers evaluating software specifically around customer retention, repeat visits, and vehicle-aware service history.",
+    pains: [
+      "Generic CRMs track people but not the vehicle-specific service history that detailing shops actually need.",
+      "Repeat customers are harder to serve quickly when prior jobs, notes, and invoices are spread across tools.",
+      "A detailing CRM only matters if it supports the booking and billing workflow, not just contact storage.",
+    ],
+    benefits: [
+      {
+        title: "Vehicle-first customer memory",
+        description: "Strata ties the client and the vehicle together so each repeat visit starts with more context and less guesswork.",
+      },
+      {
+        title: "CRM connected to operations",
+        description: "Appointments, quotes, invoices, and follow-up grow out of the same records instead of living in separate systems.",
+      },
+      {
+        title: "A more useful retention base",
+        description: "As customer and vehicle history deepens, the CRM becomes more valuable every month and harder to replace.",
+      },
+    ],
+    workflowSteps: [
+      { title: "Store the client and vehicle together", description: "Build a cleaner source of truth for every repeat customer and their cars." },
+      { title: "Use the CRM during booking and billing", description: "Keep estimates, appointments, invoices, and notes tied to the same records." },
+      { title: "Make repeat business easier", description: "Open the client record and quickly understand what was last done and what might come next." },
+    ],
+    fitPoints: [
+      "Detailing shops that rely on repeat customers",
+      "Businesses that need stronger customer and vehicle memory",
+      "Owners comparing CRMs with actual operational usefulness",
+    ],
+    ctaTitle: "Turn customer history into a real advantage for your detailing shop.",
+    ctaBody: "Start free and see how Strata handles clients, vehicles, appointments, invoices, and follow-up in one CRM.",
+    related: ["detailingCrm", "autoDetailingSoftware", "mobileDetailingSoftware"],
+  },
+  {
+    key: "bestWindowTintSoftware",
+    path: "/best-window-tint-shop-software",
+    navLabel: "Best Window Tint Shop Software",
+    seoTitle: "Best Window Tint Shop Software for scheduling, vehicle records, quotes, and invoices",
+    seoDescription:
+      "Looking for the best window tint shop software? Strata is built for tint businesses that need cleaner scheduling, vehicle records, estimate approval, and invoice flow.",
+    eyebrow: "Best Window Tint Shop Software",
+    h1: "What the best window tint shop software should actually make easier.",
+    intro:
+      "The best window tint shop software should reduce front-desk friction, keep the vehicle context attached, and make the quote-to-invoice path feel cleaner for both staff and customers.",
+    audience:
+      "Built for tint businesses comparing software for scheduling clarity, vehicle history, estimate flow, and public-facing polish.",
+    pains: [
+      "Most software either feels generic or forces tint-specific workflow details into a clunky shop system.",
+      "Quote approval, appointment booking, vehicle details, and invoicing need to stay aligned around the same customer and car.",
+      "Buyers care about how the software feels in front of staff and customers, not just whether it has modules.",
+    ],
+    benefits: [
+      {
+        title: "Cleaner front-desk scheduling",
+        description: "Use a month-first calendar and drill into the day without fighting a bloated scheduler.",
+      },
+      {
+        title: "Vehicle-linked service flow",
+        description: "Keep tint work, vehicle details, invoices, and prior history attached to the same record.",
+      },
+      {
+        title: "More polished estimate and invoice path",
+        description: "Create the quote, book the work, and send the invoice with a more controlled client-facing workflow.",
+      },
+    ],
+    workflowSteps: [
+      { title: "Take in the customer and car", description: "Keep the intake record useful from the first appointment onward." },
+      { title: "Book and run the tint work", description: "Keep the schedule, quote, and job context connected through the day." },
+      { title: "Invoice and preserve the service history", description: "Make the finished work easy to reference for repeat business and future questions." },
+    ],
+    fitPoints: [
+      "Tint shops that care about front-desk clarity",
+      "Businesses that need vehicle-aware records",
+      "Buyers comparing the best software, not just the cheapest",
+    ],
+    ctaTitle: "See whether Strata is the better-fit software for your tint shop.",
+    ctaBody: "Start free, load tint defaults, and compare the actual workflow instead of only reading feature lists.",
+    related: ["windowTintSoftware", "wrapPpfSoftware", "shopSchedulingSoftware"],
+  },
+  {
+    key: "bestPpfSoftware",
+    path: "/best-ppf-shop-software",
+    navLabel: "Best PPF Shop Software",
+    seoTitle: "Best PPF Shop Software for quotes, approvals, scheduling, and invoices",
+    seoDescription:
+      "Looking for the best PPF shop software? Strata is built for wrap and PPF businesses that need cleaner quoting, scheduling, vehicle records, and invoicing.",
+    eyebrow: "Best PPF Shop Software",
+    h1: "What the best PPF shop software should do beyond basic scheduling.",
+    intro:
+      "For a PPF business, the software has to handle more than appointments. It needs to keep quote scope, vehicle context, customer communication, invoice flow, and service history aligned around the same job.",
+    audience:
+      "Built for PPF and wrap businesses comparing software on quote control, schedule clarity, and customer-facing professionalism.",
+    pains: [
+      "Complex PPF work creates a lot of scope, approval, and vehicle context that is easy to lose in generic tools.",
+      "The software has to feel premium enough for customer-facing moments, not just functional for the back office.",
+      "Scheduling is only useful if it stays connected to the estimate, job, and final invoice.",
+    ],
+    benefits: [
+      {
+        title: "Better quote-to-job continuity",
+        description: "Strata keeps quotes, appointments, invoices, and vehicle history tied together so the job flow feels more controlled.",
+      },
+      {
+        title: "Stronger client-facing polish",
+        description: "Estimate and invoice surfaces are being shaped to feel more premium and more trustworthy in public-facing use.",
+      },
+      {
+        title: "Vehicle-centric record keeping",
+        description: "Every visit builds the car's history instead of scattering context across unrelated systems.",
+      },
+    ],
+    workflowSteps: [
+      { title: "Capture the scope and the vehicle", description: "Keep service details attached to the car and the customer from the start." },
+      { title: "Move through approval and scheduling", description: "Use a clearer quote and booking path that reduces workflow drift." },
+      { title: "Finish, invoice, and preserve the job record", description: "Keep the completed work available for future visits and customer questions." },
+    ],
+    fitPoints: [
+      "PPF businesses that care about quote control",
+      "Shops that want more premium customer-facing software",
+      "Operators looking for a cleaner workflow than generic shop tools",
+    ],
+    ctaTitle: "Use software that treats PPF work like a real high-consideration workflow.",
+    ctaBody: "Start free, load wrap and PPF defaults, and see how Strata handles quoting, scheduling, and billing.",
+    related: ["wrapPpfSoftware", "windowTintSoftware", "orbisxAlternative"],
+  },
+  {
+    key: "bestAutomotiveShopScheduling",
+    path: "/best-shop-scheduling-software-for-automotive-businesses",
+    navLabel: "Best Shop Scheduling Software",
+    seoTitle: "Best Shop Scheduling Software for Automotive Businesses",
+    seoDescription:
+      "Looking for the best shop scheduling software for an automotive business? Strata offers a cleaner month-to-day calendar, client and vehicle context, and a tighter booking workflow.",
+    eyebrow: "Best Shop Scheduling Software",
+    h1: "What the best shop scheduling software for automotive businesses should actually do.",
+    intro:
+      "The best shop scheduling software should not just show time slots. It should make it easier to understand the month, drill into the day, attach the right client and vehicle, and carry the booking into the rest of the business workflow.",
+    audience:
+      "Built for buyers comparing appointment software, calendars, and booking tools specifically for automotive service businesses.",
+    pains: [
+      "A lot of scheduling tools look clean in isolation but break down once vehicles, jobs, invoices, and staff context are involved.",
+      "Owners need the calendar to support the rest of the workflow, not sit off to the side as a separate module.",
+      "Mobile matters too, because scheduling often gets touched from the phone as much as the desk.",
+    ],
+    benefits: [
+      {
+        title: "Month-first clarity",
+        description: "Strata is built around a calmer month view that lets the user open the day that matters instead of overprocessing views.",
+      },
+      {
+        title: "Bookings tied to real records",
+        description: "Appointments stay connected to the client and vehicle so the team has context when the work starts.",
+      },
+      {
+        title: "Scheduling that leads into the job and invoice flow",
+        description: "The appointment is part of a larger operating system, not just a slot on a calendar.",
+      },
+    ],
+    workflowSteps: [
+      { title: "See the month clearly", description: "Understand load and choose the right day faster." },
+      { title: "Open the day and book the work", description: "Attach the right customer, vehicle, and service without extra noise." },
+      { title: "Carry the booking forward", description: "Keep the same context when the appointment turns into a job, invoice, or follow-up." },
+    ],
+    fitPoints: [
+      "Automotive businesses comparing scheduling platforms",
+      "Owners who want a cleaner daily calendar flow",
+      "Teams that need scheduling connected to CRM and billing",
+    ],
+    ctaTitle: "Use scheduling software that actually supports the rest of the shop.",
+    ctaBody: "Start free and compare how Strata handles the month view, day drill-down, and booking workflow in practice.",
+    related: ["shopSchedulingSoftware", "strataVsOrbisx", "windowTintSoftware"],
   },
 ];
 
