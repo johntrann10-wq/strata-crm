@@ -805,7 +805,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       entityType: "appointment",
       entityId: created.id,
       metadata: {
-        title: created.title ?? null,
+        title: parsed.data.title ?? null,
         clientId: created.clientId,
         vehicleId: created.vehicleId,
       },
