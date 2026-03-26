@@ -242,6 +242,22 @@ async function updateAppointmentTotalIfSupported(
     .where(eq(appointments.id, appointmentId));
 }
 
+const createAppointmentReturning = {
+  id: appointments.id,
+  businessId: appointments.businessId,
+  clientId: appointments.clientId,
+  vehicleId: appointments.vehicleId,
+  startTime: appointments.startTime,
+};
+
+type CreatedAppointmentRecord = {
+  id: string;
+  businessId: string;
+  clientId: string;
+  vehicleId: string;
+  startTime: Date;
+};
+
 const appointmentStatusSchema = z.enum(["scheduled", "confirmed", "in_progress", "completed", "cancelled", "no-show"]);
 const createSchema = z.object({
   clientId: z.string().uuid(),
@@ -692,7 +708,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   const created = await db.transaction(async (tx) => {
     let selectedServicesTotal = 0;
     let attachedAnyService = false;
-    let apt: typeof appointments.$inferSelect | undefined;
+    let apt: CreatedAppointmentRecord | undefined;
     try {
       [apt] = await tx
         .insert(appointments)
@@ -713,7 +729,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
           createdAt,
           updatedAt: createdAt,
         })
-        .returning();
+        .returning(createAppointmentReturning);
     } catch (error) {
       if (!isAppointmentSchemaDriftError(error)) throw error;
       const columns = await getAppointmentColumns();
@@ -738,7 +754,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       [apt] = await tx
         .insert(appointments)
         .values(fallbackValues as typeof appointments.$inferInsert)
-        .returning();
+        .returning(createAppointmentReturning);
     }
     if (!apt) throw new BadRequestError("Failed to create appointment.");
 
