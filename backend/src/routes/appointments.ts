@@ -1,8 +1,9 @@
 import { Router, Request, Response } from "express";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { appointments, clients, vehicles, staff, locations, quotes, services, appointmentServices, businesses } from "../db/schema.js";
-import { eq, and, or, desc, asc, gte, lte, ilike } from "drizzle-orm";
+import { eq, and, or, desc, asc, gte, lte, ilike, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -13,6 +14,7 @@ import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
 import { createRequestActivityLog } from "../lib/activity.js";
 import { sendAppointmentConfirmation } from "../lib/email.js";
 import { isSmtpConfigured } from "../lib/env.js";
+import { wrapAsync } from "../lib/asyncHandler.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
@@ -26,6 +28,37 @@ function isLocationSchemaDriftError(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   const message = String((error as { message?: string }).message ?? "").toLowerCase();
   return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+function isAppointmentSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+let cachedAppointmentColumns: Set<string> | null = null;
+
+async function getAppointmentColumns(): Promise<Set<string>> {
+  if (cachedAppointmentColumns) return cachedAppointmentColumns;
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'appointments'
+  `);
+  const resultWithRows = result as unknown as { rows?: Array<{ column_name?: string }> };
+  const rows = Array.isArray(resultWithRows.rows) ? resultWithRows.rows : [];
+  cachedAppointmentColumns = new Set(
+    rows
+      .map((row) => row?.column_name)
+      .filter((value): value is string => typeof value === "string")
+  );
+  return cachedAppointmentColumns;
 }
 
 async function locationExistsForBusiness(locationId: string, bid: string): Promise<boolean> {
@@ -72,7 +105,18 @@ const createSchema = z.object({
   /** Catalog services to attach (prices from service catalog). */
   serviceIds: z.array(z.string().uuid()).optional(),
 });
-const updateSchema = createSchema.partial();
+const updateSchema = z
+  .object({
+    startTime: z.string().datetime().optional(),
+    endTime: z.string().datetime().optional(),
+    title: z.string().nullable().optional(),
+    assignedStaffId: z.string().uuid().optional(),
+    locationId: z.string().uuid().optional(),
+    depositAmount: z.coerce.number().min(0).optional(),
+    notes: z.string().optional(),
+    internalNotes: z.string().optional(),
+  })
+  .strict();
 function parseIsoDate(s: string | undefined): Date | undefined {
   if (!s?.trim()) return undefined;
   const d = new Date(s);
@@ -408,7 +452,7 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
   });
 });
 
-appointmentsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -460,24 +504,57 @@ appointmentsRouter.post("/", requireAuth, requireTenant, async (req: Request, re
     if (q?.total != null) totalPriceInit = String(q.total);
   }
 
+  const createdAt = new Date();
+  const appointmentId = randomUUID();
   const created = await db.transaction(async (tx) => {
-    const [apt] = await tx
-      .insert(appointments)
-      .values({
+    let apt: typeof appointments.$inferSelect | undefined;
+    try {
+      [apt] = await tx
+        .insert(appointments)
+        .values({
+          id: appointmentId,
+          businessId: bid,
+          clientId: parsed.data.clientId,
+          vehicleId: parsed.data.vehicleId,
+          startTime,
+          endTime,
+          title: parsed.data.title ?? null,
+          assignedStaffId: parsed.data.assignedStaffId ?? null,
+          locationId: parsed.data.locationId ?? null,
+          depositAmount: parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0",
+          notes: parsed.data.notes?.trim() ? parsed.data.notes.trim() : null,
+          internalNotes: parsed.data.internalNotes?.trim() ? parsed.data.internalNotes.trim() : null,
+          totalPrice: totalPriceInit,
+          createdAt,
+          updatedAt: createdAt,
+        })
+        .returning();
+    } catch (error) {
+      if (!isAppointmentSchemaDriftError(error)) throw error;
+      const columns = await getAppointmentColumns();
+      const fallbackValues: Record<string, unknown> = {
+        id: appointmentId,
         businessId: bid,
         clientId: parsed.data.clientId,
         vehicleId: parsed.data.vehicleId,
         startTime,
-        endTime,
-        title: parsed.data.title ?? null,
-        assignedStaffId: parsed.data.assignedStaffId ?? null,
-        locationId: parsed.data.locationId ?? null,
-        depositAmount: parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0",
-        notes: parsed.data.notes?.trim() ? parsed.data.notes.trim() : null,
-        internalNotes: parsed.data.internalNotes?.trim() ? parsed.data.internalNotes.trim() : null,
-        totalPrice: totalPriceInit,
-      })
-      .returning();
+      };
+      if (columns.has("end_time")) fallbackValues.endTime = endTime;
+      if (columns.has("title")) fallbackValues.title = parsed.data.title ?? null;
+      if (columns.has("assigned_staff_id")) fallbackValues.assignedStaffId = parsed.data.assignedStaffId ?? null;
+      if (columns.has("location_id")) fallbackValues.locationId = parsed.data.locationId ?? null;
+      if (columns.has("deposit_amount")) fallbackValues.depositAmount = parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0";
+      if (columns.has("notes")) fallbackValues.notes = parsed.data.notes?.trim() ? parsed.data.notes.trim() : null;
+      if (columns.has("internal_notes")) fallbackValues.internalNotes = parsed.data.internalNotes?.trim() ? parsed.data.internalNotes.trim() : null;
+      if (columns.has("total_price")) fallbackValues.totalPrice = totalPriceInit;
+      if (columns.has("status")) fallbackValues.status = "scheduled";
+      if (columns.has("created_at")) fallbackValues.createdAt = createdAt;
+      if (columns.has("updated_at")) fallbackValues.updatedAt = createdAt;
+      [apt] = await tx
+        .insert(appointments)
+        .values(fallbackValues as typeof appointments.$inferInsert)
+        .returning();
+    }
     if (!apt) throw new BadRequestError("Failed to create appointment.");
 
     if (parsed.data.quoteId) {
@@ -505,34 +582,51 @@ appointmentsRouter.post("/", requireAuth, requireTenant, async (req: Request, re
   });
 
   logger.info("Appointment created", { appointmentId: created.id, businessId: bid });
-  await createRequestActivityLog(req, {
-    businessId: bid,
-    action: "appointment.created",
-    entityType: "appointment",
-    entityId: created.id,
-    metadata: {
-      title: created.title ?? null,
-      clientId: created.clientId,
-      vehicleId: created.vehicleId,
-    },
-  });
-  const confirmationResult = await sendAppointmentConfirmationForRecord(created.id, bid);
-  await createRequestActivityLog(req, {
-    businessId: bid,
-    action:
-      confirmationResult.deliveryStatus === "emailed"
-        ? "appointment.confirmation_sent"
-        : "appointment.confirmation_failed",
-    entityType: "appointment",
-    entityId: created.id,
-    metadata: {
-      recipient: confirmationResult.recipient,
-      deliveryStatus: confirmationResult.deliveryStatus,
-      deliveryError: confirmationResult.deliveryError,
-    },
-  });
+  try {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "appointment.created",
+      entityType: "appointment",
+      entityId: created.id,
+      metadata: {
+        title: created.title ?? null,
+        clientId: created.clientId,
+        vehicleId: created.vehicleId,
+      },
+    });
+  } catch (error) {
+    logger.warn("Appointment created but activity log write failed", { appointmentId: created.id, businessId: bid, error });
+  }
+  let confirmationResult: { deliveryStatus: AppointmentDeliveryStatus; deliveryError: string | null; recipient: string | null } = {
+    deliveryStatus: "email_failed",
+    deliveryError: "Appointment confirmation was skipped after a post-create failure.",
+    recipient: null,
+  };
+  try {
+    confirmationResult = await sendAppointmentConfirmationForRecord(created.id, bid);
+  } catch (error) {
+    logger.warn("Appointment created but confirmation pipeline failed", { appointmentId: created.id, businessId: bid, error });
+  }
+  try {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action:
+        confirmationResult.deliveryStatus === "emailed"
+          ? "appointment.confirmation_sent"
+          : "appointment.confirmation_failed",
+      entityType: "appointment",
+      entityId: created.id,
+      metadata: {
+        recipient: confirmationResult.recipient,
+        deliveryStatus: confirmationResult.deliveryStatus,
+        deliveryError: confirmationResult.deliveryError,
+      },
+    });
+  } catch (error) {
+    logger.warn("Appointment confirmation activity log failed", { appointmentId: created.id, businessId: bid, error });
+  }
   res.status(201).json({ ...created, ...confirmationResult });
-});
+}));
 
 appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
@@ -626,17 +720,10 @@ appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, asy
     },
   });
 
-  if (confirmationResult.deliveryStatus === "missing_email") {
-    throw new BadRequestError(confirmationResult.deliveryError ?? "Client does not have an email address.");
-  }
-  if (confirmationResult.deliveryStatus === "smtp_disabled") {
-    throw new BadRequestError(confirmationResult.deliveryError ?? "Transactional email is not configured.");
-  }
-  if (confirmationResult.deliveryStatus === "email_failed") {
-    throw new BadRequestError(confirmationResult.deliveryError ?? "Appointment confirmation email failed.");
-  }
-
-  res.json({ ok: true, ...confirmationResult });
+  res.json({
+    ok: confirmationResult.deliveryStatus === "emailed",
+    ...confirmationResult,
+  });
 });
 
 appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (req: Request, res: Response) => {
