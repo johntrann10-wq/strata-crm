@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { CalendarPlus, ChevronDown, FileText, Plus, Receipt, Search, UserPlus } from "lucide-react";
+import { CalendarPlus, ChevronDown, FileText, PhoneCall, Plus, Receipt, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -54,9 +54,9 @@ export function QuickCreateMenu() {
           <CalendarPlus className="text-orange-500" />
           New appointment
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => go("/clients/new")}>
-          <UserPlus className="text-blue-500" />
-          New client
+        <DropdownMenuItem onSelect={() => go("/leads")}>
+          <PhoneCall className="text-blue-500" />
+          New lead
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => go("/quotes/new")}>
           <Receipt className="text-purple-500" />

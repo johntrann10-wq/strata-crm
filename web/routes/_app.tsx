@@ -26,7 +26,7 @@ import {
   Settings,
   Menu,
   AlertCircle,
-  Car,
+  PhoneCall,
   Search as SearchIcon,
   Plus,
 } from "lucide-react";
@@ -108,7 +108,7 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
     label: "CRM",
     items: [
       { icon: Users, label: "Clients", href: "/clients", end: false, module: "clients", description: "Find customers quickly and act from their history." },
-      { icon: Car, label: "Vehicles", href: "/vehicles", end: false, module: "vehicles", description: "Keep vehicles, history, and service context connected." },
+      { icon: PhoneCall, label: "Leads", href: "/leads", end: false, module: "clients", description: "Capture call-in opportunities fast and move them straight into work." },
     ],
   },
   {
@@ -446,7 +446,7 @@ function AppLayoutInner({
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
           side="left"
-          className="p-0 w-64 bg-zinc-900 border-zinc-700 [&>button]:text-zinc-400 [&>button]:hover:text-white"
+          className="p-0 bg-zinc-900 border-zinc-700 [&>button]:text-zinc-400 [&>button]:hover:text-white"
         >
           <SidebarNav
             onItemClick={() => setMobileOpen(false)}
@@ -469,26 +469,26 @@ function AppLayoutInner({
       {/* Main content area */}
       <div className="flex min-w-0 flex-1 flex-col md:pl-64">
         <header className="z-10 w-full border-b border-border/70 bg-background/92 backdrop-blur supports-[backdrop-filter]:bg-background/86 md:sticky md:top-0">
-          <div className="flex items-center justify-between gap-3 px-3 py-2.5 md:hidden">
+          <div className="flex items-center justify-between gap-2 px-2.5 py-2 md:hidden">
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 shrink-0"
+              className="h-8 w-8 shrink-0 rounded-full"
               onClick={() => setMobileOpen(true)}
               aria-label="Open navigation menu"
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-4.5 w-4.5" />
             </Button>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-foreground">{activeNavEntry.item.label}</p>
+              <p className="truncate text-[13px] font-semibold text-foreground">{activeNavEntry.item.label}</p>
               {(businessName || activeLocationName) ? (
-                <p className="truncate text-[11px] text-muted-foreground">
+                <p className="truncate text-[10px] text-muted-foreground">
                   {businessName ? businessName : "No business selected"}
                   {activeLocationName ? ` · ${activeLocationName}` : ""}
                 </p>
               ) : null}
             </div>
-            <div className="shrink-0">
+            <div className="shrink-0 scale-[0.96] origin-right">
               <SecondaryNavigation icon={<UserIcon user={user as any} />} />
             </div>
           </div>
@@ -719,6 +719,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     () => tenantBusinesses.find((tenantBusiness) => tenantBusiness.id === currentBusinessId) ?? null,
     [tenantBusinesses, currentBusinessId]
   );
+  const allowWithoutBusiness = pathAllowsMissingBusiness(location.pathname);
 
   const handleBusinessChange = useCallback(
     (businessId: string) => {
@@ -737,45 +738,29 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     else clearCurrentLocationId();
   }, []);
 
-  useEffect(() => {
-    if (userFetching || businessFetching) return;
-    if (businessError) return;
-    if (!business) {
-      if (!pathAllowsMissingBusiness(location.pathname)) {
-        navigate("/onboarding", { replace: true });
-      }
-      return;
-    }
-    if ((business as { onboardingComplete?: boolean }).onboardingComplete === false) {
-      if (!pathAllowsMissingBusiness(location.pathname)) {
-        navigate("/onboarding", { replace: true });
-      }
-      return;
-    }
-  }, [business, userFetching, businessFetching, businessError, navigate, location.pathname]);
-
-  useEffect(() => {
-    if (!authCheckDone || userFetching || businessFetching || businessError) return;
-    if (pathAllowsMissingBusiness(location.pathname)) return;
-    if (!business && tenantBusinesses.length === 0) {
-      navigate("/onboarding", { replace: true });
-    }
+  const redirectTarget = useMemo(() => {
+    if (!authCheckDone) return null;
+    if (!effectiveUserId) return signInPath;
+    if (userFetching || businessFetching || businessError) return null;
+    if (allowWithoutBusiness) return null;
+    if (!business) return "/onboarding";
+    if ((business as { onboardingComplete?: boolean }).onboardingComplete === false) return "/onboarding";
+    return null;
   }, [
     authCheckDone,
+    effectiveUserId,
+    signInPath,
     userFetching,
     businessFetching,
     businessError,
+    allowWithoutBusiness,
     business,
-    tenantBusinesses.length,
-    location.pathname,
-    navigate,
   ]);
 
   useEffect(() => {
-    if (authCheckDone && !effectiveUserId) {
-      navigate(signInPath, { replace: true });
-    }
-  }, [authCheckDone, effectiveUserId, navigate, signInPath]);
+    if (!redirectTarget || location.pathname === redirectTarget) return;
+    navigate(redirectTarget, { replace: true });
+  }, [redirectTarget, location.pathname, navigate]);
 
   if (!authCheckDone) {
     return (
@@ -818,7 +803,6 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
 
   // When no business exists yet (or onboarding is incomplete), block CRM routes until redirect runs
   // or allow account/onboarding-only screens (see `pathAllowsMissingBusiness`).
-  const allowWithoutBusiness = pathAllowsMissingBusiness(location.pathname);
   if (businessError && !allowWithoutBusiness) {
     return (
       <div className="h-screen flex flex-col items-center justify-center gap-4 p-6 max-w-md mx-auto text-center">
