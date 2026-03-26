@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import type { FormEvent } from "react";
 import { api } from "../api";
 import { setAuthToken } from "../lib/auth";
+import { recordRuntimeError } from "../lib/runtimeErrors";
 
 function persistAuthTokenFromResponse(res: unknown): void {
   if (typeof window === "undefined") return;
@@ -286,6 +287,19 @@ export function useAction(actionFn: ActionFn) {
       } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e));
         setError(err);
+        let detail = "Action failed";
+        if (params) {
+          try {
+            detail = `Action failed with params ${JSON.stringify(params)}`;
+          } catch {
+            detail = "Action failed with unserializable params";
+          }
+        }
+        recordRuntimeError({
+          source: "window.unhandledrejection",
+          message: err.message,
+          detail,
+        });
         return { data: null, error: { message: err.message } };
       } finally {
         setFetching(false);

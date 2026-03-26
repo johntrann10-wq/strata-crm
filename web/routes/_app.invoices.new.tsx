@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams, useOutletContext } from "react-router";
+import type { FormEvent } from "react";
 import { useFindFirst, useFindMany, useFindOne, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
@@ -378,9 +379,11 @@ export default function NewInvoicePage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    await doSubmit(submitMode);
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const nextMode = submitter?.dataset.submitMode as typeof submitMode | undefined;
+    await doSubmit(nextMode ?? submitMode);
   };
 
   return (
@@ -762,6 +765,7 @@ export default function NewInvoicePage() {
           <Button
             type="submit"
             disabled={submitting}
+            data-submit-mode="draft"
             onClick={() => setSubmitMode('draft')}
           >
             {submitting ? "Saving…" : "Create Invoice"}
@@ -787,6 +791,7 @@ export default function NewInvoicePage() {
             <Button
               type="submit"
               disabled={submitting}
+              data-submit-mode="draft"
               onClick={() => setSubmitMode('draft')}
               className="shrink-0"
             >

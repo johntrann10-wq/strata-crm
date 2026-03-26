@@ -755,6 +755,23 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   }, [business, userFetching, businessFetching, businessError, navigate, location.pathname]);
 
   useEffect(() => {
+    if (!authCheckDone || userFetching || businessFetching || businessError) return;
+    if (pathAllowsMissingBusiness(location.pathname)) return;
+    if (!business && tenantBusinesses.length === 0) {
+      navigate("/onboarding", { replace: true });
+    }
+  }, [
+    authCheckDone,
+    userFetching,
+    businessFetching,
+    businessError,
+    business,
+    tenantBusinesses.length,
+    location.pathname,
+    navigate,
+  ]);
+
+  useEffect(() => {
     if (authCheckDone && !effectiveUserId) {
       navigate(signInPath, { replace: true });
     }
@@ -813,10 +830,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     );
   }
   if (!business && !allowWithoutBusiness) {
-    if (tenantBusinesses.length === 0) {
-      navigate("/onboarding", { replace: true });
-      return null;
-    }
+    if (tenantBusinesses.length === 0) return null;
     return (
       <div className="h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Preparing your workspace...</div>

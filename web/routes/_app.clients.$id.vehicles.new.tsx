@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, useOutletContext } from "react-router";
+import type { FormEvent } from "react";
 import { useAction } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
@@ -52,9 +53,12 @@ export default function NewVehiclePage() {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!clientId) return;
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const nextMode = submitter?.dataset.submitMode as typeof submitMode | undefined;
+    const mode = nextMode ?? submitMode;
 
     const result = await createVehicle({
       clientId,
@@ -74,15 +78,16 @@ export default function NewVehiclePage() {
 
     const createdVehicleId = (result.data as any)?.id;
     if (!createdVehicleId) {
+      toast.error("Vehicle saved but no record ID was returned. Please refresh the client record.");
       return;
     }
 
     toast.success("Vehicle saved");
-    if (submitMode === "quote") {
+    if (mode === "quote") {
       navigate(`/quotes/new?clientId=${clientId}&vehicleId=${createdVehicleId}&from=${encodeURIComponent(returnTo)}`);
       return;
     }
-    if (submitMode === "appointment") {
+    if (mode === "appointment") {
       navigate(
         `/appointments/new?clientId=${clientId}&vehicleId=${createdVehicleId}${
           currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
@@ -257,11 +262,11 @@ export default function NewVehiclePage() {
 
             <div className="flex flex-col gap-3 pt-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
-                <Button type="submit" variant="outline" disabled={creating || !clientId} onClick={() => setSubmitMode("quote")}>
+                <Button type="submit" variant="outline" disabled={creating || !clientId} data-submit-mode="quote" onClick={() => setSubmitMode("quote")}>
                   {creating && submitMode === "quote" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Save and Create Quote
                 </Button>
-                <Button type="submit" variant="outline" disabled={creating || !clientId} onClick={() => setSubmitMode("appointment")}>
+                <Button type="submit" variant="outline" disabled={creating || !clientId} data-submit-mode="appointment" onClick={() => setSubmitMode("appointment")}>
                   {creating && submitMode === "appointment" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Save and Book Appointment
                 </Button>
@@ -276,6 +281,7 @@ export default function NewVehiclePage() {
               </Button>
               <Button
                 type="submit"
+                data-submit-mode="client"
                 onClick={() => setSubmitMode("client")}
                 disabled={creating || !clientId}
               >

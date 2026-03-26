@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link, useSearchParams, useOutletContext } from "react-router";
+import type { FormEvent } from "react";
 import { useFindFirst, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
@@ -72,8 +73,11 @@ export default function NewClientPage() {
     return undefined;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const nextMode = submitter?.dataset.submitMode as typeof submitMode | undefined;
+    const mode = nextMode ?? submitMode;
 
     const errors: Record<string, string> = {};
     if (!formData.firstName.trim()) errors.firstName = "First name is required";
@@ -114,15 +118,15 @@ export default function NewClientPage() {
     }
 
     toast.success("Client saved");
-    if (submitMode === "vehicle") {
+    if (mode === "vehicle") {
       navigate(`/clients/${createdClientId}/vehicles/new?next=client&from=${encodeURIComponent(returnTo)}`);
       return;
     }
-    if (submitMode === "quote") {
+    if (mode === "quote") {
       navigate(`/quotes/new?clientId=${createdClientId}&from=${encodeURIComponent(returnTo)}`);
       return;
     }
-    if (submitMode === "appointment") {
+    if (mode === "appointment") {
       navigate(
         `/appointments/new?clientId=${createdClientId}${
           currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
@@ -383,21 +387,21 @@ export default function NewClientPage() {
         {/* Actions */}
         <div className="flex flex-col gap-3 pt-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <Button type="submit" variant="outline" disabled={fetching} onClick={() => setSubmitMode("vehicle")}>
+            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="vehicle" onClick={() => setSubmitMode("vehicle")}>
               {fetching && submitMode === "vehicle" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save and Add Vehicle
             </Button>
-            <Button type="submit" variant="outline" disabled={fetching} onClick={() => setSubmitMode("quote")}>
+            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="quote" onClick={() => setSubmitMode("quote")}>
               {fetching && submitMode === "quote" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save and Create Quote
             </Button>
-            <Button type="submit" variant="outline" disabled={fetching} onClick={() => setSubmitMode("appointment")}>
+            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="appointment" onClick={() => setSubmitMode("appointment")}>
               {fetching && submitMode === "appointment" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save and Book Appointment
             </Button>
           </div>
           <div className="flex items-center gap-3">
-            <Button type="submit" disabled={fetching} onClick={() => setSubmitMode("client")}>
+            <Button type="submit" disabled={fetching} data-submit-mode="client" onClick={() => setSubmitMode("client")}>
               {fetching && submitMode === "client" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save Client
             </Button>
