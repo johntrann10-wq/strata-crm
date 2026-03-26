@@ -25,8 +25,13 @@ type ClientPick = {
   lastName?: string | null;
   phone?: string | null;
 };
-type ServicePick = { id: string; name?: string; price?: number; durationMinutes?: number | null };
+type ServicePick = { id: string; name?: string; price?: number | string | null; durationMinutes?: number | null };
 type VehiclePick = { id: string; year?: number | null; make?: string | null; model?: string | null };
+
+const toMoneyNumber = (value: unknown): number => {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+};
 
 interface QuickBookSheetProps {
   open: boolean;
@@ -392,7 +397,7 @@ export function QuickBookSheet({
                       {svc.name}
                       {svc.price != null && (
                         <span className="ml-1 opacity-80">
-                          (${svc.price.toFixed(2)})
+                          (${toMoneyNumber(svc.price).toFixed(2)})
                         </span>
                       )}
                     </button>

@@ -58,6 +58,11 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 
+const toMoneyNumber = (value: unknown): number => {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+};
+
 export default function NewAppointmentPage() {
   const { user, businessId, businessType, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
@@ -276,7 +281,7 @@ export default function NewAppointmentPage() {
       (acc, id) => {
         const service = servicesData?.find((s) => s.id === id);
         if (service) {
-          acc.totalPrice += service.price ?? 0;
+          acc.totalPrice += toMoneyNumber(service.price);
           acc.totalDuration += service.durationMinutes ?? 0;
         }
         return acc;
@@ -947,7 +952,7 @@ export default function NewAppointmentPage() {
                               </span>
                             )}
                             <span className="font-semibold">
-                              ${(service.price ?? 0).toFixed(2)}
+                              ${toMoneyNumber(service.price).toFixed(2)}
                             </span>
                           </div>
                         </div>
@@ -1342,7 +1347,7 @@ export default function NewAppointmentPage() {
                       return (
                         <div key={id} className="flex justify-between">
                           <span className="text-muted-foreground">{s.name}</span>
-                          <span>${(s.price ?? 0).toFixed(2)}</span>
+                          <span>${toMoneyNumber(s.price).toFixed(2)}</span>
                         </div>
                       );
                     })}
