@@ -49,6 +49,9 @@ export default function PublicLayout() {
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-gray-900">Product</h2>
               <div className="mt-3 flex flex-col gap-2 text-sm">
+                <Link to="/features" className="text-gray-600 transition-colors hover:text-gray-950">
+                  Strata CRM features
+                </Link>
                 {featureSeoPages.map((page) => (
                   <Link key={page.key} to={page.path} className="text-gray-600 transition-colors hover:text-gray-950">
                     {page.navLabel}

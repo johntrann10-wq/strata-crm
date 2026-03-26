@@ -37,7 +37,7 @@ const navigationItems: NavItems = [
   {
     type: "item",
     title: "Features",
-    href: "/#features",
+    href: "/features",
     description: "Quote-to-booking, CRM, scheduling, and payments—done right.",
   },
   {

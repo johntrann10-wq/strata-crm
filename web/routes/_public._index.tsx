@@ -233,7 +233,7 @@ export default function LandingPage() {
           </Link>
           <nav className="hidden items-center gap-5 text-sm text-gray-600 md:flex">
             <a href="#product" className="transition-colors hover:text-gray-950">Product</a>
-            <a href="#features" className="transition-colors hover:text-gray-950">Features</a>
+            <Link to="/features" className="transition-colors hover:text-gray-950">Features</Link>
             <a href="#industries" className="transition-colors hover:text-gray-950">Who it's for</a>
             <Link to="/pricing" className="transition-colors hover:text-gray-950">Pricing</Link>
           </nav>
@@ -308,6 +308,15 @@ export default function LandingPage() {
                 )}
               >
                 View pricing
+              </Link>
+              <Link
+                to="/features"
+                className={cn(
+                  buttonVariants({ size: "lg", variant: "outline" }),
+                  "min-h-[54px] rounded-2xl border-gray-300 bg-white/85 px-7 text-base font-semibold text-gray-900 hover:bg-white"
+                )}
+              >
+                Explore features
               </Link>
             </div>
 
@@ -551,6 +560,12 @@ export default function LandingPage() {
               className="rounded-full border border-orange-200 bg-white px-4 py-2 font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-50"
             >
               See Strata CRM pricing
+            </Link>
+            <Link
+              to="/features"
+              className="rounded-full border border-orange-200 bg-white px-4 py-2 font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-50"
+            >
+              Explore Strata CRM features
             </Link>
           </div>
         </div>
