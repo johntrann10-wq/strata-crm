@@ -153,6 +153,25 @@ async function locationExistsForBusiness(locationId: string, bid: string): Promi
   }
 }
 
+async function updateAppointmentTotalIfSupported(
+  tx: any,
+  appointmentId: string,
+  totalPrice: string
+) {
+  const appointmentColumns = await getAppointmentColumns();
+  if (!appointmentColumns.has("total_price")) return;
+  const updates: Record<string, unknown> = {
+    totalPrice,
+  };
+  if (appointmentColumns.has("updated_at")) {
+    updates.updatedAt = new Date();
+  }
+  await tx
+    .update(appointments)
+    .set(updates as Partial<typeof appointments.$inferInsert>)
+    .where(eq(appointments.id, appointmentId));
+}
+
 const appointmentStatusSchema = z.enum(["scheduled", "confirmed", "in_progress", "completed", "cancelled", "no-show"]);
 const createSchema = z.object({
   clientId: z.string().uuid(),
@@ -682,28 +701,10 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
             businessId: bid,
             error,
           });
-          const appointmentColumns = await getAppointmentColumns();
-          if (appointmentColumns.has("total_price")) {
-            await tx
-              .update(appointments)
-              .set({
-                totalPrice: selectedServicesTotal.toFixed(2),
-                updatedAt: new Date(),
-              })
-              .where(eq(appointments.id, apt.id));
-          }
+          await updateAppointmentTotalIfSupported(tx, apt.id, selectedServicesTotal.toFixed(2));
         }
       } else {
-        const appointmentColumns = await getAppointmentColumns();
-        if (appointmentColumns.has("total_price")) {
-          await tx
-            .update(appointments)
-            .set({
-              totalPrice: selectedServicesTotal.toFixed(2),
-              updatedAt: new Date(),
-            })
-            .where(eq(appointments.id, apt.id));
-        }
+        await updateAppointmentTotalIfSupported(tx, apt.id, selectedServicesTotal.toFixed(2));
       }
     }
 
