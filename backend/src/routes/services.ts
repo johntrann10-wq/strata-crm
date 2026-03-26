@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { services, appointmentServices } from "../db/schema.js";
-import { eq, and, asc, desc, count } from "drizzle-orm";
+import { eq, and, asc, desc, count, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { warnOnce } from "../lib/warnOnce.js";
@@ -79,6 +79,26 @@ const fullServiceSelection = {
   isAddon: services.isAddon,
   active: services.active,
 };
+
+let cachedServiceColumns: Set<string> | null = null;
+
+async function getServiceColumns(): Promise<Set<string>> {
+  if (cachedServiceColumns) return cachedServiceColumns;
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'services'
+  `);
+  const rows = Array.isArray((result as { rows?: unknown[] }).rows)
+    ? ((result as { rows: Array<{ column_name?: string }> }).rows)
+    : ((result as Array<{ column_name?: string }>) ?? []);
+  cachedServiceColumns = new Set(
+    rows
+      .map((row) => row?.column_name)
+      .filter((value): value is string => typeof value === "string")
+  );
+  return cachedServiceColumns;
+}
 
 function withMissingServiceFields<T extends Omit<ServiceRecord, "notes" | "durationMinutes" | "category" | "taxable" | "isAddon" | "active">>(
   row: T
@@ -222,13 +242,21 @@ servicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
       businessId: bid,
       error: error instanceof Error ? error.message : String(error),
     });
+    const columns = await getServiceColumns();
+    const fallbackValues: Partial<typeof services.$inferInsert> = {
+      businessId: bid,
+      name: body.name,
+      price: String(body.price),
+    };
+    if (columns.has("duration_minutes")) fallbackValues.durationMinutes = body.durationMinutes ?? null;
+    if (columns.has("category")) fallbackValues.category = body.category ?? "other";
+    if (columns.has("notes")) fallbackValues.notes = body.notes ?? null;
+    if (columns.has("taxable")) fallbackValues.taxable = body.taxable ?? true;
+    if (columns.has("is_addon")) fallbackValues.isAddon = body.isAddon ?? false;
+    if (columns.has("active")) fallbackValues.active = body.active ?? true;
     const [created] = await db
       .insert(services)
-      .values({
-        businessId: bid,
-        name: body.name,
-        price: String(body.price),
-      })
+      .values(fallbackValues)
       .returning({ id: services.id });
     createdId = created?.id ?? null;
   }
