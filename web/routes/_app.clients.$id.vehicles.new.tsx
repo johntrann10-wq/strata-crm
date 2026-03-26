@@ -50,6 +50,13 @@ export default function NewVehiclePage() {
     submitModeRef.current = mode;
     setSubmitMode(mode);
   };
+  const redirectTo = (href: string) => {
+    if (typeof window !== "undefined") {
+      window.location.assign(href);
+      return;
+    }
+    navigate(href);
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -89,18 +96,18 @@ export default function NewVehiclePage() {
 
     toast.success("Vehicle saved");
     if (mode === "quote") {
-      navigate(`/quotes/new?clientId=${clientId}&vehicleId=${createdVehicleId}&from=${encodeURIComponent(returnTo)}`);
+      redirectTo(`/quotes/new?clientId=${clientId}&vehicleId=${createdVehicleId}&from=${encodeURIComponent(returnTo)}`);
       return;
     }
     if (mode === "appointment") {
-      navigate(
+      redirectTo(
         `/appointments/new?clientId=${clientId}&vehicleId=${createdVehicleId}${
           currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
         }&from=${encodeURIComponent(returnTo)}`
       );
       return;
     }
-    navigate(`${returnTo}`);
+    redirectTo(`${returnTo}`);
   };
 
   return (
