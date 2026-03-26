@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, Link, useSearchParams, useOutletContext } from "react-router";
 import type { FormEvent } from "react";
 import { useFindFirst, useAction } from "../hooks/useApi";
@@ -36,6 +36,7 @@ export default function NewClientPage() {
     const next = searchParams.get("next");
     return next === "vehicle" || next === "quote" || next === "appointment" ? next : "client";
   });
+  const submitModeRef = useRef<typeof submitMode>(submitMode);
 
   const [{ data: business, fetching: businessFetching }] = useFindFirst(api.business, {
     select: { id: true },
@@ -58,6 +59,10 @@ export default function NewClientPage() {
 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
+  const setSubmitIntent = (mode: typeof submitMode) => {
+    submitModeRef.current = mode;
+    setSubmitMode(mode);
+  };
 
   const getFieldError = (fieldName: string): string | undefined => {
     if (localErrors[fieldName]) return localErrors[fieldName];
@@ -77,7 +82,7 @@ export default function NewClientPage() {
     e.preventDefault();
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
     const nextMode = submitter?.dataset.submitMode as typeof submitMode | undefined;
-    const mode = nextMode ?? submitMode;
+    const mode = nextMode ?? submitModeRef.current ?? submitMode;
 
     const errors: Record<string, string> = {};
     if (!formData.firstName.trim()) errors.firstName = "First name is required";
@@ -387,21 +392,21 @@ export default function NewClientPage() {
         {/* Actions */}
         <div className="flex flex-col gap-3 pt-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="vehicle" onClick={() => setSubmitMode("vehicle")}>
+            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="vehicle" onClick={() => setSubmitIntent("vehicle")}>
               {fetching && submitMode === "vehicle" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save and Add Vehicle
             </Button>
-            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="quote" onClick={() => setSubmitMode("quote")}>
+            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="quote" onClick={() => setSubmitIntent("quote")}>
               {fetching && submitMode === "quote" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save and Create Quote
             </Button>
-            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="appointment" onClick={() => setSubmitMode("appointment")}>
+            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="appointment" onClick={() => setSubmitIntent("appointment")}>
               {fetching && submitMode === "appointment" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save and Book Appointment
             </Button>
           </div>
           <div className="flex items-center gap-3">
-            <Button type="submit" disabled={fetching} data-submit-mode="client" onClick={() => setSubmitMode("client")}>
+            <Button type="submit" disabled={fetching} data-submit-mode="client" onClick={() => setSubmitIntent("client")}>
               {fetching && submitMode === "client" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save Client
             </Button>

@@ -24,6 +24,7 @@ export default function NewVehiclePage() {
     const next = searchParams.get("next");
     return next === "quote" || next === "appointment" ? next : "client";
   });
+  const submitModeRef = useRef<typeof submitMode>(submitMode);
   const intendedNext =
     submitMode === "quote"
       ? "Save this vehicle and continue straight into quote creation."
@@ -45,6 +46,10 @@ export default function NewVehiclePage() {
 
   const [showMoreDetails, setShowMoreDetails] = useState(false);
   const vinInputRef = useRef<HTMLInputElement>(null);
+  const setSubmitIntent = (mode: typeof submitMode) => {
+    submitModeRef.current = mode;
+    setSubmitMode(mode);
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -58,7 +63,7 @@ export default function NewVehiclePage() {
     if (!clientId) return;
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
     const nextMode = submitter?.dataset.submitMode as typeof submitMode | undefined;
-    const mode = nextMode ?? submitMode;
+    const mode = nextMode ?? submitModeRef.current ?? submitMode;
 
     const result = await createVehicle({
       clientId,
@@ -262,11 +267,11 @@ export default function NewVehiclePage() {
 
             <div className="flex flex-col gap-3 pt-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
-                <Button type="submit" variant="outline" disabled={creating || !clientId} data-submit-mode="quote" onClick={() => setSubmitMode("quote")}>
+                <Button type="submit" variant="outline" disabled={creating || !clientId} data-submit-mode="quote" onClick={() => setSubmitIntent("quote")}>
                   {creating && submitMode === "quote" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Save and Create Quote
                 </Button>
-                <Button type="submit" variant="outline" disabled={creating || !clientId} data-submit-mode="appointment" onClick={() => setSubmitMode("appointment")}>
+                <Button type="submit" variant="outline" disabled={creating || !clientId} data-submit-mode="appointment" onClick={() => setSubmitIntent("appointment")}>
                   {creating && submitMode === "appointment" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Save and Book Appointment
                 </Button>
@@ -282,7 +287,7 @@ export default function NewVehiclePage() {
               <Button
                 type="submit"
                 data-submit-mode="client"
-                onClick={() => setSubmitMode("client")}
+                onClick={() => setSubmitIntent("client")}
                 disabled={creating || !clientId}
               >
                 {creating && submitMode === "client" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
