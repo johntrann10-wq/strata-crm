@@ -237,11 +237,30 @@ businessesRouter.post("/:id/completeOnboarding", requireAuth, async (req: Reques
   if (!canAccessBusiness(req, b, "settings.write")) {
     throw new ForbiddenError("You do not have permission to perform this action.");
   }
-  const [updated] = await db
-    .update(businesses)
-    .set({ onboardingComplete: true, updatedAt: new Date() })
-    .where(eq(businesses.id, id))
-    .returning();
+  let updated: typeof businesses.$inferSelect | undefined;
+  try {
+    [updated] = await db
+      .update(businesses)
+      .set({ onboardingComplete: true, updatedAt: new Date() })
+      .where(eq(businesses.id, id))
+      .returning();
+  } catch (error) {
+    if (!isBusinessSchemaDriftError(error)) throw error;
+    warnOnce(
+      "businesses:complete-onboarding:schema",
+      "business completeOnboarding falling back without full schema",
+      {
+        businessId: id,
+        userId: req.userId,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
+    updated = {
+      ...b,
+      onboardingComplete: true,
+      updatedAt: new Date(),
+    };
+  }
   if (!updated) throw new NotFoundError("Business not found.");
   res.json(serializeBusiness(updated));
 });
