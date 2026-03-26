@@ -37,8 +37,6 @@ function shouldUseSameOriginApi(): boolean {
   if (typeof window === "undefined") return false;
   const host = window.location.hostname.toLowerCase();
   return (
-    host === "stratacrm.app" ||
-    host === "www.stratacrm.app" ||
     host.endsWith(".vercel.app") ||
     host.endsWith(".netlify.app")
   );
