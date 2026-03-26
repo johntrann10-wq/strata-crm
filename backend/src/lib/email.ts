@@ -48,9 +48,9 @@ function buildTransportOptions(port: number, secure: boolean) {
     port,
     secure,
     family: 4,
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 15_000,
+    connectionTimeout: 4_000,
+    greetingTimeout: 4_000,
+    socketTimeout: 5_000,
     tls: {
       servername: process.env.SMTP_HOST!,
     },
