@@ -101,9 +101,14 @@ async function sendMailWithTimeout(
   timeoutMs: number
 ): Promise<void> {
   let timeoutHandle: NodeJS.Timeout | null = null;
+  const sendPromise = transport.sendMail(payload);
+  sendPromise.catch(() => {
+    // The timeout path may win the race first. Consume late send failures so they
+    // cannot surface as unhandled rejections after the route has already moved on.
+  });
   try {
     await Promise.race([
-      transport.sendMail(payload),
+      sendPromise,
       new Promise<never>((_, reject) => {
         timeoutHandle = setTimeout(() => {
           try {
