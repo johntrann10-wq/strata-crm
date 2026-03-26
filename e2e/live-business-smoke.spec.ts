@@ -56,6 +56,67 @@ async function clickFirstService(page: Page) {
   await serviceCheckbox.click();
 }
 
+async function ensureActiveService(page: Page): Promise<boolean> {
+  const result = await page.evaluate(async () => {
+    const token = window.localStorage.getItem("authToken");
+    const businessId = window.localStorage.getItem("currentBusinessId");
+    if (!token || !businessId) {
+      return { ok: false, reason: "missing auth context" };
+    }
+
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+    const base = "https://strata-crm-production.up.railway.app/api";
+    const filter = encodeURIComponent(
+      JSON.stringify({
+        businessId: { equals: businessId },
+        active: { equals: true },
+      })
+    );
+
+    const listResp = await fetch(`${base}/services?filter=${filter}&first=1`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const listBody = await listResp.json().catch(() => ({}));
+    const existing = Array.isArray(listBody?.records) ? listBody.records[0] : null;
+    if (existing?.id) {
+      return { ok: true, created: false, id: existing.id };
+    }
+
+    const createResp = await fetch(`${base}/services`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: "Smoke Test Service",
+        price: 149,
+        durationMinutes: 120,
+        active: true,
+      }),
+    });
+    const createBody = await createResp.json().catch(() => ({}));
+    return {
+      ok: createResp.ok,
+      created: true,
+      status: createResp.status,
+      id: createBody?.id ?? null,
+      body: createBody,
+    };
+  });
+
+  // eslint-disable-next-line no-console
+  console.log("ensureActiveService", result);
+  if (!result?.ok) {
+    if (result?.status === 503) {
+      return false;
+    }
+    throw new Error(`Unable to seed service for smoke: ${JSON.stringify(result)}`);
+  }
+  await page.reload();
+  return true;
+}
+
 test.describe("Live business workflow smoke", () => {
   test.beforeAll(() => {
     if (!email || !password) {
@@ -78,6 +139,7 @@ test.describe("Live business workflow smoke", () => {
     let appointmentId = "";
     let quoteId = "";
     let invoiceId = "";
+    let servicesAvailable = false;
 
     page.on("response", async (response) => {
       if (!response.url().includes("/api/")) return;
@@ -90,6 +152,10 @@ test.describe("Live business workflow smoke", () => {
       }
       // eslint-disable-next-line no-console
       console.log("API failure", response.status(), response.url(), body);
+    });
+    page.on("pageerror", (error) => {
+      // eslint-disable-next-line no-console
+      console.log("page error", error.message);
     });
 
     await signIn(page);
@@ -112,7 +178,16 @@ test.describe("Live business workflow smoke", () => {
       await page.locator("#year").fill("2022");
       await page.locator("#make").fill("Toyota");
       await page.locator("#vehicleModel").fill("Camry");
+      const createResponsePromise = page.waitForResponse((response) =>
+        response.url().includes("/api/vehicles") &&
+        response.request().method() === "POST"
+      );
       await page.getByRole("button", { name: /save and book appointment/i }).click();
+      const createResponse = await createResponsePromise;
+      const vehiclePayload = await createResponse.json().catch(() => ({}));
+      notes.push(`vehicle create: http_${createResponse.status()} id_${vehiclePayload?.id ?? "missing"}`);
+      // eslint-disable-next-line no-console
+      console.log("vehicle create response", createResponse.status(), vehiclePayload, page.url());
       await waitForPathname(page, /^\/appointments\/new$/);
       const url = new URL(page.url());
       vehicleId = url.searchParams.get("vehicleId") ?? "";
@@ -122,7 +197,11 @@ test.describe("Live business workflow smoke", () => {
     let appointmentDeliveryStatus: string | null = null;
     await test.step("Create appointment", async () => {
       await expect(page.getByRole("heading", { name: /new appointment/i })).toBeVisible();
-      await clickFirstService(page);
+      servicesAvailable = await ensureActiveService(page);
+      await expect(page.getByRole("heading", { name: /new appointment/i })).toBeVisible();
+      if (servicesAvailable) {
+        await clickFirstService(page);
+      }
       const createResponsePromise = page.waitForResponse((response) =>
         response.url().includes("/api/appointments") &&
         response.request().method() === "POST"
@@ -135,6 +214,7 @@ test.describe("Live business workflow smoke", () => {
       appointmentId = /^\/appointments\/([^/]+)$/.exec(new URL(page.url()).pathname)?.[1] ?? "";
       expect(appointmentId).not.toBe("");
       notes.push(`appointment delivery: ${appointmentDeliveryStatus ?? "unknown"}`);
+      notes.push(`services available: ${servicesAvailable}`);
     });
 
     await test.step("Calendar shows created appointment context", async () => {

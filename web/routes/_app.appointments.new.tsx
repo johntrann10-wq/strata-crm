@@ -227,7 +227,7 @@ export default function NewAppointmentPage() {
     }
   );
 
-  const [{ data: vehiclesData, fetching: vehiclesFetching }] = useFindMany(
+  const [{ data: vehiclesData, fetching: vehiclesFetching }, refetchVehicles] = useFindMany(
     api.vehicle,
     {
       filter: selectedClientId
@@ -438,6 +438,7 @@ export default function NewAppointmentPage() {
         setQuickVehicleError("Vehicle saved but no record ID was returned. Please refresh and try again.");
         return;
       }
+      await refetchVehicles();
       setSelectedVehicleId(createdVehicleId);
       setShowQuickAddVehicle(false);
       setQuickYear('');
@@ -456,7 +457,7 @@ export default function NewAppointmentPage() {
     setFormError(null);
     setVehicleError(null);
 
-    if (selectedServiceIds.length === 0) {
+    if (servicesData && servicesData.length > 0 && selectedServiceIds.length === 0) {
       setFormError("Please select at least one service so an end time can be calculated.");
       return;
     }
@@ -497,10 +498,12 @@ export default function NewAppointmentPage() {
       const clientNotes = notes.trim();
       const mobileAddressNote = isMobile && mobileAddress.trim() ? `Mobile service address: ${mobileAddress.trim()}` : "";
       const persistedNotes = [mobileAddressNote, clientNotes].filter(Boolean).join("\n\n") || undefined;
-      const autoTitle = selectedServiceIds
-        .map((id) => servicesData?.find((s) => s.id === id)?.name)
-        .filter(Boolean)
-        .join(" + ");
+      const autoTitle = selectedServiceIds.length
+        ? selectedServiceIds
+            .map((id) => servicesData?.find((s) => s.id === id)?.name)
+            .filter(Boolean)
+            .join(" + ")
+        : "Appointment";
       const result = await createAppointment({
         clientId: selectedClientId,
         vehicleId: selectedVehicleId!,
@@ -524,8 +527,12 @@ export default function NewAppointmentPage() {
 
       if (result.data) {
         const payload = result.data as { id: string; deliveryStatus?: string | null; deliveryError?: string | null };
+        if (!payload.id) {
+          setFormError("Appointment was created, but no record ID was returned. Please refresh the schedule and confirm the booking.");
+          return;
+        }
         notifyAppointmentConfirmation(payload.deliveryStatus ?? null, payload.deliveryError ?? null);
-        navigate(`/appointments/${result.data.id}?from=${encodeURIComponent(returnTo)}`);
+        navigate(`/appointments/${payload.id}?from=${encodeURIComponent(returnTo)}`);
       }
     } catch (err: unknown) {
       const message =
@@ -542,6 +549,7 @@ export default function NewAppointmentPage() {
   const vehicles = vehiclesData ?? [];
   const clients = clientsData ?? [];
   const services = servicesData ?? [];
+  const requiresServiceSelection = services.length > 0;
   const addonLinks = (packageAddonLinks ?? []) as Array<{ parentServiceId: string; addonServiceId: string }>;
   const packageTemplates = services
     .filter((service) => !service.isAddon)
@@ -945,8 +953,13 @@ export default function NewAppointmentPage() {
                 </div>
               )}
 
-              {services.length > 0 && selectedServiceIds.length === 0 && selectedClientId && (
+              {requiresServiceSelection && selectedServiceIds.length === 0 && selectedClientId && (
                 <p className="text-xs text-muted-foreground mt-2">Select at least one service to calculate the appointment duration and end time.</p>
+              )}
+              {!requiresServiceSelection && selectedClientId && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  No active services are loaded yet. You can still save a basic appointment now and add service details later.
+                </p>
               )}
 
               {/* Quote prefilled badge */}
