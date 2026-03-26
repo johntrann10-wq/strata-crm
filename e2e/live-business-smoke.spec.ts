@@ -86,10 +86,7 @@ async function clickFirstService(page: Page, serviceName: string) {
 }
 
 async function fillRequiredMobileAddress(page: Page) {
-  const mobileToggle = page.getByRole("checkbox", { name: /mobile service/i });
-  if (!(await mobileToggle.isChecked().catch(() => false))) return;
-
-  const addressField = page.getByRole("textbox", { name: /service address/i });
+  const addressField = page.locator("#mobileAddress");
   if (await addressField.isVisible().catch(() => false)) {
     await addressField.fill("123 Smoke Test Ave, Los Angeles, CA 90001");
   }
@@ -217,7 +214,11 @@ test.describe("Live business workflow smoke", () => {
     const clientLast = `Flow${String(stamp).slice(-6)}`;
     const clientEmail = `smoke+${stamp}@example.com`;
     const clientPhone = "555-010-1234";
+    const leadFirst = "Lead";
+    const leadLast = `Flow${String(stamp).slice(-5)}`;
+    const leadEmail = `lead+${stamp}@example.com`;
     let clientId = "";
+    let leadClientId = "";
     let vehicleId = "";
     let appointmentId = "";
     let quoteId = "";
@@ -248,6 +249,31 @@ test.describe("Live business workflow smoke", () => {
     });
 
     await signIn(page);
+
+    await test.step("Create lead and convert it into a client record", async () => {
+      await page.goto("/leads");
+      await expect(page.getByRole("heading", { name: /^leads$/i })).toBeVisible();
+      await page.locator("#leadFirstName").fill(leadFirst);
+      await page.locator("#leadLastName").fill(leadLast);
+      await page.locator("#leadEmail").fill(leadEmail);
+      await page.locator("#serviceInterest").fill("Window tint quote");
+      await page.locator("#nextStep").fill("Send pricing");
+      await page.getByRole("button", { name: /^save lead$/i }).click();
+      await waitForPathname(page, /^\/clients\/[^/]+$/);
+      leadClientId = /^\/clients\/([^/]+)$/.exec(new URL(page.url()).pathname)?.[1] ?? "";
+      expect(leadClientId).not.toBe("");
+      await expect(page.locator("main")).toContainText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i"));
+
+      await page.goto("/leads");
+      const leadCard = page.locator("section").filter({ has: page.getByText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i")) }).first();
+      await expect(leadCard).toBeVisible();
+      await leadCard.getByRole("button", { name: /convert to client/i }).click();
+      await waitForPathname(page, new RegExp(`^/clients/${leadClientId}$`));
+      await expect(page.locator("main")).toContainText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i"));
+      await page.goBack();
+      await expect(page).toHaveURL(/\/leads/);
+      await expect(page.locator("main")).toContainText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i"));
+    });
 
     await test.step("Create client", async () => {
       await page.goto("/clients/new");
@@ -323,7 +349,7 @@ test.describe("Live business workflow smoke", () => {
       appointmentId = /^\/appointments\/([^/]+)$/.exec(new URL(page.url()).pathname)?.[1] ?? "";
       expect(appointmentId).not.toBe("");
       notes.push(`appointment delivery: ${appointmentDeliveryStatus ?? "unknown"}`);
-      notes.push(`services available: ${servicesAvailable}`);
+      notes.push(`starter services ready: ${serviceResult.ok ? "yes" : "degraded"}`);
     });
 
     await test.step("Calendar shows created appointment context", async () => {

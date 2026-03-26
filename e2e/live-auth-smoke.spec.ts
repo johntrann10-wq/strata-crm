@@ -91,9 +91,15 @@ test.describe("Live auth smoke", () => {
     await expect(page).toHaveURL(/\/clients/);
     await expectMainHeading(page, /^clients$/i);
 
+    await page.goto("/leads");
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/leads/);
+    await expectMainHeading(page, /^leads$/i);
+
     await page.goto("/vehicles");
+    await page.waitForLoadState("networkidle");
     await expect(page).toHaveURL(/\/vehicles/);
-    await expectMainHeading(page, /^vehicles$/i);
+    await expectMainHeading(page, /vehicles live inside client records/i);
 
     await page.goto("/appointments");
     await expect(page).toHaveURL(/\/appointments/);

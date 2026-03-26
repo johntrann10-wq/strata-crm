@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 export interface PageContext {
@@ -43,12 +43,17 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [pageContext, setPageContextState] = useState<PageContext>(defaultPageContext);
 
-  const handleSetPageContext = (ctx: PageContext | null) => {
+  const handleSetPageContext = useCallback((ctx: PageContext | null) => {
     setPageContextState(ctx ?? defaultPageContext);
-  };
+  }, []);
+
+  const value = useMemo(
+    () => ({ open, setOpen, pageContext, setPageContext: handleSetPageContext }),
+    [open, pageContext, handleSetPageContext]
+  );
 
   return (
-    <CommandPaletteContext.Provider value={{ open, setOpen, pageContext, setPageContext: handleSetPageContext }}>
+    <CommandPaletteContext.Provider value={value}>
       {children}
     </CommandPaletteContext.Provider>
   );
