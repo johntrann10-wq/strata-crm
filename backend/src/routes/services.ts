@@ -5,6 +5,7 @@ import { services, appointmentServices } from "../db/schema.js";
 import { eq, and, asc, desc, count } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
+import { warnOnce } from "../lib/warnOnce.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 
@@ -108,7 +109,7 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
       .limit(first);
   } catch (error) {
     if (!isServiceSchemaDriftError(error)) throw error;
-    logger.warn("services list falling back without full schema", {
+    warnOnce("services:list:full-schema", "services list falling back without full schema", {
       businessId: bid,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -132,7 +133,7 @@ async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRe
     return row ?? null;
   } catch (error) {
     if (!isServiceSchemaDriftError(error)) throw error;
-    logger.warn("service lookup falling back without full schema", {
+    warnOnce("services:lookup:full-schema", "service lookup falling back without full schema", {
       businessId: bid,
       serviceId: id,
       error: error instanceof Error ? error.message : String(error),
@@ -217,7 +218,7 @@ servicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
     createdId = created?.id ?? null;
   } catch (error) {
     if (!isServiceSchemaDriftError(error)) throw error;
-    logger.warn("service create falling back without full schema", {
+    warnOnce("services:create:full-schema", "service create falling back without full schema", {
       businessId: bid,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -267,7 +268,7 @@ servicesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, re
       .where(eq(services.id, req.params.id));
   } catch (error) {
     if (!isServiceSchemaDriftError(error)) throw error;
-    logger.warn("service update falling back without full schema", {
+    warnOnce("services:update:full-schema", "service update falling back without full schema", {
       businessId: bid,
       serviceId: req.params.id,
       error: error instanceof Error ? error.message : String(error),

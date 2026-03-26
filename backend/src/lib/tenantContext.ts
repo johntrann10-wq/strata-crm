@@ -3,6 +3,7 @@ import { db } from "../db/index.js";
 import { businesses, businessMemberships } from "../db/schema.js";
 import type { MembershipRole } from "./permissions.js";
 import { logger } from "./logger.js";
+import { warnOnce } from "./warnOnce.js";
 
 export interface TenantContext {
   businessId: string;
@@ -12,8 +13,13 @@ export interface TenantContext {
 
 function isTenantSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
-  const code = (error as { code?: string }).code;
-  const message = String((error as { message?: string }).message ?? "").toLowerCase();
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
   return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
@@ -52,7 +58,7 @@ export async function resolveTenantContext(
         .limit(1);
     } catch (error) {
       if (!isTenantSchemaDriftError(error)) throw error;
-      logger.warn("business membership schema unavailable during tenant resolution", {
+      warnOnce("tenant:preferred-membership-schema", "business membership schema unavailable during tenant resolution", {
         userId,
         preferredBusinessId: normalizedPreferredBusinessId,
         error: error instanceof Error ? error.message : String(error),
@@ -87,7 +93,7 @@ export async function resolveTenantContext(
       .limit(1);
   } catch (error) {
     if (!isTenantSchemaDriftError(error)) throw error;
-    logger.warn("business membership schema unavailable during tenant bootstrap", {
+    warnOnce("tenant:bootstrap-membership-schema", "business membership schema unavailable during tenant bootstrap", {
       userId,
       error: error instanceof Error ? error.message : String(error),
     });

@@ -7,6 +7,7 @@ import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { logger } from "../lib/logger.js";
+import { warnOnce } from "../lib/warnOnce.js";
 
 export const locationsRouter = Router({ mergeParams: true });
 
@@ -91,7 +92,7 @@ async function listLocationsForBusiness(bid: string): Promise<LocationRecord[]> 
       .orderBy(asc(locations.name));
   } catch (error) {
     if (!isLocationSchemaDriftError(error)) throw error;
-    logger.warn("locations list falling back without full schema", {
+    warnOnce("locations:list:full-schema", "locations list falling back without full schema", {
       businessId: bid,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -104,7 +105,7 @@ async function listLocationsForBusiness(bid: string): Promise<LocationRecord[]> 
       return rows.map((row) => withMissingFields(row, { timezone: row.timezone }));
     } catch (innerError) {
       if (!isLocationSchemaDriftError(innerError)) throw innerError;
-      logger.warn("locations list falling back without timezone column", {
+      warnOnce("locations:list:timezone", "locations list falling back without timezone column", {
         businessId: bid,
         error: innerError instanceof Error ? innerError.message : String(innerError),
       });
@@ -117,7 +118,7 @@ async function listLocationsForBusiness(bid: string): Promise<LocationRecord[]> 
         return rows.map((row) => withMissingFields(row, { active: row.active }));
       } catch (legacyError) {
         if (!isLocationSchemaDriftError(legacyError)) throw legacyError;
-        logger.warn("locations list falling back without active column", {
+        warnOnce("locations:list:active", "locations list falling back without active column", {
           businessId: bid,
           error: legacyError instanceof Error ? legacyError.message : String(legacyError),
         });
@@ -142,7 +143,7 @@ async function getLocationForBusiness(bid: string, id: string): Promise<Location
     return row ?? null;
   } catch (error) {
     if (!isLocationSchemaDriftError(error)) throw error;
-    logger.warn("location lookup falling back without full schema", {
+    warnOnce("locations:lookup:full-schema", "location lookup falling back without full schema", {
       businessId: bid,
       locationId: id,
       error: error instanceof Error ? error.message : String(error),
@@ -156,7 +157,7 @@ async function getLocationForBusiness(bid: string, id: string): Promise<Location
       return row ? withMissingFields(row, { timezone: row.timezone }) : null;
     } catch (innerError) {
       if (!isLocationSchemaDriftError(innerError)) throw innerError;
-      logger.warn("location lookup falling back without timezone column", {
+      warnOnce("locations:lookup:timezone", "location lookup falling back without timezone column", {
         businessId: bid,
         locationId: id,
         error: innerError instanceof Error ? innerError.message : String(innerError),
@@ -170,7 +171,7 @@ async function getLocationForBusiness(bid: string, id: string): Promise<Location
         return row ? withMissingFields(row, { active: row.active }) : null;
       } catch (legacyError) {
         if (!isLocationSchemaDriftError(legacyError)) throw legacyError;
-        logger.warn("location lookup falling back without active column", {
+        warnOnce("locations:lookup:active", "location lookup falling back without active column", {
           businessId: bid,
           locationId: id,
           error: legacyError instanceof Error ? legacyError.message : String(legacyError),
@@ -218,7 +219,7 @@ locationsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: 
     createdId = created?.id ?? null;
   } catch (error) {
     if (!isLocationSchemaDriftError(error)) throw error;
-    logger.warn("location create falling back without phone column", {
+    warnOnce("locations:create:phone", "location create falling back without phone column", {
       businessId: bid,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -236,7 +237,7 @@ locationsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: 
       createdId = created?.id ?? null;
     } catch (innerError) {
       if (!isLocationSchemaDriftError(innerError)) throw innerError;
-      logger.warn("location create falling back without timezone/active columns", {
+      warnOnce("locations:create:legacy", "location create falling back without timezone/active columns", {
         businessId: bid,
         error: innerError instanceof Error ? innerError.message : String(innerError),
       });

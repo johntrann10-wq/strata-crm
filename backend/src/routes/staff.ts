@@ -10,6 +10,7 @@ import { requireTenant } from "../middleware/tenant.js";
 import { requirePermission } from "../middleware/permissions.js";
 import type { MembershipRole } from "../lib/permissions.js";
 import { logger } from "../lib/logger.js";
+import { warnOnce } from "../lib/warnOnce.js";
 
 export const staffRouter = Router({ mergeParams: true });
 
@@ -77,7 +78,7 @@ staffRouter.get("/", requireAuth, requireTenant, requirePermission("team.read"),
       .where(eq(businessMemberships.businessId, tenantId));
   } catch (error) {
     if (!isStaffSchemaDriftError(error)) throw error;
-    logger.warn("staff list falling back without business memberships", {
+    warnOnce("staff:list:memberships", "staff list falling back without business memberships", {
       businessId: tenantId,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -132,10 +133,10 @@ staffRouter.post("/", requireAuth, requireTenant, requirePermission("team.write"
       }
     } catch (error) {
       if (!isStaffSchemaDriftError(error)) throw error;
-      logger.warn("staff create skipping membership duplicate check due to schema drift", {
-        businessId: tenantId,
-        userId: user.id,
-        error: error instanceof Error ? error.message : String(error),
+        warnOnce("staff:create:duplicate-check", "staff create skipping membership duplicate check due to schema drift", {
+          businessId: tenantId,
+          userId: user.id,
+          error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -168,7 +169,7 @@ staffRouter.post("/", requireAuth, requireTenant, requirePermission("team.write"
         });
       } catch (error) {
         if (!isStaffSchemaDriftError(error)) throw error;
-        logger.warn("staff create skipping membership insert due to schema drift", {
+        warnOnce("staff:create:membership-insert", "staff create skipping membership insert due to schema drift", {
           businessId: tenantId,
           userId: newUserId,
           error: error instanceof Error ? error.message : String(error),
@@ -224,7 +225,7 @@ staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.wr
       membership = membershipRow ?? null;
     } catch (error) {
       if (!isStaffSchemaDriftError(error)) throw error;
-      logger.warn("staff update skipping membership owner check due to schema drift", {
+      warnOnce("staff:update:owner-check", "staff update skipping membership owner check due to schema drift", {
         businessId: businessId(req),
         staffId: existing.id,
         error: error instanceof Error ? error.message : String(error),
