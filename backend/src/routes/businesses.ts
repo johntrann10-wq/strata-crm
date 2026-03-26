@@ -10,6 +10,7 @@ import { randomUUID } from "crypto";
 import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
 import { roleHasPermission } from "../lib/permissions.js";
 import { warnOnce } from "../lib/warnOnce.js";
+import { wrapAsync } from "../lib/asyncHandler.js";
 
 export const businessesRouter = Router({ mergeParams: true });
 type BusinessRecord = typeof businesses.$inferSelect;
@@ -188,7 +189,7 @@ async function loadBusinessByOwner(ownerId: string): Promise<BusinessRecord | nu
   }
 }
 
-businessesRouter.get("/", requireAuth, async (req: Request, res: Response) => {
+businessesRouter.get("/", requireAuth, wrapAsync(async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   if (req.businessId) {
     if (!req.membershipRole || !roleHasPermission(req.membershipRole, "settings.read")) {
@@ -214,9 +215,9 @@ businessesRouter.get("/", requireAuth, async (req: Request, res: Response) => {
     return;
   }
   res.json({ records: [serializeBusiness(business)] });
-});
+}));
 
-businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
+businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -273,9 +274,9 @@ businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
   });
   if (!created) throw new BadRequestError("Failed to create business.");
   res.status(201).json(serializeBusiness(created));
-});
+}));
 
-businessesRouter.get("/:id", requireAuth, async (req: Request, res: Response) => {
+businessesRouter.get("/:id", requireAuth, wrapAsync(async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   const business = await loadBusinessById(req.params.id);
   if (!business) throw new NotFoundError("Business not found.");
@@ -283,9 +284,9 @@ businessesRouter.get("/:id", requireAuth, async (req: Request, res: Response) =>
     throw new ForbiddenError("You do not have permission to perform this action.");
   }
   res.json(serializeBusiness(business));
-});
+}));
 
-businessesRouter.patch("/:id", requireAuth, async (req: Request, res: Response) => {
+businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
@@ -362,9 +363,9 @@ businessesRouter.patch("/:id", requireAuth, async (req: Request, res: Response) 
   }
   if (!updated) throw new NotFoundError("Business not found.");
   res.json(serializeBusiness(updated));
-});
+}));
 
-businessesRouter.post("/:id/completeOnboarding", requireAuth, async (req: Request, res: Response) => {
+businessesRouter.post("/:id/completeOnboarding", requireAuth, wrapAsync(async (req: Request, res: Response) => {
   const id = req.params.id;
   const b = await loadBusinessById(id);
   if (!b) throw new NotFoundError("Business not found.");
@@ -397,4 +398,4 @@ businessesRouter.post("/:id/completeOnboarding", requireAuth, async (req: Reques
   }
   if (!updated) throw new NotFoundError("Business not found.");
   res.json(serializeBusiness(updated));
-});
+}));
