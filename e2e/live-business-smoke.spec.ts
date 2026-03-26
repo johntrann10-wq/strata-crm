@@ -74,26 +74,15 @@ async function fillVehicleSelector(page: Page) {
   }
 }
 
-async function clickFirstService(page: Page) {
+async function clickFirstService(page: Page, serviceName: string) {
   const serviceCard = page
     .locator("main")
     .locator("div.cursor-pointer")
-    .filter({ has: page.getByText(/\$\d+\.\d{2}/) })
+    .filter({ has: page.getByText(serviceName, { exact: true }) })
     .first();
-
-  if (await serviceCard.isVisible().catch(() => false)) {
-    await serviceCard.click();
-    return;
-  }
-
-  const serviceCheckbox = page
-    .locator("main")
-    .locator("div")
-    .filter({ hasText: /\$\d+\.\d{2}/ })
-    .getByRole("checkbox")
-    .first();
-  await expect(serviceCheckbox).toBeVisible();
-  await serviceCheckbox.click();
+  await expect(serviceCard).toBeVisible();
+  await serviceCard.click();
+  await expect(page.getByText(/^Services selected$/i)).toBeVisible();
 }
 
 async function fillRequiredMobileAddress(page: Page) {
@@ -132,7 +121,7 @@ async function clickInvoiceSendButton(page: Page) {
   await page.getByRole("button", { name: /^mark as sent$/i }).first().click();
 }
 
-async function ensureActiveService(page: Page): Promise<boolean> {
+async function ensureActiveService(page: Page): Promise<{ ok: true; name: string } | { ok: false }> {
   const result = await page.evaluate(async () => {
     try {
       const token = window.localStorage.getItem("authToken");
@@ -159,7 +148,7 @@ async function ensureActiveService(page: Page): Promise<boolean> {
       const listBody = await listResp.json().catch(() => ({}));
       const existing = Array.isArray(listBody?.records) ? listBody.records[0] : null;
       if (existing?.id) {
-        return { ok: true, created: false, id: existing.id };
+        return { ok: true, created: false, id: existing.id, name: existing.name ?? "Smoke Test Service" };
       }
 
       const createResp = await fetch(`${base}/services`, {
@@ -178,6 +167,7 @@ async function ensureActiveService(page: Page): Promise<boolean> {
         created: true,
         status: createResp.status,
         id: createBody?.id ?? null,
+        name: createBody?.name ?? "Smoke Test Service",
         body: createBody,
       };
     } catch (error) {
@@ -192,12 +182,12 @@ async function ensureActiveService(page: Page): Promise<boolean> {
   console.log("ensureActiveService", result);
   if (!result?.ok) {
     if (result?.status === 503 || /failed to fetch/i.test(String(result?.reason ?? ""))) {
-      return false;
+      return { ok: false };
     }
     throw new Error(`Unable to seed service for smoke: ${JSON.stringify(result)}`);
   }
   await page.reload();
-  return true;
+  return { ok: true, name: result.name ?? "Smoke Test Service" };
 }
 
 test.describe("Live business workflow smoke", () => {
@@ -232,7 +222,7 @@ test.describe("Live business workflow smoke", () => {
     let appointmentId = "";
     let quoteId = "";
     let invoiceId = "";
-    let servicesAvailable = false;
+    let serviceName = "";
 
     page.on("response", async (response) => {
       if (!response.url().includes("/api/")) return;
@@ -296,10 +286,11 @@ test.describe("Live business workflow smoke", () => {
     let appointmentDeliveryStatus: string | null = null;
     await test.step("Create appointment", async () => {
       await expect(page.getByRole("heading", { name: /new appointment/i })).toBeVisible();
-      servicesAvailable = await ensureActiveService(page);
+      const serviceResult = await ensureActiveService(page);
       await expect(page.getByRole("heading", { name: /new appointment/i })).toBeVisible();
-      if (servicesAvailable) {
-        await clickFirstService(page);
+      if (serviceResult.ok) {
+        serviceName = serviceResult.name;
+        await clickFirstService(page, serviceName);
       }
       await fillRequiredMobileAddress(page);
       let createResponse;
