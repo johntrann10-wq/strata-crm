@@ -12,16 +12,22 @@ type SeoLandingPageProps = {
 
 export function buildSeoMeta(page: SeoPageConfig) {
   const url = `https://stratacrm.app${page.path}`;
+  const socialImageUrl = "https://stratacrm.app/social-preview.png";
   return [
     { title: page.seoTitle },
     { name: "description", content: page.seoDescription },
     { name: "robots", content: "index,follow" },
+    { property: "og:site_name", content: "Strata CRM" },
     { property: "og:title", content: page.seoTitle },
     { property: "og:description", content: page.seoDescription },
     { property: "og:url", content: url },
     { property: "og:type", content: "article" },
+    { property: "og:image", content: socialImageUrl },
+    { property: "og:image:alt", content: "Strata CRM marketing preview for automotive service business software." },
+    { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: page.seoTitle },
     { name: "twitter:description", content: page.seoDescription },
+    { name: "twitter:image", content: socialImageUrl },
   ];
 }
 

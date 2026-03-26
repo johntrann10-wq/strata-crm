@@ -26,6 +26,28 @@ const defaultDescription =
   "Strata helps automotive service businesses run scheduling, clients, vehicles, jobs, quotes, invoices, and payments in one clear operating system.";
 const socialImageUrl = `${siteUrl}${socialPreviewHref}`;
 
+function isIndexableMarketingPath(pathname: string) {
+  if (pathname === "/") return true;
+  return [
+    "/auto-detailing-software",
+    "/mobile-detailing-software",
+    "/window-tint-shop-software",
+    "/wrap-ppf-shop-software",
+    "/mechanic-shop-software",
+    "/performance-shop-software",
+    "/tire-shop-software",
+    "/muffler-exhaust-shop-software",
+    "/shop-scheduling-software",
+    "/detailing-crm",
+    "/orbisx-alternative",
+    "/strata-vs-orbisx",
+    "/best-crm-for-auto-detailing-shops",
+    "/best-window-tint-shop-software",
+    "/best-ppf-shop-software",
+    "/best-shop-scheduling-software-for-automotive-businesses",
+  ].includes(pathname);
+}
+
 /** Google OAuth redirects with ?token=... persist before /auth/me runs. */
 function OAuthTokenFromQuery() {
   const location = useLocation();
@@ -165,6 +187,8 @@ export default function App({ loaderData }: Route.ComponentProps) {
   const location = useLocation();
   const canonicalPath = location.pathname === "/" ? "/" : location.pathname.replace(/\/+$/, "");
   const canonicalUrl = `${siteUrl}${canonicalPath || "/"}`;
+  const shouldIndex = isIndexableMarketingPath(canonicalPath || "/");
+  const robotsContent = shouldIndex ? "index,follow" : "noindex,nofollow";
 
   return (
     <html lang="en" className="light">
@@ -172,6 +196,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
         <Meta />
         <Links />
         <link rel="canonical" href={canonicalUrl} />
+        <meta name="robots" content={robotsContent} />
         {!isProduction && <script type="module" src="/@vite/client" async />}
       </head>
       <body>
