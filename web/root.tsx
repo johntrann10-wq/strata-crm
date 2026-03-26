@@ -45,6 +45,7 @@ function isIndexableMarketingPath(pathname: string) {
     "/best-window-tint-shop-software",
     "/best-ppf-shop-software",
     "/best-shop-scheduling-software-for-automotive-businesses",
+    "/pricing",
   ].includes(pathname);
 }
 

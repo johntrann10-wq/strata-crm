@@ -16,6 +16,7 @@ Allow: /best-crm-for-auto-detailing-shops
 Allow: /best-window-tint-shop-software
 Allow: /best-ppf-shop-software
 Allow: /best-shop-scheduling-software-for-automotive-businesses
+Allow: /pricing
 Disallow: /sign-in
 Disallow: /sign-up
 Disallow: /forgot-password

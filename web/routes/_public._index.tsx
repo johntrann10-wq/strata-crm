@@ -235,7 +235,7 @@ export default function LandingPage() {
             <a href="#product" className="transition-colors hover:text-gray-950">Product</a>
             <a href="#features" className="transition-colors hover:text-gray-950">Features</a>
             <a href="#industries" className="transition-colors hover:text-gray-950">Who it's for</a>
-            <a href="#pricing" className="transition-colors hover:text-gray-950">Pricing</a>
+            <Link to="/pricing" className="transition-colors hover:text-gray-950">Pricing</Link>
           </nav>
           <div className="flex items-center gap-2">
             <Link
@@ -300,6 +300,15 @@ export default function LandingPage() {
               >
                 Sign in
               </Link>
+              <Link
+                to="/pricing"
+                className={cn(
+                  buttonVariants({ size: "lg", variant: "outline" }),
+                  "min-h-[54px] rounded-2xl border-gray-300 bg-white/85 px-7 text-base font-semibold text-gray-900 hover:bg-white"
+                )}
+              >
+                View pricing
+              </Link>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
@@ -351,13 +360,13 @@ export default function LandingPage() {
               </div>
               <p className="mt-2 text-sm leading-6 text-gray-600">First month free. No confusing feature tiers just to unlock core workflows.</p>
               <Link
-                to="/sign-up"
+                to="/pricing"
                 className={cn(
                   buttonVariants({ size: "lg" }),
                   "mt-6 w-full min-h-[52px] rounded-2xl bg-gray-950 text-white hover:bg-gray-800"
                 )}
               >
-                Create your workspace
+                View pricing
               </Link>
             </div>
           </div>
@@ -373,13 +382,13 @@ export default function LandingPage() {
             </p>
           </div>
           <Link
-            to="/sign-up"
+            to="/pricing"
             className={cn(
               buttonVariants({ size: "lg" }),
               "min-h-[50px] rounded-2xl bg-gray-950 px-6 text-sm font-semibold text-white hover:bg-gray-800"
             )}
           >
-            Create workspace
+            View pricing
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </div>
@@ -538,7 +547,7 @@ export default function LandingPage() {
               Explore detailing CRM software
             </Link>
             <Link
-              to="/#pricing"
+              to="/pricing"
               className="rounded-full border border-orange-200 bg-white px-4 py-2 font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-50"
             >
               See Strata CRM pricing

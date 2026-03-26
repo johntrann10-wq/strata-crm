@@ -49,7 +49,7 @@ const navigationItems: NavItems = [
   {
     type: "item",
     title: "Pricing",
-    href: "/#pricing",
+    href: "/pricing",
     description: "$29/month, first month free.",
   },
 ];
