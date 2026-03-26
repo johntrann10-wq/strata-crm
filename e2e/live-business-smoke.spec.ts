@@ -47,10 +47,8 @@ async function openSelectAndChoose(page: Page, label: RegExp | string, option: R
 }
 
 async function fillVehicleSelector(page: Page) {
-  const manualButton = page.getByRole("button", { name: /manual fallback/i });
-  const catalogButton = page.getByRole("button", { name: /use catalog/i });
-
-  if (await manualButton.isVisible().catch(() => false)) {
+  const yearCombobox = page.getByRole("combobox").first();
+  if (await yearCombobox.isVisible().catch(() => false)) {
     await openSelectAndChoose(page, /^year$/i, "2022");
     await openSelectAndChoose(page, /^make\s*\*?$/i, /toyota/i);
     await openSelectAndChoose(page, /^model\s*\*?$/i, /camry/i);
@@ -61,8 +59,11 @@ async function fillVehicleSelector(page: Page) {
     return;
   }
 
-  await expect(catalogButton).toBeVisible();
-  await catalogButton.click();
+  const manualToggle = page.getByRole("button", { name: /manual fallback|use catalog/i });
+  if (await manualToggle.isVisible().catch(() => false)) {
+    await manualToggle.click();
+  }
+
   await expect(page.locator("#vehicle-year")).toBeVisible();
   await page.locator("#vehicle-year").fill("2022");
   await page.locator("#vehicle-make").fill("Toyota");

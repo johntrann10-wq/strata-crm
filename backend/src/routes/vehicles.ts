@@ -296,6 +296,31 @@ async function insertLegacyVehicleRecord(
   return rows[0]?.id ?? null;
 }
 
+async function loadVehicleRecordById(vehicleId: string, bid: string): Promise<VehicleRecord | null> {
+  try {
+    const [row] = await db
+      .select(fullVehicleSelection)
+      .from(vehicles)
+      .where(and(eq(vehicles.id, vehicleId), eq(vehicles.businessId, bid)))
+      .limit(1);
+    return row ? normalizeVehicleRecord(row) : null;
+  } catch (error) {
+    if (!isVehicleSchemaDriftError(error)) throw error;
+    warnOnce("vehicles:load:full-schema", "vehicle load falling back without structured schema", {
+      businessId: bid,
+      vehicleId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const [row] = await db
+    .select(legacyVehicleSelection)
+    .from(vehicles)
+    .where(and(eq(vehicles.id, vehicleId), eq(vehicles.businessId, bid)))
+    .limit(1);
+  return row ? withMissingVehicleFields(row) : null;
+}
+
 async function updateLegacyVehicleRecord(id: string, patch: z.infer<typeof patchSchema>): Promise<void> {
   const columns = await getVehicleColumns();
   const updateColumns: string[] = [];
@@ -488,7 +513,7 @@ vehiclesRouter.get(
     }
 
     const [row] = await db
-      .select()
+      .select(legacyVehicleSelection)
       .from(vehicles)
       .where(and(eq(vehicles.id, req.params.id), eq(vehicles.businessId, bid)))
       .limit(1);
@@ -550,13 +575,8 @@ vehiclesRouter.post(
       throw new BadRequestError("Vehicle could not be created.");
     }
 
-    const [createdRecord] = await db
-      .select()
-      .from(vehicles)
-      .where(and(eq(vehicles.id, createdId), eq(vehicles.businessId, bid)))
-      .limit(1);
-    if (!createdRecord) throw new NotFoundError("Vehicle was created but could not be loaded.");
-    const created = withMissingVehicleFields(createdRecord);
+    const created = await loadVehicleRecordById(createdId, bid);
+    if (!created) throw new NotFoundError("Vehicle was created but could not be loaded.");
 
     logger.info("Vehicle created", { vehicleId: created.id, businessId: bid, clientId: created.clientId });
     await createRequestActivityLog(req, {
@@ -583,11 +603,7 @@ vehiclesRouter.patch(
   requireTenant,
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
-    const [existing] = await db
-      .select()
-      .from(vehicles)
-      .where(and(eq(vehicles.id, req.params.id), eq(vehicles.businessId, bid)))
-      .limit(1);
+    const existing = await loadVehicleRecordById(req.params.id, bid);
     if (!existing) throw new NotFoundError("Vehicle not found.");
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -639,13 +655,8 @@ vehiclesRouter.patch(
     }
 
     await updateLegacyVehicleRecord(req.params.id, parsed.data);
-    const [updated] = await db
-      .select()
-      .from(vehicles)
-      .where(and(eq(vehicles.id, req.params.id), eq(vehicles.businessId, bid)))
-      .limit(1);
-    if (!updated) throw new NotFoundError("Vehicle not found.");
-    const normalized = withMissingVehicleFields(updated);
+    const normalized = await loadVehicleRecordById(req.params.id, bid);
+    if (!normalized) throw new NotFoundError("Vehicle not found.");
     logger.info("Vehicle updated", { vehicleId: normalized.id, businessId: bid, clientId: normalized.clientId });
     await createRequestActivityLog(req, {
       businessId: bid,
