@@ -586,18 +586,22 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
   });
 
   logger.info("Invoice created", { invoiceId: inv.id, businessId: bid });
-  await createRequestActivityLog(req, {
-    businessId: bid,
-    action: "invoice.created",
-    entityType: "invoice",
-    entityId: inv.id,
-    metadata: {
-      clientId: inv.clientId,
-      appointmentId: inv.appointmentId,
-      total: inv.total,
-      status: inv.status,
-    },
-  });
+  try {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "invoice.created",
+      entityType: "invoice",
+      entityId: inv.id,
+      metadata: {
+        clientId: inv.clientId,
+        appointmentId: inv.appointmentId,
+        total: inv.total,
+        status: inv.status,
+      },
+    });
+  } catch (error) {
+    logger.warn("Invoice created but activity log write failed", { invoiceId: inv.id, businessId: bid, error });
+  }
   res.status(201).json(inv);
 });
 

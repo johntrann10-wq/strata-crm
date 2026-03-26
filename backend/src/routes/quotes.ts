@@ -442,17 +442,21 @@ quotesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Res
     return freshQuote;
   });
   if (!created) throw new BadRequestError("Failed to create quote.");
-  await createRequestActivityLog(req, {
-    businessId: bid,
-    action: "quote.created",
-    entityType: "quote",
-    entityId: created.id,
-    metadata: {
-      clientId: created.clientId,
-      vehicleId: created.vehicleId,
-      status: created.status,
-    },
-  });
+  try {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "quote.created",
+      entityType: "quote",
+      entityId: created.id,
+      metadata: {
+        clientId: created.clientId,
+        vehicleId: created.vehicleId,
+        status: created.status,
+      },
+    });
+  } catch (error) {
+    logger.warn("Quote created but activity log write failed", { quoteId: created.id, businessId: bid, error });
+  }
   res.status(201).json(created);
 });
 

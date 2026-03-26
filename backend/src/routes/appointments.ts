@@ -44,6 +44,7 @@ function isAppointmentSchemaDriftError(error: unknown): boolean {
 }
 
 let cachedAppointmentColumns: Set<string> | null = null;
+let cachedAppointmentServiceColumns: Set<string> | null = null;
 
 async function getAppointmentColumns(): Promise<Set<string>> {
   if (cachedAppointmentColumns) return cachedAppointmentColumns;
@@ -60,6 +61,61 @@ async function getAppointmentColumns(): Promise<Set<string>> {
       .filter((value): value is string => typeof value === "string")
   );
   return cachedAppointmentColumns;
+}
+
+async function getAppointmentServiceColumns(): Promise<Set<string>> {
+  if (cachedAppointmentServiceColumns) return cachedAppointmentServiceColumns;
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'appointment_services'
+  `);
+  const resultWithRows = result as unknown as { rows?: Array<{ column_name?: string }> };
+  const rows = Array.isArray(resultWithRows.rows) ? resultWithRows.rows : [];
+  cachedAppointmentServiceColumns = new Set(
+    rows
+      .map((row) => row?.column_name)
+      .filter((value): value is string => typeof value === "string")
+  );
+  return cachedAppointmentServiceColumns;
+}
+
+async function attachServiceToAppointment(
+  tx: any,
+  {
+    appointmentId,
+    serviceId,
+    unitPrice,
+  }: {
+    appointmentId: string;
+    serviceId: string;
+    unitPrice: string | null;
+  }
+) {
+  const now = new Date();
+  try {
+    await tx.insert(appointmentServices).values({
+      appointmentId,
+      serviceId,
+      quantity: 1,
+      unitPrice,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return;
+  } catch (error) {
+    if (!isAppointmentSchemaDriftError(error)) throw error;
+    const columns = await getAppointmentServiceColumns();
+    const fallbackValues: Partial<typeof appointmentServices.$inferInsert> = {};
+    if (columns.has("id")) fallbackValues.id = randomUUID();
+    if (columns.has("appointment_id")) fallbackValues.appointmentId = appointmentId;
+    if (columns.has("service_id")) fallbackValues.serviceId = serviceId;
+    if (columns.has("quantity")) fallbackValues.quantity = 1;
+    if (columns.has("unit_price")) fallbackValues.unitPrice = unitPrice;
+    if (columns.has("created_at")) fallbackValues.createdAt = now;
+    if (columns.has("updated_at")) fallbackValues.updatedAt = now;
+    await tx.insert(appointmentServices).values(fallbackValues as typeof appointmentServices.$inferInsert);
+  }
 }
 
 async function locationExistsForBusiness(locationId: string, bid: string): Promise<boolean> {
@@ -527,6 +583,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   const createdAt = new Date();
   const appointmentId = randomUUID();
   const created = await db.transaction(async (tx) => {
+    let selectedServicesTotal = 0;
     let apt: typeof appointments.$inferSelect | undefined;
     try {
       [apt] = await tx
@@ -588,14 +645,33 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       for (const sid of parsed.data.serviceIds) {
         const [svc] = await tx.select().from(services).where(and(eq(services.id, sid), eq(services.businessId, bid))).limit(1);
         if (!svc) continue;
-        await tx.insert(appointmentServices).values({
+        selectedServicesTotal += Number(svc.price ?? 0);
+        await attachServiceToAppointment(tx, {
           appointmentId: apt.id,
           serviceId: sid,
-          quantity: 1,
           unitPrice: svc.price ?? null,
         });
       }
-      await recalculateAppointmentTotal(tx, apt.id);
+      try {
+        await recalculateAppointmentTotal(tx, apt.id);
+      } catch (error) {
+        if (!isAppointmentSchemaDriftError(error)) throw error;
+        logger.warn("Appointment total recalculation falling back on legacy schema", {
+          appointmentId: apt.id,
+          businessId: bid,
+          error,
+        });
+        const appointmentColumns = await getAppointmentColumns();
+        if (appointmentColumns.has("total_price")) {
+          await tx
+            .update(appointments)
+            .set({
+              totalPrice: selectedServicesTotal.toFixed(2),
+              updatedAt: new Date(),
+            })
+            .where(eq(appointments.id, apt.id));
+        }
+      }
     }
 
     return apt;
