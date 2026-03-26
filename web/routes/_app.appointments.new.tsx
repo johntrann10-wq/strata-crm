@@ -429,13 +429,21 @@ export default function NewAppointmentPage() {
         model: quickModel.trim(),
         year: quickYear ? parseInt(quickYear) : undefined,
       } as any);
-      if ((result as any)?.data?.id) {
-        setSelectedVehicleId((result as any).data.id);
-        setShowQuickAddVehicle(false);
-        setQuickYear('');
-        setQuickMake('');
-        setQuickModel('');
+      if (result.error) {
+        setQuickVehicleError(result.error.message ?? "Failed to add vehicle.");
+        return;
       }
+      const createdVehicleId = (result.data as { id?: string } | null)?.id;
+      if (!createdVehicleId) {
+        setQuickVehicleError("Vehicle saved but no record ID was returned. Please refresh and try again.");
+        return;
+      }
+      setSelectedVehicleId(createdVehicleId);
+      setShowQuickAddVehicle(false);
+      setQuickYear('');
+      setQuickMake('');
+      setQuickModel('');
+      toast.success("Vehicle added");
     } catch (e: any) {
       setQuickVehicleError(e?.message ?? 'Failed to add vehicle.');
     } finally {
