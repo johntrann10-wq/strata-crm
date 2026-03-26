@@ -66,6 +66,16 @@ function serializeBusiness(record: typeof businesses.$inferSelect) {
   };
 }
 
+function canAccessBusiness(
+  req: Request,
+  business: Pick<typeof businesses.$inferSelect, "id" | "ownerId">,
+  permission?: "settings.read" | "settings.write"
+): boolean {
+  if (req.userId && business.ownerId === req.userId) return true;
+  if (!req.businessId || req.businessId !== business.id || !req.membershipRole) return false;
+  return permission ? roleHasPermission(req.membershipRole, permission) : true;
+}
+
 function isBusinessSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
@@ -165,25 +175,22 @@ businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
   res.status(201).json(serializeBusiness(created));
 });
 
-businessesRouter.get("/:id", requireAuth, requirePermission("settings.read"), async (req: Request, res: Response) => {
+businessesRouter.get("/:id", requireAuth, async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
-  if (!req.businessId || req.businessId !== req.params.id) {
-    throw new NotFoundError("Business not found.");
-  }
   const [business] = await db
     .select()
     .from(businesses)
     .where(eq(businesses.id, req.params.id))
     .limit(1);
   if (!business) throw new NotFoundError("Business not found.");
+  if (!canAccessBusiness(req, business, "settings.read")) {
+    throw new ForbiddenError("You do not have permission to perform this action.");
+  }
   res.json(serializeBusiness(business));
 });
 
-businessesRouter.patch("/:id", requireAuth, requirePermission("settings.write"), async (req: Request, res: Response) => {
+businessesRouter.patch("/:id", requireAuth, async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
-  if (!req.businessId || req.businessId !== req.params.id) {
-    throw new NotFoundError("Business not found.");
-  }
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
   const [existing] = await db
@@ -192,6 +199,9 @@ businessesRouter.patch("/:id", requireAuth, requirePermission("settings.write"),
     .where(eq(businesses.id, req.params.id))
     .limit(1);
   if (!existing) throw new NotFoundError("Business not found.");
+  if (!canAccessBusiness(req, existing, "settings.write")) {
+    throw new ForbiddenError("You do not have permission to perform this action.");
+  }
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (parsed.data.name !== undefined) updates.name = parsed.data.name;
@@ -220,11 +230,13 @@ businessesRouter.patch("/:id", requireAuth, requirePermission("settings.write"),
   res.json(serializeBusiness(updated));
 });
 
-businessesRouter.post("/:id/completeOnboarding", requireAuth, requirePermission("settings.write"), async (req: Request, res: Response) => {
+businessesRouter.post("/:id/completeOnboarding", requireAuth, async (req: Request, res: Response) => {
   const id = req.params.id;
-  if (!req.businessId || req.businessId !== id) throw new NotFoundError("Business not found.");
   const [b] = await db.select().from(businesses).where(eq(businesses.id, id)).limit(1);
   if (!b) throw new NotFoundError("Business not found.");
+  if (!canAccessBusiness(req, b, "settings.write")) {
+    throw new ForbiddenError("You do not have permission to perform this action.");
+  }
   const [updated] = await db
     .update(businesses)
     .set({ onboardingComplete: true, updatedAt: new Date() })
