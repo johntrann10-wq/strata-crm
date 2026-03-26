@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { seoPageList } from "@/lib/seoPages";
 import { cn } from "@/lib/utils";
 
 const featureCards = [
@@ -509,6 +510,38 @@ export default function LandingPage() {
               >
                 {type}
               </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Software by shop type</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
+              Explore the exact Strata workflow for your kind of shop.
+            </h2>
+            <p className="mt-4 text-lg leading-8 text-gray-600">
+              These pages are built around high-intent searches from real operators comparing software for their category, workflow, and growth stage.
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {seoPageList.map((page) => (
+              <Link
+                key={page.key}
+                to={page.path}
+                className="rounded-[24px] border border-orange-100 bg-white/94 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-[0_18px_50px_rgba(249,115,22,0.10)]"
+              >
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">{page.eyebrow}</p>
+                <h3 className="mt-3 text-xl font-semibold tracking-tight text-gray-950">{page.navLabel}</h3>
+                <p className="mt-2 text-sm leading-6 text-gray-600">{page.seoDescription}</p>
+                <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-orange-700">
+                  Explore page
+                  <ChevronRight className="h-4 w-4" />
+                </div>
+              </Link>
             ))}
           </div>
         </div>
