@@ -29,6 +29,16 @@ async function signIn(page: Page) {
   await expect(page).toHaveURL(/\/signed-in/);
 }
 
+async function waitForPathname(page: Page, matcher: RegExp) {
+  await page.waitForFunction(
+    ({ source, flags }) => {
+      const pattern = new RegExp(source, flags);
+      return pattern.test(window.location.pathname);
+    },
+    { source: matcher.source, flags: matcher.flags }
+  );
+}
+
 async function clickFirstService(page: Page) {
   const recommendedPackage = page
     .locator("main")
@@ -92,8 +102,8 @@ test.describe("Live business workflow smoke", () => {
       await page.locator("#email").fill(clientEmail);
       await page.locator("#phone").fill(clientPhone);
       await page.getByRole("button", { name: /save and add vehicle/i }).click();
-      await page.waitForURL(/\/clients\/[^/]+\/vehicles\/new/);
-      clientId = /\/clients\/([^/]+)\/vehicles\/new/.exec(page.url())?.[1] ?? "";
+      await waitForPathname(page, /^\/clients\/[^/]+\/vehicles\/new$/);
+      clientId = /^\/clients\/([^/]+)\/vehicles\/new$/.exec(new URL(page.url()).pathname)?.[1] ?? "";
       expect(clientId).not.toBe("");
     });
 
@@ -103,7 +113,7 @@ test.describe("Live business workflow smoke", () => {
       await page.locator("#make").fill("Toyota");
       await page.locator("#vehicleModel").fill("Camry");
       await page.getByRole("button", { name: /save and book appointment/i }).click();
-      await page.waitForURL(/\/appointments\/new\?/);
+      await waitForPathname(page, /^\/appointments\/new$/);
       const url = new URL(page.url());
       vehicleId = url.searchParams.get("vehicleId") ?? "";
       expect(vehicleId).not.toBe("");
@@ -121,8 +131,8 @@ test.describe("Live business workflow smoke", () => {
       const createResponse = await createResponsePromise;
       const payload = await createResponse.json();
       appointmentDeliveryStatus = payload?.deliveryStatus ?? null;
-      await page.waitForURL(/\/appointments\/[^/?]+/);
-      appointmentId = /\/appointments\/([^/?]+)/.exec(page.url())?.[1] ?? "";
+      await waitForPathname(page, /^\/appointments\/[^/]+$/);
+      appointmentId = /^\/appointments\/([^/]+)$/.exec(new URL(page.url()).pathname)?.[1] ?? "";
       expect(appointmentId).not.toBe("");
       notes.push(`appointment delivery: ${appointmentDeliveryStatus ?? "unknown"}`);
     });
@@ -141,8 +151,8 @@ test.describe("Live business workflow smoke", () => {
       await page.locator('input[placeholder="Description"]').first().fill("Exterior detail package");
       await page.locator('input[placeholder="0.00"]').first().fill("199");
       await page.getByRole("button", { name: /^create quote$/i }).first().click();
-      await page.waitForURL(/\/quotes\/[^/?]+/);
-      quoteId = /\/quotes\/([^/?]+)/.exec(page.url())?.[1] ?? "";
+      await waitForPathname(page, /^\/quotes\/[^/]+$/);
+      quoteId = /^\/quotes\/([^/]+)$/.exec(new URL(page.url()).pathname)?.[1] ?? "";
       expect(quoteId).not.toBe("");
 
       const sendResponsePromise = page.waitForResponse((response) =>
@@ -166,8 +176,8 @@ test.describe("Live business workflow smoke", () => {
       await page.locator('input[placeholder="Description"]').first().fill("Detailing invoice");
       await page.locator('input[type="number"]').nth(2).fill("249");
       await page.getByRole("button", { name: /^create invoice$/i }).first().click();
-      await page.waitForURL(/\/invoices\/[^/?]+/);
-      invoiceId = /\/invoices\/([^/?]+)/.exec(page.url())?.[1] ?? "";
+      await waitForPathname(page, /^\/invoices\/[^/]+$/);
+      invoiceId = /^\/invoices\/([^/]+)$/.exec(new URL(page.url()).pathname)?.[1] ?? "";
       expect(invoiceId).not.toBe("");
 
       const sendResponsePromise = page.waitForResponse((response) =>

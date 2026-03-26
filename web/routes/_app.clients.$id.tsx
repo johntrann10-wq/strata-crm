@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
+import { Link, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -137,6 +137,7 @@ export default function ClientDetailPage() {
   const [form, setForm] = useState<FormState>(blank);
   const [showAllAppointments, setShowAllAppointments] = useState(false);
   const { setPageContext } = usePageContext();
+  const isNestedVehicleRoute = id ? location.pathname.startsWith(`/clients/${id}/vehicles/`) : false;
 
   const [{ data: client, fetching, error }, refetch] = useFindOne(api.client, id!, {
     select: {
@@ -218,6 +219,10 @@ export default function ClientDetailPage() {
       });
     };
   }, [client, id, setPageContext]);
+
+  if (isNestedVehicleRoute) {
+    return <Outlet />;
+  }
 
   const handleSave = async () => {
     const result = await runUpdate({ id: id!, ...(form as any) });
