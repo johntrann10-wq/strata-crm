@@ -28,6 +28,7 @@ export type LeadRecord = {
   serviceInterest: string;
   nextStep: string;
   summary: string;
+  vehicle: string;
   isLead: boolean;
 };
 
@@ -37,6 +38,7 @@ const DEFAULT_LEAD: LeadRecord = {
   serviceInterest: "",
   nextStep: "",
   summary: "",
+  vehicle: "",
   isLead: false,
 };
 
@@ -46,6 +48,7 @@ const PREFIXES = {
   serviceInterest: "Service interest:",
   nextStep: "Next step:",
   summary: "Lead summary:",
+  vehicle: "Lead vehicle:",
 } as const;
 
 export function formatLeadStatus(status: string | null | undefined): string {
@@ -81,6 +84,7 @@ export function parseLeadRecord(notes: string | null | undefined): LeadRecord {
     serviceInterest: read(PREFIXES.serviceInterest),
     nextStep: read(PREFIXES.nextStep),
     summary: read(PREFIXES.summary),
+    vehicle: read(PREFIXES.vehicle),
     isLead: true,
   };
 }
@@ -91,6 +95,7 @@ export function buildLeadNotes(input: {
   serviceInterest?: string;
   nextStep?: string;
   summary?: string;
+  vehicle?: string;
 }) {
   return [
     `${PREFIXES.status} ${input.status}`,
@@ -98,5 +103,6 @@ export function buildLeadNotes(input: {
     `${PREFIXES.serviceInterest} ${input.serviceInterest?.trim() ?? ""}`,
     `${PREFIXES.nextStep} ${input.nextStep?.trim() ?? ""}`,
     `${PREFIXES.summary} ${input.summary?.trim() ?? ""}`,
+    `${PREFIXES.vehicle} ${input.vehicle?.trim() ?? ""}`,
   ].join("\n");
 }
