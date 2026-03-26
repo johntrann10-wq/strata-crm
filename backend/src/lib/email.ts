@@ -14,6 +14,8 @@ import { isSmtpConfigured } from "./env.js";
 
 let transporter: nodemailer.Transporter | null = null;
 let fallbackTransporter: nodemailer.Transporter | null = null;
+const PRIMARY_SEND_TIMEOUT_MS = 2_500;
+const FALLBACK_SEND_TIMEOUT_MS = 1_500;
 
 function isEmailSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -93,6 +95,31 @@ function getFromAddress(): string {
   throw new Error("SMTP sender address is not configured");
 }
 
+async function sendMailWithTimeout(
+  transport: nodemailer.Transporter,
+  payload: nodemailer.SendMailOptions,
+  timeoutMs: number
+): Promise<void> {
+  let timeoutHandle: NodeJS.Timeout | null = null;
+  try {
+    await Promise.race([
+      transport.sendMail(payload),
+      new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          try {
+            transport.close();
+          } catch {
+            // ignore transport close failures during bounded send timeout
+          }
+          reject(new Error(`SMTP send timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+}
+
 export type TemplateVars = Record<string, string | number | undefined>;
 
 function replaceVars(template: string, vars: TemplateVars, escapeForHtml: boolean): string {
@@ -161,7 +188,7 @@ export async function sendTemplatedEmailInternal(
     text: bodyText,
   };
   try {
-    await t.sendMail(payload);
+    await sendMailWithTimeout(t, payload, PRIMARY_SEND_TIMEOUT_MS);
   } catch (error) {
     if (
       isGmailSmtpHost() &&
@@ -174,7 +201,7 @@ export async function sendTemplatedEmailInternal(
         error: error instanceof Error ? error.message : String(error),
       });
       transporter = null;
-      await getFallbackTransporter().sendMail(payload);
+      await sendMailWithTimeout(getFallbackTransporter(), payload, FALLBACK_SEND_TIMEOUT_MS);
       return;
     }
     throw error;

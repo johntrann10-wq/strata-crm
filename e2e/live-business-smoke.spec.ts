@@ -40,20 +40,53 @@ async function waitForPathname(page: Page, matcher: RegExp) {
 }
 
 async function clickFirstService(page: Page) {
-  const recommendedPackage = page
+  const serviceCard = page
     .locator("main")
-    .getByRole("button")
-    .filter({ hasText: /services/i })
+    .locator("div.cursor-pointer")
+    .filter({ has: page.getByText(/\$\d+\.\d{2}/) })
     .first();
 
-  if (await recommendedPackage.isVisible().catch(() => false)) {
-    await recommendedPackage.click();
+  if (await serviceCard.isVisible().catch(() => false)) {
+    await serviceCard.click();
     return;
   }
 
-  const serviceCheckbox = page.locator("main").getByRole("checkbox").first();
+  const serviceCheckbox = page
+    .locator("main")
+    .locator("div")
+    .filter({ hasText: /\$\d+\.\d{2}/ })
+    .getByRole("checkbox")
+    .first();
   await expect(serviceCheckbox).toBeVisible();
   await serviceCheckbox.click();
+}
+
+async function fillRequiredMobileAddress(page: Page) {
+  const mobileToggle = page.getByRole("checkbox", { name: /mobile service/i });
+  if (!(await mobileToggle.isChecked().catch(() => false))) return;
+
+  const addressField = page.getByRole("textbox", { name: /service address/i });
+  if (await addressField.isVisible().catch(() => false)) {
+    await addressField.fill("123 Smoke Test Ave, Los Angeles, CA 90001");
+  }
+}
+
+async function clickQuoteSendButton(page: Page) {
+  const communicationButton = page.getByRole("button", { name: /^send quote$/i }).last();
+  if (await communicationButton.isVisible().catch(() => false)) {
+    await communicationButton.click();
+    return;
+  }
+  await page.getByRole("button", { name: /^mark as sent$/i }).first().click();
+}
+
+async function clickInvoiceSendButton(page: Page) {
+  const communicationButton = page.getByRole("button", { name: /^send invoice$/i }).last();
+  if (await communicationButton.isVisible().catch(() => false)) {
+    await communicationButton.click();
+    return;
+  }
+  await page.getByRole("button", { name: /^mark as sent$/i }).first().click();
 }
 
 async function ensureActiveService(page: Page): Promise<boolean> {
@@ -137,10 +170,16 @@ test.describe("Live business workflow smoke", () => {
     const failures: string[] = [];
     const notes: string[] = [];
     const stamp = Date.now();
-    const appointmentSlot = new Date(stamp + 48 * 60 * 60 * 1000);
-    appointmentSlot.setSeconds(0, 0);
-    const appointmentDate = appointmentSlot.toISOString().slice(0, 10);
-    const appointmentTime = appointmentSlot.toTimeString().slice(0, 5);
+    const buildAppointmentSlot = (attempt: number) => {
+      const slot = new Date();
+      slot.setDate(slot.getDate() + 3 + attempt);
+      slot.setHours(10 + ((Math.floor(stamp / 1000) + attempt) % 6), ((Math.floor(stamp / 1000) + attempt) % 4) * 15, 0, 0);
+      return {
+        date: slot.toISOString().slice(0, 10),
+        time: slot.toTimeString().slice(0, 5),
+      };
+    };
+    let appointmentSlot = buildAppointmentSlot(0);
     const clientFirst = "Smoke";
     const clientLast = `Flow${String(stamp).slice(-6)}`;
     const clientEmail = `smoke+${stamp}@example.com`;
@@ -167,6 +206,12 @@ test.describe("Live business workflow smoke", () => {
     page.on("pageerror", (error) => {
       // eslint-disable-next-line no-console
       console.log("page error", error.message);
+    });
+    page.on("console", (msg) => {
+      if (msg.type() === "error" || msg.type() === "warning") {
+        // eslint-disable-next-line no-console
+        console.log("browser console", msg.type(), msg.text());
+      }
     });
 
     await signIn(page);
@@ -203,8 +248,8 @@ test.describe("Live business workflow smoke", () => {
       const url = new URL(page.url());
       vehicleId = url.searchParams.get("vehicleId") ?? "";
       expect(vehicleId).not.toBe("");
-      url.searchParams.set("date", appointmentDate);
-      url.searchParams.set("time", appointmentTime);
+      url.searchParams.set("date", appointmentSlot.date);
+      url.searchParams.set("time", appointmentSlot.time);
       await page.goto(url.pathname + url.search);
     });
 
@@ -216,14 +261,32 @@ test.describe("Live business workflow smoke", () => {
       if (servicesAvailable) {
         await clickFirstService(page);
       }
-      await page.locator("#startTime").fill(appointmentTime);
-      const createResponsePromise = page.waitForResponse((response) =>
-        response.url().includes("/api/appointments") &&
-        response.request().method() === "POST"
-      );
-      await page.getByRole("button", { name: /save appointment/i }).click();
-      const createResponse = await createResponsePromise;
-      const payload = await createResponse.json();
+      await fillRequiredMobileAddress(page);
+      let createResponse;
+      let payload: any = {};
+      let created = false;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        appointmentSlot = buildAppointmentSlot(attempt);
+        await page.locator("#startTime").fill(appointmentSlot.time);
+        const createResponsePromise = page.waitForResponse((response) =>
+          response.url().includes("/api/appointments") &&
+          response.request().method() === "POST"
+        );
+        await page.getByRole("button", { name: /save appointment/i }).click();
+        createResponse = await createResponsePromise;
+        payload = await createResponse.json().catch(() => ({}));
+        if (createResponse.ok) {
+          created = true;
+          break;
+        }
+        if (createResponse.status() !== 409) {
+          throw new Error(`Appointment create failed (${createResponse.status()}): ${JSON.stringify(payload)}`);
+        }
+        notes.push(`appointment retry due to overlap at ${appointmentSlot.date} ${appointmentSlot.time}`);
+      }
+      if (!created || !createResponse) {
+        throw new Error("Unable to create appointment without overlap after retries.");
+      }
       appointmentDeliveryStatus = payload?.deliveryStatus ?? null;
       await waitForPathname(page, /^\/appointments\/[^/]+$/);
       appointmentId = /^\/appointments\/([^/]+)$/.exec(new URL(page.url()).pathname)?.[1] ?? "";
@@ -254,8 +317,24 @@ test.describe("Live business workflow smoke", () => {
         response.url().includes(`/api/quotes/${quoteId}/send`) &&
         response.request().method() === "POST"
       );
-      await page.getByRole("button", { name: /^mark as sent$/i }).first().click();
-      const sendResponse = await sendResponsePromise;
+      await clickQuoteSendButton(page);
+      let sendResponse;
+      try {
+        sendResponse = await sendResponsePromise;
+      } catch (error) {
+        const runtimeErrors = await page.evaluate(() => {
+          try {
+            const raw = window.sessionStorage.getItem("strata.runtimeErrors");
+            return raw ? JSON.parse(raw) : [];
+          } catch {
+            return [];
+          }
+        }).catch(() => []);
+        const toastText = await page.locator('[data-sonner-toaster]').textContent().catch(() => null);
+        // eslint-disable-next-line no-console
+        console.log("quote send diagnostics", { runtimeErrors, toastText, error: error instanceof Error ? error.message : String(error) });
+        throw error;
+      }
       const sendPayload = await sendResponse.json().catch(() => ({}));
       quoteDeliveryStatus = sendPayload?.deliveryStatus ?? null;
       notes.push(`quote delivery: ${quoteDeliveryStatus ?? `http_${sendResponse.status()}`}`);
@@ -279,7 +358,7 @@ test.describe("Live business workflow smoke", () => {
         response.url().includes(`/api/invoices/${invoiceId}/sendToClient`) &&
         response.request().method() === "POST"
       );
-      await page.getByRole("button", { name: /^mark as sent$/i }).first().click();
+      await clickInvoiceSendButton(page);
       const sendResponse = await sendResponsePromise;
       const sendPayload = await sendResponse.json().catch(() => ({}));
       invoiceDeliveryStatus = sendPayload?.deliveryStatus ?? null;
