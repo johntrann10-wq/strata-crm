@@ -47,14 +47,6 @@ export default function NewVehiclePage() {
 
   const [{ fetching: creating, error: createError }, createVehicle] = useAction(api.vehicle.create);
 
-  const redirectTo = (href: string) => {
-    if (typeof window !== "undefined") {
-      window.location.assign(href);
-      return;
-    }
-    navigate(href);
-  };
-
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!clientId) return;
@@ -95,18 +87,18 @@ export default function NewVehiclePage() {
 
     toast.success("Vehicle saved");
     if (mode === "quote") {
-      redirectTo(`/quotes/new?clientId=${clientId}&vehicleId=${createdVehicleId}&from=${encodeURIComponent(returnTo)}`);
+      navigate(`/quotes/new?clientId=${clientId}&vehicleId=${createdVehicleId}&from=${encodeURIComponent(returnTo)}`);
       return;
     }
     if (mode === "appointment") {
-      redirectTo(
+      navigate(
         `/appointments/new?clientId=${clientId}&vehicleId=${createdVehicleId}${
           currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
         }&from=${encodeURIComponent(returnTo)}`
       );
       return;
     }
-    redirectTo(returnTo);
+    navigate(returnTo);
   };
 
   return (
@@ -206,4 +198,3 @@ export default function NewVehiclePage() {
     </div>
   );
 }
-
