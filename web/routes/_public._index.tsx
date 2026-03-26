@@ -19,6 +19,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { seoPageList } from "@/lib/seoPages";
 import { cn } from "@/lib/utils";
 
+const homeTitle = "Automotive Service Business Software | Strata CRM";
+const homeDescription =
+  "Strata CRM is modern software for automotive service businesses. Manage scheduling, clients, vehicles, jobs, quotes, invoices, and payments in one clear system.";
+
 const featureCards = [
   {
     icon: Calendar,
@@ -146,6 +150,18 @@ const previewAppointments = [
   { time: "1:00 PM", title: "Brake pad and rotor replacement", customer: "Chris M. | 2018 F-150", status: "In progress" },
 ];
 
+export function meta() {
+  return [
+    { title: homeTitle },
+    { name: "description", content: homeDescription },
+    { property: "og:title", content: homeTitle },
+    { property: "og:description", content: homeDescription },
+    { property: "og:url", content: "https://stratacrm.app/" },
+    { name: "twitter:title", content: homeTitle },
+    { name: "twitter:description", content: homeDescription },
+  ];
+}
+
 export default function LandingPage() {
   const location = useLocation();
 
@@ -207,11 +223,11 @@ export default function LandingPage() {
 
             <div className="space-y-4">
               <h1 className="max-w-4xl text-balance text-4xl font-extrabold tracking-tight text-gray-950 sm:text-5xl lg:text-6xl">
-                The shop operating system that feels clear from the first day.
+                Automotive service business software that feels clear from the first day.
               </h1>
               <p className="max-w-3xl text-lg leading-8 text-gray-600 sm:text-xl">
-                Strata helps service shops book work, manage clients and vehicles, run jobs, and get paid without the clutter,
-                guesswork, and broken flow of old shop software.
+                Strata CRM helps automotive service businesses manage appointments, clients, vehicles, jobs, quotes, invoices,
+                and payments without the clutter, guesswork, and broken flow of outdated shop software.
               </p>
             </div>
 
@@ -304,7 +320,7 @@ export default function LandingPage() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">See the flow clearly</p>
             <p className="mt-1 max-w-2xl text-base leading-7 text-gray-700">
-              Strata is built to make scheduling, intake, jobs, and billing feel more obvious for the person actually running the day.
+              Strata is modern shop management software for detailing, tint, wrap, PPF, tire, performance, and mechanic businesses that need one clearer operating flow.
             </p>
           </div>
           <Link
@@ -326,10 +342,10 @@ export default function LandingPage() {
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">How it works</p>
               <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-                Simpler day-to-day shop operations.
+                What Strata CRM handles for an automotive service business.
               </h2>
               <p className="mt-4 max-w-xl text-lg leading-8 text-gray-600">
-                Strata is designed so a first-time user can understand the next step quickly, while still giving an experienced shop owner the depth they need.
+                Strata is designed so a first-time user can understand the next step quickly, while still giving a growing shop the scheduling, CRM, and billing depth it needs.
               </p>
             </div>
 
@@ -433,10 +449,10 @@ export default function LandingPage() {
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Product highlights</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-              Powerful enough for real operations. Clear enough to use under pressure.
+              Better than outdated shop software that feels heavier than the work itself.
             </h2>
             <p className="mt-4 text-lg leading-8 text-gray-600">
-              The goal is not more screens. It is faster scheduling, easier intake, better job handoff, and cleaner billing.
+              The goal is not more screens. It is faster scheduling, easier intake, stronger customer and vehicle history, better job handoff, and cleaner billing.
             </p>
           </div>
 
@@ -466,10 +482,10 @@ export default function LandingPage() {
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">What shop owners actually care about</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-              A clearer operating flow, not just more software.
+              Why modern automotive service businesses switch to Strata.
             </h2>
             <p className="mt-4 text-lg leading-8 text-gray-600">
-              The product is designed around the moments that slow real shops down: intake, scheduling, job handoff, and getting paid.
+              The product is designed around the moments that actually slow shops down: intake, scheduling, job handoff, approvals, invoicing, and getting paid.
             </p>
           </div>
 
