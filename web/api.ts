@@ -1,5 +1,7 @@
 import {
   clearAuthToken,
+  clearCurrentBusinessId,
+  clearCurrentLocationId,
   emitAuthEvent,
   getAuthToken,
   getCurrentBusinessId,
@@ -31,6 +33,17 @@ export type AuthContextData = {
 type AuthEnvelope = { data: AuthUserData };
 type AuthContextEnvelope = { data: AuthContextData };
 
+function shouldUseSameOriginApi(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname.toLowerCase();
+  return (
+    host === "stratacrm.app" ||
+    host === "www.stratacrm.app" ||
+    host.endsWith(".vercel.app") ||
+    host.endsWith(".netlify.app")
+  );
+}
+
 /**
  * Fetch-based API client for Node API endpoints.
  * Uses JWT in Authorization header and talks directly to the Express backend.
@@ -40,6 +53,7 @@ type AuthContextEnvelope = { data: AuthContextData };
  * - If both unset: empty string → relative `/api/...` (dev: Vite proxy; prod: same-origin + edge proxy when VITE_ALLOW_RELATIVE_API=true at build)
  */
 function resolveApiBase(): string {
+  if (import.meta.env.PROD && shouldUseSameOriginApi()) return "";
   // Use `import.meta.env.VITE_*` directly here — assigning `import.meta.env` to a variable
   // breaks Vite's static replacement and can minify to `{}`, ignoring build-time API URLs.
   const raw =
@@ -67,12 +81,14 @@ export class ApiError extends Error {
   status: number;
   path: string;
   detail?: string;
-  constructor(message: string, status: number, path: string, detail?: string) {
+  code?: string;
+  constructor(message: string, status: number, path: string, detail?: string, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.path = path;
     this.detail = detail;
+    this.code = code;
   }
 }
 
@@ -108,13 +124,15 @@ async function request<T = unknown>(
     if (res.status === 401 || res.status === 403) {
       // Invalid/expired token: clear local auth so boot + protected pages can redirect predictably.
       clearAuthToken();
+      clearCurrentBusinessId();
+      clearCurrentLocationId();
       emitAuthEvent("auth:invalid", { status: res.status, path });
     }
     const errText = await res.text();
-    let errBody: { message?: string; detail?: string } = {};
+    let errBody: { message?: string; detail?: string; code?: string } = {};
     if (errText) {
       try {
-        errBody = JSON.parse(errText) as { message?: string; detail?: string };
+        errBody = JSON.parse(errText) as { message?: string; detail?: string; code?: string };
       } catch {
         errBody = { message: errText.slice(0, 200) };
       }
@@ -129,7 +147,7 @@ async function request<T = unknown>(
           "API not found (404). Set STRATA_API_ORIGIN on Vercel/Netlify for the /api proxy, or VITE_API_URL / NEXT_PUBLIC_API_URL at build time (see DEPLOY.md).";
       }
     }
-    throw new ApiError(message, res.status, path, errBody.detail);
+    throw new ApiError(message, res.status, path, errBody.detail, errBody.code);
   }
   const text = await res.text();
   try {
