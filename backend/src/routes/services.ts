@@ -233,8 +233,33 @@ servicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
     createdId = created?.id ?? null;
   }
   if (!createdId) throw new BadRequestError("Unable to create service.");
-  const created = await getServiceForBusiness(createdId, bid);
-  if (!created) throw new NotFoundError("Service not found after create.");
+  let created: ServiceRecord | null = null;
+  try {
+    created = await getServiceForBusiness(createdId, bid);
+  } catch (error) {
+    warnOnce("services:create:lookup", "service create returning fallback record after lookup failure", {
+      businessId: bid,
+      serviceId: createdId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  if (!created) {
+    const now = new Date();
+    created = {
+      id: createdId,
+      businessId: bid,
+      name: body.name,
+      notes: body.notes ?? null,
+      price: String(body.price),
+      durationMinutes: body.durationMinutes ?? null,
+      category: body.category ?? "other",
+      taxable: body.taxable ?? true,
+      isAddon: body.isAddon ?? false,
+      active: body.active ?? true,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
   res.status(201).json(created);
 });
 
