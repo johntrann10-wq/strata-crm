@@ -176,8 +176,8 @@ export default function OnboardingPage() {
     }
 
     try {
-      setCurrentBusinessId(saved.id);
       await api.business.completeOnboarding(saved.id);
+      setCurrentBusinessId(saved.id);
       try {
         const presetResult = await applyBusinessPreset();
         if (presetResult.data && typeof presetResult.data === "object" && "ok" in presetResult.data && presetResult.data.ok === false) {
