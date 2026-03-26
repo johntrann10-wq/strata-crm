@@ -58,57 +58,64 @@ async function clickFirstService(page: Page) {
 
 async function ensureActiveService(page: Page): Promise<boolean> {
   const result = await page.evaluate(async () => {
-    const token = window.localStorage.getItem("authToken");
-    const businessId = window.localStorage.getItem("currentBusinessId");
-    if (!token || !businessId) {
-      return { ok: false, reason: "missing auth context" };
+    try {
+      const token = window.localStorage.getItem("authToken");
+      const businessId = window.localStorage.getItem("currentBusinessId");
+      if (!token || !businessId) {
+        return { ok: false, reason: "missing auth context" };
+      }
+
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
+      const base = "https://strata-crm-production.up.railway.app/api";
+      const filter = encodeURIComponent(
+        JSON.stringify({
+          businessId: { equals: businessId },
+          active: { equals: true },
+        })
+      );
+
+      const listResp = await fetch(`${base}/services?filter=${filter}&first=1`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const listBody = await listResp.json().catch(() => ({}));
+      const existing = Array.isArray(listBody?.records) ? listBody.records[0] : null;
+      if (existing?.id) {
+        return { ok: true, created: false, id: existing.id };
+      }
+
+      const createResp = await fetch(`${base}/services`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: "Smoke Test Service",
+          price: 149,
+          durationMinutes: 120,
+          active: true,
+        }),
+      });
+      const createBody = await createResp.json().catch(() => ({}));
+      return {
+        ok: createResp.ok,
+        created: true,
+        status: createResp.status,
+        id: createBody?.id ?? null,
+        body: createBody,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: error instanceof Error ? error.message : String(error),
+      };
     }
-
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    };
-    const base = "https://strata-crm-production.up.railway.app/api";
-    const filter = encodeURIComponent(
-      JSON.stringify({
-        businessId: { equals: businessId },
-        active: { equals: true },
-      })
-    );
-
-    const listResp = await fetch(`${base}/services?filter=${filter}&first=1`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const listBody = await listResp.json().catch(() => ({}));
-    const existing = Array.isArray(listBody?.records) ? listBody.records[0] : null;
-    if (existing?.id) {
-      return { ok: true, created: false, id: existing.id };
-    }
-
-    const createResp = await fetch(`${base}/services`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        name: "Smoke Test Service",
-        price: 149,
-        durationMinutes: 120,
-        active: true,
-      }),
-    });
-    const createBody = await createResp.json().catch(() => ({}));
-    return {
-      ok: createResp.ok,
-      created: true,
-      status: createResp.status,
-      id: createBody?.id ?? null,
-      body: createBody,
-    };
   });
 
   // eslint-disable-next-line no-console
   console.log("ensureActiveService", result);
   if (!result?.ok) {
-    if (result?.status === 503) {
+    if (result?.status === 503 || /failed to fetch/i.test(String(result?.reason ?? ""))) {
       return false;
     }
     throw new Error(`Unable to seed service for smoke: ${JSON.stringify(result)}`);
@@ -239,7 +246,7 @@ test.describe("Live business workflow smoke", () => {
         response.url().includes(`/api/quotes/${quoteId}/send`) &&
         response.request().method() === "POST"
       );
-      await page.getByRole("button", { name: /mark as sent/i }).first().click();
+      await page.getByRole("button", { name: /^send quote$/i }).click();
       const sendResponse = await sendResponsePromise;
       const sendPayload = await sendResponse.json().catch(() => ({}));
       quoteDeliveryStatus = sendPayload?.deliveryStatus ?? null;
@@ -264,7 +271,7 @@ test.describe("Live business workflow smoke", () => {
         response.url().includes(`/api/invoices/${invoiceId}/sendToClient`) &&
         response.request().method() === "POST"
       );
-      await page.getByRole("button", { name: /mark as sent/i }).first().click();
+      await page.getByRole("button", { name: /^send invoice$/i }).click();
       const sendResponse = await sendResponsePromise;
       const sendPayload = await sendResponse.json().catch(() => ({}));
       invoiceDeliveryStatus = sendPayload?.deliveryStatus ?? null;

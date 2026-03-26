@@ -66,6 +66,7 @@ export default function NewAppointmentPage() {
   const [searchParams] = useSearchParams();
   const quoteIdParam = searchParams.get("quoteId");
   const clientIdParam = searchParams.get("clientId");
+  const vehicleIdParam = searchParams.get("vehicleId");
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/appointments";
   const hasQueueReturn = searchParams.has("from");
 
@@ -112,6 +113,9 @@ export default function NewAppointmentPage() {
     if (clientIdParam && selectedClientId === null) {
       setSelectedClientId(clientIdParam);
     }
+    if (vehicleIdParam && selectedVehicleId === null) {
+      setSelectedVehicleId(vehicleIdParam);
+    }
     const timeParam = searchParams.get("time");
     if (timeParam) setStartTime(timeParam);
     const dateParam = searchParams.get("date");
@@ -119,7 +123,7 @@ export default function NewAppointmentPage() {
       const d = new Date(dateParam + "T12:00:00");
       if (!isNaN(d.getTime())) setSelectedDate(d);
     }
-  }, [searchParams]);
+  }, [searchParams, clientIdParam, vehicleIdParam, selectedClientId, selectedVehicleId]);
 
   // Default selectedDate to today on the client when no date param is provided
   useEffect(() => {
