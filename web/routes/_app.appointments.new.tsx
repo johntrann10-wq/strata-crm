@@ -934,9 +934,7 @@ export default function NewAppointmentPage() {
                         >
                           <Checkbox
                             checked={isSelected}
-                            onCheckedChange={() => toggleService(service.id)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="shrink-0"
+                            className="shrink-0 pointer-events-none"
                           />
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm">{service.name}</p>
@@ -1208,12 +1206,7 @@ export default function NewAppointmentPage() {
                 <Checkbox
                   id="isMobile"
                   checked={isMobile}
-                  onCheckedChange={(checked) => {
-                    setIsMobile(checked === true);
-                    if (!checked) setMobileAddress("");
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="mt-0.5 shrink-0"
+                  className="mt-0.5 shrink-0 pointer-events-none"
                 />
                 <div>
                   <Label
