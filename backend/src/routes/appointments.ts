@@ -135,8 +135,6 @@ async function buildAppointmentConfirmationPayload(appointmentId: string, bid: s
       clientLastName: clients.lastName,
       clientEmail: clients.email,
       businessName: businesses.name,
-      vehicleDisplayName: vehicles.displayName,
-      vehicleTrim: vehicles.trim,
       vehicleYear: vehicles.year,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
@@ -177,14 +175,11 @@ async function buildAppointmentConfirmationPayload(appointmentId: string, bid: s
         })
       : "Scheduled appointment",
     vehicle:
-      appointmentRow.vehicleDisplayName ||
       buildVehicleDisplayName({
         year: appointmentRow.vehicleYear,
         make: appointmentRow.vehicleMake,
         model: appointmentRow.vehicleModel,
-        trim: appointmentRow.vehicleTrim,
-      }) ||
-      null,
+      }) || null,
     address: appointmentRow.locationAddress ?? null,
     serviceSummary:
       serviceRows.length > 0 ? `Services: ${serviceRows.map((service) => service.name).join(", ")}` : null,
@@ -313,8 +308,6 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
       updatedAt: appointments.updatedAt,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
-      vehicleDisplayName: vehicles.displayName,
-      vehicleTrim: vehicles.trim,
       vehicleYear: vehicles.year,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
@@ -358,15 +351,12 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
             year: row.vehicleYear ?? null,
             make: row.vehicleMake,
             model: row.vehicleModel,
-            trim: row.vehicleTrim ?? null,
-            displayName:
-              row.vehicleDisplayName ||
-              buildVehicleDisplayName({
-                year: row.vehicleYear,
-                make: row.vehicleMake,
-                model: row.vehicleModel,
-                trim: row.vehicleTrim,
-              }),
+            trim: null,
+            displayName: buildVehicleDisplayName({
+              year: row.vehicleYear,
+              make: row.vehicleMake,
+              model: row.vehicleModel,
+            }),
           }
         : null,
     assignedStaff:
@@ -391,8 +381,6 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
       clientPhone: clients.phone,
       clientEmail: clients.email,
       vehicleId: appointments.vehicleId,
-      vehicleDisplayName: vehicles.displayName,
-      vehicleTrim: vehicles.trim,
       vehicleYear: vehicles.year,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
@@ -462,15 +450,12 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
             year: row.vehicleYear ?? null,
             make: row.vehicleMake,
             model: row.vehicleModel,
-            trim: row.vehicleTrim ?? null,
-            displayName:
-              row.vehicleDisplayName ||
-              buildVehicleDisplayName({
-                year: row.vehicleYear,
-                make: row.vehicleMake,
-                model: row.vehicleModel,
-                trim: row.vehicleTrim,
-              }),
+            trim: null,
+            displayName: buildVehicleDisplayName({
+              year: row.vehicleYear,
+              make: row.vehicleMake,
+              model: row.vehicleModel,
+            }),
             color: row.vehicleColor ?? null,
             licensePlate: row.vehicleLicensePlate ?? null,
           }

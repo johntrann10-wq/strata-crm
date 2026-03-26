@@ -114,8 +114,6 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
         clientFirstName: clients.firstName,
         clientLastName: clients.lastName,
         aptStart: appointments.startTime,
-        vehicleDisplayName: vehicles.displayName,
-        vehicleTrim: vehicles.trim,
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
@@ -187,8 +185,6 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
         clientFirstName: clients.firstName,
         clientLastName: clients.lastName,
         aptStart: appointments.startTime,
-        vehicleDisplayName: vehicles.displayName,
-        vehicleTrim: vehicles.trim,
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
@@ -326,20 +322,16 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
       vehicle:
         r.vehicleMake != null
           ? {
-              year: r.vehicleYear ?? null,
+            year: r.vehicleYear ?? null,
+            make: r.vehicleMake,
+            model: r.vehicleModel ?? "",
+            displayName: buildVehicleDisplayName({
+              year: r.vehicleYear,
               make: r.vehicleMake,
-              model: r.vehicleModel ?? "",
-              trim: r.vehicleTrim ?? null,
-              displayName:
-                r.vehicleDisplayName ||
-                buildVehicleDisplayName({
-                  year: r.vehicleYear,
-                  make: r.vehicleMake,
-                  model: r.vehicleModel,
-                  trim: r.vehicleTrim,
-                }),
-            }
-          : null,
+              model: r.vehicleModel,
+            }),
+          }
+        : null,
     };
   });
 
@@ -379,8 +371,6 @@ invoicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res:
           year: vehicles.year,
           make: vehicles.make,
           model: vehicles.model,
-          trim: vehicles.trim,
-          displayName: vehicles.displayName,
         })
         .from(vehicles)
         .where(eq(vehicles.id, apt.vehicleId))
@@ -393,15 +383,12 @@ invoicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res:
               year: v.year,
               make: v.make ?? "",
               model: v.model ?? "",
-              trim: v.trim ?? null,
-              displayName:
-                v.displayName ||
-                buildVehicleDisplayName({
-                  year: v.year,
-                  make: v.make,
-                  model: v.model,
-                  trim: v.trim,
-                }),
+              trim: null,
+              displayName: buildVehicleDisplayName({
+                year: v.year,
+                make: v.make,
+                model: v.model,
+              }),
             }
           : undefined,
       };
