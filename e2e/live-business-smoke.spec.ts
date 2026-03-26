@@ -39,6 +39,40 @@ async function waitForPathname(page: Page, matcher: RegExp) {
   );
 }
 
+async function openSelectAndChoose(page: Page, label: RegExp | string, option: RegExp | string) {
+  const labelLocator = page.getByText(label, { exact: false }).first();
+  const field = labelLocator.locator("xpath=ancestor::div[contains(@class,'space-y-2')][1]");
+  await field.getByRole("combobox").click();
+  await page.getByRole("option", { name: option }).click();
+}
+
+async function fillVehicleSelector(page: Page) {
+  const manualButton = page.getByRole("button", { name: /manual fallback/i });
+  const catalogButton = page.getByRole("button", { name: /use catalog/i });
+
+  if (await manualButton.isVisible().catch(() => false)) {
+    await openSelectAndChoose(page, /^year$/i, "2022");
+    await openSelectAndChoose(page, /^make\s*\*?$/i, /toyota/i);
+    await openSelectAndChoose(page, /^model\s*\*?$/i, /camry/i);
+    const trimInput = page.getByPlaceholder(/enter trim if known/i);
+    if (await trimInput.isVisible().catch(() => false)) {
+      await trimInput.fill("SE");
+    }
+    return;
+  }
+
+  await expect(catalogButton).toBeVisible();
+  await catalogButton.click();
+  await expect(page.locator("#vehicle-year")).toBeVisible();
+  await page.locator("#vehicle-year").fill("2022");
+  await page.locator("#vehicle-make").fill("Toyota");
+  await page.locator("#vehicle-model").fill("Camry");
+  const trimInput = page.locator("#vehicle-trim");
+  if (await trimInput.isVisible().catch(() => false)) {
+    await trimInput.fill("SE");
+  }
+}
+
 async function clickFirstService(page: Page) {
   const serviceCard = page
     .locator("main")
@@ -72,7 +106,11 @@ async function fillRequiredMobileAddress(page: Page) {
 }
 
 async function clickQuoteSendButton(page: Page) {
-  const communicationButton = page.getByRole("button", { name: /^send quote$/i }).last();
+  const communicationCard = page
+    .locator('[class*="card"]')
+    .filter({ has: page.getByRole("heading", { name: /client communication/i }) })
+    .first();
+  const communicationButton = communicationCard.getByRole("button", { name: /^send quote$|^resend quote$/i });
   if (await communicationButton.isVisible().catch(() => false)) {
     await communicationButton.click();
     return;
@@ -81,7 +119,11 @@ async function clickQuoteSendButton(page: Page) {
 }
 
 async function clickInvoiceSendButton(page: Page) {
-  const communicationButton = page.getByRole("button", { name: /^send invoice$/i }).last();
+  const communicationCard = page
+    .locator('[class*="card"]')
+    .filter({ has: page.getByRole("heading", { name: /client communication/i }) })
+    .first();
+  const communicationButton = communicationCard.getByRole("button", { name: /^send invoice$|^resend invoice$/i });
   if (await communicationButton.isVisible().catch(() => false)) {
     await communicationButton.click();
     return;
@@ -230,10 +272,7 @@ test.describe("Live business workflow smoke", () => {
     });
 
     await test.step("Create vehicle", async () => {
-      await expect(page.locator("#make")).toBeVisible();
-      await page.locator("#year").fill("2022");
-      await page.locator("#make").fill("Toyota");
-      await page.locator("#vehicleModel").fill("Camry");
+      await fillVehicleSelector(page);
       const createResponsePromise = page.waitForResponse((response) =>
         response.url().includes("/api/vehicles") &&
         response.request().method() === "POST"

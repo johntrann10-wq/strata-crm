@@ -38,6 +38,7 @@ import { PageHeader } from "../components/shared/PageHeader";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
+import { buildVehicleDisplayName } from "../lib/vehicles";
 
 function formatCurrency(amount: number | string | null | undefined): string {
   const value = Number(amount ?? 0);
@@ -123,6 +124,12 @@ export default function VehicleDetailPage() {
       year: true,
       make: true,
       model: true,
+      trim: true,
+      bodyStyle: true,
+      engine: true,
+      displayName: true,
+      source: true,
+      sourceVehicleId: true,
       color: true,
       vin: true,
       licensePlate: true,
@@ -163,10 +170,15 @@ export default function VehicleDetailPage() {
   const [year, setYear] = useState("");
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
+  const [trim, setTrim] = useState("");
+  const [bodyStyle, setBodyStyle] = useState("");
+  const [engine, setEngine] = useState("");
   const [color, setColor] = useState("");
   const [licensePlate, setLicensePlate] = useState("");
   const [mileage, setMileage] = useState("");
   const [notes, setNotes] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [source, setSource] = useState("");
   const [showMoreDetails, setShowMoreDetails] = useState(true);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
@@ -176,10 +188,15 @@ export default function VehicleDetailPage() {
       setYear((vehicle as any).year?.toString() ?? "");
       setMake((vehicle as any).make ?? "");
       setModel((vehicle as any).model ?? "");
+      setTrim((vehicle as any).trim ?? "");
+      setBodyStyle((vehicle as any).bodyStyle ?? "");
+      setEngine((vehicle as any).engine ?? "");
       setColor((vehicle as any).color ?? "");
       setLicensePlate((vehicle as any).licensePlate ?? "");
       setMileage((vehicle as any).mileage?.toString() ?? "");
       setNotes((vehicle as any).notes ?? "");
+      setDisplayName((vehicle as any).displayName ?? "");
+      setSource((vehicle as any).source ?? "manual");
     }
   }, [vehicle]);
 
@@ -236,11 +253,16 @@ export default function VehicleDetailPage() {
       year: year ? parseInt(year, 10) : null,
       make,
       model,
+      trim: trim || null,
+      bodyStyle: bodyStyle || null,
+      engine: engine || null,
       color: color || null,
       vin: vin || null,
       licensePlate: licensePlate || null,
       mileage: mileage ? parseInt(mileage, 10) : null,
       notes: notes || null,
+      displayName: displayName || buildVehicleDisplayName({ year, make, model, trim, bodyStyle, engine }),
+      source: source || "manual",
     });
   };
 
@@ -275,9 +297,16 @@ export default function VehicleDetailPage() {
     ? `${(vehicle as any).client.firstName} ${(vehicle as any).client.lastName}`.trim()
     : "Client";
   const pageTitle =
-    (vehicle as any)?.year && (vehicle as any)?.make && (vehicle as any)?.model
-      ? `${(vehicle as any).year} ${(vehicle as any).make} ${(vehicle as any).model}`
-      : "Vehicle";
+    (vehicle as any)?.displayName ||
+    buildVehicleDisplayName({
+      year: (vehicle as any)?.year?.toString(),
+      make: (vehicle as any)?.make,
+      model: (vehicle as any)?.model,
+      trim: (vehicle as any)?.trim,
+      bodyStyle: (vehicle as any)?.bodyStyle,
+      engine: (vehicle as any)?.engine,
+    }) ||
+    "Vehicle";
 
   const relatedRecords: RelatedRecord[] = [
     ...activeJobs.slice(0, 4).map((job) => ({
@@ -555,10 +584,15 @@ export default function VehicleDetailPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid gap-4 sm:grid-cols-2">
+                  <SummaryField label="Display Name" value={displayName || "Generated automatically"} />
                   <SummaryField label="Owner" value={clientName} />
+                  <SummaryField label="Trim" value={trim || "Not provided"} />
+                  <SummaryField label="Body Style" value={bodyStyle || "Not provided"} />
+                  <SummaryField label="Engine" value={engine || "Not provided"} />
                   <SummaryField label="License Plate" value={licensePlate || "Not provided"} />
                   <SummaryField label="VIN" value={vin || "Not provided"} />
                   <SummaryField label="Mileage" value={mileage ? `${mileage} mi` : "Not provided"} />
+                  <SummaryField label="Source" value={source || "manual"} />
                 </div>
 
                 <div className="space-y-2">
@@ -583,6 +617,37 @@ export default function VehicleDetailPage() {
                   <div className="space-y-2">
                     <Label htmlFor="model">Model</Label>
                     <Input id="model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Camry" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="trim">Trim</Label>
+                    <Input id="trim" value={trim} onChange={(e) => setTrim(e.target.value)} placeholder="XSE" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bodyStyle">Body Style</Label>
+                    <Input id="bodyStyle" value={bodyStyle} onChange={(e) => setBodyStyle(e.target.value)} placeholder="Sedan" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="engine">Engine</Label>
+                    <Input id="engine" value={engine} onChange={(e) => setEngine(e.target.value)} placeholder="2.5L I4" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="displayName">Display Name</Label>
+                    <Input
+                      id="displayName"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="2022 Toyota Camry XSE"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="source">Source</Label>
+                    <Input id="source" value={source} onChange={(e) => setSource(e.target.value)} placeholder="manual" />
                   </div>
                 </div>
 

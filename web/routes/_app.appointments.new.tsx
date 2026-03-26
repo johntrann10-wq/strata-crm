@@ -57,6 +57,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
+import { VehicleCatalogFields } from "../components/vehicles/VehicleCatalogFields";
+import {
+  emptyVehicleCatalogFormValue,
+  formatVehicleLabel,
+  type VehicleCatalogFormValue,
+} from "../lib/vehicles";
 
 const toMoneyNumber = (value: unknown): number => {
   const numeric = Number(value ?? 0);
@@ -98,9 +104,10 @@ export default function NewAppointmentPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [vehicleError, setVehicleError] = useState<string | null>(null);
   const [showQuickAddVehicle, setShowQuickAddVehicle] = useState(false);
-  const [quickYear, setQuickYear] = useState('');
-  const [quickMake, setQuickMake] = useState('');
-  const [quickModel, setQuickModel] = useState('');
+  const [quickVehicleForm, setQuickVehicleForm] = useState<VehicleCatalogFormValue>({
+    ...emptyVehicleCatalogFormValue,
+    year: String(new Date().getFullYear()),
+  });
   const [quickVehicleError, setQuickVehicleError] = useState('');
   const [savingVehicle, setSavingVehicle] = useState(false);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(currentLocationId);
@@ -424,7 +431,7 @@ export default function NewAppointmentPage() {
   );
 
   const handleQuickAddVehicle = async () => {
-    if (!quickMake.trim() || !quickModel.trim()) {
+    if (!quickVehicleForm.make.trim() || !quickVehicleForm.model.trim()) {
       setQuickVehicleError('Make and model are required.');
       return;
     }
@@ -434,9 +441,16 @@ export default function NewAppointmentPage() {
     try {
       const result = await createVehicle({
         clientId: selectedClientId,
-        make: quickMake.trim(),
-        model: quickModel.trim(),
-        year: quickYear ? parseInt(quickYear) : undefined,
+        make: quickVehicleForm.make.trim(),
+        model: quickVehicleForm.model.trim(),
+        year: quickVehicleForm.year ? parseInt(quickVehicleForm.year, 10) : undefined,
+        trim: quickVehicleForm.trim || undefined,
+        bodyStyle: quickVehicleForm.bodyStyle || undefined,
+        engine: quickVehicleForm.engine || undefined,
+        vin: quickVehicleForm.vin || undefined,
+        displayName: quickVehicleForm.displayName || undefined,
+        source: quickVehicleForm.source || "manual",
+        sourceVehicleId: quickVehicleForm.sourceVehicleId || undefined,
       } as any);
       if (result.error) {
         setQuickVehicleError(result.error.message ?? "Failed to add vehicle.");
@@ -450,9 +464,10 @@ export default function NewAppointmentPage() {
       await refetchVehicles();
       setSelectedVehicleId(createdVehicleId);
       setShowQuickAddVehicle(false);
-      setQuickYear('');
-      setQuickMake('');
-      setQuickModel('');
+      setQuickVehicleForm({
+        ...emptyVehicleCatalogFormValue,
+        year: String(new Date().getFullYear()),
+      });
       toast.success("Vehicle added");
     } catch (e: any) {
       setQuickVehicleError(e?.message ?? 'Failed to add vehicle.');
@@ -749,11 +764,7 @@ export default function NewAppointmentPage() {
                     ) : (
                       <div className='rounded-lg border bg-muted/30 p-3 space-y-3'>
                         <p className='text-sm font-medium'>Quick-add a vehicle</p>
-                        <div className='grid grid-cols-3 gap-2'>
-                          <Input placeholder='Year' value={quickYear} onChange={(e) => setQuickYear(e.target.value)} maxLength={4} />
-                          <Input placeholder='Make *' value={quickMake} onChange={(e) => setQuickMake(e.target.value)} />
-                          <Input placeholder='Model *' value={quickModel} onChange={(e) => setQuickModel(e.target.value)} />
-                        </div>
+                        <VehicleCatalogFields value={quickVehicleForm} setValue={setQuickVehicleForm} compact />
                         {quickVehicleError && <p className='text-xs text-destructive'>{quickVehicleError}</p>}
                         <div className='flex gap-2'>
                           <Button type='button' size='sm' onClick={handleQuickAddVehicle} disabled={savingVehicle}>
@@ -778,11 +789,7 @@ export default function NewAppointmentPage() {
                     <SelectContent>
                       {vehicles.map((v) => (
                         <SelectItem key={v.id} value={v.id}>
-                          {[v.year, v.make, v.model]
-                            .filter(Boolean)
-                            .join(" ")}
-                          {v.color ? ` — ${v.color}` : ""}
-                          {v.licensePlate ? ` (${v.licensePlate})` : ""}
+                          {formatVehicleLabel(v as any)}
                         </SelectItem>
                       ))}
                     </SelectContent>

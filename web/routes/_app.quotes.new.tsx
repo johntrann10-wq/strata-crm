@@ -5,6 +5,7 @@ import { api } from "../api";
 import { toast } from "sonner";
 import type { AuthOutletContext } from "./_app";
 import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
+import { formatVehicleLabel } from "../lib/vehicles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -167,7 +168,6 @@ export default function NewQuotePage() {
   } as any);
 
   const [, runCreate] = useAction(api.quote.create);
-  const [, runCreateLineItem] = useAction(api.quoteLineItem.create);
 
   // Derived calculations
   const subtotal = lineItems.reduce((sum, item) => {
@@ -301,6 +301,11 @@ export default function NewQuotePage() {
         taxAmount,
         total,
         status: "draft",
+        lineItems: validLineItems.map((item) => ({
+          description: item.description.trim(),
+          quantity: parseInt(item.quantity, 10) || 1,
+          unitPrice: parseFloat(item.unitPrice) || 0,
+        })),
       });
 
       if (result.error) {
@@ -311,30 +316,6 @@ export default function NewQuotePage() {
       const quoteId = result.data?.id;
       if (!quoteId) {
         toast.error("Failed to create quote");
-        return;
-      }
-
-      let lineItemFailure: string | null = null;
-      for (const item of validLineItems) {
-        const qty = parseInt(item.quantity, 10) || 1;
-        const price = parseFloat(item.unitPrice) || 0;
-        const lineItemResult = await runCreateLineItem({
-          quote: { _link: quoteId },
-          description: item.description,
-          quantity: qty,
-          unitPrice: price,
-          total: qty * price,
-          taxable: item.taxable,
-        });
-        if (lineItemResult.error) {
-          lineItemFailure = lineItemResult.error.message ?? "One or more line items could not be added.";
-          break;
-        }
-      }
-
-      if (lineItemFailure) {
-        toast.error(`Quote created, but line items failed: ${lineItemFailure}`);
-        navigate(`/quotes/${quoteId}?from=${encodeURIComponent(returnTo)}`);
         return;
       }
 
@@ -704,7 +685,7 @@ export default function NewQuotePage() {
                   <SelectContent>
                     {vehicles?.map((vehicle) => (
                       <SelectItem key={vehicle.id} value={vehicle.id}>
-                        {vehicle.year} {vehicle.make} {vehicle.model}
+                        {formatVehicleLabel(vehicle as any)}
                       </SelectItem>
                     ))}
                   </SelectContent>

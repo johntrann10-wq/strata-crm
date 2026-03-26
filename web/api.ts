@@ -361,6 +361,38 @@ export const api = {
   notificationLog: resource("notification-logs"),
   client: resource("clients"),
   vehicle: resource("vehicles"),
+  vehicleCatalog: {
+    listYears: () =>
+      request<{ records?: Array<{ id: string; year: number; label: string }> }>("/vehicle-catalog/years").then(
+        (body) => body?.records ?? []
+      ),
+    listMakes: (year: number) =>
+      request<{ records?: Array<{ id: string; label: string; value: string; source: string; sourceVehicleId: string | null }> }>(
+        `/vehicle-catalog/makes?${new URLSearchParams({ year: String(year) }).toString()}`
+      ).then((body) => body?.records ?? []),
+    listModels: (params: { year: number; makeId: string; make?: string }) =>
+      request<{ records?: Array<{ id: string; label: string; value: string; source: string; sourceVehicleId: string | null }> }>(
+        `/vehicle-catalog/models?${new URLSearchParams({
+          year: String(params.year),
+          makeId: params.makeId,
+          ...(params.make ? { make: params.make } : {}),
+        }).toString()}`
+      ).then((body) => body?.records ?? []),
+    listTrims: (params: { year: number; makeId: string; make?: string; model: string }) =>
+      request<{ records?: Array<{ id: string; label: string; value: string; source: string; sourceVehicleId: string | null; bodyStyle: string | null; engine: string | null }> }>(
+        `/vehicle-catalog/trims?${new URLSearchParams({
+          year: String(params.year),
+          makeId: params.makeId,
+          model: params.model,
+          ...(params.make ? { make: params.make } : {}),
+        }).toString()}`
+      ).then((body) => body?.records ?? []),
+    vinLookup: (vin: string) =>
+      request<{ record?: { vin: string; year: number | null; make: string | null; model: string | null; trim: string | null; bodyStyle: string | null; engine: string | null; displayName: string; source: string; sourceVehicleId: string | null } | null }>(
+        "/vehicle-catalog/vin-lookup",
+        { method: "POST", body: JSON.stringify({ vin }) }
+      ).then((body) => body?.record ?? null),
+  },
   business: {
     ...resource("businesses"),
     completeOnboarding: (id: string) =>

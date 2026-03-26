@@ -93,15 +93,28 @@ CREATE TABLE IF NOT EXISTS vehicles (
   make text NOT NULL,
   model text NOT NULL,
   year integer,
+  trim text,
+  body_style text,
+  engine text,
   color text,
   license_plate text,
   vin text,
+  display_name text,
+  source text,
+  source_vehicle_id text,
   mileage integer,
   notes text,
   deleted_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS trim text;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS body_style text;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine text;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS display_name text;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS source text;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS source_vehicle_id text;
 
 CREATE TABLE IF NOT EXISTS locations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

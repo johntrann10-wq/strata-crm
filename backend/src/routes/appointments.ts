@@ -15,6 +15,7 @@ import { createRequestActivityLog } from "../lib/activity.js";
 import { sendAppointmentConfirmation } from "../lib/email.js";
 import { isEmailConfigured } from "../lib/env.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
+import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
@@ -134,6 +135,8 @@ async function buildAppointmentConfirmationPayload(appointmentId: string, bid: s
       clientLastName: clients.lastName,
       clientEmail: clients.email,
       businessName: businesses.name,
+      vehicleDisplayName: vehicles.displayName,
+      vehicleTrim: vehicles.trim,
       vehicleYear: vehicles.year,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
@@ -173,9 +176,15 @@ async function buildAppointmentConfirmationPayload(appointmentId: string, bid: s
           hour12: true,
         })
       : "Scheduled appointment",
-    vehicle: [appointmentRow.vehicleYear, appointmentRow.vehicleMake, appointmentRow.vehicleModel]
-      .filter(Boolean)
-      .join(" ") || null,
+    vehicle:
+      appointmentRow.vehicleDisplayName ||
+      buildVehicleDisplayName({
+        year: appointmentRow.vehicleYear,
+        make: appointmentRow.vehicleMake,
+        model: appointmentRow.vehicleModel,
+        trim: appointmentRow.vehicleTrim,
+      }) ||
+      null,
     address: appointmentRow.locationAddress ?? null,
     serviceSummary:
       serviceRows.length > 0 ? `Services: ${serviceRows.map((service) => service.name).join(", ")}` : null,
@@ -304,6 +313,8 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
       updatedAt: appointments.updatedAt,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
+      vehicleDisplayName: vehicles.displayName,
+      vehicleTrim: vehicles.trim,
       vehicleYear: vehicles.year,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
@@ -343,7 +354,20 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
     client: row.clientFirstName != null ? { firstName: row.clientFirstName, lastName: row.clientLastName } : null,
     vehicle:
       row.vehicleMake != null
-        ? { year: row.vehicleYear ?? null, make: row.vehicleMake, model: row.vehicleModel }
+        ? {
+            year: row.vehicleYear ?? null,
+            make: row.vehicleMake,
+            model: row.vehicleModel,
+            trim: row.vehicleTrim ?? null,
+            displayName:
+              row.vehicleDisplayName ||
+              buildVehicleDisplayName({
+                year: row.vehicleYear,
+                make: row.vehicleMake,
+                model: row.vehicleModel,
+                trim: row.vehicleTrim,
+              }),
+          }
         : null,
     assignedStaff:
       row.assignedStaffId != null
@@ -367,6 +391,8 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
       clientPhone: clients.phone,
       clientEmail: clients.email,
       vehicleId: appointments.vehicleId,
+      vehicleDisplayName: vehicles.displayName,
+      vehicleTrim: vehicles.trim,
       vehicleYear: vehicles.year,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
@@ -436,6 +462,15 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
             year: row.vehicleYear ?? null,
             make: row.vehicleMake,
             model: row.vehicleModel,
+            trim: row.vehicleTrim ?? null,
+            displayName:
+              row.vehicleDisplayName ||
+              buildVehicleDisplayName({
+                year: row.vehicleYear,
+                make: row.vehicleMake,
+                model: row.vehicleModel,
+                trim: row.vehicleTrim,
+              }),
             color: row.vehicleColor ?? null,
             licensePlate: row.vehicleLicensePlate ?? null,
           }

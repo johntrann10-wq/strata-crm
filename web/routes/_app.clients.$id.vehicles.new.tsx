@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useParams, useNavigate, useSearchParams, useOutletContext } from "react-router";
 import type { FormEvent } from "react";
 import { useAction } from "../hooks/useApi";
@@ -9,9 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { toast } from "sonner";
+import { VehicleCatalogFields } from "../components/vehicles/VehicleCatalogFields";
+import {
+  emptyVehicleCatalogFormValue,
+  type VehicleCatalogFormValue,
+} from "../lib/vehicles";
 
 export default function NewVehiclePage() {
   const { id: clientId } = useParams<{ id: string }>();
@@ -24,7 +29,15 @@ export default function NewVehiclePage() {
     const next = searchParams.get("next");
     return next === "quote" || next === "appointment" ? next : "client";
   });
-  const submitModeRef = useRef<typeof submitMode>(submitMode);
+  const [vehicleForm, setVehicleForm] = useState<VehicleCatalogFormValue>({
+    ...emptyVehicleCatalogFormValue,
+    year: String(new Date().getFullYear()),
+  });
+  const [color, setColor] = useState("");
+  const [licensePlate, setLicensePlate] = useState("");
+  const [mileage, setMileage] = useState<string>("");
+  const [notes, setNotes] = useState("");
+
   const intendedNext =
     submitMode === "quote"
       ? "Save this vehicle and continue straight into quote creation."
@@ -32,24 +45,8 @@ export default function NewVehiclePage() {
         ? "Save this vehicle and continue straight into appointment booking."
         : "Save this vehicle and return to the client record.";
 
-  const [{ fetching: creating, error: createError }, createVehicle] =
-    useAction(api.vehicle.create);
+  const [{ fetching: creating, error: createError }, createVehicle] = useAction(api.vehicle.create);
 
-  const [year, setYear] = useState<string>(() => String(new Date().getFullYear()));
-  const [make, setMake] = useState("");
-  const [vehicleModel, setVehicleModel] = useState("");
-  const [color, setColor] = useState("");
-  const [vin, setVin] = useState("");
-  const [licensePlate, setLicensePlate] = useState("");
-  const [mileage, setMileage] = useState<string>("");
-  const [notes, setNotes] = useState("");
-
-  const [showMoreDetails, setShowMoreDetails] = useState(false);
-  const vinInputRef = useRef<HTMLInputElement>(null);
-  const setSubmitIntent = (mode: typeof submitMode) => {
-    submitModeRef.current = mode;
-    setSubmitMode(mode);
-  };
   const redirectTo = (href: string) => {
     if (typeof window !== "undefined") {
       window.location.assign(href);
@@ -58,35 +55,37 @@ export default function NewVehiclePage() {
     navigate(href);
   };
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      vinInputRef.current?.focus();
-    }, 150);
-    return () => clearTimeout(timer);
-  }, []);
-
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!clientId) return;
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
-    const nextMode = submitter?.dataset.submitMode as typeof submitMode | undefined;
-    const mode = nextMode ?? submitModeRef.current ?? submitMode;
+    const mode = (submitter?.dataset.submitMode as typeof submitMode | undefined) ?? submitMode;
+    setSubmitMode(mode);
+
+    if (!vehicleForm.make.trim() || !vehicleForm.model.trim()) {
+      toast.error("Select or enter a make and model before saving.");
+      return;
+    }
 
     const result = await createVehicle({
       clientId,
-      year: year ? parseInt(year, 10) : undefined,
-      make,
-      model: vehicleModel,
+      year: vehicleForm.year ? parseInt(vehicleForm.year, 10) : undefined,
+      make: vehicleForm.make,
+      model: vehicleForm.model,
+      trim: vehicleForm.trim || undefined,
+      bodyStyle: vehicleForm.bodyStyle || undefined,
+      engine: vehicleForm.engine || undefined,
+      vin: vehicleForm.vin || undefined,
+      displayName: vehicleForm.displayName || undefined,
+      source: vehicleForm.source || "manual",
+      sourceVehicleId: vehicleForm.sourceVehicleId || undefined,
       color: color || undefined,
-      vin: vin || undefined,
       licensePlate: licensePlate || undefined,
       mileage: mileage ? parseInt(mileage, 10) : undefined,
       notes: notes || undefined,
     });
 
-    if (result.error) {
-      return;
-    }
+    if (result.error) return;
 
     const createdVehicleId = (result.data as any)?.id;
     if (!createdVehicleId) {
@@ -107,11 +106,11 @@ export default function NewVehiclePage() {
       );
       return;
     }
-    redirectTo(`${returnTo}`);
+    redirectTo(returnTo);
   };
 
   return (
-    <div className="container mx-auto py-6 max-w-2xl">
+    <div className="container mx-auto max-w-3xl py-6">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to clients queue" /> : null}
       <div className="mb-6">
         <Button variant="ghost" onClick={() => navigate(returnTo)}>
@@ -125,7 +124,7 @@ export default function NewVehiclePage() {
           <CardTitle>Add New Vehicle</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
               <p className="text-sm font-medium">Vehicle handoff</p>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -134,172 +133,71 @@ export default function NewVehiclePage() {
               <p className="mt-2 text-xs text-muted-foreground">{intendedNext}</p>
             </div>
 
-            {createError && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
-                {createError.message}
+            {createError ? (
+              <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{createError.message}</div>
+            ) : null}
+
+            <VehicleCatalogFields value={vehicleForm} setValue={setVehicleForm} />
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="color">Color</Label>
+                <Input id="color" value={color} onChange={(event) => setColor(event.target.value)} placeholder="White" />
               </div>
-            )}
+              <div className="space-y-2">
+                <Label htmlFor="licensePlate">License Plate</Label>
+                <Input
+                  id="licensePlate"
+                  value={licensePlate}
+                  onChange={(event) => setLicensePlate(event.target.value)}
+                  placeholder="ABC-1234"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="mileage">Mileage</Label>
+                <Input
+                  id="mileage"
+                  type="number"
+                  value={mileage}
+                  onChange={(event) => setMileage(event.target.value)}
+                  placeholder="35000"
+                />
+              </div>
+            </div>
 
             <div className="space-y-2">
-              <Label htmlFor="vin">VIN</Label>
-              <Input
-                id="vin"
-                ref={vinInputRef}
-                type="text"
-                placeholder="Vehicle Identification Number (optional)"
-                value={vin}
-                onChange={(e) => setVin(e.target.value)}
-                maxLength={32}
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                placeholder="Any additional notes about the vehicle..."
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                rows={3}
               />
-              <p className="text-xs text-muted-foreground">
-                Enter the VIN if you have it (up to 17 characters).
-              </p>
             </div>
-
-            {/* Year, Make, Model – always visible primary fields */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="year">Year</Label>
-                <Input
-                  id="year"
-                  type="number"
-                  placeholder="e.g. 2023"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  min={1900}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="make">
-                  Make <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="make"
-                  type="text"
-                  placeholder="e.g. Toyota"
-                  value={make}
-                  onChange={(e) => setMake(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="vehicleModel">
-                  Model <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="vehicleModel"
-                  type="text"
-                  placeholder="e.g. Camry"
-                  value={vehicleModel}
-                  onChange={(e) => setVehicleModel(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            {/* More Details toggle */}
-            <button
-              type="button"
-              onClick={() => setShowMoreDetails((v) => !v)}
-              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {showMoreDetails ? (
-                <>
-                  <ChevronUp className="h-4 w-4" />
-                  - Less Details
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="h-4 w-4" />
-                  + More Details
-                </>
-              )}
-            </button>
-
-            {/* Collapsible additional fields */}
-            {showMoreDetails && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="color">Color</Label>
-                    <Input
-                      id="color"
-                      type="text"
-                      placeholder="e.g. White"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      maxLength={50}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="licensePlate">License Plate</Label>
-                    <Input
-                      id="licensePlate"
-                      type="text"
-                      placeholder="e.g. ABC-1234"
-                      value={licensePlate}
-                      onChange={(e) => setLicensePlate(e.target.value)}
-                      maxLength={32}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="mileage">Mileage</Label>
-                    <Input
-                      id="mileage"
-                      type="number"
-                      placeholder="e.g. 50000"
-                      value={mileage}
-                      onChange={(e) => setMileage(e.target.value)}
-                      min={0}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea
-                    id="notes"
-                    placeholder="Any additional notes about the vehicle..."
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-              </div>
-            )}
 
             <div className="flex flex-col gap-3 pt-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
-                <Button type="submit" variant="outline" disabled={creating || !clientId} data-submit-mode="quote" onClick={() => setSubmitIntent("quote")}>
+                <Button type="submit" variant="outline" disabled={creating || !clientId} data-submit-mode="quote">
                   {creating && submitMode === "quote" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Save and Create Quote
                 </Button>
-                <Button type="submit" variant="outline" disabled={creating || !clientId} data-submit-mode="appointment" onClick={() => setSubmitIntent("appointment")}>
+                <Button type="submit" variant="outline" disabled={creating || !clientId} data-submit-mode="appointment">
                   {creating && submitMode === "appointment" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Save and Book Appointment
                 </Button>
               </div>
               <div className="flex justify-end gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate(returnTo)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                data-submit-mode="client"
-                onClick={() => setSubmitIntent("client")}
-                disabled={creating || !clientId}
-              >
-                {creating && submitMode === "client" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Add Vehicle
-              </Button>
+                <Button type="button" variant="outline" onClick={() => navigate(returnTo)}>
+                  Cancel
+                </Button>
+                <Button type="submit" data-submit-mode="client" disabled={creating || !clientId}>
+                  {creating && submitMode === "client" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Add Vehicle
+                </Button>
               </div>
             </div>
           </form>
@@ -308,3 +206,4 @@ export default function NewVehiclePage() {
     </div>
   );
 }
+

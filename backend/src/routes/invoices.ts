@@ -12,6 +12,7 @@ import { createRequestActivityLog } from "../lib/activity.js";
 import { isEmailConfigured } from "../lib/env.js";
 import { sendInvoiceEmail } from "../lib/email.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
+import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
 
 export const invoicesRouter = Router({ mergeParams: true });
 
@@ -113,6 +114,8 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
         clientFirstName: clients.firstName,
         clientLastName: clients.lastName,
         aptStart: appointments.startTime,
+        vehicleDisplayName: vehicles.displayName,
+        vehicleTrim: vehicles.trim,
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
@@ -184,6 +187,8 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
         clientFirstName: clients.firstName,
         clientLastName: clients.lastName,
         aptStart: appointments.startTime,
+        vehicleDisplayName: vehicles.displayName,
+        vehicleTrim: vehicles.trim,
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
@@ -324,6 +329,15 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
               year: r.vehicleYear ?? null,
               make: r.vehicleMake,
               model: r.vehicleModel ?? "",
+              trim: r.vehicleTrim ?? null,
+              displayName:
+                r.vehicleDisplayName ||
+                buildVehicleDisplayName({
+                  year: r.vehicleYear,
+                  make: r.vehicleMake,
+                  model: r.vehicleModel,
+                  trim: r.vehicleTrim,
+                }),
             }
           : null,
     };
@@ -343,13 +357,54 @@ invoicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res:
   const lineItemsRows = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, row.id));
   const paymentsList = await listInvoicePayments(row.id);
   const [clientRow] = await db.select({ id: clients.id, firstName: clients.firstName, lastName: clients.lastName, email: clients.email, phone: clients.phone }).from(clients).where(eq(clients.id, row.clientId)).limit(1);
-  let appointmentData: { id: string; startTime: Date | null; vehicle?: { year: number | null; make: string; model: string } } | null = null;
+  let appointmentData:
+    | {
+        id: string;
+        startTime: Date | null;
+        vehicle?: {
+          year: number | null;
+          make: string;
+          model: string;
+          trim: string | null;
+          displayName: string;
+        };
+      }
+    | null = null;
   let quoteData: { id: string; status: string; total: string | null } | null = null;
   if (row.appointmentId) {
     const [apt] = await db.select({ id: appointments.id, startTime: appointments.startTime, vehicleId: appointments.vehicleId }).from(appointments).where(eq(appointments.id, row.appointmentId)).limit(1);
     if (apt?.vehicleId) {
-      const [v] = await db.select({ year: vehicles.year, make: vehicles.make, model: vehicles.model }).from(vehicles).where(eq(vehicles.id, apt.vehicleId)).limit(1);
-      appointmentData = { id: apt.id, startTime: apt.startTime, vehicle: v ? { year: v.year, make: v.make ?? "", model: v.model ?? "" } : undefined };
+      const [v] = await db
+        .select({
+          year: vehicles.year,
+          make: vehicles.make,
+          model: vehicles.model,
+          trim: vehicles.trim,
+          displayName: vehicles.displayName,
+        })
+        .from(vehicles)
+        .where(eq(vehicles.id, apt.vehicleId))
+        .limit(1);
+      appointmentData = {
+        id: apt.id,
+        startTime: apt.startTime,
+        vehicle: v
+          ? {
+              year: v.year,
+              make: v.make ?? "",
+              model: v.model ?? "",
+              trim: v.trim ?? null,
+              displayName:
+                v.displayName ||
+                buildVehicleDisplayName({
+                  year: v.year,
+                  make: v.make,
+                  model: v.model,
+                  trim: v.trim,
+                }),
+            }
+          : undefined,
+      };
     } else {
       appointmentData = apt ? { id: apt.id, startTime: apt.startTime } : null;
     }

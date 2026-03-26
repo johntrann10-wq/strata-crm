@@ -14,6 +14,7 @@ import { sendQuoteEmail, sendQuoteFollowUpEmail } from "../lib/email.js";
 import { logger } from "../lib/logger.js";
 import { renderQuoteHtml, type QuoteTemplateData } from "../lib/quoteTemplate.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
+import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
 
 export const quotesRouter = Router({ mergeParams: true });
 
@@ -135,6 +136,8 @@ quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Resp
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
       clientEmail: clients.email,
+      vehicleDisplayName: vehicles.displayName,
+      vehicleTrim: vehicles.trim,
       vehicleYear: vehicles.year,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
@@ -178,6 +181,15 @@ quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Resp
             year: r.vehicleYear ?? null,
             make: r.vehicleMake,
             model: r.vehicleModel ?? "",
+            trim: r.vehicleTrim ?? null,
+            displayName:
+              r.vehicleDisplayName ||
+              buildVehicleDisplayName({
+                year: r.vehicleYear,
+                make: r.vehicleMake,
+                model: r.vehicleModel,
+                trim: r.vehicleTrim,
+              }),
           }
         : null,
   }));
@@ -224,6 +236,8 @@ quotesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: R
         year: vehicles.year,
         make: vehicles.make,
         model: vehicles.model,
+        trim: vehicles.trim,
+        displayName: vehicles.displayName,
         color: vehicles.color,
         licensePlate: vehicles.licensePlate,
       })
@@ -292,6 +306,8 @@ quotesRouter.get("/:id/html", requireAuth, requireTenant, async (req: Request, r
         year: vehicles.year,
         make: vehicles.make,
         model: vehicles.model,
+        trim: vehicles.trim,
+        displayName: vehicles.displayName,
         color: vehicles.color,
         licensePlate: vehicles.licensePlate,
       })
@@ -559,6 +575,8 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
       clientLastName: clients.lastName,
       clientEmail: clients.email,
       businessName: businesses.name,
+      vehicleDisplayName: vehicles.displayName,
+      vehicleTrim: vehicles.trim,
       vehicleYear: vehicles.year,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
@@ -624,7 +642,14 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
       clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
       businessName: existing.businessName ?? "Your shop",
       amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
-      vehicle: [existing.vehicleYear, existing.vehicleMake, existing.vehicleModel].filter(Boolean).join(" "),
+      vehicle:
+        existing.vehicleDisplayName ||
+        buildVehicleDisplayName({
+          year: existing.vehicleYear,
+          make: existing.vehicleMake,
+          model: existing.vehicleModel,
+          trim: existing.vehicleTrim,
+        }),
       quoteUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/quotes/${existing.id}`,
       message: parsed.data.message ?? null,
     });
@@ -688,6 +713,8 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
       clientLastName: clients.lastName,
       clientEmail: clients.email,
       businessName: businesses.name,
+      vehicleDisplayName: vehicles.displayName,
+      vehicleTrim: vehicles.trim,
       vehicleYear: vehicles.year,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
@@ -753,7 +780,14 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
       clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
       businessName: existing.businessName ?? "Your shop",
       amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
-      vehicle: [existing.vehicleYear, existing.vehicleMake, existing.vehicleModel].filter(Boolean).join(" "),
+      vehicle:
+        existing.vehicleDisplayName ||
+        buildVehicleDisplayName({
+          year: existing.vehicleYear,
+          make: existing.vehicleMake,
+          model: existing.vehicleModel,
+          trim: existing.vehicleTrim,
+        }),
       quoteUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/quotes/${existing.id}`,
       message: parsed.data.message ?? null,
     });
