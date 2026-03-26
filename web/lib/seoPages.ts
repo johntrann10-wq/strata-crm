@@ -600,3 +600,29 @@ const pages: SeoPageConfig[] = [
 
 export const seoPages = Object.fromEntries(pages.map((page) => [page.key, page])) as Record<SeoPageKey, SeoPageConfig>;
 export const seoPageList = pages;
+
+export const categorySeoPageKeys: SeoPageKey[] = [
+  "autoDetailingSoftware",
+  "mobileDetailingSoftware",
+  "windowTintSoftware",
+  "wrapPpfSoftware",
+  "mechanicSoftware",
+  "performanceSoftware",
+  "tireShopSoftware",
+  "mufflerExhaustSoftware",
+];
+
+export const featureSeoPageKeys: SeoPageKey[] = ["shopSchedulingSoftware", "detailingCrm"];
+
+export const comparisonSeoPageKeys: SeoPageKey[] = [
+  "orbisxAlternative",
+  "strataVsOrbisx",
+  "bestCrmAutoDetailing",
+  "bestWindowTintSoftware",
+  "bestPpfSoftware",
+  "bestAutomotiveShopScheduling",
+];
+
+export const categorySeoPages = categorySeoPageKeys.map((key) => seoPages[key]);
+export const featureSeoPages = featureSeoPageKeys.map((key) => seoPages[key]);
+export const comparisonSeoPages = comparisonSeoPageKeys.map((key) => seoPages[key]);

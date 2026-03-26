@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { SeoPageConfig } from "@/lib/seoPages";
+import { comparisonSeoPages, featureSeoPages, type SeoPageConfig } from "@/lib/seoPages";
 
 type SeoLandingPageProps = {
   page: SeoPageConfig;
@@ -32,6 +32,8 @@ export function buildSeoMeta(page: SeoPageConfig) {
 }
 
 export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
+  const adjacentFeaturePages = featureSeoPages.filter((entry) => entry.path !== page.path);
+  const adjacentComparisonPages = comparisonSeoPages.filter((entry) => entry.path !== page.path).slice(0, 3);
   const pageSchema = {
     "@context": "https://schema.org",
     "@graph": [
@@ -254,6 +256,50 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
                 </div>
               </Link>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-2">
+          <div className="rounded-[26px] border border-orange-100 bg-white/94 p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Explore adjacent workflows</p>
+            <h2 className="mt-3 text-2xl font-bold tracking-tight text-gray-950">Compare the feature pages that shape daily operations.</h2>
+            <p className="mt-3 text-sm leading-6 text-gray-600">
+              Buyers researching {page.navLabel.toLowerCase()} often also compare automotive shop scheduling software, CRM depth, and pricing fit before starting a trial.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              {adjacentFeaturePages.map((featurePage) => (
+                <Link
+                  key={featurePage.key}
+                  to={featurePage.path}
+                  className="rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-100"
+                >
+                  {featurePage.navLabel}
+                </Link>
+              ))}
+              <Link
+                to="/#pricing"
+                className="rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-100"
+              >
+                Strata CRM pricing
+              </Link>
+            </div>
+          </div>
+
+          <div className="rounded-[26px] border border-orange-100 bg-white/94 p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Compare alternatives</p>
+            <h2 className="mt-3 text-2xl font-bold tracking-tight text-gray-950">Move naturally from category pages to comparison pages.</h2>
+            <p className="mt-3 text-sm leading-6 text-gray-600">
+              Once a buyer understands the workflow fit, the next step is usually to compare Strata against outdated alternatives and other software categories.
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              {adjacentComparisonPages.map((comparisonPage) => (
+                <Link key={comparisonPage.key} to={comparisonPage.path} className="text-sm font-medium text-orange-700 transition-colors hover:text-orange-800">
+                  {comparisonPage.navLabel}
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </section>

@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { seoPageList } from "@/lib/seoPages";
+import { categorySeoPages, comparisonSeoPages, featureSeoPages, seoPageList } from "@/lib/seoPages";
 import { cn } from "@/lib/utils";
 
 const homeTitle = "Automotive Service Business Software | Strata CRM";
@@ -523,6 +523,27 @@ export default function LandingPage() {
               </Card>
             ))}
           </div>
+
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm">
+            <Link
+              to="/shop-scheduling-software"
+              className="rounded-full border border-orange-200 bg-white px-4 py-2 font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-50"
+            >
+              Explore shop scheduling software
+            </Link>
+            <Link
+              to="/detailing-crm"
+              className="rounded-full border border-orange-200 bg-white px-4 py-2 font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-50"
+            >
+              Explore detailing CRM software
+            </Link>
+            <Link
+              to="/#pricing"
+              className="rounded-full border border-orange-200 bg-white px-4 py-2 font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-50"
+            >
+              See Strata CRM pricing
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -592,20 +613,13 @@ export default function LandingPage() {
             </p>
           </div>
           <div className="mt-10 flex flex-wrap justify-center gap-3 text-sm">
-            {[
-              { to: "/strata-vs-orbisx", label: "Strata vs OrbisX" },
-              { to: "/orbisx-alternative", label: "OrbisX Alternative" },
-              { to: "/best-crm-for-auto-detailing-shops", label: "Best CRM for Auto Detailing Shops" },
-              { to: "/best-window-tint-shop-software", label: "Best Window Tint Shop Software" },
-              { to: "/best-ppf-shop-software", label: "Best PPF Shop Software" },
-              { to: "/best-shop-scheduling-software-for-automotive-businesses", label: "Best Shop Scheduling Software" },
-            ].map((item) => (
+            {comparisonSeoPages.map((item) => (
               <Link
-                key={item.to}
-                to={item.to}
+                key={item.path}
+                to={item.path}
                 className="rounded-full border border-orange-200 bg-orange-50 px-4 py-2 font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-100"
               >
-                {item.label}
+                {item.navLabel}
               </Link>
             ))}
           </div>
@@ -640,6 +654,55 @@ export default function LandingPage() {
                 </div>
               </Link>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-3">
+          <div className="rounded-[26px] border border-orange-100 bg-white/94 p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Browse by feature</p>
+            <h2 className="mt-3 text-2xl font-bold tracking-tight text-gray-950">Start from the workflow you care about.</h2>
+            <p className="mt-3 text-sm leading-6 text-gray-600">
+              If you are evaluating scheduling, CRM depth, or daily software fit, move into the feature pages below.
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              {featureSeoPages.map((page) => (
+                <Link key={page.key} to={page.path} className="text-sm font-medium text-orange-700 transition-colors hover:text-orange-800">
+                  {page.navLabel}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[26px] border border-orange-100 bg-white/94 p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Browse by business type</p>
+            <h2 className="mt-3 text-2xl font-bold tracking-tight text-gray-950">See software for your kind of shop.</h2>
+            <p className="mt-3 text-sm leading-6 text-gray-600">
+              Compare the exact Strata workflow for detailing, tint, wrap, mechanic, performance, tire, and exhaust businesses.
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              {categorySeoPages.slice(0, 5).map((page) => (
+                <Link key={page.key} to={page.path} className="text-sm font-medium text-orange-700 transition-colors hover:text-orange-800">
+                  {page.navLabel}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[26px] border border-orange-100 bg-white/94 p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Browse comparisons</p>
+            <h2 className="mt-3 text-2xl font-bold tracking-tight text-gray-950">Research alternatives and best-fit pages.</h2>
+            <p className="mt-3 text-sm leading-6 text-gray-600">
+              If you are actively comparing software, start with the pages built around competitor and category-intent searches.
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              {comparisonSeoPages.slice(0, 5).map((page) => (
+                <Link key={page.key} to={page.path} className="text-sm font-medium text-orange-700 transition-colors hover:text-orange-800">
+                  {page.navLabel}
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </section>
