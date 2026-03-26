@@ -584,7 +584,13 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
         deliveryError: "Client does not have an email address.",
       },
     });
-    throw new AppError("Client does not have an email address.", 400, "EMAIL_MISSING_RECIPIENT");
+    res.status(400).json({
+      message: "Client does not have an email address.",
+      code: "EMAIL_MISSING_RECIPIENT",
+      deliveryStatus: "missing_email",
+      deliveryError: "Client does not have an email address.",
+    });
+    return;
   }
   if (!isSmtpConfigured()) {
     logger.error("Quote send blocked: SMTP is not configured", { quoteId: existing.id, businessId: bid });
@@ -600,7 +606,13 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
         deliveryError: "Transactional email is not configured.",
       },
     });
-    throw new AppError("Transactional email is not configured. Set SMTP_* environment variables.", 503, "EMAIL_NOT_CONFIGURED");
+    res.status(503).json({
+      message: "Transactional email is not configured. Set SMTP_* environment variables.",
+      code: "EMAIL_NOT_CONFIGURED",
+      deliveryStatus: "smtp_disabled",
+      deliveryError: "Transactional email is not configured.",
+    });
+    return;
   }
 
   let deliveryError: string | null = null;
@@ -630,7 +642,13 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
         deliveryError,
       },
     });
-    throw new AppError(`Quote email failed to send: ${deliveryError}`, 502, "EMAIL_SEND_FAILED");
+    res.status(502).json({
+      message: `Quote email failed to send: ${deliveryError}`,
+      code: "EMAIL_SEND_FAILED",
+      deliveryStatus: "email_failed",
+      deliveryError,
+    });
+    return;
   }
 
   const [updated] = await db
@@ -693,7 +711,13 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
         deliveryError: "Client does not have an email address.",
       },
     });
-    throw new AppError("Client does not have an email address.", 400, "EMAIL_MISSING_RECIPIENT");
+    res.status(400).json({
+      message: "Client does not have an email address.",
+      code: "EMAIL_MISSING_RECIPIENT",
+      deliveryStatus: "missing_email",
+      deliveryError: "Client does not have an email address.",
+    });
+    return;
   }
   if (!isSmtpConfigured()) {
     logger.error("Quote follow-up blocked: SMTP is not configured", { quoteId: existing.id, businessId: bid });
@@ -709,7 +733,13 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
         deliveryError: "Transactional email is not configured.",
       },
     });
-    throw new AppError("Transactional email is not configured. Set SMTP_* environment variables.", 503, "EMAIL_NOT_CONFIGURED");
+    res.status(503).json({
+      message: "Transactional email is not configured. Set SMTP_* environment variables.",
+      code: "EMAIL_NOT_CONFIGURED",
+      deliveryStatus: "smtp_disabled",
+      deliveryError: "Transactional email is not configured.",
+    });
+    return;
   }
 
   let deliveryError: string | null = null;
@@ -739,7 +769,13 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
         deliveryError,
       },
     });
-    throw new AppError(`Quote follow-up email failed to send: ${deliveryError}`, 502, "EMAIL_SEND_FAILED");
+    res.status(502).json({
+      message: `Quote follow-up email failed to send: ${deliveryError}`,
+      code: "EMAIL_SEND_FAILED",
+      deliveryStatus: "email_failed",
+      deliveryError,
+    });
+    return;
   }
 
   const [updated] = await db

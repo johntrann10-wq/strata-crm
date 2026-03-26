@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "../db/index.js";
 import { invoices, businesses, invoiceLineItems, clients, payments, appointments, vehicles, quotes, activityLogs } from "../db/schema.js";
 import { eq, and, or, desc, asc, isNull, sql, ilike } from "drizzle-orm";
-import { NotFoundError, ForbiddenError, BadRequestError, AppError } from "../lib/errors.js";
+import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { logger } from "../lib/logger.js";
@@ -614,7 +614,13 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
         deliveryError: "Client does not have an email address.",
       },
     });
-    throw new AppError("Client does not have an email address.", 400, "EMAIL_MISSING_RECIPIENT");
+    res.status(400).json({
+      message: "Client does not have an email address.",
+      code: "EMAIL_MISSING_RECIPIENT",
+      deliveryStatus: "missing_email",
+      deliveryError: "Client does not have an email address.",
+    });
+    return;
   }
   if (!isSmtpConfigured()) {
     logger.error("Invoice send blocked: SMTP is not configured", { invoiceId: existing.id, businessId: bid });
@@ -631,7 +637,13 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
         deliveryError: "Transactional email is not configured.",
       },
     });
-    throw new AppError("Transactional email is not configured. Set SMTP_* environment variables.", 503, "EMAIL_NOT_CONFIGURED");
+    res.status(503).json({
+      message: "Transactional email is not configured. Set SMTP_* environment variables.",
+      code: "EMAIL_NOT_CONFIGURED",
+      deliveryStatus: "smtp_disabled",
+      deliveryError: "Transactional email is not configured.",
+    });
+    return;
   }
 
   let deliveryError: string | null = null;
@@ -662,7 +674,13 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
         deliveryError,
       },
     });
-    throw new AppError(`Invoice email failed to send: ${deliveryError}`, 502, "EMAIL_SEND_FAILED");
+    res.status(502).json({
+      message: `Invoice email failed to send: ${deliveryError}`,
+      code: "EMAIL_SEND_FAILED",
+      deliveryStatus: "email_failed",
+      deliveryError,
+    });
+    return;
   }
 
   const [updated] = await db.update(invoices).set({ status: "sent", updatedAt: new Date() }).where(eq(invoices.id, req.params.id)).returning();
