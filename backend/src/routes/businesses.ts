@@ -8,6 +8,8 @@ import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { randomUUID } from "crypto";
 import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
+import { roleHasPermission } from "../lib/permissions.js";
+import { warnOnce } from "../lib/warnOnce.js";
 
 export const businessesRouter = Router({ mergeParams: true });
 
@@ -64,9 +66,24 @@ function serializeBusiness(record: typeof businesses.$inferSelect) {
   };
 }
 
-businessesRouter.get("/", requireAuth, requirePermission("settings.read"), async (req: Request, res: Response) => {
+function isBusinessSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+businessesRouter.get("/", requireAuth, async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   if (req.businessId) {
+    if (!req.membershipRole || !roleHasPermission(req.membershipRole, "settings.read")) {
+      throw new ForbiddenError("You do not have permission to perform this action.");
+    }
     const [currentBusiness] = await db.select().from(businesses).where(eq(businesses.id, req.businessId)).limit(1);
     res.json({ records: currentBusiness ? [serializeBusiness(currentBusiness)] : [] });
     return;
@@ -123,15 +140,24 @@ businessesRouter.post("/", requireAuth, async (req: Request, res: Response) => {
 
     if (!newBusiness) return [];
 
-    await tx.insert(businessMemberships).values({
-      id: membershipId,
-      businessId,
-      userId: req.userId!,
-      role: "owner",
-      status: "active",
-      isDefault: true,
-      joinedAt: new Date(),
-    });
+    try {
+      await tx.insert(businessMemberships).values({
+        id: membershipId,
+        businessId,
+        userId: req.userId!,
+        role: "owner",
+        status: "active",
+        isDefault: true,
+        joinedAt: new Date(),
+      });
+    } catch (error) {
+      if (!isBusinessSchemaDriftError(error)) throw error;
+      warnOnce("businesses:create:membership-schema", "business membership schema unavailable during business create", {
+        userId: req.userId,
+        businessId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     return [newBusiness];
   });
