@@ -372,6 +372,33 @@ export function getPresetSummaryForBusinessType(type: string | null | undefined)
   };
 }
 
+export async function getAppliedBusinessPresetSummary(businessId: string) {
+  const [business] = await db
+    .select({ id: businesses.id, type: businesses.type })
+    .from(businesses)
+    .where(eq(businesses.id, businessId))
+    .limit(1);
+  if (!business) throw new Error("Business not found.");
+
+  const presetType = business.type;
+  const preset = getPresetForBusinessType(business.type);
+  const combined = [...COMMON_ADDONS, ...preset.services];
+  const names = combined.map((item) => item.name);
+  const existingKeys = await loadExistingServiceNames(businessId, names);
+  const appliedCount = combined.filter((item) => {
+    if (existingKeys.has(`${item.name}::${item.category}`)) return true;
+    if (existingKeys.has(item.name)) return true;
+    return false;
+  }).length;
+
+  return {
+    group: presetType,
+    expectedCount: combined.length,
+    appliedCount,
+    fullyApplied: appliedCount >= combined.length,
+  };
+}
+
 export async function applyBusinessPreset(businessId: string) {
   const [business] = await db
     .select({ id: businesses.id, type: businesses.type })

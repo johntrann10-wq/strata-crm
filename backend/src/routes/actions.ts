@@ -14,7 +14,11 @@ import { logger } from "../lib/logger.js";
 import { withIdempotency } from "../lib/idempotency.js";
 import * as automations from "../lib/automations.js";
 import { retryFailedEmailNotifications } from "../lib/email.js";
-import { applyBusinessPreset, getPresetSummaryForBusinessType } from "../lib/businessPresets.js";
+import {
+  applyBusinessPreset,
+  getAppliedBusinessPresetSummary,
+  getPresetSummaryForBusinessType,
+} from "../lib/businessPresets.js";
 import { businesses } from "../db/schema.js";
 
 export const actionsRouter = Router({ mergeParams: true });
@@ -265,6 +269,36 @@ actionsRouter.post("/applyBusinessPreset", requireAuth, requireTenant, async (re
     res.json({ ok: true, ...result });
   } catch (error) {
     logger.warn("Business preset apply failed; returning safe fallback", { businessId: bid, error });
+    try {
+      const summary = await getAppliedBusinessPresetSummary(bid);
+      if (summary.fullyApplied) {
+        res.json({
+          ok: true,
+          created: 0,
+          skipped: summary.expectedCount,
+          group: summary.group,
+          degraded: true,
+          message: "Starter services are already applied.",
+        });
+        return;
+      }
+      if (summary.appliedCount > 0) {
+        res.json({
+          ok: true,
+          created: 0,
+          skipped: Math.max(summary.expectedCount - summary.appliedCount, 0),
+          group: summary.group,
+          degraded: true,
+          message: `Starter services were partially applied (${summary.appliedCount}/${summary.expectedCount}).`,
+        });
+        return;
+      }
+    } catch (summaryError) {
+      logger.warn("Business preset fallback summary failed", {
+        businessId: bid,
+        error: summaryError,
+      });
+    }
     res.json({ ok: false, message: "Starter services could not be fully applied until production services schema is migrated." });
   }
 });
