@@ -268,7 +268,9 @@ function service(
 }
 
 function serializePresetNotes(servicePreset: PresetService) {
+  const categoryMarker = `[[strata:service-category=${servicePreset.category}]]`;
   const sections = [
+    categoryMarker,
     servicePreset.shortDescription ? `Description: ${servicePreset.shortDescription}` : null,
     `Price Type: ${servicePreset.priceType}`,
     `Required Deposit: ${servicePreset.requiredDeposit > 0 ? `$${servicePreset.requiredDeposit}` : "None"}`,

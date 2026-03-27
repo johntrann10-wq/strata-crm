@@ -23,6 +23,8 @@ const CATEGORY_VALUES = [
   "other",
 ] as const;
 
+const LEGACY_CATEGORY_PREFIX = "[[strata:service-category=";
+
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
   return req.businessId;
@@ -62,6 +64,39 @@ type ServiceRecord = {
   createdAt: Date;
   updatedAt: Date;
 };
+
+function isKnownServiceCategory(value: string | null | undefined): value is (typeof CATEGORY_VALUES)[number] {
+  return typeof value === "string" && (CATEGORY_VALUES as readonly string[]).includes(value);
+}
+
+function encodeLegacyServiceNotes(notes: string | null | undefined, category: string | null | undefined): string | null {
+  const trimmedNotes = typeof notes === "string" ? notes.trim() : "";
+  if (!isKnownServiceCategory(category)) {
+    return trimmedNotes || null;
+  }
+  const marker = `${LEGACY_CATEGORY_PREFIX}${category}]]`;
+  if (trimmedNotes.startsWith(marker)) {
+    return trimmedNotes;
+  }
+  return trimmedNotes ? `${marker}\n${trimmedNotes}` : marker;
+}
+
+function decodeLegacyServiceFields(notes: string | null | undefined): { notes: string | null; category: (typeof CATEGORY_VALUES)[number] | null } {
+  if (typeof notes !== "string" || notes.length === 0) {
+    return { notes: null, category: null };
+  }
+  const normalized = notes.replace(/\r\n/g, "\n");
+  const match = normalized.match(/^\[\[strata:service-category=([a-z_]+)\]\](?:\n)?/);
+  if (!match) {
+    return { notes, category: null };
+  }
+  const category = isKnownServiceCategory(match[1]) ? match[1] : null;
+  const cleaned = normalized.slice(match[0].length).trim();
+  return {
+    notes: cleaned || null,
+    category,
+  };
+}
 
 const legacyServiceSelection = {
   id: services.id,
@@ -121,7 +156,7 @@ async function insertLegacyServiceRecord(
   }
   if (columns.has("notes")) {
     insertColumns.push("notes");
-    insertValues.push(body.notes ?? null);
+    insertValues.push(encodeLegacyServiceNotes(body.notes ?? null, body.category ?? "other"));
   }
   if (columns.has("taxable")) {
     insertColumns.push("taxable");
@@ -156,14 +191,24 @@ async function insertLegacyServiceRecord(
 function withMissingServiceFields<T extends Omit<ServiceRecord, "notes" | "durationMinutes" | "category" | "taxable" | "isAddon" | "active">>(
   row: T
 ): ServiceRecord {
+  const decoded = decodeLegacyServiceFields((row as { notes?: string | null }).notes ?? null);
   return {
     ...row,
-    notes: null,
+    notes: decoded.notes,
     durationMinutes: null,
-    category: "other",
+    category: decoded.category ?? "other",
     taxable: true,
     isAddon: false,
     active: true,
+  };
+}
+
+function normalizeServiceRecord(row: ServiceRecord): ServiceRecord {
+  const decoded = decodeLegacyServiceFields(row.notes);
+  return {
+    ...row,
+    notes: decoded.notes,
+    category: row.category ?? decoded.category ?? "other",
   };
 }
 
@@ -174,12 +219,13 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
   }
 
   try {
-    return await db
+    const rows = await db
       .select(fullServiceSelection)
       .from(services)
       .where(and(...conditions))
       .orderBy(asc(services.category), asc(services.name), desc(services.createdAt))
       .limit(first);
+    return rows.map((row) => normalizeServiceRecord(row));
   } catch (error) {
     if (!isServiceSchemaDriftError(error)) throw error;
     warnOnce("services:list:full-schema", "services list falling back without full schema", {
@@ -203,7 +249,7 @@ async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRe
       .from(services)
       .where(and(eq(services.id, id), eq(services.businessId, bid)))
       .limit(1);
-    return row ?? null;
+    return row ? normalizeServiceRecord(row) : null;
   } catch (error) {
     if (!isServiceSchemaDriftError(error)) throw error;
     warnOnce("services:lookup:full-schema", "service lookup falling back without full schema", {
@@ -371,6 +417,14 @@ servicesRouter.patch("/:id", requireAuth, requireTenant, wrapAsync(async (req: R
       .set({
         ...(body.name != null ? { name: body.name } : {}),
         ...(body.price != null ? { price: String(body.price) } : {}),
+        ...(body.notes !== undefined || body.category != null
+          ? {
+              notes: encodeLegacyServiceNotes(
+                body.notes !== undefined ? body.notes : existing.notes,
+                body.category ?? existing.category ?? "other"
+              ),
+            }
+          : {}),
         updatedAt: new Date(),
       })
       .where(eq(services.id, req.params.id));
