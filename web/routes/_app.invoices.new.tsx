@@ -25,6 +25,7 @@ import type { AuthOutletContext } from "./_app";
 import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { PageHeader } from "../components/shared/PageHeader";
+import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 
 interface LineItem {
   id: string;
@@ -139,7 +140,7 @@ export default function NewInvoicePage() {
   // Form state
   const [clientComboOpen, setClientComboOpen] = useState(false);
   const [dueDate, setDueDate] = useState(() => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-  const [notes, setNotes] = useState(() => creationPreset.invoiceNotes);
+  const [notes, setNotes] = useState("");
   const [taxRate, setTaxRate] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [lineItems, setLineItems] = useState<LineItem[]>([
@@ -362,11 +363,7 @@ export default function NewInvoicePage() {
             toast.warning("Invoice created, but delivery state was unclear.");
           }
         } catch (sendError) {
-          toast.error(
-            sendError instanceof Error
-              ? `Invoice created, but email failed: ${sendError.message}`
-              : "Invoice created, but email failed."
-          );
+          toast.error(`Invoice created, but ${getTransactionalEmailErrorMessage(sendError, "invoice")}`);
         }
       } else {
         toast.success("Invoice created successfully");

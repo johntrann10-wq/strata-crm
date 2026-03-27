@@ -67,8 +67,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getAuthToken, getCurrentBusinessId } from "@/lib/auth";
+import { getCurrentBusinessId } from "@/lib/auth";
+import { getTransactionalEmailErrorMessage } from "@/lib/transactionalEmail";
 import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
+import { printAuthenticatedDocument } from "@/lib/printDocument";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
@@ -106,46 +108,12 @@ function capitalize(str: string | null | undefined): string {
 }
 
 async function openPrintableInvoice(invoiceId: string, businessId?: string | null) {
-  const token = getAuthToken();
-  if (!token) {
-    throw new Error("You need to sign in again before printing.");
-  }
-
-  const printWindow = window.open("", "_blank", "noopener,noreferrer");
-  if (!printWindow) {
-    throw new Error("Popup blocked. Allow popups for printing.");
-  }
-
-  printWindow.document.write(
-    "<!doctype html><html><head><title>Preparing invoice...</title></head><body style='font-family:system-ui;padding:24px;color:#111827'>Preparing invoice...</body></html>"
-  );
-  printWindow.document.close();
-
-  const headers: HeadersInit = {
-    Authorization: `Bearer ${token}`,
-  };
-  const activeBusinessId = businessId ?? getCurrentBusinessId();
-  if (activeBusinessId) {
-    (headers as Record<string, string>)["x-business-id"] = activeBusinessId;
-  }
-
-  const response = await fetch(`${API_BASE}/api/invoices/${encodeURIComponent(invoiceId)}/html`, {
-    headers,
+  await printAuthenticatedDocument({
+    url: `${API_BASE}/api/invoices/${encodeURIComponent(invoiceId)}/html`,
+    businessId: businessId ?? getCurrentBusinessId(),
+    pendingTitle: "Preparing invoice...",
+    loadErrorMessage: "Could not load printable invoice.",
   });
-
-  if (!response.ok) {
-    printWindow.close();
-    throw new Error("Could not load printable invoice.");
-  }
-
-  const html = await response.text();
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
-  printWindow.focus();
-  setTimeout(() => {
-    printWindow.print();
-  }, 150);
 }
 
 /** Normalize line items from API (array or edges.node) */
@@ -464,7 +432,7 @@ export default function InvoiceDetailPage() {
       void refetch();
       void refetchActivity();
     } else {
-      toast.error("Failed to update invoice: " + result.error.message);
+      toast.error(getTransactionalEmailErrorMessage(result.error, "Invoice"));
     }
     return result;
   };

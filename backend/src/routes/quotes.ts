@@ -16,6 +16,7 @@ import { logger } from "../lib/logger.js";
 import { renderQuoteHtml, type QuoteTemplateData } from "../lib/quoteTemplate.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
+import { buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 
 export const quotesRouter = Router({ mergeParams: true });
 
@@ -458,6 +459,106 @@ quotesRouter.get("/:id/html", requireAuth, requireTenant, async (req: Request, r
   res.send(html);
 });
 
+quotesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  const access = verifyPublicDocumentToken(token, { kind: "quote", entityId: req.params.id });
+  if (!access) throw new ForbiddenError("Quote access link is invalid or expired.");
+
+  const [row] = await db
+    .select()
+    .from(quotes)
+    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, access.businessId)))
+    .limit(1);
+  if (!row) throw new NotFoundError("Quote not found.");
+
+  const [businessRow] = await db
+    .select({
+      name: businesses.name,
+      email: businesses.email,
+      phone: businesses.phone,
+      address: businesses.address,
+      city: businesses.city,
+      state: businesses.state,
+      zip: businesses.zip,
+      timezone: businesses.timezone,
+    })
+    .from(businesses)
+    .where(eq(businesses.id, access.businessId))
+    .limit(1);
+
+  const [clientRow] = await db
+    .select({
+      firstName: clients.firstName,
+      lastName: clients.lastName,
+      email: clients.email,
+      phone: clients.phone,
+      address: clients.address,
+    })
+    .from(clients)
+    .where(eq(clients.id, row.clientId))
+    .limit(1);
+
+  let vehicleRow: QuoteTemplateData["vehicle"] = null;
+  if (row.vehicleId) {
+    const [vehicle] = await db
+      .select({
+        year: vehicles.year,
+        make: vehicles.make,
+        model: vehicles.model,
+        color: vehicles.color,
+        licensePlate: vehicles.licensePlate,
+      })
+      .from(vehicles)
+      .where(and(eq(vehicles.id, row.vehicleId), eq(vehicles.businessId, access.businessId)))
+      .limit(1);
+    vehicleRow = vehicle ?? null;
+  }
+
+  const lineItemsRows = await db
+    .select()
+    .from(quoteLineItems)
+    .where(eq(quoteLineItems.quoteId, row.id))
+    .orderBy(desc(quoteLineItems.createdAt));
+
+  const html = renderQuoteHtml({
+    status: row.status,
+    subtotal: row.subtotal,
+    taxRate: row.taxRate,
+    taxAmount: row.taxAmount,
+    total: row.total,
+    notes: row.notes,
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt,
+    business: {
+      name: businessRow?.name,
+      email: businessRow?.email,
+      phone: businessRow?.phone,
+      address: [businessRow?.address, businessRow?.city, businessRow?.state, businessRow?.zip].filter(Boolean).join(", "),
+      city: businessRow?.city,
+      state: businessRow?.state,
+      zip: businessRow?.zip,
+      timezone: businessRow?.timezone,
+    },
+    client: {
+      firstName: clientRow?.firstName,
+      lastName: clientRow?.lastName,
+      email: clientRow?.email,
+      phone: clientRow?.phone,
+      address: clientRow?.address,
+    },
+    vehicle: vehicleRow,
+    lineItems: lineItemsRows.map((item) => ({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total,
+    })),
+  });
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
+});
+
 const createQuoteSchema = z.object({
   clientId: z.string().uuid().optional(),
   client: z.object({ _link: z.string().uuid() }).optional(),
@@ -765,6 +866,11 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
 
   let deliveryError: string | null = null;
   try {
+    const publicToken = createPublicDocumentToken({
+      kind: "quote",
+      entityId: existing.id,
+      businessId: bid,
+    });
     await sendQuoteEmail({
       to: existing.clientEmail.trim(),
       businessId: bid,
@@ -776,7 +882,7 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
         make: existing.vehicleMake,
         model: existing.vehicleModel,
       }),
-      quoteUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/quotes/${existing.id}`,
+      quoteUrl: buildPublicDocumentUrl(`/api/quotes/${existing.id}/public-html?token=${encodeURIComponent(publicToken)}`),
       message: parsed.data.message ?? null,
     });
   } catch (error) {
@@ -898,6 +1004,11 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
 
   let deliveryError: string | null = null;
   try {
+    const publicToken = createPublicDocumentToken({
+      kind: "quote",
+      entityId: existing.id,
+      businessId: bid,
+    });
     await sendQuoteFollowUpEmail({
       to: existing.clientEmail.trim(),
       businessId: bid,
@@ -909,7 +1020,7 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
         make: existing.vehicleMake,
         model: existing.vehicleModel,
       }),
-      quoteUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/quotes/${existing.id}`,
+      quoteUrl: buildPublicDocumentUrl(`/api/quotes/${existing.id}/public-html?token=${encodeURIComponent(publicToken)}`),
       message: parsed.data.message ?? null,
     });
   } catch (error) {

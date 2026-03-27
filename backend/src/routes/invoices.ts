@@ -14,6 +14,7 @@ import { isEmailConfigured } from "../lib/env.js";
 import { sendInvoiceEmail } from "../lib/email.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
+import { buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 
 export const invoicesRouter = Router({ mergeParams: true });
 
@@ -29,8 +30,14 @@ const createSchema = z.object({
   quoteId: z.string().uuid().optional(),
   status: z.enum(["draft", "sent"]).optional(),
   lineItems: z
-    .array(z.object({ description: z.string().trim().min(1), quantity: z.number(), unitPrice: z.number() }))
-    .optional(),
+    .array(
+      z.object({
+        description: z.string().trim().min(1),
+        quantity: z.number().positive(),
+        unitPrice: z.number().min(0),
+      })
+    )
+    .min(1),
   discountAmount: z.number().min(0).optional(),
   taxRate: z.coerce.number().min(0).max(100).optional(),
   notes: z.string().optional(),
@@ -597,6 +604,67 @@ invoicesRouter.get("/:id/html", requireAuth, requireTenant, async (req: Request,
   res.send(html);
 });
 
+invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  const access = verifyPublicDocumentToken(token, { kind: "invoice", entityId: req.params.id });
+  if (!access) throw new ForbiddenError("Invoice access link is invalid or expired.");
+
+  const [row] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, access.businessId)))
+    .limit(1);
+  if (!row) throw new NotFoundError("Invoice not found.");
+  const [businessRow] = await db
+    .select({ name: businesses.name, email: businesses.email, phone: businesses.phone, address: businesses.address, city: businesses.city, state: businesses.state, zip: businesses.zip, timezone: businesses.timezone })
+    .from(businesses)
+    .where(eq(businesses.id, access.businessId))
+    .limit(1);
+  const [clientRow] = await db
+    .select({ firstName: clients.firstName, lastName: clients.lastName, email: clients.email, phone: clients.phone, address: clients.address })
+    .from(clients)
+    .where(eq(clients.id, row.clientId))
+    .limit(1);
+  const lineItemsRows = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, row.id));
+  const paymentsList = await listActiveInvoicePayments(row.id);
+  const totalPaid = paymentsList.reduce((sum, p) => sum + Number(p.amount ?? 0), 0);
+  const templateData: InvoiceTemplateData = {
+    invoiceNumber: row.invoiceNumber,
+    status: row.status,
+    dueDate: row.dueDate,
+    subtotal: row.subtotal,
+    taxRate: row.taxRate,
+    taxAmount: row.taxAmount,
+    discountAmount: row.discountAmount,
+    total: row.total,
+    totalPaid: String(totalPaid),
+    notes: row.notes,
+    createdAt: row.createdAt,
+    business: {
+      name: businessRow?.name,
+      email: businessRow?.email,
+      phone: businessRow?.phone,
+      address: [businessRow?.address, businessRow?.city, businessRow?.state, businessRow?.zip].filter(Boolean).join(", "),
+      city: businessRow?.city,
+      state: businessRow?.state,
+      zip: businessRow?.zip,
+      timezone: businessRow?.timezone,
+    },
+    client: {
+      firstName: clientRow?.firstName,
+      lastName: clientRow?.lastName,
+      email: clientRow?.email,
+      phone: clientRow?.phone,
+      address: clientRow?.address,
+    },
+    lineItems: lineItemsRows.map((li) => ({ description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, total: li.total })),
+    payments: paymentsList.map((p) => ({ amount: p.amount, method: p.method, paidAt: p.paidAt })),
+  };
+  const html = renderInvoiceHtml(templateData);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
+});
+
 invoicesRouter.post(
   "/",
   requireAuth,
@@ -679,7 +747,7 @@ invoicesRouter.post(
     }
   }
 
-  const lineItems = parsed.data.lineItems ?? [];
+  const lineItems = parsed.data.lineItems;
   const initialStatus = parsed.data.status ?? "draft";
   const subtotal = lineItems.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
   const discountAmount = parsed.data.discountAmount ?? 0;
@@ -896,6 +964,11 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
 
   let deliveryError: string | null = null;
   try {
+    const publicToken = createPublicDocumentToken({
+      kind: "invoice",
+      entityId: existing.id,
+      businessId: bid,
+    });
     await sendInvoiceEmail({
       to: existing.clientEmail.trim(),
       businessId: bid,
@@ -903,7 +976,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       businessName: existing.businessName ?? "Your shop",
       amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
       invoiceNumber: existing.invoiceNumber ?? "Invoice",
-      invoiceUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/invoices/${existing.id}`,
+      invoiceUrl: buildPublicDocumentUrl(`/api/invoices/${existing.id}/public-html?token=${encodeURIComponent(publicToken)}`),
       message: parsed.data.message ?? null,
     });
   } catch (error) {

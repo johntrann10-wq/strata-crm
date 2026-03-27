@@ -5,7 +5,6 @@ import { format, addMinutes } from "date-fns";
 import {
   CalendarIcon,
   ChevronLeft,
-  ChevronDown,
   Check,
   ChevronsUpDown,
   Clock,
@@ -15,6 +14,8 @@ import {
   Loader2,
   Sparkles,
   Package,
+  Search,
+  X,
 } from "lucide-react";
 import { api } from "../api";
 import { formatServiceCategory } from "../lib/serviceCatalog";
@@ -51,6 +52,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -118,7 +125,6 @@ export default function NewAppointmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [vehicleError, setVehicleError] = useState<string | null>(null);
-  const [showQuickAddVehicle, setShowQuickAddVehicle] = useState(false);
   const [quickVehicleForm, setQuickVehicleForm] = useState<VehicleCatalogFormValue>({
     ...emptyVehicleCatalogFormValue,
     year: String(new Date().getFullYear()),
@@ -126,14 +132,13 @@ export default function NewAppointmentPage() {
   const [quickVehicleError, setQuickVehicleError] = useState('');
   const [savingVehicle, setSavingVehicle] = useState(false);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(currentLocationId);
-  const [showAdditionalDetails, setShowAdditionalDetails] = useState(false);
-  const [showMobileClientVehicle, setShowMobileClientVehicle] = useState(false);
-  const [showMobileServices, setShowMobileServices] = useState(false);
-  const [showMobileSchedule, setShowMobileSchedule] = useState(false);
   const [showQuotePrefilledBadge, setShowQuotePrefilledBadge] = useState(false);
   const hasPrefilledFromQuote = useRef(false);
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
+  const internalNotesRef = useRef<HTMLTextAreaElement | null>(null);
   const [clientSearchQuery, setClientSearchQuery] = useState<string>("");
   const [debouncedClientQuery, setDebouncedClientQuery] = useState<string>("");
+  const [serviceSearchQuery, setServiceSearchQuery] = useState("");
 
   // Pre-fill client, date and time from URL query params
   useEffect(() => {
@@ -350,13 +355,6 @@ export default function NewAppointmentPage() {
     }
   }, [quoteIdParam, quoteData, selectedVehicleId]);
 
-  // Auto-open quick-add vehicle form when client has no vehicles on file
-  useEffect(() => {
-    if (selectedClientId && vehiclesData && vehiclesData.length === 0) {
-      setShowQuickAddVehicle(true);
-    }
-  }, [vehiclesData, selectedClientId]);
-
   // Auto-select sole staff member
   useEffect(() => {
     if (staffData && staffData.length === 1 && selectedStaffId === null) {
@@ -425,10 +423,33 @@ export default function NewAppointmentPage() {
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId === selectedClientId ? null : clientId);
     setSelectedVehicleId(null);
-    setShowQuickAddVehicle(false);
     setClientSearchOpen(false);
     setClientSearchQuery("");
   };
+
+  const applyTemplateToNotes = useCallback(
+    (
+      template: string,
+      setter: React.Dispatch<React.SetStateAction<string>>,
+      inputRef: React.RefObject<HTMLTextAreaElement | null>,
+      successMessage: string
+    ) => {
+      let applied = false;
+      setter((current) => {
+        if (current.includes(template)) {
+          return current;
+        }
+        applied = true;
+        return current.trim() ? `${current.trim()}\n\n${template}` : template;
+      });
+      window.requestAnimationFrame(() => {
+        inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        inputRef.current?.focus();
+      });
+      toast.success(applied ? successMessage : "Notes were already applied");
+    },
+    []
+  );
 
   const toggleService = (serviceId: string) => {
     setSelectedServiceIds((prev) =>
@@ -478,7 +499,6 @@ export default function NewAppointmentPage() {
       }
       await refetchVehicles();
       setSelectedVehicleId(createdVehicleId);
-      setShowQuickAddVehicle(false);
       setQuickVehicleForm({
         ...emptyVehicleCatalogFormValue,
         year: String(new Date().getFullYear()),
@@ -609,11 +629,68 @@ export default function NewAppointmentPage() {
       };
     })
     .filter((entry) => entry.linkedAddons.length > 0);
+  const normalizedServiceSearch = serviceSearchQuery.trim().toLowerCase();
   const recommendedPackageTemplates = packageTemplates.filter((pkg) =>
-    creationPreset.recommendedCategories.includes(String(pkg.baseService.category ?? "other"))
+    creationPreset.recommendedCategories.includes(String(pkg.baseService.category ?? "other")) &&
+    [
+      pkg.baseService.name,
+      pkg.baseService.notes,
+      ...pkg.linkedAddons.map((addon) => addon?.name),
+      formatServiceCategory(pkg.baseService.category),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedServiceSearch || "")
   );
   const otherPackageTemplates = packageTemplates.filter(
-    (pkg) => !creationPreset.recommendedCategories.includes(String(pkg.baseService.category ?? "other"))
+    (pkg) =>
+      !creationPreset.recommendedCategories.includes(String(pkg.baseService.category ?? "other")) &&
+      [
+        pkg.baseService.name,
+        pkg.baseService.notes,
+        ...pkg.linkedAddons.map((addon) => addon?.name),
+        formatServiceCategory(pkg.baseService.category),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedServiceSearch || "")
+  );
+  const groupedServices = useMemo(() => {
+    const groups = new Map<string, typeof services>();
+    for (const service of services) {
+      const haystack = [service.name, service.notes, formatServiceCategory(service.category)]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (normalizedServiceSearch && !haystack.includes(normalizedServiceSearch)) continue;
+      const key = String(service.category ?? "other");
+      const existing = groups.get(key);
+      if (existing) existing.push(service);
+      else groups.set(key, [service]);
+    }
+    return Array.from(groups.entries())
+      .sort(([left], [right]) => {
+        const leftRecommended = creationPreset.recommendedCategories.includes(left);
+        const rightRecommended = creationPreset.recommendedCategories.includes(right);
+        if (leftRecommended !== rightRecommended) return leftRecommended ? -1 : 1;
+        return formatServiceCategory(left).localeCompare(formatServiceCategory(right));
+      })
+      .map(([category, entries]) => ({
+        category,
+        title: formatServiceCategory(category),
+        recommended: creationPreset.recommendedCategories.includes(category),
+        services: entries.sort((a, b) => a.name.localeCompare(b.name)),
+      }));
+  }, [creationPreset.recommendedCategories, normalizedServiceSearch, services]);
+  const selectedServices = useMemo(
+    () => services.filter((service) => selectedServiceIds.includes(service.id)),
+    [selectedServiceIds, services]
+  );
+  const defaultOpenServiceGroups = useMemo(
+    () => groupedServices.map((group) => group.category),
+    [groupedServices]
   );
   const staff = staffData ?? [];
   const isLoading = isSubmitting || actionFetching;
@@ -658,28 +735,11 @@ export default function NewAppointmentPage() {
           {/* Section: Client & Vehicle */}
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle className="text-base font-semibold">
-                  Client &amp; Vehicle
-                </CardTitle>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="lg:hidden"
-                  onClick={() => setShowMobileClientVehicle((value) => !value)}
-                >
-                  {showMobileClientVehicle ? "Hide" : "Show"}
-                  <ChevronDown
-                    className={cn(
-                      "ml-1 h-4 w-4 transition-transform",
-                      showMobileClientVehicle && "rotate-180"
-                    )}
-                  />
-                </Button>
-              </div>
+              <CardTitle className="text-base font-semibold">
+                Client &amp; Vehicle
+              </CardTitle>
             </CardHeader>
-            <CardContent className={showMobileClientVehicle ? "space-y-4" : "hidden space-y-4 lg:block"}>
+            <CardContent className="space-y-4">
               {/* Client searchable select */}
               <div className="space-y-2">
                 <Label>
@@ -754,7 +814,7 @@ export default function NewAppointmentPage() {
               {/* Vehicle select */}
               <div className="space-y-2">
                 <Label>Vehicle <span className="text-destructive">*</span></Label>
-                {selectedClientId && vehiclesData && vehicles.length === 0 && !showQuickAddVehicle && (
+                {selectedClientId && vehiclesData && vehicles.length === 0 && (
                   <Alert className="border-amber-200 bg-amber-50 text-amber-800">
                     <AlertDescription>
                       This client has no vehicles on file. Add one below before booking the appointment.
@@ -770,25 +830,17 @@ export default function NewAppointmentPage() {
                     Loading vehicles...
                   </p>
                 ) : vehicles.length === 0 ? (
-                  <div className='space-y-3'>
-                    <p className='text-sm text-muted-foreground italic'>No vehicles on file for this client.</p>
-                    {!showQuickAddVehicle ? (
-                      <Button type='button' variant='outline' size='sm' onClick={() => setShowQuickAddVehicle(true)}>
-                        + Add Vehicle Now
+                  <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                    <p className="text-sm text-muted-foreground italic">
+                      No vehicles on file for this client. Add one now to keep booking moving.
+                    </p>
+                    <VehicleCatalogFields value={quickVehicleForm} setValue={setQuickVehicleForm} compact />
+                    {quickVehicleError ? <p className="text-xs text-destructive">{quickVehicleError}</p> : null}
+                    <div className="flex gap-2">
+                      <Button type="button" size="sm" onClick={handleQuickAddVehicle} disabled={savingVehicle}>
+                        {savingVehicle ? "Saving..." : "Save Vehicle"}
                       </Button>
-                    ) : (
-                      <div className='rounded-lg border bg-muted/30 p-3 space-y-3'>
-                        <p className='text-sm font-medium'>Quick-add a vehicle</p>
-                        <VehicleCatalogFields value={quickVehicleForm} setValue={setQuickVehicleForm} compact />
-                        {quickVehicleError && <p className='text-xs text-destructive'>{quickVehicleError}</p>}
-                        <div className='flex gap-2'>
-                          <Button type='button' size='sm' onClick={handleQuickAddVehicle} disabled={savingVehicle}>
-                            {savingVehicle ? 'Saving...' : 'Save Vehicle'}
-                          </Button>
-                          <Button type='button' size='sm' variant='ghost' onClick={() => setShowQuickAddVehicle(false)}>Cancel</Button>
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 ) : (
                   <Select
@@ -820,35 +872,42 @@ export default function NewAppointmentPage() {
           {/* Section: Services */}
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle className="text-base font-semibold">Services</CardTitle>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="lg:hidden"
-                  onClick={() => setShowMobileServices((value) => !value)}
-                >
-                  {showMobileServices ? "Hide" : "Show"}
-                  <ChevronDown
-                    className={cn(
-                      "ml-1 h-4 w-4 transition-transform",
-                      showMobileServices && "rotate-180"
-                    )}
-                  />
-                </Button>
-              </div>
+              <CardTitle className="text-base font-semibold">Services</CardTitle>
             </CardHeader>
-            <CardContent className={showMobileServices ? "" : "hidden lg:block"}>
+            <CardContent>
               <div className="mb-4 rounded-xl border border-border/70 bg-muted/30 p-4">
                 <div className="space-y-2">
                   <p className="text-sm font-medium">{creationPreset.title}</p>
                   <p className="text-sm text-muted-foreground">{creationPreset.summary}</p>
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setNotes(creationPreset.appointmentClientNotes)}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        applyTemplateToNotes(
+                          creationPreset.appointmentClientNotes,
+                          setNotes,
+                          notesRef,
+                          "Client intake notes applied"
+                        )
+                      }
+                    >
                       Apply client intake
                     </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setInternalNotes(creationPreset.appointmentInternalNotes)}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        applyTemplateToNotes(
+                          creationPreset.appointmentInternalNotes,
+                          setInternalNotes,
+                          internalNotesRef,
+                          "Internal handoff notes applied"
+                        )
+                      }
+                    >
                       Apply internal handoff
                     </Button>
                     {creationPreset.defaultMobile ? (
@@ -871,32 +930,86 @@ export default function NewAppointmentPage() {
                 </p>
               ) : (
                 <div className="space-y-4">
+                  <div className="rounded-xl border border-border/70 bg-background p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Build the job fast</p>
+                        <p className="text-sm text-muted-foreground">
+                          Start with a package if the work is standard, or expand a category for one-off services.
+                        </p>
+                      </div>
+                      <div className="relative w-full lg:max-w-xs">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={serviceSearchQuery}
+                          onChange={(event) => setServiceSearchQuery(event.target.value)}
+                          placeholder="Search services, notes, or category..."
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
+                    {selectedServices.length > 0 ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {selectedServices.map((service) => (
+                          <button
+                            key={service.id}
+                            type="button"
+                            onClick={() => toggleService(service.id)}
+                            className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-primary/10"
+                          >
+                            <span>{service.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {service.durationMinutes ? `${formatDuration(service.durationMinutes)} · ` : ""}
+                              ${toMoneyNumber(service.price).toFixed(2)}
+                            </span>
+                            <X className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-4 text-xs text-muted-foreground">
+                        No services selected yet. Pick a package or expand a category below.
+                      </p>
+                    )}
+                  </div>
+
                   {recommendedPackageTemplates.length > 0 && (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <Package className="h-4 w-4 text-muted-foreground" />
                         <p className="text-sm font-medium text-muted-foreground">Recommended packages</p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid gap-3 md:grid-cols-2">
                         {recommendedPackageTemplates.map((pkg) => (
-                          <Button
+                          <button
                             key={pkg.baseService.id}
                             type="button"
-                            variant="outline"
-                            size="sm"
                             onClick={() =>
                               applyPackageTemplate(
                                 pkg.baseService.id,
                                 pkg.linkedAddons.map((addon) => addon!.id)
                               )
                             }
+                            className="rounded-xl border border-border/70 bg-card p-4 text-left transition-colors hover:bg-muted/30"
                           >
-                            {pkg.baseService.name}
-                            <span className="ml-1 text-muted-foreground">
-                              · {pkg.linkedAddons.length + 1} services · ${pkg.totalPackagePrice.toFixed(2)}
-                              {pkg.totalPackageDuration > 0 ? ` · ${formatDuration(pkg.totalPackageDuration)}` : ""}
-                            </span>
-                          </Button>
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold">{pkg.baseService.name}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {formatServiceCategory(pkg.baseService.category)} · {pkg.linkedAddons.length + 1} services
+                                </p>
+                              </div>
+                              <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              <span>{pkg.totalPackageDuration > 0 ? formatDuration(pkg.totalPackageDuration) : "Custom duration"}</span>
+                              <span>·</span>
+                              <span>${pkg.totalPackagePrice.toFixed(2)}</span>
+                            </div>
+                            <p className="mt-3 text-xs text-muted-foreground">
+                              Includes {pkg.linkedAddons.map((addon) => addon?.name).join(", ")}.
+                            </p>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -908,74 +1021,109 @@ export default function NewAppointmentPage() {
                         <Package className="h-4 w-4 text-muted-foreground" />
                         <p className="text-sm font-medium text-muted-foreground">Other package templates</p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid gap-3 md:grid-cols-2">
                         {otherPackageTemplates.map((pkg) => (
-                          <Button
+                          <button
                             key={pkg.baseService.id}
                             type="button"
-                            variant="outline"
-                            size="sm"
                             onClick={() =>
                               applyPackageTemplate(
                                 pkg.baseService.id,
                                 pkg.linkedAddons.map((addon) => addon!.id)
                               )
                             }
+                            className="rounded-xl border border-border/70 bg-card p-4 text-left transition-colors hover:bg-muted/30"
                           >
-                            {pkg.baseService.name}
-                            <span className="ml-1 text-muted-foreground">
-                              · {pkg.linkedAddons.length + 1} services · ${pkg.totalPackagePrice.toFixed(2)}
-                              {pkg.totalPackageDuration > 0 ? ` · ${formatDuration(pkg.totalPackageDuration)}` : ""}
-                            </span>
-                          </Button>
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold">{pkg.baseService.name}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {formatServiceCategory(pkg.baseService.category)} · {pkg.linkedAddons.length + 1} services
+                                </p>
+                              </div>
+                              <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              <span>{pkg.totalPackageDuration > 0 ? formatDuration(pkg.totalPackageDuration) : "Custom duration"}</span>
+                              <span>·</span>
+                              <span>${pkg.totalPackagePrice.toFixed(2)}</span>
+                            </div>
+                            <p className="mt-3 text-xs text-muted-foreground">
+                              Includes {pkg.linkedAddons.map((addon) => addon?.name).join(", ")}.
+                            </p>
+                          </button>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    {services.map((service) => {
-                      const isSelected = selectedServiceIds.includes(service.id);
-                      return (
-                        <div
-                          key={service.id}
-                          className={cn(
-                            "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors select-none",
-                            isSelected
-                              ? "border-primary bg-primary/5"
-                              : "border-border hover:bg-muted/40"
-                          )}
-                          onClick={() => toggleService(service.id)}
-                        >
-                          <SelectionIndicator checked={isSelected} />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm">{service.name}</p>
-                            {service.notes && (
-                              <p className="text-xs text-muted-foreground truncate">
-                                {service.notes}
-                              </p>
-                            )}
-                            {service.category && (
-                              <p className="text-xs text-muted-foreground">
-                                {formatServiceCategory(service.category)}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 shrink-0 text-sm">
-                            {service.durationMinutes != null && service.durationMinutes > 0 && (
-                              <span className="flex items-center gap-1 text-muted-foreground">
-                                <Clock className="h-3 w-3" />
-                                {formatDuration(service.durationMinutes)}
-                              </span>
-                            )}
-                            <span className="font-semibold">
-                              ${toMoneyNumber(service.price).toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {groupedServices.length > 0 ? (
+                    <Accordion type="multiple" defaultValue={defaultOpenServiceGroups} className="rounded-xl border border-border/70 bg-card px-4">
+                      {groupedServices.map((group) => {
+                        const selectedCount = group.services.filter((service) => selectedServiceIds.includes(service.id)).length;
+                        return (
+                          <AccordionItem key={group.category} value={group.category}>
+                            <AccordionTrigger className="py-4 hover:no-underline">
+                              <div className="flex min-w-0 flex-1 items-center gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-foreground">{group.title}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {group.services.length} service{group.services.length === 1 ? "" : "s"}
+                                    {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
+                                  </p>
+                                </div>
+                                {group.recommended ? (
+                                  <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-medium text-orange-700">
+                                    Recommended
+                                  </span>
+                                ) : null}
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="space-y-2 pb-4">
+                              {group.services.map((service) => {
+                                const isSelected = selectedServiceIds.includes(service.id);
+                                return (
+                                  <div
+                                    key={service.id}
+                                    className={cn(
+                                      "flex select-none items-center gap-3 rounded-lg border p-3 transition-colors",
+                                      isSelected
+                                        ? "border-primary bg-primary/5"
+                                        : "border-border hover:bg-muted/40"
+                                    )}
+                                    onClick={() => toggleService(service.id)}
+                                  >
+                                    <SelectionIndicator checked={isSelected} />
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm font-medium">{service.name}</p>
+                                      {service.notes ? (
+                                        <p className="truncate text-xs text-muted-foreground">{service.notes}</p>
+                                      ) : null}
+                                    </div>
+                                    <div className="flex shrink-0 items-center gap-3 text-sm">
+                                      {service.durationMinutes != null && service.durationMinutes > 0 ? (
+                                        <span className="flex items-center gap-1 text-muted-foreground">
+                                          <Clock className="h-3 w-3" />
+                                          {formatDuration(service.durationMinutes)}
+                                        </span>
+                                      ) : null}
+                                      <span className="font-semibold">
+                                        ${toMoneyNumber(service.price).toFixed(2)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </AccordionContent>
+                          </AccordionItem>
+                        );
+                      })}
+                    </Accordion>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
+                      No services match this search yet. Try another term or clear the search.
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1021,26 +1169,9 @@ export default function NewAppointmentPage() {
           {/* Section: Schedule */}
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle className="text-base font-semibold">Schedule</CardTitle>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="lg:hidden"
-                  onClick={() => setShowMobileSchedule((value) => !value)}
-                >
-                  {showMobileSchedule ? "Hide" : "Show"}
-                  <ChevronDown
-                    className={cn(
-                      "ml-1 h-4 w-4 transition-transform",
-                      showMobileSchedule && "rotate-180"
-                    )}
-                  />
-                </Button>
-              </div>
+              <CardTitle className="text-base font-semibold">Schedule</CardTitle>
             </CardHeader>
-            <CardContent className={showMobileSchedule ? "space-y-4" : "hidden space-y-4 lg:block"}>
+            <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Date picker */}
                 <div className="space-y-2">
@@ -1249,67 +1380,48 @@ export default function NewAppointmentPage() {
                 </div>
               )}
 
-              {/* Toggle for extra fields */}
-              <button
-                type="button"
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setShowAdditionalDetails((v) => !v)}
-              >
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 shrink-0 transition-transform",
-                    showAdditionalDetails && "rotate-180"
-                  )}
-                />
-                {showAdditionalDetails ? "Fewer details" : "More details"}
-              </button>
-
-              {/* Collapsible: Deposit Amount, Notes, Internal Notes */}
-              {showAdditionalDetails && (
-                <div className="space-y-4">
-                  {/* Deposit Amount */}
-                  <div className="space-y-2">
-                    <Label htmlFor="depositAmount">Deposit Amount</Label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      <Input
-                        id="depositAmount"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={depositAmount}
-                        onChange={(e) => setDepositAmount(e.target.value)}
-                        className="pl-9"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Notes */}
-                  <div className="space-y-2">
-                    <Label htmlFor="notes">Notes</Label>
-                    <Textarea
-                      id="notes"
-                      placeholder="Notes about this appointment (visible to client)..."
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      className="min-h-[80px] resize-none"
-                    />
-                  </div>
-
-                  {/* Internal Notes */}
-                  <div className="space-y-2">
-                    <Label htmlFor="internalNotes">Internal Notes</Label>
-                    <Textarea
-                      id="internalNotes"
-                      placeholder="Internal notes (not visible to client)..."
-                      value={internalNotes}
-                      onChange={(e) => setInternalNotes(e.target.value)}
-                      className="min-h-[80px] resize-none"
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="depositAmount">Deposit Amount</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                      id="depositAmount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value)}
+                      className="pl-9"
                     />
                   </div>
                 </div>
-              )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    ref={notesRef}
+                    placeholder="Notes about this appointment (visible to client)..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="min-h-[80px] resize-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="internalNotes">Internal Notes</Label>
+                  <Textarea
+                    id="internalNotes"
+                    ref={internalNotesRef}
+                    placeholder="Internal notes (not visible to client)..."
+                    value={internalNotes}
+                    onChange={(e) => setInternalNotes(e.target.value)}
+                    className="min-h-[80px] resize-none"
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
 

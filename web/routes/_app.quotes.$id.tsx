@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { useFindOne, useAction, useFindMany } from "../hooks/useApi";
-import { api } from "../api";
+import { API_BASE, api } from "../api";
 import { toast } from "sonner";
 import type { AuthOutletContext } from "./_app";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
@@ -32,6 +32,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
+import { printAuthenticatedDocument } from "@/lib/printDocument";
 import {
   Dialog,
   DialogContent,
@@ -55,10 +57,12 @@ import {
   Phone,
   CalendarPlus,
   Pencil,
+  Printer,
   Trash2,
   Plus,
   MoreHorizontal,
 } from "lucide-react";
+import { getCurrentBusinessId } from "@/lib/auth";
 
 const StatusBadge = ({ status }: { status: string }) => {
   const variants: Record<string, string> = {
@@ -95,6 +99,15 @@ const formatDate = (date: Date | string | null | undefined): string => {
     year: "numeric",
   });
 };
+
+async function openPrintableQuote(quoteId: string, businessId?: string | null) {
+  await printAuthenticatedDocument({
+    url: `${API_BASE}/api/quotes/${encodeURIComponent(quoteId)}/html`,
+    businessId: businessId ?? getCurrentBusinessId(),
+    pendingTitle: "Preparing estimate...",
+    loadErrorMessage: "Could not load printable estimate.",
+  });
+}
 
 export default function QuoteDetailPage() {
   const { id } = useParams();
@@ -217,7 +230,7 @@ export default function QuoteDetailPage() {
   const handleSend = async (message?: string) => {
     const result = await runSend({ id: id!, message });
     if (result.error) {
-      toast.error("Failed to send quote: " + result.error.message);
+      toast.error(getTransactionalEmailErrorMessage(result.error, "Quote"));
     } else {
       const deliveryStatus = (result.data as any)?.deliveryStatus;
       if (deliveryStatus === "emailed") {
@@ -234,7 +247,7 @@ export default function QuoteDetailPage() {
   const handleSendFollowUp = async (message?: string) => {
     const result = await runSendFollowUp({ id: id!, message });
     if (result.error) {
-      toast.error("Failed to send follow-up: " + result.error.message);
+      toast.error(getTransactionalEmailErrorMessage(result.error, "Quote follow-up"));
     } else {
       const deliveryStatus = (result.data as any)?.deliveryStatus;
       if (deliveryStatus === "emailed") {
@@ -414,6 +427,17 @@ export default function QuoteDetailPage() {
         right={
           <div className="flex items-center justify-end gap-2">
             <div className="hidden sm:flex sm:flex-wrap sm:justify-end sm:gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  void openPrintableQuote(quote.id).catch((error) => {
+                    toast.error(error instanceof Error ? error.message : "Could not open printable estimate");
+                  });
+                }}
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Print
+              </Button>
               {(quote.status === "draft" || quote.status === "sent") && (
                 <Button
                   onClick={() => void handleSend()}
@@ -445,6 +469,18 @@ export default function QuoteDetailPage() {
             </div>
 
             <div className="flex w-full items-center gap-2 sm:hidden">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  void openPrintableQuote(quote.id).catch((error) => {
+                    toast.error(error instanceof Error ? error.message : "Could not open printable estimate");
+                  });
+                }}
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Print
+              </Button>
               {(quote.status === "draft" || quote.status === "sent") ? (
                 <Button
                   onClick={() => void handleSend()}

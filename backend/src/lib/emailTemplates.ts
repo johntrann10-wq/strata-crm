@@ -17,7 +17,6 @@ export const appointmentConfirmation = {
       <p>Vehicle: {{vehicle}}</p>
       <p>Address: {{address}}</p>
       <p>{{serviceSummary}}</p>
-      <p><a href="{{confirmationUrl}}" style="display:inline-block;padding:10px 20px;background:#ea580c;color:#fff;text-decoration:none;border-radius:6px;">View details</a></p>
       <p class="muted" style="color:#6b7280;font-size:14px;">If you need to reschedule, please contact us.</p>
     </div>
     <p class="footer" style="margin-top:24px;font-size:12px;color:#9ca3af;">{{businessName}}</p>
