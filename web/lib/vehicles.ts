@@ -41,7 +41,7 @@ export function buildVehicleDisplayName(value: Partial<VehicleCatalogFormValue>)
     .join(" ");
 }
 
-export function formatVehicleLabel(vehicle: {
+export function formatVehicleLabel(vehicle?: {
   displayName?: string | null;
   year?: number | string | null;
   make?: string | null;
@@ -49,11 +49,11 @@ export function formatVehicleLabel(vehicle: {
   trim?: string | null;
   color?: string | null;
   licensePlate?: string | null;
-}): string {
+} | null): string {
+  if (!vehicle) return "Vehicle";
   const primary =
     String(vehicle.displayName ?? "").trim() ||
     [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ");
   const suffix = [vehicle.color, vehicle.licensePlate].filter(Boolean).join(" • ");
   return suffix ? `${primary} — ${suffix}` : primary || "Vehicle";
 }
-

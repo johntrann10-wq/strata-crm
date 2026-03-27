@@ -272,9 +272,12 @@ test.describe("Live business workflow smoke", () => {
       await expect(page.locator("main")).toContainText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i"));
 
       await page.goto("/leads");
-      const leadCard = page.locator("section").filter({ has: page.getByText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i")) }).first();
+      const leadCard = page
+        .getByText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i"))
+        .first()
+        .locator("xpath=ancestor::*[.//button[contains(., 'Convert to client')]][1]");
       await expect(leadCard).toBeVisible();
-      await leadCard.getByRole("button", { name: /convert to client/i }).click();
+      await leadCard.getByRole("button", { name: /convert to client/i }).first().click();
       await waitForPathname(page, new RegExp(`^/clients/${leadClientId}$`));
       await expect(page.locator("main")).toContainText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i"));
       await page.goBack();
