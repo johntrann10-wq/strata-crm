@@ -15,9 +15,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Check } from "lucide-react";
+import { Loader2, Check, Clock, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { formatServiceCategory } from "../../lib/serviceCatalog";
 
 type ClientPick = {
   id: string;
@@ -25,7 +32,7 @@ type ClientPick = {
   lastName?: string | null;
   phone?: string | null;
 };
-type ServicePick = { id: string; name?: string; price?: number | string | null; durationMinutes?: number | null };
+type ServicePick = { id: string; name?: string; price?: number | string | null; durationMinutes?: number | null; category?: string | null };
 type VehiclePick = { id: string; year?: number | null; make?: string | null; model?: string | null };
 
 const toMoneyNumber = (value: unknown): number => {
@@ -86,6 +93,7 @@ export function QuickBookSheet({
   const [bookingDate, setBookingDate] = useState<string>(() => initialDate ?? getToday());
   const [bookingTime, setBookingTime] = useState<string>(() => initialTime ?? getNextHour());
   const [clientSearch, setClientSearch] = useState<string>("");
+  const [serviceSearch, setServiceSearch] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const fullFormHref = selectedClientId
     ? `/clients/${selectedClientId}/vehicles/new?next=appointment&from=${encodeURIComponent(appointmentDraftHref)}`
@@ -108,6 +116,7 @@ export function QuickBookSheet({
       setSelectedServiceIds([]);
       setError(null);
       setClientSearch("");
+      setServiceSearch("");
       setBookingDate(initialDate ?? getToday());
       setBookingTime(initialTime ?? getNextHour());
     }
@@ -127,9 +136,9 @@ export function QuickBookSheet({
       businessId: { equals: businessId ?? "" },
       active: { equals: true },
     },
-    select: { id: true, name: true, price: true, durationMinutes: true },
-    sort: { name: "Ascending" },
-    first: 100,
+    select: { id: true, name: true, price: true, durationMinutes: true, category: true },
+    sort: { category: "Ascending" },
+    first: 250,
     pause: !businessId || !open,
   });
 
@@ -175,6 +184,24 @@ export function QuickBookSheet({
       c.phone?.toLowerCase().includes(q)
     );
   });
+  const normalizedServiceSearch = serviceSearch.trim().toLowerCase();
+  const groupedServices = serviceList.reduce<Record<string, ServicePick[]>>((acc, service) => {
+    const haystack = [service.name, formatServiceCategory(service.category)].filter(Boolean).join(" ").toLowerCase();
+    if (normalizedServiceSearch && !haystack.includes(normalizedServiceSearch)) return acc;
+    const key = service.category ?? "other";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(service);
+    return acc;
+  }, {});
+  const sortedServiceGroups = Object.entries(groupedServices).sort(([left], [right]) =>
+    formatServiceCategory(left).localeCompare(formatServiceCategory(right))
+  );
+  const selectedClient = clientList.find((client) => client.id === selectedClientId) ?? null;
+  const selectedVehicle = vehicleList.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  const selectedServices = serviceList.filter((service) => selectedServiceIds.includes(service.id));
+  const selectedServiceDuration = selectedServices.reduce((sum, service) => sum + (service.durationMinutes ?? 0), 0);
+  const selectedServiceTotal = selectedServices.reduce((sum, service) => sum + toMoneyNumber(service.price), 0);
+  const quickTimePresets = ["08:00", "09:00", "12:00", "15:00", "17:00"];
 
   const toggleService = (serviceId: string) => {
     setSelectedServiceIds((prev) =>
@@ -269,9 +296,21 @@ export function QuickBookSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex flex-col p-0 w-full max-w-md">
-        <SheetHeader className="px-4 pt-6 pb-3 border-b shrink-0">
+        <SheetHeader className="border-b shrink-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.24),rgba(255,255,255,0))] px-4 pt-6 pb-4">
           <SheetTitle>Quick Book</SheetTitle>
-          <SheetDescription>Book an appointment in seconds.</SheetDescription>
+          <SheetDescription>Book an appointment in seconds without losing the important details.</SheetDescription>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-2xl border border-border/70 bg-background/82 px-3 py-2 text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Client</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                {selectedClient ? `${selectedClient.firstName} ${selectedClient.lastName}` : "Choose client"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/82 px-3 py-2 text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Schedule</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">{bookingDate || "Pick date"} · {bookingTime || "--:--"}</p>
+            </div>
+          </div>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 space-y-5">
@@ -327,6 +366,20 @@ export function QuickBookSheet({
           {/* 2. Date & Time section */}
           <div className="space-y-2">
             <Label>Date & Time *</Label>
+            <div className="flex flex-wrap gap-2">
+              {quickTimePresets.map((preset) => (
+                <Button
+                  key={preset}
+                  type="button"
+                  variant={bookingTime === preset ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 rounded-full px-3 text-[11px]"
+                  onClick={() => setBookingTime(preset)}
+                >
+                  {preset}
+                </Button>
+              ))}
+            </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -379,30 +432,92 @@ export function QuickBookSheet({
             {serviceList.length === 0 ? (
               <p className="text-xs text-muted-foreground">No services configured.</p>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {serviceList.map((svc) => {
-                  const isSelected = selectedServiceIds.includes(svc.id);
-                  return (
-                    <button
-                      key={svc.id}
-                      type="button"
-                      onClick={() => toggleService(svc.id)}
-                      className={cn(
-                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                        isSelected
-                          ? "bg-orange-500 text-white border-orange-500"
-                          : "bg-muted border-border text-muted-foreground hover:border-orange-400"
-                      )}
-                    >
-                      {svc.name}
-                      {svc.price != null && (
-                        <span className="ml-1 opacity-80">
-                          (${toMoneyNumber(svc.price).toFixed(2)})
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={serviceSearch}
+                    onChange={(e) => setServiceSearch(e.target.value)}
+                    placeholder="Search services..."
+                    className="h-8 pl-8 text-sm"
+                  />
+                </div>
+                {selectedServiceIds.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      {selectedServices.map((service) => (
+                        <button
+                          key={service.id}
+                          type="button"
+                          onClick={() => toggleService(service.id)}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-medium text-orange-700"
+                        >
+                          <span>{service.name}</span>
+                          <Check className="h-3 w-3" />
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedServiceIds.length} service{selectedServiceIds.length === 1 ? "" : "s"} selected · {selectedServiceDuration > 0 ? `${selectedServiceDuration}m` : "Custom duration"} · ${selectedServiceTotal.toFixed(2)}
+                    </p>
+                  </div>
+                ) : null}
+                {sortedServiceGroups.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No services match this search.</p>
+                ) : (
+                  <Accordion type="multiple" defaultValue={sortedServiceGroups.slice(0, 2).map(([category]) => category)} className="rounded-md border">
+                    {sortedServiceGroups.map(([category, entries]) => {
+                      const selectedCount = entries.filter((service) => selectedServiceIds.includes(service.id)).length;
+                      return (
+                        <AccordionItem key={category} value={category} className="px-3">
+                          <AccordionTrigger className="py-3 hover:no-underline">
+                            <div className="min-w-0 text-left">
+                              <p className="text-sm font-medium">{formatServiceCategory(category)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {entries.length} option{entries.length === 1 ? "" : "s"}
+                                {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
+                              </p>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="space-y-2 pb-3">
+                            {entries.map((svc) => {
+                              const isSelected = selectedServiceIds.includes(svc.id);
+                              return (
+                                <button
+                                  key={svc.id}
+                                  type="button"
+                                  onClick={() => toggleService(svc.id)}
+                                  className={cn(
+                                    "flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition-colors",
+                                    isSelected
+                                      ? "border-orange-500 bg-orange-50 text-orange-700"
+                                      : "border-border hover:bg-muted"
+                                  )}
+                                >
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium">{svc.name}</p>
+                                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                      {svc.durationMinutes ? (
+                                        <span className="inline-flex items-center gap-1">
+                                          <Clock className="h-3 w-3" />
+                                          {svc.durationMinutes}m
+                                        </span>
+                                      ) : null}
+                                      {svc.price != null ? (
+                                        <span>${toMoneyNumber(svc.price).toFixed(2)}</span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                  {isSelected ? <Check className="h-4 w-4 shrink-0 text-orange-500" /> : null}
+                                </button>
+                              );
+                            })}
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
+                )}
               </div>
             )}
           </div>
@@ -427,19 +542,26 @@ export function QuickBookSheet({
                   </Button>
                 </div>
               ) : (
-                <select
-                  value={selectedVehicleId ?? ""}
-                  onChange={(e) => setSelectedVehicleId(e.target.value || null)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  <option value="">None</option>
-                  {vehicleList.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.year ? `${v.year} ` : ""}
-                      {v.make} {v.model}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-2">
+                  <select
+                    value={selectedVehicleId ?? ""}
+                    onChange={(e) => setSelectedVehicleId(e.target.value || null)}
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="">None</option>
+                    {vehicleList.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.year ? `${v.year} ` : ""}
+                        {v.make} {v.model}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedVehicle ? (
+                    <div className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
+                      Ready to book: {[selectedVehicle.year, selectedVehicle.make, selectedVehicle.model].filter(Boolean).join(" ")}
+                    </div>
+                  ) : null}
+                </div>
               )}
             </div>
           )}

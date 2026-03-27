@@ -1,8 +1,3 @@
-/**
- * Standardized HTML invoice template for clients.
- * Responsive (mobile & desktop), XSS-safe (all inputs escaped), includes line items, discounts, tax, partial payments.
- */
-
 import { escapeHtml, formatCurrency, formatDate } from "./escape.js";
 
 export type InvoiceTemplateBusiness = {
@@ -55,141 +50,166 @@ export type InvoiceTemplateData = {
   payments: InvoiceTemplatePayment[];
 };
 
-function fmtCur(n: string | number | null | undefined): string {
-  if (n === null || n === undefined) return "$0.00";
-  const num = typeof n === "string" ? parseFloat(n) : n;
-  return formatCurrency(Number.isFinite(num) ? num : 0);
+function money(value: string | number | null | undefined): string {
+  const parsed = typeof value === "string" ? parseFloat(value) : value;
+  return formatCurrency(Number.isFinite(parsed as number) ? (parsed as number) : 0);
+}
+
+function numberValue(value: string | number | null | undefined): number {
+  const parsed = typeof value === "string" ? parseFloat(value) : value;
+  return Number.isFinite(parsed as number) ? (parsed as number) : 0;
+}
+
+function label(value: string | null | undefined): string {
+  return (value ?? "draft")
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export function renderInvoiceHtml(data: InvoiceTemplateData): string {
-  const tz = data.business?.timezone ?? "America/New_York";
-  const businessName = escapeHtml(data.business?.name ?? "Business");
-  const businessEmail = escapeHtml(data.business?.email ?? "");
-  const businessPhone = escapeHtml(data.business?.phone ?? "");
-  const businessAddr = [data.business?.address, data.business?.city, data.business?.state, data.business?.zip]
-    .filter(Boolean)
-    .join(", ");
-  const clientName = [data.client?.firstName, data.client?.lastName].filter(Boolean).join(" ") || "Client";
-  const clientEmail = escapeHtml(data.client?.email ?? "");
-  const clientPhone = escapeHtml(data.client?.phone ?? "");
-  const invoiceNumber = escapeHtml(data.invoiceNumber ?? "—");
-  const dueDate = formatDate(data.dueDate, tz);
-  const subtotal = fmtCur(data.subtotal);
-  const taxRate = escapeHtml(String(data.taxRate ?? 0));
-  const taxAmount = fmtCur(data.taxAmount);
-  const discountAmount = fmtCur(data.discountAmount);
-  const total = fmtCur(data.total);
-  const totalPaid = fmtCur(data.totalPaid);
+  const tz = data.business.timezone ?? "America/New_York";
+  const status = (data.status ?? "draft").toLowerCase();
+  const businessName = escapeHtml(data.business.name ?? "Business");
+  const clientName = escapeHtml([data.client.firstName, data.client.lastName].filter(Boolean).join(" ") || "Client");
+  const clientEmail = escapeHtml(data.client.email ?? "");
+  const clientPhone = escapeHtml(data.client.phone ?? "");
+  const clientAddress = escapeHtml(data.client.address ?? "");
+  const issuedDate = escapeHtml(formatDate(data.createdAt, tz) || "-");
+  const dueDate = escapeHtml(formatDate(data.dueDate, tz) || "-");
+  const balance = Math.max(numberValue(data.total) - numberValue(data.totalPaid), 0);
   const notes = escapeHtml(data.notes ?? "");
-  const status = escapeHtml(data.status ?? "draft");
-
-  const lineRows = (data.lineItems ?? []).map(
-    (li) =>
-      `<tr>
-        <td class="desc">${escapeHtml(li.description ?? "")}</td>
-        <td class="qty">${escapeHtml(String(li.quantity ?? ""))}</td>
-        <td class="num">${fmtCur(li.unitPrice)}</td>
-        <td class="num">${fmtCur(li.total)}</td>
-      </tr>`
-  ).join("");
-
-  const paymentRows = (data.payments ?? []).map(
-    (p) =>
-      `<tr>
-        <td>${formatDate(p.paidAt, tz)}</td>
-        <td>${escapeHtml(String(p.method ?? ""))}</td>
-        <td class="num">${fmtCur(p.amount)}</td>
-      </tr>`
-  ).join("");
+  const discountAmount = money(data.discountAmount);
+  const taxAmount = money(data.taxAmount);
+  const taxRate = escapeHtml(String(data.taxRate ?? 0));
+  const lineItemCount = data.lineItems?.length ?? 0;
+  const rows = (data.lineItems ?? [])
+    .map((line) => `<tr><td class="desc">${escapeHtml(line.description ?? "")}</td><td class="num" data-label="Qty">${escapeHtml(String(line.quantity ?? ""))}</td><td class="num" data-label="Unit">${money(line.unitPrice)}</td><td class="num" data-label="Amount">${money(line.total)}</td></tr>`)
+    .join("");
+  const payments = (data.payments ?? [])
+    .map((payment) => `<tr><td>${escapeHtml(formatDate(payment.paidAt, tz) || "-")}</td><td>${escapeHtml(payment.method ?? "-")}</td><td class="num">${money(payment.amount)}</td></tr>`)
+    .join("");
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Invoice ${invoiceNumber}</title>
+  <title>Invoice ${escapeHtml(data.invoiceNumber ?? "-")}</title>
   <style>
-    * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; line-height: 1.5; color: #1a1a1a; margin: 0; padding: 16px; background: #f5f5f5; }
-    .invoice { max-width: 700px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
-    .header { padding: 24px; border-bottom: 1px solid #eee; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
-    .brand { font-size: 1.25rem; font-weight: 700; color: #111; }
-    .meta { text-align: right; }
-    .meta .inv-num { font-size: 1.1rem; font-weight: 600; }
-    .meta .status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-top: 4px; }
-    .status.paid { background: #dcfce7; color: #166534; }
-    .status.partial { background: #fef9c3; color: #854d0e; }
-    .status.sent { background: #dbeafe; color: #1e40af; }
-    .status.draft { background: #f3f4f6; color: #374151; }
-    .parties { padding: 24px; display: flex; flex-wrap: wrap; gap: 24px; }
-    .party { flex: 1; min-width: 180px; }
-    .party h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
-    .party p { margin: 0 0 4px; }
-    .party p:last-child { margin-bottom: 0; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eee; }
-    th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; }
-    .num, .qty { text-align: right; }
-    .totals { padding: 24px; background: #fafafa; }
-    .totals table { max-width: 280px; margin-left: auto; }
-    .totals td { border: none; padding: 4px 0; }
-    .totals .label { color: #6b7280; }
-    .totals .grand { font-size: 1.25rem; font-weight: 700; padding-top: 8px; border-top: 2px solid #1a1a1a; }
-    .payments { padding: 0 24px 24px; }
-    .payments h3 { font-size: 12px; color: #6b7280; margin: 0 0 8px; }
-    .notes { padding: 24px; border-top: 1px solid #eee; color: #6b7280; font-size: 13px; }
-    @media (max-width: 600px) {
-      .header { flex-direction: column; }
-      .meta { text-align: left; }
-      th, td { padding: 8px; font-size: 13px; }
-    }
+    :root { color-scheme: light; --ink:#0f172a; --muted:#475569; --line:#dbe2ea; --panel:#f8fafc; --accent:#f97316; }
+    * { box-sizing:border-box; } html,body { margin:0; background:#eef2f6; color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    .page { padding:32px 18px 56px; } .doc { position:relative; max-width:860px; margin:0 auto; background:#fff; border:1px solid rgba(148,163,184,.2); border-radius:24px; box-shadow:0 24px 60px rgba(15,23,42,.12); overflow:hidden; }
+    .doc::before { content:""; display:block; height:6px; background:linear-gradient(90deg, #f97316, #fb923c 38%, #0f172a); }
+    .header { padding:32px 36px 24px; border-bottom:1px solid var(--line); display:grid; grid-template-columns:minmax(0,1.35fr) minmax(260px,.85fr); gap:24px; background:radial-gradient(circle at top right, rgba(249,115,22,.14), transparent 32%),linear-gradient(180deg, rgba(248,250,252,.95), #fff); }
+    .eyebrow,.section-title { font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin:0 0 10px; }
+    .section-title { color:#64748b; margin-bottom:12px; }
+    h1 { margin:0; font-size:32px; line-height:1.05; letter-spacing:-.03em; }
+    .sub { margin:10px 0 0; color:var(--muted); font-size:14px; max-width:42ch; } .stack { display:grid; gap:4px; margin-top:16px; color:var(--muted); font-size:13px; }
+    .meta { border:1px solid rgba(148,163,184,.22); border-radius:18px; padding:18px; background:rgba(255,255,255,.84); }
+    .meta .number { font-size:28px; font-weight:700; letter-spacing:-.03em; margin:8px 0 10px; }
+    .pill { display:inline-flex; border-radius:999px; padding:6px 10px; font-size:12px; font-weight:700; background:#e5e7eb; color:#374151; }
+    .pill.sent { background:#dbeafe; color:#1d4ed8; } .pill.paid { background:#dcfce7; color:#166534; } .pill.partial { background:#fef3c7; color:#92400e; } .pill.void { background:#fee2e2; color:#b91c1c; }
+    .meta-grid { display:grid; gap:10px; margin-top:16px; } .meta-row { display:flex; justify-content:space-between; gap:12px; font-size:13px; } .meta-row span:first-child { color:#64748b; } .meta-row span:last-child { font-weight:600; text-align:right; }
+    .body { padding:28px 36px 36px; display:grid; gap:22px; }
+    .hero,.summary { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(250px,.8fr); gap:18px; }
+    .card { border:1px solid var(--line); border-radius:18px; padding:18px; background:#fff; } .soft { background:var(--panel); }
+    .party { font-size:18px; font-weight:700; letter-spacing:-.02em; margin:0 0 6px; } .detail { color:var(--muted); font-size:14px; word-break:break-word; }
+    .amount { border-radius:20px; padding:20px 22px; background:linear-gradient(180deg, rgba(249,115,22,.08), rgba(255,255,255,.96)); border:1px solid rgba(249,115,22,.18); } .amount .big { margin:8px 0 6px; font-size:36px; line-height:1; letter-spacing:-.04em; font-weight:800; }
+    table { width:100%; border-collapse:collapse; } .lines { border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#fff; }
+    .lines th { background:var(--panel); color:#64748b; font-size:11px; letter-spacing:.14em; text-transform:uppercase; text-align:left; padding:13px 16px; border-bottom:1px solid var(--line); }
+    .lines td { padding:15px 16px; border-bottom:1px solid #edf2f7; font-size:14px; vertical-align:top; } .lines tr:last-child td { border-bottom:none; } .desc { font-weight:600; } .num { text-align:right; white-space:nowrap; }
+    .totals td { padding:6px 0; font-size:14px; border:none; } .totals .label { color:#64748b; } .totals .value { text-align:right; font-weight:600; } .totals .grand td { padding-top:12px; border-top:1px solid rgba(148,163,184,.35); font-size:20px; font-weight:800; color:var(--ink); }
+    .payments th,.payments td { padding:10px 0; font-size:13px; border-bottom:1px solid rgba(148,163,184,.18); } .payments th { text-align:left; color:#64748b; font-size:11px; letter-spacing:.12em; text-transform:uppercase; } .payments tr:last-child td { border-bottom:none; }
+    .notice { border-radius:18px; border:1px solid rgba(15,23,42,.08); background:linear-gradient(180deg, rgba(15,23,42,.03), rgba(255,255,255,.98)); padding:18px; }
+    .footer { padding:0 36px 34px; color:#64748b; font-size:12px; text-align:center; }
+    @page { margin:14mm; } @media (max-width:760px) { .page{padding:0;} .doc{border:none;border-radius:0;box-shadow:none;} .header,.body,.footer{padding-left:20px;padding-right:20px;} .header,.hero,.summary{grid-template-columns:1fr;} .lines thead{display:none;} .lines,.lines tbody,.lines tr,.lines td{display:block;width:100%;} .lines td{padding:8px 16px;border-bottom:none;} .lines tr{padding:10px 0;border-bottom:1px solid #edf2f7;} .lines tr:last-child{border-bottom:none;} .num::before{content:attr(data-label);float:left;color:#64748b;font-weight:600;} }
+    @media print { html,body{background:#fff;} .page{padding:0;} .doc{max-width:none;border:none;border-radius:0;box-shadow:none;} }
   </style>
 </head>
 <body>
-  <div class="invoice">
-    <div class="header">
-      <div>
-        <div class="brand">${businessName}</div>
-        ${businessEmail ? `<p>${businessEmail}</p>` : ""}
-        ${businessPhone ? `<p>${businessPhone}</p>` : ""}
-        ${businessAddr ? `<p>${escapeHtml(businessAddr)}</p>` : ""}
-      </div>
-      <div class="meta">
-        <div class="inv-num">Invoice ${invoiceNumber}</div>
-        <span class="status ${escapeHtml(status)}">${status}</span>
-        ${dueDate ? `<p style="margin-top:8px;">Due: ${escapeHtml(dueDate)}</p>` : ""}
-      </div>
-    </div>
-    <div class="parties">
-      <div class="party">
-        <h3>Bill to</h3>
-        <p><strong>${escapeHtml(clientName)}</strong></p>
-        ${clientEmail ? `<p>${clientEmail}</p>` : ""}
-        ${clientPhone ? `<p>${clientPhone}</p>` : ""}
-      </div>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th class="desc">Description</th>
-          <th class="qty">Qty</th>
-          <th class="num">Unit price</th>
-          <th class="num">Amount</th>
-        </tr>
-      </thead>
-      <tbody>${lineRows || "<tr><td colspan=\"4\">No line items</td></tr>"}</tbody>
-    </table>
-    <div class="totals">
-      <table>
-        <tr><td class="label">Subtotal</td><td class="num">${subtotal}</td></tr>
-        ${Number(parseFloat(String(data.discountAmount ?? 0))) > 0 ? `<tr><td class="label">Discount</td><td class="num">−${discountAmount}</td></tr>` : ""}
-        ${Number(parseFloat(String(data.taxAmount ?? 0))) > 0 ? `<tr><td class="label">Tax (${taxRate}%)</td><td class="num">${taxAmount}</td></tr>` : ""}
-        <tr><td class="label grand">Total</td><td class="num grand">${total}</td></tr>
-        ${Number(parseFloat(String(data.totalPaid ?? 0))) > 0 ? `<tr><td class="label">Paid</td><td class="num">${totalPaid}</td></tr>` : ""}
-      </table>
-    </div>
-    ${paymentRows ? `<div class="payments"><h3>Payment history</h3><table><thead><tr><th>Date</th><th>Method</th><th class="num">Amount</th></tr></thead><tbody>${paymentRows}</tbody></table></div>` : ""}
-    ${notes ? `<div class="notes">${notes}</div>` : ""}
+  <div class="page">
+    <main class="doc">
+      <section class="header">
+        <div>
+          <p class="eyebrow">Client Invoice</p>
+          <h1>${businessName}</h1>
+          <p class="sub">A clean summary of completed work, charges, and payment status.</p>
+          <div class="stack">
+            ${data.business.email ? `<div>${escapeHtml(data.business.email)}</div>` : ""}
+            ${data.business.phone ? `<div>${escapeHtml(data.business.phone)}</div>` : ""}
+            ${data.business.address ? `<div>${escapeHtml(data.business.address)}</div>` : ""}
+          </div>
+        </div>
+        <aside class="meta">
+          <p class="section-title">Invoice</p>
+          <div class="number">#${escapeHtml(data.invoiceNumber ?? "-")}</div>
+          <span class="pill ${status}">${escapeHtml(label(status))}</span>
+          <div class="meta-grid">
+            <div class="meta-row"><span>Issued</span><span>${issuedDate}</span></div>
+            <div class="meta-row"><span>Due</span><span>${dueDate}</span></div>
+            <div class="meta-row"><span>Balance due</span><span>${money(balance)}</span></div>
+            <div class="meta-row"><span>Scope</span><span>${lineItemCount} ${lineItemCount === 1 ? "line item" : "line items"}</span></div>
+          </div>
+        </aside>
+      </section>
+      <section class="body">
+        <section class="hero">
+          <div class="card">
+            <p class="section-title">Bill To</p>
+            <p class="party">${clientName}</p>
+            ${clientEmail ? `<div class="detail">${clientEmail}</div>` : ""}
+            ${clientPhone ? `<div class="detail">${clientPhone}</div>` : ""}
+            ${clientAddress ? `<div class="detail">${clientAddress}</div>` : ""}
+          </div>
+          <div class="amount">
+            <p class="section-title">Total Invoice</p>
+            <div class="big">${money(data.total)}</div>
+            <div class="detail">${balance > 0 ? `${money(balance)} remaining` : "Paid in full"}</div>
+          </div>
+        </section>
+        <section class="notice">
+          <p class="section-title">Billing Summary</p>
+          <div class="detail">This invoice reflects the completed work and current payment status on the record. Keep it for service history and accounting.</div>
+        </section>
+        <section class="summary">
+          <div class="card soft">
+            <p class="section-title">Service Record</p>
+            <div class="detail">This invoice is part of your service history with ${businessName}. It can be used as your reference for completed work, charges, and payment tracking.</div>
+          </div>
+          <div class="card soft">
+            <p class="section-title">Need Help?</p>
+            <div class="detail">If anything on this invoice looks off, contact the shop before payment so we can review the record with you and correct anything that needs attention.</div>
+          </div>
+        </section>
+        <section class="lines">
+          <table>
+            <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="4">No line items</td></tr>'}</tbody>
+          </table>
+        </section>
+        <section class="summary">
+          <div class="card">
+            <p class="section-title">Notes</p>
+            <div class="detail">${notes || "Thank you for your business."}</div>
+          </div>
+          <div style="display:grid; gap:18px;">
+            <div class="card soft">
+              <p class="section-title">Charges</p>
+              <table class="totals">
+                <tr><td class="label">Subtotal</td><td class="value">${money(data.subtotal)}</td></tr>
+                ${numberValue(data.discountAmount) > 0 ? `<tr><td class="label">Discount</td><td class="value">-${discountAmount}</td></tr>` : ""}
+                ${numberValue(data.taxAmount) > 0 ? `<tr><td class="label">Tax (${taxRate}%)</td><td class="value">${taxAmount}</td></tr>` : ""}
+                ${numberValue(data.totalPaid) > 0 ? `<tr><td class="label">Payments received</td><td class="value">${money(data.totalPaid)}</td></tr>` : ""}
+                <tr class="grand"><td>Total</td><td class="value">${money(data.total)}</td></tr>
+              </table>
+            </div>
+            ${payments ? `<div class="card soft"><p class="section-title">Payment History</p><table class="payments"><thead><tr><th>Date</th><th>Method</th><th class="num">Amount</th></tr></thead><tbody>${payments}</tbody></table></div>` : ""}
+          </div>
+        </section>
+      </section>
+      <div class="footer">Generated by ${businessName}. Please keep this invoice for your service records and payment history.</div>
+    </main>
   </div>
 </body>
 </html>`.replaceAll("â€”", "-").replaceAll("âˆ’", "-");

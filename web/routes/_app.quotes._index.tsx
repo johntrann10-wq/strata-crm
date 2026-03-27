@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
+import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { StatusBadge } from "../components/shared/StatusBadge";
 
 function safeDate(value: string | null | undefined): Date | null {
@@ -98,6 +99,7 @@ export default function QuotesIndexPage() {
   const isFirstLoadAll = allFetching && allQuotes === undefined;
   const allRows = Array.isArray(allQuotes) ? allQuotes : [];
   const lostRows = Array.isArray(lostQuotes) ? lostQuotes : [];
+  const acceptedRows = allRows.filter((record) => String((record as Record<string, any>).status ?? "") === "accepted");
   const agingRows = allRows.filter((record) => {
     const row = record as Record<string, any>;
     const createdAt = safeDate(String(row.createdAt ?? ""));
@@ -115,13 +117,16 @@ export default function QuotesIndexPage() {
   });
   const [, runSendQuote] = useAction(api.quote.send);
   const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
+  const openPipelineValue = allRows
+    .filter((record) => ["draft", "sent", "accepted"].includes(String((record as Record<string, any>).status ?? "")))
+    .reduce((sum, record) => sum + Number((record as Record<string, any>).total ?? 0), 0);
 
   const handleSendQuote = async (quoteId: string) => {
     setSendingQuoteId(quoteId);
     try {
       const result = await runSendQuote({ id: quoteId });
       if (result.error) {
-        toast.error(result.error.message ?? "Failed to send quote");
+        toast.error(getTransactionalEmailErrorMessage(result.error, "Quote"));
       } else {
         const payload = result.data as { deliveryStatus?: string; deliveryError?: string | null } | undefined;
         if (payload?.deliveryStatus === "emailed") {
@@ -144,7 +149,7 @@ export default function QuotesIndexPage() {
     try {
       const result = await runSendFollowUp({ id: quoteId });
       if (result.error) {
-        toast.error(result.error.message ?? "Failed to record follow-up");
+        toast.error(getTransactionalEmailErrorMessage(result.error, "Quote follow-up"));
       } else {
         const payload = result.data as { deliveryStatus?: string; deliveryError?: string | null } | undefined;
         if (payload?.deliveryStatus === "emailed") {
@@ -180,6 +185,7 @@ export default function QuotesIndexPage() {
     <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Quotes"
+        subtitle="Track approvals, revive stalled estimates, and move accepted work into appointments and invoices."
         actions={
           <Button asChild>
             <Link to="/quotes/new">
@@ -189,6 +195,31 @@ export default function QuotesIndexPage() {
           </Button>
         }
       />
+
+      <section className="overflow-hidden rounded-[28px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.14),transparent_24%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Open pipeline</p>
+            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{formatCurrency(openPipelineValue)}</p>
+            <p className="mt-1 text-sm text-slate-600">Draft, sent, and accepted quotes still in play.</p>
+          </div>
+          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Ready to book</p>
+            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{acceptedRows.length}</p>
+            <p className="mt-1 text-sm text-slate-600">Approved work that should turn into scheduled jobs.</p>
+          </div>
+          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Cooling off</p>
+            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{agingRows.length}</p>
+            <p className="mt-1 text-sm text-slate-600">Quotes older than three days that need attention.</p>
+          </div>
+          <div className="rounded-[22px] border border-white/80 bg-slate-950 px-4 py-4 text-white shadow-[0_18px_45px_rgba(15,23,42,0.22)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-300">Follow-up queue</p>
+            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em]">{followUpRows.length}</p>
+            <p className="mt-1 text-sm text-slate-300">Clients due for another touch before the estimate goes cold.</p>
+          </div>
+        </div>
+      </section>
 
       <ListViewToolbar
         search={search}

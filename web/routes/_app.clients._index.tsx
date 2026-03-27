@@ -78,44 +78,48 @@ export default function ClientsPage() {
             </Button>
           </div>
           <div className={`grid gap-3 md:grid-cols-2 xl:grid-cols-4 ${showMobileStats ? "grid" : "hidden md:grid"}`}>
-          <div className="surface-panel px-4 py-3 sm:px-5">
-            <p className="text-sm font-medium text-muted-foreground">Visible clients</p>
-            <div className="mt-3 flex items-end justify-between gap-3">
-              <p className="text-2xl font-semibold tracking-tight">{visibleClients.length}</p>
-              <Users className="h-5 w-5 text-primary" />
+            <div className="surface-panel px-4 py-3 sm:px-5">
+              <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Visible clients</p>
+              <div className="mt-3 flex items-end justify-between gap-3">
+                <p className="text-2xl font-semibold tracking-tight">{visibleClients.length}</p>
+                <Users className="h-5 w-5 text-primary" />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {debouncedSearch ? "Current search results" : "Most recent CRM records"}
+              </p>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {debouncedSearch ? "Current search results" : "Most recent CRM records"}
-            </p>
-          </div>
-          <div className="surface-panel px-4 py-3 sm:px-5">
-            <p className="text-sm font-medium text-muted-foreground">Phone coverage</p>
-            <div className="mt-3 flex items-end justify-between gap-3">
-              <p className="text-2xl font-semibold tracking-tight">{clientsWithPhone}</p>
-              <Phone className="h-5 w-5 text-primary" />
+            <div className="surface-panel px-4 py-3 sm:px-5">
+              <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Phone coverage</p>
+              <div className="mt-3 flex items-end justify-between gap-3">
+                <p className="text-2xl font-semibold tracking-tight">{clientsWithPhone}</p>
+                <Phone className="h-5 w-5 text-primary" />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {visibleClients.length > 0
+                  ? `${Math.round((clientsWithPhone / visibleClients.length) * 100)}% reachable by phone`
+                  : "No client records loaded"}
+              </p>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {visibleClients.length > 0 ? `${Math.round((clientsWithPhone / visibleClients.length) * 100)}% reachable by phone` : "No client records loaded"}
-            </p>
-          </div>
-          <div className="surface-panel px-4 py-3 sm:px-5">
-            <p className="text-sm font-medium text-muted-foreground">Email coverage</p>
-            <div className="mt-3 flex items-end justify-between gap-3">
-              <p className="text-2xl font-semibold tracking-tight">{clientsWithEmail}</p>
-              <Mail className="h-5 w-5 text-primary" />
+            <div className="surface-panel px-4 py-3 sm:px-5">
+              <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Email coverage</p>
+              <div className="mt-3 flex items-end justify-between gap-3">
+                <p className="text-2xl font-semibold tracking-tight">{clientsWithEmail}</p>
+                <Mail className="h-5 w-5 text-primary" />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {visibleClients.length > 0
+                  ? `${Math.round((clientsWithEmail / visibleClients.length) * 100)}% ready for quote and invoice sends`
+                  : "No client records loaded"}
+              </p>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {visibleClients.length > 0 ? `${Math.round((clientsWithEmail / visibleClients.length) * 100)}% ready for quote and invoice sends` : "No client records loaded"}
-            </p>
-          </div>
-          <div className="surface-panel px-4 py-3 sm:px-5">
-            <p className="text-sm font-medium text-muted-foreground">New this month</p>
-            <div className="mt-3 flex items-end justify-between gap-3">
-              <p className="text-2xl font-semibold tracking-tight">{newThisMonth}</p>
-              <CalendarClock className="h-5 w-5 text-primary" />
+            <div className="surface-panel px-4 py-3 sm:px-5">
+              <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">New this month</p>
+              <div className="mt-3 flex items-end justify-between gap-3">
+                <p className="text-2xl font-semibold tracking-tight">{newThisMonth}</p>
+                <CalendarClock className="h-5 w-5 text-primary" />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">Fresh intake added to the CRM this month</p>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Fresh intake added to the CRM this month</p>
-          </div>
           </div>
         </section>
       ) : null}
@@ -127,7 +131,7 @@ export default function ClientsPage() {
         loading={isRefetching}
         resultCount={isLoading || clientsError ? null : visibleClients.length}
         noun="clients"
-        filtersLabel={debouncedSearch ? "search active" : null}
+        filtersLabel={debouncedSearch ? `Search: ${debouncedSearch}` : null}
         onClear={search ? () => setSearch("") : undefined}
         className="mb-5"
         actions={

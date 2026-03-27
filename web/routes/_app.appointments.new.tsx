@@ -694,32 +694,77 @@ export default function NewAppointmentPage() {
   );
   const staff = staffData ?? [];
   const isLoading = isSubmitting || actionFetching;
+  const selectedVehicleLabel = selectedVehicleId
+    ? formatVehicleLabel(vehicles.find((vehicle) => vehicle.id === selectedVehicleId) as any)
+    : null;
+  const bookingSnapshot = [
+    selectedDate ? format(selectedDate, "EEE, MMM d") : "Pick a date",
+    startTime || "Set a start time",
+  ].join(" · ");
+  const timePresets = ["08:00", "09:00", "12:00", "15:00", "17:00"];
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto p-4 pb-28 sm:p-6 sm:pb-6 lg:p-8">
         {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to appointments queue" /> : null}
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate(returnTo)}
-            className="shrink-0"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">New Appointment</h1>
-            <p className="text-sm text-muted-foreground">
-              Schedule a new appointment for a client
-            </p>
-            {currentLocationId && locationsData?.some((location) => location.id === currentLocationId) ? (
-              <p className="mt-1 text-sm text-muted-foreground">
-                Defaulting to {locationsData.find((location) => location.id === currentLocationId)?.name ?? "current location"}
-              </p>
-            ) : null}
+        <div className="mb-6 overflow-hidden rounded-[1.75rem] border border-white/70 bg-white/80 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_30px_70px_rgba(15,23,42,0.08)] backdrop-blur-md">
+          <div className="bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.24),rgba(255,255,255,0))] px-4 py-5 sm:px-6 sm:py-6">
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate(returnTo)}
+                className="shrink-0"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+              <div className="min-w-0">
+                <div className="inline-flex items-center rounded-full border border-orange-200/80 bg-orange-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-700">
+                  Scheduling lane
+                </div>
+                <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-[2rem]">New Appointment</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Schedule a new appointment for a client with all of the booking context visible.
+                </p>
+                {currentLocationId && locationsData?.some((location) => location.id === currentLocationId) ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Defaulting to {locationsData.find((location) => location.id === currentLocationId)?.name ?? "current location"}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Client</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {selectedClient ? `${selectedClient.firstName} ${selectedClient.lastName}` : "Choose a client"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vehicle</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {selectedVehicleLabel || "Add or pick a vehicle"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Services</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {selectedServiceIds.length > 0 ? `${selectedServiceIds.length} selected` : "Build the work order"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {totalDuration > 0 ? `${formatDuration(totalDuration)} planned` : "Duration appears as you select services"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Run of show</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{bookingSnapshot}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {endDateTime ? `Wraps around ${format(endDateTime, "h:mm a")}` : "End time appears after services are set"}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1145,21 +1190,20 @@ export default function NewAppointmentPage() {
               )}
 
               {selectedServiceIds.length > 0 && (
-                <div className="mt-4 p-3 rounded-lg bg-muted/50 space-y-1.5">
-                  <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>Services selected</span>
-                    <span>{selectedServiceIds.length}</span>
-                  </div>
-                  {totalDuration > 0 && (
-                    <div className="flex justify-between text-sm text-muted-foreground">
-                      <span>Total duration</span>
-                      <span>{formatDuration(totalDuration)}</span>
+                <div className="mt-4 rounded-[1.1rem] border border-primary/20 bg-primary/[0.04] p-4">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Services selected</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">{selectedServiceIds.length}</p>
                     </div>
-                  )}
-                  <Separator className="my-1" />
-                  <div className="flex justify-between text-sm font-semibold">
-                    <span>Estimated total</span>
-                    <span>${totalPrice.toFixed(2)}</span>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Planned duration</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">{totalDuration > 0 ? formatDuration(totalDuration) : "Not set"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Estimated total</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">${totalPrice.toFixed(2)}</p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1172,6 +1216,23 @@ export default function NewAppointmentPage() {
               <CardTitle className="text-base font-semibold">Schedule</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Fast picks</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {timePresets.map((preset) => (
+                    <Button
+                      key={preset}
+                      type="button"
+                      variant={startTime === preset ? "default" : "outline"}
+                      size="sm"
+                      className="h-8 rounded-full px-3 text-xs"
+                      onClick={() => setStartTime(preset)}
+                    >
+                      {preset}
+                    </Button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Date picker */}
                 <div className="space-y-2">

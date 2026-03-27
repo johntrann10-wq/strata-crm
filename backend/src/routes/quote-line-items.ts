@@ -60,7 +60,7 @@ quoteLineItemsRouter.get("/:id", requireAuth, requireTenant, async (req: Request
 const createSchema = z.object({
   quoteId: z.string().uuid().optional(),
   quote: z.object({ _link: z.string().uuid() }).optional(),
-  description: z.string().min(1),
+  description: z.string().trim().min(1),
   quantity: z.coerce.number().positive(),
   unitPrice: z.coerce.number().min(0),
 });
@@ -99,7 +99,7 @@ quoteLineItemsRouter.post("/", requireAuth, requireTenant, async (req: Request, 
 });
 
 const updateSchema = z.object({
-  description: z.string().min(1).optional(),
+  description: z.string().trim().min(1).optional(),
   quantity: z.coerce.number().positive().optional(),
   unitPrice: z.coerce.number().min(0).optional(),
 });

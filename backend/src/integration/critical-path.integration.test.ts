@@ -32,6 +32,7 @@ describe.skipIf(skipEmbeddedCriticalPath)("Critical path smoke (backend integrat
   let clientId = "";
   let vehicleId = "";
   let appointmentId = "";
+  let quoteId = "";
   let invoiceId = "";
 
   beforeAll(async () => {
@@ -99,7 +100,7 @@ describe.skipIf(skipEmbeddedCriticalPath)("Critical path smoke (backend integrat
     await embedded?.stop();
   });
 
-  it("sign-up -> sign-in -> /auth/me -> onboarding -> client/vehicle/appointment/invoice", async () => {
+  it("sign-up -> sign-in -> /auth/me -> onboarding -> client/vehicle/quote/appointment/invoice", async () => {
     if (!app) throw new Error("Backend app failed to load.");
 
     // sign-up
@@ -170,6 +171,23 @@ describe.skipIf(skipEmbeddedCriticalPath)("Critical path smoke (backend integrat
     vehicleId = vehicleRes.body?.id;
     expect(vehicleId).toBeTruthy();
 
+    // create quote
+    const quoteRes = await request(app).post("/api/quotes").set("Authorization", `Bearer ${token}`).send({
+      clientId,
+      vehicleId,
+      lineItems: [
+        {
+          description: "Test Service",
+          quantity: 1,
+          unitPrice: 100,
+        },
+      ],
+    });
+    expect(quoteRes.status).toBe(201);
+    quoteId = quoteRes.body?.id;
+    expect(quoteId).toBeTruthy();
+    expect(quoteRes.body?.total).toBe("100.00");
+
     // create appointment
     const start = new Date();
     start.setDate(start.getDate() + 2);
@@ -194,6 +212,7 @@ describe.skipIf(skipEmbeddedCriticalPath)("Critical path smoke (backend integrat
     const invoiceRes = await request(app).post("/api/invoices").set("Authorization", `Bearer ${token}`).send({
       clientId,
       appointmentId,
+      quoteId,
       lineItems: [
         {
           description: "Test Service",

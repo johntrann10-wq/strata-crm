@@ -14,6 +14,7 @@ export const SignInComponent = (props: {
   const location = useLocation();
   const search = props.searchParamsOverride ?? location.search;
   const navigate = useNavigate();
+  const fallbackAfterAuth = "/signed-in";
 
   const {
     submit,
@@ -23,7 +24,9 @@ export const SignInComponent = (props: {
     ...props.options,
     onSuccess: () => {
       props.options?.onSuccess?.();
-      navigate("/signed-in", { replace: true });
+      if (!props.options?.onSuccess) {
+        navigate(fallbackAfterAuth, { replace: true });
+      }
     },
   });
 

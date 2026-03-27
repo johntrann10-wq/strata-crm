@@ -12,6 +12,18 @@ describe("appointments route logic", () => {
     assignedStaffId: z.string().uuid().optional(),
     locationId: z.string().uuid().optional(),
   });
+  const updateSchema = z
+    .object({
+      startTime: z.string().datetime().optional(),
+      endTime: z.string().datetime().optional(),
+      title: z.string().nullable().optional(),
+      assignedStaffId: z.string().uuid().optional(),
+      locationId: z.string().uuid().optional(),
+      depositAmount: z.coerce.number().min(0).optional(),
+      notes: z.string().optional(),
+      internalNotes: z.string().optional(),
+    })
+    .strict();
 
   it("accepts valid appointment create payload", () => {
     const result = createSchema.safeParse({
@@ -34,6 +46,14 @@ describe("appointments route logic", () => {
       clientId: "not-uuid",
       vehicleId: "660e8400-e29b-41d4-a716-446655440001",
       startTime: "2025-03-20T10:00:00.000Z",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("updateSchema rejects unsupported relationship changes", () => {
+    const result = updateSchema.safeParse({
+      clientId: "550e8400-e29b-41d4-a716-446655440000",
+      vehicleId: "660e8400-e29b-41d4-a716-446655440001",
     });
     expect(result.success).toBe(false);
   });

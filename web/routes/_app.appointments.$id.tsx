@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
@@ -593,11 +594,11 @@ export default function AppointmentDetail() {
     if (!appointment) return;
     const result = await runSendConfirmation({ id: appointment.id });
     if (result.error) {
-      toast.error(`Failed to send confirmation: ${result.error.message}`);
+      toast.error(getTransactionalEmailErrorMessage(result.error, "Appointment confirmation"));
       return;
     }
     const payload = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
-    notifyConfirmationResult(payload?.deliveryStatus ?? "emailed", payload?.deliveryError ?? null, "Confirmation sent");
+    notifyConfirmationResult(payload?.deliveryStatus ?? null, payload?.deliveryError ?? null, "Confirmation sent");
     void refetchActivity();
   };
 
@@ -794,6 +795,21 @@ export default function AppointmentDetail() {
     ["sent", "partial"].includes(String((invoice as any).status ?? "")) &&
     !safeDate((invoice as any).lastPaidAt ?? null) &&
     isOlderThanDays((invoice as any).lastSentAt ?? null, 3);
+  const appointmentClientName = appointment.client
+    ? `${appointment.client.firstName} ${appointment.client.lastName}`
+    : "Walk-in client";
+  const appointmentVehicleLabel = appointment.vehicle
+    ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+    : "No vehicle attached";
+  const appointmentLocationLabel = appointment.isMobile
+    ? appointment.mobileAddress || "Mobile service"
+    : "In-shop service";
+  const appointmentValueLabel =
+    appointment.totalPrice != null && appointment.totalPrice > 0
+      ? formatCurrency(appointment.totalPrice)
+      : appointmentServices && appointmentServices.length > 0
+        ? `${appointmentServices.length} booked service${appointmentServices.length === 1 ? "" : "s"}`
+        : "No pricing attached yet";
 
   const relatedRecords: RelatedRecord[] = [];
   if (appointment) {
@@ -868,6 +884,66 @@ export default function AppointmentDetail() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to appointments queue" /> : null}
+      <section className="overflow-hidden rounded-[30px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_22%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.14),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_320px]">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">
+                Appointment record
+              </Badge>
+              <StatusBadge status={appointment.status} type="appointment" />
+              {appointment.rescheduleCount != null && appointment.rescheduleCount > 0 ? (
+                <Badge className="rounded-full border-amber-200 bg-amber-100 text-amber-800 text-[11px] uppercase tracking-[0.16em]">
+                  {appointment.rescheduleCount}x rescheduled
+                </Badge>
+              ) : null}
+            </div>
+            <div>
+              <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.5rem]">{pageTitle}</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                Run the appointment from one place. Client context, vehicle context, status, billing, and handoff
+                decisions should all feel obvious here.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Booked for</p>
+                <p className="mt-2 text-base font-semibold text-slate-950">{appointmentClientName}</p>
+                <p className="mt-1 text-sm text-slate-600">{appointmentVehicleLabel}</p>
+              </div>
+              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Scheduled</p>
+                <p className="mt-2 text-base font-semibold text-slate-950">{formatDate(appointment.startTime)}</p>
+                <p className="mt-1 text-sm text-slate-600">{formatTime(appointment.startTime)}</p>
+              </div>
+              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Work in play</p>
+                <p className="mt-2 text-base font-semibold text-slate-950">{appointmentValueLabel}</p>
+                <p className="mt-1 text-sm text-slate-600">{appointmentLocationLabel}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[26px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.24)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Immediate actions</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Keep the job moving</h2>
+            <div className="mt-4 space-y-3 text-sm text-slate-300">
+              <div className="flex items-start gap-3">
+                <Clock className="mt-0.5 h-4 w-4 text-orange-300" />
+                <span>{formatDateTime(appointment.startTime)}</span>
+              </div>
+              <div className="flex items-start gap-3">
+                <MapPin className="mt-0.5 h-4 w-4 text-orange-300" />
+                <span>{appointmentLocationLabel}</span>
+              </div>
+              <div className="flex items-start gap-3">
+                <DollarSign className="mt-0.5 h-4 w-4 text-orange-300" />
+                <span>{appointmentValueLabel}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">

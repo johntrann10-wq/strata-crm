@@ -500,7 +500,15 @@ export const api = {
     }),
   applyBusinessPreset: () =>
     request<
-      | { ok: true; created: number; skipped: number; group: string }
+      | {
+          ok: true;
+          created: number;
+          skipped: number;
+          group: string;
+          appliedCount?: number;
+          expectedCount?: number;
+          fullyApplied?: boolean;
+        }
       | { ok: false; message: string }
     >("/actions/applyBusinessPreset", {
       method: "POST",

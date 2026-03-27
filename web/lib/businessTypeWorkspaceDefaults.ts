@@ -175,7 +175,7 @@ export const BUSINESS_TYPE_WORKSPACE_DEFAULTS: BusinessTypeWorkspaceDefaults[] =
     label: "Muffler / Exhaust",
     description: "Exhaust repair, fabrication, leak work, upgrades, and sound tuning.",
     exampleName: "Street Tone Exhaust",
-    starterCount: 26,
+    starterCount: 25,
     sampleServices: ["Muffler Replacement", "Custom Exhaust", "Leak Repair"],
     defaultStaffCount: "2",
     defaultDays: "Mon-Fri",

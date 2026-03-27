@@ -200,14 +200,39 @@ const SidebarNav = memo(function SidebarNav({
 
   return (
     <div className="flex flex-col h-full bg-[hsl(220,20%,10%)]">
-      <div className="border-b border-white/8 px-5 py-4">
+      <div className="border-b border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0))] px-5 py-4">
         <Link to="/signed-in" className="flex items-center gap-2.5" onClick={onItemClick}>
-          <Wrench className="h-5 w-5 shrink-0 text-orange-400" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-white/8 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+            <Wrench className="h-4.5 w-4.5 shrink-0 text-orange-400" />
+          </div>
           <div className="min-w-0">
             <div className="text-[15px] font-semibold tracking-tight text-white">Strata</div>
             <div className="text-[11px] uppercase tracking-[0.12em] text-white/38">Shop OS</div>
           </div>
         </Link>
+        <div className="mt-4 rounded-[1.15rem] border border-white/10 bg-white/6 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Operating focus</div>
+              <div className="mt-1 text-[13px] font-medium text-white/92">
+                {businessId ? "Live workspace ready" : "Finish setup to begin"}
+              </div>
+            </div>
+            <div className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-200/85">
+              {currentLocationId ? "Filtered location" : "All locations"}
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/62">
+            <div className="rounded-xl border border-white/8 bg-black/10 px-3 py-2">
+              <div className="font-semibold uppercase tracking-[0.12em] text-white/32">Search</div>
+              <div className="mt-1 text-white/84">Jump anywhere fast</div>
+            </div>
+            <div className="rounded-xl border border-white/8 bg-black/10 px-3 py-2">
+              <div className="font-semibold uppercase tracking-[0.12em] text-white/32">Booking</div>
+              <div className="mt-1 text-white/84">Move from intake to work</div>
+            </div>
+          </div>
+        </div>
         <div className="mt-4 grid gap-2">
           <Button
             type="button"
@@ -234,8 +259,12 @@ const SidebarNav = memo(function SidebarNav({
         <div className="space-y-4">
           {visibleSections.map((section) => (
             <div key={section.id}>
-              <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/28">
-                {section.label}
+              <div className="mb-1.5 flex items-center gap-2 px-3">
+                <span className="h-px flex-1 bg-white/8" />
+                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/28">
+                  {section.label}
+                </div>
+                <span className="h-px w-6 bg-white/8" />
               </div>
               <div className="space-y-1">
                 {section.items.map(({ icon: Icon, label, href, end }) => (
@@ -246,14 +275,16 @@ const SidebarNav = memo(function SidebarNav({
                     onClick={onItemClick}
                     className={({ isActive }) =>
                       cn(
-                        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-150",
+                        "group flex w-full items-center gap-3 rounded-[1rem] px-3 py-2.5 text-[13px] font-medium transition-all duration-150",
                         isActive
-                          ? "bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                          ? "bg-white/10 text-white shadow-[0_10px_28px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.06)]"
                           : "text-white/50 hover:bg-white/6 hover:text-white/85"
                       )
                     }
                   >
-                    <Icon className="h-4 w-4 shrink-0" />
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/8 bg-black/10 transition-colors group-hover:border-white/14 group-hover:bg-white/6">
+                      <Icon className="h-4 w-4 shrink-0" />
+                    </div>
                     <span className="flex-1 truncate">{label}</span>
                     {isNavItemActive(location.pathname, { href, end }) ? (
                       <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
@@ -501,6 +532,9 @@ function AppLayoutInner({
                     <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2.5 sm:text-[11px]">
                       {activeNavEntry.section.label}
                     </span>
+                    <span className="inline-flex items-center rounded-full border border-orange-200/80 bg-orange-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-700 sm:px-2.5 sm:text-[11px]">
+                      Focused workspace
+                    </span>
                   </div>
                   <h1 className="mt-0.5 text-balance text-[19px] font-semibold tracking-tight text-foreground sm:mt-2 sm:text-[28px]">
                     {activeNavEntry.item.label}
@@ -591,7 +625,7 @@ function AppLayoutInner({
                     cn(
                       "inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-medium transition-colors",
                       isActive
-                        ? "border-primary/20 bg-primary/8 text-primary"
+                        ? "border-primary/20 bg-primary/8 text-primary shadow-[0_8px_20px_rgba(249,115,22,0.08)]"
                         : "border-border/70 bg-background/80 text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                     )
                   }

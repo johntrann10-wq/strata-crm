@@ -173,10 +173,10 @@ body,
 
 @layer components {
   .page-content {
-    @apply mx-auto max-w-7xl px-3 py-3 sm:px-6 sm:py-6 lg:px-8 lg:py-8;
+    @apply mx-auto max-w-7xl px-2.5 py-2.5 sm:px-6 sm:py-6 lg:px-8 lg:py-8;
   }
   .page-section {
-    @apply space-y-5 sm:space-y-7;
+    @apply space-y-4 sm:space-y-7;
   }
   .surface-panel {
     @apply rounded-[1.35rem] border border-white/65 bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04),0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur-md;
@@ -199,6 +199,21 @@ body,
   }
   .mobile-support-card {
     @apply rounded-[1.1rem] border border-white/60 bg-background/80 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)];
+  }
+}
+
+@media (max-width: 767px) {
+  .page-content {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  }
+
+  .surface-panel {
+    border-radius: 1.1rem;
+  }
+
+  .kpi-card {
+    border-radius: 1.05rem;
+    padding: 1rem;
   }
 }
 

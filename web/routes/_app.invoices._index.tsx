@@ -205,6 +205,35 @@ export default function InvoicesIndexPage() {
         }
       />
 
+      <section className="overflow-hidden rounded-[28px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.10),transparent_24%),radial-gradient(circle_at_top_right,rgba(249,115,22,0.10),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Revenue this month</p>
+            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-emerald-700">
+              {formatCurrency((invoiceMetrics as any)?.revenueThisMonth ?? 0)}
+            </p>
+            <p className="mt-1 text-sm text-slate-600">Cash recorded from paid invoices this month.</p>
+          </div>
+          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Outstanding</p>
+            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-amber-700">
+              {formatCurrency((invoiceMetrics as any)?.outstandingBalance ?? 0)}
+            </p>
+            <p className="mt-1 text-sm text-slate-600">Sent and partial invoices still waiting on payment.</p>
+          </div>
+          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Overdue</p>
+            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{overdueInvoices.length}</p>
+            <p className="mt-1 text-sm text-slate-600">Invoices that need collection effort right now.</p>
+          </div>
+          <div className="rounded-[22px] border border-white/80 bg-slate-950 px-4 py-4 text-white shadow-[0_18px_45px_rgba(15,23,42,0.22)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-300">Stale follow-up</p>
+            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em]">{staleInvoices.length}</p>
+            <p className="mt-1 text-sm text-slate-300">Sent invoices with no payment activity in the last few days.</p>
+          </div>
+        </div>
+      </section>
+
       <ListViewToolbar
         search={search}
         onSearchChange={setSearch}

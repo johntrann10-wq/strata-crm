@@ -198,6 +198,21 @@ export default function LeadsPage() {
   const newLeadCount = useMemo(() => leadRecords.filter((entry) => entry.lead.status === "new").length, [leadRecords]);
   const quotedLeadCount = useMemo(() => leadRecords.filter((entry) => entry.lead.status === "quoted").length, [leadRecords]);
   const bookedLeadCount = useMemo(() => leadRecords.filter((entry) => entry.lead.status === "booked").length, [leadRecords]);
+  const contactReadyLeadCount = useMemo(
+    () => leadRecords.filter((entry) => Boolean(entry.client.phone || entry.client.email)).length,
+    [leadRecords]
+  );
+  const knownVehicleLeadCount = useMemo(
+    () => leadRecords.filter((entry) => Boolean(entry.lead.vehicle?.trim())).length,
+    [leadRecords]
+  );
+  const missingNextStepCount = useMemo(
+    () =>
+      leadRecords.filter(
+        (entry) => ACTIVE_STATUSES.includes(entry.lead.status) && !entry.lead.nextStep?.trim()
+      ).length,
+    [leadRecords]
+  );
 
   const setSubmitIntent = (mode: SubmitMode) => {
     submitModeRef.current = mode;
@@ -518,25 +533,43 @@ export default function LeadsPage() {
 
         <div className="space-y-6">
           <section className="surface-panel p-5">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Lead queue</p>
-                  <p className="mt-1 text-sm text-foreground">Keep source, ask, status, vehicle, and next move visible so nothing gets lost between first contact and scheduled work.</p>
+              <div className="flex flex-col gap-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Lead queue</p>
+                    <p className="mt-1 text-sm text-foreground">Keep source, ask, status, vehicle, and next move visible so nothing gets lost between first contact and scheduled work.</p>
+                  </div>
+                  <Badge variant="outline">{visibleLeads.length} visible</Badge>
                 </div>
-                <Badge variant="outline">{visibleLeads.length} showing</Badge>
-              </div>
 
-              {inlineUpdateError ? <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">{inlineUpdateError}</div> : null}
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Contact ready</p>
+                    <p className="mt-2 text-lg font-semibold text-foreground">{contactReadyLeadCount}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Leads with a phone number or email ready for follow-up.</p>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Vehicle captured</p>
+                    <p className="mt-2 text-lg font-semibold text-foreground">{knownVehicleLeadCount}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Intake records that already include a known vehicle.</p>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Needs next step</p>
+                    <p className="mt-2 text-lg font-semibold text-foreground">{missingNextStepCount}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Active leads that still need a clear follow-up plan.</p>
+                  </div>
+                </div>
 
-              <div className="grid gap-3">
-                <div className="relative">
+                {inlineUpdateError ? <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">{inlineUpdateError}</div> : null}
+
+                <div className="grid gap-3">
+                  <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search lead name, ask, contact, source, or vehicle" className="pl-9" />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as LeadStatus | "all" | "active")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as LeadStatus | "all" | "active")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="active">Active only</SelectItem>
                       <SelectItem value="all">All statuses</SelectItem>
@@ -549,10 +582,36 @@ export default function LeadsPage() {
                       <SelectItem value="all">All sources</SelectItem>
                       {LEAD_SOURCE_OPTIONS.map((source) => <SelectItem key={source} value={source}>{formatLeadSource(source)}</SelectItem>)}
                     </SelectContent>
-                  </Select>
+                    </Select>
+                  </div>
+                  {searchQuery || statusFilter !== "active" || sourceFilter !== "all" ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 px-4 py-3 text-sm">
+                      <p className="text-muted-foreground">
+                        {[
+                          searchQuery ? `Search: ${searchQuery}` : null,
+                          statusFilter !== "active" ? `Status: ${statusFilter === "all" ? "all" : formatLeadStatus(statusFilter)}` : null,
+                          sourceFilter !== "all" ? `Source: ${formatLeadSource(sourceFilter)}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" | ")}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-xs"
+                        onClick={() => {
+                          setSearchQuery("");
+                          setStatusFilter("active");
+                          setSourceFilter("all");
+                        }}
+                      >
+                        Clear filters
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
-            </div>
 
             <div className="mt-4 space-y-3">
               {recentClientsFetching ? (
@@ -601,7 +660,7 @@ export default function LeadsPage() {
                         <Button size="sm" variant="outline" asChild><Link to={`/appointments/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}`}>Book</Link></Button>
                         <Button size="sm" variant="outline" asChild><Link to={`/quotes/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}`}>Quote</Link></Button>
                         <Button size="sm" variant="outline" asChild><Link to={`/clients/${client.id}/vehicles/new?from=${encodeURIComponent("/leads")}`}>Add vehicle</Link></Button>
-                        {lead.status !== "converted" ? <Button size="sm" onClick={() => void handleConvert(entry)} disabled={updatingLead}>Convert to client</Button> : null}
+                        {lead.status !== "converted" ? <Button size="sm" onClick={() => void handleConvert(entry)} disabled={updatingLead}>Mark converted</Button> : null}
                       </div>
 
                       <p className="mt-3 text-xs text-muted-foreground">

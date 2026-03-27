@@ -133,6 +133,7 @@ export default function CalendarPage() {
       .filter((appointment) => appointment.assignedStaff)
       .map((appointment) => appointment.assignedStaffId ?? `${appointment.assignedStaff?.firstName}-${appointment.assignedStaff?.lastName}`)
   ).size;
+  const activeRevenue = activeAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
 
   function handlePrev() {
     setCurrentDate((d) => navigateDate(d, view, -1));
@@ -206,8 +207,8 @@ export default function CalendarPage() {
   return (
     <div className="page-content flex h-full flex-col">
       <div className="page-section space-y-4">
-        <div className="surface-panel overflow-hidden sm:rounded-[1.75rem]">
-          <div className="border-b border-white/60 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.09),transparent_34%),radial-gradient(circle_at_top_right,rgba(15,23,42,0.05),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.92),rgba(250,248,244,0.82))] px-4 py-4 sm:px-6">
+        <div className="surface-panel overflow-hidden sm:rounded-[2rem]">
+          <div className="border-b border-white/60 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.14),transparent_30%),radial-gradient(circle_at_top_right,rgba(14,165,233,0.08),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,249,252,0.9))] px-4 py-4 sm:px-6">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -224,15 +225,15 @@ export default function CalendarPage() {
                 </div>
 
                 <div>
-                  <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                  <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.6rem]">
                     {getHeaderTitle(currentDate, view)}
                   </h1>
                   {!isMobileLayout ? (
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                       {VIEW_LABELS[view]}. Clean time-slot planning, clear workload visibility, and faster booking decisions.
                     </p>
                   ) : (
-                    <p className="mt-1 text-sm text-muted-foreground">{VIEW_LABELS[view]}.</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{VIEW_LABELS[view]}.</p>
                   )}
                 </div>
 
@@ -279,7 +280,7 @@ export default function CalendarPage() {
                   </div>
 
                 {isMobileLayout ? (
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-1.5">
                     <div className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-center shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
                       <p className="text-lg font-semibold text-foreground">{activeAppointments.length}</p>
                       <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Booked</p>
@@ -296,13 +297,13 @@ export default function CalendarPage() {
                 ) : null}
               </div>
 
-              <div className="flex flex-col gap-3 sm:min-w-[240px] sm:max-w-[320px] xl:w-[320px]">
-                <Button size="lg" className="justify-center rounded-2xl" onClick={handleNewAppointment}>
+              <div className="flex flex-col gap-2.5 sm:min-w-[280px] sm:max-w-[340px] xl:w-[340px]">
+                <Button size="lg" className="justify-center rounded-2xl shadow-[0_16px_36px_rgba(249,115,22,0.24)]" onClick={handleNewAppointment}>
                   <Plus className="mr-2 h-4 w-4" />
                   New appointment
                 </Button>
                 <div className={cn("grid gap-3 sm:grid-cols-2 xl:grid-cols-1", isMobileLayout && "hidden sm:grid")}>
-                  <div className="rounded-2xl border border-white/70 bg-white/78 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+                  <div className="rounded-[22px] border border-white/80 bg-white/82 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Next up</p>
                     {nextUpcoming ? (
                       <div className="mt-2 space-y-1">
@@ -325,24 +326,74 @@ export default function CalendarPage() {
                       <p className="mt-2 text-sm text-muted-foreground">No upcoming appointments in this range.</p>
                     )}
                   </div>
-                  <div className="rounded-2xl border border-white/70 bg-white/78 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Today at a glance</p>
-                    <div className="mt-2 grid grid-cols-3 gap-3 text-sm">
+                  <div className="rounded-[22px] border border-white/80 bg-slate-950 p-4 text-white shadow-[0_16px_40px_rgba(15,23,42,0.24)]">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-300">Operating lane</p>
+                    <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
                       <div>
-                        <p className="text-xl font-semibold text-foreground">{activeAppointments.length}</p>
-                        <p className="text-xs text-muted-foreground">Booked</p>
+                        <p className="text-xl font-semibold">{activeAppointments.length}</p>
+                        <p className="text-xs text-slate-300">Booked</p>
                       </div>
                       <div>
-                        <p className="text-xl font-semibold text-foreground">{unassignedAppointments}</p>
-                        <p className="text-xs text-muted-foreground">Open</p>
+                        <p className="text-xl font-semibold">{unassignedAppointments}</p>
+                        <p className="text-xs text-slate-300">Open</p>
                       </div>
                       <div>
-                        <p className="text-xl font-semibold text-foreground">{activeConflicts.size}</p>
-                        <p className="text-xs text-muted-foreground">Conflicts</p>
+                        <p className="text-xl font-semibold">{activeConflicts.size}</p>
+                        <p className="text-xs text-slate-300">Conflicts</p>
                       </div>
                     </div>
+                    <p className="mt-3 text-xs text-slate-300">
+                      {uniqueStaff > 0 ? `${uniqueStaff} team members are carrying the current schedule.` : "No team assignments yet in this range."}
+                    </p>
                   </div>
                 </div>
+                {isMobileLayout ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="justify-center rounded-xl"
+                      onClick={() => setShowMobileAgenda((value) => !value)}
+                    >
+                      <Clock3 className="mr-2 h-4 w-4" />
+                      {showMobileAgenda ? "Hide agenda" : "Show agenda"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="justify-center rounded-xl"
+                      onClick={() => setShowMobileTeam((value) => !value)}
+                    >
+                      <Users className="mr-2 h-4 w-4" />
+                      {showMobileTeam ? "Hide team" : "Show team"}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className={cn("mt-5 grid gap-3", isMobileLayout ? "grid-cols-2" : "md:grid-cols-4")}>
+              <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Booked in view</p>
+                <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{activeAppointments.length}</p>
+                <p className="mt-1 text-sm text-slate-600">Everything active in this scheduling window.</p>
+              </div>
+              <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Revenue in play</p>
+                <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">
+                  {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(activeRevenue)}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">Quoted job value tied to the visible schedule.</p>
+              </div>
+              <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Mobile work</p>
+                <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{mobileAppointments}</p>
+                <p className="mt-1 text-sm text-slate-600">Appointments leaving the shop and needing route awareness.</p>
+              </div>
+              <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Team coverage</p>
+                <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{uniqueStaff}</p>
+                <p className="mt-1 text-sm text-slate-600">Assigned staff visible in this calendar range.</p>
               </div>
             </div>
           </div>
@@ -418,7 +469,7 @@ export default function CalendarPage() {
           </div>
 
           <aside className={cn("space-y-4", isMobileLayout && "space-y-3")}>
-            <div className="surface-panel rounded-[1.5rem] p-4">
+            <div className="surface-panel rounded-[1.6rem] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected day</p>
@@ -432,11 +483,11 @@ export default function CalendarPage() {
                 </Button>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-white/60 bg-white/72 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
                   <p className="mt-2 text-2xl font-semibold text-foreground">{selectedDayAppointments.length}</p>
                 </div>
-                <div className="rounded-2xl border border-white/60 bg-white/72 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Revenue</p>
                   <p className="mt-2 text-2xl font-semibold text-foreground">
                     {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(selectedDayRevenue)}

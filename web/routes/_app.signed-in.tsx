@@ -31,6 +31,7 @@ import { StatusBadge } from "../components/shared/StatusBadge";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { toast } from "sonner";
 import { getBusinessTypeWorkspaceDefaults } from "../lib/businessTypeWorkspaceDefaults";
+import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 
 type AppointmentRecord = {
   id: string;
@@ -567,6 +568,52 @@ export default function SignedIn() {
       .slice(0, 6);
   }, [staffRecords, activeJobs, todayAppointments, user?.id]);
   const showTeamAssignments = staffRecords.length > 1 || teamLoad.length > 0;
+  const dashboardHeroSignals = useMemo(
+    () => [
+      {
+        label: "Booked today",
+        value: todayAppointments.length > 0 ? `${todayAppointments.length}` : "0",
+        detail: todayAppointments.length > 0 ? formatCurrency(todayBookedValue) : "Open schedule",
+        href: "/appointments",
+      },
+      {
+        label: "Money queue",
+        value: unpaidRevenue > 0 ? formatCurrency(unpaidRevenue) : "Clear",
+        detail:
+          unpaidInvoices.length > 0
+            ? `${unpaidInvoices.length} invoice${unpaidInvoices.length === 1 ? "" : "s"} waiting`
+            : "No unpaid invoices",
+        href: "/invoices",
+      },
+      {
+        label: "Pending approvals",
+        value: String(pendingApprovalsCount),
+        detail:
+          pendingApprovalsCount > 0
+            ? `${pendingQuotes.length} quote${pendingQuotes.length === 1 ? "" : "s"} + follow-up work`
+            : "Nothing urgent",
+        href: pendingApprovalsCount > 0 ? "/quotes" : scheduleJobHref,
+      },
+      {
+        label: "Next up",
+        value: upcomingAppointments[0] ? formatSafe(upcomingAppointments[0].startTime, "h:mm a") : "Unscheduled",
+        detail: upcomingAppointments[0]?.client
+          ? `${upcomingAppointments[0].client.firstName ?? ""} ${upcomingAppointments[0].client.lastName ?? ""}`.trim() || "Next appointment"
+          : "No upcoming appointment",
+        href: upcomingAppointments[0] ? `/appointments/${upcomingAppointments[0].id}` : scheduleJobHref,
+      },
+    ],
+    [
+      pendingApprovalsCount,
+      pendingQuotes.length,
+      scheduleJobHref,
+      todayAppointments.length,
+      todayBookedValue,
+      unpaidInvoices.length,
+      unpaidRevenue,
+      upcomingAppointments,
+    ]
+  );
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -593,7 +640,7 @@ export default function SignedIn() {
       try {
         const result = await runSendQuote({ id: quoteId });
           if (result?.error) {
-            toast.error(result.error.message ?? "Could not send quote");
+            toast.error(getTransactionalEmailErrorMessage(result.error, "Quote"));
             return;
           }
         const deliveryStatus = (result?.data as { deliveryStatus?: string } | undefined)?.deliveryStatus;
@@ -618,7 +665,7 @@ export default function SignedIn() {
       try {
         const result = await runSendFollowUp({ id: quoteId });
         if (result?.error) {
-          toast.error(result.error.message ?? "Could not follow up quote");
+          toast.error(getTransactionalEmailErrorMessage(result.error, "Quote follow-up"));
           return;
         }
           const deliveryStatus = (result?.data as { deliveryStatus?: string } | undefined)?.deliveryStatus;
@@ -643,7 +690,7 @@ export default function SignedIn() {
       try {
         const result = await runSendInvoice({ id: invoiceId });
           if (result?.error) {
-            toast.error(result.error.message ?? "Could not send invoice");
+            toast.error(getTransactionalEmailErrorMessage(result.error, "Invoice"));
             return;
           }
         const deliveryStatus = (result?.data as { deliveryStatus?: string } | undefined)?.deliveryStatus;
@@ -749,17 +796,18 @@ export default function SignedIn() {
   return (
     <div className="pb-6 md:pb-8">
       <div className="page-content page-section max-w-7xl space-y-5">
-        <section className="rounded-[28px] border border-border/70 bg-card px-4 py-5 shadow-sm sm:px-5 sm:py-6">
+        <section className="overflow-hidden rounded-[32px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_24%),radial-gradient(circle_at_top_right,rgba(15,23,42,0.08),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] px-4 py-5 shadow-[0_22px_60px_rgba(15,23,42,0.08)] sm:px-6 sm:py-6">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Control center</p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-orange-600">Control center</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.6rem]">
                 {businessName ?? "Dashboard"}
               </h1>
-              <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-                What needs attention today, what is on the board, and which money or approvals are still waiting.
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-[15px]">
+                A calm operating view for the shop. Know what is booked, what needs follow-up, and which next move
+                keeps the day moving forward.
               </p>
-              <p className="mt-3 text-sm text-muted-foreground">
+              <p className="mt-4 text-sm font-medium text-slate-500">
                 {format(filterNow, "EEEE, MMM d")}
                 {activeLocationName ? ` · ${activeLocationName}` : ""}
               </p>
@@ -768,7 +816,7 @@ export default function SignedIn() {
               type="button"
               variant="outline"
               size="icon"
-              className="h-11 w-11 shrink-0 rounded-xl"
+              className="h-11 w-11 shrink-0 rounded-2xl border-white/70 bg-white/70 shadow-sm backdrop-blur"
               onClick={() => void handleRefresh()}
               disabled={refreshing || anyLoading}
               aria-label="Refresh dashboard"
@@ -777,15 +825,58 @@ export default function SignedIn() {
             </Button>
           </div>
 
-          <div className="mt-5 grid gap-2.5 sm:grid-cols-3 sm:gap-3">
-            <QuickAction
-              href={scheduleJobHref}
-              label="New Appointment"
-              icon={<CalendarPlus className="h-5 w-5 shrink-0" />}
-              primary
-            />
-            <QuickAction href="/quotes/new" label="New Quote" icon={<Receipt className="h-5 w-5 shrink-0" />} />
-            <QuickAction href="/invoices/new" label="New Invoice" icon={<FileText className="h-5 w-5 shrink-0" />} />
+          <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_360px]">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {dashboardHeroSignals.map((signal) => (
+                <Link
+                  key={signal.label}
+                  to={signal.href}
+                  className="group rounded-[24px] border border-white/80 bg-white/85 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-[0_16px_40px_rgba(249,115,22,0.14)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="rounded-2xl bg-orange-50 p-2.5 text-orange-600 transition group-hover:bg-orange-100">
+                      {signal.icon}
+                    </div>
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      {signal.detail}
+                    </span>
+                  </div>
+                  <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    {signal.label}
+                  </p>
+                  <div className="mt-2 text-[1.8rem] font-semibold tracking-[-0.05em] text-slate-950">
+                    {signal.value}
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">{signal.helper}</p>
+                </Link>
+              ))}
+            </div>
+
+            <div className="rounded-[28px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.28)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-orange-300">
+                    Move the day forward
+                  </p>
+                  <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Quick actions with real momentum</h2>
+                </div>
+                <CheckCircle2 className="mt-1 h-5 w-5 text-orange-300" />
+              </div>
+              <p className="mt-3 text-sm leading-6 text-slate-300">
+                The best dashboards do more than report. They make the next best move obvious while the front desk is
+                busy.
+              </p>
+              <div className="mt-5 grid gap-2.5">
+                <QuickAction
+                  href={scheduleJobHref}
+                  label="New Appointment"
+                  icon={<CalendarPlus className="h-5 w-5 shrink-0" />}
+                  primary
+                />
+                <QuickAction href="/quotes/new" label="New Quote" icon={<Receipt className="h-5 w-5 shrink-0" />} />
+                <QuickAction href="/invoices/new" label="New Invoice" icon={<FileText className="h-5 w-5 shrink-0" />} />
+              </div>
+            </div>
           </div>
         </section>
 
@@ -809,6 +900,16 @@ export default function SignedIn() {
               total={activationChecklist.total}
               percent={activationChecklist.percent}
               items={activationChecklist.items}
+              todayAppointments={todayAppointments.length}
+              activeJobs={activeJobs.length}
+              unpaidRevenue={unpaidRevenue}
+              pendingApprovalsCount={pendingApprovalsCount}
+              staleFollowUps={staleQuoteFollowUps.length + staleInvoiceCollections.length}
+              depositCount={depositsAwaitingPayment.length}
+              nextUpcomingAppointment={upcomingAppointments[0] ?? null}
+              recentClientCount={recentClients.length}
+              hasDefaultTaxRate={Number(activationBusiness?.defaultTaxRate ?? 0) > 0}
+              scheduleJobHref={scheduleJobHref}
             />
           )}
         </section>
@@ -1675,6 +1776,16 @@ function ActivationChecklistCard({
   total,
   percent,
   items,
+  todayAppointments,
+  activeJobs,
+  unpaidRevenue,
+  pendingApprovalsCount,
+  staleFollowUps,
+  depositCount,
+  nextUpcomingAppointment,
+  recentClientCount,
+  hasDefaultTaxRate,
+  scheduleJobHref,
 }: {
   completed: number;
   total: number;
@@ -1688,6 +1799,16 @@ function ActivationChecklistCard({
     actionLabel: string;
     icon: ReactNode;
   }>;
+  todayAppointments: number;
+  activeJobs: number;
+  unpaidRevenue: number;
+  pendingApprovalsCount: number;
+  staleFollowUps: number;
+  depositCount: number;
+  nextUpcomingAppointment: AppointmentRecord | null;
+  recentClientCount: number;
+  hasDefaultTaxRate: boolean;
+  scheduleJobHref: string;
 }) {
   const allDone = completed === total;
   const nextItem = items.find((item) => !item.done) ?? items[0];
@@ -1715,6 +1836,97 @@ function ActivationChecklistCard({
             : nextItem?.key === "invoices"
               ? "Once this is done, Strata starts carrying real money workflow, not just organization."
               : "Once this is done, you can take bookings without second-guessing your setup.";
+  const businessPulse = [
+    {
+      label: "Booked today",
+      value: todayAppointments > 0 ? String(todayAppointments) : "Open",
+      detail: todayAppointments > 0 ? "Appointments are already on the board." : "No work is booked yet today.",
+      href: "/appointments",
+      actionLabel: "Open calendar",
+    },
+    {
+      label: "Money queue",
+      value: unpaidRevenue > 0 ? formatCurrency(unpaidRevenue) : "Clear",
+      detail:
+        pendingApprovalsCount > 0
+          ? `${pendingApprovalsCount} billing or approval action${pendingApprovalsCount === 1 ? "" : "s"} need attention.`
+          : "Quotes and invoices look under control right now.",
+      href: pendingApprovalsCount > 0 ? "/quotes" : "/invoices",
+      actionLabel: pendingApprovalsCount > 0 ? "Review queue" : "Open invoices",
+    },
+    {
+      label: "Next slot",
+      value: nextUpcomingAppointment ? formatSafe(nextUpcomingAppointment.startTime, "EEE h:mm a") : "Unbooked",
+      detail: nextUpcomingAppointment
+        ? "Next appointment currently on the schedule."
+        : "No upcoming appointment is loaded yet.",
+      href: "/appointments",
+      actionLabel: "Open schedule",
+    },
+  ];
+  const optimizationPrompts = [
+    todayAppointments === 0
+      ? {
+          title: "Fill today's board",
+          detail: "There are no appointments on the schedule yet. Push one real job onto the calendar so the day has a clear operating plan.",
+          href: scheduleJobHref,
+          actionLabel: "Book appointment",
+        }
+      : null,
+    pendingApprovalsCount > 0
+      ? {
+          title: "Clear the money queue",
+          detail: `${pendingApprovalsCount} quote, invoice, or deposit action${pendingApprovalsCount === 1 ? "" : "s"} still need follow-up.`,
+          href: pendingApprovalsCount > 0 ? "/quotes" : "/invoices",
+          actionLabel: "Review billing",
+        }
+      : null,
+    staleFollowUps > 0
+      ? {
+          title: "Follow up stale work",
+          detail: `${staleFollowUps} quote or invoice follow-up${staleFollowUps === 1 ? "" : "s"} have gone stale and should be nudged.`,
+          href: "/quotes?tab=followup",
+          actionLabel: "Run follow-ups",
+        }
+      : null,
+    depositCount > 0
+      ? {
+          title: "Collect pending deposits",
+          detail: `${depositCount} appointment${depositCount === 1 ? "" : "s"} still need deposit collection before the work starts.`,
+          href: "/appointments",
+          actionLabel: "Review deposits",
+        }
+      : null,
+    activeJobs === 0
+      ? {
+          title: "Create live work",
+          detail: "Nothing is currently marked active. Move a job forward so the dashboard reflects real workload instead of setup only.",
+          href: "/jobs",
+          actionLabel: "Open jobs",
+        }
+      : null,
+    recentClientCount < 3
+      ? {
+          title: "Build the pipeline",
+          detail: "The client base is still thin. Capture a few more leads so the workflow gets pressure-tested with real records.",
+          href: "/leads",
+          actionLabel: "Capture lead",
+        }
+      : null,
+    !hasDefaultTaxRate
+      ? {
+          title: "Tighten billing defaults",
+          detail: "Default tax rate still looks unset. Lock that in so quotes and invoices stay consistent without manual correction.",
+          href: "/settings",
+          actionLabel: "Open settings",
+        }
+      : null,
+  ].filter(Boolean) as Array<{
+    title: string;
+    detail: string;
+    href: string;
+    actionLabel: string;
+  }>;
 
   return (
     <div className="space-y-5">
@@ -1722,11 +1934,11 @@ function ActivationChecklistCard({
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Activation</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-            {allDone ? "Your workspace is operational" : "Get Strata useful in the next few minutes"}
+            {allDone ? "Your workspace is live - keep momentum moving" : "Get Strata useful in the next few minutes"}
           </h2>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">
             {allDone
-              ? "The essentials are in place. Your CRM, scheduling, services, and billing workflow are ready for real daily use."
+              ? "Core setup is done. Use this space for the next best actions that keep jobs booked, quotes moving, and invoices collected."
               : "Finish the high-value setup steps below so the calendar, CRM, and billing flow start working like a real shop system."}
           </p>
         </div>
@@ -1768,7 +1980,66 @@ function ActivationChecklistCard({
             </div>
           </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="space-y-4 rounded-[1.75rem] border border-emerald-200/70 bg-[linear-gradient(135deg,rgba(236,253,245,0.96),rgba(255,255,255,0.98))] p-5 shadow-[0_18px_50px_rgba(16,185,129,0.12)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Business pulse</p>
+              <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
+                Setup is done. Now use this space to run the shop.
+              </h3>
+              <p className="mt-2 text-sm text-slate-600">
+                This module now tracks live operating signals so the completed checklist turns into a practical control panel instead of a dead success state.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Button asChild className="min-h-[46px] rounded-xl bg-orange-500 px-5 text-white hover:bg-orange-600">
+                <Link to="/leads">Capture lead</Link>
+              </Button>
+              <Button asChild variant="outline" className="min-h-[46px] rounded-xl">
+                <Link to={scheduleJobHref}>Book appointment</Link>
+              </Button>
+              <Button asChild variant="outline" className="min-h-[46px] rounded-xl">
+                <Link to="/quotes/new">Build quote</Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-3">
+            {businessPulse.map((item) => (
+              <div key={item.label} className="rounded-2xl border border-white/70 bg-white/75 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
+                <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{item.value}</p>
+                <p className="mt-2 text-sm text-slate-600">{item.detail}</p>
+                <Button asChild variant="ghost" className="mt-3 h-auto px-0 text-sm font-semibold text-slate-900 hover:bg-transparent hover:text-slate-700">
+                  <Link to={item.href}>{item.actionLabel}</Link>
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-2">
+            {optimizationPrompts.length > 0 ? (
+              optimizationPrompts.slice(0, 4).map((prompt) => (
+                <div key={prompt.title} className="rounded-2xl border border-border/70 bg-white/70 p-4">
+                  <p className="text-sm font-semibold text-slate-950">{prompt.title}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{prompt.detail}</p>
+                  <Button asChild variant="outline" className="mt-3 rounded-xl">
+                    <Link to={prompt.href}>{prompt.actionLabel}</Link>
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-border/70 bg-white/70 p-4 xl:col-span-2">
+                <p className="text-sm font-semibold text-slate-950">Everything important looks healthy right now.</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Keep using the quick actions above to capture new leads, book work, and move billing forward before bottlenecks build up again.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => (

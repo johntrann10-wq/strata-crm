@@ -265,7 +265,7 @@ export default function AppointmentsPage() {
             debouncedSearch ? `Search: ${debouncedSearch}` : null,
           ]
             .filter(Boolean)
-            .join(" • ") || null
+            .join(" | ") || null
         }
         onClear={() => {
           setSearch("");
@@ -297,10 +297,30 @@ export default function AppointmentsPage() {
       </Tabs>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Scheduled" value={String(stats.scheduled)} />
-        <MetricCard label="Confirmed" value={String(stats.confirmed)} />
-        <MetricCard label="In progress" value={String(stats.inProgress)} />
-        <MetricCard label="My queue" value={myStaffRecord ? String(stats.myQueue) : "-"} />
+        <MetricCard
+          label="Scheduled"
+          value={String(stats.scheduled)}
+          detail="Booked work that still needs prep or confirmation."
+        />
+        <MetricCard
+          label="Confirmed"
+          value={String(stats.confirmed)}
+          detail="Appointments customers can already count on."
+        />
+        <MetricCard
+          label="In progress"
+          value={String(stats.inProgress)}
+          detail="Active work currently moving through the shop."
+        />
+        <MetricCard
+          label="My queue"
+          value={myStaffRecord ? String(stats.myQueue) : "-"}
+          detail={
+            myStaffRecord
+              ? "Appointments assigned to this staff account."
+              : "Link a staff profile to unlock a personal queue."
+          }
+        />
       </div>
 
       {appointmentsError && !isInitialLoad ? (
@@ -461,12 +481,13 @@ export default function AppointmentsPage() {
 
 export { RouteErrorBoundary as ErrorBoundary };
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function MetricCard({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="mt-1 text-2xl font-semibold">{value}</p>
+    <Card className="border-border/70 shadow-sm">
+      <CardContent className="space-y-1 p-4">
+        <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{label}</div>
+        <div className="text-2xl font-semibold tracking-tight text-foreground">{value}</div>
+        {detail ? <p className="text-sm leading-relaxed text-muted-foreground">{detail}</p> : null}
       </CardContent>
     </Card>
   );

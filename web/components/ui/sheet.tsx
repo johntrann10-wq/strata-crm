@@ -51,9 +51,9 @@ function SheetContent({
         className={cn(
           "bg-background/98 data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-[0_20px_60px_rgba(15,23,42,0.18)] transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
           side === "right" &&
-            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-[min(92vw,24rem)] border-l border-border/80 sm:w-[24rem]",
+            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-[min(88vw,24rem)] border-l border-border/80 sm:w-[24rem]",
           side === "left" &&
-            "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-[min(92vw,24rem)] border-r border-border/80 sm:w-[24rem]",
+            "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-[min(88vw,24rem)] border-r border-border/80 sm:w-[24rem]",
           side === "top" &&
             "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 max-h-[85vh] overflow-y-auto border-b border-border/80",
           side === "bottom" &&

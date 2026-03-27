@@ -300,6 +300,32 @@ export default function ClientDetailPage() {
     })[0];
   const latestInvoice = [...invoiceList].sort((a, b) => eventDateValue(b as Record<string, unknown>) - eventDateValue(a as Record<string, unknown>))[0];
   const latestQuote = [...quoteList].sort((a, b) => eventDateValue(b as Record<string, unknown>) - eventDateValue(a as Record<string, unknown>))[0];
+  const clientDisplayName = [client.firstName, client.lastName].filter(Boolean).join(" ") || "Client";
+  const clientInitials = [client.firstName, client.lastName]
+    .filter(Boolean)
+    .map((value) => String(value).trim().charAt(0).toUpperCase())
+    .join("")
+    .slice(0, 2) || "C";
+  const primaryVehicleLabel =
+    vehicleList.length > 0
+      ? [vehicleList[0].year, vehicleList[0].make, vehicleList[0].model].filter(Boolean).join(" ")
+      : "No vehicle on file yet";
+  const clientSinceLabel = safeDate(client.createdAt)?.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const openRevenueLabel =
+    unpaidInvoiceValue > 0
+      ? `${formatCurrency(unpaidInvoiceValue)} unpaid`
+      : openQuoteValue > 0
+        ? `${formatCurrency(openQuoteValue)} in quotes`
+        : "No open billing";
+  const nextStepLabel = nextAppointment
+    ? `Next visit ${formatTimelineWhen((nextAppointment.startTime as string | null | undefined) ?? null)}`
+    : vehicleList.length === 0
+      ? "Add a vehicle to keep this record production-ready"
+      : "Ready for the next booking or quote";
   const clientTimeline = [
     ...apptList.map((appointment) => ({
       id: `appointment-${appointment.id}`,
@@ -516,6 +542,83 @@ export default function ClientDetailPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <section className="overflow-hidden rounded-[30px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.12),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+            <div className="space-y-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] bg-slate-950 text-lg font-semibold tracking-[0.14em] text-white shadow-[0_14px_30px_rgba(15,23,42,0.18)]">
+                    {clientInitials}
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-700">Relationship cockpit</p>
+                    <div>
+                      <h2 className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">{clientDisplayName}</h2>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {clientSinceLabel ? `Client since ${clientSinceLabel}` : "Client record"}
+                        {client.email ? ` · ${client.email}` : ""}
+                        {client.phone ? ` · ${client.phone}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:min-w-[220px]">
+                  <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Primary vehicle</p>
+                    <p className="mt-1 text-sm font-medium text-slate-900">{primaryVehicleLabel}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Next best move</p>
+                    <p className="mt-1 text-sm font-medium text-slate-900">{nextStepLabel}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Booked relationship</p>
+                  <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.05em] text-slate-950">{formatCurrency(totalSpend)}</p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {apptList.length > 0 ? `${apptList.length} appointments on record` : "No appointments logged yet"}
+                  </p>
+                </div>
+                <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Open money</p>
+                  <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.05em] text-slate-950">{openRevenueLabel}</p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {latestInvoice ? "Billing has recent activity" : latestQuote ? "Quote activity is recent" : "No billing history yet"}
+                  </p>
+                </div>
+                <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Record health</p>
+                  <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.05em] text-slate-950">
+                    {vehicleList.length > 0 ? "Ready" : "Needs vehicle"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {vehicleList.length > 0
+                      ? "This client can move cleanly into booking, quotes, and invoicing."
+                      : "Add a vehicle so the next appointment and estimate are faster."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[26px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.24)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Relationship actions</p>
+              <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Keep the client moving without leaving the record</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-300">
+                Everything important should be one move away: schedule work, price work, collect money, or update the garage.
+              </p>
+              <div className="mt-5 grid gap-2.5">
+                <QuickWorkflowAction icon={CalendarPlus} title="Book appointment" detail="Schedule the next service visit" href={appointmentHref} />
+                <QuickWorkflowAction icon={Receipt} title="Create quote" detail="Build and send a fresh estimate" href={newQuoteHref} />
+                <QuickWorkflowAction icon={FileText} title="Create invoice" detail="Bill work without leaving the record" href={newInvoiceHref} />
+                <QuickWorkflowAction icon={Plus} title="Add vehicle" detail="Capture another vehicle for this client" href={addVehicleHref} />
+              </div>
+            </div>
+          </div>
+        </section>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <WorkflowMetricCard icon={ClipboardList} label="Active jobs" value={String(activeJobsCount)} detail={activeJobsCount > 0 ? "Work in progress" : "No active jobs"} />

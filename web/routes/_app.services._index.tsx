@@ -235,7 +235,7 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
           id="svc-notes"
           value={formData.notes}
           onChange={(e) => onChange({ ...formData, notes: e.target.value })}
-          placeholder="Optional — internal notes, inclusions, or booking hints."
+          placeholder="Optional - internal notes, inclusions, or booking hints."
           rows={3}
         />
       </div>
@@ -559,7 +559,7 @@ export default function ServicesPage() {
           categoryFilter !== "all" ? `Category: ${formatServiceCategory(categoryFilter)}` : null,
         ]
           .filter(Boolean)
-          .join(" • ")}
+          .join(" | ")}
         onClear={() => {
           setSearch("");
           setCategoryFilter("all");
@@ -799,7 +799,7 @@ export default function ServicesPage() {
                 structure for every business type.
               </p>
               {addonLinksFetching ? (
-                <p className="text-xs text-muted-foreground">Loading…</p>
+                <p className="text-xs text-muted-foreground">Loading...</p>
               ) : addonLinks && addonLinks.length > 0 ? (
                 <div className="space-y-1 mt-2">
                   <div className="flex flex-col gap-1">
@@ -851,7 +851,7 @@ export default function ServicesPage() {
                       .map((s) => (
                         <SelectItem key={s.id} value={s.id}>
                           {s.name}
-                          {s.isAddon ? " · add-on" : ""}
+                          {s.isAddon ? " Ã‚Â· add-on" : ""}
                         </SelectItem>
                       ))}
                   </SelectContent>
@@ -906,7 +906,7 @@ export default function ServicesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Service?</AlertDialogTitle>
             <AlertDialogDescription>
-              If this service has been used in past appointments it cannot be deleted — deactivate it instead.
+              If this service has been used in past appointments it cannot be deleted - deactivate it instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1014,13 +1014,13 @@ function ServiceCard({
           </span>
           {durationStr && (
             <>
-              <span className="text-muted-foreground/50">·</span>
+              <span className="text-muted-foreground/50">|</span>
               <span>{durationStr}</span>
             </>
           )}
           {service.taxable && (
             <>
-              <span className="text-muted-foreground/50">·</span>
+              <span className="text-muted-foreground/50">|</span>
               <span className="text-xs">Taxable</span>
             </>
           )}

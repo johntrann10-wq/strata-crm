@@ -70,6 +70,7 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
   const expiresAt = escapeHtml(formatDate(data.expiresAt, tz) || "-");
   const vehicleLine = escapeHtml([data.vehicle?.year, data.vehicle?.make, data.vehicle?.model].filter(Boolean).join(" ") || "-");
   const vehicleMeta = escapeHtml([data.vehicle?.color, data.vehicle?.licensePlate].filter(Boolean).join(" - "));
+  const lineItemCount = data.lineItems?.length ?? 0;
   const notes = escapeHtml(data.notes ?? "");
   const taxRate = escapeHtml(String(data.taxRate ?? 0));
   const taxAmount = money(data.taxAmount);
@@ -86,7 +87,8 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
   <style>
     :root { color-scheme: light; --ink:#0f172a; --muted:#475569; --line:#dbe2ea; --panel:#f8fafc; --accent:#f97316; }
     * { box-sizing:border-box; } html,body { margin:0; background:#eef2f6; color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif; }
-    .page { padding:32px 18px 56px; } .doc { max-width:860px; margin:0 auto; background:#fff; border:1px solid rgba(148,163,184,.2); border-radius:24px; box-shadow:0 24px 60px rgba(15,23,42,.12); overflow:hidden; }
+    .page { padding:32px 18px 56px; } .doc { position:relative; max-width:860px; margin:0 auto; background:#fff; border:1px solid rgba(148,163,184,.2); border-radius:24px; box-shadow:0 24px 60px rgba(15,23,42,.12); overflow:hidden; }
+    .doc::before { content:""; display:block; height:6px; background:linear-gradient(90deg, #f97316, #fb923c 38%, #0f172a); }
     .header { padding:32px 36px 24px; border-bottom:1px solid var(--line); display:grid; grid-template-columns:minmax(0,1.35fr) minmax(260px,.85fr); gap:24px; background:radial-gradient(circle at top right, rgba(249,115,22,.14), transparent 32%),linear-gradient(180deg, rgba(248,250,252,.95), #fff); }
     .eyebrow,.section-title { font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin:0 0 10px; }
     .section-title { color:#64748b; margin-bottom:12px; }
@@ -106,6 +108,7 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
     .lines th { background:var(--panel); color:#64748b; font-size:11px; letter-spacing:.14em; text-transform:uppercase; text-align:left; padding:13px 16px; border-bottom:1px solid var(--line); }
     .lines td { padding:15px 16px; border-bottom:1px solid #edf2f7; font-size:14px; vertical-align:top; } .lines tr:last-child td { border-bottom:none; } .desc { font-weight:600; } .num { text-align:right; white-space:nowrap; }
     .totals td { padding:6px 0; font-size:14px; border:none; } .totals .label { color:#64748b; } .totals .value { text-align:right; font-weight:600; } .totals .grand td { padding-top:12px; border-top:1px solid rgba(148,163,184,.35); font-size:20px; font-weight:800; color:var(--ink); }
+    .notice { border-radius:18px; border:1px solid rgba(249,115,22,.16); background:linear-gradient(180deg, rgba(249,115,22,.09), rgba(255,255,255,.98)); padding:18px; }
     .footer { padding:0 36px 34px; color:#64748b; font-size:12px; text-align:center; }
     @page { margin:14mm; } @media (max-width:760px) { .page{padding:0;} .doc{border:none;border-radius:0;box-shadow:none;} .header,.body,.footer{padding-left:20px;padding-right:20px;} .header,.hero,.summary{grid-template-columns:1fr;} .lines thead{display:none;} .lines,.lines tbody,.lines tr,.lines td{display:block;width:100%;} .lines td{padding:8px 16px;border-bottom:none;} .lines tr{padding:10px 0;border-bottom:1px solid #edf2f7;} .lines tr:last-child{border-bottom:none;} .num::before{content:attr(data-label);float:left;color:#64748b;font-weight:600;} }
     @media print { html,body{background:#fff;} .page{padding:0;} .doc{max-width:none;border:none;border-radius:0;box-shadow:none;} }
@@ -133,6 +136,7 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
             <div class="meta-row"><span>Created</span><span>${createdAt}</span></div>
             <div class="meta-row"><span>Valid through</span><span>${expiresAt}</span></div>
             <div class="meta-row"><span>Vehicle</span><span>${vehicleLine}</span></div>
+            <div class="meta-row"><span>Scope</span><span>${lineItemCount} ${lineItemCount === 1 ? "line item" : "line items"}</span></div>
           </div>
         </aside>
       </section>
@@ -150,6 +154,20 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
             <p class="section-title">Estimated Total</p>
             <div class="big">${money(data.total)}</div>
             <div class="detail">Prepared for review and approval.</div>
+          </div>
+        </section>
+        <section class="notice">
+          <p class="section-title">How To Use This Estimate</p>
+          <div class="detail">Review the scope, pricing, and vehicle details below. When you are ready, reply to approve and we can lock in scheduling and final work prep.</div>
+        </section>
+        <section class="summary">
+          <div class="card soft">
+            <p class="section-title">Approval Readiness</p>
+            <div class="detail">Everything shown here is what we are prepared to deliver for this estimate. If you need a revision, reply before approval so we can update scope, pricing, or timing cleanly.</div>
+          </div>
+          <div class="card soft">
+            <p class="section-title">What Happens Next</p>
+            <div class="detail">Once approved, we move this estimate into scheduling, service prep, and final invoicing. If anything changes before work begins, we will confirm it with you first.</div>
           </div>
         </section>
         <section class="lines">
@@ -179,7 +197,7 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
           </div>
         </section>
       </section>
-      <div class="footer">Generated by ${businessName}. Pricing and scope are subject to final approval.</div>
+      <div class="footer">Prepared by ${businessName}. Pricing, parts, and scope remain subject to final approval before work begins.</div>
     </main>
   </div>
 </body>

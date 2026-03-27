@@ -134,7 +134,7 @@ type StaffRecord = {
 
 type BusinessPresetActionResult = BusinessPresetSummary;
 type ApplyBusinessPresetResult =
-  | { ok: true; created: number; skipped: number; group: string }
+  | { ok: true; created: number; skipped: number; group: string; appliedCount?: number; expectedCount?: number; fullyApplied?: boolean }
   | { ok: false; message: string };
 
 type SystemStatus = {
@@ -351,6 +351,9 @@ export default function SettingsPage() {
   const [{ data: presetSummary }, getBusinessPreset] = useAction(api.getBusinessPreset);
   const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
   const preset = presetSummary as BusinessPresetActionResult | undefined;
+  const presetServiceCount = preset?.count ?? 0;
+  const presetPreviewNames = preset?.names?.slice(0, 4) ?? [];
+  const presetHasRecommendations = presetServiceCount > 0;
 
   useEffect(() => {
     if (!business) return;
@@ -582,6 +585,12 @@ export default function SettingsPage() {
         toast.warning(payload.message);
         return;
       }
+      if (payload.fullyApplied === false) {
+        toast.warning(
+          `Starter services partially applied (${payload.appliedCount ?? 0}/${payload.expectedCount ?? 0}). Refresh Services and retry once the current deploy finishes.`
+        );
+        return;
+      }
       if ((payload.created ?? 0) > 0) {
         toast.success(`Added ${payload.created} starter services`);
       } else {
@@ -683,13 +692,19 @@ export default function SettingsPage() {
                 <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1">
-                      <p className="text-sm font-medium">Starter service preset</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">Starter service preset</p>
+                        <Badge variant={presetHasRecommendations ? "secondary" : "outline"}>
+                          {presetServiceCount} recommended
+                        </Badge>
+                      </div>
                       <p className="text-sm text-muted-foreground">
-                        {formatBusinessPresetLabel(preset?.group ?? formData.type)} with {preset?.count ?? 0} recommended starter services.
+                        {formatBusinessPresetLabel(preset?.group ?? formData.type)} catalog. Use this to load or refresh the recommended starter services for this shop type.
                       </p>
-                      {preset?.names?.length ? (
+                      {presetPreviewNames.length ? (
                         <p className="text-xs text-muted-foreground">
-                          Includes {preset.names.join(", ")}.
+                          Includes {presetPreviewNames.join(", ")}
+                          {presetServiceCount > presetPreviewNames.length ? `, and ${presetServiceCount - presetPreviewNames.length} more.` : "."}
                         </p>
                       ) : null}
                     </div>

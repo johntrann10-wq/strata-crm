@@ -199,11 +199,11 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-white">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.12),transparent_20%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_18%),linear-gradient(180deg,#0b0d10_0%,#0f1115_55%,#11141a_100%)] text-white">
       <div className="border-b border-[#1f1f1f]">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500 text-sm font-bold text-white">S</div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500 text-sm font-bold text-white shadow-[0_10px_24px_rgba(249,115,22,0.35)]">S</div>
             <span className="text-lg font-bold tracking-tight">Strata</span>
           </div>
           <span className="hidden text-sm text-[#6b7280] sm:inline">Get operational in minutes</span>
@@ -217,8 +217,15 @@ export default function OnboardingPage() {
           <section className="grid gap-6 lg:grid-cols-[1.35fr_0.85fr]">
             <div>
               <div className="mb-6">
-                <h1 className="mb-3 text-2xl font-bold sm:text-4xl">Choose your shop type</h1>
-                <p className="text-sm text-[#9ca3af] sm:text-lg">Pick the kind of shop you run. Strata will load the right services, booking defaults, and workflow structure automatically.</p>
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-orange-200">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Built for fast launch
+                </div>
+                <h1 className="mb-3 mt-4 text-3xl font-semibold tracking-[-0.05em] sm:text-[3.4rem]">Choose your shop type</h1>
+                <p className="max-w-2xl text-sm leading-7 text-[#aab3c2] sm:text-lg">
+                  Pick the kind of shop you run. Strata will shape the workspace around your real operating model so you
+                  start with usable services, realistic defaults, and a workflow that already makes sense.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -233,8 +240,10 @@ export default function OnboardingPage() {
                       setValidationError(null);
                     }}
                     className={cn(
-                      "rounded-2xl border p-4 text-left transition-all sm:p-5",
-                      selectedType === type.value ? "border-orange-500 bg-[#1f1a16] shadow-lg shadow-orange-500/10" : "border-[#2a2a2a] bg-[#141414] hover:border-orange-500/60 hover:bg-[#1a1714]"
+                      "rounded-[1.35rem] border p-4 text-left transition-all sm:p-5",
+                      selectedType === type.value
+                        ? "border-orange-500 bg-[linear-gradient(180deg,rgba(38,25,16,0.96),rgba(23,19,17,0.98))] shadow-[0_18px_40px_rgba(249,115,22,0.12)]"
+                        : "border-[#2a2a2a] bg-[linear-gradient(180deg,#141414_0%,#121212_100%)] hover:border-orange-500/60 hover:bg-[#1a1714]"
                     )}
                   >
                     <Icon className="mb-3 h-8 w-8 text-orange-300" />
@@ -252,7 +261,7 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-[#272727] bg-[linear-gradient(180deg,#171717_0%,#111111_100%)] p-5 sm:p-6">
+            <div className="rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(249,115,22,0.10),transparent_26%),linear-gradient(180deg,#17181d_0%,#111217_100%)] p-5 shadow-[0_26px_70px_rgba(0,0,0,0.32)] sm:p-6">
               {selectedTypeMeta ? (
                 <div className="space-y-5">
                   <div>
@@ -264,7 +273,7 @@ export default function OnboardingPage() {
                       {selectedTypeMeta.label}
                     </div>
                     <h2 className="mt-4 text-xl font-semibold">You will start with a usable workspace</h2>
-                    <p className="mt-2 text-sm text-[#9ca3af]">No blank setup. Strata will preload services, workflow defaults, booking settings, and day-one language for this shop type.</p>
+                    <p className="mt-2 text-sm leading-6 text-[#9ca3af]">No blank setup. Strata will preload services, workflow defaults, booking settings, and day-one language for this shop type.</p>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
@@ -332,11 +341,17 @@ export default function OnboardingPage() {
           <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
             <div>
               <div className="mb-6">
-                <h1 className="mb-3 text-2xl font-bold sm:text-4xl">Launch your workspace</h1>
-                <p className="text-sm text-[#9ca3af] sm:text-lg">Only your business name is required to get operational. Everything else can wait until after you start booking work.</p>
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-orange-200">
+                  <Receipt className="h-3.5 w-3.5" />
+                  Finish setup
+                </div>
+                <h1 className="mb-3 mt-4 text-3xl font-semibold tracking-[-0.05em] sm:text-[3.2rem]">Launch your workspace</h1>
+                <p className="max-w-2xl text-sm leading-7 text-[#aab3c2] sm:text-lg">
+                  Only your business name is required to get operational. Everything else can wait until after you start booking real work.
+                </p>
               </div>
 
-              <form id={ONBOARDING_FORM_ID} onSubmit={handleSubmit} className="space-y-5 rounded-3xl border border-[#232323] bg-[#141414] p-5 sm:p-6">
+              <form id={ONBOARDING_FORM_ID} onSubmit={handleSubmit} className="space-y-5 rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,#15171b_0%,#121317_100%)] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
                 <div className="space-y-1.5">
                   <Label htmlFor="name" className="text-sm font-medium text-[#d1d5db]">Business name <span className="text-orange-500">*</span></Label>
                   <Input id="name" value={formData.name} onChange={handleFieldChange("name")} placeholder={selectedTypeMeta?.exampleName ?? "Your business name"} required className="h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-white" />

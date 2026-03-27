@@ -3,7 +3,7 @@
  * Use these instead of useFindOne, useFindMany, useAction, useGlobalAction.
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { FormEvent } from "react";
 import { api } from "../api";
 import { setAuthToken } from "../lib/auth";
@@ -66,10 +66,19 @@ export function useFindOne(
   const [data, setData] = useState<any>(undefined);
   const [fetching, setFetching] = useState(!!id);
   const [error, setError] = useState<Error | null>(null);
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Ensure we don't keep stale data when switching between "signed in" and "signed out".
   useEffect(() => {
     if (id == null || id === "") {
+      requestIdRef.current += 1;
       setData(undefined);
       setError(null);
       setFetching(false);
@@ -88,14 +97,19 @@ export function useFindOne(
       setFetching(false);
       return;
     }
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setFetching(true);
     setError(null);
     try {
       const result = await model.findOne(id, stableOpts);
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setData(result ?? null);
     } catch (e) {
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setFetching(false);
     }
   }, [id, model, stableOpts]);
@@ -115,6 +129,14 @@ export function useFindMany(
   const [data, setData] = useState<any[] | undefined>(undefined);
   const [fetching, setFetching] = useState(!opts?.pause);
   const [error, setError] = useState<Error | null>(null);
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const optsKey = useMemo(
     () =>
@@ -159,19 +181,36 @@ export function useFindMany(
   );
   const stableOpts = useMemo(() => opts, [optsKey]);
 
+  useEffect(() => {
+    if (stableOpts?.pause) {
+      requestIdRef.current += 1;
+      setData(undefined);
+      setFetching(false);
+      setError(null);
+      return;
+    }
+    setData(undefined);
+    setError(null);
+  }, [optsKey, stableOpts?.pause]);
+
   const refetch = useCallback(async () => {
     if (stableOpts?.pause) {
       setFetching(false);
       return;
     }
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setFetching(true);
     setError(null);
     try {
       const result = await model.findMany(stableOpts);
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setData(Array.isArray(result) ? result : []);
     } catch (e) {
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setFetching(false);
     }
   }, [model, stableOpts]);
@@ -190,10 +229,19 @@ export function useFindFirst(
   const [data, setData] = useState<any>(undefined);
   const [fetching, setFetching] = useState(!opts?.pause);
   const [error, setError] = useState<Error | null>(null);
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Clear data when paused so we don't keep stale business/user records around.
   useEffect(() => {
     if (opts?.pause) {
+      requestIdRef.current += 1;
       setData(undefined);
       setError(null);
       setFetching(false);
@@ -243,19 +291,30 @@ export function useFindFirst(
   );
   const stableOpts = useMemo(() => opts, [optsKey]);
 
+  useEffect(() => {
+    if (stableOpts?.pause) return;
+    setData(undefined);
+    setError(null);
+  }, [optsKey, stableOpts?.pause]);
+
   const refetch = useCallback(async () => {
     if (stableOpts?.pause) {
       setFetching(false);
       return;
     }
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setFetching(true);
     setError(null);
     try {
       const result = await model.findFirst(stableOpts);
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setData(result ?? null);
     } catch (e) {
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setFetching(false);
     }
   }, [model, stableOpts]);
@@ -273,20 +332,35 @@ export function useAction(actionFn: ActionFn) {
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [data, setData] = useState<unknown>(undefined);
+  const actionIdRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const run = useCallback(
     async (params?: Record<string, unknown>) => {
+      const actionId = actionIdRef.current + 1;
+      actionIdRef.current = actionId;
       setFetching(true);
       setError(null);
       setData(undefined);
       try {
         const result = await actionFn(params);
         const data = result ?? null;
+        if (!mountedRef.current || actionId !== actionIdRef.current) {
+          return { data, error: undefined };
+        }
         setData(data);
         return { data, error: undefined };
       } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e));
-        setError(err);
+        if (mountedRef.current && actionId === actionIdRef.current) {
+          setError(err);
+        }
         let detail = "Action failed";
         if (params) {
           try {
@@ -302,7 +376,9 @@ export function useAction(actionFn: ActionFn) {
         });
         return { data: null, error: { message: err.message } };
       } finally {
-        setFetching(false);
+        if (mountedRef.current && actionId === actionIdRef.current) {
+          setFetching(false);
+        }
       }
     },
     [actionFn]

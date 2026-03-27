@@ -210,7 +210,7 @@ export default function JobsIndexPage() {
             debouncedSearch ? `Search: ${debouncedSearch}` : null,
           ]
             .filter(Boolean)
-            .join(" • ") || null
+            .join(" | ") || null
         }
         onClear={() => {
           setSearch("");
