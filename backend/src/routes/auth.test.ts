@@ -13,4 +13,12 @@ describe("auth route helper logic", () => {
     expect(resolveSafeRedirectPath("//evil.example")).toBe("/signed-in");
     expect(resolveSafeRedirectPath("settings")).toBe("/signed-in");
   });
+
+  it("defaults Google auth redirects to the app when state is missing or invalid", async () => {
+    const { resolveGoogleStateRedirect } = await import("./auth.js");
+    expect(resolveGoogleStateRedirect(undefined)).toBe("/signed-in");
+    expect(resolveGoogleStateRedirect("")).toBe("/signed-in");
+    expect(resolveGoogleStateRedirect("{not-json")).toBe("/signed-in");
+    expect(resolveGoogleStateRedirect(JSON.stringify({ redirectPath: "/signed-in" }))).toBe("/signed-in");
+  });
 });

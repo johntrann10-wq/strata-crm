@@ -47,6 +47,16 @@ export function resolveSafeRedirectPath(input: unknown): string {
   return trimmed || "/signed-in";
 }
 
+export function resolveGoogleStateRedirect(input: unknown): string {
+  if (typeof input !== "string" || input.trim() === "") return "/signed-in";
+  try {
+    const parsed = JSON.parse(input) as { redirectPath?: unknown };
+    return resolveSafeRedirectPath(parsed.redirectPath);
+  } catch {
+    return "/signed-in";
+  }
+}
+
 function requireJwtSecret() {
   const secret = process.env.JWT_SECRET;
   if (secret && secret.trim() !== "") return secret;
@@ -415,16 +425,7 @@ authRouter.get(
       logger.info("User signed in via Google", { userId: user.id, email: user.email });
     }
     const token = createToken(user.id);
-    const redirectPath = (() => {
-      try {
-        const raw = (req.query.state as string | undefined) ?? "";
-        if (!raw) return "/";
-        const parsed = JSON.parse(raw) as { redirectPath?: string };
-        return resolveSafeRedirectPath(parsed.redirectPath);
-      } catch {
-        return "/signed-in";
-      }
-    })();
+    const redirectPath = resolveGoogleStateRedirect(req.query.state);
     const frontendUrl = process.env.FRONTEND_URL ?? "";
     const baseRedirect = frontendUrl ? `${frontendUrl}${redirectPath}` : redirectPath;
     const url = new URL(baseRedirect, frontendUrl || undefined);

@@ -6,6 +6,15 @@ import { GoogleMark } from "./GoogleMark";
 import { Link, useLocation, useNavigate } from "react-router";
 import { api, API_BASE } from "../../api";
 
+function buildGoogleAuthHref(search: string): string {
+  const params = new URLSearchParams(search);
+  if (!params.has("redirectPath")) {
+    params.set("redirectPath", "/signed-in");
+  }
+  const query = params.toString();
+  return `${API_BASE}/api/auth/google/start${query ? `?${query}` : ""}`;
+}
+
 export const SignInComponent = (props: {
   options?: Parameters<typeof useActionForm>[1];
   searchParamsOverride?: string;
@@ -15,6 +24,7 @@ export const SignInComponent = (props: {
   const search = props.searchParamsOverride ?? location.search;
   const navigate = useNavigate();
   const fallbackAfterAuth = "/signed-in";
+  const googleAuthHref = buildGoogleAuthHref(search);
 
   const {
     submit,
@@ -49,7 +59,7 @@ export const SignInComponent = (props: {
         <form onSubmit={submit}>
           {/* Google Sign In */}
           <a
-            href={`${API_BASE}/api/auth/google/start${search}`}
+            href={googleAuthHref}
             className="w-full h-10 border border-border bg-background hover:bg-muted text-[13px] font-medium rounded-lg flex items-center justify-center gap-2.5 transition-colors"
           >
             <GoogleMark className="h-4 w-4 shrink-0" />
