@@ -321,17 +321,11 @@ export default function CalendarPage() {
 
           <aside className={cn("space-y-4", isMobileLayout && "space-y-3")}>
             <div className="surface-panel rounded-[1.6rem] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected day</p>
-                  <h2 className="mt-1 text-lg font-semibold text-foreground">
-                    {currentDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-                  </h2>
-                </div>
-                <Button size="sm" variant="outline" className="rounded-full" onClick={handleNewAppointment}>
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  New appointment
-                </Button>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected day</p>
+                <h2 className="mt-1 text-lg font-semibold text-foreground">
+                  {currentDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                </h2>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
