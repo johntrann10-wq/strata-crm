@@ -34,7 +34,6 @@ export function PageHeader({ title, subtitle, right, actions, loading, backTo, b
           </h1>
           {badge && badge}
         </div>
-        {subtitle ? <p className="mt-1.5 max-w-2xl text-[12px] leading-5 text-muted-foreground sm:mt-2 sm:text-[15px] sm:leading-6">{subtitle}</p> : null}
       </div>
       {(right ?? actions) && (
         <div className="relative mt-3 flex w-full shrink-0 flex-col items-stretch gap-2 self-start sm:mt-4 sm:flex-row sm:flex-wrap sm:items-start lg:mt-0 lg:w-auto lg:justify-end">

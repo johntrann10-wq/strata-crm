@@ -53,7 +53,7 @@ export default function ClientsPage() {
     <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Clients"
-        subtitle="Find people fast, keep contact info organized, and jump into the next action without digging."
+        subtitle="Use the client ledger to manage contact records, communication readiness, and every downstream vehicle, appointment, quote, and invoice."
         right={
           <Button asChild>
             <Link to="/clients/new">
@@ -69,9 +69,6 @@ export default function ClientsPage() {
           <div className="mobile-support-card flex items-center justify-between gap-3 md:hidden">
             <div>
               <p className="text-sm font-semibold text-foreground">{visibleClients.length} visible clients</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {search ? "Search is active" : "Recent people in your CRM"}
-              </p>
             </div>
             <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => setShowMobileStats((open) => !open)}>
               {showMobileStats ? "Hide details" : "More details"}
@@ -84,9 +81,6 @@ export default function ClientsPage() {
                 <p className="text-2xl font-semibold tracking-tight">{visibleClients.length}</p>
                 <Users className="h-5 w-5 text-primary" />
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {debouncedSearch ? "Current search results" : "Most recent CRM records"}
-              </p>
             </div>
             <div className="surface-panel px-4 py-3 sm:px-5">
               <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Phone coverage</p>
@@ -94,11 +88,6 @@ export default function ClientsPage() {
                 <p className="text-2xl font-semibold tracking-tight">{clientsWithPhone}</p>
                 <Phone className="h-5 w-5 text-primary" />
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {visibleClients.length > 0
-                  ? `${Math.round((clientsWithPhone / visibleClients.length) * 100)}% reachable by phone`
-                  : "No client records loaded"}
-              </p>
             </div>
             <div className="surface-panel px-4 py-3 sm:px-5">
               <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Email coverage</p>
@@ -106,11 +95,6 @@ export default function ClientsPage() {
                 <p className="text-2xl font-semibold tracking-tight">{clientsWithEmail}</p>
                 <Mail className="h-5 w-5 text-primary" />
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {visibleClients.length > 0
-                  ? `${Math.round((clientsWithEmail / visibleClients.length) * 100)}% ready for quote and invoice sends`
-                  : "No client records loaded"}
-              </p>
             </div>
             <div className="surface-panel px-4 py-3 sm:px-5">
               <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">New this month</p>
@@ -118,7 +102,6 @@ export default function ClientsPage() {
                 <p className="text-2xl font-semibold tracking-tight">{newThisMonth}</p>
                 <CalendarClock className="h-5 w-5 text-primary" />
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">Fresh intake added to the CRM this month</p>
             </div>
           </div>
         </section>

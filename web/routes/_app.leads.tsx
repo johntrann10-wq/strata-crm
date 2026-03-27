@@ -363,7 +363,7 @@ export default function LeadsPage() {
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to previous screen" /> : null}
       <PageHeader
         title="Leads"
-        subtitle="Capture interest from any source, keep the next move visible, and convert leads into client work without losing the intake context."
+        subtitle="Capture inbound demand from any source, qualify it quickly, and convert it into client work without losing intake details."
         backTo={returnTo}
         badge={
           <Badge variant="secondary" className="text-sm font-medium">
@@ -377,31 +377,24 @@ export default function LeadsPage() {
             <div className="surface-panel px-4 py-4 sm:px-5">
               <p className="text-sm font-medium text-muted-foreground">Active leads</p>
               <p className="mt-3 text-2xl font-semibold tracking-tight">{activeLeadCount}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Needs follow-up or conversion</p>
             </div>
             <div className="surface-panel px-4 py-4 sm:px-5">
               <p className="text-sm font-medium text-muted-foreground">New</p>
               <p className="mt-3 text-2xl font-semibold tracking-tight">{newLeadCount}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Fresh inbound opportunities</p>
             </div>
             <div className="surface-panel px-4 py-4 sm:px-5">
               <p className="text-sm font-medium text-muted-foreground">Quoted</p>
               <p className="mt-3 text-2xl font-semibold tracking-tight">{quotedLeadCount}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Waiting on approval</p>
             </div>
             <div className="surface-panel px-4 py-4 sm:px-5">
               <p className="text-sm font-medium text-muted-foreground">Booked</p>
               <p className="mt-3 text-2xl font-semibold tracking-tight">{bookedLeadCount}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Moved into scheduled work</p>
             </div>
           </section>
 
           <section className="rounded-[1.4rem] border bg-card p-5 shadow-sm sm:p-6">
             <div className="mb-5 rounded-xl border border-border/70 bg-muted/30 p-4">
-              <p className="text-sm font-medium">Fast lead intake</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Every lead becomes a real client record immediately. Capture the ask, source, known vehicle, and next step now, then move straight into booking, quoting, or vehicle intake when the lead is ready.
-              </p>
+              <p className="text-sm font-medium">Lead record intake</p>
             </div>
 
             {localErrors.general ? <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">{localErrors.general}</div> : null}
@@ -536,8 +529,8 @@ export default function LeadsPage() {
               <div className="flex flex-col gap-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Lead queue</p>
-                    <p className="mt-1 text-sm text-foreground">Keep source, ask, status, vehicle, and next move visible so nothing gets lost between first contact and scheduled work.</p>
+                    <p className="text-sm font-medium text-muted-foreground">Pipeline queue</p>
+                    <p className="mt-1 text-sm text-foreground">Keep source, requested work, status, vehicle, and next action visible so nothing is lost between first contact and scheduled work.</p>
                   </div>
                   <Badge variant="outline">{visibleLeads.length} visible</Badge>
                 </div>
@@ -554,7 +547,7 @@ export default function LeadsPage() {
                     <p className="mt-1 text-xs text-muted-foreground">Intake records that already include a known vehicle.</p>
                   </div>
                   <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Needs next step</p>
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Missing next action</p>
                     <p className="mt-2 text-lg font-semibold text-foreground">{missingNextStepCount}</p>
                     <p className="mt-1 text-xs text-muted-foreground">Active leads that still need a clear follow-up plan.</p>
                   </div>
@@ -660,7 +653,7 @@ export default function LeadsPage() {
                         <Button size="sm" variant="outline" asChild><Link to={`/appointments/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}`}>Book</Link></Button>
                         <Button size="sm" variant="outline" asChild><Link to={`/quotes/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}`}>Quote</Link></Button>
                         <Button size="sm" variant="outline" asChild><Link to={`/clients/${client.id}/vehicles/new?from=${encodeURIComponent("/leads")}`}>Add vehicle</Link></Button>
-                        {lead.status !== "converted" ? <Button size="sm" onClick={() => void handleConvert(entry)} disabled={updatingLead}>Mark converted</Button> : null}
+                        {lead.status !== "converted" ? <Button size="sm" onClick={() => void handleConvert(entry)} disabled={updatingLead}>Convert to client</Button> : null}
                       </div>
 
                       <p className="mt-3 text-xs text-muted-foreground">

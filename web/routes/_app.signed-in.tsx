@@ -856,15 +856,14 @@ export default function SignedIn() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-orange-300">
-                    Move the day forward
+                    Operations actions
                   </p>
-                  <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Quick actions with real momentum</h2>
+                  <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Create the next operational record</h2>
                 </div>
                 <CheckCircle2 className="mt-1 h-5 w-5 text-orange-300" />
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-300">
-                The best dashboards do more than report. They make the next best move obvious while the front desk is
-                busy.
+                Use these controls to create the next appointment, quote, or invoice without leaving the control center.
               </p>
               <div className="mt-5 grid gap-2.5">
                 <QuickAction
@@ -1907,10 +1906,10 @@ function ActivationChecklistCard({
       : null,
     recentClientCount < 3
       ? {
-          title: "Build the pipeline",
-          detail: "The client base is still thin. Capture a few more leads so the workflow gets pressure-tested with real records.",
+          title: "Strengthen lead coverage",
+          detail: "The client base is still thin. Add a few more qualified leads so the CRM, schedule, and billing records reflect real operating volume.",
           href: "/leads",
-          actionLabel: "Capture lead",
+          actionLabel: "Open leads",
         }
       : null,
     !hasDefaultTaxRate
@@ -1930,17 +1929,12 @@ function ActivationChecklistCard({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Activation</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">System readiness</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-            {allDone ? "Your workspace is live - keep momentum moving" : "Get Strata useful in the next few minutes"}
+            {allDone ? "Operational controls are online" : "Finish core setup so the system can run real work"}
           </h2>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">
-            {allDone
-              ? "Core setup is done. Use this space for the next best actions that keep jobs booked, quotes moving, and invoices collected."
-              : "Finish the high-value setup steps below so the calendar, CRM, and billing flow start working like a real shop system."}
-          </p>
         </div>
         <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3 lg:min-w-[220px]">
           <div className="flex items-center justify-between gap-3">
@@ -1953,9 +1947,6 @@ function ActivationChecklistCard({
               style={{ width: `${percent}%` }}
             />
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {allDone ? "Everything essential is complete." : `${total - completed} key step${total - completed === 1 ? "" : "s"} left.`}
-          </p>
         </div>
       </div>
 
@@ -1963,11 +1954,10 @@ function ActivationChecklistCard({
         <div className="rounded-[1.75rem] border border-orange-200/70 bg-[linear-gradient(135deg,rgba(255,247,237,0.98),rgba(255,255,255,0.96))] p-5 shadow-[0_18px_50px_rgba(249,115,22,0.12)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Best next step</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Required next action</p>
               <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
                 {nextItem.label}
               </h3>
-              <p className="mt-2 text-sm text-slate-600">{quickWinLabel}</p>
               <p className="mt-2 text-sm font-medium text-slate-800">{quickWinOutcome}</p>
             </div>
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
@@ -1984,23 +1974,20 @@ function ActivationChecklistCard({
         <div className="space-y-4 rounded-[1.75rem] border border-emerald-200/70 bg-[linear-gradient(135deg,rgba(236,253,245,0.96),rgba(255,255,255,0.98))] p-5 shadow-[0_18px_50px_rgba(16,185,129,0.12)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Business pulse</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Control center</p>
               <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
-                Setup is done. Now use this space to run the shop.
+                This is the operating summary for the business.
               </h3>
-              <p className="mt-2 text-sm text-slate-600">
-                This module now tracks live operating signals so the completed checklist turns into a practical control panel instead of a dead success state.
-              </p>
             </div>
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button asChild className="min-h-[46px] rounded-xl bg-orange-500 px-5 text-white hover:bg-orange-600">
-                <Link to="/leads">Capture lead</Link>
+                <Link to="/leads">Open leads</Link>
               </Button>
               <Button asChild variant="outline" className="min-h-[46px] rounded-xl">
                 <Link to={scheduleJobHref}>Book appointment</Link>
               </Button>
               <Button asChild variant="outline" className="min-h-[46px] rounded-xl">
-                <Link to="/quotes/new">Build quote</Link>
+                <Link to="/quotes/new">Create quote</Link>
               </Button>
             </div>
           </div>
@@ -2010,7 +1997,6 @@ function ActivationChecklistCard({
               <div key={item.label} className="rounded-2xl border border-white/70 bg-white/75 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
                 <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{item.value}</p>
-                <p className="mt-2 text-sm text-slate-600">{item.detail}</p>
                 <Button asChild variant="ghost" className="mt-3 h-auto px-0 text-sm font-semibold text-slate-900 hover:bg-transparent hover:text-slate-700">
                   <Link to={item.href}>{item.actionLabel}</Link>
                 </Button>
@@ -2023,7 +2009,6 @@ function ActivationChecklistCard({
               optimizationPrompts.slice(0, 4).map((prompt) => (
                 <div key={prompt.title} className="rounded-2xl border border-border/70 bg-white/70 p-4">
                   <p className="text-sm font-semibold text-slate-950">{prompt.title}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{prompt.detail}</p>
                   <Button asChild variant="outline" className="mt-3 rounded-xl">
                     <Link to={prompt.href}>{prompt.actionLabel}</Link>
                   </Button>
@@ -2031,10 +2016,7 @@ function ActivationChecklistCard({
               ))
             ) : (
               <div className="rounded-2xl border border-border/70 bg-white/70 p-4 xl:col-span-2">
-                <p className="text-sm font-semibold text-slate-950">Everything important looks healthy right now.</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Keep using the quick actions above to capture new leads, book work, and move billing forward before bottlenecks build up again.
-                </p>
+                <p className="text-sm font-semibold text-slate-950">No immediate operating exceptions are visible.</p>
               </div>
             )}
           </div>
@@ -2069,7 +2051,6 @@ function ActivationChecklistCard({
                     )}
                     <p className="font-medium">{item.label}</p>
                   </div>
-                  <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
                 </div>
               </div>
             </div>
@@ -2122,19 +2103,14 @@ function DailyOperationsCard({
 
   return (
     <section className="rounded-[28px] border border-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] px-4 py-5 shadow-sm sm:px-5 sm:py-6">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            {isOperational ? "Daily operating view" : "Make Strata indispensable"}
+            {isOperational ? "Operations overview" : "Core system setup"}
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-            {isOperational ? "Run the shop from here every day" : "Finish the essentials that make Strata useful daily"}
+            {isOperational ? "Use this as the shop command surface" : "Finish the records that make the system dependable"}
           </h2>
-          <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            {isOperational
-              ? "Use this as the control point for today's schedule, live work, pending money, and follow-up so nothing important lives outside the system."
-              : "Once the first client, vehicle, appointment, and invoice are in place, Strata stops feeling like setup software and starts acting like the shop's operating system."}
-          </p>
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
           <Button asChild className="min-h-[46px] rounded-xl bg-slate-950 text-white hover:bg-slate-800">
@@ -2190,7 +2166,7 @@ function DailyOperationsCard({
             <OperatingLane
               key={step.key}
               title={step.label}
-              value="Recommended next"
+              value="Required setup"
               detail={step.detail}
               href={step.href}
               actionLabel={step.actionLabel}
@@ -2219,7 +2195,6 @@ function OperatingLane({
     <div className="rounded-[1.4rem] border border-border/70 bg-white/85 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</p>
       <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{value}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{detail}</p>
       <Button asChild variant="ghost" className="mt-3 h-auto px-0 text-sm font-semibold text-slate-900 hover:bg-transparent hover:text-slate-700">
         <Link to={href}>{actionLabel}</Link>
       </Button>
@@ -2251,29 +2226,23 @@ function ShopTypePlaybookCard({
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
             {businessName?.trim() ? `${businessName} should feel ready on day one` : `${defaults.label} workflow, already loaded`}
           </h2>
-          <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            {defaults.workflowSummary}
-          </p>
         </div>
         <div className="grid shrink-0 gap-2 sm:grid-cols-2 lg:w-[320px]">
           <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Starter services</p>
             <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{defaults.starterCount}</p>
-            <p className="mt-1 text-xs text-slate-600">Preloaded for quoting and booking</p>
           </div>
           <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Booking defaults</p>
             <p className="mt-2 text-sm font-semibold text-slate-950">{defaults.defaultDays}</p>
-            <p className="mt-1 text-xs text-slate-600">
-              {defaults.defaultOpen}-{defaults.defaultClose} with {defaults.appointmentBufferMinutes} min buffer
-            </p>
+            <p className="mt-1 text-xs text-slate-600">{defaults.defaultOpen}-{defaults.defaultClose}</p>
           </div>
         </div>
       </div>
 
       <div className="mt-5 grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="rounded-[1.5rem] border border-border/70 bg-white/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Operating rhythm</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Standard workflow</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <PlaybookStep
               title="Book with confidence"
@@ -2291,11 +2260,8 @@ function ShopTypePlaybookCard({
         </div>
 
         <div className="rounded-[1.5rem] border border-border/70 bg-white/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">What makes this sticky</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">System-of-record value</p>
           <div className="mt-3 space-y-3">
-            <p className="text-sm text-slate-700">
-              Once clients, vehicles, appointments, and invoices live here, Strata becomes the running memory of the shop, not just another tool.
-            </p>
             <div className="flex flex-wrap gap-2">
               {defaults.sampleServices.map((service) => (
                 <span key={service} className="rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-xs font-medium text-slate-700">
@@ -2328,7 +2294,6 @@ function PlaybookStep({
   return (
     <div className="rounded-2xl border border-border/70 bg-muted/15 p-4">
       <p className="text-sm font-semibold text-slate-950">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{detail}</p>
     </div>
   );
 }
