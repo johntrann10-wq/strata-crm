@@ -266,7 +266,15 @@ actionsRouter.post("/applyBusinessPreset", requireAuth, requireTenant, async (re
   const bid = businessId(req);
   try {
     const result = await applyBusinessPreset(bid);
-    res.json({ ok: true, ...result });
+    if (result.fullyApplied) {
+      res.json({ ok: true, ...result });
+      return;
+    }
+    res.json({
+      ok: false,
+      ...result,
+      message: `Starter services were only partially applied (${result.appliedCount}/${result.expectedCount}).`,
+    });
   } catch (error) {
     logger.warn("Business preset apply failed; returning safe fallback", { businessId: bid, error });
     try {

@@ -304,6 +304,69 @@ function isPresetSchemaDriftError(error: unknown) {
   );
 }
 
+let cachedServiceColumns: Set<string> | null = null;
+
+async function getServiceColumns(): Promise<Set<string>> {
+  if (cachedServiceColumns) return cachedServiceColumns;
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'services'
+  `);
+  const resultWithRows = result as unknown as { rows?: Array<{ column_name?: string }> };
+  const rows = Array.isArray(resultWithRows.rows) ? resultWithRows.rows : [];
+  cachedServiceColumns = new Set(
+    rows
+      .map((row) => row?.column_name)
+      .filter((value): value is string => typeof value === "string")
+  );
+  return cachedServiceColumns;
+}
+
+async function insertLegacyPresetServiceRow(businessId: string, item: PresetService, now: Date) {
+  const columns = await getServiceColumns();
+  const insertColumns = ["id", "business_id", "name", "price"];
+  const insertValues: unknown[] = [randomUUID(), businessId, item.name, String(item.startingPrice)];
+
+  if (columns.has("duration_minutes")) {
+    insertColumns.push("duration_minutes");
+    insertValues.push(item.estimatedMinutes);
+  }
+  if (columns.has("category")) {
+    insertColumns.push("category");
+    insertValues.push(item.category);
+  }
+  if (columns.has("notes")) {
+    insertColumns.push("notes");
+    insertValues.push(serializePresetNotes(item));
+  }
+  if (columns.has("taxable")) {
+    insertColumns.push("taxable");
+    insertValues.push(item.taxable);
+  }
+  if (columns.has("is_addon")) {
+    insertColumns.push("is_addon");
+    insertValues.push(item.isAddon ?? false);
+  }
+  if (columns.has("active")) {
+    insertColumns.push("active");
+    insertValues.push(true);
+  }
+  if (columns.has("created_at")) {
+    insertColumns.push("created_at");
+    insertValues.push(now);
+  }
+  if (columns.has("updated_at")) {
+    insertColumns.push("updated_at");
+    insertValues.push(now);
+  }
+
+  await db.execute(sql`insert into "services" (${sql.join(
+    insertColumns.map((column) => sql.raw(`"${column}"`)),
+    sql`, `
+  )}) values (${sql.join(insertValues.map((value) => sql`${value}`), sql`, `)})`);
+}
+
 async function loadExistingServiceNames(businessId: string, names: string[]) {
   try {
     const existing = await db
@@ -347,10 +410,7 @@ async function insertPresetServices(businessId: string, rows: PresetService[]) {
     logger.warn("Business preset seeding inserting with legacy services schema", { businessId, error });
     for (const item of rows) {
       try {
-        await db.execute(sql`
-          insert into "services" ("id", "business_id", "name", "price", "notes", "created_at", "updated_at")
-          values (${randomUUID()}, ${businessId}, ${item.name}, ${String(item.startingPrice)}, ${serializePresetNotes(item)}, ${now}, ${now})
-        `);
+        await insertLegacyPresetServiceRow(businessId, item, now);
       } catch (rowError) {
         if (!isPresetSchemaDriftError(rowError)) throw rowError;
         logger.warn("Business preset skipped one legacy service row", {
@@ -441,7 +501,7 @@ export async function applyBusinessPreset(businessId: string) {
     return false;
   }).length;
   const createdCount = Math.max(appliedCount - previouslyAppliedCount, 0);
-  const skippedCount = Math.max(combined.length - createdCount, 0);
+  const skippedCount = previouslyAppliedCount;
 
   const serviceIdByName = await loadSeededServiceIds(businessId, names);
 
