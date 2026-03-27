@@ -474,7 +474,7 @@ export default function ClientDetailPage() {
         <PageHeader
           backTo={returnTo}
           title={`${client.firstName} ${client.lastName}`}
-          subtitle={`Client since ${new Date(client.createdAt).toLocaleDateString()}${client.email ? ` - ${client.email}` : ""}${client.phone ? ` - ${client.phone}` : ""}`}
+          subtitle={`Client record opened ${new Date(client.createdAt).toLocaleDateString()}${client.email ? ` - ${client.email}` : ""}${client.phone ? ` - ${client.phone}` : ""}`}
           badge={<Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">CRM Record</Badge>}
           actions={
             <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
@@ -605,10 +605,10 @@ export default function ClientDetailPage() {
             </div>
 
             <div className="rounded-[26px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.24)]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Relationship actions</p>
-              <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Keep the client moving without leaving the record</h3>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Record actions</p>
+              <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Run the client workflow from the record</h3>
               <p className="mt-3 text-sm leading-6 text-slate-300">
-                Everything important should be one move away: schedule work, price work, collect money, or update the garage.
+                The core actions should stay one click away: schedule work, price work, issue billing, or update the vehicle file.
               </p>
               <div className="mt-5 grid gap-2.5">
                 <QuickWorkflowAction icon={CalendarPlus} title="Book appointment" detail="Schedule the next service visit" href={appointmentHref} />
@@ -633,8 +633,8 @@ export default function ClientDetailPage() {
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <CardTitle>Client Summary</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">Contact details, notes, and intake context for day-to-day service work.</p>
+                    <CardTitle>Client record</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">Contact details, notes, and account context used to service, quote, and bill this client.</p>
                   </div>
                   {!editMode ? (
                     <Button variant="ghost" size="icon" onClick={() => setEditMode(true)}>
@@ -740,7 +740,7 @@ export default function ClientDetailPage() {
 
             <Card className="border-white/65">
               <CardHeader className="pb-4">
-                <CardTitle>Client Quick Actions</CardTitle>
+                <CardTitle>Account actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <QuickWorkflowAction icon={CalendarPlus} title="Book appointment" detail="Schedule the next service visit" href={appointmentHref} />
@@ -769,7 +769,7 @@ export default function ClientDetailPage() {
 
             <Card className="border-white/65">
               <CardHeader className="pb-4">
-                <CardTitle>Workflow Snapshot</CardTitle>
+                <CardTitle>Active workflow</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {jobList.slice(0, 3).map((job) => (
@@ -819,7 +819,7 @@ function RelationshipSnapshotCard({
   return (
     <Card className="border-white/65">
       <CardHeader className="pb-4">
-        <CardTitle>Relationship Snapshot</CardTitle>
+        <CardTitle>Account snapshot</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <SummaryField

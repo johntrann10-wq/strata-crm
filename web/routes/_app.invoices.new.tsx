@@ -19,7 +19,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { ArrowLeft, Check, ChevronDown, ChevronUp, ChevronsUpDown, FileText, Package, Plus, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronsUpDown, FileText, Package, Plus, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
 import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
@@ -148,8 +148,6 @@ export default function NewInvoicePage() {
   ]);
   const [submitting, setSubmitting] = useState(false);
   const [submitMode, setSubmitMode] = useState<'draft' | 'sent'>('draft');
-  const [showMobileInvoiceDetails, setShowMobileInvoiceDetails] = useState(false);
-  const [showMobileNotes, setShowMobileNotes] = useState(false);
 
   // Pre-fill from linked quote
   useEffect(() => {
@@ -435,21 +433,9 @@ export default function NewInvoicePage() {
         {/* Invoice Details */}
         <Card>
           <CardHeader className="border-b border-border/70 pb-4">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-base font-semibold">Invoice details</CardTitle>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="lg:hidden"
-                onClick={() => setShowMobileInvoiceDetails((value) => !value)}
-              >
-                {showMobileInvoiceDetails ? "Hide" : "Show"}
-                {showMobileInvoiceDetails ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />}
-              </Button>
-            </div>
+            <CardTitle className="text-base font-semibold">Invoice details</CardTitle>
           </CardHeader>
-          <CardContent className={showMobileInvoiceDetails ? "space-y-4" : "hidden space-y-4 lg:block"}>
+          <CardContent className="space-y-4">
             {/* Client Combobox */}
             <div className="space-y-2">
               <Label>
@@ -729,21 +715,9 @@ export default function NewInvoicePage() {
         {/* Notes */}
           <Card>
             <CardHeader className="border-b border-border/70 pb-4">
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle className="text-base font-semibold">Notes</CardTitle>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="lg:hidden"
-                  onClick={() => setShowMobileNotes((value) => !value)}
-                >
-                  {showMobileNotes ? "Hide" : "Show"}
-                  {showMobileNotes ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />}
-                </Button>
-              </div>
+              <CardTitle className="text-base font-semibold">Notes</CardTitle>
             </CardHeader>
-          <CardContent className={showMobileNotes ? "" : "hidden lg:block"}>
+          <CardContent>
             <Textarea
               id="notes"
               placeholder="Add any notes for this invoice..."

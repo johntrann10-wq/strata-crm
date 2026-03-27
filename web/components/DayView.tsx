@@ -85,9 +85,21 @@ export function DayView({
             </div>
             <Button size="sm" onClick={() => onSlotClick(currentDate)}>
               <Plus className="mr-2 h-4 w-4" />
-              Book
+              New appointment
             </Button>
           </div>
+          {dayAppts.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-medium">
+              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                {dayAppts.length} booked
+              </span>
+              {unassignedCount > 0 ? (
+                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                  {unassignedCount} unassigned
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
@@ -96,13 +108,10 @@ export function DayView({
               <CalendarIcon className="h-12 w-12 text-muted-foreground" />
               <div>
                 <p className="text-base font-semibold text-foreground">Nothing booked yet</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Add an appointment for this day and keep the schedule moving.
-                </p>
               </div>
               <Button onClick={() => onSlotClick(currentDate)}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add appointment
+                New appointment
               </Button>
             </div>
           ) : (
@@ -231,9 +240,21 @@ export function DayView({
           </div>
           <Button size="sm" onClick={() => onSlotClick(currentDate)}>
             <Plus className="mr-2 h-4 w-4" />
-            Book
+            New appointment
           </Button>
         </div>
+        {dayAppts.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-medium">
+            <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+              {dayAppts.length} booked
+            </span>
+            {unassignedCount > 0 ? (
+              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                {unassignedCount} unassigned
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <StaffWorkloadBar appointments={dayAppts} />

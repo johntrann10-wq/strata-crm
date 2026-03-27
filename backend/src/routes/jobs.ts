@@ -22,6 +22,18 @@ import { createRequestActivityLog } from "../lib/activity.js";
 
 export const jobsRouter = Router({ mergeParams: true });
 
+function isSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
   return req.businessId;
@@ -188,19 +200,45 @@ jobsRouter.get("/:id", requireAuth, requireTenant, requirePermission("jobs.read"
 
   if (!job) throw new NotFoundError("Job not found.");
 
-  const jobServices = await db
-    .select({
-      id: appointmentServices.id,
-      quantity: appointmentServices.quantity,
-      unitPrice: appointmentServices.unitPrice,
-      serviceId: services.id,
-      serviceName: services.name,
-      category: services.category,
-      durationMinutes: services.durationMinutes,
-    })
-    .from(appointmentServices)
-    .leftJoin(services, eq(appointmentServices.serviceId, services.id))
-    .where(eq(appointmentServices.appointmentId, job.id));
+  let jobServices: Array<{
+    id: string;
+    quantity: number | null;
+    unitPrice: string | null;
+    serviceId: string | null;
+    serviceName: string | null;
+    category: string | null;
+    durationMinutes: number | null;
+  }> = [];
+  try {
+    jobServices = await db
+      .select({
+        id: appointmentServices.id,
+        quantity: appointmentServices.quantity,
+        unitPrice: appointmentServices.unitPrice,
+        serviceId: services.id,
+        serviceName: services.name,
+        category: services.category,
+        durationMinutes: services.durationMinutes,
+      })
+      .from(appointmentServices)
+      .leftJoin(services, eq(appointmentServices.serviceId, services.id))
+      .where(eq(appointmentServices.appointmentId, job.id));
+  } catch (error) {
+    if (!isSchemaDriftError(error)) throw error;
+    jobServices = await db
+      .select({
+        id: appointmentServices.id,
+        quantity: appointmentServices.quantity,
+        unitPrice: appointmentServices.unitPrice,
+        serviceId: services.id,
+        serviceName: services.name,
+        category: sql<string | null>`null`,
+        durationMinutes: sql<number | null>`null`,
+      })
+      .from(appointmentServices)
+      .leftJoin(services, eq(appointmentServices.serviceId, services.id))
+      .where(eq(appointmentServices.appointmentId, job.id));
+  }
 
   const [invoice] = await db
     .select({

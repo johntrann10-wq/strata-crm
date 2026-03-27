@@ -722,12 +722,9 @@ export default function NewAppointmentPage() {
               </Button>
               <div className="min-w-0">
                 <div className="inline-flex items-center rounded-full border border-orange-200/80 bg-orange-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-700">
-                  Scheduling lane
+                  Scheduling
                 </div>
                 <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-[2rem]">New Appointment</h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Schedule a new appointment for a client with all of the booking context visible.
-                </p>
                 {currentLocationId && locationsData?.some((location) => location.id === currentLocationId) ? (
                   <p className="mt-2 text-sm text-muted-foreground">
                     Defaulting to {locationsData.find((location) => location.id === currentLocationId)?.name ?? "current location"}
@@ -737,19 +734,19 @@ export default function NewAppointmentPage() {
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Client</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">1. Client</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
                   {selectedClient ? `${selectedClient.firstName} ${selectedClient.lastName}` : "Choose a client"}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vehicle</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">2. Vehicle</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
                   {selectedVehicleLabel || "Add or pick a vehicle"}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Services</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">3. Services</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
                   {selectedServiceIds.length > 0 ? `${selectedServiceIds.length} selected` : "Build the work order"}
                 </p>
@@ -758,7 +755,7 @@ export default function NewAppointmentPage() {
                 </p>
               </div>
               <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Run of show</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">4. Schedule</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">{bookingSnapshot}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {endDateTime ? `Wraps around ${format(endDateTime, "h:mm a")}` : "End time appears after services are set"}

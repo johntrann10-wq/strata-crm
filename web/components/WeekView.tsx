@@ -21,6 +21,7 @@ interface WeekViewProps {
   appointments: ApptRecord[];
   onSlotClick: (date: Date) => void;
   onApptClick: (apt: ApptRecord) => void;
+  onDayClick?: (date: Date) => void;
   onReschedule?: (appointmentId: string, newStart: Date, newEnd: Date | null) => void;
   conflictIds?: Set<string>;
 }
@@ -30,6 +31,7 @@ export function WeekView({
   appointments,
   onSlotClick,
   onApptClick,
+  onDayClick,
   onReschedule,
   conflictIds,
 }: WeekViewProps) {
@@ -94,14 +96,21 @@ export function WeekView({
                 {DAY_NAMES[di]}
               </p>
               <div className="mt-2 flex items-center justify-center gap-2">
-                <span
+                <button
+                  type="button"
+                  onClick={() => onDayClick?.(day)}
+                  className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                  aria-label={`Open ${day.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`}
+                >
+                  <span
                   className={cn(
                     "inline-flex h-9 w-9 items-center justify-center rounded-full text-base font-semibold",
                     isToday ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-foreground"
                   )}
-                >
-                  {day.getDate()}
-                </span>
+                  >
+                    {day.getDate()}
+                  </span>
+                </button>
               </div>
               <div className="mt-2 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
                 <span>{bookedCount} booked</span>

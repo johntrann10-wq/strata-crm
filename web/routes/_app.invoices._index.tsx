@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useOutletContext, useSearchParams } from "react-router";
-import { AlertCircle, Clock, DollarSign, FileText, Loader2, PlusCircle, Search } from "lucide-react";
+import { AlertCircle, FileText, Loader2, PlusCircle, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -194,7 +194,7 @@ export default function InvoicesIndexPage() {
             {isRefetching ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : null}
           </span>
         }
-        subtitle="Manage billing, search invoice history fast, and stay on top of cash flow."
+        subtitle="Manage receivables, search invoice history, and keep outstanding balances and collection pressure visible."
         right={
           <Button asChild>
             <Link to={linkWithQueueState("/invoices/new")}>
@@ -278,57 +278,6 @@ export default function InvoicesIndexPage() {
           </div>
         </div>
       ) : null}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Revenue This Month</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {metricsFetching && !invoiceMetrics ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <div className="text-2xl font-bold text-green-600">
-                {formatCurrency((invoiceMetrics as any)?.revenueThisMonth ?? 0)}
-              </div>
-            )}
-            <p className="mt-1 text-xs text-muted-foreground">This month</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Outstanding</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {metricsFetching && !invoiceMetrics ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <div className="text-2xl font-bold text-yellow-600">
-                {formatCurrency((invoiceMetrics as any)?.outstandingBalance ?? 0)}
-              </div>
-            )}
-            <p className="mt-1 text-xs text-muted-foreground">Sent and partial invoices</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">This Month</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {metricsFetching && !invoiceMetrics ? (
-              <Skeleton className="h-8 w-16" />
-            ) : (
-              <div className="text-2xl font-bold">{(invoiceMetrics as any)?.invoicesThisMonth ?? 0}</div>
-            )}
-            <p className="mt-1 text-xs text-muted-foreground">Invoices created</p>
-          </CardContent>
-        </Card>
-      </div>
 
       {overdueInvoices.length > 0 ? (
         <div className="grid gap-3 sm:grid-cols-2">

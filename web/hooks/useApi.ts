@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { FormEvent } from "react";
 import { api } from "../api";
 import { setAuthToken } from "../lib/auth";
+import { recordReliabilityDiagnostic } from "../lib/reliabilityDiagnostics";
 import { recordRuntimeError } from "../lib/runtimeErrors";
 
 function persistAuthTokenFromResponse(res: unknown): void {
@@ -107,7 +108,14 @@ export function useFindOne(
       setData(result ?? null);
     } catch (e) {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
-      setError(e instanceof Error ? e : new Error(String(e)));
+      const err = e instanceof Error ? e : new Error(String(e));
+      setError(err);
+      recordReliabilityDiagnostic({
+        source: "query.error",
+        severity: "error",
+        message: err.message,
+        detail: `findOne failed for id ${id}`,
+      });
     } finally {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setFetching(false);
@@ -208,7 +216,14 @@ export function useFindMany(
       setData(Array.isArray(result) ? result : []);
     } catch (e) {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
-      setError(e instanceof Error ? e : new Error(String(e)));
+      const err = e instanceof Error ? e : new Error(String(e));
+      setError(err);
+      recordReliabilityDiagnostic({
+        source: "query.error",
+        severity: "error",
+        message: err.message,
+        detail: "findMany failed for a resource query",
+      });
     } finally {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setFetching(false);
@@ -312,7 +327,14 @@ export function useFindFirst(
       setData(result ?? null);
     } catch (e) {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
-      setError(e instanceof Error ? e : new Error(String(e)));
+      const err = e instanceof Error ? e : new Error(String(e));
+      setError(err);
+      recordReliabilityDiagnostic({
+        source: "query.error",
+        severity: "error",
+        message: err.message,
+        detail: "findFirst failed for a resource query",
+      });
     } finally {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setFetching(false);
@@ -371,6 +393,12 @@ export function useAction(actionFn: ActionFn) {
         }
         recordRuntimeError({
           source: "window.unhandledrejection",
+          message: err.message,
+          detail,
+        });
+        recordReliabilityDiagnostic({
+          source: "action.error",
+          severity: "error",
           message: err.message,
           detail,
         });
@@ -450,12 +478,18 @@ export function useActionForm(
         })
         .catch((err: Error) => {
           let msg = err.message;
-          if (msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("Load failed")) {
-            msg =
-              "Cannot reach the API. Locally: run the backend and ensure Vite proxies /api to it. Production: set STRATA_API_ORIGIN on Vercel/Netlify (same-origin /api proxy) or VITE_API_URL / NEXT_PUBLIC_API_URL at build time; see DEPLOY.md.";
-          }
-          setErrors({ root: { message: msg } });
-        })
+        if (msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("Load failed")) {
+          msg =
+            "Cannot reach the API. Locally: run the backend and ensure Vite proxies /api to it. Production: set STRATA_API_ORIGIN on Vercel/Netlify (same-origin /api proxy) or VITE_API_URL / NEXT_PUBLIC_API_URL at build time; see DEPLOY.md.";
+        }
+        recordReliabilityDiagnostic({
+          source: "form.error",
+          severity: "error",
+          message: msg,
+          detail: `Action form submission failed for ${actionFn.name || "anonymous action"}`,
+        });
+        setErrors({ root: { message: msg } });
+      })
         .finally(() => setIsSubmitting(false));
     },
     [actionFn, values, options?.onSuccess, options?.send]

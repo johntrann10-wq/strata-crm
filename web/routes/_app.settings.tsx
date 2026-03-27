@@ -59,7 +59,18 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { formatBusinessPresetLabel } from "../lib/businessPresets";
 import type { BusinessPresetSummary } from "../lib/businessPresets";
-import { clearRuntimeErrors, listRuntimeErrors, type RuntimeErrorEntry } from "../lib/runtimeErrors";
+import {
+  clearReliabilityDiagnostics,
+  getReliabilityDiagnosticsEventName,
+  listReliabilityDiagnostics,
+  type ReliabilityDiagnosticEntry,
+} from "../lib/reliabilityDiagnostics";
+import {
+  clearRuntimeErrors,
+  getRuntimeErrorsEventName,
+  listRuntimeErrors,
+  type RuntimeErrorEntry,
+} from "../lib/runtimeErrors";
 import { PageHeader } from "../components/shared/PageHeader";
 
 const BUSINESS_TYPES = [
@@ -313,6 +324,7 @@ export default function SettingsPage() {
     active: true,
   });
   const [runtimeErrors, setRuntimeErrors] = useState<RuntimeErrorEntry[]>([]);
+  const [reliabilityDiagnostics, setReliabilityDiagnostics] = useState<ReliabilityDiagnosticEntry[]>([]);
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({
     status: "idle",
     message: "Not checked yet.",
@@ -382,9 +394,21 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!canViewDiagnostics) return;
     const syncErrors = () => setRuntimeErrors(listRuntimeErrors());
+    const syncReliability = () => setReliabilityDiagnostics(listReliabilityDiagnostics());
+    const runtimeEventName = getRuntimeErrorsEventName();
+    const reliabilityEventName = getReliabilityDiagnosticsEventName();
     syncErrors();
+    syncReliability();
     window.addEventListener("focus", syncErrors);
-    return () => window.removeEventListener("focus", syncErrors);
+    window.addEventListener("focus", syncReliability);
+    window.addEventListener(runtimeEventName, syncErrors as EventListener);
+    window.addEventListener(reliabilityEventName, syncReliability as EventListener);
+    return () => {
+      window.removeEventListener("focus", syncErrors);
+      window.removeEventListener("focus", syncReliability);
+      window.removeEventListener(runtimeEventName, syncErrors as EventListener);
+      window.removeEventListener(reliabilityEventName, syncReliability as EventListener);
+    };
   }, [canViewDiagnostics]);
 
   useEffect(() => {
@@ -603,8 +627,10 @@ export default function SettingsPage() {
 
   const handleClearDiagnostics = () => {
     clearRuntimeErrors();
+    clearReliabilityDiagnostics();
     setRuntimeErrors([]);
-    toast.success("Runtime diagnostics cleared");
+    setReliabilityDiagnostics([]);
+    toast.success("Diagnostics cleared");
   };
 
   const handleRefreshSystemStatus = async () => {
@@ -953,10 +979,79 @@ export default function SettingsPage() {
                         Client diagnostics
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground">
-                        Use the runtime diagnostics card below to inspect browser-side crashes and failed promises.
+                        Use the diagnostics cards below to inspect browser crashes, failed requests, auth expiry, and parse errors without opening devtools.
                       </p>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+            ) : null}
+            {canViewDiagnostics ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Reliability Diagnostics</CardTitle>
+                  <CardDescription>
+                    Recent request failures, auth invalidations, and malformed-response events captured in this browser session.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        {reliabilityDiagnostics.length > 0
+                          ? `${reliabilityDiagnostics.length} reliability issue${reliabilityDiagnostics.length === 1 ? "" : "s"} captured`
+                          : "No reliability issues captured"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        This log is designed to catch the failures users feel most: broken API calls, session drops, invalid JSON, and false-success risk.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      onClick={handleClearDiagnostics}
+                      disabled={runtimeErrors.length === 0 && reliabilityDiagnostics.length === 0}
+                    >
+                      Clear diagnostics
+                    </Button>
+                  </div>
+                  {reliabilityDiagnostics.length === 0 ? null : (
+                    <div className="space-y-3">
+                      {reliabilityDiagnostics.map((entry) => (
+                        <div key={entry.id} className="rounded-lg border bg-background p-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant={entry.severity === "error" ? "destructive" : "secondary"}>
+                                  {entry.source}
+                                </Badge>
+                                {entry.status ? (
+                                  <Badge variant="outline">HTTP {entry.status}</Badge>
+                                ) : null}
+                                {entry.method ? (
+                                  <Badge variant="outline">{entry.method}</Badge>
+                                ) : null}
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(entry.timestamp).toLocaleString()}
+                                </span>
+                              </div>
+                              <p className="break-words text-sm font-medium">{entry.message}</p>
+                              {entry.path ? (
+                                <p className="break-all text-xs text-muted-foreground">{entry.path}</p>
+                              ) : null}
+                            </div>
+                          </div>
+                          {entry.detail ? (
+                            <pre className="mt-3 overflow-x-auto rounded-md bg-muted p-3 text-xs text-muted-foreground">
+                              <code>{entry.detail}</code>
+                            </pre>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ) : null}
@@ -986,7 +1081,7 @@ export default function SettingsPage() {
                       size="sm"
                       className="w-full sm:w-auto"
                       onClick={handleClearDiagnostics}
-                      disabled={runtimeErrors.length === 0}
+                      disabled={runtimeErrors.length === 0 && reliabilityDiagnostics.length === 0}
                     >
                       Clear diagnostics
                     </Button>

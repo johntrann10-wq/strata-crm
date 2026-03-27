@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
-import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, Users } from "lucide-react";
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
 import { api } from "../api";
 import { useAction, useFindMany } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { QuickBookSheet } from "../components/shared/QuickBookSheet";
 import {
   type ApptRecord,
   ConflictBanner,
@@ -20,23 +19,31 @@ import {
   navigateDate,
 } from "../components/CalendarViews";
 
+function toLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function CalendarPage() {
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [view, setView] = useState<"month" | "week" | "day">("month");
+  const [view, setView] = useState<"month" | "week" | "day">("week");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [conflictDismissed, setConflictDismissed] = useState(false);
-  const [quickBookOpen, setQuickBookOpen] = useState(false);
-  const [quickBookDate, setQuickBookDate] = useState<string | undefined>(undefined);
-  const [quickBookTime, setQuickBookTime] = useState<string | undefined>(undefined);
-  const [showMobileAgenda, setShowMobileAgenda] = useState(false);
-  const [showMobileTeam, setShowMobileTeam] = useState(false);
+  const layoutInitializedRef = useRef(false);
 
   useEffect(() => {
     const check = () => {
-      setIsMobileLayout(window.innerWidth < 768);
+      const mobile = window.innerWidth < 768;
+      setIsMobileLayout(mobile);
+      if (!layoutInitializedRef.current) {
+        setView(mobile ? "month" : "week");
+        layoutInitializedRef.current = true;
+      }
     };
     check();
     window.addEventListener("resize", check);
@@ -119,15 +126,6 @@ export default function CalendarPage() {
   const activeAppointments = appointments.filter(
     (appointment) => appointment.status !== "cancelled" && appointment.status !== "no-show"
   );
-  const unassignedAppointments = activeAppointments.filter((appointment) => !appointment.assignedStaffId).length;
-  const mobileAppointments = activeAppointments.filter((appointment) => appointment.isMobile).length;
-  const nextUpcoming = activeAppointments.find((appointment) => new Date(appointment.startTime).getTime() >= Date.now()) ?? null;
-  const uniqueStaff = new Set(
-    activeAppointments
-      .filter((appointment) => appointment.assignedStaff)
-      .map((appointment) => appointment.assignedStaffId ?? `${appointment.assignedStaff?.firstName}-${appointment.assignedStaff?.lastName}`)
-  ).size;
-  const activeRevenue = activeAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
 
   function handlePrev() {
     setCurrentDate((d) => navigateDate(d, view, -1));
@@ -147,12 +145,12 @@ export default function CalendarPage() {
   }
 
   function handleSlotClick(date: Date) {
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = toLocalDateString(date);
     const h = date.getHours().toString().padStart(2, "0");
     const m = date.getMinutes().toString().padStart(2, "0");
-    setQuickBookDate(dateStr);
-    setQuickBookTime(`${h}:${m}`);
-    setQuickBookOpen(true);
+    navigate(`/appointments/new?date=${encodeURIComponent(dateStr)}&time=${encodeURIComponent(`${h}:${m}`)}${
+      currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+    }`);
   }
 
   function handleApptClick(apt: ApptRecord) {
@@ -160,18 +158,10 @@ export default function CalendarPage() {
   }
 
   function handleNewAppointment() {
-    const iso = currentDate.toISOString().split("T")[0];
-    setQuickBookDate(iso);
-    setQuickBookTime(undefined);
-    setQuickBookOpen(true);
-  }
-
-  function handleBackToMonth() {
-    setView("month");
-  }
-
-  function handleBooked(id: string) {
-    navigate(`/appointments/${id}`);
+    const iso = toLocalDateString(currentDate);
+    navigate(`/appointments/new?date=${encodeURIComponent(iso)}${
+      currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+    }`);
   }
 
   const selectedDayAppointments = useMemo(
@@ -181,29 +171,14 @@ export default function CalendarPage() {
   const selectedDayRevenue = selectedDayAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
   const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
   const selectedDayConflicts = selectedDayAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
-  const teamOnDeck = Array.from(
-    selectedDayAppointments.reduce((map, appointment) => {
-      const key =
-        appointment.assignedStaffId ??
-        (appointment.assignedStaff ? `${appointment.assignedStaff.firstName}-${appointment.assignedStaff.lastName}` : "__unassigned__");
-      const existing = map.get(key) ?? {
-        label: appointment.assignedStaff
-          ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-          : "Unassigned",
-        count: 0,
-      };
-      existing.count += 1;
-      map.set(key, existing);
-      return map;
-    }, new Map<string, { label: string; count: number }>())
-  );
+  const availableViews = isMobileLayout ? (["day", "week", "month"] as const) : (["week", "day", "month"] as const);
 
   return (
     <div className="page-content flex h-full flex-col">
       <div className="page-section space-y-4">
         <div className="surface-panel overflow-hidden sm:rounded-[2rem]">
-          <div className="border-b border-white/60 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.14),transparent_30%),radial-gradient(circle_at_top_right,rgba(14,165,233,0.08),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,249,252,0.9))] px-4 py-4 sm:px-6">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="border-b border-white/60 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.14),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,249,252,0.9))] px-4 py-4 sm:px-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -243,7 +218,7 @@ export default function CalendarPage() {
                   </div>
 
                   <div className="inline-flex w-full items-center overflow-x-auto rounded-full border border-white/70 bg-white/72 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_10px_24px_rgba(15,23,42,0.05)] sm:w-auto">
-                    {(["month", "day"] as const).map((calendarView) => (
+                    {availableViews.map((calendarView) => (
                       <button
                         key={calendarView}
                         type="button"
@@ -255,128 +230,19 @@ export default function CalendarPage() {
                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
                         )}
                       >
-                          {calendarView === "month" ? "Month" : "Day"}
-                        </button>
-                      ))}
-                    </div>
-                    {view === "day" ? (
-                      <Button variant="ghost" size="sm" className="rounded-full" onClick={handleBackToMonth}>
-                        Back to month
-                      </Button>
-                    ) : null}
+                        {calendarView === "month" ? "Month" : calendarView === "week" ? "Week" : "Day"}
+                      </button>
+                    ))}
                   </div>
+                </div>
 
-                {isMobileLayout ? (
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <div className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-center shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
-                      <p className="text-lg font-semibold text-foreground">{activeAppointments.length}</p>
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Booked</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-center shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
-                      <p className="text-lg font-semibold text-foreground">{unassignedAppointments}</p>
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Open</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-center shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
-                      <p className="text-lg font-semibold text-foreground">{activeConflicts.size}</p>
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Conflicts</p>
-                    </div>
-                  </div>
-                ) : null}
               </div>
 
-              <div className="flex flex-col gap-2.5 sm:min-w-[280px] sm:max-w-[340px] xl:w-[340px]">
-                <Button size="lg" className="justify-center rounded-2xl shadow-[0_16px_36px_rgba(249,115,22,0.24)]" onClick={handleNewAppointment}>
+              <div className="flex flex-col gap-2.5 lg:min-w-[220px] lg:items-end">
+                <Button size="lg" className="justify-center rounded-2xl shadow-[0_16px_36px_rgba(249,115,22,0.24)] lg:min-w-[220px]" onClick={handleNewAppointment}>
                   <Plus className="mr-2 h-4 w-4" />
                   New appointment
                 </Button>
-                <div className={cn("grid gap-3 sm:grid-cols-2 xl:grid-cols-1", isMobileLayout && "hidden sm:grid")}>
-                  <div className="rounded-[22px] border border-white/80 bg-white/82 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Next up</p>
-                    {nextUpcoming ? (
-                      <div className="mt-2 space-y-1">
-                        <p className="text-sm font-semibold text-foreground">
-                          {nextUpcoming.title ||
-                            (nextUpcoming.client
-                              ? `${nextUpcoming.client.firstName} ${nextUpcoming.client.lastName}`
-                              : "Appointment")}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(nextUpcoming.startTime).toLocaleString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-muted-foreground">No upcoming appointments in this range.</p>
-                    )}
-                  </div>
-                  <div className="rounded-[22px] border border-white/80 bg-slate-950 p-4 text-white shadow-[0_16px_40px_rgba(15,23,42,0.24)]">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-300">Operating lane</p>
-                    <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
-                      <div>
-                        <p className="text-xl font-semibold">{activeAppointments.length}</p>
-                        <p className="text-xs text-slate-300">Booked</p>
-                      </div>
-                      <div>
-                        <p className="text-xl font-semibold">{unassignedAppointments}</p>
-                        <p className="text-xs text-slate-300">Open</p>
-                      </div>
-                      <div>
-                        <p className="text-xl font-semibold">{activeConflicts.size}</p>
-                        <p className="text-xs text-slate-300">Conflicts</p>
-                      </div>
-                    </div>
-                    <p className="mt-3 text-xs text-slate-300">
-                      {uniqueStaff > 0 ? `${uniqueStaff} team members are carrying the current schedule.` : "No team assignments yet in this range."}
-                    </p>
-                  </div>
-                </div>
-                {isMobileLayout ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="justify-center rounded-xl"
-                      onClick={() => setShowMobileAgenda((value) => !value)}
-                    >
-                      <Clock3 className="mr-2 h-4 w-4" />
-                      {showMobileAgenda ? "Hide agenda" : "Show agenda"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="justify-center rounded-xl"
-                      onClick={() => setShowMobileTeam((value) => !value)}
-                    >
-                      <Users className="mr-2 h-4 w-4" />
-                      {showMobileTeam ? "Hide team" : "Show team"}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className={cn("mt-5 grid gap-3", isMobileLayout ? "grid-cols-2" : "md:grid-cols-4")}>
-              <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Booked in view</p>
-                <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{activeAppointments.length}</p>
-              </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Revenue in play</p>
-                <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">
-                  {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(activeRevenue)}
-                </p>
-              </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Mobile work</p>
-                <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{mobileAppointments}</p>
-              </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Team coverage</p>
-                <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{uniqueStaff}</p>
               </div>
             </div>
           </div>
@@ -422,6 +288,7 @@ export default function CalendarPage() {
             {view === "month" ? (
               <MonthView
                 currentDate={currentDate}
+                selectedDate={currentDate}
                 appointments={appointments}
                 onDayClick={handleDayClick}
                 onApptClick={handleApptClick}
@@ -434,6 +301,7 @@ export default function CalendarPage() {
                 appointments={appointments}
                 onSlotClick={handleSlotClick}
                 onApptClick={handleApptClick}
+                onDayClick={handleDayClick}
                 onReschedule={handleReschedule}
                 conflictIds={activeConflicts}
               />
@@ -460,9 +328,9 @@ export default function CalendarPage() {
                     {currentDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
                   </h2>
                 </div>
-                <Button size="sm" variant="outline" className="rounded-full" onClick={() => handleDayClick(currentDate)}>
+                <Button size="sm" variant="outline" className="rounded-full" onClick={handleNewAppointment}>
                   <Plus className="mr-1.5 h-4 w-4" />
-                  Book
+                  New appointment
                 </Button>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3">
@@ -484,34 +352,16 @@ export default function CalendarPage() {
                 <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
                   {selectedDayConflicts} conflicts
                 </span>
-                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-                  {teamOnDeck.length} owners on deck
-                </span>
               </div>
             </div>
 
             <div className="surface-panel rounded-[1.5rem] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Agenda</p>
-                  <p className="mt-1 text-sm text-muted-foreground">What this day actually looks like.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock3 className="h-4 w-4 text-muted-foreground" />
-                  {isMobileLayout ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 rounded-full px-3"
-                      onClick={() => setShowMobileAgenda((value) => !value)}
-                    >
-                      {showMobileAgenda ? "Hide" : "Show"}
-                    </Button>
-                  ) : null}
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day agenda</p>
                 </div>
               </div>
-              {!isMobileLayout || showMobileAgenda ? selectedDayAppointments.length > 0 ? (
+              {selectedDayAppointments.length > 0 ? (
                 <div className="mt-3 space-y-2">
                   {selectedDayAppointments.slice(0, 6).map((appointment) => (
                     <button
@@ -545,54 +395,6 @@ export default function CalendarPage() {
               ) : (
                 <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-6 text-center">
                   <p className="text-sm font-medium text-foreground">No appointments on this day</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Use Book to place something into this slot.</p>
-                </div>
-              ) : isMobileLayout ? (
-                <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
-                  Tap Show to see the day agenda.
-                </div>
-              ) : null}
-            </div>
-
-            <div className="surface-panel rounded-[1.5rem] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Team on deck</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Keep visibility on who owns the day.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  {isMobileLayout ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 rounded-full px-3"
-                      onClick={() => setShowMobileTeam((value) => !value)}
-                    >
-                      {showMobileTeam ? "Hide" : "Show"}
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              {!isMobileLayout || showMobileTeam ? (
-                <div className="mt-3 space-y-2">
-                  {teamOnDeck.length > 0 ? (
-                  teamOnDeck.slice(0, 5).map(([key, entry]) => (
-                    <div key={key} className="flex items-center justify-between rounded-2xl border border-white/65 bg-white/72 px-3 py-2.5">
-                      <span className="text-sm font-medium text-foreground">{entry.label}</span>
-                      <span className="text-xs text-muted-foreground">{entry.count} booked</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
-                    Nobody is assigned on this day yet.
-                  </div>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
-                  Tap Show to see assigned staff for this day.
                 </div>
               )}
             </div>
@@ -600,16 +402,6 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {quickBookOpen ? (
-        <QuickBookSheet
-          open={quickBookOpen}
-          onOpenChange={setQuickBookOpen}
-          initialDate={quickBookDate}
-          initialTime={quickBookTime}
-          onBooked={handleBooked}
-          businessId={businessId ?? undefined}
-        />
-      ) : null}
     </div>
   );
 }

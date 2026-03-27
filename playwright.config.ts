@@ -12,10 +12,29 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
+  webServer: process.env.PLAYWRIGHT_BASE_URL
+    ? undefined
+    : {
+        command: "npm.cmd run dev -- --host 127.0.0.1 --port 4173",
+        url: "http://127.0.0.1:4173",
+        reuseExistingServer: !process.env.CI,
+        timeout: 120000,
+      },
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5173",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4173",
     trace: "on-first-retry",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  timeout: 15000,
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      testIgnore: /mobile-core\.spec\.ts/,
+    },
+    {
+      name: "mobile-chrome",
+      use: { ...devices["Pixel 7"] },
+      testMatch: /mobile-core\.spec\.ts/,
+    },
+  ],
+  timeout: 30000,
 });

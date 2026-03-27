@@ -7,6 +7,7 @@ import {
   getCurrentBusinessId,
   setAuthToken,
 } from "./lib/auth";
+import { recordReliabilityDiagnostic } from "./lib/reliabilityDiagnostics";
 
 /** Standard auth payload from sign-in, sign-up, and GET /auth/me. */
 export type AuthUserData = {
@@ -98,6 +99,7 @@ async function request<T = unknown>(
   init: RequestInit = {}
 ): Promise<T> {
   const url = path.startsWith("http") ? path : `${API_BASE}/api${path}`;
+  const method = (init.method ?? "GET").toUpperCase();
   const token = getToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -110,10 +112,24 @@ async function request<T = unknown>(
   if (currentBusinessId) {
     (headers as any)["x-business-id"] = currentBusinessId;
   }
-  const res = await fetch(url, {
-    ...init,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Network request failed";
+    recordReliabilityDiagnostic({
+      source: "api.network",
+      severity: "error",
+      message: `Network request failed for ${method} ${path}`,
+      method,
+      path,
+      detail: message,
+    });
+    throw new ApiError(message, 0, path);
+  }
   if (!res.ok) {
     // Special-case 402 for businesses so onboarding is never blocked
     if (res.status === 402 && path.startsWith("/businesses")) {
@@ -125,6 +141,14 @@ async function request<T = unknown>(
       clearCurrentBusinessId();
       clearCurrentLocationId();
       emitAuthEvent("auth:invalid", { status: res.status, path });
+      recordReliabilityDiagnostic({
+        source: "auth.invalid",
+        severity: "warning",
+        message: `Authentication expired or was rejected for ${method} ${path}`,
+        method,
+        path,
+        status: res.status,
+      });
     }
     const errText = await res.text();
     let errBody: { message?: string; detail?: string; code?: string } = {};
@@ -145,12 +169,30 @@ async function request<T = unknown>(
           "API not found (404). Set STRATA_API_ORIGIN on Vercel/Netlify for the /api proxy, or VITE_API_URL / NEXT_PUBLIC_API_URL at build time (see DEPLOY.md).";
       }
     }
+    recordReliabilityDiagnostic({
+      source: "api.http",
+      severity: res.status >= 500 ? "error" : "warning",
+      message,
+      method,
+      path,
+      status: res.status,
+      detail: errBody.detail ?? errText.slice(0, 300),
+    });
     throw new ApiError(message, res.status, path, errBody.detail, errBody.code);
   }
   const text = await res.text();
   try {
     return (text ? JSON.parse(text) : null) as T;
   } catch {
+    recordReliabilityDiagnostic({
+      source: "api.parse",
+      severity: "error",
+      message: `Invalid JSON received for ${method} ${path}`,
+      method,
+      path,
+      status: res.status,
+      detail: text.slice(0, 300),
+    });
     throw new ApiError("Invalid JSON from server", res.status, path);
   }
 }

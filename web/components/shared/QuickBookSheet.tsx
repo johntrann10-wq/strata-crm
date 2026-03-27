@@ -1,5 +1,5 @@
 import { addMinutes } from "date-fns";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useOutletContext, Link } from "react-router";
 import { useFindMany, useAction } from "../../hooks/useApi";
 import { api } from "../../api";
@@ -9,7 +9,6 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -57,12 +56,6 @@ const getLocalDateString = (date: Date): string => {
 };
 
 const getToday = (): string => getLocalDateString(new Date());
-
-const getTomorrow = (): string => {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return getLocalDateString(d);
-};
 
 const getNextHour = (): string => {
   const now = new Date();
@@ -168,8 +161,23 @@ export function QuickBookSheet({
     }
   }, [vehicles, vehiclesFetching, selectedVehicleId]);
 
-  const today = getToday();
-  const tomorrow = getTomorrow();
+  const minBookingDate = useMemo(() => getToday(), []);
+  const today = minBookingDate;
+  const tomorrow = useMemo(() => {
+    const nextDay = new Date();
+    nextDay.setDate(nextDay.getDate() + 1);
+    return getLocalDateString(nextDay);
+  }, []);
+  const bookingDateLabel = useMemo(() => {
+    if (!bookingDate) return "Pick date";
+    const parsed = new Date(`${bookingDate}T12:00:00`);
+    if (Number.isNaN(parsed.getTime())) return bookingDate;
+    return parsed.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  }, [bookingDate]);
 
   const clientList = (Array.isArray(clients) ? clients : []) as ClientPick[];
   const serviceList = (Array.isArray(services) ? services : []) as ServicePick[];
@@ -298,7 +306,6 @@ export function QuickBookSheet({
       <SheetContent side="right" className="flex flex-col p-0 w-full max-w-md">
         <SheetHeader className="border-b shrink-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.24),rgba(255,255,255,0))] px-4 pt-6 pb-4">
           <SheetTitle>Quick Book</SheetTitle>
-          <SheetDescription>Book an appointment in seconds without losing the important details.</SheetDescription>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <div className="rounded-2xl border border-border/70 bg-background/82 px-3 py-2 text-left">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Client</p>
@@ -321,7 +328,7 @@ export function QuickBookSheet({
           )}
           {/* 1. Client section */}
           <div className="space-y-1.5">
-            <Label>Client *</Label>
+            <Label>1. Client *</Label>
             <Input
               placeholder="Search clients..."
               value={clientSearch}
@@ -365,7 +372,7 @@ export function QuickBookSheet({
 
           {/* 2. Date & Time section */}
           <div className="space-y-2">
-            <Label>Date & Time *</Label>
+            <Label>2. Schedule *</Label>
             <div className="flex flex-wrap gap-2">
               {quickTimePresets.map((preset) => (
                 <Button
@@ -428,7 +435,7 @@ export function QuickBookSheet({
 
           {/* 3. Services section */}
           <div className="space-y-2">
-            <Label>Services (optional)</Label>
+            <Label>3. Services</Label>
             {serviceList.length === 0 ? (
               <p className="text-xs text-muted-foreground">No services configured.</p>
             ) : (
@@ -525,18 +532,14 @@ export function QuickBookSheet({
           {/* 4. Vehicle section — only when client selected */}
           {selectedClientId && (
             <div className="space-y-2">
-              <Label>Vehicle *</Label>
-              <p className="text-xs text-muted-foreground">A vehicle is required to book an appointment.</p>
+              <Label>4. Vehicle *</Label>
               {vehiclesFetching ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Loading vehicles…</span>
+                  <span>Loading vehicles...</span>
                 </div>
               ) : vehicleList.length === 0 ? (
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">
-                    This client needs a vehicle on file before you can book the appointment.
-                  </p>
                   <Button asChild variant="outline" size="sm" className="h-8">
                     <Link to={`/clients/${selectedClientId}/vehicles/new?next=appointment&from=${encodeURIComponent(appointmentDraftHref)}`}>Add vehicle</Link>
                   </Button>
@@ -575,7 +578,7 @@ export function QuickBookSheet({
         <SheetFooter className="border-t pt-4 px-4 pb-4 shrink-0 flex flex-row items-center justify-between gap-2">
           <Link to={fullFormHref}>
             <Button variant="ghost" size="sm">
-              Full form →
+              Open full scheduler
             </Button>
           </Link>
           <Button
@@ -584,7 +587,7 @@ export function QuickBookSheet({
             className="bg-orange-500 hover:bg-orange-600 text-white"
           >
             {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            Book Now
+            Book appointment
           </Button>
         </SheetFooter>
       </SheetContent>

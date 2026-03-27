@@ -603,6 +603,7 @@ export function ConflictBanner({
 
 interface MonthViewProps {
   currentDate: Date;
+  selectedDate?: Date;
   appointments: ApptRecord[];
   onDayClick: (date: Date) => void;
   onApptClick: (apt: ApptRecord) => void;
@@ -611,6 +612,7 @@ interface MonthViewProps {
 
 export function MonthView({
   currentDate,
+  selectedDate,
   appointments,
   onDayClick,
   onApptClick,
@@ -629,13 +631,15 @@ export function MonthView({
         ))}
       </div>
 
-      <div className="grid min-w-0 flex-1 grid-rows-6 overflow-auto">
+      <div className="grid min-w-0 flex-1 grid-rows-6 overflow-hidden">
         {grid.map((week, wi) => (
-          <div key={wi} className="grid min-h-0 grid-cols-7 border-b border-border/60 last:border-b-0">
+          <div key={wi} className="grid min-h-[88px] grid-cols-7 border-b border-border/60 last:border-b-0 sm:min-h-0">
             {week.map((day, di) => {
               const isCurrentMonth = day.getMonth() === currentDate.getMonth();
               const isToday = isSameDay(day, today);
+              const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
               const dayAppts = appointments.filter((a) => isSameDay(new Date(a.startTime), day));
+              const dayRevenue = dayAppts.reduce((total, apt) => total + Number(apt.totalPrice ?? 0), 0);
               const hasConflict = !!conflictIds && dayAppts.some((a) => conflictIds.has(a.id));
 
               return (
@@ -646,7 +650,8 @@ export function MonthView({
                     "group flex min-h-0 flex-col border-r border-border/60 px-2 py-2 text-left transition-colors last:border-r-0",
                     "hover:bg-muted/35",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
-                    isToday && "bg-primary/[0.045]"
+                    isToday && "bg-primary/[0.045]",
+                    isSelected && "ring-1 ring-inset ring-primary/30"
                   )}
                   onClick={() => onDayClick(day)}
                 >
@@ -670,7 +675,7 @@ export function MonthView({
                   </div>
 
                   <div className="space-y-1 overflow-hidden">
-                    {dayAppts.slice(0, 3).map((apt) => {
+                    {dayAppts.slice(0, 2).map((apt, index) => {
                       const status = getStatusStyle(apt.status);
                       return (
                         <button
@@ -678,6 +683,7 @@ export function MonthView({
                           type="button"
                           className={cn(
                             "flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left shadow-sm transition-colors",
+                            index === 1 && "hidden sm:flex",
                             "hover:opacity-95",
                             status.surface,
                             status.text,
@@ -698,11 +704,24 @@ export function MonthView({
                         </button>
                       );
                     })}
-                    {dayAppts.length > 3 ? (
+                    {dayAppts.length > 2 ? (
                       <p className="px-1 text-[11px] font-medium text-muted-foreground">
-                        +{dayAppts.length - 3} more
+                        +{dayAppts.length - 2} more
                       </p>
                     ) : null}
+                  </div>
+
+                  <div className="mt-auto flex items-center justify-between gap-2 pt-2 text-[9px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:pt-3 sm:text-[10px]">
+                    <span>
+                      {dayAppts.length > 0
+                        ? new Intl.NumberFormat("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                            maximumFractionDigits: 0,
+                          }).format(dayRevenue)
+                        : "No work"}
+                    </span>
+                    <span>{isSelected ? "Selected" : "View day"}</span>
                   </div>
                 </button>
               );
