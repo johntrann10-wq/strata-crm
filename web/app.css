@@ -236,6 +236,34 @@ body,
   }
 }
 
+@layer components {
+  [data-onboarding-input="true"] {
+    background: #1a1a1a !important;
+    color: #f4f4f5 !important;
+    -webkit-text-fill-color: #f4f4f5 !important;
+    caret-color: #f4f4f5;
+    color-scheme: dark;
+  }
+
+  [data-onboarding-input="true"]::placeholder {
+    color: #7d8695 !important;
+  }
+
+  [data-onboarding-input="true"]:focus {
+    background: #1a1a1a !important;
+    color: #f4f4f5 !important;
+    -webkit-text-fill-color: #f4f4f5 !important;
+  }
+
+  [data-onboarding-input="true"]:-webkit-autofill,
+  [data-onboarding-input="true"]:-webkit-autofill:hover,
+  [data-onboarding-input="true"]:-webkit-autofill:focus {
+    -webkit-text-fill-color: #f4f4f5 !important;
+    box-shadow: inset 0 0 0 1000px #1a1a1a !important;
+    transition: background-color 9999s ease-in-out 0s;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

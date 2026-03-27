@@ -29,10 +29,16 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
+import type { CSSProperties } from "react";
 
 const ONBOARDING_FORM_ID = "onboarding-business-form";
 const onboardingInputClass =
-  "h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-zinc-100 placeholder:text-[#7d8695] [color-scheme:dark] [&:-webkit-autofill]:[-webkit-text-fill-color:#f4f4f5] [&:-webkit-autofill]:shadow-[inset_0_0_0px_1000px_#1a1a1a] [&:-webkit-autofill:hover]:[-webkit-text-fill-color:#f4f4f5] [&:-webkit-autofill:focus]:[-webkit-text-fill-color:#f4f4f5] [&:-webkit-autofill:focus]:shadow-[inset_0_0_0px_1000px_#1a1a1a]";
+  "h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] placeholder:text-[#7d8695]";
+const onboardingInputStyle: CSSProperties = {
+  color: "#f4f4f5",
+  WebkitTextFillColor: "#f4f4f5",
+  caretColor: "#f4f4f5",
+};
 
 type BusinessTypeValue =
   | "auto_detailing"
@@ -356,7 +362,7 @@ export default function OnboardingPage() {
               <form id={ONBOARDING_FORM_ID} onSubmit={handleSubmit} className="space-y-5 rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,#15171b_0%,#121317_100%)] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
                 <div className="space-y-1.5">
                   <Label htmlFor="name" className="text-sm font-medium text-[#d1d5db]">Business name <span className="text-orange-500">*</span></Label>
-                  <Input id="name" value={formData.name} onChange={handleFieldChange("name")} placeholder={selectedTypeMeta?.exampleName ?? "Your business name"} required className={onboardingInputClass} />
+                  <Input id="name" value={formData.name} onChange={handleFieldChange("name")} placeholder={selectedTypeMeta?.exampleName ?? "Your business name"} required className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
                   <p className="text-xs text-[#8b929f]">This is the only thing you need to enter right now.</p>
                 </div>
 
@@ -373,31 +379,31 @@ export default function OnboardingPage() {
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
                           <Label htmlFor="phone" className="text-sm font-medium text-[#d1d5db]">Phone</Label>
-                          <Input id="phone" type="tel" value={formData.phone} onChange={handleFieldChange("phone")} placeholder="(555) 000-0000" className={onboardingInputClass} />
+                          <Input id="phone" type="tel" value={formData.phone} onChange={handleFieldChange("phone")} placeholder="(555) 000-0000" className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor="email" className="text-sm font-medium text-[#d1d5db]">Email</Label>
-                          <Input id="email" type="email" value={formData.email} onChange={handleFieldChange("email")} placeholder="hello@yourbusiness.com" className={onboardingInputClass} />
+                          <Input id="email" type="email" value={formData.email} onChange={handleFieldChange("email")} placeholder="hello@yourbusiness.com" className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
                         </div>
                       </div>
 
                       <div className="space-y-1.5">
                         <Label htmlFor="address" className="text-sm font-medium text-[#d1d5db]">Address</Label>
-                        <Input id="address" value={formData.address} onChange={handleFieldChange("address")} placeholder="123 Main St" className={onboardingInputClass} />
+                        <Input id="address" value={formData.address} onChange={handleFieldChange("address")} placeholder="123 Main St" className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
                       </div>
 
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <div className="space-y-1.5">
                           <Label htmlFor="city" className="text-sm font-medium text-[#d1d5db]">City</Label>
-                          <Input id="city" value={formData.city} onChange={handleFieldChange("city")} placeholder="Los Angeles" className={onboardingInputClass} />
+                          <Input id="city" value={formData.city} onChange={handleFieldChange("city")} placeholder="Los Angeles" className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor="state" className="text-sm font-medium text-[#d1d5db]">State</Label>
-                          <Input id="state" value={formData.state} onChange={handleFieldChange("state")} placeholder="CA" maxLength={2} className={onboardingInputClass} />
+                          <Input id="state" value={formData.state} onChange={handleFieldChange("state")} placeholder="CA" maxLength={2} className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor="zip" className="text-sm font-medium text-[#d1d5db]">Zip</Label>
-                          <Input id="zip" value={formData.zip} onChange={handleFieldChange("zip")} placeholder="90210" className={onboardingInputClass} />
+                          <Input id="zip" value={formData.zip} onChange={handleFieldChange("zip")} placeholder="90210" className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
                         </div>
                       </div>
                     </div>
@@ -416,15 +422,15 @@ export default function OnboardingPage() {
                     <div className="space-y-4 border-t border-[#262626] px-4 pb-4 pt-3">
                       <div className="space-y-1.5">
                         <Label htmlFor="staffCount" className="text-sm font-medium text-[#d1d5db]">Number of staff</Label>
-                        <Input id="staffCount" type="number" min={0} max={500} value={staffCount} onChange={(e) => setStaffCount(e.target.value)} className={`${onboardingInputClass} w-full sm:w-32`} />
+                        <Input id="staffCount" type="number" min={0} max={500} value={staffCount} onChange={(e) => setStaffCount(e.target.value)} className={`${onboardingInputClass} w-full sm:w-32`} data-onboarding-input="true" style={onboardingInputStyle} />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-sm font-medium text-[#d1d5db]">Typical operating hours</Label>
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[120px_1fr_auto_1fr] sm:items-center">
-                          <Input value={operatingHours.days} onChange={(e) => setOperatingHours((current) => ({ ...current, days: e.target.value }))} className={onboardingInputClass} />
-                          <Input type="time" value={operatingHours.open} onChange={(e) => setOperatingHours((current) => ({ ...current, open: e.target.value }))} className={onboardingInputClass} />
+                          <Input value={operatingHours.days} onChange={(e) => setOperatingHours((current) => ({ ...current, days: e.target.value }))} className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
+                          <Input type="time" value={operatingHours.open} onChange={(e) => setOperatingHours((current) => ({ ...current, open: e.target.value }))} className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
                           <span className="text-center text-[#6b7280]">to</span>
-                          <Input type="time" value={operatingHours.close} onChange={(e) => setOperatingHours((current) => ({ ...current, close: e.target.value }))} className={onboardingInputClass} />
+                          <Input type="time" value={operatingHours.close} onChange={(e) => setOperatingHours((current) => ({ ...current, close: e.target.value }))} className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
                         </div>
                       </div>
                     </div>
