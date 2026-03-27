@@ -443,6 +443,19 @@ export function getPresetSummaryForBusinessType(type: string | null | undefined)
   };
 }
 
+export function getPresetServiceCategoryByName(): Map<string, ServiceCategory> {
+  const map = new Map<string, ServiceCategory>();
+  for (const addon of COMMON_ADDONS) {
+    map.set(addon.name.toLowerCase(), addon.category);
+  }
+  for (const preset of Object.values(PRESETS)) {
+    for (const service of preset.services) {
+      map.set(service.name.toLowerCase(), service.category);
+    }
+  }
+  return map;
+}
+
 export async function getAppliedBusinessPresetSummary(businessId: string) {
   const [business] = await db
     .select({ id: businesses.id, type: businesses.type })

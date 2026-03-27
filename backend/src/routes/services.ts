@@ -10,6 +10,7 @@ import { warnOnce } from "../lib/warnOnce.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { getPresetServiceCategoryByName } from "../lib/businessPresets.js";
 
 export const servicesRouter = Router({ mergeParams: true });
 
@@ -24,6 +25,7 @@ const CATEGORY_VALUES = [
 ] as const;
 
 const LEGACY_CATEGORY_PREFIX = "[[strata:service-category=";
+const PRESET_SERVICE_CATEGORY_BY_NAME = getPresetServiceCategoryByName();
 
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
@@ -96,6 +98,38 @@ function decodeLegacyServiceFields(notes: string | null | undefined): { notes: s
     notes: cleaned || null,
     category,
   };
+}
+
+function inferLegacyServiceCategory(
+  name: string | null | undefined,
+  notes: string | null | undefined
+): (typeof CATEGORY_VALUES)[number] | null {
+  const normalizedName = name?.trim().toLowerCase();
+  if (normalizedName && PRESET_SERVICE_CATEGORY_BY_NAME.has(normalizedName)) {
+    return PRESET_SERVICE_CATEGORY_BY_NAME.get(normalizedName) ?? null;
+  }
+
+  const haystack = `${name ?? ""}\n${notes ?? ""}`.toLowerCase();
+  if (!haystack.trim()) return null;
+  if (/(detail|wash|coating|paint correction|polish|decontamination|odor|headlight|engine bay|sealant)/.test(haystack)) {
+    return "detail";
+  }
+  if (/(tint|ceramic film|dyed film|carbon film|sun strip|windshield)/.test(haystack)) {
+    return "tint";
+  }
+  if (/(ppf|paint protection film|rocker panel protection|door edge|door cup)/.test(haystack)) {
+    return "ppf";
+  }
+  if (/(tire|wheel balance|wheel balancing|alignment|tpms|flat repair|rotation|changeover)/.test(haystack)) {
+    return "tire";
+  }
+  if (/(wrap|vinyl|chrome delete|roof wrap|trim wrap)/.test(haystack)) {
+    return "body";
+  }
+  if (/(oil|brake|battery|spark plug|ignition coil|coolant|transmission|diagnostic|inspection|exhaust|muffler|resonator|downpipe|coilover|suspension|ecu tune|dyno)/.test(haystack)) {
+    return "mechanical";
+  }
+  return null;
 }
 
 const legacyServiceSelection = {
@@ -196,7 +230,7 @@ function withMissingServiceFields<T extends Omit<ServiceRecord, "notes" | "durat
     ...row,
     notes: decoded.notes,
     durationMinutes: null,
-    category: decoded.category ?? "other",
+    category: decoded.category ?? inferLegacyServiceCategory((row as { name?: string | null }).name, decoded.notes) ?? "other",
     taxable: true,
     isAddon: false,
     active: true,
@@ -208,7 +242,10 @@ function normalizeServiceRecord(row: ServiceRecord): ServiceRecord {
   return {
     ...row,
     notes: decoded.notes,
-    category: row.category ?? decoded.category ?? "other",
+    category:
+      row.category === "other"
+        ? decoded.category ?? inferLegacyServiceCategory(row.name, decoded.notes) ?? "other"
+        : row.category ?? decoded.category ?? inferLegacyServiceCategory(row.name, decoded.notes) ?? "other",
   };
 }
 
