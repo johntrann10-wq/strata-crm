@@ -346,10 +346,19 @@ async function insertPresetServices(businessId: string, rows: PresetService[]) {
     if (!isPresetSchemaDriftError(error)) throw error;
     logger.warn("Business preset seeding inserting with legacy services schema", { businessId, error });
     for (const item of rows) {
-      await db.execute(sql`
-        insert into "services" ("id", "business_id", "name", "price", "notes", "created_at", "updated_at")
-        values (${randomUUID()}, ${businessId}, ${item.name}, ${String(item.startingPrice)}, ${serializePresetNotes(item)}, ${now}, ${now})
-      `);
+      try {
+        await db.execute(sql`
+          insert into "services" ("id", "business_id", "name", "price", "notes", "created_at", "updated_at")
+          values (${randomUUID()}, ${businessId}, ${item.name}, ${String(item.startingPrice)}, ${serializePresetNotes(item)}, ${now}, ${now})
+        `);
+      } catch (rowError) {
+        if (!isPresetSchemaDriftError(rowError)) throw rowError;
+        logger.warn("Business preset skipped one legacy service row", {
+          businessId,
+          serviceName: item.name,
+          error: rowError,
+        });
+      }
     }
   }
 }
@@ -420,6 +429,20 @@ export async function applyBusinessPreset(businessId: string) {
 
   await insertPresetServices(businessId, toInsert);
 
+  const existingKeysAfterInsert = await loadExistingServiceNames(businessId, names);
+  const appliedCount = combined.filter((item) => {
+    if (existingKeysAfterInsert.has(`${item.name}::${item.category}`)) return true;
+    if (existingKeysAfterInsert.has(item.name)) return true;
+    return false;
+  }).length;
+  const previouslyAppliedCount = combined.filter((item) => {
+    if (existingKeys.has(`${item.name}::${item.category}`)) return true;
+    if (existingKeys.has(item.name)) return true;
+    return false;
+  }).length;
+  const createdCount = Math.max(appliedCount - previouslyAppliedCount, 0);
+  const skippedCount = Math.max(combined.length - createdCount, 0);
+
   const serviceIdByName = await loadSeededServiceIds(businessId, names);
 
   const addonNameByKey = new Map(COMMON_ADDONS.map((item) => [item.key, item.name]));
@@ -464,5 +487,12 @@ export async function applyBusinessPreset(businessId: string) {
     }
   }
 
-  return { created: toInsert.length, skipped: combined.length - toInsert.length, group: presetType };
+  return {
+    created: createdCount,
+    skipped: skippedCount,
+    group: presetType,
+    expectedCount: combined.length,
+    appliedCount,
+    fullyApplied: appliedCount >= combined.length,
+  };
 }
