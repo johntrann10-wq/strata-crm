@@ -26,8 +26,13 @@ function businessId(req: Request): string {
 
 function isLocationSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
-  const code = (error as { code?: string }).code;
-  const message = String((error as { message?: string }).message ?? "").toLowerCase();
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
   return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
