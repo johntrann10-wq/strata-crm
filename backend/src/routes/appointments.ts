@@ -295,27 +295,120 @@ function parseIsoDate(s: string | undefined): Date | undefined {
 
 type AppointmentDeliveryStatus = "emailed" | "missing_email" | "smtp_disabled" | "email_failed";
 
+function extractMobileServiceAddress(notes: string | null | undefined): string | null {
+  const text = notes?.trim();
+  if (!text) return null;
+  const match = text.match(/Mobile service address:\s*(.+)/i);
+  return match?.[1]?.trim() || null;
+}
+
+function formatAppointmentDateTime(value: Date | string | null | undefined, timezone: string | null | undefined): string {
+  if (!value) return "Scheduled appointment";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Scheduled appointment";
+
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: timezone?.trim() || undefined,
+      timeZoneName: "short",
+    }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZoneName: "short",
+    }).format(date);
+  }
+}
+
 async function buildAppointmentConfirmationPayload(appointmentId: string, bid: string) {
-  const [appointmentRow] = await db
-    .select({
-      id: appointments.id,
-      startTime: appointments.startTime,
-      clientFirstName: clients.firstName,
-      clientLastName: clients.lastName,
-      clientEmail: clients.email,
-      businessName: businesses.name,
-      vehicleYear: vehicles.year,
-      vehicleMake: vehicles.make,
-      vehicleModel: vehicles.model,
-      locationAddress: locations.address,
-    })
-    .from(appointments)
-    .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
-    .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
-    .leftJoin(businesses, eq(appointments.businessId, businesses.id))
-    .leftJoin(locations, and(eq(appointments.locationId, locations.id), eq(locations.businessId, bid)))
-    .where(and(eq(appointments.id, appointmentId), eq(appointments.businessId, bid)))
-    .limit(1);
+  let appointmentRow:
+    | {
+        id: string;
+        startTime: Date;
+        notes: string | null;
+        clientFirstName: string | null;
+        clientLastName: string | null;
+        clientEmail: string | null;
+        businessName: string | null;
+        businessTimezone: string | null;
+        vehicleYear: number | null;
+        vehicleMake: string | null;
+        vehicleModel: string | null;
+        locationName: string | null;
+        locationAddress: string | null;
+        locationTimezone: string | null;
+      }
+    | undefined;
+  try {
+    [appointmentRow] = await db
+      .select({
+        id: appointments.id,
+        startTime: appointments.startTime,
+        notes: appointments.notes,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+        clientEmail: clients.email,
+        businessName: businesses.name,
+        businessTimezone: businesses.timezone,
+        vehicleYear: vehicles.year,
+        vehicleMake: vehicles.make,
+        vehicleModel: vehicles.model,
+        locationName: locations.name,
+        locationAddress: locations.address,
+        locationTimezone: locations.timezone,
+      })
+      .from(appointments)
+      .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
+      .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
+      .leftJoin(businesses, eq(appointments.businessId, businesses.id))
+      .leftJoin(locations, and(eq(appointments.locationId, locations.id), eq(locations.businessId, bid)))
+      .where(and(eq(appointments.id, appointmentId), eq(appointments.businessId, bid)))
+      .limit(1);
+  } catch (error) {
+    if (!isLocationSchemaDriftError(error)) throw error;
+    logger.warn("Appointment confirmation falling back without location timezone", {
+      appointmentId,
+      businessId: bid,
+      error,
+    });
+    [appointmentRow] = await db
+      .select({
+        id: appointments.id,
+        startTime: appointments.startTime,
+        notes: appointments.notes,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+        clientEmail: clients.email,
+        businessName: businesses.name,
+        businessTimezone: businesses.timezone,
+        vehicleYear: vehicles.year,
+        vehicleMake: vehicles.make,
+        vehicleModel: vehicles.model,
+        locationName: locations.name,
+        locationAddress: locations.address,
+        locationTimezone: sql<string | null>`null`,
+      })
+      .from(appointments)
+      .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
+      .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
+      .leftJoin(businesses, eq(appointments.businessId, businesses.id))
+      .leftJoin(locations, and(eq(appointments.locationId, locations.id), eq(locations.businessId, bid)))
+      .where(and(eq(appointments.id, appointmentId), eq(appointments.businessId, bid)))
+      .limit(1);
+  }
 
   if (!appointmentRow) return null;
 
@@ -342,24 +435,22 @@ async function buildAppointmentConfirmationPayload(appointmentId: string, bid: s
     clientName:
       `${appointmentRow.clientFirstName ?? ""} ${appointmentRow.clientLastName ?? ""}`.trim() || "Customer",
     businessName: appointmentRow.businessName ?? "Your shop",
-    dateTime: appointmentRow.startTime
-      ? new Date(appointmentRow.startTime).toLocaleString("en-US", {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        })
-      : "Scheduled appointment",
+    dateTime: formatAppointmentDateTime(
+      appointmentRow.startTime,
+      appointmentRow.locationTimezone ?? appointmentRow.businessTimezone
+    ),
     vehicle:
       buildVehicleDisplayName({
         year: appointmentRow.vehicleYear,
         make: appointmentRow.vehicleMake,
         model: appointmentRow.vehicleModel,
       }) || null,
-    address: appointmentRow.locationAddress ?? null,
+    address: (() => {
+      const mobileAddress = extractMobileServiceAddress(appointmentRow.notes);
+      if (mobileAddress) return mobileAddress;
+      const locationAddress = [appointmentRow.locationName, appointmentRow.locationAddress].filter(Boolean).join(" - ");
+      return locationAddress || null;
+    })(),
     serviceSummary:
       serviceRows.length > 0 ? `Services: ${serviceRows.map((service) => service.name).join(", ")}` : null,
     confirmationUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/appointments/${appointmentRow.id}`,
