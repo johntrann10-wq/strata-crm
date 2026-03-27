@@ -15,6 +15,7 @@ import {
   WeekView,
   detectConflicts,
   getHeaderTitle,
+  getWeekDays,
   getViewRange,
   navigateDate,
 } from "../components/CalendarViews";
@@ -24,6 +25,18 @@ function toLocalDateString(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatPanelDate(date: Date): string {
+  return date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
 
 export default function CalendarPage() {
@@ -141,7 +154,6 @@ export default function CalendarPage() {
 
   function handleDayClick(date: Date) {
     setCurrentDate(date);
-    setView("day");
   }
 
   function handleSlotClick(date: Date) {
@@ -171,6 +183,64 @@ export default function CalendarPage() {
   const selectedDayRevenue = selectedDayAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
   const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
   const selectedDayConflicts = selectedDayAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
+  const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
+  const selectedWeekAppointments = useMemo(
+    () =>
+      activeAppointments.filter((appointment) =>
+        weekDays.some((day) => new Date(appointment.startTime).toDateString() === day.toDateString())
+      ),
+    [activeAppointments, weekDays]
+  );
+  const selectedWeekRevenue = selectedWeekAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
+  const selectedWeekUnassigned = selectedWeekAppointments.filter((appointment) => !appointment.assignedStaffId).length;
+  const selectedWeekConflicts = selectedWeekAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
+  const weekAgenda = useMemo(
+    () =>
+      weekDays
+        .map((day) => ({
+          day,
+          appointments: selectedWeekAppointments.filter(
+            (appointment) => new Date(appointment.startTime).toDateString() === day.toDateString()
+          ),
+        }))
+        .filter((entry) => entry.appointments.length > 0),
+    [selectedWeekAppointments, weekDays]
+  );
+  const selectedMonthAppointments = useMemo(
+    () =>
+      activeAppointments.filter((appointment) => {
+        const start = new Date(appointment.startTime);
+        return start.getFullYear() === currentDate.getFullYear() && start.getMonth() === currentDate.getMonth();
+      }),
+    [activeAppointments, currentDate]
+  );
+  const selectedMonthRevenue = selectedMonthAppointments.reduce(
+    (total, appointment) => total + Number(appointment.totalPrice ?? 0),
+    0
+  );
+  const selectedMonthConflicts = selectedMonthAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
+  const selectedMonthUnassigned = selectedMonthAppointments.filter((appointment) => !appointment.assignedStaffId).length;
+  const selectedMonthDaysWithWork = useMemo(
+    () =>
+      new Set(
+        selectedMonthAppointments.map((appointment) => toLocalDateString(new Date(appointment.startTime)))
+      ).size,
+    [selectedMonthAppointments]
+  );
+  const busiestMonthDay = useMemo(() => {
+    const counts = new Map<string, { date: Date; count: number }>();
+    for (const appointment of selectedMonthAppointments) {
+      const date = new Date(appointment.startTime);
+      const key = toLocalDateString(date);
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        counts.set(key, { date, count: 1 });
+      }
+    }
+    return Array.from(counts.values()).sort((a, b) => b.count - a.count)[0] ?? null;
+  }, [selectedMonthAppointments]);
   const availableViews = isMobileLayout ? (["day", "week", "month"] as const) : (["week", "day", "month"] as const);
 
   return (
@@ -320,78 +390,251 @@ export default function CalendarPage() {
           </div>
 
           <aside className={cn("space-y-4", isMobileLayout && "space-y-3")}>
-            <div className="surface-panel rounded-[1.6rem] p-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected day</p>
-                <h2 className="mt-1 text-lg font-semibold text-foreground">
-                  {currentDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-                </h2>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
-                  <p className="mt-2 text-2xl font-semibold text-foreground">{selectedDayAppointments.length}</p>
+            {view === "month" ? (
+              <>
+                <div className="surface-panel rounded-[1.6rem] p-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Month overview</p>
+                    <h2 className="mt-1 text-lg font-semibold text-foreground">
+                      {currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                    </h2>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{selectedMonthAppointments.length}</p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Revenue</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(selectedMonthRevenue)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                      {selectedMonthDaysWithWork} active days
+                    </span>
+                    <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                      {selectedMonthUnassigned} unassigned
+                    </span>
+                    <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                      {selectedMonthConflicts} conflicts
+                    </span>
+                  </div>
                 </div>
-                <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Revenue</p>
-                  <p className="mt-2 text-2xl font-semibold text-foreground">
-                    {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(selectedDayRevenue)}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-                  {selectedDayUnassigned} unassigned
-                </span>
-                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-                  {selectedDayConflicts} conflicts
-                </span>
-              </div>
-            </div>
 
-            <div className="surface-panel rounded-[1.5rem] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day agenda</p>
-                </div>
-              </div>
-              {selectedDayAppointments.length > 0 ? (
-                <div className="mt-3 space-y-2">
-                  {selectedDayAppointments.slice(0, 6).map((appointment) => (
-                    <button
-                      key={appointment.id}
-                      type="button"
-                      onClick={() => handleApptClick(appointment)}
-                      className="flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88"
-                    >
-                      <div className="min-w-[54px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        {new Date(appointment.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-foreground">
-                          {appointment.title ||
-                            (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                <div className="surface-panel rounded-[1.5rem] p-4">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected date</p>
+                    <h3 className="text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
+                  </div>
+                  {selectedDayAppointments.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      {selectedDayAppointments.slice(0, 5).map((appointment) => (
+                        <button
+                          key={appointment.id}
+                          type="button"
+                          onClick={() => handleApptClick(appointment)}
+                          className="flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88"
+                        >
+                          <div className="min-w-[54px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                            {new Date(appointment.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-foreground">
+                              {appointment.title ||
+                                (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {appointment.vehicle
+                                ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+                                : appointment.assignedStaff
+                                  ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+                                  : "Unassigned"}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                      {selectedDayAppointments.length > 5 ? (
+                        <p className="px-1 text-xs text-muted-foreground">+{selectedDayAppointments.length - 5} more on this date</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="mt-3 space-y-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-5">
+                      <p className="text-sm font-medium text-foreground">No appointments on this date</p>
+                      {busiestMonthDay ? (
+                        <p className="text-xs text-muted-foreground">
+                          Busiest day this month: {formatPanelDate(busiestMonthDay.date)} ({busiestMonthDay.count})
                         </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {appointment.vehicle
-                            ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
-                            : appointment.assignedStaff
-                              ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-                              : "Unassigned"}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                  {selectedDayAppointments.length > 6 ? (
-                    <p className="px-1 text-xs text-muted-foreground">+{selectedDayAppointments.length - 6} more on this day</p>
-                  ) : null}
+                      ) : null}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-6 text-center">
-                  <p className="text-sm font-medium text-foreground">No appointments on this day</p>
+              </>
+            ) : null}
+
+            {view === "week" ? (
+              <>
+                <div className="surface-panel rounded-[1.6rem] p-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Week summary</p>
+                    <h2 className="mt-1 text-lg font-semibold text-foreground">
+                      {weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} -{" "}
+                      {weekDays[6].toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </h2>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{selectedWeekAppointments.length}</p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Revenue</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(selectedWeekRevenue)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                      {selectedWeekUnassigned} unassigned
+                    </span>
+                    <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                      {selectedWeekConflicts} conflicts
+                    </span>
+                  </div>
                 </div>
-              )}
-            </div>
+
+                <div className="surface-panel rounded-[1.5rem] p-4">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Week line-up</p>
+                    <h3 className="text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
+                  </div>
+                  {weekAgenda.length > 0 ? (
+                    <div className="mt-3 space-y-3">
+                      {weekAgenda.map((entry) => (
+                        <div key={entry.day.toISOString()} className="rounded-2xl border border-white/65 bg-white/72 px-3 py-3">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setCurrentDate(entry.day)}
+                              className="text-left text-sm font-semibold text-foreground"
+                            >
+                              {formatPanelDate(entry.day)}
+                            </button>
+                            <span className="text-xs text-muted-foreground">{entry.appointments.length} booked</span>
+                          </div>
+                          <div className="space-y-2">
+                            {entry.appointments.slice(0, 3).map((appointment) => (
+                              <button
+                                key={appointment.id}
+                                type="button"
+                                onClick={() => handleApptClick(appointment)}
+                                className="flex w-full items-start gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-left transition-colors hover:bg-background"
+                              >
+                                <div className="min-w-[54px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                  {new Date(appointment.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold text-foreground">
+                                    {appointment.title ||
+                                      (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                                  </p>
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    {appointment.vehicle
+                                      ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+                                      : appointment.assignedStaff
+                                        ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+                                        : "Unassigned"}
+                                  </p>
+                                </div>
+                              </button>
+                            ))}
+                            {entry.appointments.length > 3 ? (
+                              <p className="px-1 text-xs text-muted-foreground">+{entry.appointments.length - 3} more on this day</p>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-6 text-center">
+                      <p className="text-sm font-medium text-foreground">No appointments this week</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
+
+            {view === "day" ? (
+              <>
+                <div className="surface-panel rounded-[1.6rem] p-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day summary</p>
+                    <h2 className="mt-1 text-lg font-semibold text-foreground">{formatPanelDate(currentDate)}</h2>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{selectedDayAppointments.length}</p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Revenue</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(selectedDayRevenue)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                      {selectedDayUnassigned} unassigned
+                    </span>
+                    <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                      {selectedDayConflicts} conflicts
+                    </span>
+                  </div>
+                </div>
+
+                <div className="surface-panel rounded-[1.5rem] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day agenda</p>
+                    </div>
+                  </div>
+                  {selectedDayAppointments.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      {selectedDayAppointments.slice(0, 6).map((appointment) => (
+                        <button
+                          key={appointment.id}
+                          type="button"
+                          onClick={() => handleApptClick(appointment)}
+                          className="flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88"
+                        >
+                          <div className="min-w-[54px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                            {new Date(appointment.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-foreground">
+                              {appointment.title ||
+                                (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {appointment.vehicle
+                                ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+                                : appointment.assignedStaff
+                                  ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+                                  : "Unassigned"}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                      {selectedDayAppointments.length > 6 ? (
+                        <p className="px-1 text-xs text-muted-foreground">+{selectedDayAppointments.length - 6} more on this day</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-6 text-center">
+                      <p className="text-sm font-medium text-foreground">No appointments on this day</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
           </aside>
         </div>
       </div>
