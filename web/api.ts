@@ -91,6 +91,11 @@ export class ApiError extends Error {
   }
 }
 
+function emitSubscriptionRequired(path: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("subscription:required", { detail: { path } }));
+}
+
 function getToken() {
   return getAuthToken();
 }
@@ -158,6 +163,9 @@ async function request<T = unknown>(
       } catch {
         errBody = { message: errText.slice(0, 200) };
       }
+    }
+    if (res.status === 402 && errBody.code === "SUBSCRIPTION_REQUIRED") {
+      emitSubscriptionRequired(path);
     }
     let message =
       errBody.message ?? res.statusText ?? `Request failed ${res.status}`;

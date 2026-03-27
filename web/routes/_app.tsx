@@ -51,6 +51,12 @@ import {
 import { pathAllowsMissingBusiness } from "../lib/routeRequiresBusiness";
 import { recordRuntimeError } from "../lib/runtimeErrors";
 
+type BillingStatus = {
+  status: string | null;
+  trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
+};
+
 // SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
 
 export type AuthOutletContext = RootOutletContext & {
@@ -633,6 +639,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const [currentBusinessId, setCurrentBusinessIdState] = useState<string | null>(() => getCurrentBusinessId());
   const [currentLocationId, setCurrentLocationIdState] = useState<string | null>(() => getCurrentLocationId());
   const [authCheckDone, setAuthCheckDone] = useState(false);
+  const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [billingCheckDone, setBillingCheckDone] = useState(false);
   const effectiveUserId = clientUserId;
 
   useEffect(() => {
@@ -701,11 +709,17 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       clearCurrentLocationId();
       setAuthCheckDone(true);
     };
+    const onSubscriptionRequired = () => {
+      setBillingCheckDone(true);
+      setBillingStatus((current) => current ?? { status: "required", trialEndsAt: null, currentPeriodEnd: null });
+    };
     window.addEventListener("auth:invalid", onInvalid as EventListener);
     window.addEventListener("auth:logout", onLogout as EventListener);
+    window.addEventListener("subscription:required", onSubscriptionRequired as EventListener);
     return () => {
       window.removeEventListener("auth:invalid", onInvalid as EventListener);
       window.removeEventListener("auth:logout", onLogout as EventListener);
+      window.removeEventListener("subscription:required", onSubscriptionRequired as EventListener);
     };
   }, []);
 
@@ -725,6 +739,42 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     [tenantBusinesses, currentBusinessId]
   );
   const allowWithoutBusiness = pathAllowsMissingBusiness(location.pathname);
+  const allowWithoutSubscription =
+    location.pathname === "/subscribe" ||
+    location.pathname.startsWith("/subscribe/") ||
+    location.pathname === "/settings" ||
+    location.pathname.startsWith("/settings/") ||
+    location.pathname === "/profile" ||
+    location.pathname.startsWith("/profile/") ||
+    location.pathname === "/onboarding" ||
+    location.pathname.startsWith("/onboarding/");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!effectiveUserId || !currentBusinessId) {
+      setBillingStatus(null);
+      setBillingCheckDone(true);
+      return;
+    }
+
+    setBillingCheckDone(false);
+    api.billing
+      .getStatus()
+      .then((result) => {
+        if (cancelled) return;
+        setBillingStatus(result);
+        setBillingCheckDone(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBillingStatus(null);
+        setBillingCheckDone(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveUserId, currentBusinessId]);
 
   const handleBusinessChange = useCallback(
     (businessId: string) => {
@@ -750,6 +800,10 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     if (allowWithoutBusiness) return null;
     if (!business) return "/onboarding";
     if ((business as { onboardingComplete?: boolean }).onboardingComplete === false) return "/onboarding";
+    const isSubscribed = billingStatus?.status === "active" || billingStatus?.status === "trialing";
+    if (billingCheckDone && !allowWithoutSubscription && billingStatus && !isSubscribed) {
+      return "/subscribe";
+    }
     return null;
   }, [
     authCheckDone,
@@ -759,7 +813,10 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     businessFetching,
     businessError,
     allowWithoutBusiness,
+    allowWithoutSubscription,
     business,
+    billingStatus,
+    billingCheckDone,
   ]);
 
   useEffect(() => {
