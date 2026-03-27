@@ -16,6 +16,7 @@ import { sendAppointmentConfirmation } from "../lib/email.js";
 import { isEmailConfigured } from "../lib/env.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
+import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
@@ -362,11 +363,12 @@ async function buildAppointmentConfirmationPayload(
         clientFirstName: string | null;
         clientLastName: string | null;
         clientEmail: string | null;
-        businessName: string | null;
-        businessTimezone: string | null;
-        vehicleYear: number | null;
-        vehicleMake: string | null;
-        vehicleModel: string | null;
+      businessName: string | null;
+      businessTimezone: string | null;
+      businessType: string | null;
+      vehicleYear: number | null;
+      vehicleMake: string | null;
+      vehicleModel: string | null;
         locationName: string | null;
         locationAddress: string | null;
         locationTimezone: string | null;
@@ -383,6 +385,7 @@ async function buildAppointmentConfirmationPayload(
         clientEmail: clients.email,
         businessName: businesses.name,
         businessTimezone: businesses.timezone,
+        businessType: businesses.type,
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
@@ -415,6 +418,7 @@ async function buildAppointmentConfirmationPayload(
           clientEmail: clients.email,
           businessName: businesses.name,
           businessTimezone: sql<string | null>`null`,
+          businessType: businesses.type,
           vehicleYear: vehicles.year,
           vehicleMake: vehicles.make,
           vehicleModel: vehicles.model,
@@ -446,6 +450,7 @@ async function buildAppointmentConfirmationPayload(
           clientEmail: clients.email,
           businessName: businesses.name,
           businessTimezone: sql<string | null>`null`,
+          businessType: businesses.type,
           vehicleYear: vehicles.year,
           vehicleMake: vehicles.make,
           vehicleModel: vehicles.model,
@@ -491,7 +496,9 @@ async function buildAppointmentConfirmationPayload(
     businessName: appointmentRow.businessName ?? "Your shop",
     dateTime: formatAppointmentDateTime(
       appointmentRow.startTime,
-      appointmentRow.locationTimezone ?? appointmentRow.businessTimezone
+      appointmentRow.locationTimezone ??
+        appointmentRow.businessTimezone ??
+        getBusinessTypeDefaults(appointmentRow.businessType).timezone
     ),
     vehicle:
       buildVehicleDisplayName({
