@@ -2,12 +2,13 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { appointmentServices, appointments, services } from "../db/schema.js";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
 import { createRequestActivityLog } from "../lib/activity.js";
+import { logger } from "../lib/logger.js";
 
 export const appointmentServicesRouter = Router({ mergeParams: true });
 
@@ -24,6 +25,37 @@ function parseFilter(req: Request): unknown {
   }
 }
 
+function isServiceSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+let cachedServiceColumns: Set<string> | null = null;
+
+async function getServiceColumns(): Promise<Set<string>> {
+  if (cachedServiceColumns) return cachedServiceColumns;
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'services'
+  `);
+  const resultWithRows = result as unknown as { rows?: Array<{ column_name?: string }> };
+  const rows = Array.isArray(resultWithRows.rows) ? resultWithRows.rows : [];
+  cachedServiceColumns = new Set(
+    rows
+      .map((row) => row?.column_name)
+      .filter((value): value is string => typeof value === "string")
+  );
+  return cachedServiceColumns;
+}
+
 appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
   const filter = parseFilter(req) as { appointmentId?: { equals?: string } } | undefined;
@@ -33,26 +65,73 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Reque
   if (appointmentId) conditions.push(eq(appointmentServices.appointmentId, appointmentId));
 
   const first = req.query.first != null ? Math.min(Number(req.query.first), 100) : 50;
+  let rows: Array<{
+    id: string;
+    appointmentId: string;
+    serviceId: string;
+    quantity: number;
+    unitPrice: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    serviceName: string | null;
+    serviceCategory: string | null;
+    serviceDurationMinutes: number | null;
+  }>;
 
-  const rows = await db
-    .select({
-      id: appointmentServices.id,
-      appointmentId: appointmentServices.appointmentId,
-      serviceId: appointmentServices.serviceId,
-      quantity: appointmentServices.quantity,
-      unitPrice: appointmentServices.unitPrice,
-      createdAt: appointmentServices.createdAt,
-      updatedAt: appointmentServices.updatedAt,
-      serviceName: services.name,
-      serviceCategory: services.category,
-      serviceDurationMinutes: services.durationMinutes,
-    })
-    .from(appointmentServices)
-    .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
-    .leftJoin(services, eq(appointmentServices.serviceId, services.id))
-    .where(and(...conditions))
-    .orderBy(desc(appointmentServices.createdAt))
-    .limit(first);
+  try {
+    rows = await db
+      .select({
+        id: appointmentServices.id,
+        appointmentId: appointmentServices.appointmentId,
+        serviceId: appointmentServices.serviceId,
+        quantity: appointmentServices.quantity,
+        unitPrice: appointmentServices.unitPrice,
+        createdAt: appointmentServices.createdAt,
+        updatedAt: appointmentServices.updatedAt,
+        serviceName: services.name,
+        serviceCategory: services.category,
+        serviceDurationMinutes: services.durationMinutes,
+      })
+      .from(appointmentServices)
+      .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
+      .leftJoin(services, eq(appointmentServices.serviceId, services.id))
+      .where(and(...conditions))
+      .orderBy(desc(appointmentServices.createdAt))
+      .limit(first);
+  } catch (error) {
+    if (!isServiceSchemaDriftError(error)) throw error;
+    const columns = await getServiceColumns();
+    logger.warn("Appointment services list falling back due to service schema drift", {
+      businessId: bid,
+      appointmentId,
+      columns: Array.from(columns).sort(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    rows = await db
+      .select({
+        id: appointmentServices.id,
+        appointmentId: appointmentServices.appointmentId,
+        serviceId: appointmentServices.serviceId,
+        quantity: appointmentServices.quantity,
+        unitPrice: appointmentServices.unitPrice,
+        createdAt: appointmentServices.createdAt,
+        updatedAt: appointmentServices.updatedAt,
+        serviceName: services.name,
+      })
+      .from(appointmentServices)
+      .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
+      .leftJoin(services, eq(appointmentServices.serviceId, services.id))
+      .where(and(...conditions))
+      .orderBy(desc(appointmentServices.createdAt))
+      .limit(first)
+      .then((legacyRows) =>
+        legacyRows.map((row) => ({
+          ...row,
+          serviceCategory: null,
+          serviceDurationMinutes: null,
+        }))
+      );
+  }
 
   res.json({
     records: rows.map((row) => ({
@@ -271,4 +350,3 @@ appointmentServicesRouter.post("/:id/reopen", requireAuth, requireTenant, async 
   });
   res.json({ ok: true });
 });
-
