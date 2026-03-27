@@ -141,56 +141,26 @@ async function insertLegacyInvoice(
   const columns = await getInvoiceColumns();
   const invoiceId = randomUUID();
   const now = new Date();
-  const insertColumns = [
-    "id",
-    "business_id",
-    "client_id",
-    "invoice_number",
-    "status",
-    "subtotal",
-    "tax_rate",
-    "tax_amount",
-    "discount_amount",
-    "total",
-  ];
-  const insertValues: unknown[] = [
-    invoiceId,
-    bid,
-    data.clientId,
-    data.invoiceNumber,
-    data.status,
-    String(data.subtotal),
-    String(data.taxRate),
-    String(data.taxAmount),
-    String(data.discountAmount),
-    String(data.total),
-  ];
+  const insertData: Record<string, unknown> = {
+    id: invoiceId,
+    businessId: bid,
+    clientId: data.clientId,
+    invoiceNumber: data.invoiceNumber,
+    status: data.status,
+    subtotal: String(data.subtotal),
+    taxRate: String(data.taxRate),
+    taxAmount: String(data.taxAmount),
+    discountAmount: String(data.discountAmount),
+    total: String(data.total),
+  };
 
-  if (data.appointmentId && columns.has("appointment_id")) {
-    insertColumns.push("appointment_id");
-    insertValues.push(data.appointmentId);
-  }
-  if (data.notes != null && columns.has("notes")) {
-    insertColumns.push("notes");
-    insertValues.push(data.notes);
-  }
-  if (data.dueDate != null && columns.has("due_date")) {
-    insertColumns.push("due_date");
-    insertValues.push(data.dueDate);
-  }
-  if (columns.has("created_at")) {
-    insertColumns.push("created_at");
-    insertValues.push(now);
-  }
-  if (columns.has("updated_at")) {
-    insertColumns.push("updated_at");
-    insertValues.push(now);
-  }
+  if (data.appointmentId && columns.has("appointment_id")) insertData.appointmentId = data.appointmentId;
+  if (data.notes != null && columns.has("notes")) insertData.notes = data.notes;
+  if (data.dueDate != null && columns.has("due_date")) insertData.dueDate = data.dueDate;
+  if (columns.has("created_at")) insertData.createdAt = now;
+  if (columns.has("updated_at")) insertData.updatedAt = now;
 
-  await executor.execute(sql`insert into "invoices" (${sql.join(
-    insertColumns.map((column) => sql.raw(`"${column}"`)),
-    sql`, `
-  )}) values (${sql.join(insertValues.map((value) => sql`${value}`), sql`, `)})`);
+  await executor.insert(invoices).values(insertData);
 
   return {
     id: invoiceId,

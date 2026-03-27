@@ -97,43 +97,24 @@ async function insertLegacyQuote(
   const columns = await getQuoteColumns();
   const quoteId = randomUUID();
   const now = new Date();
-  const insertColumns = ["id", "business_id", "client_id", "status", "subtotal", "tax_rate", "tax_amount", "total"];
-  const insertValues: unknown[] = [
-    quoteId,
-    bid,
-    data.clientId,
-    data.status,
-    String(data.subtotal),
-    String(data.taxRate),
-    String(data.taxAmount),
-    String(data.total),
-  ];
+  const insertData: Record<string, unknown> = {
+    id: quoteId,
+    businessId: bid,
+    clientId: data.clientId,
+    status: data.status,
+    subtotal: String(data.subtotal),
+    taxRate: String(data.taxRate),
+    taxAmount: String(data.taxAmount),
+    total: String(data.total),
+  };
 
-  if (data.vehicleId && columns.has("vehicle_id")) {
-    insertColumns.push("vehicle_id");
-    insertValues.push(data.vehicleId);
-  }
-  if (data.notes != null && columns.has("notes")) {
-    insertColumns.push("notes");
-    insertValues.push(data.notes);
-  }
-  if (data.expiresAt != null && columns.has("expires_at")) {
-    insertColumns.push("expires_at");
-    insertValues.push(data.expiresAt);
-  }
-  if (columns.has("created_at")) {
-    insertColumns.push("created_at");
-    insertValues.push(now);
-  }
-  if (columns.has("updated_at")) {
-    insertColumns.push("updated_at");
-    insertValues.push(now);
-  }
+  if (data.vehicleId && columns.has("vehicle_id")) insertData.vehicleId = data.vehicleId;
+  if (data.notes != null && columns.has("notes")) insertData.notes = data.notes;
+  if (data.expiresAt != null && columns.has("expires_at")) insertData.expiresAt = data.expiresAt;
+  if (columns.has("created_at")) insertData.createdAt = now;
+  if (columns.has("updated_at")) insertData.updatedAt = now;
 
-  await executor.execute(sql`insert into "quotes" (${sql.join(
-    insertColumns.map((column) => sql.raw(`"${column}"`)),
-    sql`, `
-  )}) values (${sql.join(insertValues.map((value) => sql`${value}`), sql`, `)})`);
+  await executor.insert(quotes).values(insertData);
 
   return {
     id: quoteId,
