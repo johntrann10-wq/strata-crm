@@ -20,12 +20,6 @@ import {
   navigateDate,
 } from "../components/CalendarViews";
 
-const VIEW_LABELS = {
-  month: "See the full month, then drill into one day at a time",
-  week: "Balance staff and bay time",
-  day: "Run the day with clean slots and obvious next actions",
-} as const;
-
 export default function CalendarPage() {
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
@@ -228,13 +222,6 @@ export default function CalendarPage() {
                   <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.6rem]">
                     {getHeaderTitle(currentDate, view)}
                   </h1>
-                  {!isMobileLayout ? (
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                      {VIEW_LABELS[view]}. Clean time-slot planning, clear workload visibility, and faster booking decisions.
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{VIEW_LABELS[view]}.</p>
-                  )}
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -376,24 +363,20 @@ export default function CalendarPage() {
               <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Booked in view</p>
                 <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{activeAppointments.length}</p>
-                <p className="mt-1 text-sm text-slate-600">Everything active in this scheduling window.</p>
               </div>
               <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Revenue in play</p>
                 <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">
                   {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(activeRevenue)}
                 </p>
-                <p className="mt-1 text-sm text-slate-600">Quoted job value tied to the visible schedule.</p>
               </div>
               <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Mobile work</p>
                 <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{mobileAppointments}</p>
-                <p className="mt-1 text-sm text-slate-600">Appointments leaving the shop and needing route awareness.</p>
               </div>
               <div className="rounded-[22px] border border-white/80 bg-white/82 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Team coverage</p>
                 <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{uniqueStaff}</p>
-                <p className="mt-1 text-sm text-slate-600">Assigned staff visible in this calendar range.</p>
               </div>
             </div>
           </div>

@@ -210,29 +210,6 @@ const SidebarNav = memo(function SidebarNav({
             <div className="text-[11px] uppercase tracking-[0.12em] text-white/38">Shop OS</div>
           </div>
         </Link>
-        <div className="mt-4 rounded-[1.15rem] border border-white/10 bg-white/6 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Operating focus</div>
-              <div className="mt-1 text-[13px] font-medium text-white/92">
-                {businessId ? "Live workspace ready" : "Finish setup to begin"}
-              </div>
-            </div>
-            <div className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-200/85">
-              {currentLocationId ? "Filtered location" : "All locations"}
-            </div>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/62">
-            <div className="rounded-xl border border-white/8 bg-black/10 px-3 py-2">
-              <div className="font-semibold uppercase tracking-[0.12em] text-white/32">Search</div>
-              <div className="mt-1 text-white/84">Jump anywhere fast</div>
-            </div>
-            <div className="rounded-xl border border-white/8 bg-black/10 px-3 py-2">
-              <div className="font-semibold uppercase tracking-[0.12em] text-white/32">Booking</div>
-              <div className="mt-1 text-white/84">Move from intake to work</div>
-            </div>
-          </div>
-        </div>
         <div className="mt-4 grid gap-2">
           <Button
             type="button"
@@ -532,16 +509,10 @@ function AppLayoutInner({
                     <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2.5 sm:text-[11px]">
                       {activeNavEntry.section.label}
                     </span>
-                    <span className="inline-flex items-center rounded-full border border-orange-200/80 bg-orange-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-700 sm:px-2.5 sm:text-[11px]">
-                      Focused workspace
-                    </span>
                   </div>
                   <h1 className="mt-0.5 text-balance text-[19px] font-semibold tracking-tight text-foreground sm:mt-2 sm:text-[28px]">
                     {activeNavEntry.item.label}
                   </h1>
-                  <p className="mt-1 hidden max-w-3xl text-sm leading-5 text-muted-foreground sm:block">
-                    {activeNavEntry.item.description}
-                  </p>
                   {(businessName || activeLocationName) ? (
                     <p className="mt-1 text-[11px] text-muted-foreground sm:text-sm">
                       {businessName ? businessName : "No business selected"}
