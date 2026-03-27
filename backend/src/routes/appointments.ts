@@ -657,13 +657,30 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   const bid = businessId(req);
 
   // Tenancy: client and vehicle must belong to this business; vehicle must belong to client
-  const [client] = await db.select().from(clients).where(and(eq(clients.id, parsed.data.clientId), eq(clients.businessId, bid))).limit(1);
+  const [client] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.id, parsed.data.clientId), eq(clients.businessId, bid)))
+    .limit(1);
   if (!client) throw new BadRequestError("Client not found or access denied.");
-  const [vehicle] = await db.select().from(vehicles).where(and(eq(vehicles.id, parsed.data.vehicleId), eq(vehicles.businessId, bid), eq(vehicles.clientId, parsed.data.clientId))).limit(1);
+  const [vehicle] = await db
+    .select({ id: vehicles.id })
+    .from(vehicles)
+    .where(and(eq(vehicles.id, parsed.data.vehicleId), eq(vehicles.businessId, bid), eq(vehicles.clientId, parsed.data.clientId)))
+    .limit(1);
   if (!vehicle) throw new BadRequestError("Vehicle not found, or does not belong to this client or business.");
 
   if (parsed.data.quoteId) {
-    const [q] = await db.select().from(quotes).where(and(eq(quotes.id, parsed.data.quoteId), eq(quotes.businessId, bid))).limit(1);
+    const [q] = await db
+      .select({
+        id: quotes.id,
+        clientId: quotes.clientId,
+        vehicleId: quotes.vehicleId,
+        total: quotes.total,
+      })
+      .from(quotes)
+      .where(and(eq(quotes.id, parsed.data.quoteId), eq(quotes.businessId, bid)))
+      .limit(1);
     if (!q) throw new BadRequestError("Quote not found.");
     if (q.clientId !== parsed.data.clientId) throw new BadRequestError("Appointment client must match the quote.");
     if (!q.vehicleId || q.vehicleId !== parsed.data.vehicleId) {
@@ -846,7 +863,16 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
 
 appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const [existing] = await db.select().from(appointments).where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid))).limit(1);
+  const [existing] = await db
+    .select({
+      id: appointments.id,
+      startTime: appointments.startTime,
+      endTime: appointments.endTime,
+      assignedStaffId: appointments.assignedStaffId,
+    })
+    .from(appointments)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .limit(1);
   if (!existing) throw new NotFoundError("Appointment not found.");
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -947,7 +973,11 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (
   if (!statusParsed.success) throw new BadRequestError("Invalid status.");
   const status = statusParsed.data;
   const bid = businessId(req);
-  const [existing] = await db.select().from(appointments).where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid))).limit(1);
+  const [existing] = await db
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .limit(1);
   if (!existing) throw new NotFoundError("Appointment not found.");
   const updates: Record<string, unknown> = { status, updatedAt: new Date() };
   if (status === "cancelled") updates.cancelledAt = new Date();
@@ -994,7 +1024,11 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (
 
 appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const [existing] = await db.select().from(appointments).where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid))).limit(1);
+  const [existing] = await db
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .limit(1);
   if (!existing) throw new NotFoundError("Appointment not found.");
   const [updated] = await db
     .update(appointments)
@@ -1017,7 +1051,11 @@ appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, async (req:
 
 appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
-  const [existing] = await db.select().from(appointments).where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid))).limit(1);
+  const [existing] = await db
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .limit(1);
   if (!existing) throw new NotFoundError("Appointment not found.");
   const [updated] = await db
     .update(appointments)
