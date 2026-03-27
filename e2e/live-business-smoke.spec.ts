@@ -264,9 +264,11 @@ test.describe("Live business workflow smoke", () => {
       await page.locator("#serviceInterest").fill("Window tint quote");
       await page.locator("#nextStep").fill("Send pricing");
       await page.getByRole("button", { name: /^save lead$/i }).click();
-      await waitForPathname(page, /^\/clients\/[^/]+$/);
-      leadClientId = /^\/clients\/([^/]+)$/.exec(new URL(page.url()).pathname)?.[1] ?? "";
+      await waitForPathname(page, /^\/clients$/);
+      leadClientId = new URL(page.url()).searchParams.get("created") ?? "";
       expect(leadClientId).not.toBe("");
+      await expect(page.locator("main")).toContainText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i"));
+      await page.goto(`/clients/${leadClientId}`);
       await expect(page.locator("main")).toContainText(new RegExp(`${leadFirst}\\s+${leadLast}`, "i"));
 
       await page.goto("/leads");

@@ -252,6 +252,34 @@ export default function ClientDetailPage() {
     setDeleteOpen(false);
   };
 
+  if (fetching) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto flex items-center justify-center min-h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto space-y-4">
+        <Link to="/clients"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Error loading client: {error.message}
+        </div>
+      </div>
+    );
+  }
+
+  if (!client) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto space-y-4">
+        <Link to="/clients"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
+        <p className="text-muted-foreground">Client not found.</p>
+      </div>
+    );
+  }
+
   const apptList = Array.isArray(appointments) ? appointments : [];
   const vehicleList = Array.isArray(vehicles) ? vehicles : [];
   const quoteList = Array.isArray(quotes) ? quotes : [];
@@ -439,34 +467,6 @@ export default function ClientDetailPage() {
       actionLabel: String((a as any).status ?? "") === "completed" ? "Invoice" : "Quote",
     })),
   ];
-
-  if (fetching) {
-    return (
-      <div className="p-6 max-w-6xl mx-auto flex items-center justify-center min-h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-6 max-w-6xl mx-auto space-y-4">
-        <Link to="/clients"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          Error loading client: {error.message}
-        </div>
-      </div>
-    );
-  }
-
-  if (!client) {
-    return (
-      <div className="p-6 max-w-6xl mx-auto space-y-4">
-        <Link to="/clients"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
-        <p className="text-muted-foreground">Client not found.</p>
-      </div>
-    );
-  }
 
   return (
     <div className="page-content">
