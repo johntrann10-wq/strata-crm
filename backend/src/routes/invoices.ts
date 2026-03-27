@@ -597,9 +597,14 @@ invoicesRouter.get("/:id/html", requireAuth, requireTenant, async (req: Request,
   res.send(html);
 });
 
-invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+invoicesRouter.post(
+  "/",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  const data = parsed.data;
   const bid = businessId(req);
   let appointment:
     | {
@@ -687,23 +692,35 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
   });
 
   // Transaction: atomic create; nextInvoiceNumber read/update in same tx to reduce race window
-  const inv = await db.transaction(async (tx) => {
-    const [b] = await tx.select({ nextInvoiceNumber: businesses.nextInvoiceNumber }).from(businesses).where(eq(businesses.id, bid)).limit(1);
+  const dueDate =
+    parsed.data.dueDate != null && parsed.data.dueDate !== ""
+      ? new Date(parsed.data.dueDate)
+      : null;
+
+  async function createInvoiceWithExecutor(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    executor: any
+  ) {
+    const [b] = await executor
+      .select({ nextInvoiceNumber: businesses.nextInvoiceNumber })
+      .from(businesses)
+      .where(eq(businesses.id, bid))
+      .limit(1);
     if (!b) throw new NotFoundError("Business not found.");
-    const nextNum = b.nextInvoiceNumber ?? 1;
-    const invoiceNumber = `INV-${nextNum}`;
+    const nextNum = b.nextInvoiceNumber;
+    const invoiceNumber = nextNum != null && nextNum > 0 ? `INV-${nextNum}` : `INV-${Date.now()}`;
     const dueDate =
-      parsed.data.dueDate != null && parsed.data.dueDate !== ""
-        ? new Date(parsed.data.dueDate)
+      data.dueDate != null && data.dueDate !== ""
+        ? new Date(data.dueDate)
         : null;
     let created;
     try {
-      [created] = await tx
+      [created] = await executor
         .insert(invoices)
         .values({
           businessId: bid,
-          clientId: parsed.data.clientId,
-          appointmentId: parsed.data.appointmentId ?? null,
+          clientId: data.clientId,
+          appointmentId: data.appointmentId ?? null,
           invoiceNumber,
           status: initialStatus,
           subtotal: String(subtotal),
@@ -711,15 +728,15 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
           taxAmount: String(taxAmount),
           discountAmount: String(discountAmount),
           total: String(total),
-          notes: parsed.data.notes ?? null,
+          notes: data.notes ?? null,
           dueDate,
         })
         .returning(createInvoiceReturning);
     } catch (error) {
       if (!isInvoiceSchemaDriftError(error)) throw error;
-      created = await insertLegacyInvoice(tx, bid, {
-        clientId: parsed.data.clientId,
-        appointmentId: parsed.data.appointmentId ?? null,
+      created = await insertLegacyInvoice(executor, bid, {
+        clientId: data.clientId,
+        appointmentId: data.appointmentId ?? null,
         invoiceNumber,
         status: initialStatus,
         subtotal,
@@ -727,22 +744,25 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
         taxAmount,
         discountAmount,
         total,
-        notes: parsed.data.notes ?? null,
+        notes: data.notes ?? null,
         dueDate,
       });
     }
     if (!created) throw new BadRequestError("Failed to create invoice.");
     try {
-      await tx.update(businesses).set({ nextInvoiceNumber: nextNum + 1, updatedAt: new Date() }).where(eq(businesses.id, bid));
+      await executor
+        .update(businesses)
+        .set({ nextInvoiceNumber: (nextNum ?? 1) + 1, updatedAt: new Date() })
+        .where(eq(businesses.id, bid));
     } catch (error) {
       if (!isInvoiceSchemaDriftError(error)) throw error;
       const businessColumns = await getBusinessColumns();
-      const updates: Record<string, unknown> = { nextInvoiceNumber: nextNum + 1 };
+      const updates: Record<string, unknown> = { nextInvoiceNumber: (nextNum ?? 1) + 1 };
       if (businessColumns.has("updated_at")) updates.updatedAt = new Date();
-      await tx.update(businesses).set(updates).where(eq(businesses.id, bid));
+      await executor.update(businesses).set(updates).where(eq(businesses.id, bid));
     }
     for (const it of items) {
-      await tx.insert(invoiceLineItems).values({
+      await executor.insert(invoiceLineItems).values({
         invoiceId: created.id,
         description: it.description,
         quantity: it.quantity,
@@ -751,7 +771,19 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
       });
     }
     return created;
-  });
+  }
+
+  let inv;
+  try {
+    inv = await db.transaction((tx) => createInvoiceWithExecutor(tx));
+  } catch (error) {
+    logger.warn("Invoice create transaction failed; retrying with direct fallback", {
+      businessId: bid,
+      clientId: data.clientId,
+      error,
+    });
+    inv = await createInvoiceWithExecutor(db);
+  }
 
   logger.info("Invoice created", { invoiceId: inv.id, businessId: bid });
   try {
@@ -771,7 +803,8 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
     logger.warn("Invoice created but activity log write failed", { invoiceId: inv.id, businessId: bid, error });
   }
   res.status(201).json(inv);
-});
+  })
+);
 
 invoicesRouter.post("/:id/void", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
