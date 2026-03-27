@@ -55,6 +55,9 @@ type BillingStatus = {
   status: string | null;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
+  billingEnforced: boolean;
+  checkoutConfigured: boolean;
+  portalConfigured: boolean;
 };
 
 // SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
@@ -711,7 +714,16 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     };
     const onSubscriptionRequired = () => {
       setBillingCheckDone(true);
-      setBillingStatus((current) => current ?? { status: "required", trialEndsAt: null, currentPeriodEnd: null });
+      setBillingStatus((current) =>
+        current ?? {
+          status: "required",
+          trialEndsAt: null,
+          currentPeriodEnd: null,
+          billingEnforced: true,
+          checkoutConfigured: false,
+          portalConfigured: false,
+        }
+      );
     };
     window.addEventListener("auth:invalid", onInvalid as EventListener);
     window.addEventListener("auth:logout", onLogout as EventListener);
@@ -801,7 +813,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     if (!business) return "/onboarding";
     if ((business as { onboardingComplete?: boolean }).onboardingComplete === false) return "/onboarding";
     const isSubscribed = billingStatus?.status === "active" || billingStatus?.status === "trialing";
-    if (billingCheckDone && !allowWithoutSubscription && billingStatus && !isSubscribed) {
+    if (billingCheckDone && !allowWithoutSubscription && billingStatus?.billingEnforced && !isSubscribed) {
       return "/subscribe";
     }
     return null;

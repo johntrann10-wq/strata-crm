@@ -566,7 +566,15 @@ export const api = {
     }),
   // Billing: $29/mo, first month free
   billing: {
-    getStatus: () => request<{ status: string | null; trialEndsAt: string | null; currentPeriodEnd: string | null }>("/billing/status"),
+    getStatus: () =>
+      request<{
+        status: string | null;
+        trialEndsAt: string | null;
+        currentPeriodEnd: string | null;
+        billingEnforced: boolean;
+        checkoutConfigured: boolean;
+        portalConfigured: boolean;
+      }>("/billing/status"),
     createCheckoutSession: () =>
       request<{ url: string }>("/billing/create-checkout-session", { method: "POST" }),
     createPortalSession: () =>

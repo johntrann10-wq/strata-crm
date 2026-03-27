@@ -11,6 +11,14 @@ export default function SubscribePage() {
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
   const [checkError, setCheckError] = useState<string | null>(null);
+  const [billingStatus, setBillingStatus] = useState<{
+    status: string | null;
+    trialEndsAt: string | null;
+    currentPeriodEnd: string | null;
+    billingEnforced: boolean;
+    checkoutConfigured: boolean;
+    portalConfigured: boolean;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -19,6 +27,7 @@ export default function SubscribePage() {
       try {
         const status = await api.billing.getStatus();
         if (cancelled) return;
+        setBillingStatus(status);
         const st = status && typeof status === "object" && "status" in status ? (status as { status?: string | null }).status : null;
         if (st === "active" || st === "trialing") {
           navigate("/signed-in", { replace: true });
@@ -52,6 +61,14 @@ export default function SubscribePage() {
     }
   };
 
+  const handleSkipForNow = () => {
+    if (billingStatus?.billingEnforced) {
+      setError("Billing is required before entering this workspace.");
+      return;
+    }
+    navigate("/signed-in");
+  };
+
   if (checking) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -81,6 +98,11 @@ export default function SubscribePage() {
           {checkError && (
             <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">{checkError}</p>
           )}
+          {billingStatus && !billingStatus.checkoutConfigured ? (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              Checkout is not ready on the current deployment yet. Finish the backend deploy, then try again.
+            </p>
+          ) : null}
           {error && (
             <p className="text-sm text-destructive">{error}</p>
           )}
@@ -88,7 +110,7 @@ export default function SubscribePage() {
             className="w-full"
             size="lg"
             onClick={handleStartTrial}
-            disabled={loading}
+            disabled={loading || (billingStatus != null && !billingStatus.checkoutConfigured)}
           >
             {loading ? (
               <>
@@ -102,7 +124,7 @@ export default function SubscribePage() {
           <Button
             variant="ghost"
             className="w-full"
-            onClick={() => navigate("/signed-in")}
+            onClick={handleSkipForNow}
           >
             I&apos;ll subscribe later
           </Button>

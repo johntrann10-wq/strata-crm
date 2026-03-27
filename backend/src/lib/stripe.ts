@@ -15,6 +15,14 @@ export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
 const TRIAL_DAYS = 30;
 
+export function isStripeCheckoutConfigured(): boolean {
+  return !!(stripe && STRIPE_PRICE_ID.trim());
+}
+
+export function isStripePortalConfigured(): boolean {
+  return !!stripe;
+}
+
 export async function createCheckoutSession(params: {
   businessId: string;
   customerEmail: string;

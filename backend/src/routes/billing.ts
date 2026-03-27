@@ -11,13 +11,20 @@ import {
   STRIPE_WEBHOOK_SECRET,
   createCheckoutSession,
   createPortalSession,
+  isStripeCheckoutConfigured,
+  isStripePortalConfigured,
 } from "../lib/stripe.js";
 import { requireAuth } from "../middleware/auth.js";
 import { BadRequestError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
+import { isStripeConfigured } from "../lib/env.js";
 
 export const billingRouter = Router();
+
+function isBillingEnforced(): boolean {
+  return process.env.BILLING_ENFORCED === "true" && isStripeConfigured();
+}
 
 /** GET /api/billing/status — subscription status for current business (optionalAuth). */
 billingRouter.get(
@@ -26,7 +33,14 @@ billingRouter.get(
   wrapAsync(async (req: Request, res: Response) => {
     const businessId = req.businessId;
     if (!businessId) {
-      res.json({ status: null, trialEndsAt: null, currentPeriodEnd: null });
+      res.json({
+        status: null,
+        trialEndsAt: null,
+        currentPeriodEnd: null,
+        billingEnforced: isBillingEnforced(),
+        checkoutConfigured: isStripeCheckoutConfigured(),
+        portalConfigured: isStripePortalConfigured(),
+      });
       return;
     }
     const [b] = await db
@@ -42,6 +56,9 @@ billingRouter.get(
       status: b?.subscriptionStatus ?? null,
       trialEndsAt: b?.trialEndsAt ?? null,
       currentPeriodEnd: b?.currentPeriodEnd ?? null,
+      billingEnforced: isBillingEnforced(),
+      checkoutConfigured: isStripeCheckoutConfigured(),
+      portalConfigured: isStripePortalConfigured(),
     });
   })
 );
@@ -71,7 +88,11 @@ billingRouter.post(
       cancelUrl: `${base}/subscribe?canceled=1`,
     });
     if (!result) {
-      throw new BadRequestError("Billing is not configured.");
+      throw new BadRequestError(
+        stripe
+          ? "Stripe checkout is not configured. Add a valid STRIPE_PRICE_ID and redeploy."
+          : "Stripe is not configured on the backend. Add STRIPE_SECRET_KEY and redeploy."
+      );
     }
     res.json(result);
   })
@@ -97,7 +118,7 @@ billingRouter.post(
       customerId: b.stripeCustomerId,
       returnUrl: `${base}/settings`,
     });
-    if (!result) throw new BadRequestError("Billing is not configured.");
+    if (!result) throw new BadRequestError("Stripe customer portal is not configured.");
     res.json(result);
   })
 );
