@@ -227,8 +227,12 @@ export default function QuoteDetailPage() {
     }
   }, [quote?.id, quote?.status, quote?.expiresAt]);
 
-  const handleSend = async (message?: string) => {
-    const result = await runSend({ id: id!, message });
+  const handleSend = async (payload?: {
+    message?: string;
+    recipientEmail?: string;
+    recipientName?: string;
+  }) => {
+    const result = await runSend({ id: id!, ...payload });
     if (result.error) {
       toast.error(getTransactionalEmailErrorMessage(result.error, "Quote"));
     } else {
@@ -244,8 +248,12 @@ export default function QuoteDetailPage() {
     return result;
   };
 
-  const handleSendFollowUp = async (message?: string) => {
-    const result = await runSendFollowUp({ id: id!, message });
+  const handleSendFollowUp = async (payload?: {
+    message?: string;
+    recipientEmail?: string;
+    recipientName?: string;
+  }) => {
+    const result = await runSendFollowUp({ id: id!, ...payload });
     if (result.error) {
       toast.error(getTransactionalEmailErrorMessage(result.error, "Quote follow-up"));
     } else {
@@ -927,6 +935,7 @@ export default function QuoteDetailPage() {
 
           <CommunicationCard
             title="Client communication"
+            recipientName={`${quote.client.firstName} ${quote.client.lastName}`}
             recipient={quote.client.email}
             primaryLabel={quote.status === "sent" ? "Resend quote" : "Send quote"}
             followUpLabel="Send follow-up"

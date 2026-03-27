@@ -390,6 +390,7 @@ export async function sendAppointmentConfirmation(options: {
   address?: string | null;
   serviceSummary?: string | null;
   confirmationUrl?: string | null;
+  message?: string | null;
 }): Promise<void> {
   await sendTemplatedEmail({
     to: options.to,
@@ -403,6 +404,7 @@ export async function sendAppointmentConfirmation(options: {
       address: fallback(options.address),
       serviceSummary: fallback(options.serviceSummary),
       confirmationUrl: optionalValue(options.confirmationUrl),
+      message: optionalValue(options.message),
     },
   });
 }

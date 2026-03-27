@@ -24,6 +24,17 @@ describe("appointments route logic", () => {
       internalNotes: z.string().optional(),
     })
     .strict();
+  const sendConfirmationSchema = z.object({
+    message: z.string().max(2000).optional(),
+    recipientEmail: z.preprocess(
+      (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+      z.string().trim().email().optional()
+    ),
+    recipientName: z.preprocess(
+      (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+      z.string().trim().max(120).optional()
+    ),
+  });
 
   it("accepts valid appointment create payload", () => {
     const result = createSchema.safeParse({
@@ -54,6 +65,22 @@ describe("appointments route logic", () => {
     const result = updateSchema.safeParse({
       clientId: "550e8400-e29b-41d4-a716-446655440000",
       vehicleId: "660e8400-e29b-41d4-a716-446655440001",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts direct-recipient appointment confirmation overrides", () => {
+    const result = sendConfirmationSchema.safeParse({
+      recipientEmail: "service@example.com",
+      recipientName: "Service Desk",
+      message: "See you soon.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects invalid direct-recipient appointment emails", () => {
+    const result = sendConfirmationSchema.safeParse({
+      recipientEmail: "wrong",
     });
     expect(result.success).toBe(false);
   });

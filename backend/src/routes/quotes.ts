@@ -167,6 +167,14 @@ async function locationExistsForBusiness(locationId: string, bid: string): Promi
 const QUOTE_STATUSES = ["draft", "sent", "accepted", "declined", "expired"] as const;
 const sendQuoteSchema = z.object({
   message: z.string().max(2000).optional(),
+  recipientEmail: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().email().optional()
+  ),
+  recipientName: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().max(120).optional()
+  ),
 });
 
 quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
@@ -818,7 +826,13 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
     .limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
-  if (!existing.clientEmail?.trim()) {
+  const recipientEmail = parsed.data.recipientEmail?.trim() || existing.clientEmail?.trim() || null;
+  const recipientName =
+    parsed.data.recipientName?.trim() ||
+    `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() ||
+    "Customer";
+
+  if (!recipientEmail) {
     logger.warn("Quote send blocked: client email missing", { quoteId: existing.id, businessId: bid });
     await createRequestActivityLog(req, {
       businessId: bid,
@@ -827,6 +841,7 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
       entityId: existing.id,
       metadata: {
         recipient: null,
+        recipientName,
         message: parsed.data.message ?? null,
         deliveryStatus: "missing_email",
         deliveryError: "Client does not have an email address.",
@@ -848,13 +863,14 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
       entityType: "quote",
       entityId: existing.id,
       metadata: {
-        recipient: existing.clientEmail.trim(),
+        recipient: recipientEmail,
+        recipientName,
         message: parsed.data.message ?? null,
         deliveryStatus: "smtp_disabled",
         deliveryError: "Transactional email is not configured.",
       },
     });
-    res.json({
+    res.status(503).json({
       ok: false,
       message: "Transactional email is not configured. Set RESEND_* or SMTP_* environment variables.",
       code: "EMAIL_NOT_CONFIGURED",
@@ -872,9 +888,9 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
       businessId: bid,
     });
     await sendQuoteEmail({
-      to: existing.clientEmail.trim(),
+      to: recipientEmail,
       businessId: bid,
-      clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
+      clientName: recipientName,
       businessName: existing.businessName ?? "Your shop",
       amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
       vehicle: buildVehicleDisplayName({
@@ -894,13 +910,14 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
       entityType: "quote",
       entityId: existing.id,
       metadata: {
-        recipient: existing.clientEmail,
+        recipient: recipientEmail,
+        recipientName,
         message: parsed.data.message ?? null,
         deliveryStatus: "email_failed",
         deliveryError,
       },
     });
-    res.json({
+    res.status(502).json({
       ok: false,
       message: `Quote email failed to send: ${deliveryError}`,
       code: "EMAIL_SEND_FAILED",
@@ -919,17 +936,18 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
   await createRequestActivityLog(req, {
     businessId: bid,
     action: "quote.sent",
-    entityType: "quote",
-    entityId: updated.id,
-    metadata: {
-      status: updated.status,
-      recipient: existing.clientEmail ?? null,
-      message: parsed.data.message ?? null,
-      deliveryStatus: "emailed",
-      deliveryError: null,
-    },
-  });
-  res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null });
+      entityType: "quote",
+      entityId: updated.id,
+      metadata: {
+        status: updated.status,
+        recipient: recipientEmail,
+        recipientName,
+        message: parsed.data.message ?? null,
+        deliveryStatus: "emailed",
+        deliveryError: null,
+      },
+    });
+  res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null, recipient: recipientEmail, recipientName });
 }));
 
 quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
@@ -956,7 +974,13 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
     .limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
-  if (!existing.clientEmail?.trim()) {
+  const recipientEmail = parsed.data.recipientEmail?.trim() || existing.clientEmail?.trim() || null;
+  const recipientName =
+    parsed.data.recipientName?.trim() ||
+    `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() ||
+    "Customer";
+
+  if (!recipientEmail) {
     logger.warn("Quote follow-up blocked: client email missing", { quoteId: existing.id, businessId: bid });
     await createRequestActivityLog(req, {
       businessId: bid,
@@ -965,6 +989,7 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
       entityId: existing.id,
       metadata: {
         recipient: null,
+        recipientName,
         message: parsed.data.message ?? null,
         deliveryStatus: "missing_email",
         deliveryError: "Client does not have an email address.",
@@ -986,13 +1011,14 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
       entityType: "quote",
       entityId: existing.id,
       metadata: {
-        recipient: existing.clientEmail.trim(),
+        recipient: recipientEmail,
+        recipientName,
         message: parsed.data.message ?? null,
         deliveryStatus: "smtp_disabled",
         deliveryError: "Transactional email is not configured.",
       },
     });
-    res.json({
+    res.status(503).json({
       ok: false,
       message: "Transactional email is not configured. Set RESEND_* or SMTP_* environment variables.",
       code: "EMAIL_NOT_CONFIGURED",
@@ -1010,9 +1036,9 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
       businessId: bid,
     });
     await sendQuoteFollowUpEmail({
-      to: existing.clientEmail.trim(),
+      to: recipientEmail,
       businessId: bid,
-      clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
+      clientName: recipientName,
       businessName: existing.businessName ?? "Your shop",
       amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
       vehicle: buildVehicleDisplayName({
@@ -1032,13 +1058,14 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
       entityType: "quote",
       entityId: existing.id,
       metadata: {
-        recipient: existing.clientEmail,
+        recipient: recipientEmail,
+        recipientName,
         message: parsed.data.message ?? null,
         deliveryStatus: "email_failed",
         deliveryError,
       },
     });
-    res.json({
+    res.status(502).json({
       ok: false,
       message: `Quote follow-up email failed to send: ${deliveryError}`,
       code: "EMAIL_SEND_FAILED",
@@ -1057,17 +1084,18 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
   await createRequestActivityLog(req, {
     businessId: bid,
     action: "quote.follow_up_recorded",
-    entityType: "quote",
-    entityId: updated.id,
-    metadata: {
-      followUpSentAt: updated.followUpSentAt,
-      recipient: existing.clientEmail ?? null,
-      message: parsed.data.message ?? null,
-      deliveryStatus: "emailed",
-      deliveryError: null,
-    },
-  });
-  res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null });
+      entityType: "quote",
+      entityId: updated.id,
+      metadata: {
+        followUpSentAt: updated.followUpSentAt,
+        recipient: recipientEmail,
+        recipientName,
+        message: parsed.data.message ?? null,
+        deliveryStatus: "emailed",
+        deliveryError: null,
+      },
+    });
+  res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null, recipient: recipientEmail, recipientName });
 }));
 
 const scheduleFromQuoteSchema = z.object({

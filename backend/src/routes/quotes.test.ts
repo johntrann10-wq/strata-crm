@@ -16,6 +16,17 @@ describe("quotes route logic", () => {
       )
       .optional(),
   });
+  const sendSchema = z.object({
+    message: z.string().max(2000).optional(),
+    recipientEmail: z.preprocess(
+      (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+      z.string().trim().email().optional()
+    ),
+    recipientName: z.preprocess(
+      (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+      z.string().trim().max(120).optional()
+    ),
+  });
 
   it("accepts atomic quote creation with line items", () => {
     const result = createSchema.safeParse({
@@ -42,6 +53,22 @@ describe("quotes route logic", () => {
           unitPrice: 50,
         },
       ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts direct-recipient quote send overrides", () => {
+    const result = sendSchema.safeParse({
+      recipientEmail: "customer@example.com",
+      recipientName: "Walk-in Customer",
+      message: "Review when you can.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects invalid direct-recipient quote emails", () => {
+    const result = sendSchema.safeParse({
+      recipientEmail: "not-an-email",
     });
     expect(result.success).toBe(false);
   });

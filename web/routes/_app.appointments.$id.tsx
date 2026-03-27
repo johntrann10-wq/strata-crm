@@ -40,6 +40,7 @@ import { EntityCollaborationCard } from "../components/shared/EntityCollaboratio
 import { ChecklistCard } from "../components/shared/ChecklistCard";
 import { VerticalWorkflowCard } from "../components/shared/VerticalWorkflowCard";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
+import { CommunicationCard } from "../components/shared/CommunicationCard";
 import { getIntakePreset } from "../lib/intakePresets";
 import {
   ClientCard,
@@ -590,15 +591,23 @@ export default function AppointmentDetail() {
     }
   };
 
-  const handleSendConfirmation = async () => {
+  const handleSendConfirmation = async (payload?: {
+    message?: string;
+    recipientEmail?: string;
+    recipientName?: string;
+  }) => {
     if (!appointment) return;
-    const result = await runSendConfirmation({ id: appointment.id });
+    const result = await runSendConfirmation({ id: appointment.id, ...payload });
     if (result.error) {
       toast.error(getTransactionalEmailErrorMessage(result.error, "Appointment confirmation"));
       return;
     }
-    const payload = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
-    notifyConfirmationResult(payload?.deliveryStatus ?? null, payload?.deliveryError ?? null, "Confirmation sent");
+    const deliveryResult = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
+    notifyConfirmationResult(
+      deliveryResult?.deliveryStatus ?? null,
+      deliveryResult?.deliveryError ?? null,
+      "Confirmation sent"
+    );
     void refetchActivity();
   };
 
@@ -1585,6 +1594,25 @@ export default function AppointmentDetail() {
                 totalPrice={appointment.totalPrice}
                 depositAmount={appointment.depositAmount}
                 depositPaid={appointment.depositPaid}
+              />
+
+              <CommunicationCard
+                title="Client communication"
+                recipientName={
+                  appointment.client
+                    ? `${appointment.client.firstName} ${appointment.client.lastName}`
+                    : null
+                }
+                recipient={appointment.client?.email}
+                primaryLabel="Send confirmation"
+                activities={((activityLogs ?? []) as any[]).filter(
+                  (record) =>
+                    record.type === "appointment.confirmation_sent" ||
+                    record.type === "appointment.confirmation_failed"
+                )}
+                sending={sendingConfirmation}
+                canSend={permissions.has("appointments.write")}
+                onPrimarySend={handleSendConfirmation}
               />
 
               <Card className="lg:hidden">

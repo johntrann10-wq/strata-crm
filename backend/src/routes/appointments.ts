@@ -287,6 +287,17 @@ const updateSchema = z
     internalNotes: z.string().optional(),
   })
   .strict();
+const sendConfirmationSchema = z.object({
+  message: z.string().max(2000).optional(),
+  recipientEmail: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().email().optional()
+  ),
+  recipientName: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().max(120).optional()
+  ),
+});
 function parseIsoDate(s: string | undefined): Date | undefined {
   if (!s?.trim()) return undefined;
   const d = new Date(s);
@@ -333,7 +344,11 @@ function formatAppointmentDateTime(value: Date | string | null | undefined, time
   }
 }
 
-async function buildAppointmentConfirmationPayload(appointmentId: string, bid: string) {
+async function buildAppointmentConfirmationPayload(
+  appointmentId: string,
+  bid: string,
+  overrides?: { recipientEmail?: string | null; recipientName?: string | null; message?: string | null }
+) {
   let appointmentRow:
     | {
         id: string;
@@ -431,9 +446,11 @@ async function buildAppointmentConfirmationPayload(appointmentId: string, bid: s
 
   return {
     appointmentId: appointmentRow.id,
-    recipient: appointmentRow.clientEmail?.trim() || null,
+    recipient: overrides?.recipientEmail?.trim() || appointmentRow.clientEmail?.trim() || null,
     clientName:
-      `${appointmentRow.clientFirstName ?? ""} ${appointmentRow.clientLastName ?? ""}`.trim() || "Customer",
+      overrides?.recipientName?.trim() ||
+      `${appointmentRow.clientFirstName ?? ""} ${appointmentRow.clientLastName ?? ""}`.trim() ||
+      "Customer",
     businessName: appointmentRow.businessName ?? "Your shop",
     dateTime: formatAppointmentDateTime(
       appointmentRow.startTime,
@@ -454,14 +471,16 @@ async function buildAppointmentConfirmationPayload(appointmentId: string, bid: s
     serviceSummary:
       serviceRows.length > 0 ? `Services: ${serviceRows.map((service) => service.name).join(", ")}` : null,
     confirmationUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/appointments/${appointmentRow.id}`,
+    message: overrides?.message?.trim() || null,
   };
 }
 
 async function sendAppointmentConfirmationForRecord(
   appointmentId: string,
-  bid: string
+  bid: string,
+  overrides?: { recipientEmail?: string | null; recipientName?: string | null; message?: string | null }
 ): Promise<{ deliveryStatus: AppointmentDeliveryStatus; deliveryError: string | null; recipient: string | null }> {
-  const payload = await buildAppointmentConfirmationPayload(appointmentId, bid);
+  const payload = await buildAppointmentConfirmationPayload(appointmentId, bid, overrides);
   if (!payload) {
     return {
       deliveryStatus: "email_failed",
@@ -492,6 +511,7 @@ async function sendAppointmentConfirmationForRecord(
       address: payload.address,
       serviceSummary: payload.serviceSummary,
       confirmationUrl: payload.confirmationUrl,
+      message: payload.message,
     });
     return { deliveryStatus: "emailed", deliveryError: null, recipient: payload.recipient };
   } catch (error) {
@@ -1029,6 +1049,8 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
 });
 
 appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const parsed = sendConfirmationSchema.safeParse(req.body ?? {});
+  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
   const [existing] = await db
     .select({ id: appointments.id })
@@ -1037,7 +1059,11 @@ appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, asy
     .limit(1);
   if (!existing) throw new NotFoundError("Appointment not found.");
 
-  const confirmationResult = await sendAppointmentConfirmationForRecord(existing.id, bid);
+  const confirmationResult = await sendAppointmentConfirmationForRecord(existing.id, bid, {
+    recipientEmail: parsed.data.recipientEmail ?? null,
+    recipientName: parsed.data.recipientName ?? null,
+    message: parsed.data.message ?? null,
+  });
   await createRequestActivityLog(req, {
     businessId: bid,
     action:
@@ -1048,12 +1074,23 @@ appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, asy
     entityId: existing.id,
     metadata: {
       recipient: confirmationResult.recipient,
+      recipientName: parsed.data.recipientName ?? null,
+      message: parsed.data.message ?? null,
       deliveryStatus: confirmationResult.deliveryStatus,
       deliveryError: confirmationResult.deliveryError,
     },
   });
 
-  res.json({
+  const statusCode =
+    confirmationResult.deliveryStatus === "emailed"
+      ? 200
+      : confirmationResult.deliveryStatus === "missing_email"
+        ? 400
+        : confirmationResult.deliveryStatus === "smtp_disabled"
+          ? 503
+          : 502;
+
+  res.status(statusCode).json({
     ok: confirmationResult.deliveryStatus === "emailed",
     ...confirmationResult,
   });

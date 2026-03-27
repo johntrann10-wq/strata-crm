@@ -78,6 +78,27 @@ export default function NewClientPage() {
     return undefined;
   };
 
+  const resolveCreatedClientId = async (
+    resultData: unknown,
+    fallback: { firstName: string; lastName: string; email?: string; phone?: string }
+  ): Promise<string | null> => {
+    const createdId = (resultData as { id?: string } | null)?.id;
+    if (createdId) return createdId;
+
+    const records = await api.client.findMany({
+      search: [fallback.firstName, fallback.lastName, fallback.email, fallback.phone].filter(Boolean).join(" "),
+      first: 10,
+    });
+    const match = (records ?? []).find((client: any) => {
+      const firstNameMatches = client.firstName?.trim().toLowerCase() === fallback.firstName.trim().toLowerCase();
+      const lastNameMatches = client.lastName?.trim().toLowerCase() === fallback.lastName.trim().toLowerCase();
+      const emailMatches = fallback.email ? client.email?.trim().toLowerCase() === fallback.email.trim().toLowerCase() : true;
+      const phoneMatches = fallback.phone ? client.phone?.trim() === fallback.phone.trim() : true;
+      return firstNameMatches && lastNameMatches && emailMatches && phoneMatches;
+    });
+    return match?.id ?? null;
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
@@ -116,7 +137,12 @@ export default function NewClientPage() {
       return;
     }
 
-    const createdClientId = (result.data as any)?.id;
+    const createdClientId = await resolveCreatedClientId(result.data, {
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      email: formData.email.trim() || undefined,
+      phone: formData.phone.trim() || undefined,
+    });
     if (!createdClientId) {
       setLocalErrors({ general: "Client saved but no record ID was returned. Please refresh and check your client list." });
       return;
@@ -139,7 +165,7 @@ export default function NewClientPage() {
       );
       return;
     }
-    navigate(`/clients/${createdClientId}?from=${encodeURIComponent(returnTo)}`);
+    navigate(`/clients?created=${encodeURIComponent(createdClientId)}&from=${encodeURIComponent(returnTo)}`);
   };
 
   const generalError =

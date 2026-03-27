@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Mail, Loader2, SendHorizonal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 type ActivityRecord = {
@@ -16,14 +17,15 @@ type ActivityRecord = {
 
 type Props = {
   title: string;
+  recipientName?: string | null;
   recipient?: string | null;
   primaryLabel: string;
   followUpLabel?: string;
   activities: ActivityRecord[];
   sending?: boolean;
   canSend?: boolean;
-  onPrimarySend: (message?: string) => Promise<{ error?: { message?: string } } | void>;
-  onFollowUpSend?: (message?: string) => Promise<{ error?: { message?: string } } | void>;
+  onPrimarySend: (payload?: { message?: string; recipientEmail?: string; recipientName?: string }) => Promise<{ error?: { message?: string } } | void>;
+  onFollowUpSend?: (payload?: { message?: string; recipientEmail?: string; recipientName?: string }) => Promise<{ error?: { message?: string } } | void>;
 };
 
 function parseMeta(record: ActivityRecord): { recipient?: string; message?: string; deliveryStatus?: string; deliveryError?: string } {
@@ -70,6 +72,7 @@ function deliveryTone(status: string | undefined) {
 
 export function CommunicationCard({
   title,
+  recipientName,
   recipient,
   primaryLabel,
   followUpLabel,
@@ -80,11 +83,25 @@ export function CommunicationCard({
   onFollowUpSend,
 }: Props) {
   const [message, setMessage] = useState("");
+  const [overrideName, setOverrideName] = useState(recipientName?.trim() ?? "");
+  const [overrideEmail, setOverrideEmail] = useState(recipient?.trim() ?? "");
   const latestPrimary = useMemo(() => activities[0] ?? null, [activities]);
   const latestFollowUp = useMemo(() => activities.find((record) => record.type?.includes("follow_up")) ?? null, [activities]);
 
+  useEffect(() => {
+    setOverrideName(recipientName?.trim() ?? "");
+  }, [recipientName]);
+
+  useEffect(() => {
+    setOverrideEmail(recipient?.trim() ?? "");
+  }, [recipient]);
+
   const handlePrimary = async () => {
-    const result = await onPrimarySend(message.trim() || undefined);
+    const result = await onPrimarySend({
+      message: message.trim() || undefined,
+      recipientEmail: overrideEmail.trim() || undefined,
+      recipientName: overrideName.trim() || undefined,
+    });
     if ((result as any)?.error) {
       toast.error((result as any).error.message);
       return;
@@ -94,7 +111,11 @@ export function CommunicationCard({
 
   const handleFollowUp = async () => {
     if (!onFollowUpSend) return;
-    const result = await onFollowUpSend(message.trim() || undefined);
+    const result = await onFollowUpSend({
+      message: message.trim() || undefined,
+      recipientEmail: overrideEmail.trim() || undefined,
+      recipientName: overrideName.trim() || undefined,
+    });
     if ((result as any)?.error) {
       toast.error((result as any).error.message);
       return;
@@ -151,6 +172,27 @@ export function CommunicationCard({
 
         {canSend ? (
           <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor={`${title}-recipient-name`}>Recipient name</Label>
+                <Input
+                  id={`${title}-recipient-name`}
+                  value={overrideName}
+                  onChange={(event) => setOverrideName(event.target.value)}
+                  placeholder="Client name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`${title}-recipient-email`}>Recipient email</Label>
+                <Input
+                  id={`${title}-recipient-email`}
+                  type="email"
+                  value={overrideEmail}
+                  onChange={(event) => setOverrideEmail(event.target.value)}
+                  placeholder="client@example.com"
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor={`${title}-message`}>Message note</Label>
               <Textarea

@@ -13,6 +13,17 @@ const createSchema = z.object({
   ).min(1),
   discountAmount: z.number().min(0).optional(),
 });
+const sendSchema = z.object({
+  message: z.string().max(2000).optional(),
+  recipientEmail: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().email().optional()
+  ),
+  recipientName: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().max(120).optional()
+  ),
+});
 
 describe("invoices route logic", () => {
   it("createSchema accepts valid input and rejects invalid clientId", () => {
@@ -63,5 +74,21 @@ describe("invoices route logic", () => {
       lineItems: [{ description: "Test", quantity: 1, unitPrice: -1 }],
     });
     expect(invalidPrice.success).toBe(false);
+  });
+
+  it("accepts direct-recipient invoice send overrides", () => {
+    const result = sendSchema.safeParse({
+      recipientEmail: "billing@example.com",
+      recipientName: "Billing Contact",
+      message: "Invoice attached.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects invalid direct-recipient invoice emails", () => {
+    const result = sendSchema.safeParse({
+      recipientEmail: "bad-address",
+    });
+    expect(result.success).toBe(false);
   });
 });

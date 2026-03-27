@@ -45,6 +45,14 @@ const createSchema = z.object({
 });
 const sendInvoiceSchema = z.object({
   message: z.string().max(2000).optional(),
+  recipientEmail: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().email().optional()
+  ),
+  recipientName: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().max(120).optional()
+  ),
 });
 
 const INVOICE_STATUSES = ["draft", "sent", "paid", "partial", "void"] as const;
@@ -914,7 +922,12 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
     .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, bid)))
     .limit(1);
   if (!existing) throw new NotFoundError("Invoice not found.");
-  if (!existing.clientEmail?.trim()) {
+  const recipientEmail = parsed.data.recipientEmail?.trim() || existing.clientEmail?.trim() || null;
+  const recipientName =
+    parsed.data.recipientName?.trim() ||
+    `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() ||
+    "Customer";
+  if (!recipientEmail) {
     logger.warn("Invoice send blocked: client email missing", { invoiceId: existing.id, businessId: bid });
     await createRequestActivityLog(req, {
       businessId: bid,
@@ -924,6 +937,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       metadata: {
         invoiceNumber: existing.invoiceNumber ?? null,
         recipient: null,
+        recipientName,
         message: parsed.data.message ?? null,
         deliveryStatus: "missing_email",
         deliveryError: "Client does not have an email address.",
@@ -946,13 +960,14 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       entityId: existing.id,
       metadata: {
         invoiceNumber: existing.invoiceNumber ?? null,
-        recipient: existing.clientEmail.trim(),
+        recipient: recipientEmail,
+        recipientName,
         message: parsed.data.message ?? null,
         deliveryStatus: "smtp_disabled",
         deliveryError: "Transactional email is not configured.",
       },
     });
-    res.json({
+    res.status(503).json({
       ok: false,
       message: "Transactional email is not configured. Set RESEND_* or SMTP_* environment variables.",
       code: "EMAIL_NOT_CONFIGURED",
@@ -970,9 +985,9 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       businessId: bid,
     });
     await sendInvoiceEmail({
-      to: existing.clientEmail.trim(),
+      to: recipientEmail,
       businessId: bid,
-      clientName: `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer",
+      clientName: recipientName,
       businessName: existing.businessName ?? "Your shop",
       amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
       invoiceNumber: existing.invoiceNumber ?? "Invoice",
@@ -989,13 +1004,14 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       entityId: existing.id,
       metadata: {
         invoiceNumber: existing.invoiceNumber ?? null,
-        recipient: existing.clientEmail ?? null,
+        recipient: recipientEmail,
+        recipientName,
         message: parsed.data.message ?? null,
         deliveryStatus: "email_failed",
         deliveryError,
       },
     });
-    res.json({
+    res.status(502).json({
       ok: false,
       message: `Invoice email failed to send: ${deliveryError}`,
       code: "EMAIL_SEND_FAILED",
@@ -1010,15 +1026,16 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
   await createRequestActivityLog(req, {
     businessId: bid,
     action: "invoice.sent",
-    entityType: "invoice",
-    entityId: updated.id,
-    metadata: {
-      invoiceNumber: updated.invoiceNumber ?? null,
-      recipient: existing.clientEmail ?? null,
-      message: parsed.data.message ?? null,
-      deliveryStatus: "emailed",
-      deliveryError: null,
-    },
+      entityType: "invoice",
+      entityId: updated.id,
+      metadata: {
+        invoiceNumber: updated.invoiceNumber ?? null,
+        recipient: recipientEmail,
+        recipientName,
+        message: parsed.data.message ?? null,
+        deliveryStatus: "emailed",
+        deliveryError: null,
+      },
   });
-  res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null });
+  res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null, recipient: recipientEmail, recipientName });
 }));

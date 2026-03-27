@@ -419,9 +419,13 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  const handleMarkAsSent = async (message?: string) => {
+  const handleMarkAsSent = async (payload?: {
+    message?: string;
+    recipientEmail?: string;
+    recipientName?: string;
+  }) => {
     if (!invoice?.id) return;
-    const result = await sendToClient({ id: invoice.id, message });
+    const result = await sendToClient({ id: invoice.id, ...payload });
     if (!result.error) {
       const deliveryStatus = (result.data as any)?.deliveryStatus;
       if (deliveryStatus === "emailed") {
@@ -996,6 +1000,7 @@ export default function InvoiceDetailPage() {
 
           <CommunicationCard
             title="Client communication"
+            recipientName={clientData ? `${clientData.firstName} ${clientData.lastName}` : null}
             recipient={clientData?.email}
             primaryLabel={status === "sent" ? "Resend invoice" : "Send invoice"}
             activities={((activityLogs ?? []) as any[]).filter((record) => record.type === "invoice.sent")}

@@ -241,6 +241,27 @@ export default function LeadsPage() {
       vehicle: formData.vehicle,
     });
 
+  const resolveCreatedClientId = async (
+    resultData: unknown,
+    fallback: { firstName: string; lastName: string; email?: string; phone?: string }
+  ): Promise<string | null> => {
+    const createdId = (resultData as { id?: string } | null)?.id;
+    if (createdId) return createdId;
+
+    const records = await api.client.findMany({
+      search: [fallback.firstName, fallback.lastName, fallback.email, fallback.phone].filter(Boolean).join(" "),
+      first: 10,
+    });
+    const match = (records ?? []).find((client: any) => {
+      const firstNameMatches = client.firstName?.trim().toLowerCase() === fallback.firstName.trim().toLowerCase();
+      const lastNameMatches = client.lastName?.trim().toLowerCase() === fallback.lastName.trim().toLowerCase();
+      const emailMatches = fallback.email ? client.email?.trim().toLowerCase() === fallback.email.trim().toLowerCase() : true;
+      const phoneMatches = fallback.phone ? client.phone?.trim() === fallback.phone.trim() : true;
+      return firstNameMatches && lastNameMatches && emailMatches && phoneMatches;
+    });
+    return match?.id ?? null;
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
@@ -280,7 +301,12 @@ export default function LeadsPage() {
 
     if (result.error) return;
 
-    const createdClientId = (result.data as any)?.id;
+    const createdClientId = await resolveCreatedClientId(result.data, {
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      email: formData.email.trim() || undefined,
+      phone: formData.phone.trim() || undefined,
+    });
     if (!createdClientId) {
       setLocalErrors({ general: "Lead saved but no record ID was returned. Please refresh and check your client list." });
       return;
@@ -302,12 +328,12 @@ export default function LeadsPage() {
       return;
     }
 
-    navigate(`/clients/${createdClientId}?from=${encodeURIComponent("/leads")}`);
+    navigate(`/clients?created=${encodeURIComponent(createdClientId)}&from=${encodeURIComponent("/leads")}`);
   };
 
   const updateLeadStatus = async (client: any, status: LeadStatus) => {
     const lead = parseLeadRecord(client.notes);
-    if (!lead.isLead) return;
+    if (!lead.isLead) return false;
     const result = await updateClient({
       id: client.id,
       notes: buildLeadNotes({
@@ -317,16 +343,19 @@ export default function LeadsPage() {
     });
     if (result.error) {
       toast.error(result.error.message ?? "Could not update lead.");
-      return;
+      return false;
     }
     toast.success(status === "converted" ? "Lead marked converted" : "Lead updated");
     await refetchLeads();
+    return true;
   };
 
   const handleConvert = async (entry: LeadEntry) => {
+    let converted = true;
     if (entry.lead.status !== "converted") {
-      await updateLeadStatus(entry.client, "converted");
+      converted = await updateLeadStatus(entry.client, "converted");
     }
+    if (!converted) return;
     navigate(`/clients/${entry.client.id}?from=${encodeURIComponent("/leads")}`);
   };
 
