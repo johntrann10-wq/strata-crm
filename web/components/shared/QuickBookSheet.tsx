@@ -162,23 +162,6 @@ export function QuickBookSheet({
   }, [vehicles, vehiclesFetching, selectedVehicleId]);
 
   const minBookingDate = useMemo(() => getToday(), []);
-  const today = minBookingDate;
-  const tomorrow = useMemo(() => {
-    const nextDay = new Date();
-    nextDay.setDate(nextDay.getDate() + 1);
-    return getLocalDateString(nextDay);
-  }, []);
-  const bookingDateLabel = useMemo(() => {
-    if (!bookingDate) return "Pick date";
-    const parsed = new Date(`${bookingDate}T12:00:00`);
-    if (Number.isNaN(parsed.getTime())) return bookingDate;
-    return parsed.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
-  }, [bookingDate]);
-
   const clientList = (Array.isArray(clients) ? clients : []) as ClientPick[];
   const serviceList = (Array.isArray(services) ? services : []) as ServicePick[];
   const vehicleList = (Array.isArray(vehicles) ? vehicles : []) as VehiclePick[];
@@ -209,8 +192,6 @@ export function QuickBookSheet({
   const selectedServices = serviceList.filter((service) => selectedServiceIds.includes(service.id));
   const selectedServiceDuration = selectedServices.reduce((sum, service) => sum + (service.durationMinutes ?? 0), 0);
   const selectedServiceTotal = selectedServices.reduce((sum, service) => sum + toMoneyNumber(service.price), 0);
-  const quickTimePresets = ["08:00", "09:00", "12:00", "15:00", "17:00"];
-
   const toggleService = (serviceId: string) => {
     setSelectedServiceIds((prev) =>
       prev.includes(serviceId) ? prev.filter((id) => id !== serviceId) : [...prev, serviceId]
@@ -373,64 +354,21 @@ export function QuickBookSheet({
           {/* 2. Date & Time section */}
           <div className="space-y-2">
             <Label>2. Schedule *</Label>
-            <div className="flex flex-wrap gap-2">
-              {quickTimePresets.map((preset) => (
-                <Button
-                  key={preset}
-                  type="button"
-                  variant={bookingTime === preset ? "default" : "outline"}
-                  size="sm"
-                  className="h-7 rounded-full px-3 text-[11px]"
-                  onClick={() => setBookingTime(preset)}
-                >
-                  {preset}
-                </Button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setBookingDate(today)}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-medium rounded-md border transition-colors",
-                  bookingDate === today
-                    ? "bg-orange-500 text-white border-orange-500"
-                    : "bg-background border-border text-foreground hover:bg-muted"
-                )}
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                onClick={() => setBookingDate(tomorrow)}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-medium rounded-md border transition-colors",
-                  bookingDate === tomorrow
-                    ? "bg-orange-500 text-white border-orange-500"
-                    : "bg-background border-border text-foreground hover:bg-muted"
-                )}
-              >
-                Tomorrow
-              </button>
+            <div className="grid gap-2 sm:grid-cols-2">
               <input
                 type="date"
-                min={today}
+                min={minBookingDate}
                 value={bookingDate}
                 onChange={(e) => setBookingDate(e.target.value)}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-medium rounded-md border transition-colors cursor-pointer",
-                  bookingDate !== today && bookingDate !== tomorrow
-                    ? "bg-orange-500 text-white border-orange-500"
-                    : "bg-background border-border text-foreground hover:bg-muted"
-                )}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <input
+                type="time"
+                value={bookingTime}
+                onChange={(e) => setBookingTime(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
-            <input
-              type="time"
-              value={bookingTime}
-              onChange={(e) => setBookingTime(e.target.value)}
-              className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
           </div>
 
           {/* 3. Services section */}

@@ -711,18 +711,15 @@ export function MonthView({
                     ) : null}
                   </div>
 
-                  <div className="mt-auto flex items-center justify-between gap-2 pt-2 text-[9px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:pt-3 sm:text-[10px]">
-                    <span>
-                      {dayAppts.length > 0
-                        ? new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: "USD",
-                            maximumFractionDigits: 0,
-                          }).format(dayRevenue)
-                        : "No work"}
-                    </span>
-                    <span>{isSelected ? "Selected" : "View day"}</span>
-                  </div>
+                  {dayAppts.length > 0 ? (
+                    <div className="mt-auto pt-2 text-[9px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:pt-3 sm:text-[10px]">
+                      {new Intl.NumberFormat("en-US", {
+                        style: "currency",
+                        currency: "USD",
+                        maximumFractionDigits: 0,
+                      }).format(dayRevenue)}
+                    </div>
+                  ) : null}
                 </button>
               );
             })}

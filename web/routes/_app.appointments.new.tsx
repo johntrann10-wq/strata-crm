@@ -701,8 +701,6 @@ export default function NewAppointmentPage() {
     selectedDate ? format(selectedDate, "EEE, MMM d") : "Pick a date",
     startTime || "Set a start time",
   ].join(" · ");
-  const timePresets = ["08:00", "09:00", "12:00", "15:00", "17:00"];
-
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto p-4 pb-28 sm:p-6 sm:pb-6 lg:p-8">
@@ -1213,23 +1211,6 @@ export default function NewAppointmentPage() {
               <CardTitle className="text-base font-semibold">Schedule</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Fast picks</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {timePresets.map((preset) => (
-                    <Button
-                      key={preset}
-                      type="button"
-                      variant={startTime === preset ? "default" : "outline"}
-                      size="sm"
-                      className="h-8 rounded-full px-3 text-xs"
-                      onClick={() => setStartTime(preset)}
-                    >
-                      {preset}
-                    </Button>
-                  ))}
-                </div>
-              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Date picker */}
                 <div className="space-y-2">
