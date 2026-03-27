@@ -394,35 +394,67 @@ async function buildAppointmentConfirmationPayload(
       .limit(1);
   } catch (error) {
     if (!isLocationSchemaDriftError(error)) throw error;
-    logger.warn("Appointment confirmation falling back without location timezone", {
+    logger.warn("Appointment confirmation falling back without location/business timezone columns", {
       appointmentId,
       businessId: bid,
-      error,
+      error: error instanceof Error ? error.message : String(error),
     });
-    [appointmentRow] = await db
-      .select({
-        id: appointments.id,
-        startTime: appointments.startTime,
-        notes: appointments.notes,
-        clientFirstName: clients.firstName,
-        clientLastName: clients.lastName,
-        clientEmail: clients.email,
-        businessName: businesses.name,
-        businessTimezone: businesses.timezone,
-        vehicleYear: vehicles.year,
-        vehicleMake: vehicles.make,
-        vehicleModel: vehicles.model,
-        locationName: locations.name,
-        locationAddress: locations.address,
-        locationTimezone: sql<string | null>`null`,
-      })
-      .from(appointments)
-      .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
-      .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
-      .leftJoin(businesses, eq(appointments.businessId, businesses.id))
-      .leftJoin(locations, and(eq(appointments.locationId, locations.id), eq(locations.businessId, bid)))
-      .where(and(eq(appointments.id, appointmentId), eq(appointments.businessId, bid)))
-      .limit(1);
+    try {
+      [appointmentRow] = await db
+        .select({
+          id: appointments.id,
+          startTime: appointments.startTime,
+          notes: appointments.notes,
+          clientFirstName: clients.firstName,
+          clientLastName: clients.lastName,
+          clientEmail: clients.email,
+          businessName: businesses.name,
+          businessTimezone: sql<string | null>`null`,
+          vehicleYear: vehicles.year,
+          vehicleMake: vehicles.make,
+          vehicleModel: vehicles.model,
+          locationName: locations.name,
+          locationAddress: locations.address,
+          locationTimezone: sql<string | null>`null`,
+        })
+        .from(appointments)
+        .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
+        .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
+        .leftJoin(businesses, eq(appointments.businessId, businesses.id))
+        .leftJoin(locations, and(eq(appointments.locationId, locations.id), eq(locations.businessId, bid)))
+        .where(and(eq(appointments.id, appointmentId), eq(appointments.businessId, bid)))
+        .limit(1);
+    } catch (fallbackError) {
+      if (!isLocationSchemaDriftError(fallbackError)) throw fallbackError;
+      logger.warn("Appointment confirmation falling back without locations join", {
+        appointmentId,
+        businessId: bid,
+        error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+      });
+      [appointmentRow] = await db
+        .select({
+          id: appointments.id,
+          startTime: appointments.startTime,
+          notes: appointments.notes,
+          clientFirstName: clients.firstName,
+          clientLastName: clients.lastName,
+          clientEmail: clients.email,
+          businessName: businesses.name,
+          businessTimezone: sql<string | null>`null`,
+          vehicleYear: vehicles.year,
+          vehicleMake: vehicles.make,
+          vehicleModel: vehicles.model,
+          locationName: sql<string | null>`null`,
+          locationAddress: sql<string | null>`null`,
+          locationTimezone: sql<string | null>`null`,
+        })
+        .from(appointments)
+        .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
+        .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
+        .leftJoin(businesses, eq(appointments.businessId, businesses.id))
+        .where(and(eq(appointments.id, appointmentId), eq(appointments.businessId, bid)))
+        .limit(1);
+    }
   }
 
   if (!appointmentRow) return null;
@@ -949,7 +981,17 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   try {
     confirmationResult = await sendAppointmentConfirmationForRecord(created.id, bid);
   } catch (error) {
-    logger.warn("Appointment created but confirmation pipeline failed", { appointmentId: created.id, businessId: bid, error });
+    const deliveryError = error instanceof Error ? error.message : String(error);
+    logger.warn("Appointment created but confirmation pipeline failed", {
+      appointmentId: created.id,
+      businessId: bid,
+      error: deliveryError,
+    });
+    confirmationResult = {
+      deliveryStatus: "email_failed",
+      deliveryError,
+      recipient: null,
+    };
   }
   try {
     await createRequestActivityLog(req, {
@@ -1048,7 +1090,7 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   res.json(updated);
 });
 
-appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const parsed = sendConfirmationSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -1094,7 +1136,7 @@ appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, asy
     ok: confirmationResult.deliveryStatus === "emailed",
     ...confirmationResult,
   });
-});
+}));
 
 appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const statusParsed = appointmentStatusSchema.safeParse(req.body?.status ?? "scheduled");
