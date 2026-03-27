@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
@@ -55,6 +56,160 @@ function isPaymentSchemaDriftError(error: unknown): boolean {
     message.includes('column "notes" does not exist') ||
     message.includes('column "reference_number" does not exist')
   );
+}
+
+function isInvoiceSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+const createInvoiceReturning = {
+  id: invoices.id,
+  businessId: invoices.businessId,
+  clientId: invoices.clientId,
+  appointmentId: invoices.appointmentId,
+  invoiceNumber: invoices.invoiceNumber,
+  status: invoices.status,
+  subtotal: invoices.subtotal,
+  taxRate: invoices.taxRate,
+  taxAmount: invoices.taxAmount,
+  discountAmount: invoices.discountAmount,
+  total: invoices.total,
+  dueDate: invoices.dueDate,
+  paidAt: invoices.paidAt,
+  notes: invoices.notes,
+  createdAt: invoices.createdAt,
+  updatedAt: invoices.updatedAt,
+};
+
+let cachedInvoiceColumns: Set<string> | null = null;
+let cachedBusinessColumns: Set<string> | null = null;
+
+async function getInvoiceColumns(): Promise<Set<string>> {
+  if (cachedInvoiceColumns) return cachedInvoiceColumns;
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'invoices'
+  `);
+  const rows = (result as { rows?: Array<{ column_name?: string }> }).rows ?? [];
+  cachedInvoiceColumns = new Set(
+    rows.map((row) => row?.column_name).filter((value): value is string => typeof value === "string")
+  );
+  return cachedInvoiceColumns;
+}
+
+async function getBusinessColumns(): Promise<Set<string>> {
+  if (cachedBusinessColumns) return cachedBusinessColumns;
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'businesses'
+  `);
+  const rows = (result as { rows?: Array<{ column_name?: string }> }).rows ?? [];
+  cachedBusinessColumns = new Set(
+    rows.map((row) => row?.column_name).filter((value): value is string => typeof value === "string")
+  );
+  return cachedBusinessColumns;
+}
+
+async function insertLegacyInvoice(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  executor: any,
+  bid: string,
+  data: {
+    clientId: string;
+    appointmentId: string | null;
+    invoiceNumber: string;
+    status: string;
+    subtotal: number;
+    taxRate: number;
+    taxAmount: number;
+    discountAmount: number;
+    total: number;
+    notes: string | null;
+    dueDate: Date | null;
+  }
+) {
+  const columns = await getInvoiceColumns();
+  const invoiceId = randomUUID();
+  const now = new Date();
+  const insertColumns = [
+    "id",
+    "business_id",
+    "client_id",
+    "invoice_number",
+    "status",
+    "subtotal",
+    "tax_rate",
+    "tax_amount",
+    "discount_amount",
+    "total",
+  ];
+  const insertValues: unknown[] = [
+    invoiceId,
+    bid,
+    data.clientId,
+    data.invoiceNumber,
+    data.status,
+    String(data.subtotal),
+    String(data.taxRate),
+    String(data.taxAmount),
+    String(data.discountAmount),
+    String(data.total),
+  ];
+
+  if (data.appointmentId && columns.has("appointment_id")) {
+    insertColumns.push("appointment_id");
+    insertValues.push(data.appointmentId);
+  }
+  if (data.notes != null && columns.has("notes")) {
+    insertColumns.push("notes");
+    insertValues.push(data.notes);
+  }
+  if (data.dueDate != null && columns.has("due_date")) {
+    insertColumns.push("due_date");
+    insertValues.push(data.dueDate);
+  }
+  if (columns.has("created_at")) {
+    insertColumns.push("created_at");
+    insertValues.push(now);
+  }
+  if (columns.has("updated_at")) {
+    insertColumns.push("updated_at");
+    insertValues.push(now);
+  }
+
+  await executor.execute(sql`insert into "invoices" (${sql.join(
+    insertColumns.map((column) => sql.raw(`"${column}"`)),
+    sql`, `
+  )}) values (${sql.join(insertValues.map((value) => sql`${value}`), sql`, `)})`);
+
+  return {
+    id: invoiceId,
+    businessId: bid,
+    clientId: data.clientId,
+    appointmentId: data.appointmentId,
+    invoiceNumber: data.invoiceNumber,
+    status: data.status,
+    subtotal: String(data.subtotal),
+    taxRate: String(data.taxRate),
+    taxAmount: String(data.taxAmount),
+    discountAmount: String(data.discountAmount),
+    total: String(data.total),
+    dueDate: columns.has("due_date") ? data.dueDate : null,
+    paidAt: null,
+    notes: columns.has("notes") ? data.notes : null,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 async function listInvoicePayments(invoiceId: string) {
@@ -493,12 +648,20 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
     | undefined;
 
   // Tenancy: client must belong to this business
-  const [client] = await db.select().from(clients).where(and(eq(clients.id, parsed.data.clientId), eq(clients.businessId, bid))).limit(1);
+  const [client] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.id, parsed.data.clientId), eq(clients.businessId, bid)))
+    .limit(1);
   if (!client) throw new BadRequestError("Client not found or access denied.");
 
   if (parsed.data.appointmentId) {
     const [apt] = await db
-      .select()
+      .select({
+        id: appointments.id,
+        clientId: appointments.clientId,
+        vehicleId: appointments.vehicleId,
+      })
       .from(appointments)
       .where(and(eq(appointments.id, parsed.data.appointmentId), eq(appointments.businessId, bid)))
       .limit(1);
@@ -512,7 +675,16 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
   }
 
   if (parsed.data.quoteId) {
-    const [q] = await db.select().from(quotes).where(and(eq(quotes.id, parsed.data.quoteId), eq(quotes.businessId, bid))).limit(1);
+    const [q] = await db
+      .select({
+        id: quotes.id,
+        clientId: quotes.clientId,
+        vehicleId: quotes.vehicleId,
+        appointmentId: quotes.appointmentId,
+      })
+      .from(quotes)
+      .where(and(eq(quotes.id, parsed.data.quoteId), eq(quotes.businessId, bid)))
+      .limit(1);
     if (!q) throw new BadRequestError("Quote not found.");
     if (q.clientId !== parsed.data.clientId) throw new BadRequestError("Invoice client must match the quote client.");
     quote = {
@@ -554,25 +726,51 @@ invoicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
       parsed.data.dueDate != null && parsed.data.dueDate !== ""
         ? new Date(parsed.data.dueDate)
         : null;
-    const [created] = await tx
-      .insert(invoices)
-      .values({
-        businessId: bid,
+    let created;
+    try {
+      [created] = await tx
+        .insert(invoices)
+        .values({
+          businessId: bid,
+          clientId: parsed.data.clientId,
+          appointmentId: parsed.data.appointmentId ?? null,
+          invoiceNumber,
+          status: initialStatus,
+          subtotal: String(subtotal),
+          taxRate: String(taxRate),
+          taxAmount: String(taxAmount),
+          discountAmount: String(discountAmount),
+          total: String(total),
+          notes: parsed.data.notes ?? null,
+          dueDate,
+        })
+        .returning(createInvoiceReturning);
+    } catch (error) {
+      if (!isInvoiceSchemaDriftError(error)) throw error;
+      created = await insertLegacyInvoice(tx, bid, {
         clientId: parsed.data.clientId,
         appointmentId: parsed.data.appointmentId ?? null,
         invoiceNumber,
         status: initialStatus,
-        subtotal: String(subtotal),
-        taxRate: String(taxRate),
-        taxAmount: String(taxAmount),
-        discountAmount: String(discountAmount),
-        total: String(total),
+        subtotal,
+        taxRate,
+        taxAmount,
+        discountAmount,
+        total,
         notes: parsed.data.notes ?? null,
         dueDate,
-      })
-      .returning();
+      });
+    }
     if (!created) throw new BadRequestError("Failed to create invoice.");
-    await tx.update(businesses).set({ nextInvoiceNumber: nextNum + 1, updatedAt: new Date() }).where(eq(businesses.id, bid));
+    try {
+      await tx.update(businesses).set({ nextInvoiceNumber: nextNum + 1, updatedAt: new Date() }).where(eq(businesses.id, bid));
+    } catch (error) {
+      if (!isInvoiceSchemaDriftError(error)) throw error;
+      const businessColumns = await getBusinessColumns();
+      const updates: Record<string, unknown> = { nextInvoiceNumber: nextNum + 1 };
+      if (businessColumns.has("updated_at")) updates.updatedAt = new Date();
+      await tx.update(businesses).set(updates).where(eq(businesses.id, bid));
+    }
     for (const it of items) {
       await tx.insert(invoiceLineItems).values({
         invoiceId: created.id,

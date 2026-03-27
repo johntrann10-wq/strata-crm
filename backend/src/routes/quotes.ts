@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
@@ -28,6 +29,130 @@ function isLocationSchemaDriftError(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   const message = String((error as { message?: string }).message ?? "").toLowerCase();
   return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+function isQuoteSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+const createQuoteReturning = {
+  id: quotes.id,
+  businessId: quotes.businessId,
+  clientId: quotes.clientId,
+  vehicleId: quotes.vehicleId,
+  appointmentId: quotes.appointmentId,
+  status: quotes.status,
+  subtotal: quotes.subtotal,
+  taxRate: quotes.taxRate,
+  taxAmount: quotes.taxAmount,
+  total: quotes.total,
+  expiresAt: quotes.expiresAt,
+  sentAt: quotes.sentAt,
+  followUpSentAt: quotes.followUpSentAt,
+  notes: quotes.notes,
+  createdAt: quotes.createdAt,
+  updatedAt: quotes.updatedAt,
+};
+
+let cachedQuoteColumns: Set<string> | null = null;
+
+async function getQuoteColumns(): Promise<Set<string>> {
+  if (cachedQuoteColumns) return cachedQuoteColumns;
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'quotes'
+  `);
+  const rows = (result as { rows?: Array<{ column_name?: string }> }).rows ?? [];
+  cachedQuoteColumns = new Set(
+    rows.map((row) => row?.column_name).filter((value): value is string => typeof value === "string")
+  );
+  return cachedQuoteColumns;
+}
+
+async function insertLegacyQuote(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  executor: any,
+  bid: string,
+  data: {
+    clientId: string;
+    vehicleId: string | null;
+    notes: string | null;
+    expiresAt: Date | null;
+    taxRate: number;
+    subtotal: number;
+    taxAmount: number;
+    total: number;
+    status: string;
+  }
+) {
+  const columns = await getQuoteColumns();
+  const quoteId = randomUUID();
+  const now = new Date();
+  const insertColumns = ["id", "business_id", "client_id", "status", "subtotal", "tax_rate", "tax_amount", "total"];
+  const insertValues: unknown[] = [
+    quoteId,
+    bid,
+    data.clientId,
+    data.status,
+    String(data.subtotal),
+    String(data.taxRate),
+    String(data.taxAmount),
+    String(data.total),
+  ];
+
+  if (data.vehicleId && columns.has("vehicle_id")) {
+    insertColumns.push("vehicle_id");
+    insertValues.push(data.vehicleId);
+  }
+  if (data.notes != null && columns.has("notes")) {
+    insertColumns.push("notes");
+    insertValues.push(data.notes);
+  }
+  if (data.expiresAt != null && columns.has("expires_at")) {
+    insertColumns.push("expires_at");
+    insertValues.push(data.expiresAt);
+  }
+  if (columns.has("created_at")) {
+    insertColumns.push("created_at");
+    insertValues.push(now);
+  }
+  if (columns.has("updated_at")) {
+    insertColumns.push("updated_at");
+    insertValues.push(now);
+  }
+
+  await executor.execute(sql`insert into "quotes" (${sql.join(
+    insertColumns.map((column) => sql.raw(`"${column}"`)),
+    sql`, `
+  )}) values (${sql.join(insertValues.map((value) => sql`${value}`), sql`, `)})`);
+
+  return {
+    id: quoteId,
+    businessId: bid,
+    clientId: data.clientId,
+    vehicleId: data.vehicleId,
+    appointmentId: null,
+    status: data.status,
+    subtotal: String(data.subtotal),
+    taxRate: String(data.taxRate),
+    taxAmount: String(data.taxAmount),
+    total: String(data.total),
+    expiresAt: columns.has("expires_at") ? data.expiresAt : null,
+    sentAt: null,
+    followUpSentAt: null,
+    notes: columns.has("notes") ? data.notes : null,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 async function locationExistsForBusiness(locationId: string, bid: string): Promise<boolean> {
@@ -385,13 +510,17 @@ quotesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Res
   if (parsed.data.business?._link && parsed.data.business._link !== bid) {
     throw new BadRequestError("Business mismatch.");
   }
-  const [client] = await db.select().from(clients).where(and(eq(clients.id, clientId), eq(clients.businessId, bid))).limit(1);
+  const [client] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.id, clientId), eq(clients.businessId, bid)))
+    .limit(1);
   if (!client) throw new BadRequestError("Client not found or access denied.");
 
   const vehicleId = parsed.data.vehicleId ?? parsed.data.vehicle?._link ?? null;
   if (vehicleId) {
     const [veh] = await db
-      .select()
+      .select({ id: vehicles.id })
       .from(vehicles)
       .where(and(eq(vehicles.id, vehicleId), eq(vehicles.businessId, bid), eq(vehicles.clientId, clientId)))
       .limit(1);
@@ -399,6 +528,9 @@ quotesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Res
   }
 
   const taxRate = parsed.data.taxRate ?? 0;
+  const subtotal = (parsed.data.lineItems ?? []).reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const taxAmount = (subtotal * taxRate) / 100;
+  const total = subtotal + taxAmount;
   let expiresAt: Date | null = null;
   if (parsed.data.expiresAt != null && parsed.data.expiresAt !== "") {
     const d = new Date(parsed.data.expiresAt);
@@ -406,21 +538,37 @@ quotesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Res
   }
 
   const created = await db.transaction(async (tx) => {
-    const [quote] = await tx
-      .insert(quotes)
-      .values({
-        businessId: bid,
+    let quote;
+    try {
+      [quote] = await tx
+        .insert(quotes)
+        .values({
+          businessId: bid,
+          clientId,
+          vehicleId,
+          notes: parsed.data.notes ?? null,
+          expiresAt,
+          taxRate: String(taxRate),
+          subtotal: String(subtotal),
+          taxAmount: String(taxAmount),
+          total: String(total),
+          status: parsed.data.status ?? "draft",
+        })
+        .returning(createQuoteReturning);
+    } catch (error) {
+      if (!isQuoteSchemaDriftError(error)) throw error;
+      quote = await insertLegacyQuote(tx, bid, {
         clientId,
         vehicleId,
         notes: parsed.data.notes ?? null,
         expiresAt,
-        taxRate: String(taxRate),
-        subtotal: "0",
-        taxAmount: "0",
-        total: "0",
+        taxRate,
+        subtotal,
+        taxAmount,
+        total,
         status: parsed.data.status ?? "draft",
-      })
-      .returning();
+      });
+    }
     if (!quote) throw new BadRequestError("Failed to create quote.");
 
     for (const item of parsed.data.lineItems ?? []) {
@@ -437,9 +585,17 @@ quotesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Res
       await recalculateQuoteTotals(tx, quote.id);
     }
 
-    const [freshQuote] = await tx.select().from(quotes).where(eq(quotes.id, quote.id)).limit(1);
-    if (!freshQuote) throw new BadRequestError("Failed to load created quote.");
-    return freshQuote;
+    try {
+      const [freshQuote] = await tx
+        .select(createQuoteReturning)
+        .from(quotes)
+        .where(eq(quotes.id, quote.id))
+        .limit(1);
+      if (freshQuote) return freshQuote;
+    } catch (error) {
+      if (!isQuoteSchemaDriftError(error)) throw error;
+    }
+    return quote;
   });
   if (!created) throw new BadRequestError("Failed to create quote.");
   try {

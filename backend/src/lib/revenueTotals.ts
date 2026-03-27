@@ -19,9 +19,40 @@ function money(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
 
+function isSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42p01" || code === "42703" || message.includes("does not exist");
+}
+
 /** Recompute quote subtotal / tax / total from line items + stored tax rate (%). */
 export async function recalculateQuoteTotals(executor: DbLike, quoteId: string): Promise<void> {
-  const [q] = await executor.select().from(quotes).where(eq(quotes.id, quoteId)).limit(1);
+  let q:
+    | {
+        id: string;
+        taxRate: string | null;
+      }
+    | undefined;
+  try {
+    [q] = await executor
+      .select({ id: quotes.id, taxRate: quotes.taxRate })
+      .from(quotes)
+      .where(eq(quotes.id, quoteId))
+      .limit(1);
+  } catch (error) {
+    if (!isSchemaDriftError(error)) throw error;
+    [q] = await executor
+      .select({ id: quotes.id, taxRate: quotes.taxRate })
+      .from(quotes)
+      .where(eq(quotes.id, quoteId))
+      .limit(1);
+  }
   if (!q) return;
   const lines = await executor.select().from(quoteLineItems).where(eq(quoteLineItems.quoteId, quoteId));
   const subtotal = lines.reduce((s, r) => s + Number(r.total ?? 0), 0);
@@ -41,7 +72,17 @@ export async function recalculateQuoteTotals(executor: DbLike, quoteId: string):
 
 /** Recompute invoice subtotal / tax / total from line items + stored tax rate (%) and discount. */
 export async function recalculateInvoiceTotals(executor: DbLike, invoiceId: string): Promise<void> {
-  const [inv] = await executor.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+  const [inv] = await executor
+    .select({
+      id: invoices.id,
+      status: invoices.status,
+      discountAmount: invoices.discountAmount,
+      taxRate: invoices.taxRate,
+      paidAt: invoices.paidAt,
+    })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .limit(1);
   if (!inv) return;
   if (inv.status === "void") return;
 
