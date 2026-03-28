@@ -25,6 +25,7 @@ const defaultTitle = "Strata - fast CRM for auto service shops";
 const defaultDescription =
   "Strata helps automotive service businesses run scheduling, clients, vehicles, jobs, quotes, invoices, and payments in one clear operating system.";
 const socialImageUrl = `${siteUrl}${socialPreviewHref}`;
+const googleSiteVerification = "8J8smTWAQcFyKEfHd6HqfOQ2K1G4afNezGJNNFN4RBM";
 
 function isIndexableMarketingPath(pathname: string) {
   if (pathname === "/") return true;
@@ -127,6 +128,7 @@ export const meta = () => [
   { name: "viewport", content: "width=device-width, initial-scale=1" },
   { title: defaultTitle },
   { name: "description", content: defaultDescription },
+  { name: "google-site-verification", content: googleSiteVerification },
   { name: "apple-mobile-web-app-title", content: "Strata CRM" },
   { property: "og:site_name", content: "Strata CRM" },
   { property: "og:type", content: "website" },
