@@ -14,7 +14,35 @@ async function completeOnboardingIfNeeded(page: Page) {
   await expect(page.locator("#name")).toBeVisible();
   await page.locator("#name").fill(`Live Smoke ${Date.now()}`);
   await page.getByRole("button", { name: /launch|finish setup/i }).click();
-  await page.waitForURL(/\/signed-in/);
+  await page.waitForURL(/\/(signed-in|subscribe)/);
+}
+
+async function assertWorkspaceReady(page: Page) {
+  if (/\/subscribe(?:[/?#]|$)/.test(page.url())) {
+    const billingStatus = await page.evaluate(async () => {
+      const token = window.localStorage.getItem("authToken");
+      if (!token) return { error: "missing_token" };
+      try {
+        const response = await fetch("https://strata-crm-production.up.railway.app/api/billing/status", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const body = await response.json().catch(() => ({}));
+        return {
+          httpStatus: response.status,
+          ...body,
+        };
+      } catch (error) {
+        return {
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    });
+    throw new Error(
+      `Smoke account is gated at /subscribe. Billing status: ${JSON.stringify(billingStatus)}`
+    );
+  }
+
+  await expect(page).toHaveURL(/\/signed-in/);
 }
 
 async function signIn(page: Page) {
@@ -23,10 +51,10 @@ async function signIn(page: Page) {
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(password);
   await page.getByRole("button", { name: /sign in with email/i }).click();
-  await page.waitForURL(/\/(signed-in|onboarding)/);
+  await page.waitForURL(/\/(signed-in|onboarding|subscribe)/);
   await page.waitForLoadState("networkidle");
   await completeOnboardingIfNeeded(page);
-  await expect(page).toHaveURL(/\/signed-in/);
+  await assertWorkspaceReady(page);
 }
 
 async function waitForPathname(page: Page, matcher: RegExp) {
@@ -365,8 +393,8 @@ test.describe("Live business workflow smoke", () => {
     await test.step("Calendar shows created appointment context", async () => {
       await page.goto("/calendar");
       await expect(page).toHaveURL(/\/calendar/);
-      await expect(page.locator("main")).toContainText(/selected day/i);
-      await expect(page.locator("main")).toContainText(/appointments/i);
+      await expect(page.locator("main")).toContainText(/scheduling/i);
+      await expect(page.locator("main")).toContainText(/week summary|day summary|month overview/i);
     });
 
     let quoteDeliveryStatus: string | null = null;

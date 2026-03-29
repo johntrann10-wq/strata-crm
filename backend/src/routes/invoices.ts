@@ -106,6 +106,7 @@ const createInvoiceReturning = {
 
 let cachedInvoiceColumns: Set<string> | null = null;
 let cachedBusinessColumns: Set<string> | null = null;
+let cachedInvoiceLineItemColumns: Set<string> | null = null;
 
 async function getInvoiceColumns(): Promise<Set<string>> {
   if (cachedInvoiceColumns) return cachedInvoiceColumns;
@@ -133,6 +134,47 @@ async function getBusinessColumns(): Promise<Set<string>> {
     rows.map((row) => row?.column_name).filter((value): value is string => typeof value === "string")
   );
   return cachedBusinessColumns;
+}
+
+async function getInvoiceLineItemColumns(): Promise<Set<string>> {
+  if (cachedInvoiceLineItemColumns) return cachedInvoiceLineItemColumns;
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'invoice_line_items'
+  `);
+  const rows = (result as { rows?: Array<{ column_name?: string }> }).rows ?? [];
+  cachedInvoiceLineItemColumns = new Set(
+    rows.map((row) => row?.column_name).filter((value): value is string => typeof value === "string")
+  );
+  return cachedInvoiceLineItemColumns;
+}
+
+async function insertLegacyInvoiceLineItem(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  executor: any,
+  data: {
+    invoiceId: string;
+    description: string;
+    quantity: string;
+    unitPrice: string;
+    total: string;
+  }
+) {
+  const columns = await getInvoiceLineItemColumns();
+  const now = new Date();
+  const insertData: Record<string, unknown> = {
+    invoiceId: data.invoiceId,
+    description: data.description,
+    quantity: data.quantity,
+    unitPrice: data.unitPrice,
+    total: data.total,
+  };
+
+  if (columns.has("created_at")) insertData.createdAt = now;
+  if (columns.has("updated_at")) insertData.updatedAt = now;
+
+  await executor.insert(invoiceLineItems).values(insertData);
 }
 
 async function insertLegacyInvoice(
@@ -838,13 +880,24 @@ invoicesRouter.post(
       await executor.update(businesses).set(updates).where(eq(businesses.id, bid));
     }
     for (const it of items) {
-      await executor.insert(invoiceLineItems).values({
-        invoiceId: created.id,
-        description: it.description,
-        quantity: it.quantity,
-        unitPrice: it.unitPrice,
-        total: it.total,
-      });
+      try {
+        await executor.insert(invoiceLineItems).values({
+          invoiceId: created.id,
+          description: it.description,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          total: it.total,
+        });
+      } catch (error) {
+        if (!isInvoiceSchemaDriftError(error)) throw error;
+        await insertLegacyInvoiceLineItem(executor, {
+          invoiceId: created.id,
+          description: it.description,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          total: it.total,
+        });
+      }
     }
     return created;
   }

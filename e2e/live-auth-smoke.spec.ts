@@ -13,9 +13,9 @@ test.describe("Live auth smoke", () => {
     await expect(page.locator("main").getByRole("heading", { level: 1, name })).toBeVisible();
   }
 
-  async function completeOnboardingIfNeeded(page: import("@playwright/test").Page) {
-    const onboardingHeading = page.getByRole("heading", { name: /choose your shop type/i });
-    if (!(await onboardingHeading.isVisible().catch(() => false))) return;
+async function completeOnboardingIfNeeded(page: import("@playwright/test").Page) {
+  const onboardingHeading = page.getByRole("heading", { name: /choose your shop type/i });
+  if (!(await onboardingHeading.isVisible().catch(() => false))) return;
 
     await page.getByRole("button", { name: /tire shop/i }).click();
     await page.getByRole("button", { name: /^continue$/i }).click();
@@ -28,12 +28,40 @@ test.describe("Live auth smoke", () => {
     // eslint-disable-next-line no-console
     console.log(
       "post-onboarding auth:",
-      await page.evaluate(() => ({
+    await page.evaluate(() => ({
         token: window.localStorage.getItem("authToken"),
         businessId: window.localStorage.getItem("currentBusinessId"),
       }))
     );
-    await page.waitForURL(/\/signed-in/);
+    await page.waitForURL(/\/(signed-in|subscribe)/);
+  }
+
+  async function assertWorkspaceReady(page: import("@playwright/test").Page) {
+    if (/\/subscribe(?:[/?#]|$)/.test(page.url())) {
+      const billingStatus = await page.evaluate(async () => {
+        const token = window.localStorage.getItem("authToken");
+        if (!token) return { error: "missing_token" };
+        try {
+          const response = await fetch("https://strata-crm-production.up.railway.app/api/billing/status", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const body = await response.json().catch(() => ({}));
+          return {
+            httpStatus: response.status,
+            ...body,
+          };
+        } catch (error) {
+          return {
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      });
+      throw new Error(
+        `Smoke account is gated at /subscribe. Billing status: ${JSON.stringify(billingStatus)}`
+      );
+    }
+
+    await expect(page).toHaveURL(/\/signed-in/);
   }
 
   test.beforeAll(() => {
@@ -76,11 +104,10 @@ test.describe("Live auth smoke", () => {
     await page.locator("#password").fill(password);
     await page.getByRole("button", { name: /sign in with email/i }).click();
 
-    await page.waitForURL(/\/(signed-in|onboarding)/);
+    await page.waitForURL(/\/(signed-in|onboarding|subscribe)/);
     await page.waitForLoadState("networkidle");
     await completeOnboardingIfNeeded(page);
-
-    await expect(page).toHaveURL(/\/signed-in/);
+    await assertWorkspaceReady(page);
     await expect(
       page.locator("main").getByRole("heading", { level: 2, name: /^today's schedule$/i })
     ).toBeVisible();
