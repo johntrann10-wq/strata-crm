@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
@@ -7,6 +7,7 @@ import { serviceCategories, services } from "../db/schema.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { formatLegacyServiceCategory, isLegacyServiceCategory, LEGACY_SERVICE_CATEGORIES } from "../lib/serviceCategories.js";
+import { warnOnce } from "../lib/warnOnce.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 
@@ -23,6 +24,28 @@ function parseFilter(req: Request): Record<string, unknown> | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isServiceCategorySchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+async function getTableColumns(tableName: string): Promise<Set<string>> {
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = ${tableName}
+  `);
+  const rows = (result as { rows?: Array<{ column_name?: string }> }).rows ?? [];
+  return new Set(rows.map((row) => row.column_name).filter((value): value is string => Boolean(value)));
 }
 
 const createSchema = z.object({
@@ -59,34 +82,77 @@ serviceCategoriesRouter.get(
       conditions.push(eq(serviceCategories.active, filter.active.equals));
     }
 
-    const rows = await db
+    try {
+      const rows = await db
+        .select({
+          id: serviceCategories.id,
+          businessId: serviceCategories.businessId,
+          name: serviceCategories.name,
+          key: serviceCategories.key,
+          sortOrder: serviceCategories.sortOrder,
+          active: serviceCategories.active,
+          createdAt: serviceCategories.createdAt,
+          updatedAt: serviceCategories.updatedAt,
+          serviceCount: count(services.id),
+        })
+        .from(serviceCategories)
+        .leftJoin(services, eq(services.categoryId, serviceCategories.id))
+        .where(and(...conditions))
+        .groupBy(
+          serviceCategories.id,
+          serviceCategories.businessId,
+          serviceCategories.name,
+          serviceCategories.key,
+          serviceCategories.sortOrder,
+          serviceCategories.active,
+          serviceCategories.createdAt,
+          serviceCategories.updatedAt
+        )
+        .orderBy(asc(serviceCategories.sortOrder), asc(serviceCategories.name));
+
+      res.json({ records: rows.map((row) => ({ ...row, serviceCount: Number(row.serviceCount ?? 0) })) });
+      return;
+    } catch (error) {
+      if (!isServiceCategorySchemaDriftError(error)) throw error;
+      warnOnce("service-categories:list:fallback", "service categories list falling back without full schema", {
+        businessId: bid,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const serviceColumns = await getTableColumns("services");
+    if (!serviceColumns.has("category")) {
+      res.json({ records: [] });
+      return;
+    }
+
+    const legacyRows = await db
       .select({
-        id: serviceCategories.id,
-        businessId: serviceCategories.businessId,
-        name: serviceCategories.name,
-        key: serviceCategories.key,
-        sortOrder: serviceCategories.sortOrder,
-        active: serviceCategories.active,
-        createdAt: serviceCategories.createdAt,
-        updatedAt: serviceCategories.updatedAt,
+        category: services.category,
         serviceCount: count(services.id),
       })
-      .from(serviceCategories)
-      .leftJoin(services, eq(services.categoryId, serviceCategories.id))
-      .where(and(...conditions))
-      .groupBy(
-        serviceCategories.id,
-        serviceCategories.businessId,
-        serviceCategories.name,
-        serviceCategories.key,
-        serviceCategories.sortOrder,
-        serviceCategories.active,
-        serviceCategories.createdAt,
-        serviceCategories.updatedAt
-      )
-      .orderBy(asc(serviceCategories.sortOrder), asc(serviceCategories.name));
+      .from(services)
+      .where(eq(services.businessId, bid))
+      .groupBy(services.category)
+      .orderBy(asc(services.category));
 
-    res.json({ records: rows.map((row) => ({ ...row, serviceCount: Number(row.serviceCount ?? 0) })) });
+    const now = new Date();
+    const records = legacyRows.map((row, index) => {
+      const key = isLegacyServiceCategory(row.category) ? row.category : null;
+      return {
+        id: `legacy:${row.category ?? "other"}`,
+        businessId: bid,
+        name: formatLegacyServiceCategory(row.category),
+        key,
+        sortOrder: key ? LEGACY_SERVICE_CATEGORIES.findIndex((category) => category.key === key) : 1000 + index,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+        serviceCount: Number(row.serviceCount ?? 0),
+      };
+    });
+
+    res.json({ records });
   })
 );
 
