@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { z } from "zod";
-import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { appointmentServices, serviceCategories, services } from "../db/schema.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
@@ -241,8 +241,15 @@ function normalizeServiceRecord(row: {
 }
 
 async function listServicesForBusiness(bid: string, activeFilter?: boolean, first = 100): Promise<ServiceRow[]> {
+  const serviceColumns = await getServiceColumns();
+  const hasLegacyCategory = serviceColumns.has("category");
+  const hasCategoryId = serviceColumns.has("category_id");
+  const hasSortOrder = serviceColumns.has("sort_order");
+  const hasTaxable = serviceColumns.has("taxable");
+  const hasIsAddon = serviceColumns.has("is_addon");
+  const hasActive = serviceColumns.has("active");
   const conditions = [eq(services.businessId, bid)];
-  if (typeof activeFilter === "boolean") conditions.push(eq(services.active, activeFilter));
+  if (typeof activeFilter === "boolean" && hasActive) conditions.push(eq(services.active, activeFilter));
 
   try {
     const rows = await db
@@ -253,21 +260,26 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
         notes: services.notes,
         price: services.price,
         durationMinutes: services.durationMinutes,
-        category: services.category,
-        categoryId: services.categoryId,
-        categoryName: serviceCategories.name,
-        categorySortOrder: serviceCategories.sortOrder,
-        sortOrder: services.sortOrder,
-        taxable: services.taxable,
-        isAddon: services.isAddon,
-        active: services.active,
+        category: hasLegacyCategory ? services.category : sql<string | null>`null`,
+        categoryId: hasCategoryId ? services.categoryId : sql<string | null>`null`,
+        categoryName: hasCategoryId ? serviceCategories.name : sql<string | null>`null`,
+        categorySortOrder: hasCategoryId ? serviceCategories.sortOrder : sql<number | null>`null`,
+        sortOrder: hasSortOrder ? services.sortOrder : sql<number | null>`0`,
+        taxable: hasTaxable ? services.taxable : sql<boolean | null>`true`,
+        isAddon: hasIsAddon ? services.isAddon : sql<boolean | null>`false`,
+        active: hasActive ? services.active : sql<boolean | null>`true`,
         createdAt: services.createdAt,
         updatedAt: services.updatedAt,
       })
       .from(services)
-      .leftJoin(serviceCategories, eq(services.categoryId, serviceCategories.id))
+      .leftJoin(serviceCategories, hasCategoryId ? eq(services.categoryId, serviceCategories.id) : sql`false`)
       .where(and(...conditions))
-      .orderBy(asc(serviceCategories.sortOrder), asc(services.sortOrder), asc(services.name), desc(services.createdAt))
+      .orderBy(
+        hasCategoryId ? asc(serviceCategories.sortOrder) : sql`1`,
+        hasSortOrder ? asc(services.sortOrder) : sql`1`,
+        asc(services.name),
+        desc(services.createdAt)
+      )
       .limit(first);
     return rows.map((row) => normalizeServiceRecord(row));
   } catch (error) {
@@ -284,10 +296,10 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
         notes: services.notes,
         price: services.price,
         durationMinutes: services.durationMinutes,
-        category: services.category,
-        taxable: services.taxable,
-        isAddon: services.isAddon,
-        active: services.active,
+        category: hasLegacyCategory ? services.category : sql<string | null>`null`,
+        taxable: hasTaxable ? services.taxable : sql<boolean | null>`true`,
+        isAddon: hasIsAddon ? services.isAddon : sql<boolean | null>`false`,
+        active: hasActive ? services.active : sql<boolean | null>`true`,
         createdAt: services.createdAt,
         updatedAt: services.updatedAt,
       })
@@ -300,6 +312,14 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
 }
 
 async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRow | null> {
+  const serviceColumns = await getServiceColumns();
+  const hasLegacyCategory = serviceColumns.has("category");
+  const hasCategoryId = serviceColumns.has("category_id");
+  const hasSortOrder = serviceColumns.has("sort_order");
+  const hasTaxable = serviceColumns.has("taxable");
+  const hasIsAddon = serviceColumns.has("is_addon");
+  const hasActive = serviceColumns.has("active");
+
   try {
     const [row] = await db
       .select({
@@ -309,19 +329,19 @@ async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRo
         notes: services.notes,
         price: services.price,
         durationMinutes: services.durationMinutes,
-        category: services.category,
-        categoryId: services.categoryId,
-        categoryName: serviceCategories.name,
-        categorySortOrder: serviceCategories.sortOrder,
-        sortOrder: services.sortOrder,
-        taxable: services.taxable,
-        isAddon: services.isAddon,
-        active: services.active,
+        category: hasLegacyCategory ? services.category : sql<string | null>`null`,
+        categoryId: hasCategoryId ? services.categoryId : sql<string | null>`null`,
+        categoryName: hasCategoryId ? serviceCategories.name : sql<string | null>`null`,
+        categorySortOrder: hasCategoryId ? serviceCategories.sortOrder : sql<number | null>`null`,
+        sortOrder: hasSortOrder ? services.sortOrder : sql<number | null>`0`,
+        taxable: hasTaxable ? services.taxable : sql<boolean | null>`true`,
+        isAddon: hasIsAddon ? services.isAddon : sql<boolean | null>`false`,
+        active: hasActive ? services.active : sql<boolean | null>`true`,
         createdAt: services.createdAt,
         updatedAt: services.updatedAt,
       })
       .from(services)
-      .leftJoin(serviceCategories, eq(services.categoryId, serviceCategories.id))
+      .leftJoin(serviceCategories, hasCategoryId ? eq(services.categoryId, serviceCategories.id) : sql`false`)
       .where(and(eq(services.id, id), eq(services.businessId, bid)))
       .limit(1);
     return row ? normalizeServiceRecord(row) : null;
@@ -335,10 +355,10 @@ async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRo
         notes: services.notes,
         price: services.price,
         durationMinutes: services.durationMinutes,
-        category: services.category,
-        taxable: services.taxable,
-        isAddon: services.isAddon,
-        active: services.active,
+        category: hasLegacyCategory ? services.category : sql<string | null>`null`,
+        taxable: hasTaxable ? services.taxable : sql<boolean | null>`true`,
+        isAddon: hasIsAddon ? services.isAddon : sql<boolean | null>`false`,
+        active: hasActive ? services.active : sql<boolean | null>`true`,
         createdAt: services.createdAt,
         updatedAt: services.updatedAt,
       })
