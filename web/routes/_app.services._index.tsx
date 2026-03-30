@@ -660,6 +660,87 @@ export default function ServicesPage() {
         <MetricCard label="Add-ons" value={String(activeAddonCount)} detail="Optional extras on file" />
       </div>
 
+      <ListViewToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search services, notes, or categories..."
+        loading={servicesFetching}
+        resultCount={visibleServices.length}
+        noun="services"
+        filtersLabel={[
+          serviceTab === "active" ? "Active only" : "Inactive only",
+          categoryFilter === "all" ? null : categoryOptions.find((option) => option.value === categoryFilter)?.label ?? null,
+        ]}
+        onClear={() => { setSearch(""); setCategoryFilter("all"); setServiceTab("active"); }}
+        actions={
+          <div className="flex gap-2">
+            <Select value={serviceTab} onValueChange={(value) => setServiceTab(value as "active" | "inactive")}>
+              <SelectTrigger className="min-w-[140px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="min-w-[180px]"><SelectValue placeholder="All categories" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {categoryOptions.map((category) => (
+                  <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        }
+      />
+
+      {isFirstLoad ? (
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 6 }).map((_, index) => <ServiceCardSkeleton key={index} />)}
+        </div>
+      ) : serviceGroups.length === 0 ? (
+        <EmptyState
+          icon={Wrench}
+          title="No matching services"
+          description="Create a service or clear the filters to see the full catalog."
+          action={<Button onClick={() => openCreateService()}><Plus className="mr-2 h-4 w-4" />Add Service</Button>}
+        />
+      ) : (
+        <div className="space-y-6">
+          {serviceGroups.map((group) => (
+            <Card key={group.id}>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle>{group.title}</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">{group.services.length} services</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => openCreateService(group.id === UNCATEGORIZED_VALUE ? null : group.id)}>
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    Add service
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {group.services.map((service, index) => (
+                  <ServiceCard
+                    key={service.id}
+                    service={service}
+                    onEdit={(record) => { setEditService(record); setEditFormData(serviceToFormData(record)); setNewAddonServiceId(""); }}
+                    onToggle={handleToggleActive}
+                    isToggling={togglingId === service.id}
+                    onMoveUp={() => void moveService(group.id, service.id, -1)}
+                    onMoveDown={() => void moveService(group.id, service.id, 1)}
+                    moveDisabledUp={index === 0 || reorderServiceFetching}
+                    moveDisabledDown={index === group.services.length - 1 || reorderServiceFetching}
+                  />
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
@@ -873,90 +954,6 @@ export default function ServicesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-      <ListViewToolbar
-        search={search}
-        onSearchChange={setSearch}
-        placeholder="Search services, notes, or categories..."
-        loading={servicesFetching}
-        resultCount={visibleServices.length}
-        noun="services"
-        filtersLabel={[
-          serviceTab === "active" ? "Active only" : "Inactive only",
-          categoryFilter === "all" ? null : categoryOptions.find((option) => option.value === categoryFilter)?.label ?? null,
-        ]}
-        onClear={() => { setSearch(""); setCategoryFilter("all"); setServiceTab("active"); }}
-        actions={
-          <div className="flex gap-2">
-            <Select value={serviceTab} onValueChange={(value) => setServiceTab(value as "active" | "inactive")}>
-              <SelectTrigger className="min-w-[140px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="min-w-[180px]"><SelectValue placeholder="All categories" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All categories</SelectItem>
-                {categoryOptions.map((category) => (
-                  <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        }
-      />
-
-      {isFirstLoad ? (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 6 }).map((_, index) => <ServiceCardSkeleton key={index} />)}
-        </div>
-      ) : serviceGroups.length === 0 ? (
-        <EmptyState
-          icon={Wrench}
-          title="No matching services"
-          description="Create a service or clear the filters to see the full catalog."
-          action={<Button onClick={() => openCreateService()}><Plus className="mr-2 h-4 w-4" />Add Service</Button>}
-        />
-      ) : (
-        <div className="space-y-6">
-          {serviceGroups.map((group) => (
-            <Card key={group.id}>
-              <CardHeader>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <CardTitle>{group.title}</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">{group.services.length} services</p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => openCreateService(group.id === UNCATEGORIZED_VALUE ? null : group.id)}>
-                    <Plus className="mr-1 h-3.5 w-3.5" />
-                    Add service
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {group.services.map((service, index) => (
-                  <ServiceCard
-                    key={service.id}
-                    service={service}
-                    onEdit={(record) => { setEditService(record); setEditFormData(serviceToFormData(record)); setNewAddonServiceId(""); }}
-                    onToggle={handleToggleActive}
-                    isToggling={togglingId === service.id}
-                    onMoveUp={() => void moveService(group.id, service.id, -1)}
-                    onMoveDown={() => void moveService(group.id, service.id, 1)}
-                    moveDisabledUp={index === 0 || reorderServiceFetching}
-                    moveDisabledDown={index === group.services.length - 1 || reorderServiceFetching}
-                  />
-                ))}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
 
       <Card>
         <CardHeader>
@@ -999,3 +996,6 @@ export default function ServicesPage() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
