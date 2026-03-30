@@ -465,6 +465,37 @@ export const api = {
         if (!id) throw new Error("Service delete requires id");
         return r.delete(id);
       },
+      reorder: (params: Record<string, unknown>) =>
+        request<unknown>("/services/reorder", {
+          method: "POST",
+          body: JSON.stringify(params),
+        }),
+    };
+  })(),
+  serviceCategory: (() => {
+    const r = resource("service-categories");
+    return {
+      ...r,
+      update: (params: Record<string, unknown>) => {
+        const id = params.id as string | undefined;
+        if (!id) throw new Error("Service category update requires id");
+        const { id: _omit, ...body } = params;
+        return r.update(id, body);
+      },
+      delete: (params: Record<string, unknown>) => {
+        const id = params.id as string | undefined;
+        if (!id) throw new Error("Service category delete requires id");
+        const { id: _omit, ...body } = params;
+        return request(`/service-categories/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          body: JSON.stringify(body),
+        });
+      },
+      reorder: (params: Record<string, unknown>) =>
+        request<unknown>("/service-categories/reorder", {
+          method: "POST",
+          body: JSON.stringify(params),
+        }),
     };
   })(),
   /** Parent service → optional add-on service (same catalog model). */

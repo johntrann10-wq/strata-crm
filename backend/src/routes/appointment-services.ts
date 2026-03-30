@@ -1,9 +1,11 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { appointmentServices, appointments, services } from "../db/schema.js";
+import { appointmentServices, appointments, serviceCategories, services } from "../db/schema.js";
 import { and, eq, desc } from "drizzle-orm";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
+import { formatLegacyServiceCategory } from "../lib/serviceCategories.js";
+import { warnOnce } from "../lib/warnOnce.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
@@ -24,6 +26,18 @@ function parseFilter(req: Request): unknown {
   }
 }
 
+function isServiceSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
 appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
   const filter = parseFilter(req) as { appointmentId?: { equals?: string } } | undefined;
@@ -34,25 +48,68 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Reque
 
   const first = req.query.first != null ? Math.min(Number(req.query.first), 100) : 50;
 
-  const rows = await db
-    .select({
-      id: appointmentServices.id,
-      appointmentId: appointmentServices.appointmentId,
-      serviceId: appointmentServices.serviceId,
-      quantity: appointmentServices.quantity,
-      unitPrice: appointmentServices.unitPrice,
-      createdAt: appointmentServices.createdAt,
-      updatedAt: appointmentServices.updatedAt,
-      serviceName: services.name,
-      serviceCategory: services.category,
-      serviceDurationMinutes: services.durationMinutes,
-    })
-    .from(appointmentServices)
-    .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
-    .leftJoin(services, eq(appointmentServices.serviceId, services.id))
-    .where(and(...conditions))
-    .orderBy(desc(appointmentServices.createdAt))
-    .limit(first);
+  let rows: Array<{
+    id: string;
+    appointmentId: string;
+    serviceId: string | null;
+    quantity: number | null;
+    unitPrice: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    serviceName: string | null;
+    serviceCategory: string | null;
+    serviceCategoryLabel?: string | null;
+    serviceDurationMinutes: number | null;
+  }>;
+
+  try {
+    rows = await db
+      .select({
+        id: appointmentServices.id,
+        appointmentId: appointmentServices.appointmentId,
+        serviceId: appointmentServices.serviceId,
+        quantity: appointmentServices.quantity,
+        unitPrice: appointmentServices.unitPrice,
+        createdAt: appointmentServices.createdAt,
+        updatedAt: appointmentServices.updatedAt,
+        serviceName: services.name,
+        serviceCategory: services.category,
+        serviceCategoryLabel: serviceCategories.name,
+        serviceDurationMinutes: services.durationMinutes,
+      })
+      .from(appointmentServices)
+      .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
+      .leftJoin(services, eq(appointmentServices.serviceId, services.id))
+      .leftJoin(serviceCategories, eq(services.categoryId, serviceCategories.id))
+      .where(and(...conditions))
+      .orderBy(desc(appointmentServices.createdAt))
+      .limit(first);
+  } catch (error) {
+    if (!isServiceSchemaDriftError(error)) throw error;
+    warnOnce("appointment-services:list:fallback", "appointment services list falling back without full service category schema", {
+      businessId: bid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    rows = await db
+      .select({
+        id: appointmentServices.id,
+        appointmentId: appointmentServices.appointmentId,
+        serviceId: appointmentServices.serviceId,
+        quantity: appointmentServices.quantity,
+        unitPrice: appointmentServices.unitPrice,
+        createdAt: appointmentServices.createdAt,
+        updatedAt: appointmentServices.updatedAt,
+        serviceName: services.name,
+        serviceCategory: services.category,
+        serviceDurationMinutes: services.durationMinutes,
+      })
+      .from(appointmentServices)
+      .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
+      .leftJoin(services, eq(appointmentServices.serviceId, services.id))
+      .where(and(...conditions))
+      .orderBy(desc(appointmentServices.createdAt))
+      .limit(first);
+  }
 
   res.json({
     records: rows.map((row) => ({
@@ -67,7 +124,7 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Reque
         ? {
             id: row.serviceId,
             name: row.serviceName,
-            category: row.serviceCategory,
+            category: row.serviceCategoryLabel ?? formatLegacyServiceCategory(row.serviceCategory),
             durationMinutes: row.serviceDurationMinutes,
           }
         : null,

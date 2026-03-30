@@ -31,7 +31,7 @@ type ClientPick = {
   lastName?: string | null;
   phone?: string | null;
 };
-type ServicePick = { id: string; name?: string; price?: number | string | null; durationMinutes?: number | null; category?: string | null };
+type ServicePick = { id: string; name?: string; price?: number | string | null; durationMinutes?: number | null; category?: string | null; categoryLabel?: string | null };
 type VehiclePick = { id: string; year?: number | null; make?: string | null; model?: string | null };
 
 const toMoneyNumber = (value: unknown): number => {
@@ -129,7 +129,7 @@ export function QuickBookSheet({
       businessId: { equals: businessId ?? "" },
       active: { equals: true },
     },
-    select: { id: true, name: true, price: true, durationMinutes: true, category: true },
+    select: { id: true, name: true, price: true, durationMinutes: true, category: true, categoryLabel: true },
     sort: { category: "Ascending" },
     first: 250,
     pause: !businessId || !open,
@@ -177,7 +177,7 @@ export function QuickBookSheet({
   });
   const normalizedServiceSearch = serviceSearch.trim().toLowerCase();
   const groupedServices = serviceList.reduce<Record<string, ServicePick[]>>((acc, service) => {
-    const haystack = [service.name, formatServiceCategory(service.category)].filter(Boolean).join(" ").toLowerCase();
+    const haystack = [service.name, service.categoryLabel ?? formatServiceCategory(service.category)].filter(Boolean).join(" ").toLowerCase();
     if (normalizedServiceSearch && !haystack.includes(normalizedServiceSearch)) return acc;
     const key = service.category ?? "other";
     if (!acc[key]) acc[key] = [];
@@ -417,7 +417,7 @@ export function QuickBookSheet({
                         <AccordionItem key={category} value={category} className="px-3">
                           <AccordionTrigger className="py-3 hover:no-underline">
                             <div className="min-w-0 text-left">
-                              <p className="text-sm font-medium">{formatServiceCategory(category)}</p>
+                              <p className="text-sm font-medium">{group[0]?.categoryLabel ?? formatServiceCategory(category)}</p>
                               <p className="text-xs text-muted-foreground">
                                 {entries.length} option{entries.length === 1 ? "" : "s"}
                                 {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}

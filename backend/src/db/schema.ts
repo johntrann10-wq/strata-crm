@@ -253,6 +253,8 @@ export const services = pgTable("services", {
   /** Estimated job duration in minutes. */
   durationMinutes: integer("duration_minutes"),
   category: serviceCategoryEnum("category").default("other").notNull(),
+  categoryId: uuid("category_id").references(() => serviceCategories.id, { onDelete: "set null" }),
+  sortOrder: integer("sort_order").default(0).notNull(),
   taxable: boolean("taxable").default(true),
   /** When true, service is intended as an add-on to another line item (still configurable). */
   isAddon: boolean("is_addon").default(false),
@@ -260,6 +262,24 @@ export const services = pgTable("services", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const serviceCategories = pgTable(
+  "service_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id").notNull().references(() => businesses.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    key: text("key"),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    active: boolean("active").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("service_categories_business_name_unique").on(t.businessId, t.name),
+    uniqueIndex("service_categories_business_key_unique").on(t.businessId, t.key),
+  ]
+);
 
 /** Optional add-ons: parent service → offered add-on service (same tenant, no business rules in DB). */
 export const serviceAddonLinks = pgTable(

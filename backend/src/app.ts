@@ -24,6 +24,7 @@ import { quotesRouter } from "./routes/quotes.js";
 import { staffRouter } from "./routes/staff.js";
 import { locationsRouter } from "./routes/locations.js";
 import { servicesRouter } from "./routes/services.js";
+import { serviceCategoriesRouter } from "./routes/service-categories.js";
 import { serviceAddonLinksRouter } from "./routes/service-addon-links.js";
 import { jobsRouter } from "./routes/jobs.js";
 import { actionsRouter } from "./routes/actions.js";
@@ -77,6 +78,7 @@ app.use("/api/quote-line-items", optionalAuth, requireSubscription, quoteLineIte
 app.use("/api/staff", optionalAuth, staffRouter);
 app.use("/api/locations", optionalAuth, locationsRouter);
 app.use("/api/services", optionalAuth, servicesRouter);
+app.use("/api/service-categories", optionalAuth, serviceCategoriesRouter);
 app.use("/api/service-addon-links", optionalAuth, serviceAddonLinksRouter);
 app.use("/api/jobs", optionalAuth, requireSubscription, jobsRouter);
 app.use("/api/actions", optionalAuth, actionsRouter);

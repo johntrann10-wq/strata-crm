@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router";
-import { useFindMany, useAction } from "../hooks/useApi";
+import { useAction, useFindMany } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -25,66 +25,76 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Package, Trash2, Wrench } from "lucide-react";
-import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { PageHeader } from "../components/shared/PageHeader";
+import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "../components/shared/EmptyState";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
+import { PageHeader } from "../components/shared/PageHeader";
+import { cn } from "@/lib/utils";
 import {
-  SERVICE_CATEGORY_VALUES,
-  SERVICE_CATEGORY_LABELS,
-  formatServiceCategory,
-  type ServiceCategory,
-} from "../lib/serviceCatalog";
+  ArrowDown,
+  ArrowUp,
+  FolderKanban,
+  Package,
+  Pencil,
+  Plus,
+  Trash2,
+  Wrench,
+} from "lucide-react";
+import { toast } from "sonner";
+import { formatServiceCategory } from "../lib/serviceCatalog";
 
-interface ServiceRecord {
+const UNCATEGORIZED_VALUE = "__uncategorized__";
+
+type ServiceRecord = {
   id: string;
   name: string;
   price: number;
   durationMinutes: number | null;
   category: string | null;
+  categoryId: string | null;
+  categoryLabel: string | null;
+  sortOrder: number | null;
   active: boolean | null;
   isAddon: boolean | null;
   taxable: boolean | null;
   notes: string | null;
-}
+};
 
-interface AddonLinkRecord {
+type CategoryRecord = {
+  id: string;
+  name: string;
+  key: string | null;
+  sortOrder: number;
+  active: boolean;
+  serviceCount: number;
+};
+
+type AddonLinkRecord = {
   id: string;
   parentServiceId: string;
   addonServiceId: string;
-  sortOrder?: number | null;
-}
+};
 
-interface ServiceFormData {
+type ServiceFormData = {
   name: string;
   price: string;
   duration: string;
-  category: string;
+  categoryId: string;
   notes: string;
   taxable: boolean;
   isAddon: boolean;
-}
+};
 
-const defaultFormData: ServiceFormData = {
+const defaultServiceFormData: ServiceFormData = {
   name: "",
   price: "",
   duration: "",
-  category: "other",
+  categoryId: UNCATEGORIZED_VALUE,
   notes: "",
   taxable: true,
   isAddon: false,
@@ -94,7 +104,7 @@ function formatPrice(price: number | string): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-  }).format(Number(price));
+  }).format(Number(price ?? 0));
 }
 
 function formatDuration(minutes: number | null): string {
@@ -111,7 +121,7 @@ function serviceToFormData(service: ServiceRecord): ServiceFormData {
     name: service.name ?? "",
     price: service.price != null ? String(service.price) : "",
     duration: service.durationMinutes != null ? String(service.durationMinutes) : "",
-    category: service.category ?? "other",
+    categoryId: service.categoryId ?? UNCATEGORIZED_VALUE,
     notes: service.notes ?? "",
     taxable: service.taxable ?? true,
     isAddon: service.isAddon ?? false,
@@ -133,45 +143,35 @@ function ServiceCardSkeleton() {
   );
 }
 
-function ActiveToggle({
-  active,
-  onToggle,
-  loading,
+function CategoryForm({
+  name,
+  onChange,
 }: {
-  active: boolean;
-  onToggle: () => void;
-  loading: boolean;
+  name: string;
+  onChange: (value: string) => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!loading) onToggle();
-      }}
-      disabled={loading}
-      aria-label={active ? "Deactivate service" : "Activate service"}
-      className={cn(
-        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-        active ? "bg-green-500" : "bg-input"
-      )}
-    >
-      <span
-        className={cn(
-          "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform",
-          active ? "translate-x-4" : "translate-x-0"
-        )}
+    <div className="grid gap-2 py-2">
+      <Label htmlFor="category-name">Category name</Label>
+      <Input
+        id="category-name"
+        value={name}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="e.g. Ceramic Coatings"
       />
-    </button>
+    </div>
   );
 }
 
-interface ServiceFormProps {
+function ServiceForm({
+  formData,
+  onChange,
+  categoryOptions,
+}: {
   formData: ServiceFormData;
   onChange: (data: ServiceFormData) => void;
-}
-
-function ServiceForm({ formData, onChange }: ServiceFormProps) {
+  categoryOptions: Array<{ value: string; label: string }>;
+}) {
   return (
     <div className="grid gap-4 py-2">
       <div className="grid gap-2">
@@ -204,26 +204,21 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
             min="0"
             step="1"
             value={formData.duration}
-            onChange={(e) =>
-              onChange({ ...formData, duration: e.target.value })
-            }
+            onChange={(e) => onChange({ ...formData, duration: e.target.value })}
             placeholder="e.g. 120"
           />
         </div>
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="svc-category">Category *</Label>
-        <Select
-          value={formData.category}
-          onValueChange={(val) => onChange({ ...formData, category: val })}
-        >
+        <Label htmlFor="svc-category">Category</Label>
+        <Select value={formData.categoryId} onValueChange={(value) => onChange({ ...formData, categoryId: value })}>
           <SelectTrigger id="svc-category">
-            <SelectValue placeholder="Select a category" />
+            <SelectValue placeholder="Select category" />
           </SelectTrigger>
           <SelectContent>
-            {SERVICE_CATEGORY_VALUES.map((cat) => (
-              <SelectItem key={cat} value={cat}>
-                {SERVICE_CATEGORY_LABELS[cat]}
+            {categoryOptions.map((category) => (
+              <SelectItem key={category.value} value={category.value}>
+                {category.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -235,7 +230,7 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
           id="svc-notes"
           value={formData.notes}
           onChange={(e) => onChange({ ...formData, notes: e.target.value })}
-          placeholder="Optional - internal notes, inclusions, or booking hints."
+          placeholder="Internal notes, inclusions, or booking hints."
           rows={3}
         />
       </div>
@@ -244,9 +239,7 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
           <Checkbox
             id="svc-taxable"
             checked={formData.taxable}
-            onCheckedChange={(checked) =>
-              onChange({ ...formData, taxable: Boolean(checked) })
-            }
+            onCheckedChange={(checked) => onChange({ ...formData, taxable: Boolean(checked) })}
           />
           <Label htmlFor="svc-taxable" className="cursor-pointer">
             Taxable
@@ -256,9 +249,7 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
           <Checkbox
             id="svc-addon"
             checked={formData.isAddon}
-            onCheckedChange={(checked) =>
-              onChange({ ...formData, isAddon: Boolean(checked) })
-            }
+            onCheckedChange={(checked) => onChange({ ...formData, isAddon: Boolean(checked) })}
           />
           <Label htmlFor="svc-addon" className="cursor-pointer">
             Add-on service
@@ -269,496 +260,461 @@ function ServiceForm({ formData, onChange }: ServiceFormProps) {
   );
 }
 
+function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
+        <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ActiveToggle({
+  active,
+  onToggle,
+  loading,
+}: {
+  active: boolean;
+  onToggle: () => void;
+  loading: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!loading) onToggle();
+      }}
+      disabled={loading}
+      className={cn(
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent transition-colors",
+        active ? "bg-green-500" : "bg-input"
+      )}
+    >
+      <span
+        className={cn(
+          "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg transition-transform",
+          active ? "translate-x-4" : "translate-x-0"
+        )}
+      />
+    </button>
+  );
+}
+
+function ServiceCard({
+  service,
+  onEdit,
+  onToggle,
+  isToggling,
+  onMoveUp,
+  onMoveDown,
+  moveDisabledUp,
+  moveDisabledDown,
+}: {
+  service: ServiceRecord;
+  onEdit: (service: ServiceRecord) => void;
+  onToggle: (service: ServiceRecord) => void;
+  isToggling: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  moveDisabledUp: boolean;
+  moveDisabledDown: boolean;
+}) {
+  const durationStr = formatDuration(service.durationMinutes);
+
+  return (
+    <div
+      className="flex items-center justify-between rounded-lg border bg-card p-4 transition-colors hover:bg-accent/30"
+      onClick={() => onEdit(service)}
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="truncate font-medium text-sm">{service.name}</span>
+          {service.isAddon ? <Badge variant="secondary">Add-on</Badge> : null}
+          <Badge variant="outline">{service.categoryLabel ?? formatServiceCategory(service.category)}</Badge>
+        </div>
+        <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{formatPrice(service.price)}</span>
+          {durationStr ? <span>{durationStr}</span> : null}
+          {service.taxable ? <span>Taxable</span> : null}
+        </div>
+      </div>
+
+      <div className="ml-4 flex items-center gap-2">
+        <Button size="icon" variant="outline" onClick={(e) => { e.stopPropagation(); onMoveUp(); }} disabled={moveDisabledUp}>
+          <ArrowUp className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="icon" variant="outline" onClick={(e) => { e.stopPropagation(); onMoveDown(); }} disabled={moveDisabledDown}>
+          <ArrowDown className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="icon" variant="outline" onClick={(e) => { e.stopPropagation(); onEdit(service); }}>
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        <ActiveToggle active={service.active !== false} onToggle={() => onToggle(service)} loading={isToggling} />
+      </div>
+    </div>
+  );
+}
+
 export default function ServicesPage() {
   const { businessId } = useOutletContext<AuthOutletContext>();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [serviceTab, setServiceTab] = useState<"active" | "inactive">("active");
 
-  const businessIdFilter = useMemo(
-    () => (businessId ? { businessId: { equals: businessId } } : undefined),
-    [businessId]
-  );
+  const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
+  const [editCategory, setEditCategory] = useState<CategoryRecord | null>(null);
+  const [deleteCategory, setDeleteCategory] = useState<CategoryRecord | null>(null);
+  const [categoryName, setCategoryName] = useState("");
+  const [moveDeleteServicesTo, setMoveDeleteServicesTo] = useState<string>(UNCATEGORIZED_VALUE);
 
-  const [{ data: services, fetching: servicesFetching }, refetchServices] =
-    useFindMany(api.service, {
-      filter: businessIdFilter,
-      sort: { category: "Ascending" },
-      first: 100,
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        durationMinutes: true,
-        category: true,
-        active: true,
-        isAddon: true,
-        taxable: true,
-        notes: true,
-      },
-      pause: !businessId,
-    });
-
-  const [{ fetching: updateFetching, error: updateError }, runUpdate] =
-    useAction(api.service.update);
-  const [{ fetching: createFetching, error: createError }, runCreate] =
-    useAction(api.service.create);
-  const [{ fetching: deleteFetching, error: deleteError }, runDelete] =
-    useAction(api.service.delete);
-
-  const [newAddonServiceId, setNewAddonServiceId] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"active" | "inactive">("active");
+  const [createServiceOpen, setCreateServiceOpen] = useState(false);
   const [editService, setEditService] = useState<ServiceRecord | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [editFormData, setEditFormData] = useState<ServiceFormData>(defaultFormData);
-  const [createFormData, setCreateFormData] = useState<ServiceFormData>(defaultFormData);
+  const [deleteService, setDeleteService] = useState<ServiceRecord | null>(null);
+  const [createFormData, setCreateFormData] = useState<ServiceFormData>(defaultServiceFormData);
+  const [editFormData, setEditFormData] = useState<ServiceFormData>(defaultServiceFormData);
+  const [newAddonServiceId, setNewAddonServiceId] = useState<string>("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const addonLinkFilter = useMemo(
-    () =>
-      editService
-        ? { parentService: { id: { equals: editService.id } } }
-        : undefined,
-    [editService]
-  );
-
-  const [{ data: addonLinks, fetching: addonLinksFetching }, refetchAddonLinks] = useFindMany(
-    api.serviceAddonLink,
-    {
-      filter: addonLinkFilter,
-      select: { id: true, addonServiceId: true, parentServiceId: true, sortOrder: true },
-      first: 50,
-      pause: !editService,
-    }
-  );
-
-  const [{ fetching: creatingAddonLink }, runCreateAddonLink] = useAction(api.serviceAddonLink.create);
-  const [{ fetching: deletingAddonLink }, runDeleteAddonLink] = useAction(api.serviceAddonLink.delete);
-
-  const resetEditDialogState = () => {
-    setNewAddonServiceId("");
-  };
-
-  const [{ data: packageAddonLinks }] = useFindMany(api.serviceAddonLink, {
+  const [{ data: categoriesData, fetching: categoriesFetching }, refetchCategories] = useFindMany(api.serviceCategory, {
+    first: 100,
+    sort: { sortOrder: "Ascending" },
+    pause: !businessId,
+  });
+  const [{ data: servicesData, fetching: servicesFetching }, refetchServices] = useFindMany(api.service, {
+    filter: businessId ? { businessId: { equals: businessId } } : undefined,
+    sort: { name: "Ascending" },
+    first: 250,
+    pause: !businessId,
+  });
+  const [{ data: addonLinksData }, refetchAddonLinks] = useFindMany(api.serviceAddonLink, {
     first: 250,
     pause: !businessId,
   } as any);
 
-  // Open edit dialog
-  const handleEditService = (service: ServiceRecord) => {
-    setEditService(service);
-    setEditFormData(serviceToFormData(service));
-    setNewAddonServiceId("");
+  const [{ fetching: createCategoryFetching }, runCreateCategory] = useAction(api.serviceCategory.create);
+  const [{ fetching: updateCategoryFetching }, runUpdateCategory] = useAction(api.serviceCategory.update);
+  const [{ fetching: deleteCategoryFetching }, runDeleteCategory] = useAction(api.serviceCategory.delete);
+  const [{ fetching: reorderCategoryFetching }, runReorderCategory] = useAction(api.serviceCategory.reorder);
+
+  const [{ fetching: createServiceFetching }, runCreateService] = useAction(api.service.create);
+  const [{ fetching: updateServiceFetching }, runUpdateService] = useAction(api.service.update);
+  const [{ fetching: deleteServiceFetching }, runDeleteService] = useAction(api.service.delete);
+  const [{ fetching: reorderServiceFetching }, runReorderService] = useAction(api.service.reorder);
+
+  const [{ fetching: createAddonLinkFetching }, runCreateAddonLink] = useAction(api.serviceAddonLink.create);
+  const [{ fetching: deleteAddonLinkFetching }, runDeleteAddonLink] = useAction(api.serviceAddonLink.delete);
+
+  const categories = ((categoriesData ?? []) as CategoryRecord[]).filter((category) => category.active !== false);
+  const inactiveCategories = ((categoriesData ?? []) as CategoryRecord[]).filter((category) => category.active === false);
+  const services = (servicesData ?? []) as ServiceRecord[];
+  const addonLinks = (addonLinksData ?? []) as AddonLinkRecord[];
+
+  const categoryById = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
+  const categoryOptions = useMemo(
+    () => [{ value: UNCATEGORIZED_VALUE, label: "Uncategorized" }, ...categories.map((category) => ({ value: category.id, label: category.name }))],
+    [categories]
+  );
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const visibleServices = services.filter((service) => {
+    const matchesActive = serviceTab === "active" ? service.active !== false : service.active === false;
+    const categoryValue = service.categoryId ?? UNCATEGORIZED_VALUE;
+    const matchesCategory = categoryFilter === "all" ? true : categoryValue === categoryFilter;
+    const haystack = [service.name, service.notes, service.categoryLabel ?? formatServiceCategory(service.category)]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const matchesSearch = normalizedSearch ? haystack.includes(normalizedSearch) : true;
+    return matchesActive && matchesCategory && matchesSearch;
+  });
+
+  const serviceGroups = useMemo(() => {
+    const bucket = new Map<string, { id: string; title: string; order: number; services: ServiceRecord[] }>();
+    for (const service of visibleServices) {
+      const groupId = service.categoryId ?? UNCATEGORIZED_VALUE;
+      const category = service.categoryId ? categoryById.get(service.categoryId) : null;
+      const title = category?.name ?? service.categoryLabel ?? "Uncategorized";
+      const order = category?.sortOrder ?? 9999;
+      if (!bucket.has(groupId)) bucket.set(groupId, { id: groupId, title, order, services: [] });
+      bucket.get(groupId)!.services.push(service);
+    }
+    return Array.from(bucket.values())
+      .sort((left, right) => left.order - right.order || left.title.localeCompare(right.title))
+      .map((group) => ({
+        ...group,
+        services: group.services.sort(
+          (left, right) => Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0) || left.name.localeCompare(right.name)
+        ),
+      }));
+  }, [categoryById, visibleServices]);
+
+  const packageSummaries = useMemo(
+    () =>
+      services
+        .filter((service) => !service.isAddon)
+        .map((service) => {
+          const linkedAddons = addonLinks
+            .filter((link) => link.parentServiceId === service.id)
+            .map((link) => services.find((candidate) => candidate.id === link.addonServiceId))
+            .filter(Boolean) as ServiceRecord[];
+          return {
+            service,
+            linkedAddons,
+            totalPrice:
+              Number(service.price ?? 0) +
+              linkedAddons.reduce((sum, addon) => sum + Number(addon.price ?? 0), 0),
+          };
+        })
+        .filter((summary) => summary.linkedAddons.length > 0)
+        .sort((left, right) => left.service.name.localeCompare(right.service.name)),
+    [addonLinks, services]
+  );
+
+  const activeServicesCount = services.filter((service) => service.active !== false).length;
+  const activeAddonCount = services.filter((service) => service.active !== false && service.isAddon).length;
+  const canMoveCategoryDelete = deleteCategory ? services.some((service) => service.categoryId === deleteCategory.id) : false;
+  const isFirstLoad = (servicesFetching || categoriesFetching) && !servicesData && !categoriesData;
+
+  const openCreateService = (categoryId?: string | null) => {
+    setCreateFormData({ ...defaultServiceFormData, categoryId: categoryId ?? UNCATEGORIZED_VALUE });
+    setCreateServiceOpen(true);
   };
 
-  // Handle edit form submit
-  const handleUpdateSubmit = async (e: React.FormEvent) => {
+  const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editService) return;
-    if (!editFormData.name.trim() || !editFormData.price || !editFormData.category) {
-      toast.error("Please fill in all required fields.");
-      return;
-    }
-    const result = await runUpdate({
-      id: editService.id,
-      name: editFormData.name.trim(),
-      price: parseFloat(editFormData.price),
-      durationMinutes: editFormData.duration ? parseInt(editFormData.duration, 10) : null,
-      category: editFormData.category as ServiceCategory,
-      notes: editFormData.notes.trim() || null,
-      taxable: editFormData.taxable,
-      isAddon: editFormData.isAddon,
-    });
-    if (result.error) {
-      toast.error("Failed to update service: " + result.error.message);
-    } else {
-      toast.success("Service updated successfully.");
-      setEditService(null);
-      resetEditDialogState();
-      void refetchServices();
-    }
+    if (!categoryName.trim()) return toast.error("Enter a category name.");
+    const result = await runCreateCategory({ name: categoryName.trim() });
+    if (result.error) return toast.error(result.error.message);
+    toast.success("Category created.");
+    setCategoryName("");
+    setCreateCategoryOpen(false);
+    void refetchCategories();
   };
 
-  // Handle create form submit
-  const handleCreateSubmit = async (e: React.FormEvent) => {
+  const handleUpdateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createFormData.name.trim() || !createFormData.price || !createFormData.category) {
-      toast.error("Please fill in all required fields.");
-      return;
-    }
-    const result = await runCreate({
+    if (!editCategory || !categoryName.trim()) return toast.error("Enter a category name.");
+    const result = await runUpdateCategory({ id: editCategory.id, name: categoryName.trim() });
+    if (result.error) return toast.error(result.error.message);
+    toast.success("Category updated.");
+    setEditCategory(null);
+    setCategoryName("");
+    void refetchCategories();
+    void refetchServices();
+  };
+
+  const handleArchiveCategory = async (category: CategoryRecord, active: boolean) => {
+    const result = await runUpdateCategory({ id: category.id, active });
+    if (result.error) return toast.error(result.error.message);
+    toast.success(active ? "Category restored." : "Category archived.");
+    void refetchCategories();
+  };
+
+  const moveCategory = async (categoryId: string, direction: -1 | 1) => {
+    const index = categories.findIndex((category) => category.id === categoryId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= categories.length) return;
+    const orderedIds = categories.map((category) => category.id);
+    [orderedIds[index], orderedIds[nextIndex]] = [orderedIds[nextIndex], orderedIds[index]];
+    const result = await runReorderCategory({ orderedIds });
+    if (result.error) return toast.error(result.error.message);
+    void refetchCategories();
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!deleteCategory) return;
+    const payload =
+      moveDeleteServicesTo === UNCATEGORIZED_VALUE
+        ? { id: deleteCategory.id, moveToUncategorized: true }
+        : { id: deleteCategory.id, moveToCategoryId: moveDeleteServicesTo };
+    const result = await runDeleteCategory(payload);
+    if (result.error) return toast.error(result.error.message);
+    toast.success("Category deleted.");
+    setDeleteCategory(null);
+    setMoveDeleteServicesTo(UNCATEGORIZED_VALUE);
+    void refetchCategories();
+    void refetchServices();
+  };
+
+  const handleCreateService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createFormData.name.trim() || !createFormData.price) return toast.error("Please fill in all required fields.");
+    const result = await runCreateService({
       name: createFormData.name.trim(),
       price: parseFloat(createFormData.price),
       durationMinutes: createFormData.duration ? parseInt(createFormData.duration, 10) : null,
-      category: createFormData.category as ServiceCategory,
+      categoryId: createFormData.categoryId === UNCATEGORIZED_VALUE ? null : createFormData.categoryId,
       notes: createFormData.notes.trim() || null,
       taxable: createFormData.taxable,
       isAddon: createFormData.isAddon,
       business: businessId ? { _link: businessId } : undefined,
     });
-    if (result.error) {
-      toast.error("Failed to create service: " + result.error.message);
-    } else {
-      toast.success("Service created successfully.");
-      setCreateDialogOpen(false);
-      setCreateFormData(defaultFormData);
-      void refetchServices();
-    }
+    if (result.error) return toast.error(result.error.message);
+    toast.success("Service created.");
+    setCreateServiceOpen(false);
+    setCreateFormData(defaultServiceFormData);
+    void refetchServices();
   };
 
-  // Handle toggle active
+  const handleUpdateService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editService || !editFormData.name.trim() || !editFormData.price) return toast.error("Please fill in all required fields.");
+    const result = await runUpdateService({
+      id: editService.id,
+      name: editFormData.name.trim(),
+      price: parseFloat(editFormData.price),
+      durationMinutes: editFormData.duration ? parseInt(editFormData.duration, 10) : null,
+      categoryId: editFormData.categoryId === UNCATEGORIZED_VALUE ? null : editFormData.categoryId,
+      notes: editFormData.notes.trim() || null,
+      taxable: editFormData.taxable,
+      isAddon: editFormData.isAddon,
+    });
+    if (result.error) return toast.error(result.error.message);
+    toast.success("Service updated.");
+    setEditService(null);
+    setNewAddonServiceId("");
+    void refetchServices();
+  };
+
   const handleToggleActive = async (service: ServiceRecord) => {
     setTogglingId(service.id);
     try {
-      const newActive = !service.active;
-      const result = await runUpdate({ id: service.id, active: newActive });
-      if (result.error) {
-        toast.error("Failed to update service: " + result.error.message);
-      } else {
-        toast.success(newActive ? "Service activated" : "Service deactivated");
-        void refetchServices();
-      }
+      const result = await runUpdateService({ id: service.id, active: !(service.active !== false) });
+      if (result.error) return toast.error(result.error.message);
+      toast.success(service.active !== false ? "Service deactivated." : "Service activated.");
+      void refetchServices();
     } finally {
       setTogglingId(null);
     }
   };
 
+  const moveService = async (groupId: string, serviceId: string, direction: -1 | 1) => {
+    const group = serviceGroups.find((entry) => entry.id === groupId);
+    if (!group) return;
+    const index = group.services.findIndex((service) => service.id === serviceId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= group.services.length) return;
+    const orderedIds = group.services.map((service) => service.id);
+    [orderedIds[index], orderedIds[nextIndex]] = [orderedIds[nextIndex], orderedIds[index]];
+    const result = await runReorderService({ orderedIds });
+    if (result.error) return toast.error(result.error.message);
+    void refetchServices();
+  };
+
+  const handleDeleteService = async () => {
+    if (!deleteService) return;
+    const result = await runDeleteService({ id: deleteService.id });
+    if (result.error) return toast.error(result.error.message);
+    toast.success("Service deleted.");
+    setDeleteService(null);
+    setEditService(null);
+    void refetchServices();
+  };
+
   const handleAddAddonLink = async () => {
-    if (!newAddonServiceId || !editService) return;
-    const result = await runCreateAddonLink({
-      parentServiceId: editService.id,
-      addonServiceId: newAddonServiceId,
-    });
-    if (result.error) {
-      toast.error("Failed to add add-on: " + result.error.message);
-      return;
-    }
-    toast.success("Add-on linked");
+    if (!editService || !newAddonServiceId) return;
+    const result = await runCreateAddonLink({ parentServiceId: editService.id, addonServiceId: newAddonServiceId });
+    if (result.error) return toast.error(result.error.message);
+    toast.success("Add-on linked.");
     setNewAddonServiceId("");
     void refetchAddonLinks();
   };
 
-  const handleRemoveAddonLink = async (linkId: string) => {
-    const result = await runDeleteAddonLink({ id: linkId });
-    if (result.error) {
-      toast.error("Failed to remove add-on: " + result.error.message);
-      return;
-    }
-    toast.success("Add-on removed");
+  const handleRemoveAddonLink = async (id: string) => {
+    const result = await runDeleteAddonLink({ id });
+    if (result.error) return toast.error(result.error.message);
+    toast.success("Add-on removed.");
     void refetchAddonLinks();
   };
 
-  const isFirstLoad = servicesFetching && !services;
-  const isRefetching = servicesFetching && !!services;
-
-  const allServices: ServiceRecord[] = (services ?? []) as ServiceRecord[];
-  const allAddonLinks: AddonLinkRecord[] = (packageAddonLinks ?? []) as AddonLinkRecord[];
-  const normalizedSearch = search.trim().toLowerCase();
-
-  // Separate addons from regular services
-  const regularServices = allServices.filter((s) => !s.isAddon);
-  const addonServices = allServices.filter((s) => s.isAddon);
-
-  // Filter by active tab
-  const filteredRegular = regularServices.filter((service) => {
-    const matchesActive = activeTab === "active" ? service.active !== false : service.active === false;
-    const matchesCategory = categoryFilter === "all" ? true : (service.category ?? "other") === categoryFilter;
-    const haystack = [service.name, service.notes, formatServiceCategory(service.category)].filter(Boolean).join(" ").toLowerCase();
-    const matchesSearch = normalizedSearch ? haystack.includes(normalizedSearch) : true;
-    return matchesActive && matchesCategory && matchesSearch;
-  });
-  const filteredAddons = addonServices.filter((service) => {
-    const matchesActive = activeTab === "active" ? service.active !== false : service.active === false;
-    const matchesCategory = categoryFilter === "all" ? true : (service.category ?? "other") === categoryFilter;
-    const haystack = [service.name, service.notes, formatServiceCategory(service.category)].filter(Boolean).join(" ").toLowerCase();
-    const matchesSearch = normalizedSearch ? haystack.includes(normalizedSearch) : true;
-    return matchesActive && matchesCategory && matchesSearch;
-  });
-
-  // Group regular services by category
-  const groupedByCategory = filteredRegular.reduce<
-    Record<string, ServiceRecord[]>
-  >((acc, service) => {
-    const cat = service.category ?? "other";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(service);
-    return acc;
-  }, {});
-
-  const sortedCategories = Object.keys(groupedByCategory).sort();
-
-  const packageSummaries = filteredRegular
-    .map((service) => {
-      const linkedAddonRecords = allAddonLinks.filter((link) => link.parentServiceId === service.id);
-      const linkedAddons = linkedAddonRecords
-        .map((link) => allServices.find((candidate) => candidate.id === link.addonServiceId))
-        .filter(Boolean) as ServiceRecord[];
-      const basePrice = Number(service.price ?? 0);
-      const addonPrice = linkedAddons.reduce((sum, addon) => sum + Number(addon.price ?? 0), 0);
-      const baseDuration = Number(service.durationMinutes ?? 0);
-      const addonDuration = linkedAddons.reduce((sum, addon) => sum + Number(addon.durationMinutes ?? 0), 0);
-      return {
-        service,
-        linkedAddons,
-        packagePrice: basePrice + addonPrice,
-        packageDuration: baseDuration + addonDuration,
-      };
-    })
-    .sort((a, b) => a.service.name.localeCompare(b.service.name));
-
-  const packagesWithStructure = packageSummaries.filter((summary) => summary.linkedAddons.length > 0);
-  const packageCandidatesWithoutAddons = packageSummaries.filter((summary) => summary.linkedAddons.length === 0);
-  const activeServicesCount = regularServices.filter((service) => service.active !== false).length;
-  const activeAddonCount = addonServices.filter((service) => service.active !== false).length;
+  const linkedAddonRecords = useMemo(
+    () => addonLinks.filter((link) => link.parentServiceId === editService?.id),
+    [addonLinks, editService]
+  );
 
   return (
     <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Services"
         right={
-          <Button onClick={() => setCreateDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Service
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setCreateCategoryOpen(true)}>
+              <FolderKanban className="mr-2 h-4 w-4" />
+              Add Category
+            </Button>
+            <Button onClick={() => openCreateService()}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Service
+            </Button>
+          </div>
         }
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm font-medium text-muted-foreground">Core services</p>
-            <p className="mt-2 text-2xl font-semibold tracking-tight">{activeServicesCount}</p>
-            <p className="mt-1 text-sm text-muted-foreground">Active catalog services customers can book</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm font-medium text-muted-foreground">Package templates</p>
-            <p className="mt-2 text-2xl font-semibold tracking-tight">{packagesWithStructure.length}</p>
-            <p className="mt-1 text-sm text-muted-foreground">Services with linked add-ons ready to reuse</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm font-medium text-muted-foreground">Add-on services</p>
-            <p className="mt-2 text-2xl font-semibold tracking-tight">{activeAddonCount}</p>
-            <p className="mt-1 text-sm text-muted-foreground">Optional extras available across the catalog</p>
-          </CardContent>
-        </Card>
+        <MetricCard label="Categories" value={String(categories.length)} detail="Active service groups" />
+        <MetricCard label="Active services" value={String(activeServicesCount)} detail="Bookable catalog services" />
+        <MetricCard label="Add-ons" value={String(activeAddonCount)} detail="Optional extras on file" />
       </div>
-
-      <ListViewToolbar
-        search={search}
-        onSearchChange={setSearch}
-        placeholder="Search services, notes, or categories..."
-        loading={isRefetching}
-        resultCount={filteredRegular.length + filteredAddons.length}
-        noun="services"
-        filtersLabel={[
-          activeTab === "active" ? "Active only" : "Inactive only",
-          categoryFilter !== "all" ? `Category: ${formatServiceCategory(categoryFilter)}` : null,
-        ]
-          .filter(Boolean)
-          .join(" | ")}
-        onClear={() => {
-          setSearch("");
-          setCategoryFilter("all");
-          setActiveTab("active");
-        }}
-        actions={
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="min-w-[180px]">
-              <SelectValue placeholder="All categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {SERVICE_CATEGORY_VALUES.map((cat) => (
-                <SelectItem key={cat} value={cat}>
-                  {SERVICE_CATEGORY_LABELS[cat]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        }
-      />
-
-      {/* Tabs */}
-      <Tabs
-        value={activeTab}
-        onValueChange={(val) => setActiveTab(val as "active" | "inactive")}
-      >
-        <TabsList>
-          <TabsTrigger value="active">Active</TabsTrigger>
-          <TabsTrigger value="inactive">Inactive</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value={activeTab} className="mt-4">
-          {isFirstLoad ? (
-            <div className="flex flex-col gap-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <ServiceCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : (
-            <div className={cn("flex flex-col gap-8", isRefetching && "opacity-60 transition-opacity")}>
-              {/* Regular services grouped by category */}
-              {sortedCategories.length === 0 && filteredAddons.length === 0 ? (
-                <EmptyState
-                  icon={Wrench}
-                  title="No services yet"
-                  description="Add your first service to start building appointments and invoices."
-                  action={
-                    <Button onClick={() => setCreateDialogOpen(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Service
-                    </Button>
-                  }
-                />
-              ) : (
-                <>
-                  {sortedCategories.map((cat) => (
-                    <div key={cat} className="flex flex-col gap-3">
-                      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2">
-                        {formatServiceCategory(cat)}
-                      </h2>
-                      <div className="flex flex-col gap-2">
-                        {groupedByCategory[cat].map((service) => (
-                          <ServiceCard
-                            key={service.id}
-                            service={service}
-                            onEdit={handleEditService}
-                            onToggle={handleToggleActive}
-                            isToggling={togglingId === service.id}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Add-on services section */}
-                  {filteredAddons.length > 0 && (
-                    <div className="flex flex-col gap-3">
-                      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2">
-                        Add-On Services
-                      </h2>
-                      <div className="flex flex-col gap-2">
-                        {filteredAddons.map((service) => (
-                          <ServiceCard
-                            key={service.id}
-                            service={service}
-                            onEdit={handleEditService}
-                            onToggle={handleToggleActive}
-                            isToggling={togglingId === service.id}
-                            showAddonBadge
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-4 w-4" />
-                Package Templates
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Reusable job bundles built from one primary service plus linked add-ons. This works across detailing,
-                tint, PPF, repair, and any other vertical on the same shared catalog.
-              </p>
+              <CardTitle>Category management</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">Create, reorder, archive, and clean up the catalog structure your team actually uses.</p>
             </div>
-            <Badge variant="outline">{packagesWithStructure.length} configured</Badge>
+            <Badge variant="outline">{categories.length} active</Badge>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {isFirstLoad ? (
-            <div className="grid gap-3 lg:grid-cols-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <ServiceCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : packagesWithStructure.length === 0 ? (
-            <EmptyState
-              icon={Package}
-              title="No package templates yet"
-              description="Open any main service and attach add-ons to turn it into a reusable package template."
-            />
+        <CardContent className="space-y-3">
+          {categories.length === 0 ? (
+            <EmptyState icon={FolderKanban} title="No categories yet" description="Create the first category, then add services under it." />
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {packagesWithStructure.map((summary) => (
-                <button
-                  key={summary.service.id}
-                  type="button"
-                  onClick={() => handleEditService(summary.service)}
-                  className="rounded-xl border bg-card p-4 text-left transition-colors hover:bg-accent/30"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-base font-semibold">{summary.service.name}</h3>
-                        <Badge variant="secondary">{formatServiceCategory(summary.service.category)}</Badge>
-                        {summary.service.active === false ? <Badge variant="outline">Inactive</Badge> : null}
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Base service plus {summary.linkedAddons.length} linked add-on{summary.linkedAddons.length === 1 ? "" : "s"}.
-                      </p>
-                    </div>
-                    <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
+            categories.map((category, index) => (
+              <div key={category.id} className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{category.name}</p>
+                    {category.key ? <Badge variant="secondary">Starter</Badge> : null}
                   </div>
-                  <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Package Price</p>
-                      <p className="font-medium">{formatPrice(summary.packagePrice)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Est. Duration</p>
-                      <p className="font-medium">{formatDuration(summary.packageDuration) || "-"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Includes</p>
-                      <p className="font-medium">{summary.linkedAddons.length + 1} services</p>
-                    </div>
-                  </div>
-                  <Separator className="my-4" />
-                  <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Linked add-ons</p>
-                    <div className="flex flex-wrap gap-2">
-                      {summary.linkedAddons.map((addon) => (
-                        <Badge key={addon.id} variant="outline" className="bg-muted/30">
-                          {addon.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+                  <p className="mt-1 text-sm text-muted-foreground">{category.serviceCount} services</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => openCreateService(category.id)}>
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    Add service
+                  </Button>
+                  <Button size="icon" variant="outline" onClick={() => void moveCategory(category.id, -1)} disabled={index === 0 || reorderCategoryFetching}>
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="icon" variant="outline" onClick={() => void moveCategory(category.id, 1)} disabled={index === categories.length - 1 || reorderCategoryFetching}>
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setEditCategory(category); setCategoryName(category.name); }}>
+                    <Pencil className="mr-1 h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => void handleArchiveCategory(category, false)}>Archive</Button>
+                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { setDeleteCategory(category); setMoveDeleteServicesTo(UNCATEGORIZED_VALUE); }}>
+                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))
           )}
 
-          {packageCandidatesWithoutAddons.length > 0 ? (
-            <div className="rounded-lg border border-dashed p-4">
-              <p className="text-sm font-medium">Good package candidates</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                These services do not have add-ons yet. Open one to attach extras and turn it into a stronger package.
-              </p>
+          {inactiveCategories.length > 0 ? (
+            <div className="rounded-xl border border-dashed p-4">
+              <p className="text-sm font-medium">Archived categories</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {packageCandidatesWithoutAddons.slice(0, 10).map((summary) => (
-                  <Button
-                    key={summary.service.id}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleEditService(summary.service)}
-                  >
-                    {summary.service.name}
+                {inactiveCategories.map((category) => (
+                  <Button key={category.id} variant="outline" size="sm" onClick={() => void handleArchiveCategory(category, true)}>
+                    Restore {category.name}
                   </Button>
                 ))}
               </div>
@@ -767,285 +723,279 @@ export default function ServicesPage() {
         </CardContent>
       </Card>
 
-      {/* Edit Service Dialog */}
-      <Dialog
-        open={editService !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEditService(null);
-            resetEditDialogState();
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[520px]">
+      <Dialog open={createCategoryOpen} onOpenChange={setCreateCategoryOpen}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Service</DialogTitle>
-            <DialogDescription>
-              Update the details for this service.
-            </DialogDescription>
+            <DialogTitle>Add Category</DialogTitle>
+            <DialogDescription>Create a new service category for your team.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleUpdateSubmit}>
-            <ServiceForm
-              formData={editFormData}
-              onChange={setEditFormData}
-            />
-
-            <Separator className="my-3" />
-
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Optional add-ons</p>
-              <p className="text-xs text-muted-foreground">
-                Link other catalog services offered as add-ons with this service (e.g. coating + add-on polish). Same
-                structure for every business type.
-              </p>
-              {addonLinksFetching ? (
-                <p className="text-xs text-muted-foreground">Loading...</p>
-              ) : addonLinks && addonLinks.length > 0 ? (
-                <div className="space-y-1 mt-2">
-                  <div className="flex flex-col gap-1">
-                    {addonLinks.map((link) => {
-                      const name =
-                        allServices.find((s) => s.id === (link as { addonServiceId: string }).addonServiceId)
-                          ?.name ?? "Service";
-                      return (
-                        <div
-                          key={link.id}
-                          className="flex items-center justify-between text-sm bg-muted/40 rounded px-2 py-1.5"
-                        >
-                          <span className="font-medium">{name}</span>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleRemoveAddonLink(link.id)}
-                            type="button"
-                            disabled={deletingAddonLink}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-1">No add-ons linked yet.</p>
-              )}
-
-              <div className="flex items-center gap-2 mt-2">
-                <Select value={newAddonServiceId} onValueChange={setNewAddonServiceId}>
-                  <SelectTrigger className="flex-1 h-8 text-xs">
-                    <SelectValue placeholder="Select a service to offer as add-on" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allServices
-                      .filter(
-                        (s) =>
-                          editService &&
-                          s.id !== editService.id &&
-                          s.active !== false &&
-                          !(addonLinks ?? []).some(
-                            (l) => (l as { addonServiceId: string }).addonServiceId === s.id
-                          )
-                      )
-                      .map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                          {s.isAddon ? " Ã‚Â· add-on" : ""}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs shrink-0"
-                  onClick={() => void handleAddAddonLink()}
-                  disabled={!newAddonServiceId || creatingAddonLink}
-                  type="button"
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add
-                </Button>
-              </div>
-            </div>
-
-            <DialogFooter className="mt-4 sm:justify-between">
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => setShowDeleteConfirm(true)}
-                disabled={updateFetching || deleteFetching}
-              >
-                Delete Service
-              </Button>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setEditService(null);
-                    resetEditDialogState();
-                  }}
-                  disabled={updateFetching}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={updateFetching}>
-                  {updateFetching ? "Saving..." : "Save Changes"}
-                </Button>
-              </div>
+          <form onSubmit={handleCreateCategory}>
+            <CategoryForm name={categoryName} onChange={setCategoryName} />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCreateCategoryOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={createCategoryFetching}>{createCategoryFetching ? "Creating..." : "Create Category"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Service Confirmation */}
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <Dialog open={Boolean(editCategory)} onOpenChange={(open) => !open && setEditCategory(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Category</DialogTitle>
+            <DialogDescription>Rename or clean up this category without losing services.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateCategory}>
+            <CategoryForm name={categoryName} onChange={setCategoryName} />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditCategory(null)}>Cancel</Button>
+              <Button type="submit" disabled={updateCategoryFetching}>{updateCategoryFetching ? "Saving..." : "Save Changes"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={Boolean(deleteCategory)} onOpenChange={(open) => !open && setDeleteCategory(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Service?</AlertDialogTitle>
+            <AlertDialogTitle>Delete category?</AlertDialogTitle>
             <AlertDialogDescription>
-              If this service has been used in past appointments it cannot be deleted - deactivate it instead.
+              {canMoveCategoryDelete ? "Services in this category need a safe destination before deletion." : "This will remove the category. Services without a category are preserved."}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {canMoveCategoryDelete ? (
+            <div className="grid gap-2">
+              <Label htmlFor="move-category">Move services to</Label>
+              <Select value={moveDeleteServicesTo} onValueChange={setMoveDeleteServicesTo}>
+                <SelectTrigger id="move-category"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNCATEGORIZED_VALUE}>Uncategorized</SelectItem>
+                  {categories.filter((category) => category.id !== deleteCategory?.id).map((category) => (
+                    <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteFetching}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                if (editService) {
-                  const result = await runDelete({ id: editService.id });
-                  if (result.error) {
-                    toast.error(result.error.message);
-                  } else {
-                    toast.success("Service deleted");
-                    setEditService(null);
-                    setShowDeleteConfirm(false);
-                    resetEditDialogState();
-                    void refetchServices();
-                  }
-                }
-              }}
-              disabled={deleteFetching}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteFetching ? "Deleting..." : "Delete"}
+            <AlertDialogCancel disabled={deleteCategoryFetching}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleDeleteCategory()} disabled={deleteCategoryFetching} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteCategoryFetching ? "Deleting..." : "Delete Category"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Create Service Dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="sm:max-w-[520px]">
+      <Dialog open={createServiceOpen} onOpenChange={setCreateServiceOpen}>
+        <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>Add Service</DialogTitle>
-            <DialogDescription>
-              Create a new service for your business.
-            </DialogDescription>
+            <DialogDescription>Create a service and place it in the right category right away.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleCreateSubmit}>
-            <ServiceForm
-              formData={createFormData}
-              onChange={setCreateFormData}
-            />
-            <DialogFooter className="mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setCreateDialogOpen(false);
-                  setCreateFormData(defaultFormData);
-                }}
-                disabled={createFetching}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={createFetching}>
-                {createFetching ? "Creating..." : "Create Service"}
-              </Button>
+          <form onSubmit={handleCreateService}>
+            <ServiceForm formData={createFormData} onChange={setCreateFormData} categoryOptions={categoryOptions} />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCreateServiceOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={createServiceFetching}>{createServiceFetching ? "Creating..." : "Create Service"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={Boolean(editService)} onOpenChange={(open) => !open && setEditService(null)}>
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Edit Service</DialogTitle>
+            <DialogDescription>Update service details, move it between categories, or manage add-ons.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateService}>
+            <ServiceForm formData={editFormData} onChange={setEditFormData} categoryOptions={categoryOptions} />
+            <Separator className="my-4" />
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium">Optional add-ons</p>
+                <p className="mt-1 text-xs text-muted-foreground">Link other services so this service can act like a reusable package.</p>
+              </div>
+              {linkedAddonRecords.length > 0 ? (
+                <div className="space-y-2">
+                  {linkedAddonRecords.map((link) => {
+                    const linkedService = services.find((service) => service.id === link.addonServiceId);
+                    return (
+                      <div key={link.id} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2">
+                        <span className="text-sm font-medium">{linkedService?.name ?? "Service"}</span>
+                        <Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => void handleRemoveAddonLink(link.id)} disabled={deleteAddonLinkFetching}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No add-ons linked yet.</p>
+              )}
+              <div className="flex gap-2">
+                <Select value={newAddonServiceId} onValueChange={setNewAddonServiceId}>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Select a service to link as an add-on" /></SelectTrigger>
+                  <SelectContent>
+                    {services.filter((service) => editService && service.id !== editService.id && service.active !== false && !linkedAddonRecords.some((link) => link.addonServiceId === service.id)).map((service) => (
+                      <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" onClick={() => void handleAddAddonLink()} disabled={!newAddonServiceId || createAddonLinkFetching}>
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Add
+                </Button>
+              </div>
+            </div>
+            <DialogFooter className="mt-4 sm:justify-between">
+              <Button type="button" variant="destructive" onClick={() => setDeleteService(editService)} disabled={updateServiceFetching}>Delete Service</Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setEditService(null)}>Cancel</Button>
+                <Button type="submit" disabled={updateServiceFetching}>{updateServiceFetching ? "Saving..." : "Save Changes"}</Button>
+              </div>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={Boolean(deleteService)} onOpenChange={(open) => !open && setDeleteService(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete service?</AlertDialogTitle>
+            <AlertDialogDescription>Services linked to past appointments cannot be deleted. If that happens, deactivate the service instead.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteServiceFetching}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleDeleteService()} disabled={deleteServiceFetching} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteServiceFetching ? "Deleting..." : "Delete Service"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-interface ServiceCardProps {
-  service: ServiceRecord;
-  onEdit: (service: ServiceRecord) => void;
-  onToggle: (service: ServiceRecord) => void;
-  isToggling: boolean;
-  showAddonBadge?: boolean;
-}
+      <ListViewToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search services, notes, or categories..."
+        loading={servicesFetching}
+        resultCount={visibleServices.length}
+        noun="services"
+        filtersLabel={[
+          serviceTab === "active" ? "Active only" : "Inactive only",
+          categoryFilter === "all" ? null : categoryOptions.find((option) => option.value === categoryFilter)?.label ?? null,
+        ]}
+        onClear={() => { setSearch(""); setCategoryFilter("all"); setServiceTab("active"); }}
+        actions={
+          <div className="flex gap-2">
+            <Select value={serviceTab} onValueChange={(value) => setServiceTab(value as "active" | "inactive")}>
+              <SelectTrigger className="min-w-[140px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="min-w-[180px]"><SelectValue placeholder="All categories" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {categoryOptions.map((category) => (
+                  <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        }
+      />
 
-function ServiceCard({
-  service,
-  onEdit,
-  onToggle,
-  isToggling,
-  showAddonBadge = false,
-}: ServiceCardProps) {
-  const durationStr = formatDuration(service.durationMinutes);
-
-  return (
-    <div
-      className="flex items-center justify-between rounded-lg border bg-card p-4 cursor-pointer hover:bg-accent/50 transition-colors group"
-      onClick={() => onEdit(service)}
-    >
-      <div className="flex flex-col gap-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-sm truncate">{service.name}</span>
-          {showAddonBadge && (
-            <Badge variant="secondary" className="text-xs">
-              Add-on
-            </Badge>
-          )}
-          {service.category && (
-            <Badge variant="outline" className="text-xs">
-              {formatServiceCategory(service.category)}
-            </Badge>
-          )}
+      {isFirstLoad ? (
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 6 }).map((_, index) => <ServiceCardSkeleton key={index} />)}
         </div>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">
-            {formatPrice(service.price)}
-          </span>
-          {durationStr && (
-            <>
-              <span className="text-muted-foreground/50">|</span>
-              <span>{durationStr}</span>
-            </>
-          )}
-          {service.taxable && (
-            <>
-              <span className="text-muted-foreground/50">|</span>
-              <span className="text-xs">Taxable</span>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3 ml-4 shrink-0">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit(service);
-          }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-accent"
-          aria-label="Edit service"
-        >
-          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-        </button>
-        <Package className="h-3.5 w-3.5 text-muted-foreground/50" />
-        <ActiveToggle
-          active={service.active !== false}
-          onToggle={() => onToggle(service)}
-          loading={isToggling}
+      ) : serviceGroups.length === 0 ? (
+        <EmptyState
+          icon={Wrench}
+          title="No matching services"
+          description="Create a service or clear the filters to see the full catalog."
+          action={<Button onClick={() => openCreateService()}><Plus className="mr-2 h-4 w-4" />Add Service</Button>}
         />
-      </div>
-    </div>
-  );
-}
+      ) : (
+        <div className="space-y-6">
+          {serviceGroups.map((group) => (
+            <Card key={group.id}>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle>{group.title}</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">{group.services.length} services</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => openCreateService(group.id === UNCATEGORIZED_VALUE ? null : group.id)}>
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    Add service
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {group.services.map((service, index) => (
+                  <ServiceCard
+                    key={service.id}
+                    service={service}
+                    onEdit={(record) => { setEditService(record); setEditFormData(serviceToFormData(record)); setNewAddonServiceId(""); }}
+                    onToggle={handleToggleActive}
+                    isToggling={togglingId === service.id}
+                    onMoveUp={() => void moveService(group.id, service.id, -1)}
+                    onMoveDown={() => void moveService(group.id, service.id, 1)}
+                    moveDisabledUp={index === 0 || reorderServiceFetching}
+                    moveDisabledDown={index === group.services.length - 1 || reorderServiceFetching}
+                  />
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2"><Package className="h-4 w-4" />Package templates</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">Primary services with linked add-ons, ready for faster booking.</p>
+            </div>
+            <Badge variant="outline">{packageSummaries.length} configured</Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {packageSummaries.length === 0 ? (
+            <EmptyState icon={Package} title="No package templates yet" description="Link add-ons on a service to turn it into a reusable package." />
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {packageSummaries.map((summary) => (
+                <button key={summary.service.id} type="button" onClick={() => { setEditService(summary.service); setEditFormData(serviceToFormData(summary.service)); }} className="rounded-xl border bg-card p-4 text-left transition-colors hover:bg-accent/30">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-semibold">{summary.service.name}</h3>
+                        <Badge variant="secondary">{summary.service.categoryLabel ?? formatServiceCategory(summary.service.category)}</Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">{summary.linkedAddons.length} linked add-on{summary.linkedAddons.length === 1 ? "" : "s"}</p>
+                    </div>
+                    <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </div>
+                  <Separator className="my-4" />
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Includes</p>
+                    <div className="flex flex-wrap gap-2">
+                      {summary.linkedAddons.map((addon) => <Badge key={addon.id} variant="outline">{addon.name}</Badge>)}
+                    </div>
+                    <p className="pt-2 text-sm font-medium">{formatPrice(summary.totalPrice)}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>

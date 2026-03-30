@@ -238,6 +238,8 @@ export default function NewAppointmentPage() {
         price: true,
         durationMinutes: true,
         category: true,
+        categoryId: true,
+        categoryLabel: true,
         notes: true,
       },
       first: 250,
@@ -637,7 +639,7 @@ export default function NewAppointmentPage() {
       pkg.baseService.name,
       pkg.baseService.notes,
       ...pkg.linkedAddons.map((addon) => addon?.name),
-      formatServiceCategory(pkg.baseService.category),
+      pkg.baseService.categoryLabel ?? formatServiceCategory(pkg.baseService.category),
     ]
       .filter(Boolean)
       .join(" ")
@@ -651,7 +653,7 @@ export default function NewAppointmentPage() {
         pkg.baseService.name,
         pkg.baseService.notes,
         ...pkg.linkedAddons.map((addon) => addon?.name),
-        formatServiceCategory(pkg.baseService.category),
+        pkg.baseService.categoryLabel ?? formatServiceCategory(pkg.baseService.category),
       ]
         .filter(Boolean)
         .join(" ")
@@ -661,7 +663,7 @@ export default function NewAppointmentPage() {
   const groupedServices = useMemo(() => {
     const groups = new Map<string, typeof services>();
     for (const service of services) {
-      const haystack = [service.name, service.notes, formatServiceCategory(service.category)]
+      const haystack = [service.name, service.notes, service.categoryLabel ?? formatServiceCategory(service.category)]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -680,7 +682,9 @@ export default function NewAppointmentPage() {
       })
       .map(([category, entries]) => ({
         category,
-        title: formatServiceCategory(category),
+        title:
+          entries[0]?.categoryLabel ??
+          formatServiceCategory(category),
         recommended: creationPreset.recommendedCategories.includes(category),
         services: entries.sort((a, b) => a.name.localeCompare(b.name)),
       }));
@@ -689,7 +693,7 @@ export default function NewAppointmentPage() {
     if (!normalizedServiceSearch) return [];
     return services
       .filter((service) => {
-        const haystack = [service.name, service.notes, formatServiceCategory(service.category)]
+        const haystack = [service.name, service.notes, service.categoryLabel ?? formatServiceCategory(service.category)]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -1062,7 +1066,7 @@ export default function NewAppointmentPage() {
                               <div>
                                 <p className="text-sm font-semibold">{pkg.baseService.name}</p>
                                 <p className="mt-1 text-xs text-muted-foreground">
-                                  {formatServiceCategory(pkg.baseService.category)} · {pkg.linkedAddons.length + 1} services
+                                  {pkg.baseService.categoryLabel ?? formatServiceCategory(pkg.baseService.category)} · {pkg.linkedAddons.length + 1} services
                                 </p>
                               </div>
                               <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -1104,7 +1108,7 @@ export default function NewAppointmentPage() {
                               <div>
                                 <p className="text-sm font-semibold">{pkg.baseService.name}</p>
                                 <p className="mt-1 text-xs text-muted-foreground">
-                                  {formatServiceCategory(pkg.baseService.category)} · {pkg.linkedAddons.length + 1} services
+                                  {pkg.baseService.categoryLabel ?? formatServiceCategory(pkg.baseService.category)} · {pkg.linkedAddons.length + 1} services
                                 </p>
                               </div>
                               <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -1150,7 +1154,7 @@ export default function NewAppointmentPage() {
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-medium text-foreground">{service.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {formatServiceCategory(service.category)}
+                                  {service.categoryLabel ?? formatServiceCategory(service.category)}
                                   {service.notes ? ` - ${service.notes}` : ""}
                                 </p>
                               </div>

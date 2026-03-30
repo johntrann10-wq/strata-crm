@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { businesses, serviceAddonLinks, services } from "../db/schema.js";
 import { logger } from "./logger.js";
+import { ensureBusinessServiceCategories, formatLegacyServiceCategory } from "./serviceCategories.js";
 
 type ServiceCategory = "detail" | "tint" | "ppf" | "mechanical" | "tire" | "body" | "other";
 type PriceType = "fixed" | "starting_at" | "hourly";
@@ -329,6 +330,9 @@ async function insertLegacyPresetServiceRow(businessId: string, item: PresetServ
   const columns = await getServiceColumns();
   const insertColumns = ["id", "business_id", "name", "price"];
   const insertValues: unknown[] = [randomUUID(), businessId, item.name, String(item.startingPrice)];
+  const categoryIds = columns.has("category_id")
+    ? await ensureBusinessServiceCategories(businessId, [{ key: item.category, name: formatLegacyServiceCategory(item.category) }])
+    : new Map<string, string>();
 
   if (columns.has("duration_minutes")) {
     insertColumns.push("duration_minutes");
@@ -337,6 +341,14 @@ async function insertLegacyPresetServiceRow(businessId: string, item: PresetServ
   if (columns.has("category")) {
     insertColumns.push("category");
     insertValues.push(item.category);
+  }
+  if (columns.has("category_id")) {
+    insertColumns.push("category_id");
+    insertValues.push(categoryIds.get(item.category) ?? null);
+  }
+  if (columns.has("sort_order")) {
+    insertColumns.push("sort_order");
+    insertValues.push(0);
   }
   if (columns.has("notes")) {
     insertColumns.push("notes");
@@ -390,15 +402,25 @@ async function loadExistingServiceNames(businessId: string, names: string[]) {
 async function insertPresetServices(businessId: string, rows: PresetService[]) {
   if (rows.length === 0) return;
   const now = new Date();
+  const categoryIds = await ensureBusinessServiceCategories(
+    businessId,
+    rows.map((item, index) => ({
+      key: item.category,
+      name: formatLegacyServiceCategory(item.category),
+      sortOrder: index,
+    }))
+  );
   try {
     await db.insert(services).values(
-      rows.map((item) => ({
+      rows.map((item, index) => ({
         id: randomUUID(),
         businessId,
         name: item.name,
         category: item.category,
+        categoryId: categoryIds.get(item.category) ?? null,
         price: String(item.startingPrice),
         durationMinutes: item.estimatedMinutes,
+        sortOrder: index,
         notes: serializePresetNotes(item),
         taxable: item.taxable,
         isAddon: item.isAddon ?? false,

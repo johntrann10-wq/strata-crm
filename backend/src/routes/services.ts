@@ -1,31 +1,44 @@
 import { Router, Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { z } from "zod";
+import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { services, appointmentServices } from "../db/schema.js";
-import { eq, and, asc, desc, count, sql } from "drizzle-orm";
-import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
-import { logger } from "../lib/logger.js";
+import { appointmentServices, serviceCategories, services } from "../db/schema.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { warnOnce } from "../lib/warnOnce.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
-import { getPresetServiceCategoryByName } from "../lib/businessPresets.js";
+import {
+  ensureBusinessServiceCategories,
+  formatLegacyServiceCategory,
+  isLegacyServiceCategory,
+  LEGACY_SERVICE_CATEGORIES,
+  type LegacyServiceCategory,
+} from "../lib/serviceCategories.js";
 
 export const servicesRouter = Router({ mergeParams: true });
 
-const CATEGORY_VALUES = [
-  "detail",
-  "tint",
-  "ppf",
-  "mechanical",
-  "tire",
-  "body",
-  "other",
-] as const;
-
 const LEGACY_CATEGORY_PREFIX = "[[strata:service-category=";
-const PRESET_SERVICE_CATEGORY_BY_NAME = getPresetServiceCategoryByName();
+
+type ServiceRow = {
+  id: string;
+  businessId: string;
+  name: string;
+  notes: string | null;
+  price: string | null;
+  durationMinutes: number | null;
+  category: string | null;
+  categoryId: string | null;
+  categoryLabel: string | null;
+  categorySortOrder: number | null;
+  sortOrder: number | null;
+  taxable: boolean | null;
+  isAddon: boolean | null;
+  active: boolean | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
@@ -52,28 +65,9 @@ function isServiceSchemaDriftError(error: unknown): boolean {
   return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
-type ServiceRecord = {
-  id: string;
-  businessId: string;
-  name: string;
-  notes: string | null;
-  price: string | null;
-  durationMinutes: number | null;
-  category: (typeof CATEGORY_VALUES)[number] | null;
-  taxable: boolean | null;
-  isAddon: boolean | null;
-  active: boolean | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-function isKnownServiceCategory(value: string | null | undefined): value is (typeof CATEGORY_VALUES)[number] {
-  return typeof value === "string" && (CATEGORY_VALUES as readonly string[]).includes(value);
-}
-
 function encodeLegacyServiceNotes(notes: string | null | undefined, category: string | null | undefined): string | null {
   const trimmedNotes = typeof notes === "string" ? notes.trim() : "";
-  if (!isKnownServiceCategory(category)) {
+  if (!isLegacyServiceCategory(category)) {
     return trimmedNotes || null;
   }
   const marker = `${LEGACY_CATEGORY_PREFIX}${category}]]`;
@@ -83,97 +77,69 @@ function encodeLegacyServiceNotes(notes: string | null | undefined, category: st
   return trimmedNotes ? `${marker}\n${trimmedNotes}` : marker;
 }
 
-function decodeLegacyServiceFields(notes: string | null | undefined): { notes: string | null; category: (typeof CATEGORY_VALUES)[number] | null } {
+function decodeLegacyServiceFields(notes: string | null | undefined): { notes: string | null; category: LegacyServiceCategory | null } {
   if (typeof notes !== "string" || notes.length === 0) {
     return { notes: null, category: null };
   }
   const normalized = notes.replace(/\r\n/g, "\n");
   const match = normalized.match(/^\[\[strata:service-category=([a-z_]+)\]\](?:\n)?/);
-  if (!match) {
-    return { notes, category: null };
-  }
-  const category = isKnownServiceCategory(match[1]) ? match[1] : null;
+  if (!match) return { notes, category: null };
+  const category = isLegacyServiceCategory(match[1]) ? match[1] : null;
   const cleaned = normalized.slice(match[0].length).trim();
-  return {
-    notes: cleaned || null,
-    category,
-  };
+  return { notes: cleaned || null, category };
 }
-
-function inferLegacyServiceCategory(
-  name: string | null | undefined,
-  notes: string | null | undefined
-): (typeof CATEGORY_VALUES)[number] | null {
-  const normalizedName = name?.trim().toLowerCase();
-  if (normalizedName && PRESET_SERVICE_CATEGORY_BY_NAME.has(normalizedName)) {
-    return PRESET_SERVICE_CATEGORY_BY_NAME.get(normalizedName) ?? null;
-  }
-
-  const haystack = `${name ?? ""}\n${notes ?? ""}`.toLowerCase();
-  if (!haystack.trim()) return null;
-  if (/(detail|wash|coating|paint correction|polish|decontamination|odor|headlight|engine bay|sealant)/.test(haystack)) {
-    return "detail";
-  }
-  if (/(tint|ceramic film|dyed film|carbon film|sun strip|windshield)/.test(haystack)) {
-    return "tint";
-  }
-  if (/(ppf|paint protection film|rocker panel protection|door edge|door cup)/.test(haystack)) {
-    return "ppf";
-  }
-  if (/(tire|wheel balance|wheel balancing|alignment|tpms|flat repair|rotation|changeover)/.test(haystack)) {
-    return "tire";
-  }
-  if (/(wrap|vinyl|chrome delete|roof wrap|trim wrap)/.test(haystack)) {
-    return "body";
-  }
-  if (/(oil|brake|battery|spark plug|ignition coil|coolant|transmission|diagnostic|inspection|exhaust|muffler|resonator|downpipe|coilover|suspension|ecu tune|dyno)/.test(haystack)) {
-    return "mechanical";
-  }
-  return null;
-}
-
-const legacyServiceSelection = {
-  id: services.id,
-  businessId: services.businessId,
-  name: services.name,
-  price: services.price,
-  createdAt: services.createdAt,
-  updatedAt: services.updatedAt,
-};
-
-const fullServiceSelection = {
-  ...legacyServiceSelection,
-  notes: services.notes,
-  durationMinutes: services.durationMinutes,
-  category: services.category,
-  taxable: services.taxable,
-  isAddon: services.isAddon,
-  active: services.active,
-};
-
-let cachedServiceColumns: Set<string> | null = null;
 
 async function getServiceColumns(): Promise<Set<string>> {
-  if (cachedServiceColumns) return cachedServiceColumns;
-  const result = await db.execute(sql`
+  const result = await db.execute(`
     select column_name
     from information_schema.columns
     where table_schema = 'public' and table_name = 'services'
-  `);
-  const resultWithRows = result as unknown as { rows?: Array<{ column_name?: string }> };
-  const rows = Array.isArray(resultWithRows.rows) ? resultWithRows.rows : [];
-  cachedServiceColumns = new Set(
-    rows
-      .map((row) => row?.column_name)
-      .filter((value): value is string => typeof value === "string")
-  );
-  return cachedServiceColumns;
+  ` as any);
+  const rows = (result as { rows?: Array<{ column_name?: string }> }).rows ?? [];
+  return new Set(rows.map((row) => row.column_name).filter((value): value is string => Boolean(value)));
+}
+
+type ServicePayload = z.infer<typeof createSchema>;
+
+async function resolveCategoryAssignment(
+  bid: string,
+  payload: { category?: string | null; categoryId?: string | null }
+): Promise<{ categoryId: string | null; legacyCategory: LegacyServiceCategory }> {
+  if (payload.categoryId) {
+    const [category] = await db
+      .select({ id: serviceCategories.id, key: serviceCategories.key })
+      .from(serviceCategories)
+      .where(and(eq(serviceCategories.id, payload.categoryId), eq(serviceCategories.businessId, bid)))
+      .limit(1);
+    if (!category) throw new BadRequestError("Service category not found.");
+    return {
+      categoryId: category.id,
+      legacyCategory: category.key && isLegacyServiceCategory(category.key) ? category.key : "other",
+    };
+  }
+
+  if (payload.category && isLegacyServiceCategory(payload.category)) {
+    const mapping = await ensureBusinessServiceCategories(bid, [
+      {
+        key: payload.category,
+        name: formatLegacyServiceCategory(payload.category),
+        sortOrder: LEGACY_SERVICE_CATEGORIES.findIndex((category) => category.key === payload.category),
+      },
+    ]);
+    return {
+      categoryId: mapping.get(payload.category) ?? null,
+      legacyCategory: payload.category,
+    };
+  }
+
+  return { categoryId: null, legacyCategory: "other" };
 }
 
 async function insertLegacyServiceRecord(
   bid: string,
   serviceId: string,
-  body: z.infer<typeof createSchema>
+  body: ServicePayload,
+  resolvedCategory: { categoryId: string | null; legacyCategory: LegacyServiceCategory }
 ): Promise<string | null> {
   const columns = await getServiceColumns();
   const insertColumns = ["id", "business_id", "name", "price"];
@@ -186,11 +152,19 @@ async function insertLegacyServiceRecord(
   }
   if (columns.has("category")) {
     insertColumns.push("category");
-    insertValues.push(body.category ?? "other");
+    insertValues.push(resolvedCategory.legacyCategory);
+  }
+  if (columns.has("category_id")) {
+    insertColumns.push("category_id");
+    insertValues.push(resolvedCategory.categoryId);
+  }
+  if (columns.has("sort_order")) {
+    insertColumns.push("sort_order");
+    insertValues.push(body.sortOrder ?? 0);
   }
   if (columns.has("notes")) {
     insertColumns.push("notes");
-    insertValues.push(encodeLegacyServiceNotes(body.notes ?? null, body.category ?? "other"));
+    insertValues.push(encodeLegacyServiceNotes(body.notes ?? null, resolvedCategory.legacyCategory));
   }
   if (columns.has("taxable")) {
     insertColumns.push("taxable");
@@ -213,102 +187,175 @@ async function insertLegacyServiceRecord(
     insertValues.push(now);
   }
 
-  const query = sql`insert into "services" (${sql.join(
-    insertColumns.map((column) => sql.raw(`"${column}"`)),
-    sql`, `
-  )}) values (${sql.join(insertValues.map((value) => sql`${value}`), sql`, `)}) returning "id"`;
-  const result = await db.execute(query);
+  const query = `
+    insert into "services" (${insertColumns.map((column) => `"${column}"`).join(", ")})
+    values (${insertValues.map((_value, index) => `$${index + 1}`).join(", ")})
+    returning "id"
+  `;
+  const result = await db.execute({ text: query, values: insertValues } as any);
   const rows = (result as { rows?: Array<{ id?: string }> }).rows ?? [];
   return rows[0]?.id ?? null;
 }
 
-function withMissingServiceFields<T extends Omit<ServiceRecord, "notes" | "durationMinutes" | "category" | "taxable" | "isAddon" | "active">>(
-  row: T
-): ServiceRecord {
-  const decoded = decodeLegacyServiceFields((row as { notes?: string | null }).notes ?? null);
-  return {
-    ...row,
-    notes: decoded.notes,
-    durationMinutes: null,
-    category: decoded.category ?? inferLegacyServiceCategory((row as { name?: string | null }).name, decoded.notes) ?? "other",
-    taxable: true,
-    isAddon: false,
-    active: true,
-  };
-}
-
-function normalizeServiceRecord(row: ServiceRecord): ServiceRecord {
+function normalizeServiceRecord(row: {
+  id: string;
+  businessId: string;
+  name: string;
+  notes: string | null;
+  price: string | null;
+  durationMinutes: number | null;
+  category: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  categorySortOrder?: number | null;
+  sortOrder?: number | null;
+  taxable?: boolean | null;
+  isAddon?: boolean | null;
+  active?: boolean | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): ServiceRow {
   const decoded = decodeLegacyServiceFields(row.notes);
+  const legacyCategory = isLegacyServiceCategory(row.category) ? row.category : decoded.category ?? "other";
+  const categoryKey =
+    row.categoryName && !isLegacyServiceCategory(row.category) && !decoded.category ? row.categoryName : legacyCategory;
+
   return {
-    ...row,
+    id: row.id,
+    businessId: row.businessId,
+    name: row.name,
     notes: decoded.notes,
-    category:
-      row.category === "other"
-        ? decoded.category ?? inferLegacyServiceCategory(row.name, decoded.notes) ?? "other"
-        : row.category ?? decoded.category ?? inferLegacyServiceCategory(row.name, decoded.notes) ?? "other",
+    price: row.price,
+    durationMinutes: row.durationMinutes ?? null,
+    category: categoryKey,
+    categoryId: row.categoryId ?? null,
+    categoryLabel: row.categoryName ?? formatLegacyServiceCategory(legacyCategory),
+    categorySortOrder: row.categorySortOrder ?? null,
+    sortOrder: row.sortOrder ?? 0,
+    taxable: row.taxable ?? true,
+    isAddon: row.isAddon ?? false,
+    active: row.active ?? true,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
-async function listServicesForBusiness(bid: string, activeFilter?: boolean, first = 100): Promise<ServiceRecord[]> {
+async function listServicesForBusiness(bid: string, activeFilter?: boolean, first = 100): Promise<ServiceRow[]> {
   const conditions = [eq(services.businessId, bid)];
-  if (typeof activeFilter === "boolean") {
-    conditions.push(eq(services.active, activeFilter));
-  }
+  if (typeof activeFilter === "boolean") conditions.push(eq(services.active, activeFilter));
 
   try {
     const rows = await db
-      .select(fullServiceSelection)
+      .select({
+        id: services.id,
+        businessId: services.businessId,
+        name: services.name,
+        notes: services.notes,
+        price: services.price,
+        durationMinutes: services.durationMinutes,
+        category: services.category,
+        categoryId: services.categoryId,
+        categoryName: serviceCategories.name,
+        categorySortOrder: serviceCategories.sortOrder,
+        sortOrder: services.sortOrder,
+        taxable: services.taxable,
+        isAddon: services.isAddon,
+        active: services.active,
+        createdAt: services.createdAt,
+        updatedAt: services.updatedAt,
+      })
       .from(services)
+      .leftJoin(serviceCategories, eq(services.categoryId, serviceCategories.id))
       .where(and(...conditions))
-      .orderBy(asc(services.category), asc(services.name), desc(services.createdAt))
+      .orderBy(asc(serviceCategories.sortOrder), asc(services.sortOrder), asc(services.name), desc(services.createdAt))
       .limit(first);
     return rows.map((row) => normalizeServiceRecord(row));
   } catch (error) {
     if (!isServiceSchemaDriftError(error)) throw error;
-    warnOnce("services:list:full-schema", "services list falling back without full schema", {
+    warnOnce("services:list:fallback", "services list falling back without category schema", {
       businessId: bid,
       error: error instanceof Error ? error.message : String(error),
     });
     const rows = await db
-      .select(legacyServiceSelection)
+      .select({
+        id: services.id,
+        businessId: services.businessId,
+        name: services.name,
+        notes: services.notes,
+        price: services.price,
+        durationMinutes: services.durationMinutes,
+        category: services.category,
+        taxable: services.taxable,
+        isAddon: services.isAddon,
+        active: services.active,
+        createdAt: services.createdAt,
+        updatedAt: services.updatedAt,
+      })
       .from(services)
       .where(eq(services.businessId, bid))
       .orderBy(asc(services.name), desc(services.createdAt))
       .limit(first);
-    return rows.map((row) => withMissingServiceFields(row));
+    return rows.map((row) => normalizeServiceRecord(row));
   }
 }
 
-async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRecord | null> {
+async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRow | null> {
   try {
     const [row] = await db
-      .select(fullServiceSelection)
+      .select({
+        id: services.id,
+        businessId: services.businessId,
+        name: services.name,
+        notes: services.notes,
+        price: services.price,
+        durationMinutes: services.durationMinutes,
+        category: services.category,
+        categoryId: services.categoryId,
+        categoryName: serviceCategories.name,
+        categorySortOrder: serviceCategories.sortOrder,
+        sortOrder: services.sortOrder,
+        taxable: services.taxable,
+        isAddon: services.isAddon,
+        active: services.active,
+        createdAt: services.createdAt,
+        updatedAt: services.updatedAt,
+      })
       .from(services)
+      .leftJoin(serviceCategories, eq(services.categoryId, serviceCategories.id))
       .where(and(eq(services.id, id), eq(services.businessId, bid)))
       .limit(1);
     return row ? normalizeServiceRecord(row) : null;
   } catch (error) {
     if (!isServiceSchemaDriftError(error)) throw error;
-    warnOnce("services:lookup:full-schema", "service lookup falling back without full schema", {
-      businessId: bid,
-      serviceId: id,
-      error: error instanceof Error ? error.message : String(error),
-    });
     const [row] = await db
-      .select(legacyServiceSelection)
+      .select({
+        id: services.id,
+        businessId: services.businessId,
+        name: services.name,
+        notes: services.notes,
+        price: services.price,
+        durationMinutes: services.durationMinutes,
+        category: services.category,
+        taxable: services.taxable,
+        isAddon: services.isAddon,
+        active: services.active,
+        createdAt: services.createdAt,
+        updatedAt: services.updatedAt,
+      })
       .from(services)
       .where(and(eq(services.id, id), eq(services.businessId, bid)))
       .limit(1);
-    return row ? withMissingServiceFields(row) : null;
+    return row ? normalizeServiceRecord(row) : null;
   }
 }
 
 const createSchema = z.object({
   name: z.string().min(1),
   price: z.coerce.number().min(0),
-  /** null first so null is not coerced to 0 by z.coerce. */
   durationMinutes: z.union([z.null(), z.coerce.number().int().min(0)]).optional(),
-  category: z.enum(CATEGORY_VALUES).optional(),
+  category: z.string().nullable().optional(),
+  categoryId: z.string().uuid().nullable().optional(),
+  sortOrder: z.coerce.number().int().min(0).optional(),
   notes: z.string().nullable().optional(),
   taxable: z.boolean().optional(),
   isAddon: z.boolean().optional(),
@@ -316,13 +363,14 @@ const createSchema = z.object({
   business: z.object({ _link: z.string().uuid() }).optional(),
 });
 
-/** PATCH accepts only persisted columns (no Gadget `business` link — tenant is implicit). */
 const patchSchema = z
   .object({
     name: z.string().min(1).optional(),
     price: z.coerce.number().min(0).optional(),
     durationMinutes: z.union([z.null(), z.coerce.number().int().min(0)]).optional(),
-    category: z.enum(CATEGORY_VALUES).optional(),
+    category: z.string().nullable().optional(),
+    categoryId: z.string().uuid().nullable().optional(),
+    sortOrder: z.coerce.number().int().min(0).optional(),
     notes: z.union([z.string(), z.null()]).optional(),
     taxable: z.boolean().optional(),
     isAddon: z.boolean().optional(),
@@ -330,164 +378,220 @@ const patchSchema = z
   })
   .strict();
 
-servicesRouter.get("/", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
-  const bid = businessId(req);
-  const filter = parseFilter(req);
+const reorderSchema = z.object({
+  orderedIds: z.array(z.string().uuid()).min(1),
+});
 
-  const activeEquals = (filter as { active?: { equals?: boolean } } | undefined)?.active?.equals;
-  const first = req.query.first != null ? Math.min(Number(req.query.first), 200) : 100;
-  const list = await listServicesForBusiness(bid, activeEquals, first);
-  res.json({ records: list });
-}));
+servicesRouter.get(
+  "/",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    const filter = parseFilter(req);
+    const activeEquals = (filter as { active?: { equals?: boolean } } | undefined)?.active?.equals;
+    const first = req.query.first != null ? Math.min(Number(req.query.first), 200) : 100;
+    const list = await listServicesForBusiness(bid, activeEquals, first);
+    res.json({ records: list });
+  })
+);
 
-servicesRouter.get("/:id", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
-  const row = await getServiceForBusiness(req.params.id, businessId(req));
-  if (!row) throw new NotFoundError("Service not found.");
-  res.json(row);
-}));
+servicesRouter.get(
+  "/:id",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    const row = await getServiceForBusiness(req.params.id, businessId(req));
+    if (!row) throw new NotFoundError("Service not found.");
+    res.json(row);
+  })
+);
 
-servicesRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
-  const bid = businessId(req);
-  const parsed = createSchema.safeParse(req.body);
-  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
-  const body = parsed.data;
-  if (body.business?._link && body.business._link !== bid) {
-    throw new BadRequestError("Business mismatch.");
-  }
+servicesRouter.post(
+  "/",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    const parsed = createSchema.safeParse(req.body);
+    if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+    const body = parsed.data;
+    if (body.business?._link && body.business._link !== bid) {
+      throw new BadRequestError("Business mismatch.");
+    }
 
-  let createdId: string | null = null;
-  const createdAt = new Date();
-  const serviceId = randomUUID();
-  try {
-    const [created] = await db
-      .insert(services)
-      .values({
-        id: serviceId,
+    const resolvedCategory = await resolveCategoryAssignment(bid, body);
+    const createdAt = new Date();
+    const serviceId = randomUUID();
+    let createdId: string | null = null;
+
+    try {
+      const [created] = await db
+        .insert(services)
+        .values({
+          id: serviceId,
+          businessId: bid,
+          name: body.name,
+          price: String(body.price),
+          durationMinutes: body.durationMinutes ?? null,
+          category: resolvedCategory.legacyCategory,
+          categoryId: resolvedCategory.categoryId,
+          sortOrder: body.sortOrder ?? 0,
+          notes: encodeLegacyServiceNotes(body.notes ?? null, resolvedCategory.legacyCategory),
+          taxable: body.taxable ?? true,
+          isAddon: body.isAddon ?? false,
+          active: body.active ?? true,
+          createdAt,
+          updatedAt: createdAt,
+        })
+        .returning({ id: services.id });
+      createdId = created?.id ?? null;
+    } catch (error) {
+      warnOnce("services:create:fallback", "service create falling back without full category schema", {
         businessId: bid,
-        name: body.name,
-        price: String(body.price),
-        durationMinutes: body.durationMinutes ?? null,
-        category: body.category ?? "other",
-        notes: body.notes ?? null,
-        taxable: body.taxable ?? true,
-        isAddon: body.isAddon ?? false,
-        active: body.active ?? true,
-        createdAt,
-        updatedAt: createdAt,
-      })
-      .returning({ id: services.id });
-    createdId = created?.id ?? null;
-  } catch (error) {
-    warnOnce("services:create:full-schema", "service create falling back without full schema", {
-      businessId: bid,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    createdId = await insertLegacyServiceRecord(bid, serviceId, body);
-  }
-  if (!createdId) throw new BadRequestError("Unable to create service.");
-  let created: ServiceRecord | null = null;
-  try {
-    created = await getServiceForBusiness(createdId, bid);
-  } catch (error) {
-    warnOnce("services:create:lookup", "service create returning fallback record after lookup failure", {
-      businessId: bid,
-      serviceId: createdId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-  if (!created) {
-    created = {
-      id: createdId,
-      businessId: bid,
-      name: body.name,
-      notes: body.notes ?? null,
-      price: String(body.price),
-      durationMinutes: body.durationMinutes ?? null,
-      category: body.category ?? "other",
-      taxable: body.taxable ?? true,
-      isAddon: body.isAddon ?? false,
-      active: body.active ?? true,
-      createdAt,
-      updatedAt: createdAt,
-    };
-  }
-  res.status(201).json(created);
-}));
+        error: error instanceof Error ? error.message : String(error),
+      });
+      createdId = await insertLegacyServiceRecord(bid, serviceId, body, resolvedCategory);
+    }
 
-servicesRouter.patch("/:id", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
-  const bid = businessId(req);
-  const existing = await getServiceForBusiness(req.params.id, bid);
-  if (!existing) throw new NotFoundError("Service not found.");
+    if (!createdId) throw new BadRequestError("Unable to create service.");
+    const created = await getServiceForBusiness(createdId, bid);
+    if (!created) throw new NotFoundError("Service not found after create.");
+    res.status(201).json(created);
+  })
+);
 
-  const parsed = patchSchema.safeParse(req.body);
-  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
-  const body = parsed.data;
-  if (Object.keys(body).length === 0) {
-    res.json(existing);
-    return;
-  }
+servicesRouter.patch(
+  "/:id",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    const existing = await getServiceForBusiness(req.params.id, bid);
+    if (!existing) throw new NotFoundError("Service not found.");
 
-  try {
-    await db
-      .update(services)
-      .set({
-        ...(body.name != null ? { name: body.name } : {}),
-        ...(body.price != null ? { price: String(body.price) } : {}),
-        ...(body.durationMinutes !== undefined ? { durationMinutes: body.durationMinutes } : {}),
-        ...(body.category != null ? { category: body.category } : {}),
-        ...(body.notes !== undefined ? { notes: body.notes } : {}),
-        ...(body.taxable !== undefined ? { taxable: body.taxable } : {}),
-        ...(body.isAddon !== undefined ? { isAddon: body.isAddon } : {}),
-        ...(body.active !== undefined ? { active: body.active } : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(services.id, req.params.id));
-  } catch (error) {
-    if (!isServiceSchemaDriftError(error)) throw error;
-    warnOnce("services:update:full-schema", "service update falling back without full schema", {
-      businessId: bid,
-      serviceId: req.params.id,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    await db
-      .update(services)
-      .set({
-        ...(body.name != null ? { name: body.name } : {}),
-        ...(body.price != null ? { price: String(body.price) } : {}),
-        ...(body.notes !== undefined || body.category != null
-          ? {
-              notes: encodeLegacyServiceNotes(
-                body.notes !== undefined ? body.notes : existing.notes,
-                body.category ?? existing.category ?? "other"
-              ),
-            }
-          : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(services.id, req.params.id));
-  }
-  const updated = await getServiceForBusiness(req.params.id, bid);
-  if (!updated) throw new NotFoundError("Service not found after update.");
-  res.json(updated);
-}));
+    const parsed = patchSchema.safeParse(req.body);
+    if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+    const body = parsed.data;
+    if (Object.keys(body).length === 0) {
+      res.json(existing);
+      return;
+    }
 
-servicesRouter.delete("/:id", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
-  const bid = businessId(req);
-  const [existing] = await db
-    .select()
-    .from(services)
-    .where(and(eq(services.id, req.params.id), eq(services.businessId, bid)))
-    .limit(1);
-  if (!existing) throw new NotFoundError("Service not found.");
+    const resolvedCategory =
+      body.category !== undefined || body.categoryId !== undefined
+        ? await resolveCategoryAssignment(bid, {
+            category: body.category ?? existing.category,
+            categoryId: body.categoryId ?? existing.categoryId,
+          })
+        : {
+            categoryId: existing.categoryId,
+            legacyCategory: isLegacyServiceCategory(existing.category) ? existing.category : "other",
+          };
 
-  const [usage] = await db
-    .select({ c: count() })
-    .from(appointmentServices)
-    .where(eq(appointmentServices.serviceId, req.params.id));
-  if (Number(usage?.c ?? 0) > 0) {
-    throw new BadRequestError("This service is linked to past appointments. Deactivate it instead of deleting.");
-  }
+    try {
+      await db
+        .update(services)
+        .set({
+          ...(body.name != null ? { name: body.name } : {}),
+          ...(body.price != null ? { price: String(body.price) } : {}),
+          ...(body.durationMinutes !== undefined ? { durationMinutes: body.durationMinutes } : {}),
+          ...(body.category !== undefined || body.categoryId !== undefined
+            ? { category: resolvedCategory.legacyCategory, categoryId: resolvedCategory.categoryId }
+            : {}),
+          ...(body.sortOrder !== undefined ? { sortOrder: body.sortOrder } : {}),
+          ...(body.notes !== undefined || body.category !== undefined || body.categoryId !== undefined
+            ? {
+                notes: encodeLegacyServiceNotes(
+                  body.notes !== undefined ? body.notes : existing.notes,
+                  resolvedCategory.legacyCategory
+                ),
+              }
+            : {}),
+          ...(body.taxable !== undefined ? { taxable: body.taxable } : {}),
+          ...(body.isAddon !== undefined ? { isAddon: body.isAddon } : {}),
+          ...(body.active !== undefined ? { active: body.active } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(services.id, req.params.id));
+    } catch (error) {
+      if (!isServiceSchemaDriftError(error)) throw error;
+      await db
+        .update(services)
+        .set({
+          ...(body.name != null ? { name: body.name } : {}),
+          ...(body.price != null ? { price: String(body.price) } : {}),
+          ...(body.notes !== undefined || body.category !== undefined || body.categoryId !== undefined
+            ? {
+                notes: encodeLegacyServiceNotes(
+                  body.notes !== undefined ? body.notes : existing.notes,
+                  resolvedCategory.legacyCategory
+                ),
+              }
+            : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(services.id, req.params.id));
+    }
 
-  await db.delete(services).where(eq(services.id, req.params.id));
-  res.status(204).end();
-}));
+    const updated = await getServiceForBusiness(req.params.id, bid);
+    if (!updated) throw new NotFoundError("Service not found after update.");
+    res.json(updated);
+  })
+);
+
+servicesRouter.post(
+  "/reorder",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    const parsed = reorderSchema.safeParse(req.body);
+    if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+
+    const existing = await db
+      .select({ id: services.id })
+      .from(services)
+      .where(and(eq(services.businessId, bid), inArray(services.id, parsed.data.orderedIds)));
+    if (existing.length !== parsed.data.orderedIds.length) {
+      throw new BadRequestError("Service reorder includes records outside this business.");
+    }
+
+    await Promise.all(
+      parsed.data.orderedIds.map((id, index) =>
+        db
+          .update(services)
+          .set({ sortOrder: index, updatedAt: new Date() })
+          .where(and(eq(services.id, id), eq(services.businessId, bid)))
+      )
+    );
+
+    res.json({ ok: true });
+  })
+);
+
+servicesRouter.delete(
+  "/:id",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    const [existing] = await db
+      .select()
+      .from(services)
+      .where(and(eq(services.id, req.params.id), eq(services.businessId, bid)))
+      .limit(1);
+    if (!existing) throw new NotFoundError("Service not found.");
+
+    const [usage] = await db
+      .select({ c: count() })
+      .from(appointmentServices)
+      .where(eq(appointmentServices.serviceId, req.params.id));
+    if (Number(usage?.c ?? 0) > 0) {
+      throw new BadRequestError("This service is linked to past appointments. Deactivate it instead of deleting.");
+    }
+
+    await db.delete(services).where(eq(services.id, req.params.id));
+    res.status(204).end();
+  })
+);
