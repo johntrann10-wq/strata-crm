@@ -255,12 +255,10 @@ async function insertLegacyServiceRecord(
     insertValues.push(now);
   }
 
-  const query = `
-    insert into "services" (${insertColumns.map((column) => `"${column}"`).join(", ")})
-    values (${insertValues.map((_value, index) => `$${index + 1}`).join(", ")})
-    returning "id"
-  `;
-  const result = await db.execute({ text: query, values: insertValues } as any);
+  const result = await db.execute(sql`insert into "services" (${sql.join(
+    insertColumns.map((column) => sql.raw(`"${column}"`)),
+    sql`, `
+  )}) values (${sql.join(insertValues.map((value) => sql`${value}`), sql`, `)}) returning "id"`);
   const rows = (result as { rows?: Array<{ id?: string }> }).rows ?? [];
   return rows[0]?.id ?? null;
 }

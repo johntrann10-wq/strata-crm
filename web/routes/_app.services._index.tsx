@@ -663,13 +663,20 @@ export default function ServicesPage() {
     [addonLinks, editService]
   );
 
+  const showCategoryManagementUnavailable = () => {
+    toast.error("Category management will work after the latest database update is applied.");
+  };
+
   return (
     <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Services"
         right={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setCreateCategoryOpen(true)} disabled={!supportsCategoryManagement}>
+            <Button
+              variant="outline"
+              onClick={() => (supportsCategoryManagement ? setCreateCategoryOpen(true) : showCategoryManagementUnavailable())}
+            >
               <FolderKanban className="mr-2 h-4 w-4" />
               Add Category
             </Button>
