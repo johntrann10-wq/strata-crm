@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { appointmentServices, appointments, serviceCategories, services } from "../db/schema.js";
-import { and, eq, desc } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { formatLegacyServiceCategory } from "../lib/serviceCategories.js";
 import { warnOnce } from "../lib/warnOnce.js";
@@ -38,6 +38,16 @@ function isServiceSchemaDriftError(error: unknown): boolean {
   return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
+async function getTableColumns(tableName: string): Promise<Set<string>> {
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = ${tableName}
+  `);
+  const rows = (result as { rows?: Array<{ column_name?: string }> }).rows ?? [];
+  return new Set(rows.map((row) => row.column_name).filter((value): value is string => Boolean(value)));
+}
+
 appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
   const filter = parseFilter(req) as { appointmentId?: { equals?: string } } | undefined;
@@ -47,6 +57,11 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Reque
   if (appointmentId) conditions.push(eq(appointmentServices.appointmentId, appointmentId));
 
   const first = req.query.first != null ? Math.min(Number(req.query.first), 100) : 50;
+  const serviceColumns = await getTableColumns("services");
+  const categoryColumns = await getTableColumns("service_categories");
+  const hasLegacyCategory = serviceColumns.has("category");
+  const hasCategoryId = serviceColumns.has("category_id");
+  const hasServiceCategoriesTable = categoryColumns.size > 0;
 
   let rows: Array<{
     id: string;
@@ -73,14 +88,14 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Reque
         createdAt: appointmentServices.createdAt,
         updatedAt: appointmentServices.updatedAt,
         serviceName: services.name,
-        serviceCategory: services.category,
-        serviceCategoryLabel: serviceCategories.name,
+        serviceCategory: hasLegacyCategory ? services.category : sql<string | null>`null`,
+        serviceCategoryLabel: hasCategoryId && hasServiceCategoriesTable ? serviceCategories.name : sql<string | null>`null`,
         serviceDurationMinutes: services.durationMinutes,
       })
       .from(appointmentServices)
       .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
       .leftJoin(services, eq(appointmentServices.serviceId, services.id))
-      .leftJoin(serviceCategories, eq(services.categoryId, serviceCategories.id))
+      .leftJoin(serviceCategories, hasCategoryId && hasServiceCategoriesTable ? eq(services.categoryId, serviceCategories.id) : sql`false`)
       .where(and(...conditions))
       .orderBy(desc(appointmentServices.createdAt))
       .limit(first);
@@ -100,7 +115,7 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Reque
         createdAt: appointmentServices.createdAt,
         updatedAt: appointmentServices.updatedAt,
         serviceName: services.name,
-        serviceCategory: services.category,
+        serviceCategory: hasLegacyCategory ? services.category : sql<string | null>`null`,
         serviceDurationMinutes: services.durationMinutes,
       })
       .from(appointmentServices)
