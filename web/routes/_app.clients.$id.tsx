@@ -552,7 +552,6 @@ export default function ClientDetailPage() {
                     {clientInitials}
                   </div>
                   <div className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-700">Relationship cockpit</p>
                     <div>
                       <h2 className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">{clientDisplayName}</h2>
                       <p className="mt-1 text-sm text-slate-600">
@@ -569,7 +568,7 @@ export default function ClientDetailPage() {
                     <p className="mt-1 text-sm font-medium text-slate-900">{primaryVehicleLabel}</p>
                   </div>
                   <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Next best move</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Next action</p>
                     <p className="mt-1 text-sm font-medium text-slate-900">{nextStepLabel}</p>
                   </div>
                 </div>
@@ -577,44 +576,39 @@ export default function ClientDetailPage() {
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Booked relationship</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Revenue</p>
                   <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.05em] text-slate-950">{formatCurrency(totalSpend)}</p>
                   <p className="mt-1 text-sm text-slate-600">
-                    {apptList.length > 0 ? `${apptList.length} appointments on record` : "No appointments logged yet"}
+                    {apptList.length > 0 ? `${apptList.length} appointments` : "No appointments"}
                   </p>
                 </div>
                 <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Open money</p>
                   <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.05em] text-slate-950">{openRevenueLabel}</p>
                   <p className="mt-1 text-sm text-slate-600">
-                    {latestInvoice ? "Billing has recent activity" : latestQuote ? "Quote activity is recent" : "No billing history yet"}
+                    {latestInvoice ? "Recent invoice activity" : latestQuote ? "Recent quote activity" : "No billing history"}
                   </p>
                 </div>
                 <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Record health</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Vehicles</p>
                   <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.05em] text-slate-950">
-                    {vehicleList.length > 0 ? "Ready" : "Needs vehicle"}
+                    {vehicleList.length > 0 ? String(vehicleList.length) : "0"}
                   </p>
                   <p className="mt-1 text-sm text-slate-600">
-                    {vehicleList.length > 0
-                      ? "This client can move cleanly into booking, quotes, and invoicing."
-                      : "Add a vehicle so the next appointment and estimate are faster."}
+                    {vehicleList.length > 0 ? "On file" : "Add a vehicle"}
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="rounded-[26px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.24)]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Record actions</p>
-              <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Run the client workflow from the record</h3>
-              <p className="mt-3 text-sm leading-6 text-slate-300">
-                The core actions should stay one click away: schedule work, price work, issue billing, or update the vehicle file.
-              </p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Actions</p>
+              <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Client workflow</h3>
               <div className="mt-5 grid gap-2.5">
-                <QuickWorkflowAction icon={CalendarPlus} title="Book appointment" detail="Schedule the next service visit" href={appointmentHref} />
-                <QuickWorkflowAction icon={Receipt} title="Create quote" detail="Build and send a fresh estimate" href={newQuoteHref} />
-                <QuickWorkflowAction icon={FileText} title="Create invoice" detail="Bill work without leaving the record" href={newInvoiceHref} />
-                <QuickWorkflowAction icon={Plus} title="Add vehicle" detail="Capture another vehicle for this client" href={addVehicleHref} />
+                <QuickWorkflowAction icon={CalendarPlus} title="Book appointment" detail="" href={appointmentHref} />
+                <QuickWorkflowAction icon={Receipt} title="Create quote" detail="" href={newQuoteHref} />
+                <QuickWorkflowAction icon={FileText} title="Create invoice" detail="" href={newInvoiceHref} />
+                <QuickWorkflowAction icon={Plus} title="Add vehicle" detail="" href={addVehicleHref} />
               </div>
             </div>
           </div>
@@ -634,7 +628,6 @@ export default function ClientDetailPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <CardTitle>Client record</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">Contact details, notes, and account context used to service, quote, and bill this client.</p>
                   </div>
                   {!editMode ? (
                     <Button variant="ghost" size="icon" onClick={() => setEditMode(true)}>
@@ -978,7 +971,7 @@ function QuickWorkflowAction({
         </div>
         <div className="space-y-1">
           <p className="text-sm font-medium">{title}</p>
-          <p className="text-xs text-muted-foreground">{detail}</p>
+          {detail ? <p className="text-xs text-muted-foreground">{detail}</p> : null}
         </div>
       </div>
     </Link>

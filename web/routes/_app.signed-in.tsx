@@ -30,7 +30,6 @@ import { ActivityFeedCard, type ActivityRecord } from "../components/shared/Acti
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { toast } from "sonner";
-import { getBusinessTypeWorkspaceDefaults } from "../lib/businessTypeWorkspaceDefaults";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 
 type AppointmentRecord = {
@@ -303,10 +302,6 @@ export default function SignedIn() {
   const recentClients = (recentClientsRaw ?? []) as ClientRecord[];
   const locationRecords = (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>;
   const activationBusiness = ((activationBusinessRaw ?? [])[0] ?? null) as BusinessSetupRecord | null;
-  const workspaceDefaults = useMemo(
-    () => getBusinessTypeWorkspaceDefaults(activationBusiness?.type),
-    [activationBusiness?.type]
-  );
   const activeLocationName = useMemo(
     () => locationRecords.find((location) => location.id === currentLocationId)?.name?.trim() || null,
     [locationRecords, currentLocationId]
@@ -314,6 +309,7 @@ export default function SignedIn() {
   const scheduleJobHref = currentLocationId
     ? `/appointments/new?locationId=${encodeURIComponent(currentLocationId)}`
     : "/appointments/new";
+  const todayScheduleHref = "/calendar";
   const myStaffRecord = useMemo(
     () => staffRecords.find((staff) => staff.userId === user?.id) ?? null,
     [staffRecords, user?.id]
@@ -803,10 +799,6 @@ export default function SignedIn() {
               <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.6rem]">
                 {businessName ?? "Dashboard"}
               </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-[15px]">
-                A calm operating view for the shop. Know what is booked, what needs follow-up, and which next move
-                keeps the day moving forward.
-              </p>
               <p className="mt-4 text-sm font-medium text-slate-500">
                 {format(filterNow, "EEEE, MMM d")}
                 {activeLocationName ? ` · ${activeLocationName}` : ""}
@@ -837,9 +829,6 @@ export default function SignedIn() {
                     <div className="rounded-2xl bg-orange-50 p-2.5 text-orange-600 transition group-hover:bg-orange-100">
                       {signal.icon}
                     </div>
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                      {signal.detail}
-                    </span>
                   </div>
                   <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                     {signal.label}
@@ -847,7 +836,6 @@ export default function SignedIn() {
                   <div className="mt-2 text-[1.8rem] font-semibold tracking-[-0.05em] text-slate-950">
                     {signal.value}
                   </div>
-                  <p className="mt-2 text-sm text-slate-600">{signal.helper}</p>
                 </Link>
               ))}
             </div>
@@ -855,16 +843,11 @@ export default function SignedIn() {
             <div className="rounded-[28px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.28)]">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-orange-300">
-                    Operations actions
-                  </p>
-                  <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Create the next operational record</h2>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-orange-300">Actions</p>
+                  <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Create a record</h2>
                 </div>
                 <CheckCircle2 className="mt-1 h-5 w-5 text-orange-300" />
               </div>
-              <p className="mt-3 text-sm leading-6 text-slate-300">
-                Use these controls to create the next appointment, quote, or invoice without leaving the control center.
-              </p>
               <div className="mt-5 grid gap-2.5">
                 <QuickAction
                   href={scheduleJobHref}
@@ -922,13 +905,7 @@ export default function SignedIn() {
           pendingApprovalsCount={pendingApprovalsCount}
           staleFollowUps={staleQuoteFollowUps.length + staleInvoiceCollections.length}
           depositCount={depositsAwaitingPayment.length}
-          scheduleJobHref={scheduleJobHref}
-        />
-
-        <ShopTypePlaybookCard
-          businessName={activationBusiness?.name ?? businessName ?? null}
-          defaults={workspaceDefaults}
-          activationChecklist={activationChecklist}
+          todayScheduleHref={todayScheduleHref}
         />
 
         {anyError ? (
@@ -1811,18 +1788,7 @@ function ActivationChecklistCard({
 }) {
   const allDone = completed === total;
   const nextItem = items.find((item) => !item.done) ?? items[0];
-  const quickWinLabel =
-    nextItem?.key === "clients"
-      ? "Add one real client so Strata has someone to track."
-      : nextItem?.key === "vehicles"
-        ? "Attach the vehicle so history, scheduling, and billing stay connected."
-        : nextItem?.key === "services"
-          ? "Review the starter menu so quoting and booking feel real immediately."
-          : nextItem?.key === "appointments"
-            ? "Book one real appointment so the calendar becomes useful today."
-            : nextItem?.key === "invoices"
-              ? "Generate one invoice so billing and payment tracking start working."
-              : "Confirm booking basics so scheduling behaves correctly from day one.";
+  const openItems = items.filter((item) => !item.done);
   const quickWinOutcome =
     nextItem?.key === "clients"
       ? "Once this is done, you can book work and keep customer history in one place."
@@ -1984,7 +1950,7 @@ function ActivationChecklistCard({
                 <Link to="/leads">Open leads</Link>
               </Button>
               <Button asChild variant="outline" className="min-h-[46px] rounded-xl">
-                <Link to={scheduleJobHref}>Book appointment</Link>
+                <Link to={scheduleJobHref}>New appointment</Link>
               </Button>
               <Button asChild variant="outline" className="min-h-[46px] rounded-xl">
                 <Link to="/quotes/new">Create quote</Link>
@@ -2024,39 +1990,27 @@ function ActivationChecklistCard({
       )}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {items.map((item) => (
+        {openItems.map((item) => (
           <div
             key={item.key}
-            className={cn(
-              "rounded-2xl border p-4 shadow-sm",
-              item.done ? "border-emerald-200 bg-emerald-50/70" : "border-border/70 bg-card"
-            )}
+            className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
-                <div
-                  className={cn(
-                    "mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl",
-                    item.done ? "bg-emerald-100 text-emerald-700" : "bg-orange-50 text-orange-600"
-                  )}
-                >
+                <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
                   {item.icon}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    {item.done ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    ) : (
-                      <Circle className="h-4 w-4 text-muted-foreground" />
-                    )}
+                    <Circle className="h-4 w-4 text-muted-foreground" />
                     <p className="font-medium">{item.label}</p>
                   </div>
                 </div>
               </div>
             </div>
             <div className="mt-4">
-              <Button asChild variant={item.done ? "outline" : "default"} className="min-h-[44px] w-full rounded-xl">
-                <Link to={item.href}>{item.done ? "Review" : item.actionLabel}</Link>
+              <Button asChild className="min-h-[44px] w-full rounded-xl">
+                <Link to={item.href}>{item.actionLabel}</Link>
               </Button>
             </div>
           </div>
@@ -2075,7 +2029,7 @@ function DailyOperationsCard({
   pendingApprovalsCount,
   staleFollowUps,
   depositCount,
-  scheduleJobHref,
+  todayScheduleHref,
 }: {
   activationChecklist: {
     completed: number;
@@ -2096,7 +2050,7 @@ function DailyOperationsCard({
   pendingApprovalsCount: number;
   staleFollowUps: number;
   depositCount: number;
-  scheduleJobHref: string;
+  todayScheduleHref: string;
 }) {
   const isOperational = activationChecklist.completed >= 4;
   const nextSteps = activationChecklist.items.filter((item) => !item.done).slice(0, 3);
@@ -2114,7 +2068,7 @@ function DailyOperationsCard({
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
           <Button asChild className="min-h-[46px] rounded-xl bg-slate-950 text-white hover:bg-slate-800">
-            <Link to={scheduleJobHref}>Open today's schedule</Link>
+            <Link to={todayScheduleHref}>Open today's schedule</Link>
           </Button>
           <Button asChild variant="outline" className="min-h-[46px] rounded-xl">
             <Link to={pendingApprovalsCount > 0 || staleFollowUps > 0 ? "/quotes?tab=followup" : "/invoices?tab=stale"}>
@@ -2208,94 +2162,26 @@ function ShopTypePlaybookCard({
   activationChecklist,
 }: {
   businessName: string | null;
-  defaults: ReturnType<typeof getBusinessTypeWorkspaceDefaults>;
+  defaults: {
+    label: string;
+    starterCount: number;
+    defaultDays: string;
+    defaultOpen: string;
+    defaultClose: string;
+    bookingSettingsLabel: string;
+    estimateTemplateSummary: string;
+    invoiceTemplateSummary: string;
+    sampleServices: string[];
+  };
   activationChecklist: {
     completed: number;
     total: number;
   };
 }) {
-  const isOperational = activationChecklist.completed >= 4;
-
-  return (
-    <section className="rounded-[28px] border border-border/70 bg-card px-4 py-5 shadow-sm sm:px-5 sm:py-6">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Built for {defaults.label}
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-            {businessName?.trim() ? `${businessName} should feel ready on day one` : `${defaults.label} workflow, already loaded`}
-          </h2>
-        </div>
-        <div className="grid shrink-0 gap-2 sm:grid-cols-2 lg:w-[320px]">
-          <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Starter services</p>
-            <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{defaults.starterCount}</p>
-          </div>
-          <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Booking defaults</p>
-            <p className="mt-2 text-sm font-semibold text-slate-950">{defaults.defaultDays}</p>
-            <p className="mt-1 text-xs text-slate-600">{defaults.defaultOpen}-{defaults.defaultClose}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-[1.5rem] border border-border/70 bg-white/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Standard workflow</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <PlaybookStep
-              title="Book with confidence"
-              detail={defaults.bookingSettingsLabel}
-            />
-            <PlaybookStep
-              title="Sell the work clearly"
-              detail={defaults.estimateTemplateSummary}
-            />
-            <PlaybookStep
-              title="Close with consistency"
-              detail={defaults.invoiceTemplateSummary}
-            />
-          </div>
-        </div>
-
-        <div className="rounded-[1.5rem] border border-border/70 bg-white/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">System-of-record value</p>
-          <div className="mt-3 space-y-3">
-            <div className="flex flex-wrap gap-2">
-              {defaults.sampleServices.map((service) => (
-                <span key={service} className="rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-xs font-medium text-slate-700">
-                  {service}
-                </span>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant={isOperational ? "outline" : "default"} className="rounded-xl">
-                <Link to={isOperational ? "/appointments" : "/services"}>{isOperational ? "Open schedule" : "Review starter services"}</Link>
-              </Button>
-              <Button asChild variant="outline" className="rounded-xl">
-                <Link to="/settings">Adjust shop defaults</Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PlaybookStep({
-  title,
-  detail,
-}: {
-  title: string;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-border/70 bg-muted/15 p-4">
-      <p className="text-sm font-semibold text-slate-950">{title}</p>
-    </div>
-  );
+  void businessName;
+  void defaults;
+  void activationChecklist;
+  return null;
 }
 
 export { RouteErrorBoundary as ErrorBoundary };

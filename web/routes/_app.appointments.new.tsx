@@ -688,10 +688,6 @@ export default function NewAppointmentPage() {
     () => services.filter((service) => selectedServiceIds.includes(service.id)),
     [selectedServiceIds, services]
   );
-  const defaultOpenServiceGroups = useMemo(
-    () => groupedServices.map((group) => group.category),
-    [groupedServices]
-  );
   const staff = staffData ?? [];
   const isLoading = isSubmitting || actionFetching;
   const selectedVehicleLabel = selectedVehicleId
@@ -719,9 +715,6 @@ export default function NewAppointmentPage() {
                 <ChevronLeft className="h-5 w-5" />
               </Button>
               <div className="min-w-0">
-                <div className="inline-flex items-center rounded-full border border-orange-200/80 bg-orange-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-700">
-                  Scheduling
-                </div>
                 <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-[2rem]">New Appointment</h1>
                 {currentLocationId && locationsData?.some((location) => location.id === currentLocationId) ? (
                   <p className="mt-2 text-sm text-muted-foreground">
@@ -732,32 +725,28 @@ export default function NewAppointmentPage() {
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">1. Client</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Client</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
-                  {selectedClient ? `${selectedClient.firstName} ${selectedClient.lastName}` : "Choose a client"}
+                  {selectedClient ? `${selectedClient.firstName} ${selectedClient.lastName}` : "Select"}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">2. Vehicle</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vehicle</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
-                  {selectedVehicleLabel || "Add or pick a vehicle"}
+                  {selectedVehicleLabel || "Select"}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">3. Services</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Services</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
-                  {selectedServiceIds.length > 0 ? `${selectedServiceIds.length} selected` : "Build the work order"}
+                  {selectedServiceIds.length > 0 ? `${selectedServiceIds.length} selected` : "Select"}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {totalDuration > 0 ? `${formatDuration(totalDuration)} planned` : "Duration appears as you select services"}
-                </p>
+                {totalDuration > 0 ? <p className="mt-1 text-xs text-muted-foreground">{formatDuration(totalDuration)}</p> : null}
               </div>
               <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">4. Schedule</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Run of show</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">{bookingSnapshot}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {endDateTime ? `Wraps around ${format(endDateTime, "h:mm a")}` : "End time appears after services are set"}
-                </p>
+                {endDateTime ? <p className="mt-1 text-xs text-muted-foreground">Ends {format(endDateTime, "h:mm a")}</p> : null}
               </div>
             </div>
           </div>
@@ -918,7 +907,6 @@ export default function NewAppointmentPage() {
               <div className="mb-4 rounded-xl border border-border/70 bg-muted/30 p-4">
                 <div className="space-y-2">
                   <p className="text-sm font-medium">{creationPreset.title}</p>
-                  <p className="text-sm text-muted-foreground">{creationPreset.summary}</p>
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <Button
                       type="button"
@@ -1098,7 +1086,7 @@ export default function NewAppointmentPage() {
                   )}
 
                   {groupedServices.length > 0 ? (
-                    <Accordion type="multiple" defaultValue={defaultOpenServiceGroups} className="rounded-xl border border-border/70 bg-card px-4">
+                    <Accordion type="multiple" className="rounded-xl border border-border/70 bg-card px-4">
                       {groupedServices.map((group) => {
                         const selectedCount = group.services.filter((service) => selectedServiceIds.includes(service.id)).length;
                         return (
@@ -1165,15 +1153,6 @@ export default function NewAppointmentPage() {
                     </div>
                   )}
                 </div>
-              )}
-
-              {requiresServiceSelection && selectedServiceIds.length === 0 && selectedClientId && (
-                <p className="text-xs text-muted-foreground mt-2">Select at least one service to calculate the appointment duration and end time.</p>
-              )}
-              {!requiresServiceSelection && selectedClientId && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  No active services are loaded yet. You can still save a basic appointment now and add service details later.
-                </p>
               )}
 
               {/* Quote prefilled badge */}
@@ -1338,12 +1317,6 @@ export default function NewAppointmentPage() {
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-
-              {startDateTime && endDateTime && (
-                <p className="text-xs text-muted-foreground pt-1">
-                  Overlapping appointments are blocked when you save. If this time conflicts, you will see an error from the server.
-                </p>
               )}
 
               {/* Service duration mismatch warning */}

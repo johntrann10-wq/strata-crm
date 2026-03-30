@@ -201,22 +201,18 @@ export default function QuotesIndexPage() {
           <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Open pipeline</p>
             <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{formatCurrency(openPipelineValue)}</p>
-            <p className="mt-1 text-sm text-slate-600">Draft, sent, and accepted quotes still in play.</p>
           </div>
           <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Ready to book</p>
             <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{acceptedRows.length}</p>
-            <p className="mt-1 text-sm text-slate-600">Approved work that should turn into scheduled jobs.</p>
           </div>
           <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Cooling off</p>
             <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{agingRows.length}</p>
-            <p className="mt-1 text-sm text-slate-600">Quotes older than three days that need attention.</p>
           </div>
           <div className="rounded-[22px] border border-white/80 bg-slate-950 px-4 py-4 text-white shadow-[0_18px_45px_rgba(15,23,42,0.22)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-300">Follow-up queue</p>
             <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em]">{followUpRows.length}</p>
-            <p className="mt-1 text-sm text-slate-300">Clients due for another touch before the estimate goes cold.</p>
           </div>
         </div>
       </section>
