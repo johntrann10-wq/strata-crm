@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useOutletContext } from "react-router";
+import { Link, useOutletContext } from "react-router";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { AlertCircle, Calendar, ChevronDown, ChevronRight, Loader2, Plus, Search, UserPlus, Zap } from "lucide-react";
+import { AlertCircle, Calendar, ChevronDown, ChevronRight, Loader2, Plus, Search, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,6 @@ import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { api, ApiError } from "../api";
 import { useAction, useFindMany } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
-import { QuickBookSheet } from "../components/shared/QuickBookSheet";
 import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EmptyState } from "../components/shared/EmptyState";
@@ -98,8 +97,6 @@ function matchesTab(status: string | null | undefined, tab: AppointmentStatusTab
 
 export default function AppointmentsPage() {
   const { businessId, user, currentLocationId, setCurrentLocationId } = useOutletContext<AuthOutletContext>();
-  const navigate = useNavigate();
-  const [quickBookOpen, setQuickBookOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeTab, setActiveTab] = useState<AppointmentView>("all");
@@ -213,7 +210,7 @@ export default function AppointmentsPage() {
     <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Appointments"
-        subtitle="Manage the service board, technician ownership, and appointment status from one operational schedule."
+        subtitle="Service board"
         right={
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
             <Select
@@ -235,9 +232,11 @@ export default function AppointmentsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={() => setQuickBookOpen(true)} className="w-full lg:w-auto">
-              <Zap className="mr-2 h-4 w-4" />
-              Quick Book
+            <Button asChild variant="outline" className="w-full lg:w-auto">
+              <Link to="/calendar">
+                <Calendar className="mr-2 h-4 w-4" />
+                Open Calendar
+              </Link>
             </Button>
             <Button asChild className="w-full lg:w-auto">
               <Link to="/appointments/new">
@@ -276,23 +275,19 @@ export default function AppointmentsPage() {
         }}
       />
 
-      <QuickBookSheet
-        open={quickBookOpen}
-        onOpenChange={setQuickBookOpen}
-        onBooked={(id) => navigate(`/appointments/${id}`)}
-      />
-
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AppointmentView)}>
-        <TabsList className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-7">
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="mine" disabled={!myStaffRecord}>
+        <TabsList className="flex w-full gap-2 overflow-x-auto rounded-xl bg-transparent p-0 sm:grid sm:w-auto sm:grid-cols-7 xl:w-full">
+          <TabsTrigger value="all" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
+            All
+          </TabsTrigger>
+          <TabsTrigger value="mine" disabled={!myStaffRecord} className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
             My Queue
           </TabsTrigger>
-          <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
-          <TabsTrigger value="confirmed">Confirmed</TabsTrigger>
-          <TabsTrigger value="in_progress">In Progress</TabsTrigger>
-          <TabsTrigger value="completed">Completed</TabsTrigger>
-          <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
+          <TabsTrigger value="scheduled" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">Scheduled</TabsTrigger>
+          <TabsTrigger value="confirmed" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">Confirmed</TabsTrigger>
+          <TabsTrigger value="in_progress" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">In Progress</TabsTrigger>
+          <TabsTrigger value="completed" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">Completed</TabsTrigger>
+          <TabsTrigger value="cancelled" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">Cancelled</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -341,7 +336,7 @@ export default function AppointmentsPage() {
               ? "Link this user to a staff profile to unlock an assigned queue."
                 : activeTab === "mine"
                   ? "No appointments are assigned to this staff account right now."
-              : "Book the first real appointment so Strata starts running the schedule instead of just storing setup."
+              : "No appointments in this view."
           }
           action={
             <Button asChild>
@@ -354,6 +349,13 @@ export default function AppointmentsPage() {
         />
       ) : (
         <div className={appointmentsFetching ? "space-y-2 opacity-70" : "space-y-2"}>
+          <div className="hidden items-center rounded-xl border border-border/70 bg-muted/20 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground lg:grid lg:grid-cols-[minmax(0,1.8fr)_190px_150px_190px_auto] lg:gap-4">
+            <span>Appointment</span>
+            <span>Schedule</span>
+            <span>Location</span>
+            <span>Assigned</span>
+            <span className="text-right">Actions</span>
+          </div>
           {filteredAppointments.map((appointment) => {
             const clientName = `${appointment.client?.firstName ?? ""} ${appointment.client?.lastName ?? ""}`.trim();
             const vehicleLabel = [appointment.vehicle?.year, appointment.vehicle?.make, appointment.vehicle?.model]
@@ -383,27 +385,36 @@ export default function AppointmentsPage() {
               <Link
                 key={appointment.id}
                 to={`/appointments/${appointment.id}`}
-                className="block rounded-lg border bg-white p-4 transition-colors hover:border-primary"
+                className="block rounded-xl border bg-white p-3 transition-colors hover:border-primary sm:rounded-lg sm:p-4 lg:p-0"
               >
-                <div className="flex flex-col gap-4">
-                  <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1.8fr)_190px_150px_190px_auto] lg:items-center lg:gap-4 lg:px-4 lg:py-3">
+                  <div className="min-w-0 flex-1 space-y-1 lg:min-w-0">
                     <div className="flex items-center gap-2">
                       <StatusBadge status={appointment.status ?? ""} type="appointment" />
                       <span className="font-medium">{appointment.title || clientName || "Appointment"}</span>
                     </div>
                     <div className="text-sm text-muted-foreground">
                       {clientName || "Walk-in customer"}
-                      {vehicleLabel ? ` · ${vehicleLabel}` : ""}
+                      {vehicleLabel ? ` - ${vehicleLabel}` : ""}
                     </div>
                   </div>
-                  <div className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-2 sm:gap-x-6 lg:grid-cols-4">
-                    <span>{formattedTime || "Unscheduled"}</span>
-                    <span>{appointment.location?.name ?? "No location set"}</span>
-                    <span>{techName}</span>
-                    <span>{appointment.endTime ? format(new Date(appointment.endTime), "h:mm a") : "No end time"}</span>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-2 sm:gap-x-6 sm:text-sm lg:block">
+                    <span className="block">{formattedTime || "Unscheduled"}</span>
+                    <span className="mt-1 hidden text-xs text-muted-foreground lg:block">
+                      {appointment.endTime ? `Ends ${format(new Date(appointment.endTime), "h:mm a")}` : "No end time"}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground sm:text-sm">
+                    {appointment.location?.name ?? "No location set"}
+                  </div>
+                  <div className="text-xs text-muted-foreground sm:text-sm">
+                    <span className="block">{techName}</span>
+                    <span className="mt-1 hidden text-xs text-muted-foreground lg:block">
+                      {appointment.endTime ? format(new Date(appointment.endTime), "h:mm a") : "No end time"}
+                    </span>
                   </div>
                   <div
-                    className="flex flex-wrap items-center gap-2"
+                    className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:justify-end lg:gap-2"
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -413,7 +424,7 @@ export default function AppointmentsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="min-h-[36px] px-2 text-xs"
+                        className="min-h-[38px] px-2 text-xs lg:min-w-[108px]"
                         onClick={(event) => void handleAssignToMe(event, appointment.id)}
                       >
                         <UserPlus className="mr-1 h-3 w-3" />
@@ -423,7 +434,7 @@ export default function AppointmentsPage() {
                     {(QUICK_TRANSITIONS[appointment.status ?? ""]?.length ?? 0) > 0 ? (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="min-h-[36px] px-2 text-xs">
+                          <Button variant="outline" size="sm" className="min-h-[38px] px-2 text-xs lg:min-w-[92px]">
                             Status
                             <ChevronDown className="ml-1 h-3 w-3" />
                           </Button>
@@ -438,19 +449,19 @@ export default function AppointmentsPage() {
                       </DropdownMenu>
                     ) : null}
                     {quoteHref ? (
-                      <Button asChild variant="outline" size="sm" className="min-h-[36px] px-2 text-xs">
+                      <Button asChild variant="outline" size="sm" className="min-h-[38px] px-2 text-xs lg:min-w-[76px]">
                         <Link to={quoteHref}>Quote</Link>
                       </Button>
                     ) : null}
                     {invoiceHref ? (
-                      <Button asChild variant="outline" size="sm" className="min-h-[36px] px-2 text-xs">
+                      <Button asChild variant="outline" size="sm" className="min-h-[38px] px-2 text-xs lg:min-w-[76px]">
                         <Link to={invoiceHref}>Invoice</Link>
                       </Button>
                     ) : null}
-                    <Button asChild variant="ghost" size="sm" className="min-h-[36px] px-2 text-xs">
+                    <Button asChild variant="ghost" size="sm" className="min-h-[38px] px-2 text-xs lg:min-w-[72px]">
                       <Link to={`/appointments/${appointment.id}`}>Open</Link>
                     </Button>
-                    <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
+                    <ChevronRight className="ml-auto hidden h-4 w-4 text-muted-foreground sm:block" />
                   </div>
                 </div>
               </Link>

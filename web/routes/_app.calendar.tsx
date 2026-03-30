@@ -39,6 +39,10 @@ function formatPanelDate(date: Date): string {
   return date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
 
+function formatPanelTime(value: string): string {
+  return new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
 export default function CalendarPage() {
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
@@ -348,7 +352,7 @@ export default function CalendarPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
           <div
             className={cn(
               "flex min-h-0 flex-1 flex-col overflow-hidden pb-2",
@@ -389,7 +393,7 @@ export default function CalendarPage() {
             ) : null}
           </div>
 
-          <aside className={cn("space-y-4", isMobileLayout && "space-y-3")}>
+          <aside className={cn("space-y-4 xl:sticky xl:top-24 xl:self-start", isMobileLayout && "space-y-3")}>
             {view === "month" ? (
               <>
                 <div className="surface-panel rounded-[1.6rem] p-4">
@@ -427,6 +431,20 @@ export default function CalendarPage() {
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected date</p>
                     <h3 className="text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
                   </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                      <p className="font-semibold text-foreground">{selectedDayAppointments.length}</p>
+                      <p className="mt-1 text-muted-foreground">Booked</p>
+                    </div>
+                    <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                      <p className="font-semibold text-foreground">{formatCurrency(selectedDayRevenue)}</p>
+                      <p className="mt-1 text-muted-foreground">Revenue</p>
+                    </div>
+                    <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                      <p className="font-semibold text-foreground">{selectedDayUnassigned}</p>
+                      <p className="mt-1 text-muted-foreground">Open</p>
+                    </div>
+                  </div>
                   {selectedDayAppointments.length > 0 ? (
                     <div className="mt-3 space-y-2">
                       {selectedDayAppointments.slice(0, 5).map((appointment) => (
@@ -436,14 +454,19 @@ export default function CalendarPage() {
                           onClick={() => handleApptClick(appointment)}
                           className="flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88"
                         >
-                          <div className="min-w-[54px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                            {new Date(appointment.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                          <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                            {formatPanelTime(appointment.startTime)}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-foreground">
-                              {appointment.title ||
-                                (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
-                            </p>
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="truncate text-sm font-semibold text-foreground">
+                                {appointment.title ||
+                                  (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                              </p>
+                              <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                {appointment.status.replace("_", " ")}
+                              </span>
+                            </div>
                             <p className="truncate text-xs text-muted-foreground">
                               {appointment.vehicle
                                 ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
@@ -522,21 +545,26 @@ export default function CalendarPage() {
                             <span className="text-xs text-muted-foreground">{entry.appointments.length} booked</span>
                           </div>
                           <div className="space-y-2">
-                            {entry.appointments.slice(0, 3).map((appointment) => (
+                            {entry.appointments.slice(0, 4).map((appointment) => (
                               <button
                                 key={appointment.id}
                                 type="button"
                                 onClick={() => handleApptClick(appointment)}
                                 className="flex w-full items-start gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-left transition-colors hover:bg-background"
                               >
-                                <div className="min-w-[54px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                  {new Date(appointment.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                                <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                  {formatPanelTime(appointment.startTime)}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <p className="truncate text-sm font-semibold text-foreground">
-                                    {appointment.title ||
-                                      (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
-                                  </p>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="truncate text-sm font-semibold text-foreground">
+                                      {appointment.title ||
+                                        (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                                    </p>
+                                    <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                      {appointment.status.replace("_", " ")}
+                                    </span>
+                                  </div>
                                   <p className="truncate text-xs text-muted-foreground">
                                     {appointment.vehicle
                                       ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
@@ -547,8 +575,8 @@ export default function CalendarPage() {
                                 </div>
                               </button>
                             ))}
-                            {entry.appointments.length > 3 ? (
-                              <p className="px-1 text-xs text-muted-foreground">+{entry.appointments.length - 3} more on this day</p>
+                            {entry.appointments.length > 4 ? (
+                              <p className="px-1 text-xs text-muted-foreground">+{entry.appointments.length - 4} more on this day</p>
                             ) : null}
                           </div>
                         </div>
@@ -605,14 +633,19 @@ export default function CalendarPage() {
                           onClick={() => handleApptClick(appointment)}
                           className="flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88"
                         >
-                          <div className="min-w-[54px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                            {new Date(appointment.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                          <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                            {formatPanelTime(appointment.startTime)}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-foreground">
-                              {appointment.title ||
-                                (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
-                            </p>
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="truncate text-sm font-semibold text-foreground">
+                                {appointment.title ||
+                                  (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                              </p>
+                              <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                {appointment.status.replace("_", " ")}
+                              </span>
+                            </div>
                             <p className="truncate text-xs text-muted-foreground">
                               {appointment.vehicle
                                 ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")

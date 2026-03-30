@@ -647,7 +647,7 @@ export function MonthView({
                   key={di}
                   type="button"
                   className={cn(
-                    "group flex min-h-0 flex-col border-r border-border/60 px-2 py-2 text-left transition-colors last:border-r-0",
+                    "group flex min-h-0 flex-col border-r border-border/60 px-1.5 py-1.5 text-left transition-colors last:border-r-0 sm:px-2 sm:py-2",
                     "hover:bg-muted/35",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
                     isToday && "bg-primary/[0.045]",
@@ -658,7 +658,7 @@ export function MonthView({
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <span
                       className={cn(
-                        "inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold",
+                        "inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold sm:h-8 sm:w-8 sm:text-sm",
                         isToday ? "bg-primary text-primary-foreground" : "text-foreground"
                       )}
                     >
@@ -666,7 +666,7 @@ export function MonthView({
                     </span>
                     <div className="flex items-center gap-2">
                       {dayAppts.length > 0 ? (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground sm:px-2 sm:text-[10px]">
                           {dayAppts.length}
                         </span>
                       ) : null}
@@ -682,7 +682,7 @@ export function MonthView({
                           key={apt.id}
                           type="button"
                           className={cn(
-                            "flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left shadow-sm transition-colors",
+                            "flex w-full items-center gap-1.5 rounded-md border px-1.5 py-1 text-left shadow-sm transition-colors sm:gap-2 sm:rounded-lg sm:px-2 sm:py-1.5",
                             index === 1 && "hidden sm:flex",
                             "hover:opacity-95",
                             status.surface,
@@ -694,10 +694,10 @@ export function MonthView({
                             onApptClick(apt);
                           }}
                         >
-                          <span className={cn("h-2 w-2 shrink-0 rounded-full", status.accent)} />
+                          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full sm:h-2 sm:w-2", status.accent)} />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[11px] font-semibold">{apptLabel(apt)}</p>
-                            <p className="truncate text-[10px] opacity-75">
+                            <p className="truncate text-[10px] font-semibold sm:text-[11px]">{apptLabel(apt)}</p>
+                            <p className="truncate text-[9px] opacity-75 sm:text-[10px]">
                               {formatTime(new Date(apt.startTime))}
                             </p>
                           </div>
@@ -705,14 +705,14 @@ export function MonthView({
                       );
                     })}
                     {dayAppts.length > 2 ? (
-                      <p className="px-1 text-[11px] font-medium text-muted-foreground">
+                      <p className="px-1 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
                         +{dayAppts.length - 2} more
                       </p>
                     ) : null}
                   </div>
 
                   {dayAppts.length > 0 ? (
-                    <div className="mt-auto pt-2 text-[9px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:pt-3 sm:text-[10px]">
+                    <div className="mt-auto pt-1.5 text-[8px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:pt-3 sm:text-[10px]">
                       {new Intl.NumberFormat("en-US", {
                         style: "currency",
                         currency: "USD",

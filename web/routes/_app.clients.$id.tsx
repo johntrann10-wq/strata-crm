@@ -32,7 +32,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "../components/shared/PageHeader";
-import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { AppointmentHistoryCard, ClientEditForm, type FormState, VehiclesCard } from "../components/ClientDetailCards";
@@ -343,6 +342,7 @@ export default function ClientDetailPage() {
     day: "numeric",
     year: "numeric",
   });
+  const headerMeta = [client.email, client.phone].filter(Boolean).join(" - ") || "Client record";
   const openRevenueLabel =
     unpaidInvoiceValue > 0
       ? `${formatCurrency(unpaidInvoiceValue)} unpaid`
@@ -352,8 +352,8 @@ export default function ClientDetailPage() {
   const nextStepLabel = nextAppointment
     ? `Next visit ${formatTimelineWhen((nextAppointment.startTime as string | null | undefined) ?? null)}`
     : vehicleList.length === 0
-      ? "Add a vehicle to keep this record production-ready"
-      : "Ready for the next booking or quote";
+      ? "Add vehicle"
+      : "Book or quote";
   const clientTimeline = [
     ...apptList.map((appointment) => ({
       id: `appointment-${appointment.id}`,
@@ -474,10 +474,10 @@ export default function ClientDetailPage() {
         <PageHeader
           backTo={returnTo}
           title={`${client.firstName} ${client.lastName}`}
-          subtitle={`Client record opened ${new Date(client.createdAt).toLocaleDateString()}${client.email ? ` - ${client.email}` : ""}${client.phone ? ` - ${client.phone}` : ""}`}
-          badge={<Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">CRM Record</Badge>}
+          subtitle={headerMeta}
+          badge={<Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">Client</Badge>}
           actions={
-            <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
               <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
                 <Link to={addVehicleHref}>
                   <Car className="mr-1.5 h-4 w-4" />
@@ -487,7 +487,7 @@ export default function ClientDetailPage() {
               <Button asChild variant="default" size="sm" className="w-full sm:w-auto">
                 <Link to={appointmentHref}>
                   <CalendarPlus className="mr-1.5 h-4 w-4" />
-                  Book Appointment
+                  New Appointment
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
@@ -504,7 +504,7 @@ export default function ClientDetailPage() {
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="More actions" className="justify-self-start sm:justify-self-auto">
+                  <Button variant="ghost" size="icon" aria-label="More actions" className="col-span-2 justify-self-start sm:justify-self-auto">
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -574,7 +574,7 @@ export default function ClientDetailPage() {
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
                 <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Revenue</p>
                   <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.05em] text-slate-950">{formatCurrency(totalSpend)}</p>
@@ -586,7 +586,7 @@ export default function ClientDetailPage() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Open money</p>
                   <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.05em] text-slate-950">{openRevenueLabel}</p>
                   <p className="mt-1 text-sm text-slate-600">
-                    {latestInvoice ? "Recent invoice activity" : latestQuote ? "Recent quote activity" : "No billing history"}
+                    {latestInvoice ? "Recent invoice" : latestQuote ? "Recent quote" : "No billing"}
                   </p>
                 </div>
                 <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
@@ -604,8 +604,8 @@ export default function ClientDetailPage() {
             <div className="rounded-[26px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.24)]">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Actions</p>
               <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Client workflow</h3>
-              <div className="mt-5 grid gap-2.5">
-                <QuickWorkflowAction icon={CalendarPlus} title="Book appointment" detail="" href={appointmentHref} />
+              <div className="mt-5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
+                <QuickWorkflowAction icon={CalendarPlus} title="New appointment" detail="" href={appointmentHref} />
                 <QuickWorkflowAction icon={Receipt} title="Create quote" detail="" href={newQuoteHref} />
                 <QuickWorkflowAction icon={FileText} title="Create invoice" detail="" href={newInvoiceHref} />
                 <QuickWorkflowAction icon={Plus} title="Add vehicle" detail="" href={addVehicleHref} />
@@ -614,11 +614,11 @@ export default function ClientDetailPage() {
           </div>
         </section>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <WorkflowMetricCard icon={ClipboardList} label="Active jobs" value={String(activeJobsCount)} detail={activeJobsCount > 0 ? "Work in progress" : "No active jobs"} />
-          <WorkflowMetricCard icon={Receipt} label="Open quotes" value={`$${openQuoteValue.toFixed(2)}`} detail={`${quoteList.filter((quote) => ["draft", "sent"].includes(String((quote as any).status ?? ""))).length} awaiting action`} />
-          <WorkflowMetricCard icon={FileText} label="Unpaid invoices" value={formatCurrency(unpaidInvoiceValue)} detail={`${invoiceList.filter((invoice) => ["sent", "partial"].includes(String((invoice as any).status ?? ""))).length} awaiting payment`} />
-          <WorkflowMetricCard icon={Car} label="Vehicles" value={String(vehicleList.length)} detail={vehicleList.length > 0 ? "On this client record" : "No vehicles on file"} />
+        <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
+          <WorkflowMetricCard icon={ClipboardList} label="Active jobs" value={String(activeJobsCount)} detail={activeJobsCount > 0 ? "In progress" : "Clear"} />
+          <WorkflowMetricCard icon={Receipt} label="Open quotes" value={`$${openQuoteValue.toFixed(2)}`} detail={`${quoteList.filter((quote) => ["draft", "sent"].includes(String((quote as any).status ?? ""))).length} open`} />
+          <WorkflowMetricCard icon={FileText} label="Unpaid invoices" value={formatCurrency(unpaidInvoiceValue)} detail={`${invoiceList.filter((invoice) => ["sent", "partial"].includes(String((invoice as any).status ?? ""))).length} open`} />
+          <WorkflowMetricCard icon={Car} label="Vehicles" value={String(vehicleList.length)} detail={vehicleList.length > 0 ? "On file" : "None"} />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
@@ -730,20 +730,6 @@ export default function ClientDetailPage() {
               openInvoiceValue={unpaidInvoiceValue}
               openQuoteValue={openQuoteValue}
             />
-
-            <Card className="border-white/65">
-              <CardHeader className="pb-4">
-                <CardTitle>Account actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <QuickWorkflowAction icon={CalendarPlus} title="Book appointment" detail="Schedule the next service visit" href={appointmentHref} />
-                <QuickWorkflowAction icon={Receipt} title="Create quote" detail="Build and send a fresh estimate" href={newQuoteHref} />
-                <QuickWorkflowAction icon={FileText} title="Create invoice" detail="Bill work without leaving the record" href={newInvoiceHref} />
-                <QuickWorkflowAction icon={Plus} title="Add vehicle" detail="Capture another vehicle for this client" href={addVehicleHref} />
-              </CardContent>
-            </Card>
-
-            <ContextualNextStep entityType="client" status={null} data={{ id: id, lastAppointmentDate }} />
 
             {vehiclesError ? (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -947,7 +933,7 @@ function WorkflowMetricCard({
         <Icon className="h-4 w-4 text-muted-foreground" />
       </div>
       <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+      <p className="mt-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{detail}</p>
     </div>
   );
 }

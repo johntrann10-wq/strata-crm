@@ -104,6 +104,11 @@ async function fillVehicleSelector(page: Page) {
 
 async function clickFirstService(page: Page, serviceName: string) {
   const serviceNameText = page.getByText(serviceName, { exact: true }).first();
+  const searchInput = page.getByPlaceholder(/search services, notes, or category/i);
+  if (!(await serviceNameText.isVisible().catch(() => false)) && (await searchInput.isVisible().catch(() => false))) {
+    await searchInput.fill(serviceName);
+  }
+
   await expect(serviceNameText).toBeVisible();
 
   const clickableServiceCard = serviceNameText.locator(

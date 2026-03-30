@@ -818,29 +818,29 @@ export default function SignedIn() {
           </div>
 
           <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_360px]">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="order-2 grid gap-3 sm:grid-cols-2 xl:order-1 xl:grid-cols-4">
               {dashboardHeroSignals.map((signal) => (
                 <Link
                   key={signal.label}
                   to={signal.href}
-                  className="group rounded-[24px] border border-white/80 bg-white/85 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-[0_16px_40px_rgba(249,115,22,0.14)]"
+                  className="group rounded-[22px] border border-white/80 bg-white/85 p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-[0_16px_40px_rgba(249,115,22,0.14)] sm:p-4 sm:rounded-[24px]"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="rounded-2xl bg-orange-50 p-2.5 text-orange-600 transition group-hover:bg-orange-100">
+                    <div className="rounded-xl bg-orange-50 p-2 text-orange-600 transition group-hover:bg-orange-100 sm:rounded-2xl sm:p-2.5">
                       {signal.icon}
                     </div>
                   </div>
-                  <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:mt-5 sm:text-xs sm:tracking-[0.18em]">
                     {signal.label}
                   </p>
-                  <div className="mt-2 text-[1.8rem] font-semibold tracking-[-0.05em] text-slate-950">
+                  <div className="mt-1.5 text-[1.5rem] font-semibold tracking-[-0.05em] text-slate-950 sm:mt-2 sm:text-[1.8rem]">
                     {signal.value}
                   </div>
                 </Link>
               ))}
             </div>
 
-            <div className="rounded-[28px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.28)]">
+            <div className="order-1 rounded-[24px] bg-slate-950 p-4 text-white shadow-[0_18px_50px_rgba(15,23,42,0.28)] sm:p-5 sm:rounded-[28px] xl:order-2">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-orange-300">Actions</p>
@@ -848,7 +848,7 @@ export default function SignedIn() {
                 </div>
                 <CheckCircle2 className="mt-1 h-5 w-5 text-orange-300" />
               </div>
-              <div className="mt-5 grid gap-2.5">
+              <div className="mt-4 grid gap-2 sm:mt-5 sm:gap-2.5">
                 <QuickAction
                   href={scheduleJobHref}
                   label="New Appointment"
@@ -862,39 +862,41 @@ export default function SignedIn() {
           </div>
         </section>
 
-        <section className="rounded-[28px] border border-border/70 bg-card px-4 py-5 shadow-sm sm:px-5 sm:py-6">
-          {loadingActivationChecklist ? (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-8 w-72" />
-                <Skeleton className="h-4 w-full max-w-2xl" />
+        {(loadingActivationChecklist || activationChecklist.completed < activationChecklist.total) ? (
+          <section className="rounded-[28px] border border-border/70 bg-card px-4 py-5 shadow-sm sm:px-5 sm:py-6">
+            {loadingActivationChecklist ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-8 w-72" />
+                  <Skeleton className="h-4 w-full max-w-2xl" />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <Skeleton key={index} className="h-28 rounded-2xl" />
+                  ))}
+                </div>
               </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <Skeleton key={index} className="h-28 rounded-2xl" />
-                ))}
-              </div>
-            </div>
-          ) : (
-            <ActivationChecklistCard
-              completed={activationChecklist.completed}
-              total={activationChecklist.total}
-              percent={activationChecklist.percent}
-              items={activationChecklist.items}
-              todayAppointments={todayAppointments.length}
-              activeJobs={activeJobs.length}
-              unpaidRevenue={unpaidRevenue}
-              pendingApprovalsCount={pendingApprovalsCount}
-              staleFollowUps={staleQuoteFollowUps.length + staleInvoiceCollections.length}
-              depositCount={depositsAwaitingPayment.length}
-              nextUpcomingAppointment={upcomingAppointments[0] ?? null}
-              recentClientCount={recentClients.length}
-              hasDefaultTaxRate={Number(activationBusiness?.defaultTaxRate ?? 0) > 0}
-              scheduleJobHref={scheduleJobHref}
-            />
-          )}
-        </section>
+            ) : (
+              <ActivationChecklistCard
+                completed={activationChecklist.completed}
+                total={activationChecklist.total}
+                percent={activationChecklist.percent}
+                items={activationChecklist.items}
+                todayAppointments={todayAppointments.length}
+                activeJobs={activeJobs.length}
+                unpaidRevenue={unpaidRevenue}
+                pendingApprovalsCount={pendingApprovalsCount}
+                staleFollowUps={staleQuoteFollowUps.length + staleInvoiceCollections.length}
+                depositCount={depositsAwaitingPayment.length}
+                nextUpcomingAppointment={upcomingAppointments[0] ?? null}
+                recentClientCount={recentClients.length}
+                hasDefaultTaxRate={Number(activationBusiness?.defaultTaxRate ?? 0) > 0}
+                scheduleJobHref={scheduleJobHref}
+              />
+            )}
+          </section>
+        ) : null}
 
         <DailyOperationsCard
           activationChecklist={activationChecklist}
@@ -922,7 +924,7 @@ export default function SignedIn() {
           </div>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             href="/appointments"
             label="Revenue Today"

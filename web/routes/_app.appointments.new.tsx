@@ -139,6 +139,7 @@ export default function NewAppointmentPage() {
   const [clientSearchQuery, setClientSearchQuery] = useState<string>("");
   const [debouncedClientQuery, setDebouncedClientQuery] = useState<string>("");
   const [serviceSearchQuery, setServiceSearchQuery] = useState("");
+  const [expandedServiceCategories, setExpandedServiceCategories] = useState<string[]>([]);
 
   // Pre-fill client, date and time from URL query params
   useEffect(() => {
@@ -688,6 +689,28 @@ export default function NewAppointmentPage() {
     () => services.filter((service) => selectedServiceIds.includes(service.id)),
     [selectedServiceIds, services]
   );
+
+  useEffect(() => {
+    if (normalizedServiceSearch) {
+      setExpandedServiceCategories(groupedServices.map((group) => group.category));
+      return;
+    }
+
+    if (selectedServiceIds.length === 0) return;
+
+    const selectedCategories = Array.from(
+      new Set(
+        services
+          .filter((service) => selectedServiceIds.includes(service.id))
+          .map((service) => String(service.category ?? "other"))
+      )
+    );
+
+    setExpandedServiceCategories((current) =>
+      Array.from(new Set([...current, ...selectedCategories]))
+    );
+  }, [groupedServices, normalizedServiceSearch, selectedServiceIds, services]);
+
   const staff = staffData ?? [];
   const isLoading = isSubmitting || actionFetching;
   const selectedVehicleLabel = selectedVehicleId
@@ -699,11 +722,11 @@ export default function NewAppointmentPage() {
   ].join(" · ");
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-3xl mx-auto p-4 pb-28 sm:p-6 sm:pb-6 lg:p-8">
+      <div className="max-w-3xl mx-auto p-3 pb-28 sm:p-6 sm:pb-6 lg:p-8">
         {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to appointments queue" /> : null}
         {/* Header */}
         <div className="mb-6 overflow-hidden rounded-[1.75rem] border border-white/70 bg-white/80 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_30px_70px_rgba(15,23,42,0.08)] backdrop-blur-md">
-          <div className="bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.24),rgba(255,255,255,0))] px-4 py-5 sm:px-6 sm:py-6">
+          <div className="bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.24),rgba(255,255,255,0))] px-3 py-4 sm:px-6 sm:py-6">
             <div className="flex items-center gap-3">
               <Button
                 type="button"
@@ -715,7 +738,7 @@ export default function NewAppointmentPage() {
                 <ChevronLeft className="h-5 w-5" />
               </Button>
               <div className="min-w-0">
-                <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-[2rem]">New Appointment</h1>
+                <h1 className="mt-2 text-2xl font-bold tracking-tight sm:mt-3 sm:text-[2rem]">New Appointment</h1>
                 {currentLocationId && locationsData?.some((location) => location.id === currentLocationId) ? (
                   <p className="mt-2 text-sm text-muted-foreground">
                     Defaulting to {locationsData.find((location) => location.id === currentLocationId)?.name ?? "current location"}
@@ -723,27 +746,27 @@ export default function NewAppointmentPage() {
                 ) : null}
               </div>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
+            <div className="mt-4 grid gap-2.5 grid-cols-2 xl:grid-cols-4 sm:mt-5 sm:gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2.5 sm:px-4 sm:py-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Client</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
                   {selectedClient ? `${selectedClient.firstName} ${selectedClient.lastName}` : "Select"}
                 </p>
               </div>
-              <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
+              <div className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2.5 sm:px-4 sm:py-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vehicle</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
                   {selectedVehicleLabel || "Select"}
                 </p>
               </div>
-              <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
+              <div className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2.5 sm:px-4 sm:py-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Services</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
                   {selectedServiceIds.length > 0 ? `${selectedServiceIds.length} selected` : "Select"}
                 </p>
                 {totalDuration > 0 ? <p className="mt-1 text-xs text-muted-foreground">{formatDuration(totalDuration)}</p> : null}
               </div>
-              <div className="rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
+              <div className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2.5 sm:px-4 sm:py-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Run of show</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">{bookingSnapshot}</p>
                 {endDateTime ? <p className="mt-1 text-xs text-muted-foreground">Ends {format(endDateTime, "h:mm a")}</p> : null}
@@ -904,14 +927,15 @@ export default function NewAppointmentPage() {
               <CardTitle className="text-base font-semibold">Services</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="mb-4 rounded-xl border border-border/70 bg-muted/30 p-4">
+              <div className="mb-4 rounded-xl border border-border/70 bg-muted/30 p-3 sm:p-4">
                 <div className="space-y-2">
                   <p className="text-sm font-medium">{creationPreset.title}</p>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <div className="grid gap-2 sm:flex sm:flex-row sm:flex-wrap">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
+                      className="justify-start sm:justify-center"
                       onClick={() =>
                         applyTemplateToNotes(
                           creationPreset.appointmentClientNotes,
@@ -927,6 +951,7 @@ export default function NewAppointmentPage() {
                       type="button"
                       variant="outline"
                       size="sm"
+                      className="justify-start sm:justify-center"
                       onClick={() =>
                         applyTemplateToNotes(
                           creationPreset.appointmentInternalNotes,
@@ -939,7 +964,7 @@ export default function NewAppointmentPage() {
                       Apply internal handoff
                     </Button>
                     {creationPreset.defaultMobile ? (
-                      <Button type="button" variant="outline" size="sm" onClick={() => setIsMobile(true)}>
+                      <Button type="button" variant="outline" size="sm" className="justify-start sm:justify-center" onClick={() => setIsMobile(true)}>
                         Mark as mobile
                       </Button>
                     ) : null}
@@ -958,13 +983,10 @@ export default function NewAppointmentPage() {
                 </p>
               ) : (
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-border/70 bg-background p-4">
+                  <div className="rounded-xl border border-border/70 bg-background p-3 sm:p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div>
-                        <p className="text-sm font-medium">Build the job fast</p>
-                        <p className="text-sm text-muted-foreground">
-                          Start with a package if the work is standard, or expand a category for one-off services.
-                        </p>
+                        <p className="text-sm font-medium">Find services</p>
                       </div>
                       <div className="relative w-full lg:max-w-xs">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -995,9 +1017,7 @@ export default function NewAppointmentPage() {
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-4 text-xs text-muted-foreground">
-                        No services selected yet. Pick a package or expand a category below.
-                      </p>
+                      <p className="mt-4 text-xs text-muted-foreground">No services selected.</p>
                     )}
                   </div>
 
@@ -1086,7 +1106,12 @@ export default function NewAppointmentPage() {
                   )}
 
                   {groupedServices.length > 0 ? (
-                    <Accordion type="multiple" className="rounded-xl border border-border/70 bg-card px-4">
+                    <Accordion
+                      type="multiple"
+                      value={expandedServiceCategories}
+                      onValueChange={setExpandedServiceCategories}
+                      className="rounded-xl border border-border/70 bg-card px-3 sm:px-4"
+                    >
                       {groupedServices.map((group) => {
                         const selectedCount = group.services.filter((service) => selectedServiceIds.includes(service.id)).length;
                         return (
