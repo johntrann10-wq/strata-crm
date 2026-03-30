@@ -131,26 +131,23 @@ async function listLegacyCompatibleServices(
   first = 100
 ): Promise<ServiceRow[]> {
   const selectColumns = buildLegacyServiceSelectColumns(columns);
-  const values: unknown[] = [bid];
-  const conditions = [`s."business_id" = $1`];
-
-  if (typeof activeFilter === "boolean" && columns.has("active")) {
-    values.push(activeFilter);
-    conditions.push(`s."active" = $${values.length}`);
-  }
-
-  values.push(first);
-
-  const result = await db.execute({
-    text: `
-      select ${selectColumns}
-      from "services" s
-      where ${conditions.join(" and ")}
-      order by s."name" asc, ${columns.has("created_at") ? `s."created_at"` : `s."id"`} desc
-      limit $${values.length}
-    `,
-    values,
-  } as any);
+  const trailingOrder = sql.raw(columns.has("created_at") ? `s."created_at" desc` : `s."id" desc`);
+  const result =
+    typeof activeFilter === "boolean" && columns.has("active")
+      ? await db.execute(sql`
+          select ${sql.raw(selectColumns)}
+          from "services" s
+          where s."business_id" = ${bid} and s."active" = ${activeFilter}
+          order by s."name" asc, ${trailingOrder}
+          limit ${first}
+        `)
+      : await db.execute(sql`
+          select ${sql.raw(selectColumns)}
+          from "services" s
+          where s."business_id" = ${bid}
+          order by s."name" asc, ${trailingOrder}
+          limit ${first}
+        `);
 
   const rows = (result as { rows?: Array<Record<string, unknown>> }).rows ?? [];
   return rows.map((row) => normalizeServiceRecord(row as any));
@@ -158,15 +155,12 @@ async function listLegacyCompatibleServices(
 
 async function getLegacyCompatibleService(id: string, bid: string, columns: Set<string>): Promise<ServiceRow | null> {
   const selectColumns = buildLegacyServiceSelectColumns(columns);
-  const result = await db.execute({
-    text: `
-      select ${selectColumns}
-      from "services" s
-      where s."id" = $1 and s."business_id" = $2
-      limit 1
-    `,
-    values: [id, bid],
-  } as any);
+  const result = await db.execute(sql`
+    select ${sql.raw(selectColumns)}
+    from "services" s
+    where s."id" = ${id} and s."business_id" = ${bid}
+    limit 1
+  `);
 
   const rows = (result as { rows?: Array<Record<string, unknown>> }).rows ?? [];
   const row = rows[0];
