@@ -99,6 +99,80 @@ async function getServiceColumns(): Promise<Set<string>> {
   return new Set(rows.map((row) => row.column_name).filter((value): value is string => Boolean(value)));
 }
 
+function buildLegacyServiceSelectColumns(columns: Set<string>): string {
+  const selectColumns = [
+    `s."id" as "id"`,
+    `s."business_id" as "businessId"`,
+    `s."name" as "name"`,
+    columns.has("notes") ? `s."notes" as "notes"` : `null::text as "notes"`,
+    `s."price" as "price"`,
+    columns.has("duration_minutes")
+      ? `s."duration_minutes" as "durationMinutes"`
+      : `null::integer as "durationMinutes"`,
+    columns.has("category") ? `s."category" as "category"` : `null::text as "category"`,
+    `null::uuid as "categoryId"`,
+    `null::text as "categoryName"`,
+    `null::integer as "categorySortOrder"`,
+    columns.has("sort_order") ? `s."sort_order" as "sortOrder"` : `0::integer as "sortOrder"`,
+    columns.has("taxable") ? `s."taxable" as "taxable"` : `true as "taxable"`,
+    columns.has("is_addon") ? `s."is_addon" as "isAddon"` : `false as "isAddon"`,
+    columns.has("active") ? `s."active" as "active"` : `true as "active"`,
+    columns.has("created_at") ? `s."created_at" as "createdAt"` : `now() as "createdAt"`,
+    columns.has("updated_at") ? `s."updated_at" as "updatedAt"` : `now() as "updatedAt"`,
+  ];
+
+  return selectColumns.join(", ");
+}
+
+async function listLegacyCompatibleServices(
+  bid: string,
+  columns: Set<string>,
+  activeFilter?: boolean,
+  first = 100
+): Promise<ServiceRow[]> {
+  const selectColumns = buildLegacyServiceSelectColumns(columns);
+  const values: unknown[] = [bid];
+  const conditions = [`s."business_id" = $1`];
+
+  if (typeof activeFilter === "boolean" && columns.has("active")) {
+    values.push(activeFilter);
+    conditions.push(`s."active" = $${values.length}`);
+  }
+
+  values.push(first);
+
+  const result = await db.execute({
+    text: `
+      select ${selectColumns}
+      from "services" s
+      where ${conditions.join(" and ")}
+      order by s."name" asc, ${columns.has("created_at") ? `s."created_at"` : `s."id"`} desc
+      limit $${values.length}
+    `,
+    values,
+  } as any);
+
+  const rows = (result as { rows?: Array<Record<string, unknown>> }).rows ?? [];
+  return rows.map((row) => normalizeServiceRecord(row as any));
+}
+
+async function getLegacyCompatibleService(id: string, bid: string, columns: Set<string>): Promise<ServiceRow | null> {
+  const selectColumns = buildLegacyServiceSelectColumns(columns);
+  const result = await db.execute({
+    text: `
+      select ${selectColumns}
+      from "services" s
+      where s."id" = $1 and s."business_id" = $2
+      limit 1
+    `,
+    values: [id, bid],
+  } as any);
+
+  const rows = (result as { rows?: Array<Record<string, unknown>> }).rows ?? [];
+  const row = rows[0];
+  return row ? normalizeServiceRecord(row as any) : null;
+}
+
 type ServicePayload = z.infer<typeof createSchema>;
 
 async function resolveCategoryAssignment(
@@ -288,26 +362,7 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
       businessId: bid,
       error: error instanceof Error ? error.message : String(error),
     });
-    const rows = await db
-      .select({
-        id: services.id,
-        businessId: services.businessId,
-        name: services.name,
-        notes: services.notes,
-        price: services.price,
-        durationMinutes: services.durationMinutes,
-        category: hasLegacyCategory ? services.category : sql<string | null>`null`,
-        taxable: hasTaxable ? services.taxable : sql<boolean | null>`true`,
-        isAddon: hasIsAddon ? services.isAddon : sql<boolean | null>`false`,
-        active: hasActive ? services.active : sql<boolean | null>`true`,
-        createdAt: services.createdAt,
-        updatedAt: services.updatedAt,
-      })
-      .from(services)
-      .where(eq(services.businessId, bid))
-      .orderBy(asc(services.name), desc(services.createdAt))
-      .limit(first);
-    return rows.map((row) => normalizeServiceRecord(row));
+    return listLegacyCompatibleServices(bid, serviceColumns, activeFilter, first);
   }
 }
 
@@ -347,25 +402,7 @@ async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRo
     return row ? normalizeServiceRecord(row) : null;
   } catch (error) {
     if (!isServiceSchemaDriftError(error)) throw error;
-    const [row] = await db
-      .select({
-        id: services.id,
-        businessId: services.businessId,
-        name: services.name,
-        notes: services.notes,
-        price: services.price,
-        durationMinutes: services.durationMinutes,
-        category: hasLegacyCategory ? services.category : sql<string | null>`null`,
-        taxable: hasTaxable ? services.taxable : sql<boolean | null>`true`,
-        isAddon: hasIsAddon ? services.isAddon : sql<boolean | null>`false`,
-        active: hasActive ? services.active : sql<boolean | null>`true`,
-        createdAt: services.createdAt,
-        updatedAt: services.updatedAt,
-      })
-      .from(services)
-      .where(and(eq(services.id, id), eq(services.businessId, bid)))
-      .limit(1);
-    return row ? normalizeServiceRecord(row) : null;
+    return getLegacyCompatibleService(id, bid, serviceColumns);
   }
 }
 
