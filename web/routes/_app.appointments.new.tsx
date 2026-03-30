@@ -685,6 +685,24 @@ export default function NewAppointmentPage() {
         services: entries.sort((a, b) => a.name.localeCompare(b.name)),
       }));
   }, [creationPreset.recommendedCategories, normalizedServiceSearch, services]);
+  const directServiceSearchResults = useMemo(() => {
+    if (!normalizedServiceSearch) return [];
+    return services
+      .filter((service) => {
+        const haystack = [service.name, service.notes, formatServiceCategory(service.category)]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(normalizedServiceSearch);
+      })
+      .sort((left, right) => {
+        const leftStartsWith = left.name.toLowerCase().startsWith(normalizedServiceSearch);
+        const rightStartsWith = right.name.toLowerCase().startsWith(normalizedServiceSearch);
+        if (leftStartsWith !== rightStartsWith) return leftStartsWith ? -1 : 1;
+        return left.name.localeCompare(right.name);
+      })
+      .slice(0, 8);
+  }, [normalizedServiceSearch, services]);
   const selectedServices = useMemo(
     () => services.filter((service) => selectedServiceIds.includes(service.id)),
     [selectedServiceIds, services]
@@ -1104,6 +1122,55 @@ export default function NewAppointmentPage() {
                       </div>
                     </div>
                   )}
+
+                  {directServiceSearchResults.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-foreground">Search results</p>
+                        <p className="text-xs text-muted-foreground">
+                          {directServiceSearchResults.length} match{directServiceSearchResults.length === 1 ? "" : "es"}
+                        </p>
+                      </div>
+                      <div className="grid gap-2">
+                        {directServiceSearchResults.map((service) => {
+                          const isSelected = selectedServiceIds.includes(service.id);
+                          return (
+                            <button
+                              key={service.id}
+                              type="button"
+                              className={cn(
+                                "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors",
+                                isSelected
+                                  ? "border-primary bg-primary/5"
+                                  : "border-border bg-card hover:bg-muted/40"
+                              )}
+                              onClick={() => toggleService(service.id)}
+                            >
+                              <SelectionIndicator checked={isSelected} />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-foreground">{service.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatServiceCategory(service.category)}
+                                  {service.notes ? ` - ${service.notes}` : ""}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-3 text-sm">
+                                {service.durationMinutes != null && service.durationMinutes > 0 ? (
+                                  <span className="flex items-center gap-1 text-muted-foreground">
+                                    <Clock className="h-3 w-3" />
+                                    {formatDuration(service.durationMinutes)}
+                                  </span>
+                                ) : null}
+                                <span className="font-semibold">
+                                  ${toMoneyNumber(service.price).toFixed(2)}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {groupedServices.length > 0 ? (
                     <Accordion
