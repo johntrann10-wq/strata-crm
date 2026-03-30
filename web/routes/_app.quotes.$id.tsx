@@ -119,6 +119,8 @@ export default function QuoteDetailPage() {
   const hasQueueReturn = searchParams.has("from");
   const withReturn = (pathname: string) =>
     `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(returnTo)}`;
+  const recipientNameOverride = searchParams.get("recipientName")?.trim() || "";
+  const recipientEmailOverride = searchParams.get("recipientEmail")?.trim() || "";
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDeclineDialog, setShowDeclineDialog] = useState(false);
@@ -238,7 +240,7 @@ export default function QuoteDetailPage() {
     } else {
       const deliveryStatus = (result.data as any)?.deliveryStatus;
       if (deliveryStatus === "emailed") {
-        toast.success("Quote emailed to client");
+        toast.success("Quote emailed");
       } else {
         toast.warning("Quote was marked as sent, but email was not delivered");
       }
@@ -259,7 +261,7 @@ export default function QuoteDetailPage() {
     } else {
       const deliveryStatus = (result.data as any)?.deliveryStatus;
       if (deliveryStatus === "emailed") {
-        toast.success("Follow-up emailed to client");
+        toast.success("Follow-up emailed");
       } else {
         toast.warning("Follow-up was recorded, but email was not delivered");
       }
@@ -934,9 +936,9 @@ export default function QuoteDetailPage() {
           </Card>
 
           <CommunicationCard
-            title="Client communication"
-            recipientName={`${quote.client.firstName} ${quote.client.lastName}`}
-            recipient={quote.client.email}
+            title="Quote delivery"
+            recipientName={recipientNameOverride || `${quote.client.firstName} ${quote.client.lastName}`}
+            recipient={recipientEmailOverride || quote.client.email}
             primaryLabel={quote.status === "sent" ? "Resend quote" : "Send quote"}
             followUpLabel="Send follow-up"
             activities={((activityLogs ?? []) as any[]).filter((record) => record.type === "quote.sent" || record.type === "quote.follow_up_recorded")}

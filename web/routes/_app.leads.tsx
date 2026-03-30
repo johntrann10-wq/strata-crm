@@ -86,6 +86,20 @@ const ACTIONS: Array<{
 
 const ACTIVE_STATUSES: LeadStatus[] = ["new", "contacted", "quoted", "booked"];
 
+function buildQuoteRecipientQuery(values: {
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+}) {
+  const params = new URLSearchParams();
+  const recipientName = [values.firstName?.trim(), values.lastName?.trim()].filter(Boolean).join(" ").trim();
+  const recipientEmail = values.email?.trim() || "";
+  if (recipientName) params.set("recipientName", recipientName);
+  if (recipientEmail) params.set("recipientEmail", recipientEmail);
+  const query = params.toString();
+  return query ? `&${query}` : "";
+}
+
 function buildLeadSearchText(client: any, lead: ReturnType<typeof parseLeadRecord>) {
   return [
     client.firstName,
@@ -320,7 +334,13 @@ export default function LeadsPage() {
       return;
     }
     if (mode === "quote") {
-      navigate(`/quotes/new?clientId=${createdClientId}&from=${encodeURIComponent("/leads")}`);
+      navigate(
+        `/quotes/new?clientId=${createdClientId}&from=${encodeURIComponent("/leads")}${buildQuoteRecipientQuery({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+        })}`
+      );
       return;
     }
     if (mode === "appointment") {
@@ -680,7 +700,11 @@ export default function LeadsPage() {
                       <div className="mt-4 flex flex-wrap gap-2">
                         <Button size="sm" variant="outline" asChild><Link to={`/clients/${client.id}?from=${encodeURIComponent("/leads")}`}>Open client</Link></Button>
                         <Button size="sm" variant="outline" asChild><Link to={`/appointments/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}`}>Book</Link></Button>
-                        <Button size="sm" variant="outline" asChild><Link to={`/quotes/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}`}>Quote</Link></Button>
+                        <Button size="sm" variant="outline" asChild><Link to={`/quotes/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}${buildQuoteRecipientQuery({
+                          firstName: client.firstName,
+                          lastName: client.lastName,
+                          email: client.email,
+                        })}`}>Quote</Link></Button>
                         <Button size="sm" variant="outline" asChild><Link to={`/clients/${client.id}/vehicles/new?from=${encodeURIComponent("/leads")}`}>Add vehicle</Link></Button>
                         {lead.status !== "converted" ? <Button size="sm" onClick={() => void handleConvert(entry)} disabled={updatingLead}>Convert to client</Button> : null}
                       </div>

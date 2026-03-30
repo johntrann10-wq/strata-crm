@@ -48,7 +48,7 @@ function formatDeliveryStatus(status: string | undefined) {
     case "smtp_disabled":
       return "Recorded only";
     case "missing_email":
-      return "Missing client email";
+      return "Missing recipient email";
     case "email_failed":
       return "Email failed";
     default:
@@ -135,7 +135,7 @@ export function CommunicationCard({
         <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Mail className="h-4 w-4" />
-            <span>{recipient?.trim() || "No client email on file"}</span>
+            <span>{recipient?.trim() || "No recipient email on file"}</span>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg border border-border/70 bg-background px-3 py-2.5">
@@ -174,16 +174,16 @@ export function CommunicationCard({
           <>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor={`${title}-recipient-name`}>Recipient name</Label>
+                <Label htmlFor={`${title}-recipient-name`}>Name</Label>
                 <Input
                   id={`${title}-recipient-name`}
                   value={overrideName}
                   onChange={(event) => setOverrideName(event.target.value)}
-                  placeholder="Client name"
+                  placeholder="Recipient name"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor={`${title}-recipient-email`}>Recipient email</Label>
+                <Label htmlFor={`${title}-recipient-email`}>Email</Label>
                 <Input
                   id={`${title}-recipient-email`}
                   type="email"

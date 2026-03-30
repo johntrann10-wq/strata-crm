@@ -66,6 +66,8 @@ export default function NewQuotePage() {
   const [searchParams] = useSearchParams();
   const clientIdParam = searchParams.get("clientId");
   const vehicleIdParam = searchParams.get("vehicleId");
+  const recipientNameParam = searchParams.get("recipientName")?.trim() || "";
+  const recipientEmailParam = searchParams.get("recipientEmail")?.trim() || "";
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/quotes";
   const hasQueueReturn = searchParams.has("from");
 
@@ -320,7 +322,11 @@ export default function NewQuotePage() {
       }
 
       toast.success("Quote created");
-      navigate(`/quotes/${quoteId}?from=${encodeURIComponent(returnTo)}`);
+      const next = new URLSearchParams();
+      next.set("from", returnTo);
+      if (recipientNameParam) next.set("recipientName", recipientNameParam);
+      if (recipientEmailParam) next.set("recipientEmail", recipientEmailParam);
+      navigate(`/quotes/${quoteId}?${next.toString()}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to create quote";
       toast.error(message);
@@ -396,49 +402,110 @@ export default function NewQuotePage() {
                     const price = parseFloat(item.unitPrice) || 0;
                     const lineTotal = qty * price;
                     return (
-                      <div key={item.id} className="flex items-center gap-2">
-                        <Input
-                          className="flex-1"
-                          placeholder="Description"
-                          value={item.description}
-                          onChange={(e) =>
-                            updateLineItem(item.id, "description", e.target.value)
-                          }
-                        />
-                        <Input
-                          className="w-20"
-                          type="number"
-                          min="1"
-                          step="1"
-                          placeholder="1"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            updateLineItem(item.id, "quantity", e.target.value)
-                          }
-                        />
-                        <Input
-                          className="w-28"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={item.unitPrice}
-                          onChange={(e) =>
-                            updateLineItem(item.id, "unitPrice", e.target.value)
-                          }
-                        />
-                        <div className="w-24 text-right text-sm text-muted-foreground">
-                          {formatCurrency(lineTotal)}
+                      <div key={item.id} className="rounded-xl border border-border/70 bg-card p-3 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0">
+                        <div className="hidden sm:flex items-center gap-2">
+                          <Input
+                            className="flex-1"
+                            placeholder="Description"
+                            value={item.description}
+                            onChange={(e) =>
+                              updateLineItem(item.id, "description", e.target.value)
+                            }
+                          />
+                          <Input
+                            className="w-20"
+                            type="number"
+                            min="1"
+                            step="1"
+                            placeholder="1"
+                            value={item.quantity}
+                            onChange={(e) =>
+                              updateLineItem(item.id, "quantity", e.target.value)
+                            }
+                          />
+                          <Input
+                            className="w-28"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={item.unitPrice}
+                            onChange={(e) =>
+                              updateLineItem(item.id, "unitPrice", e.target.value)
+                            }
+                          />
+                          <div className="w-24 text-right text-sm text-muted-foreground">
+                            {formatCurrency(lineTotal)}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => removeLineItem(item.id)}
+                            type="button"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => removeLineItem(item.id)}
-                          type="button"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+
+                        <div className="space-y-3 sm:hidden">
+                          <div className="space-y-2">
+                            <Label className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Description</Label>
+                            <Textarea
+                              className="min-h-[88px] resize-none border-border/70"
+                              placeholder="Describe the quoted work"
+                              value={item.description}
+                              onChange={(e) =>
+                                updateLineItem(item.id, "description", e.target.value)
+                              }
+                              rows={3}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-2">
+                              <Label className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Qty</Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                step="1"
+                                placeholder="1"
+                                value={item.quantity}
+                                onChange={(e) =>
+                                  updateLineItem(item.id, "quantity", e.target.value)
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Unit price</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="0.00"
+                                value={item.unitPrice}
+                                onChange={(e) =>
+                                  updateLineItem(item.id, "unitPrice", e.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-3">
+                            <div>
+                              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Line total</p>
+                              <p className="text-sm font-medium text-foreground">{formatCurrency(lineTotal)}</p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => removeLineItem(item.id)}
+                              type="button"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
