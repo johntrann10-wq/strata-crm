@@ -476,6 +476,7 @@ export const api = {
     const r = resource("service-categories");
     return {
       ...r,
+      capabilities: () => request<{ supportsManagement?: boolean }>("/service-categories/capabilities"),
       update: (params: Record<string, unknown>) => {
         const id = params.id as string | undefined;
         if (!id) throw new Error("Service category update requires id");

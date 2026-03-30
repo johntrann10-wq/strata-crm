@@ -48,6 +48,21 @@ async function getTableColumns(tableName: string): Promise<Set<string>> {
   return new Set(rows.map((row) => row.column_name).filter((value): value is string => Boolean(value)));
 }
 
+async function supportsManagedServiceCategories(): Promise<boolean> {
+  const [categoryColumns, serviceColumns] = await Promise.all([
+    getTableColumns("service_categories"),
+    getTableColumns("services"),
+  ]);
+
+  return (
+    categoryColumns.has("id") &&
+    categoryColumns.has("business_id") &&
+    categoryColumns.has("name") &&
+    categoryColumns.has("sort_order") &&
+    serviceColumns.has("category_id")
+  );
+}
+
 const createSchema = z.object({
   name: z.string().trim().min(1),
 });
@@ -69,6 +84,15 @@ const deleteSchema = z
 const reorderSchema = z.object({
   orderedIds: z.array(z.string().uuid()).min(1),
 });
+
+serviceCategoriesRouter.get(
+  "/capabilities",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (_req: Request, res: Response) => {
+    res.json({ supportsManagement: await supportsManagedServiceCategories() });
+  })
+);
 
 serviceCategoriesRouter.get(
   "/",
@@ -164,36 +188,47 @@ serviceCategoriesRouter.post(
     const bid = businessId(req);
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+    if (!(await supportsManagedServiceCategories())) {
+      throw new BadRequestError("Service category management is not available until the latest database update is applied.");
+    }
 
     const normalizedName = parsed.data.name;
-    const existing = await db
-      .select({ id: serviceCategories.id })
-      .from(serviceCategories)
-      .where(and(eq(serviceCategories.businessId, bid), eq(serviceCategories.name, normalizedName)))
-      .limit(1);
-    if (existing[0]) throw new BadRequestError("A category with that name already exists.");
+    let created;
+    try {
+      const existing = await db
+        .select({ id: serviceCategories.id })
+        .from(serviceCategories)
+        .where(and(eq(serviceCategories.businessId, bid), eq(serviceCategories.name, normalizedName)))
+        .limit(1);
+      if (existing[0]) throw new BadRequestError("A category with that name already exists.");
 
-    const [last] = await db
-      .select({ sortOrder: serviceCategories.sortOrder })
-      .from(serviceCategories)
-      .where(eq(serviceCategories.businessId, bid))
-      .orderBy(desc(serviceCategories.sortOrder))
-      .limit(1);
-    const sortOrder = last ? Number(last.sortOrder ?? 0) + 1 : 0;
+      const [last] = await db
+        .select({ sortOrder: serviceCategories.sortOrder })
+        .from(serviceCategories)
+        .where(eq(serviceCategories.businessId, bid))
+        .orderBy(desc(serviceCategories.sortOrder))
+        .limit(1);
+      const sortOrder = last ? Number(last.sortOrder ?? 0) + 1 : 0;
 
-    const [created] = await db
-      .insert(serviceCategories)
-      .values({
-        id: randomUUID(),
-        businessId: bid,
-        name: normalizedName,
-        key: isLegacyServiceCategory(normalizedName.toLowerCase()) ? normalizedName.toLowerCase() : null,
-        sortOrder,
-        active: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
+      [created] = await db
+        .insert(serviceCategories)
+        .values({
+          id: randomUUID(),
+          businessId: bid,
+          name: normalizedName,
+          key: isLegacyServiceCategory(normalizedName.toLowerCase()) ? normalizedName.toLowerCase() : null,
+          sortOrder,
+          active: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+    } catch (error) {
+      if (isServiceCategorySchemaDriftError(error)) {
+        throw new BadRequestError("Service category management is not available until the latest database update is applied.");
+      }
+      throw error;
+    }
 
     res.status(201).json(created);
   })
@@ -207,40 +242,50 @@ serviceCategoriesRouter.patch(
     const bid = businessId(req);
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
-
-    const [existing] = await db
-      .select()
-      .from(serviceCategories)
-      .where(and(eq(serviceCategories.id, req.params.id), eq(serviceCategories.businessId, bid)))
-      .limit(1);
-    if (!existing) throw new NotFoundError("Service category not found.");
-
-    if (parsed.data.name && parsed.data.name !== existing.name) {
-      const [duplicate] = await db
-        .select({ id: serviceCategories.id })
-        .from(serviceCategories)
-        .where(and(eq(serviceCategories.businessId, bid), eq(serviceCategories.name, parsed.data.name)))
-        .limit(1);
-      if (duplicate && duplicate.id !== existing.id) {
-        throw new BadRequestError("A category with that name already exists.");
-      }
+    if (!(await supportsManagedServiceCategories())) {
+      throw new BadRequestError("Service category management is not available until the latest database update is applied.");
     }
 
-    const nextName = parsed.data.name ?? existing.name;
-    const nextKey = isLegacyServiceCategory(nextName.toLowerCase()) ? nextName.toLowerCase() : existing.key ?? null;
+    try {
+      const [existing] = await db
+        .select()
+        .from(serviceCategories)
+        .where(and(eq(serviceCategories.id, req.params.id), eq(serviceCategories.businessId, bid)))
+        .limit(1);
+      if (!existing) throw new NotFoundError("Service category not found.");
 
-    const [updated] = await db
-      .update(serviceCategories)
-      .set({
-        ...(parsed.data.name ? { name: parsed.data.name } : {}),
-        ...(parsed.data.active !== undefined ? { active: parsed.data.active } : {}),
-        key: nextKey,
-        updatedAt: new Date(),
-      })
-      .where(eq(serviceCategories.id, existing.id))
-      .returning();
+      if (parsed.data.name && parsed.data.name !== existing.name) {
+        const [duplicate] = await db
+          .select({ id: serviceCategories.id })
+          .from(serviceCategories)
+          .where(and(eq(serviceCategories.businessId, bid), eq(serviceCategories.name, parsed.data.name)))
+          .limit(1);
+        if (duplicate && duplicate.id !== existing.id) {
+          throw new BadRequestError("A category with that name already exists.");
+        }
+      }
 
-    res.json(updated);
+      const nextName = parsed.data.name ?? existing.name;
+      const nextKey = isLegacyServiceCategory(nextName.toLowerCase()) ? nextName.toLowerCase() : existing.key ?? null;
+
+      const [updated] = await db
+        .update(serviceCategories)
+        .set({
+          ...(parsed.data.name ? { name: parsed.data.name } : {}),
+          ...(parsed.data.active !== undefined ? { active: parsed.data.active } : {}),
+          key: nextKey,
+          updatedAt: new Date(),
+        })
+        .where(eq(serviceCategories.id, existing.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      if (isServiceCategorySchemaDriftError(error)) {
+        throw new BadRequestError("Service category management is not available until the latest database update is applied.");
+      }
+      throw error;
+    }
   })
 );
 
@@ -252,26 +297,36 @@ serviceCategoriesRouter.post(
     const bid = businessId(req);
     const parsed = reorderSchema.safeParse(req.body);
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
-
-    const existing = await db
-      .select({ id: serviceCategories.id })
-      .from(serviceCategories)
-      .where(and(eq(serviceCategories.businessId, bid), inArray(serviceCategories.id, parsed.data.orderedIds)));
-
-    if (existing.length !== parsed.data.orderedIds.length) {
-      throw new BadRequestError("Category reorder includes records outside this business.");
+    if (!(await supportsManagedServiceCategories())) {
+      throw new BadRequestError("Service category management is not available until the latest database update is applied.");
     }
 
-    await Promise.all(
-      parsed.data.orderedIds.map((id, index) =>
-        db
-          .update(serviceCategories)
-          .set({ sortOrder: index, updatedAt: new Date() })
-          .where(and(eq(serviceCategories.id, id), eq(serviceCategories.businessId, bid)))
-      )
-    );
+    try {
+      const existing = await db
+        .select({ id: serviceCategories.id })
+        .from(serviceCategories)
+        .where(and(eq(serviceCategories.businessId, bid), inArray(serviceCategories.id, parsed.data.orderedIds)));
 
-    res.json({ ok: true });
+      if (existing.length !== parsed.data.orderedIds.length) {
+        throw new BadRequestError("Category reorder includes records outside this business.");
+      }
+
+      await Promise.all(
+        parsed.data.orderedIds.map((id, index) =>
+          db
+            .update(serviceCategories)
+            .set({ sortOrder: index, updatedAt: new Date() })
+            .where(and(eq(serviceCategories.id, id), eq(serviceCategories.businessId, bid)))
+        )
+      );
+
+      res.json({ ok: true });
+    } catch (error) {
+      if (isServiceCategorySchemaDriftError(error)) {
+        throw new BadRequestError("Service category management is not available until the latest database update is applied.");
+      }
+      throw error;
+    }
   })
 );
 
@@ -283,54 +338,64 @@ serviceCategoriesRouter.delete(
     const bid = businessId(req);
     const parsed = deleteSchema.safeParse(req.body ?? {});
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
-
-    const [existing] = await db
-      .select()
-      .from(serviceCategories)
-      .where(and(eq(serviceCategories.id, req.params.id), eq(serviceCategories.businessId, bid)))
-      .limit(1);
-    if (!existing) throw new NotFoundError("Service category not found.");
-
-    const [usage] = await db
-      .select({ c: count() })
-      .from(services)
-      .where(and(eq(services.businessId, bid), eq(services.categoryId, existing.id)));
-    const serviceCount = Number(usage?.c ?? 0);
-
-    if (serviceCount > 0) {
-      if (parsed.data.moveToCategoryId) {
-        if (parsed.data.moveToCategoryId === existing.id) {
-          throw new BadRequestError("Choose a different category.");
-        }
-        const [target] = await db
-          .select({ id: serviceCategories.id, key: serviceCategories.key })
-          .from(serviceCategories)
-          .where(and(eq(serviceCategories.id, parsed.data.moveToCategoryId), eq(serviceCategories.businessId, bid)))
-          .limit(1);
-        if (!target) throw new BadRequestError("Target category not found.");
-        await db
-          .update(services)
-          .set({
-            categoryId: target.id,
-            category: target.key && isLegacyServiceCategory(target.key) ? target.key : "other",
-            updatedAt: new Date(),
-          })
-          .where(and(eq(services.businessId, bid), eq(services.categoryId, existing.id)));
-      } else if (parsed.data.moveToUncategorized) {
-        await db
-          .update(services)
-          .set({
-            categoryId: null,
-            category: "other",
-            updatedAt: new Date(),
-          })
-          .where(and(eq(services.businessId, bid), eq(services.categoryId, existing.id)));
-      } else {
-        throw new BadRequestError("Move linked services before deleting this category.");
-      }
+    if (!(await supportsManagedServiceCategories())) {
+      throw new BadRequestError("Service category management is not available until the latest database update is applied.");
     }
 
-    await db.delete(serviceCategories).where(eq(serviceCategories.id, existing.id));
-    res.status(204).end();
+    try {
+      const [existing] = await db
+        .select()
+        .from(serviceCategories)
+        .where(and(eq(serviceCategories.id, req.params.id), eq(serviceCategories.businessId, bid)))
+        .limit(1);
+      if (!existing) throw new NotFoundError("Service category not found.");
+
+      const [usage] = await db
+        .select({ c: count() })
+        .from(services)
+        .where(and(eq(services.businessId, bid), eq(services.categoryId, existing.id)));
+      const serviceCount = Number(usage?.c ?? 0);
+
+      if (serviceCount > 0) {
+        if (parsed.data.moveToCategoryId) {
+          if (parsed.data.moveToCategoryId === existing.id) {
+            throw new BadRequestError("Choose a different category.");
+          }
+          const [target] = await db
+            .select({ id: serviceCategories.id, key: serviceCategories.key })
+            .from(serviceCategories)
+            .where(and(eq(serviceCategories.id, parsed.data.moveToCategoryId), eq(serviceCategories.businessId, bid)))
+            .limit(1);
+          if (!target) throw new BadRequestError("Target category not found.");
+          await db
+            .update(services)
+            .set({
+              categoryId: target.id,
+              category: target.key && isLegacyServiceCategory(target.key) ? target.key : "other",
+              updatedAt: new Date(),
+            })
+            .where(and(eq(services.businessId, bid), eq(services.categoryId, existing.id)));
+        } else if (parsed.data.moveToUncategorized) {
+          await db
+            .update(services)
+            .set({
+              categoryId: null,
+              category: "other",
+              updatedAt: new Date(),
+            })
+            .where(and(eq(services.businessId, bid), eq(services.categoryId, existing.id)));
+        } else {
+          throw new BadRequestError("Move linked services before deleting this category.");
+        }
+      }
+
+      await db.delete(serviceCategories).where(eq(serviceCategories.id, existing.id));
+      res.status(204).end();
+    } catch (error) {
+      if (isServiceCategorySchemaDriftError(error)) {
+        throw new BadRequestError("Service category management is not available until the latest database update is applied.");
+      }
+      throw error;
+    }
   })
 );

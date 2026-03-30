@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router";
 import { useAction, useFindMany } from "../hooks/useApi";
 import { api } from "../api";
@@ -364,6 +364,7 @@ export default function ServicesPage() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [serviceTab, setServiceTab] = useState<"active" | "inactive">("active");
+  const [supportsCategoryManagement, setSupportsCategoryManagement] = useState(true);
 
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
   const [editCategory, setEditCategory] = useState<CategoryRecord | null>(null);
@@ -412,11 +413,32 @@ export default function ServicesPage() {
   const inactiveCategories = ((categoriesData ?? []) as CategoryRecord[]).filter((category) => category.active === false);
   const services = (servicesData ?? []) as ServiceRecord[];
   const addonLinks = (addonLinksData ?? []) as AddonLinkRecord[];
+  const managedCategories = supportsCategoryManagement ? categories : [];
+  const managedInactiveCategories = supportsCategoryManagement ? inactiveCategories : [];
 
-  const categoryById = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!businessId) {
+      setSupportsCategoryManagement(true);
+      return;
+    }
+    api.serviceCategory
+      .capabilities()
+      .then((result) => {
+        if (!cancelled) setSupportsCategoryManagement(result?.supportsManagement !== false);
+      })
+      .catch(() => {
+        if (!cancelled) setSupportsCategoryManagement(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [businessId]);
+
+  const categoryById = useMemo(() => new Map(managedCategories.map((category) => [category.id, category])), [managedCategories]);
   const categoryOptions = useMemo(
-    () => [{ value: UNCATEGORIZED_VALUE, label: "Uncategorized" }, ...categories.map((category) => ({ value: category.id, label: category.name }))],
-    [categories]
+    () => [{ value: UNCATEGORIZED_VALUE, label: "Uncategorized" }, ...managedCategories.map((category) => ({ value: category.id, label: category.name }))],
+    [managedCategories]
   );
 
   const normalizedSearch = search.trim().toLowerCase();
@@ -486,6 +508,7 @@ export default function ServicesPage() {
 
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supportsCategoryManagement) return toast.error("Service category management will work after the latest database update is applied.");
     if (!categoryName.trim()) return toast.error("Enter a category name.");
     const result = await runCreateCategory({ name: categoryName.trim() });
     if (result.error) return toast.error(result.error.message);
@@ -497,6 +520,7 @@ export default function ServicesPage() {
 
   const handleUpdateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supportsCategoryManagement) return toast.error("Service category management will work after the latest database update is applied.");
     if (!editCategory || !categoryName.trim()) return toast.error("Enter a category name.");
     const result = await runUpdateCategory({ id: editCategory.id, name: categoryName.trim() });
     if (result.error) return toast.error(result.error.message);
@@ -508,6 +532,7 @@ export default function ServicesPage() {
   };
 
   const handleArchiveCategory = async (category: CategoryRecord, active: boolean) => {
+    if (!supportsCategoryManagement) return toast.error("Service category management will work after the latest database update is applied.");
     const result = await runUpdateCategory({ id: category.id, active });
     if (result.error) return toast.error(result.error.message);
     toast.success(active ? "Category restored." : "Category archived.");
@@ -515,6 +540,7 @@ export default function ServicesPage() {
   };
 
   const moveCategory = async (categoryId: string, direction: -1 | 1) => {
+    if (!supportsCategoryManagement) return toast.error("Service category management will work after the latest database update is applied.");
     const index = categories.findIndex((category) => category.id === categoryId);
     const nextIndex = index + direction;
     if (index < 0 || nextIndex < 0 || nextIndex >= categories.length) return;
@@ -526,6 +552,7 @@ export default function ServicesPage() {
   };
 
   const handleDeleteCategory = async () => {
+    if (!supportsCategoryManagement) return toast.error("Service category management will work after the latest database update is applied.");
     if (!deleteCategory) return;
     const payload =
       moveDeleteServicesTo === UNCATEGORIZED_VALUE
@@ -642,7 +669,7 @@ export default function ServicesPage() {
         title="Services"
         right={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setCreateCategoryOpen(true)}>
+            <Button variant="outline" onClick={() => setCreateCategoryOpen(true)} disabled={!supportsCategoryManagement}>
               <FolderKanban className="mr-2 h-4 w-4" />
               Add Category
             </Button>
@@ -748,14 +775,20 @@ export default function ServicesPage() {
               <CardTitle>Category management</CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">Create, reorder, archive, and clean up the catalog structure your team actually uses.</p>
             </div>
-            <Badge variant="outline">{categories.length} active</Badge>
+            <Badge variant="outline">{managedCategories.length} active</Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {categories.length === 0 ? (
+          {!supportsCategoryManagement ? (
+            <EmptyState
+              icon={FolderKanban}
+              title="Category management unavailable"
+              description="This workspace is still on the older service schema. Services still load and book normally, but creating or editing categories needs the latest database update."
+            />
+          ) : managedCategories.length === 0 ? (
             <EmptyState icon={FolderKanban} title="No categories yet" description="Create the first category, then add services under it." />
           ) : (
-            categories.map((category, index) => (
+            managedCategories.map((category, index) => (
               <div key={category.id} className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex items-center gap-2">
@@ -789,11 +822,11 @@ export default function ServicesPage() {
             ))
           )}
 
-          {inactiveCategories.length > 0 ? (
+          {managedInactiveCategories.length > 0 ? (
             <div className="rounded-xl border border-dashed p-4">
               <p className="text-sm font-medium">Archived categories</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {inactiveCategories.map((category) => (
+                {managedInactiveCategories.map((category) => (
                   <Button key={category.id} variant="outline" size="sm" onClick={() => void handleArchiveCategory(category, true)}>
                     Restore {category.name}
                   </Button>
@@ -851,7 +884,7 @@ export default function ServicesPage() {
                 <SelectTrigger id="move-category"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={UNCATEGORIZED_VALUE}>Uncategorized</SelectItem>
-                  {categories.filter((category) => category.id !== deleteCategory?.id).map((category) => (
+                  {managedCategories.filter((category) => category.id !== deleteCategory?.id).map((category) => (
                     <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
                   ))}
                 </SelectContent>
