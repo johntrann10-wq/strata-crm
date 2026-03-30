@@ -31,7 +31,7 @@ type ClientPick = {
   lastName?: string | null;
   phone?: string | null;
 };
-type ServicePick = { id: string; name?: string; price?: number | string | null; durationMinutes?: number | null; category?: string | null; categoryLabel?: string | null };
+type ServicePick = { id: string; name?: string; price?: number | string | null; durationMinutes?: number | null; category?: string | null; categoryId?: string | null; categoryLabel?: string | null };
 type VehiclePick = { id: string; year?: number | null; make?: string | null; model?: string | null };
 
 const toMoneyNumber = (value: unknown): number => {
@@ -129,7 +129,7 @@ export function QuickBookSheet({
       businessId: { equals: businessId ?? "" },
       active: { equals: true },
     },
-    select: { id: true, name: true, price: true, durationMinutes: true, category: true, categoryLabel: true },
+    select: { id: true, name: true, price: true, durationMinutes: true, category: true, categoryId: true, categoryLabel: true },
     sort: { category: "Ascending" },
     first: 250,
     pause: !businessId || !open,
@@ -176,16 +176,17 @@ export function QuickBookSheet({
     );
   });
   const normalizedServiceSearch = serviceSearch.trim().toLowerCase();
-  const groupedServices = serviceList.reduce<Record<string, ServicePick[]>>((acc, service) => {
+  const groupedServices = serviceList.reduce<Record<string, { title: string; services: ServicePick[] }>>((acc, service) => {
     const haystack = [service.name, service.categoryLabel ?? formatServiceCategory(service.category)].filter(Boolean).join(" ").toLowerCase();
     if (normalizedServiceSearch && !haystack.includes(normalizedServiceSearch)) return acc;
-    const key = service.category ?? "other";
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(service);
+    const title = service.categoryLabel ?? formatServiceCategory(service.category);
+    const key = service.categoryId ? `category:${service.categoryId}` : `legacy:${title.toLowerCase()}`;
+    if (!acc[key]) acc[key] = { title, services: [] };
+    acc[key].services.push(service);
     return acc;
   }, {});
-  const sortedServiceGroups = Object.entries(groupedServices).sort(([left], [right]) =>
-    formatServiceCategory(left).localeCompare(formatServiceCategory(right))
+  const sortedServiceGroups = Object.entries(groupedServices).sort(([, left], [, right]) =>
+    left.title.localeCompare(right.title)
   );
   const selectedClient = clientList.find((client) => client.id === selectedClientId) ?? null;
   const selectedVehicle = vehicleList.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
@@ -410,14 +411,15 @@ export function QuickBookSheet({
                 {sortedServiceGroups.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No services match this search.</p>
                 ) : (
-                  <Accordion type="multiple" defaultValue={sortedServiceGroups.slice(0, 2).map(([category]) => category)} className="rounded-md border">
-                    {sortedServiceGroups.map(([category, entries]) => {
+                  <Accordion type="multiple" defaultValue={sortedServiceGroups.slice(0, 2).map(([groupKey]) => groupKey)} className="rounded-md border">
+                    {sortedServiceGroups.map(([groupKey, group]) => {
+                      const entries = group.services;
                       const selectedCount = entries.filter((service) => selectedServiceIds.includes(service.id)).length;
                       return (
-                        <AccordionItem key={category} value={category} className="px-3">
+                        <AccordionItem key={groupKey} value={groupKey} className="px-3">
                           <AccordionTrigger className="py-3 hover:no-underline">
                             <div className="min-w-0 text-left">
-                              <p className="text-sm font-medium">{group[0]?.categoryLabel ?? formatServiceCategory(category)}</p>
+                              <p className="text-sm font-medium">{group.title}</p>
                               <p className="text-xs text-muted-foreground">
                                 {entries.length} option{entries.length === 1 ? "" : "s"}
                                 {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}

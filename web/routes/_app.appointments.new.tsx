@@ -661,32 +661,33 @@ export default function NewAppointmentPage() {
         .includes(normalizedServiceSearch || "")
   );
   const groupedServices = useMemo(() => {
-    const groups = new Map<string, typeof services>();
+    const groups = new Map<string, { title: string; categoryKey: string; services: typeof services }>();
     for (const service of services) {
       const haystack = [service.name, service.notes, service.categoryLabel ?? formatServiceCategory(service.category)]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       if (normalizedServiceSearch && !haystack.includes(normalizedServiceSearch)) continue;
-      const key = String(service.category ?? "other");
+      const categoryKey = String(service.category ?? "other");
+      const title = service.categoryLabel ?? formatServiceCategory(service.category);
+      const key = service.categoryId ? `category:${service.categoryId}` : `legacy:${title.toLowerCase()}`;
       const existing = groups.get(key);
-      if (existing) existing.push(service);
-      else groups.set(key, [service]);
+      if (existing) existing.services.push(service);
+      else groups.set(key, { title, categoryKey, services: [service] });
     }
     return Array.from(groups.entries())
-      .sort(([left], [right]) => {
-        const leftRecommended = creationPreset.recommendedCategories.includes(left);
-        const rightRecommended = creationPreset.recommendedCategories.includes(right);
+      .sort(([, left], [, right]) => {
+        const leftRecommended = creationPreset.recommendedCategories.includes(left.categoryKey);
+        const rightRecommended = creationPreset.recommendedCategories.includes(right.categoryKey);
         if (leftRecommended !== rightRecommended) return leftRecommended ? -1 : 1;
-        return formatServiceCategory(left).localeCompare(formatServiceCategory(right));
+        return left.title.localeCompare(right.title);
       })
-      .map(([category, entries]) => ({
-        category,
-        title:
-          entries[0]?.categoryLabel ??
-          formatServiceCategory(category),
-        recommended: creationPreset.recommendedCategories.includes(category),
-        services: entries.sort((a, b) => a.name.localeCompare(b.name)),
+      .map(([groupKey, group]) => ({
+        category: groupKey,
+        categoryKey: group.categoryKey,
+        title: group.title,
+        recommended: creationPreset.recommendedCategories.includes(group.categoryKey),
+        services: group.services.sort((a, b) => a.name.localeCompare(b.name)),
       }));
   }, [creationPreset.recommendedCategories, normalizedServiceSearch, services]);
   const directServiceSearchResults = useMemo(() => {
@@ -724,7 +725,11 @@ export default function NewAppointmentPage() {
       new Set(
         services
           .filter((service) => selectedServiceIds.includes(service.id))
-          .map((service) => String(service.category ?? "other"))
+          .map((service) =>
+            service.categoryId
+              ? `category:${service.categoryId}`
+              : `legacy:${String(service.categoryLabel ?? formatServiceCategory(service.category)).toLowerCase()}`
+          )
       )
     );
 
