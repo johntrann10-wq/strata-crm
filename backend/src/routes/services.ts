@@ -90,11 +90,21 @@ function decodeLegacyServiceFields(notes: string | null | undefined): { notes: s
 }
 
 async function getServiceColumns(): Promise<Set<string>> {
-  const result = await db.execute(`
+  const result = await db.execute(sql`
     select column_name
     from information_schema.columns
     where table_schema = 'public' and table_name = 'services'
-  ` as any);
+  `);
+  const rows = (result as { rows?: Array<{ column_name?: string }> }).rows ?? [];
+  return new Set(rows.map((row) => row.column_name).filter((value): value is string => Boolean(value)));
+}
+
+async function getCategoryColumns(): Promise<Set<string>> {
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'service_categories'
+  `);
   const rows = (result as { rows?: Array<{ column_name?: string }> }).rows ?? [];
   return new Set(rows.map((row) => row.column_name).filter((value): value is string => Boolean(value)));
 }
@@ -104,15 +114,19 @@ function buildLegacyServiceSelectColumns(columns: Set<string>): string {
     `s."id" as "id"`,
     `s."business_id" as "businessId"`,
     `s."name" as "name"`,
-    columns.has("notes") ? `s."notes" as "notes"` : `null::text as "notes"`,
+    columns.has("notes")
+      ? `s."notes" as "notes"`
+      : columns.has("description")
+        ? `s."description" as "notes"`
+        : `null::text as "notes"`,
     `s."price" as "price"`,
     columns.has("duration_minutes")
       ? `s."duration_minutes" as "durationMinutes"`
       : `null::integer as "durationMinutes"`,
     columns.has("category") ? `s."category" as "category"` : `null::text as "category"`,
-    `null::uuid as "categoryId"`,
-    `null::text as "categoryName"`,
-    `null::integer as "categorySortOrder"`,
+    columns.has("category_id") ? `s."category_id" as "categoryId"` : `null::uuid as "categoryId"`,
+    `c."name" as "categoryName"`,
+    `c."sort_order" as "categorySortOrder"`,
     columns.has("sort_order") ? `s."sort_order" as "sortOrder"` : `0::integer as "sortOrder"`,
     columns.has("taxable") ? `s."taxable" as "taxable"` : `true as "taxable"`,
     columns.has("is_addon") ? `s."is_addon" as "isAddon"` : `false as "isAddon"`,
@@ -131,21 +145,31 @@ async function listLegacyCompatibleServices(
   first = 100
 ): Promise<ServiceRow[]> {
   const selectColumns = buildLegacyServiceSelectColumns(columns);
+  const categoryColumns = await getCategoryColumns();
+  const hasCategoryJoin =
+    columns.has("category_id") &&
+    categoryColumns.has("id") &&
+    categoryColumns.has("name") &&
+    categoryColumns.has("sort_order");
   const trailingOrder = sql.raw(columns.has("created_at") ? `s."created_at" desc` : `s."id" desc`);
+  const categoryOrder = sql.raw(hasCategoryJoin ? `coalesce(c."sort_order", 9999) asc` : `9999 asc`);
+  const serviceOrder = sql.raw(columns.has("sort_order") ? `coalesce(s."sort_order", 0) asc` : `0 asc`);
   const result =
     typeof activeFilter === "boolean" && columns.has("active")
       ? await db.execute(sql`
           select ${sql.raw(selectColumns)}
           from "services" s
+          ${hasCategoryJoin ? sql.raw(`left join "service_categories" c on c."id" = s."category_id"`) : sql.raw(`left join (select null::uuid as "id", null::text as "name", null::integer as "sort_order") c on false`)}
           where s."business_id" = ${bid} and s."active" = ${activeFilter}
-          order by s."name" asc, ${trailingOrder}
+          order by ${categoryOrder}, ${serviceOrder}, s."name" asc, ${trailingOrder}
           limit ${first}
         `)
       : await db.execute(sql`
           select ${sql.raw(selectColumns)}
           from "services" s
+          ${hasCategoryJoin ? sql.raw(`left join "service_categories" c on c."id" = s."category_id"`) : sql.raw(`left join (select null::uuid as "id", null::text as "name", null::integer as "sort_order") c on false`)}
           where s."business_id" = ${bid}
-          order by s."name" asc, ${trailingOrder}
+          order by ${categoryOrder}, ${serviceOrder}, s."name" asc, ${trailingOrder}
           limit ${first}
         `);
 
@@ -155,9 +179,16 @@ async function listLegacyCompatibleServices(
 
 async function getLegacyCompatibleService(id: string, bid: string, columns: Set<string>): Promise<ServiceRow | null> {
   const selectColumns = buildLegacyServiceSelectColumns(columns);
+  const categoryColumns = await getCategoryColumns();
+  const hasCategoryJoin =
+    columns.has("category_id") &&
+    categoryColumns.has("id") &&
+    categoryColumns.has("name") &&
+    categoryColumns.has("sort_order");
   const result = await db.execute(sql`
     select ${sql.raw(selectColumns)}
     from "services" s
+    ${hasCategoryJoin ? sql.raw(`left join "service_categories" c on c."id" = s."category_id"`) : sql.raw(`left join (select null::uuid as "id", null::text as "name", null::integer as "sort_order") c on false`)}
     where s."id" = ${id} and s."business_id" = ${bid}
     limit 1
   `);
@@ -261,6 +292,52 @@ async function insertLegacyServiceRecord(
   )}) values (${sql.join(insertValues.map((value) => sql`${value}`), sql`, `)}) returning "id"`);
   const rows = (result as { rows?: Array<{ id?: string }> }).rows ?? [];
   return rows[0]?.id ?? null;
+}
+
+async function updateLegacyServiceRecord(
+  bid: string,
+  serviceId: string,
+  body: z.infer<typeof patchSchema>,
+  existing: ServiceRow,
+  resolvedCategory: { categoryId: string | null; legacyCategory: LegacyServiceCategory }
+): Promise<void> {
+  const columns = await getServiceColumns();
+  const updates: Array<{ column: string; value: unknown }> = [];
+
+  if (body.name !== undefined) updates.push({ column: "name", value: body.name });
+  if (body.price !== undefined) updates.push({ column: "price", value: String(body.price) });
+  if (body.durationMinutes !== undefined && columns.has("duration_minutes")) {
+    updates.push({ column: "duration_minutes", value: body.durationMinutes });
+  }
+  if ((body.category !== undefined || body.categoryId !== undefined) && columns.has("category")) {
+    updates.push({ column: "category", value: resolvedCategory.legacyCategory });
+  }
+  if ((body.category !== undefined || body.categoryId !== undefined) && columns.has("category_id")) {
+    updates.push({ column: "category_id", value: resolvedCategory.categoryId });
+  }
+  if (body.sortOrder !== undefined && columns.has("sort_order")) {
+    updates.push({ column: "sort_order", value: body.sortOrder });
+  }
+  if (body.notes !== undefined || body.category !== undefined || body.categoryId !== undefined) {
+    const encodedNotes = encodeLegacyServiceNotes(
+      body.notes !== undefined ? body.notes : existing.notes,
+      resolvedCategory.legacyCategory
+    );
+    if (columns.has("notes")) updates.push({ column: "notes", value: encodedNotes });
+    else if (columns.has("description")) updates.push({ column: "description", value: encodedNotes });
+  }
+  if (body.taxable !== undefined && columns.has("taxable")) updates.push({ column: "taxable", value: body.taxable });
+  if (body.isAddon !== undefined && columns.has("is_addon")) updates.push({ column: "is_addon", value: body.isAddon });
+  if (body.active !== undefined && columns.has("active")) updates.push({ column: "active", value: body.active });
+  if (columns.has("updated_at")) updates.push({ column: "updated_at", value: new Date() });
+
+  if (updates.length === 0) return;
+
+  await db.execute(sql`
+    update "services"
+    set ${sql.join(updates.map(({ column, value }) => sql`${sql.raw(`"${column}"`)} = ${value}`), sql`, `)}
+    where "id" = ${serviceId} and "business_id" = ${bid}
+  `);
 }
 
 function normalizeServiceRecord(row: {
@@ -565,22 +642,7 @@ servicesRouter.patch(
         .where(eq(services.id, req.params.id));
     } catch (error) {
       if (!isServiceSchemaDriftError(error)) throw error;
-      await db
-        .update(services)
-        .set({
-          ...(body.name != null ? { name: body.name } : {}),
-          ...(body.price != null ? { price: String(body.price) } : {}),
-          ...(body.notes !== undefined || body.category !== undefined || body.categoryId !== undefined
-            ? {
-                notes: encodeLegacyServiceNotes(
-                  body.notes !== undefined ? body.notes : existing.notes,
-                  resolvedCategory.legacyCategory
-                ),
-              }
-            : {}),
-          updatedAt: new Date(),
-        })
-        .where(eq(services.id, req.params.id));
+      await updateLegacyServiceRecord(bid, req.params.id, body, existing, resolvedCategory);
     }
 
     const updated = await getServiceForBusiness(req.params.id, bid);
@@ -606,14 +668,32 @@ servicesRouter.post(
       throw new BadRequestError("Service reorder includes records outside this business.");
     }
 
-    await Promise.all(
-      parsed.data.orderedIds.map((id, index) =>
-        db
-          .update(services)
-          .set({ sortOrder: index, updatedAt: new Date() })
-          .where(and(eq(services.id, id), eq(services.businessId, bid)))
-      )
-    );
+    try {
+      await Promise.all(
+        parsed.data.orderedIds.map((id, index) =>
+          db
+            .update(services)
+            .set({ sortOrder: index, updatedAt: new Date() })
+            .where(and(eq(services.id, id), eq(services.businessId, bid)))
+        )
+      );
+    } catch (error) {
+      if (!isServiceSchemaDriftError(error)) throw error;
+      const columns = await getServiceColumns();
+      if (!columns.has("sort_order")) {
+        throw new BadRequestError("Service ordering is not available until the latest database update is applied.");
+      }
+      await Promise.all(
+        parsed.data.orderedIds.map((id, index) =>
+          db.execute(sql`
+            update "services"
+            set "sort_order" = ${index}
+            ${columns.has("updated_at") ? sql`, "updated_at" = ${new Date()}` : sql``}
+            where "id" = ${id} and "business_id" = ${bid}
+          `)
+        )
+      );
+    }
 
     res.json({ ok: true });
   })
@@ -625,11 +705,7 @@ servicesRouter.delete(
   requireTenant,
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
-    const [existing] = await db
-      .select()
-      .from(services)
-      .where(and(eq(services.id, req.params.id), eq(services.businessId, bid)))
-      .limit(1);
+    const existing = await getServiceForBusiness(req.params.id, bid);
     if (!existing) throw new NotFoundError("Service not found.");
 
     const [usage] = await db

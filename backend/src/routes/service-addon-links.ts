@@ -85,12 +85,12 @@ serviceAddonLinksRouter.post("/", requireAuth, requireTenant, async (req: Reques
   }
 
   const [parent] = await db
-    .select()
+    .select({ id: services.id })
     .from(services)
     .where(and(eq(services.id, parentServiceId), eq(services.businessId, bid)))
     .limit(1);
   const [addon] = await db
-    .select()
+    .select({ id: services.id })
     .from(services)
     .where(and(eq(services.id, addonServiceId), eq(services.businessId, bid)))
     .limit(1);

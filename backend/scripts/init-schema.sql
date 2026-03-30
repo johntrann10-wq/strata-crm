@@ -25,6 +25,10 @@ DO $$ BEGIN
   CREATE TYPE payment_method AS ENUM ('cash', 'card', 'check', 'venmo', 'cashapp', 'zelle', 'other');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+DO $$ BEGIN
+  CREATE TYPE service_category AS ENUM ('detail', 'tint', 'ppf', 'mechanical', 'tire', 'body', 'other');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Tables
 CREATE TABLE IF NOT EXISTS users (
@@ -155,6 +159,30 @@ CREATE TABLE IF NOT EXISTS services (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'services'
+      AND column_name = 'description'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'services'
+      AND column_name = 'notes'
+  ) THEN
+    ALTER TABLE services RENAME COLUMN description TO notes;
+  END IF;
+END $$;
+
+ALTER TABLE services ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS category service_category DEFAULT 'other';
+ALTER TABLE services ADD COLUMN IF NOT EXISTS taxable boolean DEFAULT true;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS is_addon boolean DEFAULT false;
+
 CREATE TABLE IF NOT EXISTS service_categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
@@ -170,6 +198,18 @@ CREATE TABLE IF NOT EXISTS service_categories (
 
 ALTER TABLE services ADD COLUMN IF NOT EXISTS category_id uuid REFERENCES service_categories(id) ON DELETE SET NULL;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS sort_order integer NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS service_addon_links (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid NOT NULL REFERENCES businesses(id),
+  parent_service_id uuid NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  addon_service_id uuid NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS service_addon_links_parent_addon
+  ON service_addon_links (parent_service_id, addon_service_id);
 
 CREATE TABLE IF NOT EXISTS appointments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
