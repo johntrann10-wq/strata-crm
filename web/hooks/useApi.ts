@@ -118,8 +118,9 @@ export function useFindOne(
         detail: `findOne failed for id ${id}`,
       });
     } finally {
-      if (!mountedRef.current || requestId !== requestIdRef.current) return;
-      setFetching(false);
+      if (mountedRef.current && requestId === requestIdRef.current) {
+        setFetching(false);
+      }
     }
   }, [id, model, stableOpts]);
 
@@ -227,8 +228,9 @@ export function useFindMany(
         detail: "findMany failed for a resource query",
       });
     } finally {
-      if (!mountedRef.current || requestId !== requestIdRef.current) return;
-      setFetching(false);
+      if (mountedRef.current && requestId === requestIdRef.current) {
+        setFetching(false);
+      }
     }
   }, [model, stableOpts]);
 
@@ -338,8 +340,9 @@ export function useFindFirst(
         detail: "findFirst failed for a resource query",
       });
     } finally {
-      if (!mountedRef.current || requestId !== requestIdRef.current) return;
-      setFetching(false);
+      if (mountedRef.current && requestId === requestIdRef.current) {
+        setFetching(false);
+      }
     }
   }, [model, stableOpts]);
 

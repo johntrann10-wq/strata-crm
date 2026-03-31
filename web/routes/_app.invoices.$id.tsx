@@ -352,8 +352,8 @@ export default function InvoiceDetailPage() {
 
   const paymentsList = normalizePayments(invoice as Record<string, unknown>);
   const lineItemsList = normalizeLineItems(invoice as Record<string, unknown>);
-  const totalPaid = paymentsList.reduce((sum, p) => sum + (p.reversedAt ? 0 : Number(p.amount) ?? 0), 0);
-  const remainingBalance = (Number((invoice as Record<string, unknown>)?.total) ?? 0) - totalPaid;
+  const totalPaid = paymentsList.reduce((sum, p) => sum + (p.reversedAt ? 0 : Number(p.amount || 0)), 0);
+  const remainingBalance = Number((invoice as Record<string, unknown>)?.total || 0) - totalPaid;
 
   const handleOpenPaymentDialog = () => {
     setPaymentAmount(remainingBalance > 0 ? remainingBalance.toFixed(2) : "0.00");

@@ -80,7 +80,6 @@ async function getQuoteColumns(): Promise<Set<string>> {
 }
 
 async function insertLegacyQuote(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   executor: any,
   bid: string,
   data: {

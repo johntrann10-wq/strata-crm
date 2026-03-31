@@ -213,7 +213,6 @@ async function ensureActiveService(page: Page): Promise<{ ok: true; name: string
     }
   });
 
-  // eslint-disable-next-line no-console
   console.log("ensureActiveService", result);
   if (!result?.ok) {
     if (result?.status === 503 || /failed to fetch/i.test(String(result?.reason ?? ""))) {
@@ -272,16 +271,13 @@ test.describe("Live business workflow smoke", () => {
       } catch {
         body = "<unreadable>";
       }
-      // eslint-disable-next-line no-console
       console.log("API failure", response.status(), response.url(), body);
     });
     page.on("pageerror", (error) => {
-      // eslint-disable-next-line no-console
       console.log("page error", error.message);
     });
     page.on("console", (msg) => {
       if (msg.type() === "error" || msg.type() === "warning") {
-        // eslint-disable-next-line no-console
         console.log("browser console", msg.type(), msg.text());
       }
     });
@@ -341,7 +337,6 @@ test.describe("Live business workflow smoke", () => {
       const createResponse = await createResponsePromise;
       const vehiclePayload = await createResponse.json().catch(() => ({}));
       notes.push(`vehicle create: http_${createResponse.status()} id_${vehiclePayload?.id ?? "missing"}`);
-      // eslint-disable-next-line no-console
       console.log("vehicle create response", createResponse.status(), vehiclePayload, page.url());
       await waitForPathname(page, /^\/appointments\/new$/);
       const url = new URL(page.url());
@@ -487,7 +482,6 @@ test.describe("Live business workflow smoke", () => {
       await expect(page).toHaveURL(/\/sign-in/);
     });
 
-    // eslint-disable-next-line no-console
     console.log(
       JSON.stringify(
         {

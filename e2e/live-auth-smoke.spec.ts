@@ -23,9 +23,7 @@ async function completeOnboardingIfNeeded(page: import("@playwright/test").Page)
     await page.locator("#name").fill("Live Smoke Tire Shop");
     await page.getByRole("button", { name: /launch|finish setup/i }).click();
     await page.waitForTimeout(3000);
-    // eslint-disable-next-line no-console
     console.log("post-onboarding url:", page.url());
-    // eslint-disable-next-line no-console
     console.log(
       "post-onboarding auth:",
     await page.evaluate(() => ({
@@ -81,17 +79,14 @@ async function completeOnboardingIfNeeded(page: import("@playwright/test").Page)
       } catch {
         body = "<unreadable>";
       }
-      // eslint-disable-next-line no-console
       console.log("API failure", response.status(), response.url(), body);
     });
     page.on("requestfailed", (request) => {
       if (!request.url().includes("/api/")) return;
-      // eslint-disable-next-line no-console
       console.log("API request failed", request.method(), request.url(), request.failure()?.errorText);
     });
     page.on("console", (message) => {
       if (message.type() === "error" || /failed|cors|fetch/i.test(message.text())) {
-        // eslint-disable-next-line no-console
         console.log("browser console", message.type(), message.text());
       }
     });

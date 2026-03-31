@@ -8,7 +8,6 @@ const redirectUri = apiBase ? `${apiBase}/api/auth/google/callback` : "";
 if (!clientId || !clientSecret) {
   // We don't throw here to avoid crashing startup if Google isn't configured;
   // routes will guard on the client existing.
-  // eslint-disable-next-line no-console
   console.warn(
     "[googleAuth] GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / API_BASE not fully configured; Google OAuth disabled."
   );

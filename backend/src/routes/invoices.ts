@@ -194,7 +194,6 @@ async function getBusinessColumns(): Promise<Set<string>> {
 }
 
 async function getNextInvoiceNumberWithFallback(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   executor: any,
   bid: string
 ) {
@@ -218,7 +217,6 @@ async function getNextInvoiceNumberWithFallback(
 }
 
 async function getHighestExistingInvoiceNumber(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   executor: any,
   bid: string
 ): Promise<number | null> {
@@ -251,7 +249,6 @@ async function getInvoiceLineItemColumns(): Promise<Set<string>> {
 }
 
 async function insertLegacyInvoiceLineItem(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   executor: any,
   data: {
     invoiceId: string;
@@ -278,7 +275,6 @@ async function insertLegacyInvoiceLineItem(
 }
 
 async function insertLegacyInvoice(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   executor: any,
   bid: string,
   invoiceId: string,
@@ -1017,7 +1013,6 @@ invoicesRouter.post(
       : null;
 
   async function createInvoiceWithExecutor(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       executor: any
     ) {
     const b = await getNextInvoiceNumberWithFallback(executor, bid);

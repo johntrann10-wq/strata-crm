@@ -12,7 +12,6 @@ import {
 import { BadRequestError } from "./errors.js";
 
 /** Drizzle `db` or transaction client — same query surface. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbLike = any;
 
 function money(n: number): string {
