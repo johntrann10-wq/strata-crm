@@ -419,6 +419,36 @@ async function listActiveInvoicePayments(invoiceId: string) {
 }
 
 async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and>, orderByClause: ReturnType<typeof desc>, first: number, bid: string) {
+  const paymentTotals = db
+    .select({
+      invoiceId: payments.invoiceId,
+      totalPaid: sql<string>`coalesce(sum(case when ${payments.reversedAt} is null then ${payments.amount} else 0 end), 0)`,
+      lastPaidAt: sql<Date | null>`max(case when ${payments.reversedAt} is null then ${payments.paidAt} else null end)`,
+    })
+    .from(payments)
+    .groupBy(payments.invoiceId)
+    .as("payment_totals");
+
+  const paymentTotalsLegacy = db
+    .select({
+      invoiceId: payments.invoiceId,
+      totalPaid: sql<string>`coalesce(sum(${payments.amount}), 0)`,
+      lastPaidAt: sql<Date | null>`max(${payments.paidAt})`,
+    })
+    .from(payments)
+    .groupBy(payments.invoiceId)
+    .as("payment_totals_legacy");
+
+  const invoiceActivity = db
+    .select({
+      entityId: activityLogs.entityId,
+      lastSentAt: sql<Date | null>`max(case when ${activityLogs.action} = 'invoice.sent' then ${activityLogs.createdAt} else null end)`,
+    })
+    .from(activityLogs)
+    .where(and(eq(activityLogs.businessId, bid), eq(activityLogs.entityType, "invoice")))
+    .groupBy(activityLogs.entityId)
+    .as("invoice_activity");
+
   try {
     return await db
       .select({
@@ -444,23 +474,16 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
-        totalPaid: sql<string>`coalesce(sum(case when ${payments.reversedAt} is null then ${payments.amount} else 0 end), 0)`,
-        lastPaidAt: sql<Date | null>`max(case when ${payments.reversedAt} is null then ${payments.paidAt} else null end)`,
-        lastSentAt: sql<Date | null>`max(case when ${activityLogs.action} = 'invoice.sent' then ${activityLogs.createdAt} else null end)`,
+        totalPaid: sql<string>`coalesce(${paymentTotals.totalPaid}, 0)`,
+        lastPaidAt: paymentTotals.lastPaidAt,
+        lastSentAt: invoiceActivity.lastSentAt,
       })
       .from(invoices)
       .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
       .leftJoin(appointments, eq(invoices.appointmentId, appointments.id))
       .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
-      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
-      .leftJoin(
-        activityLogs,
-        and(
-          eq(activityLogs.businessId, bid),
-          eq(activityLogs.entityType, "invoice"),
-          eq(activityLogs.entityId, invoices.id)
-        )
-      )
+      .leftJoin(paymentTotals, eq(paymentTotals.invoiceId, invoices.id))
+      .leftJoin(invoiceActivity, eq(invoiceActivity.entityId, invoices.id))
       .where(whereClause)
       .groupBy(
         invoices.id,
@@ -484,7 +507,10 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
         appointments.startTime,
         vehicles.year,
         vehicles.make,
-        vehicles.model
+        vehicles.model,
+        paymentTotals.totalPaid,
+        paymentTotals.lastPaidAt,
+        invoiceActivity.lastSentAt
       )
       .orderBy(orderByClause)
       .limit(first);
@@ -515,23 +541,16 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
-        totalPaid: sql<string>`coalesce(sum(${payments.amount}), 0)`,
-        lastPaidAt: sql<Date | null>`max(${payments.paidAt})`,
-        lastSentAt: sql<Date | null>`max(case when ${activityLogs.action} = 'invoice.sent' then ${activityLogs.createdAt} else null end)`,
+        totalPaid: sql<string>`coalesce(${paymentTotalsLegacy.totalPaid}, 0)`,
+        lastPaidAt: paymentTotalsLegacy.lastPaidAt,
+        lastSentAt: invoiceActivity.lastSentAt,
       })
       .from(invoices)
       .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
       .leftJoin(appointments, eq(invoices.appointmentId, appointments.id))
       .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
-      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
-      .leftJoin(
-        activityLogs,
-        and(
-          eq(activityLogs.businessId, bid),
-          eq(activityLogs.entityType, "invoice"),
-          eq(activityLogs.entityId, invoices.id)
-        )
-      )
+      .leftJoin(paymentTotalsLegacy, eq(paymentTotalsLegacy.invoiceId, invoices.id))
+      .leftJoin(invoiceActivity, eq(invoiceActivity.entityId, invoices.id))
       .where(whereClause)
       .groupBy(
         invoices.id,
@@ -555,7 +574,10 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
         appointments.startTime,
         vehicles.year,
         vehicles.make,
-        vehicles.model
+        vehicles.model,
+        paymentTotalsLegacy.totalPaid,
+        paymentTotalsLegacy.lastPaidAt,
+        invoiceActivity.lastSentAt
       )
       .orderBy(orderByClause)
       .limit(first);
