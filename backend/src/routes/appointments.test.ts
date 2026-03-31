@@ -35,6 +35,13 @@ describe("appointments route logic", () => {
       z.string().trim().max(120).optional()
     ),
   });
+  const recordDepositPaymentSchema = z.object({
+    amount: z.number().positive(),
+    method: z.enum(["cash", "card", "check", "venmo", "cashapp", "zelle", "other"]),
+    notes: z.string().trim().max(1000).optional(),
+    referenceNumber: z.string().trim().max(120).optional(),
+    paidAt: z.union([z.string(), z.date()]).optional(),
+  });
 
   it("accepts valid appointment create payload", () => {
     const result = createSchema.safeParse({
@@ -81,6 +88,24 @@ describe("appointments route logic", () => {
   it("rejects invalid direct-recipient appointment emails", () => {
     const result = sendConfirmationSchema.safeParse({
       recipientEmail: "wrong",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts valid manual deposit payment input", () => {
+    const result = recordDepositPaymentSchema.safeParse({
+      amount: 50,
+      method: "card",
+      notes: "Taken at pickup",
+      paidAt: "2026-03-30T10:00:00.000Z",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects deposit payment with invalid method", () => {
+    const result = recordDepositPaymentSchema.safeParse({
+      amount: 50,
+      method: "wire",
     });
     expect(result.success).toBe(false);
   });

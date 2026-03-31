@@ -32,13 +32,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
+import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import { ChecklistCard } from "../components/shared/ChecklistCard";
-import { VerticalWorkflowCard } from "../components/shared/VerticalWorkflowCard";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { CommunicationCard } from "../components/shared/CommunicationCard";
 import { getIntakePreset } from "../lib/intakePresets";
@@ -64,6 +64,7 @@ import {
   AlertTriangle,
   Plus,
   Trash2,
+  RotateCcw,
   MoreHorizontal,
 } from "lucide-react";
 
@@ -337,6 +338,8 @@ export default function AppointmentDetail() {
 
 
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [recordDepositOpen, setRecordDepositOpen] = useState(false);
+  const [reverseDepositOpen, setReverseDepositOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editStartTime, setEditStartTime] = useState("");
@@ -346,6 +349,10 @@ export default function AppointmentDetail() {
   const [editInternalNotes, setEditInternalNotes] = useState("");
   const [editVehicleId, setEditVehicleId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("__none__");
+  const [depositPaymentAmount, setDepositPaymentAmount] = useState("");
+  const [depositPaymentMethod, setDepositPaymentMethod] = useState("cash");
+  const [depositPaymentDate, setDepositPaymentDate] = useState(new Date().toISOString().split("T")[0]);
+  const [depositPaymentNotes, setDepositPaymentNotes] = useState("");
   const [showMobileAppointmentInfo, setShowMobileAppointmentInfo] = useState(false);
   const [showMobileServices, setShowMobileServices] = useState(false);
   const [showMobileNotes, setShowMobileNotes] = useState(false);
@@ -471,6 +478,8 @@ export default function AppointmentDetail() {
   const [{ fetching: completing }, runComplete] = useAction(api.appointment.complete);
   const [{ fetching: cancelling }, runCancel] = useAction(api.appointment.cancel);
   const [{ fetching: updatingNotes }, runUpdate] = useAction(api.appointment.update);
+  const [{ fetching: recordingDeposit }, runRecordDepositPayment] = useAction(api.appointment.recordDepositPayment);
+  const [{ fetching: reversingDeposit }, runReverseDepositPayment] = useAction(api.appointment.reverseDepositPayment);
   const [{ fetching: addingService }, runAddAppointmentService] = useAction(api.appointmentService.create);
   const [{ fetching: removingService }, runRemoveAppointmentService] = useAction(
     (params: Record<string, unknown>) => api.appointmentService.delete(params)
@@ -873,6 +882,60 @@ export default function AppointmentDetail() {
     }
   }
 
+  const handleOpenDepositDialog = () => {
+    const depositAmount = Number(appointment.depositAmount ?? 0);
+    setDepositPaymentAmount(depositAmount > 0 ? depositAmount.toFixed(2) : "0.00");
+    setDepositPaymentMethod("cash");
+    setDepositPaymentDate(new Date().toISOString().split("T")[0]);
+    setDepositPaymentNotes("");
+    setRecordDepositOpen(true);
+  };
+
+  const handleRecordDepositPayment = async () => {
+    if (!appointment?.id) return;
+    const depositAmount = Number(appointment.depositAmount ?? 0);
+    const amount = parseFloat(depositPaymentAmount);
+    const validation = validatePaymentAmount(amount, depositAmount);
+    if (!validation.ok) {
+      toast.error(validation.message);
+      return;
+    }
+    if (Math.abs(amount - depositAmount) > 0.009) {
+      toast.error(`Deposit payment must match the required deposit of ${formatCurrency(depositAmount)}.`);
+      return;
+    }
+    const [py, pm, pd] = depositPaymentDate.split("-").map(Number);
+    const paidAtDate = new Date(py, pm - 1, pd);
+    const result = await runRecordDepositPayment({
+      id: appointment.id,
+      amount,
+      method: depositPaymentMethod,
+      paidAt: paidAtDate.toISOString(),
+      notes: depositPaymentNotes || undefined,
+    });
+    if (!result.error) {
+      toast.success("Deposit recorded");
+      setRecordDepositOpen(false);
+      void refetchAppointment();
+      void refetchActivity();
+    } else {
+      toast.error("Failed to record deposit: " + result.error.message);
+    }
+  };
+
+  const handleReverseDepositPayment = async () => {
+    if (!appointment?.id) return;
+    const result = await runReverseDepositPayment({ id: appointment.id });
+    if (!result.error) {
+      toast.success("Deposit payment reversed");
+      setReverseDepositOpen(false);
+      void refetchAppointment();
+      void refetchActivity();
+    } else {
+      toast.error("Failed to reverse deposit: " + result.error.message);
+    }
+  };
+
   const handleContextualAction = (action?: string) => {
     if (!action) return;
     if (action === "confirm") {
@@ -1088,24 +1151,40 @@ export default function AppointmentDetail() {
             </Button>
           )}
 
-          {invoice && (
-            <Button variant="outline" size="sm" asChild>
-              <Link to={`/invoices/${invoice.id}`}>
-                <FileText className="h-4 w-4 mr-2" />
-                View Invoice
-              </Link>
-            </Button>
-          )}
+            {invoice && (
+              <Button variant="outline" size="sm" asChild>
+                <Link to={`/invoices/${invoice.id}`}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  View Invoice
+                </Link>
+              </Button>
+            )}
 
-          {quote && (
-            <Button variant="outline" size="sm" asChild>
-              <Link to={`/quotes/${quote.id}`}>
-                <FileText className="h-4 w-4 mr-2" />
-                View Quote
-              </Link>
-            </Button>
-          )}
-        </div>
+            {invoice && invoiceAllowsPayment(invoice.status) && invoice.status !== "paid" && (
+              <Button variant="outline" size="sm" asChild>
+                <Link to={`/invoices/${invoice.id}?recordPayment=1`}>
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Record Payment
+                </Link>
+              </Button>
+            )}
+
+            {quote && (
+              <Button variant="outline" size="sm" asChild>
+                <Link to={`/quotes/${quote.id}`}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  View Quote
+                </Link>
+              </Button>
+            )}
+
+            {appointment.depositAmount != null && appointment.depositAmount > 0 && !appointment.depositPaid && (
+              <Button variant="outline" size="sm" onClick={handleOpenDepositDialog}>
+                <DollarSign className="h-4 w-4 mr-2" />
+                Record Deposit
+              </Button>
+            )}
+          </div>
 
         <div className="flex items-center gap-2 sm:hidden">
           {appointment.status !== "completed" && appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
@@ -1172,23 +1251,43 @@ export default function AppointmentDetail() {
                   </Link>
                 </DropdownMenuItem>
               ) : null}
-              {invoice ? (
-                <DropdownMenuItem asChild>
-                  <Link to={`/invoices/${invoice.id}`}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    View invoice
+                {invoice ? (
+                  <DropdownMenuItem asChild>
+                    <Link to={`/invoices/${invoice.id}`}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      View invoice
                   </Link>
                 </DropdownMenuItem>
-              ) : null}
-              {quote ? (
-                <DropdownMenuItem asChild>
-                  <Link to={`/quotes/${quote.id}`}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    View quote
-                  </Link>
-                </DropdownMenuItem>
-              ) : null}
-              {(VALID_TRANSITIONS[appointment.status] ?? []).map((status) => (
+                ) : null}
+                {invoice && invoiceAllowsPayment(invoice.status) && invoice.status !== "paid" ? (
+                  <DropdownMenuItem asChild>
+                    <Link to={`/invoices/${invoice.id}?recordPayment=1`}>
+                      <DollarSign className="mr-2 h-4 w-4" />
+                      Record payment
+                    </Link>
+                  </DropdownMenuItem>
+                ) : null}
+                {quote ? (
+                  <DropdownMenuItem asChild>
+                    <Link to={`/quotes/${quote.id}`}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      View quote
+                    </Link>
+                  </DropdownMenuItem>
+                ) : null}
+                {appointment.depositAmount != null && appointment.depositAmount > 0 && !appointment.depositPaid ? (
+                  <DropdownMenuItem onClick={handleOpenDepositDialog}>
+                    <DollarSign className="mr-2 h-4 w-4" />
+                    Record deposit
+                  </DropdownMenuItem>
+                ) : null}
+                {appointment.depositPaid ? (
+                  <DropdownMenuItem onClick={() => setReverseDepositOpen(true)}>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Reverse deposit
+                  </DropdownMenuItem>
+                ) : null}
+                {(VALID_TRANSITIONS[appointment.status] ?? []).map((status) => (
                 <DropdownMenuItem
                   key={status}
                   onClick={() => void handleStatusChange(status)}
@@ -1594,6 +1693,27 @@ export default function AppointmentDetail() {
                 totalPrice={appointment.totalPrice}
                 depositAmount={appointment.depositAmount}
                 depositPaid={appointment.depositPaid}
+                depositActionLabel={
+                  appointment.depositAmount != null && appointment.depositAmount > 0
+                    ? appointment.depositPaid
+                      ? "Deposit recorded"
+                      : "Record deposit"
+                    : null
+                }
+                onDepositAction={
+                  appointment.depositAmount != null && appointment.depositAmount > 0 && !appointment.depositPaid
+                    ? handleOpenDepositDialog
+                    : null
+                }
+                depositActionDisabled={
+                  recordingDeposit ||
+                  appointment.depositAmount == null ||
+                  appointment.depositAmount <= 0 ||
+                  appointment.depositPaid === true
+                }
+                secondaryDepositActionLabel={appointment.depositPaid ? "Reverse deposit" : null}
+                onSecondaryDepositAction={appointment.depositPaid ? () => setReverseDepositOpen(true) : null}
+                secondaryDepositActionDisabled={reversingDeposit}
               />
 
               <CommunicationCard
@@ -1631,7 +1751,6 @@ export default function AppointmentDetail() {
                   </div>
                 </CardHeader>
                 <CardContent className={showMobileWorkflowTools ? "space-y-4" : "hidden"}>
-                  <VerticalWorkflowCard businessType={businessType} mode="appointment" />
                   <ChecklistCard
                     entityType="appointment"
                     entityId={appointment.id}
@@ -1656,8 +1775,6 @@ export default function AppointmentDetail() {
               </Card>
 
               <div className="hidden lg:block lg:space-y-4">
-                <VerticalWorkflowCard businessType={businessType} mode="appointment" />
-
                 <ChecklistCard
                   entityType="appointment"
                   entityId={appointment.id}
@@ -1684,6 +1801,94 @@ export default function AppointmentDetail() {
             </div>
           </div>
       </div>
+
+      <Dialog open={recordDepositOpen} onOpenChange={setRecordDepositOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Record Deposit</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="deposit-payment-amount">Amount</Label>
+              <Input
+                id="deposit-payment-amount"
+                type="number"
+                step="0.01"
+                min="0"
+                value={depositPaymentAmount}
+                onChange={(e) => setDepositPaymentAmount(e.target.value)}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-muted-foreground">
+                Deposit due: {formatCurrency(Number(appointment.depositAmount ?? 0))}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="deposit-payment-method">Method</Label>
+              <Select value={depositPaymentMethod} onValueChange={setDepositPaymentMethod}>
+                <SelectTrigger id="deposit-payment-method">
+                  <SelectValue placeholder="Select method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="card">Card</SelectItem>
+                  <SelectItem value="check">Check</SelectItem>
+                  <SelectItem value="venmo">Venmo</SelectItem>
+                  <SelectItem value="cashapp">CashApp</SelectItem>
+                  <SelectItem value="zelle">Zelle</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="deposit-payment-date">Paid On</Label>
+              <Input
+                id="deposit-payment-date"
+                type="date"
+                value={depositPaymentDate}
+                onChange={(e) => setDepositPaymentDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="deposit-payment-notes">Notes</Label>
+              <Textarea
+                id="deposit-payment-notes"
+                value={depositPaymentNotes}
+                onChange={(e) => setDepositPaymentNotes(e.target.value)}
+                placeholder="Optional note for the deposit record"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecordDepositOpen(false)} disabled={recordingDeposit}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleRecordDepositPayment()} disabled={recordingDeposit}>
+              {recordingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Record Deposit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={reverseDepositOpen} onOpenChange={setReverseDepositOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reverse deposit payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark the appointment deposit as unpaid again. Use this if the manual deposit record was entered by mistake.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reversingDeposit}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleReverseDepositPayment()} disabled={reversingDeposit}>
+              {reversingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Reverse Deposit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Edit Appointment Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>

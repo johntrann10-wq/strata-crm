@@ -234,12 +234,24 @@ interface FinancialSummaryCardProps {
   totalPrice?: number | null;
   depositAmount?: number | null;
   depositPaid?: boolean | null;
+  depositActionLabel?: string | null;
+  onDepositAction?: (() => void) | null;
+  depositActionDisabled?: boolean;
+  secondaryDepositActionLabel?: string | null;
+  onSecondaryDepositAction?: (() => void) | null;
+  secondaryDepositActionDisabled?: boolean;
 }
 
 export function FinancialSummaryCard({
   totalPrice,
   depositAmount,
   depositPaid,
+  depositActionLabel,
+  onDepositAction,
+  depositActionDisabled = false,
+  secondaryDepositActionLabel,
+  onSecondaryDepositAction,
+  secondaryDepositActionDisabled = false,
 }: FinancialSummaryCardProps) {
   const showBalanceDue =
     depositPaid === true &&
@@ -286,6 +298,26 @@ export function FinancialSummaryCard({
             <span className="font-semibold">{formatCurrency(balanceDue)}</span>
           </div>
         )}
+        {(depositActionLabel && onDepositAction) || (secondaryDepositActionLabel && onSecondaryDepositAction) ? (
+          <div className="flex flex-col gap-2 pt-2">
+            {depositActionLabel && onDepositAction ? (
+              <Button size="sm" className="w-full" onClick={onDepositAction} disabled={depositActionDisabled}>
+                {depositActionLabel}
+              </Button>
+            ) : null}
+            {secondaryDepositActionLabel && onSecondaryDepositAction ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={onSecondaryDepositAction}
+                disabled={secondaryDepositActionDisabled}
+              >
+                {secondaryDepositActionLabel}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

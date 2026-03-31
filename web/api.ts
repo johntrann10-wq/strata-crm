@@ -348,18 +348,28 @@ function action(path: string) {
 }
 // Resource endpoints matching your Node API and frontend usage
 export const api = {
-  appointment: {
-    ...resource("appointments"),
-    sendConfirmation: (params: Record<string, unknown>) =>
-      request<unknown>("/appointments/" + (params?.id ?? "") + "/sendConfirmation", {
-        method: "POST",
-        body: JSON.stringify(params),
-      }),
-    updateStatus: (params: Record<string, unknown>) =>
-      request<unknown>("/appointments/" + (params?.id ?? "") + "/updateStatus", {
-        method: "POST",
-        body: JSON.stringify(params),
-      }),
+    appointment: {
+      ...resource("appointments"),
+      sendConfirmation: (params: Record<string, unknown>) =>
+        request<unknown>("/appointments/" + (params?.id ?? "") + "/sendConfirmation", {
+          method: "POST",
+          body: JSON.stringify(params),
+        }),
+      recordDepositPayment: (params: Record<string, unknown>) =>
+        request<unknown>("/appointments/" + (params?.id ?? "") + "/recordDepositPayment", {
+          method: "POST",
+          body: JSON.stringify(params),
+        }),
+      reverseDepositPayment: (params: Record<string, unknown>) =>
+        request<unknown>("/appointments/" + (params?.id ?? "") + "/reverseDepositPayment", {
+          method: "POST",
+          body: JSON.stringify(params),
+        }),
+      updateStatus: (params: Record<string, unknown>) =>
+        request<unknown>("/appointments/" + (params?.id ?? "") + "/updateStatus", {
+          method: "POST",
+          body: JSON.stringify(params),
+        }),
     complete: (params: Record<string, unknown>) =>
       request<unknown>("/appointments/" + (params?.id ?? "") + "/complete", {
         method: "POST",

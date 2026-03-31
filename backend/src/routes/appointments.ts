@@ -304,6 +304,24 @@ const sendConfirmationSchema = z.object({
     z.string().trim().max(120).optional()
   ),
 });
+
+const depositPaymentMethodSchema = z.enum([
+  "cash",
+  "card",
+  "check",
+  "venmo",
+  "cashapp",
+  "zelle",
+  "other",
+]);
+
+const recordDepositPaymentSchema = z.object({
+  amount: z.number().positive(),
+  method: depositPaymentMethodSchema,
+  notes: z.string().trim().max(1000).optional(),
+  referenceNumber: z.string().trim().max(120).optional(),
+  paidAt: z.union([z.string(), z.date()]).optional(),
+});
 function parseIsoDate(s: string | undefined): Date | undefined {
   if (!s?.trim()) return undefined;
   const d = new Date(s);
@@ -1100,6 +1118,131 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
     });
   }
   res.json(updated);
+});
+
+appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const parsed = recordDepositPaymentSchema.safeParse(req.body ?? {});
+  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+
+  const [existing] = await db
+    .select({
+      id: appointments.id,
+      depositAmount: appointments.depositAmount,
+      depositPaid: appointments.depositPaid,
+      updatedAt: appointments.updatedAt,
+    })
+    .from(appointments)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .limit(1);
+  if (!existing) throw new NotFoundError("Appointment not found.");
+
+  const columns = await getAppointmentColumns();
+  if (!columns.has("deposit_amount") || !columns.has("deposit_paid")) {
+    throw new BadRequestError("Deposit tracking is unavailable until the latest database update is applied.");
+  }
+
+  const depositAmount = Number(existing.depositAmount ?? 0);
+  if (!Number.isFinite(depositAmount) || depositAmount <= 0) {
+    throw new BadRequestError("This appointment does not have a deposit to record.");
+  }
+
+  if (parsed.data.amount !== depositAmount) {
+    throw new BadRequestError(`Deposit payment must match the required deposit amount (${depositAmount.toFixed(2)}).`);
+  }
+
+  if (existing.depositPaid) {
+    res.json(existing);
+    return;
+  }
+
+  const updates: Record<string, unknown> = {
+    depositPaid: true,
+  };
+  if (columns.has("updated_at")) updates.updatedAt = new Date();
+
+  let updated;
+  try {
+    [updated] = await db
+      .update(appointments)
+      .set(updates as Partial<typeof appointments.$inferInsert>)
+      .where(eq(appointments.id, req.params.id))
+      .returning();
+  } catch (error) {
+    if (!isAppointmentSchemaDriftError(error)) throw error;
+    throw new BadRequestError("Deposit tracking is unavailable until the latest database update is applied.");
+  }
+
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "appointment.deposit_paid",
+    entityType: "appointment",
+    entityId: existing.id,
+    metadata: {
+      amount: parsed.data.amount,
+      method: parsed.data.method,
+      notes: parsed.data.notes ?? null,
+      referenceNumber: parsed.data.referenceNumber ?? null,
+      paidAt: parsed.data.paidAt ? new Date(parsed.data.paidAt).toISOString() : new Date().toISOString(),
+      source: "manual",
+    },
+  });
+
+  res.json(updated ?? { ...existing, depositPaid: true });
+});
+
+appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const [existing] = await db
+    .select({
+      id: appointments.id,
+      depositAmount: appointments.depositAmount,
+      depositPaid: appointments.depositPaid,
+    })
+    .from(appointments)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .limit(1);
+  if (!existing) throw new NotFoundError("Appointment not found.");
+
+  const columns = await getAppointmentColumns();
+  if (!columns.has("deposit_paid")) {
+    throw new BadRequestError("Deposit tracking is unavailable until the latest database update is applied.");
+  }
+
+  if (!existing.depositPaid) {
+    res.json(existing);
+    return;
+  }
+
+  const updates: Record<string, unknown> = {
+    depositPaid: false,
+  };
+  if (columns.has("updated_at")) updates.updatedAt = new Date();
+
+  let updated;
+  try {
+    [updated] = await db
+      .update(appointments)
+      .set(updates as Partial<typeof appointments.$inferInsert>)
+      .where(eq(appointments.id, req.params.id))
+      .returning();
+  } catch (error) {
+    if (!isAppointmentSchemaDriftError(error)) throw error;
+    throw new BadRequestError("Deposit tracking is unavailable until the latest database update is applied.");
+  }
+
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "appointment.deposit_payment_reversed",
+    entityType: "appointment",
+    entityId: existing.id,
+    metadata: {
+      amount: existing.depositAmount ?? null,
+      source: "manual",
+    },
+  });
+
+  res.json(updated ?? { ...existing, depositPaid: false });
 });
 
 appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {

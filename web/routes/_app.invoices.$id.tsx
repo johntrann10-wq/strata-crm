@@ -221,7 +221,7 @@ function CollectionActionCard({
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { permissions, currentLocationId } = useOutletContext<AuthOutletContext>();
   const canWritePayments = permissions.has("payments.write") || permissions.has("invoices.write");
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/invoices";
@@ -362,6 +362,16 @@ export default function InvoiceDetailPage() {
     setPaymentNotes("");
     setRecordPaymentOpen(true);
   };
+
+  useEffect(() => {
+    if (!invoice?.id) return;
+    if (searchParams.get("recordPayment") !== "1") return;
+    if (!invoiceAllowsPayment(invoice.status)) return;
+    handleOpenPaymentDialog();
+    const next = new URLSearchParams(searchParams);
+    next.delete("recordPayment");
+    setSearchParams(next, { replace: true });
+  }, [invoice?.id, invoice?.status, searchParams, setSearchParams]);
 
   const handleRecordPayment = async () => {
     if (!invoice?.id) return;
