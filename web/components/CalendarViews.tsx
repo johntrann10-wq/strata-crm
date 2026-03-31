@@ -684,7 +684,7 @@ export function MonthView({
                   tabIndex={0}
                   aria-label={`Open ${dayLabel}`}
                   className={cn(
-                    "group relative flex h-full min-h-0 flex-col border-r border-border/60 px-1 py-1 text-left transition-colors last:border-r-0 sm:px-2 sm:py-2",
+                    "group relative flex h-full min-h-0 touch-manipulation select-none flex-col border-r border-border/60 px-1 py-1 text-left transition-colors last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-2",
                     "hover:bg-muted/35",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
@@ -720,7 +720,7 @@ export function MonthView({
                     </div>
 
                     <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                      <div className="mb-1 space-y-1">
+                      <div className="pointer-events-none mb-1 space-y-1">
                         {daySpans.slice(0, 2).map((apt) => (
                           <div
                             key={`${apt.id}-span`}
@@ -735,7 +735,7 @@ export function MonthView({
                         ) : null}
                       </div>
 
-                      <div className="flex items-center gap-1 md:hidden">
+                      <div className="pointer-events-none flex items-center gap-1 md:hidden">
                         {mobileDots.map((apt) => {
                           const status = getStatusStyle(apt.status);
                           return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full", status.accent)} />;
