@@ -226,15 +226,15 @@ async function insertLegacyInvoice(
     id: invoiceId,
     businessId: bid,
     clientId: data.clientId,
-    invoiceNumber: data.invoiceNumber,
-    status: data.status,
-    subtotal: String(data.subtotal),
-    taxRate: String(data.taxRate),
-    taxAmount: String(data.taxAmount),
-    discountAmount: String(data.discountAmount),
-    total: String(data.total),
   };
 
+  if (columns.has("invoice_number")) insertData.invoiceNumber = data.invoiceNumber;
+  if (columns.has("status")) insertData.status = data.status;
+  if (columns.has("subtotal")) insertData.subtotal = String(data.subtotal);
+  if (columns.has("tax_rate")) insertData.taxRate = String(data.taxRate);
+  if (columns.has("tax_amount")) insertData.taxAmount = String(data.taxAmount);
+  if (columns.has("discount_amount")) insertData.discountAmount = String(data.discountAmount);
+  if (columns.has("total")) insertData.total = String(data.total);
   if (data.appointmentId && columns.has("appointment_id")) insertData.appointmentId = data.appointmentId;
   if (data.notes != null && columns.has("notes")) insertData.notes = data.notes;
   if (data.dueDate != null && columns.has("due_date")) insertData.dueDate = data.dueDate;
@@ -247,14 +247,14 @@ async function insertLegacyInvoice(
     id: invoiceId,
     businessId: bid,
     clientId: data.clientId,
-    appointmentId: data.appointmentId,
+    appointmentId: columns.has("appointment_id") ? data.appointmentId : null,
     invoiceNumber: data.invoiceNumber,
     status: data.status,
-    subtotal: String(data.subtotal),
-    taxRate: String(data.taxRate),
-    taxAmount: String(data.taxAmount),
-    discountAmount: String(data.discountAmount),
-    total: String(data.total),
+    subtotal: columns.has("subtotal") ? String(data.subtotal) : String(data.total),
+    taxRate: columns.has("tax_rate") ? String(data.taxRate) : "0",
+    taxAmount: columns.has("tax_amount") ? String(data.taxAmount) : "0",
+    discountAmount: columns.has("discount_amount") ? String(data.discountAmount) : "0",
+    total: columns.has("total") ? String(data.total) : String(data.subtotal),
     dueDate: columns.has("due_date") ? data.dueDate : null,
     paidAt: null,
     notes: columns.has("notes") ? data.notes : null,
