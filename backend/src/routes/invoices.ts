@@ -1108,7 +1108,29 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
     return;
   }
 
-  const [updated] = await db.update(invoices).set({ status: "sent", updatedAt: new Date() }).where(eq(invoices.id, req.params.id)).returning();
+  let updated;
+  try {
+    [updated] = await db
+      .update(invoices)
+      .set({ status: "sent", updatedAt: new Date() })
+      .where(eq(invoices.id, req.params.id))
+      .returning();
+  } catch (error) {
+    if (!isInvoiceSchemaDriftError(error)) throw error;
+    logger.warn("Invoice schema drift detected while finalizing send; falling back to legacy invoice update", {
+      invoiceId: existing.id,
+      businessId: bid,
+      error,
+    });
+    const invoiceColumns = await getInvoiceColumns();
+    const updates: Record<string, unknown> = { status: "sent" };
+    if (invoiceColumns.has("updated_at")) updates.updatedAt = new Date();
+    [updated] = await db
+      .update(invoices)
+      .set(updates as Partial<typeof invoices.$inferInsert>)
+      .where(eq(invoices.id, req.params.id))
+      .returning();
+  }
   if (!updated) throw new NotFoundError("Invoice not found.");
   await createRequestActivityLog(req, {
     businessId: bid,
