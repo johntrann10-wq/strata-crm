@@ -11,6 +11,19 @@ export interface LogContext {
   [key: string]: unknown;
 }
 
+const REDACTED = "[REDACTED]";
+const sensitiveKeyMatchers = [
+  /authorization/i,
+  /token/i,
+  /password/i,
+  /secret/i,
+  /cookie/i,
+  /stripe[-_]?signature/i,
+];
+const emailKeyMatchers = [/email/i, /^to$/i, /^from$/i, /^recipient$/i];
+const phoneKeyMatchers = [/phone/i];
+const addressKeyMatchers = [/address/i];
+
 const levelOrder: Record<LogLevel, number> = {
   debug: 0,
   info: 1,
@@ -25,12 +38,76 @@ function shouldLog(level: LogLevel): boolean {
   return levelOrder[level] >= levelOrder[minLevel];
 }
 
+function maskEmail(value: string): string {
+  const trimmed = value.trim();
+  const atIndex = trimmed.indexOf("@");
+  if (atIndex <= 1) return REDACTED;
+  const local = trimmed.slice(0, atIndex);
+  const domain = trimmed.slice(atIndex + 1);
+  if (!domain) return REDACTED;
+  return `${local[0]}***@${domain}`;
+}
+
+function maskPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 4) return REDACTED;
+  return `***-***-${digits.slice(-4)}`;
+}
+
+function isSensitiveKey(key: string): boolean {
+  return sensitiveKeyMatchers.some((matcher) => matcher.test(key));
+}
+
+function isEmailKey(key: string): boolean {
+  return emailKeyMatchers.some((matcher) => matcher.test(key));
+}
+
+function isPhoneKey(key: string): boolean {
+  return phoneKeyMatchers.some((matcher) => matcher.test(key));
+}
+
+function isAddressKey(key: string): boolean {
+  return addressKeyMatchers.some((matcher) => matcher.test(key));
+}
+
+function sanitizeValue(key: string, value: unknown): unknown {
+  if (value == null) return value;
+
+  if (isSensitiveKey(key)) return REDACTED;
+
+  if (typeof value === "string") {
+    if (isEmailKey(key)) return maskEmail(value);
+    if (isPhoneKey(key)) return maskPhone(value);
+    if (isAddressKey(key)) return REDACTED;
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeValue(key, entry));
+  }
+
+  if (typeof value === "object") {
+    return sanitizeContext(value as Record<string, unknown>);
+  }
+
+  return value;
+}
+
+export function sanitizeContext(context?: LogContext | Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!context) return undefined;
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(context)) {
+    sanitized[key] = sanitizeValue(key, value);
+  }
+  return sanitized;
+}
+
 function formatMessage(level: LogLevel, message: string, context?: LogContext): string {
   const payload = {
     timestamp: new Date().toISOString(),
     level,
     message,
-    ...context,
+    ...sanitizeContext(context),
   };
   return JSON.stringify(payload);
 }

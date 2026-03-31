@@ -492,6 +492,9 @@ quotesRouter.get("/:id/html", requireAuth, requireTenant, async (req: Request, r
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   res.send(html);
 });
 
@@ -592,6 +595,9 @@ quotesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   res.send(html);
 });
 
