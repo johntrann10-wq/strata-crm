@@ -542,7 +542,24 @@ async function sendAppointmentConfirmationForRecord(
   bid: string,
   overrides?: { recipientEmail?: string | null; recipientName?: string | null; message?: string | null }
 ): Promise<{ deliveryStatus: AppointmentDeliveryStatus; deliveryError: string | null; recipient: string | null }> {
-  const payload = await buildAppointmentConfirmationPayload(appointmentId, bid, overrides);
+  let payload:
+    | Awaited<ReturnType<typeof buildAppointmentConfirmationPayload>>
+    | null = null;
+  try {
+    payload = await buildAppointmentConfirmationPayload(appointmentId, bid, overrides);
+  } catch (error) {
+    const deliveryError = error instanceof Error ? error.message : String(error);
+    logger.warn("Appointment confirmation context build failed", {
+      appointmentId,
+      businessId: bid,
+      error: deliveryError,
+    });
+    return {
+      deliveryStatus: "email_failed",
+      deliveryError,
+      recipient: overrides?.recipientEmail?.trim() || null,
+    };
+  }
   if (!payload) {
     return {
       deliveryStatus: "email_failed",
@@ -1261,22 +1278,30 @@ appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, wra
     recipientName: parsed.data.recipientName ?? null,
     message: parsed.data.message ?? null,
   });
-  await createRequestActivityLog(req, {
-    businessId: bid,
-    action:
-      confirmationResult.deliveryStatus === "emailed"
-        ? "appointment.confirmation_sent"
-        : "appointment.confirmation_failed",
-    entityType: "appointment",
-    entityId: existing.id,
-    metadata: {
-      recipient: confirmationResult.recipient,
-      recipientName: parsed.data.recipientName ?? null,
-      message: parsed.data.message ?? null,
-      deliveryStatus: confirmationResult.deliveryStatus,
-      deliveryError: confirmationResult.deliveryError,
-    },
-  });
+  try {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action:
+        confirmationResult.deliveryStatus === "emailed"
+          ? "appointment.confirmation_sent"
+          : "appointment.confirmation_failed",
+      entityType: "appointment",
+      entityId: existing.id,
+      metadata: {
+        recipient: confirmationResult.recipient,
+        recipientName: parsed.data.recipientName ?? null,
+        message: parsed.data.message ?? null,
+        deliveryStatus: confirmationResult.deliveryStatus,
+        deliveryError: confirmationResult.deliveryError,
+      },
+    });
+  } catch (error) {
+    logger.warn("Appointment confirmation activity log failed", {
+      appointmentId: existing.id,
+      businessId: bid,
+      error,
+    });
+  }
 
   const statusCode =
     confirmationResult.deliveryStatus === "emailed"
@@ -1326,20 +1351,28 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (
 
   if (status === "confirmed") {
     const confirmationResult = await sendAppointmentConfirmationForRecord(updated.id, bid);
-    await createRequestActivityLog(req, {
-      businessId: bid,
-      action:
-        confirmationResult.deliveryStatus === "emailed"
-          ? "appointment.confirmation_sent"
-          : "appointment.confirmation_failed",
-      entityType: "appointment",
-      entityId: updated.id,
-      metadata: {
-        recipient: confirmationResult.recipient,
-        deliveryStatus: confirmationResult.deliveryStatus,
-        deliveryError: confirmationResult.deliveryError,
-      },
-    });
+    try {
+      await createRequestActivityLog(req, {
+        businessId: bid,
+        action:
+          confirmationResult.deliveryStatus === "emailed"
+            ? "appointment.confirmation_sent"
+            : "appointment.confirmation_failed",
+        entityType: "appointment",
+        entityId: updated.id,
+        metadata: {
+          recipient: confirmationResult.recipient,
+          deliveryStatus: confirmationResult.deliveryStatus,
+          deliveryError: confirmationResult.deliveryError,
+        },
+      });
+    } catch (error) {
+      logger.warn("Appointment confirmation activity log failed", {
+        appointmentId: updated.id,
+        businessId: bid,
+        error,
+      });
+    }
     res.json({ ...updated, ...confirmationResult });
     return;
   }
