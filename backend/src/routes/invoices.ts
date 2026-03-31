@@ -422,8 +422,8 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
   const paymentTotals = db
     .select({
       invoiceId: payments.invoiceId,
-      totalPaid: sql<string>`coalesce(sum(case when ${payments.reversedAt} is null then ${payments.amount} else 0 end), 0)`,
-      lastPaidAt: sql<Date | null>`max(case when ${payments.reversedAt} is null then ${payments.paidAt} else null end)`,
+      totalPaid: sql<string>`coalesce(sum(case when ${payments.reversedAt} is null then ${payments.amount} else 0 end), 0)`.as("total_paid"),
+      lastPaidAt: sql<Date | null>`max(case when ${payments.reversedAt} is null then ${payments.paidAt} else null end)`.as("last_paid_at"),
     })
     .from(payments)
     .groupBy(payments.invoiceId)
@@ -432,8 +432,8 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
   const paymentTotalsLegacy = db
     .select({
       invoiceId: payments.invoiceId,
-      totalPaid: sql<string>`coalesce(sum(${payments.amount}), 0)`,
-      lastPaidAt: sql<Date | null>`max(${payments.paidAt})`,
+      totalPaid: sql<string>`coalesce(sum(${payments.amount}), 0)`.as("total_paid"),
+      lastPaidAt: sql<Date | null>`max(${payments.paidAt})`.as("last_paid_at"),
     })
     .from(payments)
     .groupBy(payments.invoiceId)
@@ -442,7 +442,7 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
   const invoiceActivity = db
     .select({
       entityId: activityLogs.entityId,
-      lastSentAt: sql<Date | null>`max(case when ${activityLogs.action} = 'invoice.sent' then ${activityLogs.createdAt} else null end)`,
+      lastSentAt: sql<Date | null>`max(case when ${activityLogs.action} = 'invoice.sent' then ${activityLogs.createdAt} else null end)`.as("last_sent_at"),
     })
     .from(activityLogs)
     .where(and(eq(activityLogs.businessId, bid), eq(activityLogs.entityType, "invoice")))
