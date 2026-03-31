@@ -1054,6 +1054,35 @@ invoicesRouter.post(
               updatedAt: now,
             };
           } else {
+            try {
+              created = await insertLegacyInvoice(executor, bid, invoiceId, {
+                clientId: data.clientId,
+                appointmentId: data.appointmentId ?? null,
+                invoiceNumber,
+                status: initialStatus,
+                subtotal,
+                taxRate,
+                taxAmount,
+                discountAmount,
+                total,
+                notes: data.notes ?? null,
+                dueDate,
+              });
+            } catch (error) {
+              if (isInvoiceNumberConflictError(error)) {
+                invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
+                continue;
+              }
+              throw error;
+            }
+          }
+        } catch (error) {
+          if (isInvoiceNumberConflictError(error)) {
+            invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
+            continue;
+          }
+          if (!isInvoiceSchemaDriftError(error)) throw error;
+          try {
             created = await insertLegacyInvoice(executor, bid, invoiceId, {
               clientId: data.clientId,
               appointmentId: data.appointmentId ?? null,
@@ -1067,26 +1096,13 @@ invoicesRouter.post(
               notes: data.notes ?? null,
               dueDate,
             });
+          } catch (fallbackError) {
+            if (isInvoiceNumberConflictError(fallbackError)) {
+              invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
+              continue;
+            }
+            throw fallbackError;
           }
-        } catch (error) {
-          if (isInvoiceNumberConflictError(error)) {
-            invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
-            continue;
-          }
-          if (!isInvoiceSchemaDriftError(error)) throw error;
-          created = await insertLegacyInvoice(executor, bid, invoiceId, {
-            clientId: data.clientId,
-            appointmentId: data.appointmentId ?? null,
-            invoiceNumber,
-            status: initialStatus,
-            subtotal,
-            taxRate,
-            taxAmount,
-            discountAmount,
-            total,
-            notes: data.notes ?? null,
-            dueDate,
-          });
         }
       }
       if (!created) throw new BadRequestError("Failed to create invoice.");
