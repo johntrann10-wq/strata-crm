@@ -93,6 +93,8 @@ export default function NewInvoicePage() {
   const [{ data: appointmentRecord }] = useFindOne(api.appointment, appointmentIdParam ?? undefined, {
     select: {
       id: true,
+      title: true,
+      totalPrice: true,
       client: {
         id: true,
         firstName: true,
@@ -135,8 +137,9 @@ export default function NewInvoicePage() {
       : { id: { equals: "" } },
     select: {
       id: true,
+      quantity: true,
+      unitPrice: true,
       service: { name: true, price: true },
-      price: true,
       duration: true,
     },
     first: 50,
@@ -240,17 +243,34 @@ export default function NewInvoicePage() {
         lineItems[0].qty === 1 &&
         lineItems[0].unitPrice === 0;
       if (isBlankPlaceholder) {
+        const appointmentItems = apptServices.map((apptService) => ({
+          id: crypto.randomUUID(),
+          description: apptService.service?.name ?? "Service",
+          qty: Number((apptService as { quantity?: number | string | null }).quantity ?? 1) || 1,
+          unitPrice:
+            Number((apptService as { unitPrice?: number | string | null }).unitPrice ?? apptService.service?.price ?? 0) || 0,
+        }));
+
+        const appointmentSubtotal = appointmentItems.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
+        const appointmentTotal = Number((appointmentRecord as { totalPrice?: number | string | null } | null)?.totalPrice ?? 0);
+        const needsAdjustment = Number.isFinite(appointmentTotal) && appointmentTotal > 0 && Math.abs(appointmentTotal - appointmentSubtotal) >= 0.01;
+
         setLineItems(
-          apptServices.map((apptService) => ({
-            id: crypto.randomUUID(),
-            description: apptService.service?.name ?? "Service",
-            qty: 1,
-            unitPrice: apptService.service?.price ?? apptService.price ?? 0,
-          }))
+          needsAdjustment
+            ? [
+                ...appointmentItems,
+                {
+                  id: crypto.randomUUID(),
+                  description: `${(appointmentRecord as { title?: string | null } | null)?.title || "Appointment"} price adjustment`,
+                  qty: 1,
+                  unitPrice: Number((appointmentTotal - appointmentSubtotal).toFixed(2)),
+                },
+              ]
+            : appointmentItems
         );
       }
     }
-  }, [apptServices]);
+  }, [apptServices, appointmentRecord]);
 
   // Set default tax rate from business when loaded
   useEffect(() => {
