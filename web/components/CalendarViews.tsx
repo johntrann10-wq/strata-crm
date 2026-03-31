@@ -419,7 +419,10 @@ export function AppointmentBlock({
       style={{ top: `${top}px`, height: `${height}px`, position: "absolute" }}
       title={isConflict ? "Scheduling conflict" : undefined}
       draggable={draggableProp ?? true}
-      onClick={onClick}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onDragStart={handleDragStart}

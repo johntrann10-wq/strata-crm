@@ -129,7 +129,10 @@ export function DayView({
                       style.border,
                       conflictIds?.has(apt.id) && "ring-1 ring-rose-300"
                     )}
-                    onClick={() => onApptClick(apt)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onApptClick(apt);
+                    }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -328,7 +331,10 @@ export function DayView({
               <AppointmentBlock
                 key={apt.id}
                 apt={apt}
-                onClick={() => onApptClick(apt)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onApptClick(apt);
+                }}
                 isConflict={conflictIds?.has(apt.id)}
               />
             ))}

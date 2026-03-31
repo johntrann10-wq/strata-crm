@@ -245,7 +245,10 @@ export function WeekView({
                   <AppointmentBlock
                     key={apt.id}
                     apt={apt}
-                    onClick={() => onApptClick(apt)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onApptClick(apt);
+                    }}
                     isConflict={conflictIds?.has(apt.id)}
                   />
                 ))}
