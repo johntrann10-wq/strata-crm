@@ -623,6 +623,15 @@ export function MonthView({
 }: MonthViewProps) {
   const grid = useMemo(() => getMonthGrid(currentDate), [currentDate]);
   const today = useMemo(() => new Date(), []);
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      }),
+    []
+  );
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-border/70 bg-background/95 shadow-sm sm:rounded-[24px]">
@@ -634,9 +643,9 @@ export function MonthView({
         ))}
       </div>
 
-      <div className="grid min-w-0 flex-1 grid-rows-6 overflow-hidden">
+      <div className="grid h-[22.5rem] min-h-[22.5rem] min-w-0 grid-rows-6 overflow-hidden [grid-template-rows:repeat(6,minmax(0,1fr))] sm:h-[24rem] sm:min-h-[24rem] md:h-auto md:min-h-0 md:flex-1 md:auto-rows-fr md:[grid-template-rows:repeat(6,minmax(0,1fr))]">
         {grid.map((week, wi) => (
-          <div key={wi} className="grid min-h-[88px] grid-cols-7 border-b border-border/60 last:border-b-0 sm:min-h-0">
+          <div key={wi} className="grid min-h-0 grid-cols-7 border-b border-border/60 last:border-b-0">
             {week.map((day, di) => {
               const isCurrentMonth = day.getMonth() === currentDate.getMonth();
               const isToday = isSameDay(day, today);
@@ -644,13 +653,14 @@ export function MonthView({
               const dayAppts = appointments.filter((a) => isSameDay(new Date(a.startTime), day));
               const dayRevenue = dayAppts.reduce((total, apt) => total + Number(apt.totalPrice ?? 0), 0);
               const hasConflict = !!conflictIds && dayAppts.some((a) => conflictIds.has(a.id));
+              const mobileDots = dayAppts.slice(0, 3);
 
               return (
                 <button
                   key={di}
                   type="button"
                   className={cn(
-                    "group flex min-h-0 flex-col border-r border-border/60 px-1.5 py-1.5 text-left transition-colors last:border-r-0 sm:px-2 sm:py-2",
+                    "group flex h-full min-h-0 flex-col border-r border-border/60 px-1 py-1 text-left transition-colors last:border-r-0 sm:px-2 sm:py-2",
                     "hover:bg-muted/35",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
                     isToday && "bg-primary/[0.045]",
@@ -658,69 +668,77 @@ export function MonthView({
                   )}
                   onClick={() => onDayClick(day)}
                 >
-                  <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-start justify-between gap-1 sm:mb-2 sm:items-center sm:gap-2">
                     <span
                       className={cn(
-                        "inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold sm:h-8 sm:w-8 sm:text-sm",
+                        "inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold sm:h-8 sm:w-8 sm:text-sm",
                         isToday ? "bg-primary text-primary-foreground" : "text-foreground"
                       )}
                     >
                       {day.getDate()}
                     </span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 sm:gap-2">
                       {dayAppts.length > 0 ? (
-                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground sm:px-2 sm:text-[10px]">
+                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium leading-none text-muted-foreground sm:px-2 sm:text-[10px]">
                           {dayAppts.length}
                         </span>
                       ) : null}
-                      {hasConflict ? <AlertTriangle className="h-3.5 w-3.5 text-rose-600" /> : null}
+                      {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
                     </div>
                   </div>
 
-                  <div className="space-y-1 overflow-hidden">
-                    {dayAppts.slice(0, 2).map((apt, index) => {
-                      const status = getStatusStyle(apt.status);
-                      return (
-                        <button
-                          key={apt.id}
-                          type="button"
-                          className={cn(
-                            "flex w-full items-center gap-1.5 rounded-md border px-1.5 py-1 text-left shadow-sm transition-colors sm:gap-2 sm:rounded-lg sm:px-2 sm:py-1.5",
-                            index === 1 && "hidden sm:flex",
-                            "hover:opacity-95",
-                            status.surface,
-                            status.text,
-                            status.border
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onApptClick(apt);
-                          }}
-                        >
-                          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full sm:h-2 sm:w-2", status.accent)} />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[10px] font-semibold sm:text-[11px]">{apptLabel(apt)}</p>
-                            <p className="truncate text-[9px] opacity-75 sm:text-[10px]">
-                              {formatTime(new Date(apt.startTime))}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                    {dayAppts.length > 2 ? (
-                      <p className="px-1 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
-                        +{dayAppts.length - 2} more
-                      </p>
-                    ) : null}
+                  <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex items-center gap-1 md:hidden">
+                      {mobileDots.map((apt) => {
+                        const status = getStatusStyle(apt.status);
+                        return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full", status.accent)} />;
+                      })}
+                      {dayAppts.length > mobileDots.length ? (
+                        <span className="text-[9px] font-medium text-muted-foreground">+{dayAppts.length - mobileDots.length}</span>
+                      ) : null}
+                    </div>
+
+                    <div className="hidden space-y-1 overflow-hidden md:block">
+                      {dayAppts.slice(0, 2).map((apt, index) => {
+                        const status = getStatusStyle(apt.status);
+                        return (
+                          <button
+                            key={apt.id}
+                            type="button"
+                            className={cn(
+                              "flex w-full items-center gap-1.5 rounded-md border px-1.5 py-1 text-left shadow-sm transition-colors sm:gap-2 sm:rounded-lg sm:px-2 sm:py-1.5",
+                              index === 1 && "hidden sm:flex",
+                              "hover:opacity-95",
+                              status.surface,
+                              status.text,
+                              status.border
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onApptClick(apt);
+                            }}
+                          >
+                            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full sm:h-2 sm:w-2", status.accent)} />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[10px] font-semibold sm:text-[11px]">{apptLabel(apt)}</p>
+                              <p className="truncate text-[9px] opacity-75 sm:text-[10px]">
+                                {formatTime(new Date(apt.startTime))}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {dayAppts.length > 2 ? (
+                        <p className="px-1 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
+                          +{dayAppts.length - 2} more
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
 
                   {dayAppts.length > 0 ? (
-                    <div className="mt-auto pt-1.5 text-[8px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:pt-3 sm:text-[10px]">
-                      {new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: "USD",
-                        maximumFractionDigits: 0,
-                      }).format(dayRevenue)}
+                    <div className="mt-auto hidden pt-3 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:block">
+                      {currencyFormatter.format(dayRevenue)}
                     </div>
                   ) : null}
                 </button>
