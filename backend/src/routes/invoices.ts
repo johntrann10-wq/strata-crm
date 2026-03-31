@@ -205,6 +205,7 @@ async function insertLegacyInvoice(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   executor: any,
   bid: string,
+  invoiceId: string,
   data: {
     clientId: string;
     appointmentId: string | null;
@@ -220,7 +221,6 @@ async function insertLegacyInvoice(
   }
 ) {
   const columns = await getInvoiceColumns();
-  const invoiceId = randomUUID();
   const now = new Date();
   const insertData: Record<string, unknown> = {
     id: invoiceId,
@@ -925,16 +925,38 @@ invoicesRouter.post(
     const b = await getNextInvoiceNumberWithFallback(executor, bid);
     if (!b) throw new NotFoundError("Business not found.");
     const nextNum = b.nextInvoiceNumber ?? null;
+    const invoiceId = randomUUID();
     const invoiceNumber = nextNum != null && nextNum > 0 ? `INV-${nextNum}` : `INV-${Date.now()}`;
     const dueDate =
       data.dueDate != null && data.dueDate !== ""
         ? new Date(data.dueDate)
         : null;
-    let created;
+    let created:
+      | {
+          id: string;
+          businessId: string;
+          clientId: string;
+          appointmentId: string | null;
+          invoiceNumber: string;
+          status: string;
+          subtotal: string;
+          taxRate: string;
+          taxAmount: string;
+          discountAmount: string;
+          total: string;
+          dueDate: Date | null;
+          paidAt: null;
+          notes: string | null;
+          createdAt: Date;
+          updatedAt: Date;
+        }
+      | null = null;
+    const now = new Date();
     try {
-      [created] = await executor
+      await executor
         .insert(invoices)
         .values({
+          id: invoiceId,
           businessId: bid,
           clientId: data.clientId,
           appointmentId: data.appointmentId ?? null,
@@ -947,11 +969,31 @@ invoicesRouter.post(
           total: String(total),
           notes: data.notes ?? null,
           dueDate,
+          createdAt: now,
+          updatedAt: now,
         })
-        .returning(createInvoiceReturning);
+        .returning({ id: invoices.id });
+      created = {
+        id: invoiceId,
+        businessId: bid,
+        clientId: data.clientId,
+        appointmentId: data.appointmentId ?? null,
+        invoiceNumber,
+        status: initialStatus,
+        subtotal: String(subtotal),
+        taxRate: String(taxRate),
+        taxAmount: String(taxAmount),
+        discountAmount: String(discountAmount),
+        total: String(total),
+        dueDate,
+        paidAt: null,
+        notes: data.notes ?? null,
+        createdAt: now,
+        updatedAt: now,
+      };
     } catch (error) {
       if (!isInvoiceSchemaDriftError(error)) throw error;
-      created = await insertLegacyInvoice(executor, bid, {
+      created = await insertLegacyInvoice(executor, bid, invoiceId, {
         clientId: data.clientId,
         appointmentId: data.appointmentId ?? null,
         invoiceNumber,
