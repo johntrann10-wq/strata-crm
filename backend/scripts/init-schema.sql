@@ -14,6 +14,12 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 DO $$ BEGIN
+  CREATE TYPE appointment_job_phase AS ENUM (
+    'scheduled', 'active_work', 'waiting', 'curing', 'hold', 'pickup_ready'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
   CREATE TYPE invoice_status AS ENUM ('draft', 'sent', 'paid', 'partial', 'void');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
@@ -232,6 +238,26 @@ CREATE TABLE IF NOT EXISTS appointments (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS job_start_time timestamptz;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS expected_completion_time timestamptz;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS pickup_ready_time timestamptz;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS vehicle_on_site boolean DEFAULT false;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS job_phase appointment_job_phase DEFAULT 'scheduled';
+
+UPDATE appointments
+SET
+  job_start_time = COALESCE(job_start_time, start_time),
+  expected_completion_time = COALESCE(expected_completion_time, end_time, start_time),
+  job_phase = COALESCE(job_phase, 'scheduled'::appointment_job_phase)
+WHERE
+  job_start_time IS NULL
+  OR expected_completion_time IS NULL
+  OR job_phase IS NULL;
+
+ALTER TABLE appointments
+  ALTER COLUMN job_phase SET DEFAULT 'scheduled',
+  ALTER COLUMN job_phase SET NOT NULL;
 
 CREATE TABLE IF NOT EXISTS appointment_services (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
