@@ -302,8 +302,17 @@ export default function NewInvoicePage() {
   const serviceRecords = (servicesData ?? []) as ServiceRecord[];
   const addonLinks = (packageAddonLinks ?? []) as AddonLinkRecord[];
   const lockedAppointmentClient = (appointmentRecord as { client?: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null } | null } | null)?.client ?? null;
-  const isClientLockedToAppointment = !!appointmentIdParam;
-  const effectiveClientRecord = isClientLockedToAppointment ? lockedAppointmentClient : selectedClientRecord ?? clientFromParam ?? null;
+  const appointmentClientId = lockedAppointmentClient?.id ?? "";
+  const isClientLockedToAppointment = Boolean(appointmentIdParam && appointmentClientId);
+  const searchableClientRecords = [selectedClientRecord, clientFromParam, ...(clients ?? [])].filter(Boolean) as Array<{
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  }>;
+  const effectiveClientRecord = isClientLockedToAppointment
+    ? lockedAppointmentClient
+    : searchableClientRecords.find((client) => client.id === selectedClientId) ?? null;
   const packageTemplates = serviceRecords
     .filter((service) => !service.isAddon)
     .map((service) => {
@@ -323,7 +332,7 @@ export default function NewInvoicePage() {
 
 
   const doSubmit = async (mode: 'draft' | 'sent') => {
-    const effectiveClientId = isClientLockedToAppointment ? lockedAppointmentClient?.id ?? "" : selectedClientId;
+    const effectiveClientId = isClientLockedToAppointment ? appointmentClientId : selectedClientId;
 
     if (!effectiveClientId) {
       toast.error("Please select a client");
@@ -435,7 +444,7 @@ export default function NewInvoicePage() {
         </div>
       )}
 
-      {appointmentIdParam && (
+      {isClientLockedToAppointment && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm mb-6">
           <FileText className="h-4 w-4 shrink-0" />
           <span>
