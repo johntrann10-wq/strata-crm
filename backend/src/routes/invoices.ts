@@ -217,6 +217,25 @@ async function getNextInvoiceNumberWithFallback(
   }
 }
 
+async function getHighestExistingInvoiceNumber(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  executor: any,
+  bid: string
+): Promise<number | null> {
+  const invoiceColumns = await getInvoiceColumns();
+  if (!invoiceColumns.has("invoice_number")) return null;
+  const result = await executor.execute(sql`
+    select max((regexp_match(invoice_number, '^INV-(\d+)$'))[1]::int) as max_invoice_number
+    from invoices
+    where business_id = ${bid}
+  `);
+  const rows = (result as { rows?: Array<{ max_invoice_number?: number | string | null }> }).rows ?? [];
+  const value = rows[0]?.max_invoice_number;
+  if (value == null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 async function getInvoiceLineItemColumns(): Promise<Set<string>> {
   if (cachedInvoiceLineItemColumns) return cachedInvoiceLineItemColumns;
   const result = await db.execute(sql`
@@ -983,7 +1002,9 @@ invoicesRouter.post(
     if (!b) throw new NotFoundError("Business not found.");
     const nextNum = b.nextInvoiceNumber ?? null;
     const invoiceId = randomUUID();
-    const initialInvoiceNumber = nextNum != null && nextNum > 0 ? `INV-${nextNum}` : `INV-${Date.now()}`;
+    const highestExistingInvoiceNumber = await getHighestExistingInvoiceNumber(executor, bid);
+    const initialNumericInvoiceNumber = Math.max(nextNum ?? 1, (highestExistingInvoiceNumber ?? 0) + 1);
+    const initialInvoiceNumber = `INV-${initialNumericInvoiceNumber}`;
     const dueDate =
       data.dueDate != null && data.dueDate !== ""
         ? new Date(data.dueDate)
@@ -1012,7 +1033,7 @@ invoicesRouter.post(
       const invoiceColumns = await getInvoiceColumns();
       const canUseModernInvoiceInsert = hasRequiredColumns(invoiceColumns, MODERN_INVOICE_CREATE_COLUMNS);
       let invoiceNumber = initialInvoiceNumber;
-      for (let attempt = 0; attempt < 3 && !created; attempt += 1) {
+      for (let attempt = 0; attempt < 25 && !created; attempt += 1) {
         try {
           if (canUseModernInvoiceInsert) {
             await executor
@@ -1109,7 +1130,7 @@ invoicesRouter.post(
       try {
         const createdNumberMatch = /^INV-(\d+)$/.exec(created.invoiceNumber);
         const nextCounterValue =
-          createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : (nextNum ?? 1) + 1;
+          createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : initialNumericInvoiceNumber + 1;
         await executor
           .update(businesses)
           .set({ nextInvoiceNumber: nextCounterValue, updatedAt: new Date() })
@@ -1120,7 +1141,7 @@ invoicesRouter.post(
         if (businessColumns.has("next_invoice_number")) {
           const createdNumberMatch = /^INV-(\d+)$/.exec(created.invoiceNumber);
           const nextCounterValue =
-            createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : (nextNum ?? 1) + 1;
+            createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : initialNumericInvoiceNumber + 1;
           const updates: Record<string, unknown> = { nextInvoiceNumber: nextCounterValue };
           if (businessColumns.has("updated_at")) updates.updatedAt = new Date();
           await executor.update(businesses).set(updates).where(eq(businesses.id, bid));
