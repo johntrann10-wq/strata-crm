@@ -11,6 +11,7 @@ import { googleClient } from "../lib/googleAuth.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { randomUUID } from "crypto";
 import { getDefaultPermissionsForRole } from "../lib/permissions.js";
+import { createInMemoryRateLimiter } from "../middleware/security.js";
 const signInSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
 const signUpSchema = z.object({
   email: z.string().email(),
@@ -19,6 +20,26 @@ const signUpSchema = z.object({
   lastName: z.string().optional(),
 });
 export const authRouter = Router();
+
+const signInLimiter = createInMemoryRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  message: "Too many sign-in attempts. Please wait a few minutes and try again.",
+  key: ({ ip, body }) => {
+    const email = typeof (body as { email?: unknown })?.email === "string" ? normalizeEmail((body as { email: string }).email) : "";
+    return `auth:sign-in:${ip}:${email}`;
+  },
+});
+
+const signUpLimiter = createInMemoryRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 6,
+  message: "Too many sign-up attempts. Please wait a bit before trying again.",
+  key: ({ ip, body }) => {
+    const email = typeof (body as { email?: unknown })?.email === "string" ? normalizeEmail((body as { email: string }).email) : "";
+    return `auth:sign-up:${ip}:${email}`;
+  },
+});
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -256,6 +277,7 @@ authRouter.get(
 );
 authRouter.post(
   "/sign-in",
+  signInLimiter.middleware,
   wrapAsync(async (req: Request, res: Response, _next: NextFunction) => {
     const parsed = signInSchema.safeParse(req.body);
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -277,6 +299,7 @@ authRouter.post(
 );
 authRouter.post(
   "/sign-up",
+  signUpLimiter.middleware,
   wrapAsync(async (req: Request, res: Response, _next: NextFunction) => {
     const parsed = signUpSchema.safeParse(req.body);
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");

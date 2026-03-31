@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import session from "express-session";
 import { requestId, requestLogging } from "./middleware/logging.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { noStore, securityHeaders } from "./middleware/security.js";
 import { optionalAuth } from "./middleware/auth.js";
 import { requireSubscription } from "./middleware/subscription.js";
 import { validateEnv } from "./lib/env.js";
@@ -35,11 +36,13 @@ import { billingRouter, handleStripeWebhook } from "./routes/billing.js";
 validateEnv();
 
 const app = express();
+app.disable("x-powered-by");
 
 // CORS: Vercel → Railway (or local Vite → local API). Exact origins only — see `buildCorsAllowedOrigins`.
 // JWT uses `Authorization`; preflight OPTIONS is answered before routes.
 const corsAllowedOrigins = buildCorsAllowedOrigins();
 app.use(corsMiddleware(corsAllowedOrigins));
+app.use(securityHeaders);
 
 // Stripe webhook needs raw body (must be before express.json())
 app.post(
@@ -61,7 +64,7 @@ app.use(
 app.use(requestId);
 app.use(requestLogging);
 
-app.use("/api/auth", authRouter);
+app.use("/api/auth", noStore, authRouter);
 app.use("/api/users", optionalAuth, usersRouter);
 app.use("/api/billing", billingRouter);
 app.use("/api/businesses", optionalAuth, businessesRouter);

@@ -11,6 +11,8 @@ describe("API integration", () => {
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.headers["x-frame-options"]).toBe("DENY");
   });
 
   it("GET /api/appointments without auth returns 401", async () => {
@@ -36,5 +38,6 @@ describe("API integration", () => {
   it("POST /api/auth/sign-in with invalid body returns 400", async () => {
     const res = await request(app).post("/api/auth/sign-in").send({});
     expect(res.status).toBe(400);
+    expect(res.headers["cache-control"]).toContain("no-store");
   });
 });
