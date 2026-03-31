@@ -263,6 +263,51 @@ async function insertLegacyInvoice(
   };
 }
 
+async function markInvoiceSentWithFallback(invoiceId: string) {
+  try {
+    const [updated] = await db
+      .update(invoices)
+      .set({ status: "sent", updatedAt: new Date() })
+      .where(eq(invoices.id, invoiceId))
+      .returning({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        status: invoices.status,
+      });
+    return updated ?? null;
+  } catch (error) {
+    if (!isInvoiceSchemaDriftError(error)) throw error;
+    logger.warn("Invoice schema drift detected while finalizing send; falling back to legacy invoice update", {
+      invoiceId,
+      error,
+    });
+    const invoiceColumns = await getInvoiceColumns();
+    const updates: Record<string, unknown> = {};
+    if (invoiceColumns.has("status")) updates.status = "sent";
+    if (invoiceColumns.has("updated_at")) updates.updatedAt = new Date();
+    if (Object.keys(updates).length > 0) {
+      await db
+        .update(invoices)
+        .set(updates as Partial<typeof invoices.$inferInsert>)
+        .where(eq(invoices.id, invoiceId));
+    }
+    const [refetched] = await db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+      })
+      .from(invoices)
+      .where(eq(invoices.id, invoiceId))
+      .limit(1);
+    if (!refetched) return null;
+    return {
+      id: refetched.id,
+      invoiceNumber: refetched.invoiceNumber ?? null,
+      status: invoiceColumns.has("status") ? "sent" : null,
+    };
+  }
+}
+
 async function listInvoicePayments(invoiceId: string) {
   try {
     return await db.select().from(payments).where(eq(payments.invoiceId, invoiceId));
@@ -1134,37 +1179,33 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
     return;
   }
 
-  let updated;
+  let updated:
+    | {
+        id: string;
+        invoiceNumber: string | null;
+        status: string | null;
+      }
+    | null = null;
   try {
-    [updated] = await db
-      .update(invoices)
-      .set({ status: "sent", updatedAt: new Date() })
-      .where(eq(invoices.id, req.params.id))
-      .returning();
+    updated = await markInvoiceSentWithFallback(req.params.id);
   } catch (error) {
-    if (!isInvoiceSchemaDriftError(error)) throw error;
-    logger.warn("Invoice schema drift detected while finalizing send; falling back to legacy invoice update", {
+    logger.error("Invoice emailed but post-send status update failed", {
       invoiceId: existing.id,
       businessId: bid,
       error,
     });
-    const invoiceColumns = await getInvoiceColumns();
-    const updates: Record<string, unknown> = { status: "sent" };
-    if (invoiceColumns.has("updated_at")) updates.updatedAt = new Date();
-    await db
-      .update(invoices)
-      .set(updates as Partial<typeof invoices.$inferInsert>)
-      .where(eq(invoices.id, req.params.id));
+  }
+  if (!updated) {
     updated = {
       id: existing.id,
       invoiceNumber: existing.invoiceNumber ?? null,
       status: "sent",
     };
   }
-  if (!updated) throw new NotFoundError("Invoice not found.");
-  await createRequestActivityLog(req, {
-    businessId: bid,
-    action: "invoice.sent",
+  try {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "invoice.sent",
       entityType: "invoice",
       entityId: updated.id,
       metadata: {
@@ -1175,6 +1216,13 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
         deliveryStatus: "emailed",
         deliveryError: null,
       },
-  });
+    });
+  } catch (error) {
+    logger.warn("Invoice emailed but activity log write failed", {
+      invoiceId: updated.id,
+      businessId: bid,
+      error,
+    });
+  }
   res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null, recipient: recipientEmail, recipientName });
 }));
