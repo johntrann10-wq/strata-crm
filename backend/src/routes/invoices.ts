@@ -85,6 +85,32 @@ function isInvoiceSchemaDriftError(error: unknown): boolean {
   return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
+function isInvoiceNumberConflictError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown; constraint?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  const constraint = String((cause as { constraint?: unknown }).constraint ?? "").toLowerCase();
+  return (
+    code === "23505" &&
+    (constraint.includes("invoice_number") ||
+      message.includes("invoice_number") ||
+      message.includes("invoices_invoice_number_unique"))
+  );
+}
+
+function nextInvoiceNumberCandidate(current: string, fallbackSeed: number) {
+  const match = /^INV-(\d+)$/.exec(current);
+  if (match) {
+    return `INV-${Number(match[1]) + 1}`;
+  }
+  return `INV-${fallbackSeed}`;
+}
+
 const createInvoiceReturning = {
   id: invoices.id,
   businessId: invoices.businessId,
@@ -957,7 +983,7 @@ invoicesRouter.post(
     if (!b) throw new NotFoundError("Business not found.");
     const nextNum = b.nextInvoiceNumber ?? null;
     const invoiceId = randomUUID();
-    const invoiceNumber = nextNum != null && nextNum > 0 ? `INV-${nextNum}` : `INV-${Date.now()}`;
+    const initialInvoiceNumber = nextNum != null && nextNum > 0 ? `INV-${nextNum}` : `INV-${Date.now()}`;
     const dueDate =
       data.dueDate != null && data.dueDate !== ""
         ? new Date(data.dueDate)
@@ -985,11 +1011,31 @@ invoicesRouter.post(
       const now = new Date();
       const invoiceColumns = await getInvoiceColumns();
       const canUseModernInvoiceInsert = hasRequiredColumns(invoiceColumns, MODERN_INVOICE_CREATE_COLUMNS);
-      if (canUseModernInvoiceInsert) {
+      let invoiceNumber = initialInvoiceNumber;
+      for (let attempt = 0; attempt < 3 && !created; attempt += 1) {
         try {
-          await executor
-            .insert(invoices)
-            .values({
+          if (canUseModernInvoiceInsert) {
+            await executor
+              .insert(invoices)
+              .values({
+                id: invoiceId,
+                businessId: bid,
+                clientId: data.clientId,
+                appointmentId: data.appointmentId ?? null,
+                invoiceNumber,
+                status: initialStatus,
+                subtotal: String(subtotal),
+                taxRate: String(taxRate),
+                taxAmount: String(taxAmount),
+                discountAmount: String(discountAmount),
+                total: String(total),
+                notes: data.notes ?? null,
+                dueDate,
+                createdAt: now,
+                updatedAt: now,
+              })
+              .returning({ id: invoices.id });
+            created = {
               id: invoiceId,
               businessId: bid,
               clientId: data.clientId,
@@ -1001,31 +1047,32 @@ invoicesRouter.post(
               taxAmount: String(taxAmount),
               discountAmount: String(discountAmount),
               total: String(total),
-              notes: data.notes ?? null,
               dueDate,
+              paidAt: null,
+              notes: data.notes ?? null,
               createdAt: now,
               updatedAt: now,
-            })
-            .returning({ id: invoices.id });
-          created = {
-            id: invoiceId,
-            businessId: bid,
-            clientId: data.clientId,
-            appointmentId: data.appointmentId ?? null,
-            invoiceNumber,
-            status: initialStatus,
-            subtotal: String(subtotal),
-            taxRate: String(taxRate),
-            taxAmount: String(taxAmount),
-            discountAmount: String(discountAmount),
-            total: String(total),
-            dueDate,
-            paidAt: null,
-            notes: data.notes ?? null,
-            createdAt: now,
-            updatedAt: now,
-          };
+            };
+          } else {
+            created = await insertLegacyInvoice(executor, bid, invoiceId, {
+              clientId: data.clientId,
+              appointmentId: data.appointmentId ?? null,
+              invoiceNumber,
+              status: initialStatus,
+              subtotal,
+              taxRate,
+              taxAmount,
+              discountAmount,
+              total,
+              notes: data.notes ?? null,
+              dueDate,
+            });
+          }
         } catch (error) {
+          if (isInvoiceNumberConflictError(error)) {
+            invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
+            continue;
+          }
           if (!isInvoiceSchemaDriftError(error)) throw error;
           created = await insertLegacyInvoice(executor, bid, invoiceId, {
             clientId: data.clientId,
@@ -1041,35 +1088,27 @@ invoicesRouter.post(
             dueDate,
           });
         }
-      } else {
-        created = await insertLegacyInvoice(executor, bid, invoiceId, {
-          clientId: data.clientId,
-          appointmentId: data.appointmentId ?? null,
-        invoiceNumber,
-        status: initialStatus,
-        subtotal,
-        taxRate,
-        taxAmount,
-        discountAmount,
-        total,
-        notes: data.notes ?? null,
-          dueDate,
-        });
       }
-    if (!created) throw new BadRequestError("Failed to create invoice.");
-    try {
-      await executor
-        .update(businesses)
-        .set({ nextInvoiceNumber: (nextNum ?? 1) + 1, updatedAt: new Date() })
-        .where(eq(businesses.id, bid));
-    } catch (error) {
-      if (!isInvoiceSchemaDriftError(error)) throw error;
-      const businessColumns = await getBusinessColumns();
-      if (businessColumns.has("next_invoice_number")) {
-        const updates: Record<string, unknown> = { nextInvoiceNumber: (nextNum ?? 1) + 1 };
-        if (businessColumns.has("updated_at")) updates.updatedAt = new Date();
-        await executor.update(businesses).set(updates).where(eq(businesses.id, bid));
-      } else {
+      if (!created) throw new BadRequestError("Failed to create invoice.");
+      try {
+        const createdNumberMatch = /^INV-(\d+)$/.exec(created.invoiceNumber);
+        const nextCounterValue =
+          createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : (nextNum ?? 1) + 1;
+        await executor
+          .update(businesses)
+          .set({ nextInvoiceNumber: nextCounterValue, updatedAt: new Date() })
+          .where(eq(businesses.id, bid));
+      } catch (error) {
+        if (!isInvoiceSchemaDriftError(error)) throw error;
+        const businessColumns = await getBusinessColumns();
+        if (businessColumns.has("next_invoice_number")) {
+          const createdNumberMatch = /^INV-(\d+)$/.exec(created.invoiceNumber);
+          const nextCounterValue =
+            createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : (nextNum ?? 1) + 1;
+          const updates: Record<string, unknown> = { nextInvoiceNumber: nextCounterValue };
+          if (businessColumns.has("updated_at")) updates.updatedAt = new Date();
+          await executor.update(businesses).set(updates).where(eq(businesses.id, bid));
+        } else {
         logger.warn("Business schema drift detected while incrementing invoice number; skipping counter update", {
           businessId: bid,
         });
