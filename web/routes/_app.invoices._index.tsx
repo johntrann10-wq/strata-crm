@@ -80,6 +80,28 @@ function paidAmount(invoice: { totalPaid?: number | string | null }) {
   return Number.isNaN(value) ? 0 : value;
 }
 
+function primaryInvoiceAmount(invoice: {
+  status?: string | null;
+  total?: number | string | null;
+  remainingBalance?: number | string | null;
+  totalPaid?: number | string | null;
+}) {
+  const outstanding = balanceAmount(invoice);
+  const paid = paidAmount(invoice);
+  const total = typeof invoice.total === "string" ? Number(invoice.total) : Number(invoice.total ?? 0);
+  const normalizedTotal = Number.isNaN(total) ? 0 : total;
+
+  if (String(invoice.status ?? "") === "paid" && paid > 0) {
+    return paid;
+  }
+
+  if (outstanding <= 0 && paid > 0) {
+    return paid;
+  }
+
+  return outstanding > 0 ? outstanding : normalizedTotal;
+}
+
 export default function InvoicesIndexPage() {
   const location = useLocation();
   const { businessId } = useOutletContext<AuthOutletContext>();
@@ -314,7 +336,7 @@ export default function InvoicesIndexPage() {
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Invoice #</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Client</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Vehicle</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Balance</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Amount</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Date Created</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Due Date</th>
@@ -383,6 +405,7 @@ export default function InvoicesIndexPage() {
                             : "-";
                           const outstanding = balanceAmount(invoice);
                           const paid = paidAmount(invoice);
+                          const primaryAmount = primaryInvoiceAmount(invoice);
                           const hasPaymentHistory = paid > 0;
                           const lastSent = formatFreshness((invoice as any).lastSentAt, "Sent");
                           const lastPaid = formatFreshness((invoice as any).lastPaidAt, "Paid");
@@ -412,7 +435,7 @@ export default function InvoicesIndexPage() {
                               <td className="px-4 py-3 text-muted-foreground">{vehicleLabel || "-"}</td>
                               <td className="px-4 py-3">
                                 <div className="space-y-1">
-                                  <div className="font-medium">{formatCurrency(outstanding)}</div>
+                                  <div className="font-medium">{formatCurrency(primaryAmount)}</div>
                                   <div className="text-xs text-muted-foreground">
                                     Total {formatCurrency(invoice.total)}
                                     {hasPaymentHistory ? ` · Paid ${formatCurrency(paid)}` : ""}
