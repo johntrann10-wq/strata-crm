@@ -136,6 +136,30 @@ async function getBusinessColumns(): Promise<Set<string>> {
   return cachedBusinessColumns;
 }
 
+async function getNextInvoiceNumberWithFallback(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  executor: any,
+  bid: string
+) {
+  try {
+    const [row] = await executor
+      .select({ id: businesses.id, nextInvoiceNumber: businesses.nextInvoiceNumber })
+      .from(businesses)
+      .where(eq(businesses.id, bid))
+      .limit(1);
+    return row ?? null;
+  } catch (error) {
+    if (!isInvoiceSchemaDriftError(error)) throw error;
+    const [row] = await executor
+      .select({ id: businesses.id })
+      .from(businesses)
+      .where(eq(businesses.id, bid))
+      .limit(1);
+    if (!row) return null;
+    return { id: row.id, nextInvoiceNumber: null };
+  }
+}
+
 async function getInvoiceLineItemColumns(): Promise<Set<string>> {
   if (cachedInvoiceLineItemColumns) return cachedInvoiceLineItemColumns;
   const result = await db.execute(sql`
@@ -853,13 +877,9 @@ invoicesRouter.post(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     executor: any
   ) {
-    const [b] = await executor
-      .select({ nextInvoiceNumber: businesses.nextInvoiceNumber })
-      .from(businesses)
-      .where(eq(businesses.id, bid))
-      .limit(1);
+    const b = await getNextInvoiceNumberWithFallback(executor, bid);
     if (!b) throw new NotFoundError("Business not found.");
-    const nextNum = b.nextInvoiceNumber;
+    const nextNum = b.nextInvoiceNumber ?? null;
     const invoiceNumber = nextNum != null && nextNum > 0 ? `INV-${nextNum}` : `INV-${Date.now()}`;
     const dueDate =
       data.dueDate != null && data.dueDate !== ""
@@ -909,9 +929,15 @@ invoicesRouter.post(
     } catch (error) {
       if (!isInvoiceSchemaDriftError(error)) throw error;
       const businessColumns = await getBusinessColumns();
-      const updates: Record<string, unknown> = { nextInvoiceNumber: (nextNum ?? 1) + 1 };
-      if (businessColumns.has("updated_at")) updates.updatedAt = new Date();
-      await executor.update(businesses).set(updates).where(eq(businesses.id, bid));
+      if (businessColumns.has("next_invoice_number")) {
+        const updates: Record<string, unknown> = { nextInvoiceNumber: (nextNum ?? 1) + 1 };
+        if (businessColumns.has("updated_at")) updates.updatedAt = new Date();
+        await executor.update(businesses).set(updates).where(eq(businesses.id, bid));
+      } else {
+        logger.warn("Business schema drift detected while incrementing invoice number; skipping counter update", {
+          businessId: bid,
+        });
+      }
     }
     for (const it of items) {
       try {
@@ -1125,11 +1151,15 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
     const invoiceColumns = await getInvoiceColumns();
     const updates: Record<string, unknown> = { status: "sent" };
     if (invoiceColumns.has("updated_at")) updates.updatedAt = new Date();
-    [updated] = await db
+    await db
       .update(invoices)
       .set(updates as Partial<typeof invoices.$inferInsert>)
-      .where(eq(invoices.id, req.params.id))
-      .returning();
+      .where(eq(invoices.id, req.params.id));
+    updated = {
+      id: existing.id,
+      invoiceNumber: existing.invoiceNumber ?? null,
+      status: "sent",
+    };
   }
   if (!updated) throw new NotFoundError("Invoice not found.");
   await createRequestActivityLog(req, {
