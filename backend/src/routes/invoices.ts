@@ -108,6 +108,37 @@ let cachedInvoiceColumns: Set<string> | null = null;
 let cachedBusinessColumns: Set<string> | null = null;
 let cachedInvoiceLineItemColumns: Set<string> | null = null;
 
+const MODERN_INVOICE_CREATE_COLUMNS = [
+  "business_id",
+  "client_id",
+  "appointment_id",
+  "invoice_number",
+  "status",
+  "subtotal",
+  "tax_rate",
+  "tax_amount",
+  "discount_amount",
+  "total",
+  "due_date",
+  "notes",
+  "created_at",
+  "updated_at",
+] as const;
+
+const MODERN_INVOICE_LINE_ITEM_COLUMNS = [
+  "invoice_id",
+  "description",
+  "quantity",
+  "unit_price",
+  "total",
+  "created_at",
+  "updated_at",
+] as const;
+
+function hasRequiredColumns(columns: Set<string>, required: readonly string[]) {
+  return required.every((column) => columns.has(column));
+}
+
 async function getInvoiceColumns(): Promise<Set<string>> {
   if (cachedInvoiceColumns) return cachedInvoiceColumns;
   const result = await db.execute(sql`
@@ -919,9 +950,9 @@ invoicesRouter.post(
       : null;
 
   async function createInvoiceWithExecutor(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    executor: any
-  ) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      executor: any
+    ) {
     const b = await getNextInvoiceNumberWithFallback(executor, bid);
     if (!b) throw new NotFoundError("Business not found.");
     const nextNum = b.nextInvoiceNumber ?? null;
@@ -931,7 +962,7 @@ invoicesRouter.post(
       data.dueDate != null && data.dueDate !== ""
         ? new Date(data.dueDate)
         : null;
-    let created:
+      let created:
       | {
           id: string;
           businessId: string;
@@ -950,52 +981,70 @@ invoicesRouter.post(
           createdAt: Date;
           updatedAt: Date;
         }
-      | null = null;
-    const now = new Date();
-    try {
-      await executor
-        .insert(invoices)
-        .values({
-          id: invoiceId,
-          businessId: bid,
+        | null = null;
+      const now = new Date();
+      const invoiceColumns = await getInvoiceColumns();
+      const canUseModernInvoiceInsert = hasRequiredColumns(invoiceColumns, MODERN_INVOICE_CREATE_COLUMNS);
+      if (canUseModernInvoiceInsert) {
+        try {
+          await executor
+            .insert(invoices)
+            .values({
+              id: invoiceId,
+              businessId: bid,
+              clientId: data.clientId,
+              appointmentId: data.appointmentId ?? null,
+              invoiceNumber,
+              status: initialStatus,
+              subtotal: String(subtotal),
+              taxRate: String(taxRate),
+              taxAmount: String(taxAmount),
+              discountAmount: String(discountAmount),
+              total: String(total),
+              notes: data.notes ?? null,
+              dueDate,
+              createdAt: now,
+              updatedAt: now,
+            })
+            .returning({ id: invoices.id });
+          created = {
+            id: invoiceId,
+            businessId: bid,
+            clientId: data.clientId,
+            appointmentId: data.appointmentId ?? null,
+            invoiceNumber,
+            status: initialStatus,
+            subtotal: String(subtotal),
+            taxRate: String(taxRate),
+            taxAmount: String(taxAmount),
+            discountAmount: String(discountAmount),
+            total: String(total),
+            dueDate,
+            paidAt: null,
+            notes: data.notes ?? null,
+            createdAt: now,
+            updatedAt: now,
+          };
+        } catch (error) {
+          if (!isInvoiceSchemaDriftError(error)) throw error;
+          created = await insertLegacyInvoice(executor, bid, invoiceId, {
+            clientId: data.clientId,
+            appointmentId: data.appointmentId ?? null,
+            invoiceNumber,
+            status: initialStatus,
+            subtotal,
+            taxRate,
+            taxAmount,
+            discountAmount,
+            total,
+            notes: data.notes ?? null,
+            dueDate,
+          });
+        }
+      } else {
+        created = await insertLegacyInvoice(executor, bid, invoiceId, {
           clientId: data.clientId,
           appointmentId: data.appointmentId ?? null,
-          invoiceNumber,
-          status: initialStatus,
-          subtotal: String(subtotal),
-          taxRate: String(taxRate),
-          taxAmount: String(taxAmount),
-          discountAmount: String(discountAmount),
-          total: String(total),
-          notes: data.notes ?? null,
-          dueDate,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning({ id: invoices.id });
-      created = {
-        id: invoiceId,
-        businessId: bid,
-        clientId: data.clientId,
-        appointmentId: data.appointmentId ?? null,
-        invoiceNumber,
-        status: initialStatus,
-        subtotal: String(subtotal),
-        taxRate: String(taxRate),
-        taxAmount: String(taxAmount),
-        discountAmount: String(discountAmount),
-        total: String(total),
-        dueDate,
-        paidAt: null,
-        notes: data.notes ?? null,
-        createdAt: now,
-        updatedAt: now,
-      };
-    } catch (error) {
-      if (!isInvoiceSchemaDriftError(error)) throw error;
-      created = await insertLegacyInvoice(executor, bid, invoiceId, {
-        clientId: data.clientId,
-        appointmentId: data.appointmentId ?? null,
         invoiceNumber,
         status: initialStatus,
         subtotal,
@@ -1004,9 +1053,9 @@ invoicesRouter.post(
         discountAmount,
         total,
         notes: data.notes ?? null,
-        dueDate,
-      });
-    }
+          dueDate,
+        });
+      }
     if (!created) throw new BadRequestError("Failed to create invoice.");
     try {
       await executor
@@ -1026,20 +1075,32 @@ invoicesRouter.post(
         });
       }
     }
-    for (const it of items) {
-      try {
-        await executor.insert(invoiceLineItems).values({
-          invoiceId: created.id,
-          description: it.description,
-          quantity: it.quantity,
-          unitPrice: it.unitPrice,
-          total: it.total,
-        });
-      } catch (error) {
-        if (!isInvoiceSchemaDriftError(error)) throw error;
-        await insertLegacyInvoiceLineItem(executor, {
-          invoiceId: created.id,
-          description: it.description,
+      for (const it of items) {
+        const invoiceLineItemColumns = await getInvoiceLineItemColumns();
+        const canUseModernLineItemInsert = hasRequiredColumns(invoiceLineItemColumns, MODERN_INVOICE_LINE_ITEM_COLUMNS);
+        if (canUseModernLineItemInsert) {
+          try {
+            await executor.insert(invoiceLineItems).values({
+              invoiceId: created.id,
+              description: it.description,
+              quantity: it.quantity,
+              unitPrice: it.unitPrice,
+              total: it.total,
+            });
+          } catch (error) {
+            if (!isInvoiceSchemaDriftError(error)) throw error;
+            await insertLegacyInvoiceLineItem(executor, {
+              invoiceId: created.id,
+              description: it.description,
+              quantity: it.quantity,
+              unitPrice: it.unitPrice,
+              total: it.total,
+            });
+          }
+        } else {
+          await insertLegacyInvoiceLineItem(executor, {
+            invoiceId: created.id,
+            description: it.description,
           quantity: it.quantity,
           unitPrice: it.unitPrice,
           total: it.total,

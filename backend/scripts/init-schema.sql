@@ -262,6 +262,21 @@ CREATE TABLE IF NOT EXISTS invoices (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS appointment_id uuid REFERENCES appointments(id);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS invoice_number text;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS status invoice_status DEFAULT 'draft';
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS subtotal decimal(12,2) DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tax_rate decimal(5,2) DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tax_amount decimal(12,2) DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS discount_amount decimal(12,2) DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS total decimal(12,2) DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS due_date timestamptz;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_at timestamptz;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+CREATE UNIQUE INDEX IF NOT EXISTS invoices_invoice_number_unique ON invoices (invoice_number);
+
 CREATE TABLE IF NOT EXISTS invoice_line_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   invoice_id uuid NOT NULL REFERENCES invoices(id),
@@ -272,6 +287,13 @@ CREATE TABLE IF NOT EXISTS invoice_line_items (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE invoice_line_items ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE invoice_line_items ADD COLUMN IF NOT EXISTS quantity decimal(10,2) DEFAULT 1;
+ALTER TABLE invoice_line_items ADD COLUMN IF NOT EXISTS unit_price decimal(12,2);
+ALTER TABLE invoice_line_items ADD COLUMN IF NOT EXISTS total decimal(12,2);
+ALTER TABLE invoice_line_items ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE invoice_line_items ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS payments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
