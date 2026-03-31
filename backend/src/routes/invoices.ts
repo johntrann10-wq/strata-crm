@@ -187,17 +187,17 @@ async function insertLegacyInvoiceLineItem(
 ) {
   const columns = await getInvoiceLineItemColumns();
   const now = new Date();
-  const insertData: Record<string, unknown> = {
-    invoiceId: data.invoiceId,
-    description: data.description,
-    quantity: data.quantity,
-    unitPrice: data.unitPrice,
-    total: data.total,
-  };
-
+  const insertData: Record<string, unknown> = {};
+  if (columns.has("invoice_id")) insertData.invoiceId = data.invoiceId;
+  if (columns.has("description")) insertData.description = data.description;
+  if (columns.has("quantity")) insertData.quantity = data.quantity;
+  if (columns.has("unit_price")) insertData.unitPrice = data.unitPrice;
+  if (columns.has("total")) insertData.total = data.total;
   if (columns.has("created_at")) insertData.createdAt = now;
   if (columns.has("updated_at")) insertData.updatedAt = now;
-
+  if (Object.keys(insertData).length === 0) {
+    throw new BadRequestError("Invoice line item schema is unavailable.");
+  }
   await executor.insert(invoiceLineItems).values(insertData);
 }
 
