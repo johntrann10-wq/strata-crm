@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarIcon, Plus } from "lucide-react";
+import { getJobPhaseLabel, getJobPhaseTone, getJobSpanEnd, hasLaborOnDay, hasPresenceOnDay, isMultiDayJob } from "@/lib/calendarJobSpans";
 import {
   START_HOUR,
   END_HOUR,
@@ -41,7 +42,14 @@ export function DayView({
   const [dragOverMinute, setDragOverMinute] = useState<number | null>(null);
 
   const dayAppts = useMemo(
-    () => appointments.filter((a) => isSameDay(new Date(a.startTime), currentDate)),
+    () => appointments.filter((a) => hasLaborOnDay(a, currentDate)),
+    [appointments, currentDate]
+  );
+  const onSiteJobs = useMemo(
+    () =>
+      appointments.filter(
+        (apt) => isMultiDayJob(apt) && hasPresenceOnDay(apt, currentDate)
+      ),
     [appointments, currentDate]
   );
 
@@ -103,6 +111,24 @@ export function DayView({
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
+          {onSiteJobs.length > 0 ? (
+            <div className="mb-3 space-y-2 rounded-2xl border border-border/70 bg-muted/10 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Vehicles on site</p>
+              {onSiteJobs.slice(0, 3).map((apt) => (
+                <button
+                  key={`${apt.id}-onsite-mobile`}
+                  type="button"
+                  onClick={() => onApptClick(apt)}
+                  className="flex w-full items-center gap-2 rounded-xl border border-border/60 bg-background/85 px-3 py-2 text-left"
+                >
+                  <span className={cn("h-2 w-2 shrink-0 rounded-full", getJobPhaseTone(apt.jobPhase))} />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{apptLabel(apt)}</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">{getJobPhaseLabel(apt.jobPhase)}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           {dayAppts.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 text-center">
               <CalendarIcon className="h-12 w-12 text-muted-foreground" />
@@ -263,6 +289,26 @@ export function DayView({
       <StaffWorkloadBar appointments={dayAppts} />
 
       <div id="day-scroll-container" className="flex-1 overflow-y-auto">
+        {onSiteJobs.length > 0 ? (
+          <div className="border-b border-border/60 bg-muted/10 px-4 py-3">
+            <div className="flex flex-wrap gap-2">
+              {onSiteJobs.map((apt) => (
+                <button
+                  key={`${apt.id}-onsite`}
+                  type="button"
+                  onClick={() => onApptClick(apt)}
+                  className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/85 px-3 py-1.5 text-xs font-semibold text-muted-foreground"
+                >
+                  <span className={cn("h-2 w-2 rounded-full", getJobPhaseTone(apt.jobPhase))} />
+                  <span className="max-w-[14rem] truncate">{apptLabel(apt)}</span>
+                  <span>{getJobPhaseLabel(apt.jobPhase)}</span>
+                  <span className="hidden sm:inline">until {getJobSpanEnd(apt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div
           className="grid grid-cols-[72px_1fr] relative"
           style={{ height: TOTAL_HEIGHT }}

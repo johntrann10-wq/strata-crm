@@ -254,6 +254,12 @@ const createAppointmentReturning = {
   clientId: appointments.clientId,
   vehicleId: appointments.vehicleId,
   startTime: appointments.startTime,
+  endTime: appointments.endTime,
+  jobStartTime: appointments.jobStartTime,
+  expectedCompletionTime: appointments.expectedCompletionTime,
+  pickupReadyTime: appointments.pickupReadyTime,
+  vehicleOnSite: appointments.vehicleOnSite,
+  jobPhase: appointments.jobPhase,
 };
 
 type CreatedAppointmentRecord = {
@@ -262,14 +268,33 @@ type CreatedAppointmentRecord = {
   clientId: string;
   vehicleId: string;
   startTime: Date;
+  endTime: Date | null;
+  jobStartTime: Date | null;
+  expectedCompletionTime: Date | null;
+  pickupReadyTime: Date | null;
+  vehicleOnSite: boolean | null;
+  jobPhase: string;
 };
 
 const appointmentStatusSchema = z.enum(["scheduled", "confirmed", "in_progress", "completed", "cancelled", "no-show"]);
+const appointmentJobPhaseSchema = z.enum([
+  "scheduled",
+  "active_work",
+  "waiting",
+  "curing",
+  "hold",
+  "pickup_ready",
+]);
 const createSchema = z.object({
   clientId: z.string().uuid(),
   vehicleId: z.string().uuid(),
   startTime: z.string().datetime(),
   endTime: z.string().datetime().optional(),
+  jobStartTime: z.string().datetime().optional(),
+  expectedCompletionTime: z.string().datetime().optional(),
+  pickupReadyTime: z.string().datetime().optional(),
+  vehicleOnSite: z.boolean().optional(),
+  jobPhase: appointmentJobPhaseSchema.optional(),
   title: z.string().optional(),
   assignedStaffId: z.string().uuid().optional(),
   locationId: z.string().uuid().optional(),
@@ -285,6 +310,11 @@ const updateSchema = z
   .object({
     startTime: z.string().datetime().optional(),
     endTime: z.string().datetime().optional(),
+    jobStartTime: z.string().datetime().nullable().optional(),
+    expectedCompletionTime: z.string().datetime().nullable().optional(),
+    pickupReadyTime: z.string().datetime().nullable().optional(),
+    vehicleOnSite: z.boolean().optional(),
+    jobPhase: appointmentJobPhaseSchema.optional(),
     title: z.string().nullable().optional(),
     assignedStaffId: z.string().uuid().optional(),
     locationId: z.string().uuid().optional(),
@@ -326,6 +356,44 @@ function parseIsoDate(s: string | undefined): Date | undefined {
   if (!s?.trim()) return undefined;
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+function assertAppointmentLifecycle({
+  workStart,
+  workEnd,
+  jobStart,
+  expectedCompletion,
+  pickupReady,
+}: {
+  workStart: Date;
+  workEnd: Date | null;
+  jobStart: Date;
+  expectedCompletion: Date | null;
+  pickupReady: Date | null;
+}) {
+  if (workEnd && workEnd.getTime() <= workStart.getTime()) {
+    throw new BadRequestError("Appointment end time must be after the start time.");
+  }
+  if (jobStart.getTime() > workStart.getTime()) {
+    throw new BadRequestError("Job start cannot be after the scheduled labor start time.");
+  }
+  if (expectedCompletion && expectedCompletion.getTime() < jobStart.getTime()) {
+    throw new BadRequestError("Expected completion must be after the job start.");
+  }
+  if (pickupReady && pickupReady.getTime() < jobStart.getTime()) {
+    throw new BadRequestError("Pickup-ready time must be after the job start.");
+  }
+}
+
+function intersectsRange(params: {
+  rangeStart?: Date;
+  rangeEnd?: Date;
+  itemStart: Date;
+  itemEnd: Date;
+}): boolean {
+  if (params.rangeStart && params.itemEnd.getTime() < params.rangeStart.getTime()) return false;
+  if (params.rangeEnd && params.itemStart.getTime() > params.rangeEnd.getTime()) return false;
+  return true;
 }
 
 type AppointmentDeliveryStatus = "emailed" | "missing_email" | "smtp_disabled" | "email_failed";
@@ -634,8 +702,14 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
   if (vehicleIdFilter) conditions.push(eq(appointments.vehicleId, vehicleIdFilter));
   if (locationIdFilter) conditions.push(eq(appointments.locationId, locationIdFilter));
   if (statusFilter) conditions.push(eq(appointments.status, statusFilter));
-  if (startGte) conditions.push(gte(appointments.startTime, startGte));
-  if (startLte) conditions.push(lte(appointments.startTime, startLte));
+  if (startGte) {
+    conditions.push(
+      sql`COALESCE(${appointments.pickupReadyTime}, ${appointments.expectedCompletionTime}, ${appointments.endTime}, ${appointments.startTime}) >= ${startGte}`
+    );
+  }
+  if (startLte) {
+    conditions.push(sql`COALESCE(${appointments.jobStartTime}, ${appointments.startTime}) <= ${startLte}`);
+  }
 
   const term = `%${search}%`;
   const whereClause =
@@ -665,6 +739,11 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
       title: appointments.title,
       startTime: appointments.startTime,
       endTime: appointments.endTime,
+      jobStartTime: appointments.jobStartTime,
+      expectedCompletionTime: appointments.expectedCompletionTime,
+      pickupReadyTime: appointments.pickupReadyTime,
+      vehicleOnSite: appointments.vehicleOnSite,
+      jobPhase: appointments.jobPhase,
       status: appointments.status,
       totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
@@ -703,6 +782,11 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
     title: row.title,
     startTime: row.startTime,
     endTime: row.endTime,
+    jobStartTime: row.jobStartTime,
+    expectedCompletionTime: row.expectedCompletionTime,
+    pickupReadyTime: row.pickupReadyTime,
+    vehicleOnSite: row.vehicleOnSite,
+    jobPhase: row.jobPhase,
     status: row.status,
     totalPrice: row.totalPrice,
     depositAmount: row.depositAmount,
@@ -761,6 +845,11 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
       title: appointments.title,
       startTime: appointments.startTime,
       endTime: appointments.endTime,
+      jobStartTime: appointments.jobStartTime,
+      expectedCompletionTime: appointments.expectedCompletionTime,
+      pickupReadyTime: appointments.pickupReadyTime,
+      vehicleOnSite: appointments.vehicleOnSite,
+      jobPhase: appointments.jobPhase,
       status: appointments.status,
       totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
@@ -791,6 +880,11 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
     title: row.title,
     startTime: row.startTime,
     endTime: row.endTime,
+    jobStartTime: row.jobStartTime,
+    expectedCompletionTime: row.expectedCompletionTime,
+    pickupReadyTime: row.pickupReadyTime,
+    vehicleOnSite: row.vehicleOnSite,
+    jobPhase: row.jobPhase,
     status: row.status,
     totalPrice: row.totalPrice,
     depositAmount: row.depositAmount,
@@ -889,6 +983,26 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
 
   const startTime = new Date(parsed.data.startTime);
   const endTime = parsed.data.endTime ? new Date(parsed.data.endTime) : null;
+  const jobStartTime = parsed.data.jobStartTime ? new Date(parsed.data.jobStartTime) : startTime;
+  const expectedCompletionTime = parsed.data.expectedCompletionTime
+    ? new Date(parsed.data.expectedCompletionTime)
+    : endTime;
+  const pickupReadyTime = parsed.data.pickupReadyTime ? new Date(parsed.data.pickupReadyTime) : null;
+  const vehicleOnSite =
+    parsed.data.vehicleOnSite ??
+    !!(
+      expectedCompletionTime &&
+      expectedCompletionTime.toDateString() !== startTime.toDateString()
+    );
+
+  assertAppointmentLifecycle({
+    workStart: startTime,
+    workEnd: endTime,
+    jobStart: jobStartTime,
+    expectedCompletion: expectedCompletionTime,
+    pickupReady: pickupReadyTime,
+  });
+
   const overlap = await hasAppointmentOverlap({
     businessId: bid,
     startTime,
@@ -926,6 +1040,11 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
           vehicleId: parsed.data.vehicleId,
           startTime,
           endTime,
+          jobStartTime,
+          expectedCompletionTime,
+          pickupReadyTime,
+          vehicleOnSite,
+          jobPhase: parsed.data.jobPhase ?? "scheduled",
           title: parsed.data.title ?? null,
           assignedStaffId: parsed.data.assignedStaffId ?? null,
           locationId: parsed.data.locationId ?? null,
@@ -948,6 +1067,11 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
         startTime,
       };
       if (columns.has("end_time")) fallbackValues.endTime = endTime;
+      if (columns.has("job_start_time")) fallbackValues.jobStartTime = jobStartTime;
+      if (columns.has("expected_completion_time")) fallbackValues.expectedCompletionTime = expectedCompletionTime;
+      if (columns.has("pickup_ready_time")) fallbackValues.pickupReadyTime = pickupReadyTime;
+      if (columns.has("vehicle_on_site")) fallbackValues.vehicleOnSite = vehicleOnSite;
+      if (columns.has("job_phase")) fallbackValues.jobPhase = parsed.data.jobPhase ?? "scheduled";
       if (columns.has("title")) fallbackValues.title = parsed.data.title ?? null;
       if (columns.has("assigned_staff_id")) fallbackValues.assignedStaffId = parsed.data.assignedStaffId ?? null;
       if (columns.has("location_id")) fallbackValues.locationId = parsed.data.locationId ?? null;
@@ -1068,6 +1192,10 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
       id: appointments.id,
       startTime: appointments.startTime,
       endTime: appointments.endTime,
+      jobStartTime: appointments.jobStartTime,
+      expectedCompletionTime: appointments.expectedCompletionTime,
+      pickupReadyTime: appointments.pickupReadyTime,
+      vehicleOnSite: appointments.vehicleOnSite,
       assignedStaffId: appointments.assignedStaffId,
     })
     .from(appointments)
@@ -1093,7 +1221,34 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
 
   const startTime = parsed.data.startTime != null ? new Date(parsed.data.startTime) : (existing.startTime as Date);
   const endTime = parsed.data.endTime != null ? new Date(parsed.data.endTime) : (existing.endTime as Date | null);
+  const jobStartTime =
+    parsed.data.jobStartTime !== undefined
+      ? (parsed.data.jobStartTime ? new Date(parsed.data.jobStartTime) : startTime)
+      : ((existing.jobStartTime as Date | null) ?? startTime);
+  const expectedCompletionTime =
+    parsed.data.expectedCompletionTime !== undefined
+      ? (parsed.data.expectedCompletionTime ? new Date(parsed.data.expectedCompletionTime) : null)
+      : ((existing.expectedCompletionTime as Date | null) ?? endTime);
+  const pickupReadyTime =
+    parsed.data.pickupReadyTime !== undefined
+      ? (parsed.data.pickupReadyTime ? new Date(parsed.data.pickupReadyTime) : null)
+      : (existing.pickupReadyTime as Date | null);
+  const vehicleOnSite =
+    parsed.data.vehicleOnSite ??
+    existing.vehicleOnSite ??
+    !!(
+      expectedCompletionTime &&
+      expectedCompletionTime.toDateString() !== startTime.toDateString()
+    );
   const assignedStaffId = parsed.data.assignedStaffId ?? existing.assignedStaffId;
+
+  assertAppointmentLifecycle({
+    workStart: startTime,
+    workEnd: endTime,
+    jobStart: jobStartTime,
+    expectedCompletion: expectedCompletionTime,
+    pickupReady: pickupReadyTime,
+  });
 
   if (parsed.data.startTime != null || parsed.data.endTime != null || parsed.data.assignedStaffId != null) {
     const overlap = await hasAppointmentOverlap({
@@ -1115,6 +1270,11 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (parsed.data.startTime != null) updates.startTime = new Date(parsed.data.startTime);
   if (parsed.data.endTime != null) updates.endTime = new Date(parsed.data.endTime);
+  if (parsed.data.jobStartTime !== undefined) updates.jobStartTime = jobStartTime;
+  if (parsed.data.expectedCompletionTime !== undefined) updates.expectedCompletionTime = expectedCompletionTime;
+  if (parsed.data.pickupReadyTime !== undefined) updates.pickupReadyTime = pickupReadyTime;
+  if (parsed.data.vehicleOnSite !== undefined) updates.vehicleOnSite = vehicleOnSite;
+  if (parsed.data.jobPhase != null) updates.jobPhase = parsed.data.jobPhase;
   if (parsed.data.title != null) updates.title = parsed.data.title;
   if (parsed.data.assignedStaffId != null) updates.assignedStaffId = parsed.data.assignedStaffId;
   if (parsed.data.locationId != null) updates.locationId = parsed.data.locationId;

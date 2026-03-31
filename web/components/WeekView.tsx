@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { getJobPhaseLabel, getJobPhaseTone, hasLaborOnDay, hasPresenceOnDay, isMultiDayJob } from "@/lib/calendarJobSpans";
 import {
   START_HOUR,
   END_HOUR,
@@ -71,6 +72,37 @@ export function WeekView({
     return (currentDecimal - START_HOUR) * HOUR_HEIGHT;
   }, [today, weekDays]);
 
+  const multiDayJobs = useMemo(
+    () => appointments.filter((apt) => isMultiDayJob(apt) && weekDays.some((day) => hasPresenceOnDay(apt, day))),
+    [appointments, weekDays]
+  );
+
+  const spanLanes = useMemo(() => {
+    const lanes: Array<Array<{ apt: ApptRecord; startIndex: number; endIndex: number }>> = [];
+    const sorted = [...multiDayJobs].sort(
+      (a, b) =>
+        weekDays.findIndex((day) => hasPresenceOnDay(a, day)) -
+        weekDays.findIndex((day) => hasPresenceOnDay(b, day))
+    );
+    for (const apt of sorted) {
+      const startIndex = weekDays.findIndex((day) => hasPresenceOnDay(apt, day));
+      const reverseEndIndex = [...weekDays].reverse().findIndex((day) => hasPresenceOnDay(apt, day));
+      const endIndex = reverseEndIndex === -1 ? startIndex : weekDays.length - 1 - reverseEndIndex;
+      let laneIndex = 0;
+      while (true) {
+        const lane = lanes[laneIndex] ?? [];
+        const collision = lane.some((entry) => !(endIndex < entry.startIndex || startIndex > entry.endIndex));
+        if (!collision) {
+          lane.push({ apt, startIndex, endIndex });
+          lanes[laneIndex] = lane;
+          break;
+        }
+        laneIndex += 1;
+      }
+    }
+    return lanes.slice(0, 2);
+  }, [multiDayJobs, weekDays]);
+
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm">
       <div className="sticky top-0 z-10 grid grid-cols-[68px_repeat(7,minmax(0,1fr))] border-b border-border/70 bg-background/95 backdrop-blur-sm">
@@ -79,9 +111,9 @@ export function WeekView({
         </div>
         {weekDays.map((day, di) => {
           const isToday = isSameDay(day, today);
-          const bookedCount = appointments.filter((apt) => isSameDay(new Date(apt.startTime), day)).length;
+          const bookedCount = appointments.filter((apt) => hasLaborOnDay(apt, day)).length;
           const dayConflictCount = appointments.filter(
-            (apt) => isSameDay(new Date(apt.startTime), day) && conflictIds?.has(apt.id)
+            (apt) => hasLaborOnDay(apt, day) && conflictIds?.has(apt.id)
           ).length;
 
           return (
@@ -121,6 +153,35 @@ export function WeekView({
         })}
       </div>
 
+      {spanLanes.length > 0 ? (
+        <div className="grid grid-cols-[68px_repeat(7,minmax(0,1fr))] border-b border-border/60 bg-muted/10">
+          <div className="border-r border-border/60 px-3 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On site</p>
+          </div>
+          <div className="relative col-span-7 px-2 py-2" style={{ height: `${spanLanes.length * 28 + 8}px` }}>
+            {spanLanes.map((lane, laneIndex) =>
+              lane.map(({ apt, startIndex, endIndex }) => (
+                <button
+                  key={`${apt.id}-span`}
+                  type="button"
+                  onClick={() => onApptClick(apt)}
+                  className="absolute flex h-5 items-center gap-1.5 overflow-hidden rounded-full border border-border/60 bg-background/92 px-2 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground shadow-sm"
+                  style={{
+                    top: `${laneIndex * 28 + 6}px`,
+                    left: `${(startIndex / 7) * 100}%`,
+                    width: `${((endIndex - startIndex + 1) / 7) * 100}%`,
+                  }}
+                >
+                  <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", getJobPhaseTone(apt.jobPhase))} />
+                  <span className="truncate">{apt.title || apt.client?.lastName || "Job"}</span>
+                  <span className="hidden truncate md:inline">{getJobPhaseLabel(apt.jobPhase)}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+
       <StaffWorkloadBar appointments={appointments} />
 
       <div id="week-scroll-container" className="flex-1 overflow-y-auto">
@@ -143,7 +204,7 @@ export function WeekView({
           </div>
 
           {weekDays.map((day, di) => {
-            const dayAppts = appointments.filter((apt) => isSameDay(new Date(apt.startTime), day));
+            const dayAppts = appointments.filter((apt) => hasLaborOnDay(apt, day));
             const isTodayColumn = isSameDay(day, today);
 
             return (

@@ -2,6 +2,13 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  getJobPhaseLabel,
+  getJobPhaseTone,
+  hasLaborOnDay,
+  hasPresenceOnDay,
+  isMultiDayJob,
+} from "@/lib/calendarJobSpans";
 
 export let activeDragDurationMs = 3600000;
 
@@ -201,7 +208,11 @@ export function navigateDate(
 ): Date {
   const d = new Date(date);
   if (view === "month") {
+    const originalDay = d.getDate();
+    d.setDate(1);
     d.setMonth(d.getMonth() + direction);
+    const lastDayOfTargetMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(originalDay, lastDayOfTargetMonth));
   } else if (view === "week") {
     d.setDate(d.getDate() + direction * 7);
   } else {
@@ -215,6 +226,11 @@ export type ApptRecord = {
   title: string | null;
   startTime: string;
   endTime: string | null;
+  jobStartTime?: string | null;
+  expectedCompletionTime?: string | null;
+  pickupReadyTime?: string | null;
+  vehicleOnSite?: boolean | null;
+  jobPhase?: string | null;
   status: string;
   totalPrice?: number | null;
   isMobile?: boolean | null;
@@ -650,98 +666,135 @@ export function MonthView({
               const isCurrentMonth = day.getMonth() === currentDate.getMonth();
               const isToday = isSameDay(day, today);
               const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
-              const dayAppts = appointments.filter((a) => isSameDay(new Date(a.startTime), day));
+              const dayAppts = appointments.filter((a) => hasLaborOnDay(a, day));
+              const daySpans = appointments.filter((a) => isMultiDayJob(a) && hasPresenceOnDay(a, day));
               const dayRevenue = dayAppts.reduce((total, apt) => total + Number(apt.totalPrice ?? 0), 0);
               const hasConflict = !!conflictIds && dayAppts.some((a) => conflictIds.has(a.id));
               const mobileDots = dayAppts.slice(0, 3);
+              const dayLabel = day.toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              });
 
               return (
-                <button
+                <div
                   key={di}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open ${dayLabel}`}
                   className={cn(
-                    "group flex h-full min-h-0 flex-col border-r border-border/60 px-1 py-1 text-left transition-colors last:border-r-0 sm:px-2 sm:py-2",
+                    "group relative flex h-full min-h-0 flex-col border-r border-border/60 px-1 py-1 text-left transition-colors last:border-r-0 sm:px-2 sm:py-2",
                     "hover:bg-muted/35",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
                     isToday && "bg-primary/[0.045]",
                     isSelected && "ring-1 ring-inset ring-primary/30"
                   )}
                   onClick={() => onDayClick(day)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onDayClick(day);
+                    }
+                  }}
                 >
-                  <div className="flex items-start justify-between gap-1 sm:mb-2 sm:items-center sm:gap-2">
-                    <span
-                      className={cn(
-                        "inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold sm:h-8 sm:w-8 sm:text-sm",
-                        isToday ? "bg-primary text-primary-foreground" : "text-foreground"
-                      )}
-                    >
-                      {day.getDate()}
-                    </span>
-                    <div className="flex items-center gap-1 sm:gap-2">
-                      {dayAppts.length > 0 ? (
-                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium leading-none text-muted-foreground sm:px-2 sm:text-[10px]">
-                          {dayAppts.length}
-                        </span>
-                      ) : null}
-                      {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
-                    </div>
-                  </div>
-
-                  <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <div className="flex items-center gap-1 md:hidden">
-                      {mobileDots.map((apt) => {
-                        const status = getStatusStyle(apt.status);
-                        return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full", status.accent)} />;
-                      })}
-                      {dayAppts.length > mobileDots.length ? (
-                        <span className="text-[9px] font-medium text-muted-foreground">+{dayAppts.length - mobileDots.length}</span>
-                      ) : null}
+                  <div className="flex h-full min-h-0 flex-col">
+                    <div className="flex items-start justify-between gap-1 sm:mb-2 sm:items-center sm:gap-2">
+                      <span
+                        className={cn(
+                          "inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold sm:h-8 sm:w-8 sm:text-sm",
+                          isToday ? "bg-primary text-primary-foreground" : "text-foreground"
+                        )}
+                      >
+                        {day.getDate()}
+                      </span>
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        {dayAppts.length > 0 ? (
+                          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium leading-none text-muted-foreground sm:px-2 sm:text-[10px]">
+                            {dayAppts.length}
+                          </span>
+                        ) : null}
+                        {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
+                      </div>
                     </div>
 
-                    <div className="hidden space-y-1 overflow-hidden md:block">
-                      {dayAppts.slice(0, 2).map((apt, index) => {
-                        const status = getStatusStyle(apt.status);
-                        return (
-                          <button
-                            key={apt.id}
-                            type="button"
-                            className={cn(
-                              "flex w-full items-center gap-1.5 rounded-md border px-1.5 py-1 text-left shadow-sm transition-colors sm:gap-2 sm:rounded-lg sm:px-2 sm:py-1.5",
-                              index === 1 && "hidden sm:flex",
-                              "hover:opacity-95",
-                              status.surface,
-                              status.text,
-                              status.border
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onApptClick(apt);
-                            }}
+                    <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <div className="mb-1 space-y-1">
+                        {daySpans.slice(0, 2).map((apt) => (
+                          <div
+                            key={`${apt.id}-span`}
+                            className="flex items-center gap-1.5 overflow-hidden rounded-full border border-border/60 bg-background/75 px-1.5 py-[3px] text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2"
                           >
-                            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full sm:h-2 sm:w-2", status.accent)} />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-[10px] font-semibold sm:text-[11px]">{apptLabel(apt)}</p>
-                              <p className="truncate text-[9px] opacity-75 sm:text-[10px]">
-                                {formatTime(new Date(apt.startTime))}
-                              </p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                      {dayAppts.length > 2 ? (
-                        <p className="px-1 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
-                          +{dayAppts.length - 2} more
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
+                            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", getJobPhaseTone(apt.jobPhase))} />
+                            <span className="truncate">{apt.title || apt.client?.lastName || "Job"}</span>
+                          </div>
+                        ))}
+                        {daySpans.length > 2 ? (
+                          <p className="px-1 text-[9px] font-medium text-muted-foreground">+{daySpans.length - 2} on site</p>
+                        ) : null}
+                      </div>
 
-                  {dayAppts.length > 0 ? (
-                    <div className="mt-auto hidden pt-3 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:block">
-                      {currencyFormatter.format(dayRevenue)}
+                      <div className="flex items-center gap-1 md:hidden">
+                        {mobileDots.map((apt) => {
+                          const status = getStatusStyle(apt.status);
+                          return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full", status.accent)} />;
+                        })}
+                        {dayAppts.length > mobileDots.length ? (
+                          <span className="text-[9px] font-medium text-muted-foreground">+{dayAppts.length - mobileDots.length}</span>
+                        ) : null}
+                      </div>
+
+                      <div className="hidden space-y-1 overflow-hidden md:block">
+                        {dayAppts.slice(0, 2).map((apt, index) => {
+                          const status = getStatusStyle(apt.status);
+                          return (
+                            <button
+                              key={apt.id}
+                              type="button"
+                              className={cn(
+                                "!pointer-events-auto flex w-full items-center gap-1.5 rounded-md border px-1.5 py-1 text-left shadow-sm transition-colors sm:gap-2 sm:rounded-lg sm:px-2 sm:py-1.5",
+                                index === 1 && "hidden sm:flex",
+                                "hover:opacity-95",
+                                status.surface,
+                                status.text,
+                                status.border
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onApptClick(apt);
+                              }}
+                            >
+                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full sm:h-2 sm:w-2", status.accent)} />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[10px] font-semibold sm:text-[11px]">{apptLabel(apt)}</p>
+                                <p className="truncate text-[9px] opacity-75 sm:text-[10px]">
+                                  {formatTime(new Date(apt.startTime))}
+                                </p>
+                              </div>
+                              {isMultiDayJob(apt) ? (
+                                <span className="hidden rounded-full border border-border/60 bg-background/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground sm:inline-flex">
+                                  {getJobPhaseLabel(apt.jobPhase)}
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                        {dayAppts.length > 2 ? (
+                          <p className="px-1 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
+                            +{dayAppts.length - 2} more
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
-                  ) : null}
-                </button>
+
+                    {dayAppts.length > 0 ? (
+                      <div className="mt-auto hidden pt-3 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:block">
+                        {currencyFormatter.format(dayRevenue)}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               );
             })}
           </div>

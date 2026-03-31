@@ -27,6 +27,14 @@ const businessTypeEnum = pgEnum("business_type", [
 const appointmentStatusEnum = pgEnum("appointment_status", [
   "scheduled", "confirmed", "in_progress", "completed", "cancelled", "no-show",
 ]);
+const appointmentJobPhaseEnum = pgEnum("appointment_job_phase", [
+  "scheduled",
+  "active_work",
+  "waiting",
+  "curing",
+  "hold",
+  "pickup_ready",
+]);
 const invoiceStatusEnum = pgEnum("invoice_status", ["draft", "sent", "paid", "partial", "void"]);
 const quoteStatusEnum = pgEnum("quote_status", ["draft", "sent", "accepted", "declined", "expired"]);
 const paymentMethodEnum = pgEnum("payment_method", [
@@ -231,6 +239,11 @@ export const appointments = pgTable("appointments", {
   title: text("title"),
   startTime: timestamp("start_time", { withTimezone: true }).notNull(),
   endTime: timestamp("end_time", { withTimezone: true }),
+  jobStartTime: timestamp("job_start_time", { withTimezone: true }),
+  expectedCompletionTime: timestamp("expected_completion_time", { withTimezone: true }),
+  pickupReadyTime: timestamp("pickup_ready_time", { withTimezone: true }),
+  vehicleOnSite: boolean("vehicle_on_site").default(false),
+  jobPhase: appointmentJobPhaseEnum("job_phase").default("scheduled").notNull(),
   status: appointmentStatusEnum("status").default("scheduled").notNull(),
   totalPrice: decimal("total_price", { precision: 12, scale: 2 }).default("0"),
   depositAmount: decimal("deposit_amount", { precision: 12, scale: 2 }).default("0"),

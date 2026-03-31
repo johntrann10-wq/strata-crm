@@ -19,6 +19,7 @@ import {
   getViewRange,
   navigateDate,
 } from "../components/CalendarViews";
+import { dayEnd, dayStart, getJobSpanEnd, getJobSpanStart, hasLaborOnDay, hasPresenceOnDay, isMultiDayJob } from "@/lib/calendarJobSpans";
 
 function toLocalDateString(date: Date): string {
   const year = date.getFullYear();
@@ -88,6 +89,11 @@ export default function CalendarPage() {
       title: true,
       startTime: true,
       endTime: true,
+      jobStartTime: true,
+      expectedCompletionTime: true,
+      pickupReadyTime: true,
+      vehicleOnSite: true,
+      jobPhase: true,
       status: true,
       totalPrice: true,
       assignedStaffId: true,
@@ -181,7 +187,11 @@ export default function CalendarPage() {
   }
 
   const selectedDayAppointments = useMemo(
-    () => activeAppointments.filter((appointment) => new Date(appointment.startTime).toDateString() === currentDate.toDateString()),
+    () => activeAppointments.filter((appointment) => hasLaborOnDay(appointment, currentDate)),
+    [activeAppointments, currentDate]
+  );
+  const selectedDayOnSiteJobs = useMemo(
+    () => activeAppointments.filter((appointment) => isMultiDayJob(appointment) && hasPresenceOnDay(appointment, currentDate)),
     [activeAppointments, currentDate]
   );
   const selectedDayRevenue = selectedDayAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
@@ -191,7 +201,7 @@ export default function CalendarPage() {
   const selectedWeekAppointments = useMemo(
     () =>
       activeAppointments.filter((appointment) =>
-        weekDays.some((day) => new Date(appointment.startTime).toDateString() === day.toDateString())
+        weekDays.some((day) => hasLaborOnDay(appointment, day))
       ),
     [activeAppointments, weekDays]
   );
@@ -204,7 +214,7 @@ export default function CalendarPage() {
         .map((day) => ({
           day,
           appointments: selectedWeekAppointments.filter(
-            (appointment) => new Date(appointment.startTime).toDateString() === day.toDateString()
+            (appointment) => hasLaborOnDay(appointment, day)
           ),
         }))
         .filter((entry) => entry.appointments.length > 0),
@@ -213,8 +223,11 @@ export default function CalendarPage() {
   const selectedMonthAppointments = useMemo(
     () =>
       activeAppointments.filter((appointment) => {
-        const start = new Date(appointment.startTime);
-        return start.getFullYear() === currentDate.getFullYear() && start.getMonth() === currentDate.getMonth();
+        const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999);
+        const spanStart = getJobSpanStart(appointment);
+        const spanEnd = getJobSpanEnd(appointment);
+        return spanStart.getTime() <= monthEnd.getTime() && spanEnd.getTime() >= monthStart.getTime();
       }),
     [activeAppointments, currentDate]
   );
@@ -227,24 +240,41 @@ export default function CalendarPage() {
   const selectedMonthDaysWithWork = useMemo(
     () =>
       new Set(
-        selectedMonthAppointments.map((appointment) => toLocalDateString(new Date(appointment.startTime)))
+        selectedMonthAppointments.flatMap((appointment) => {
+          const dates: string[] = [];
+          const cursor = dayStart(getJobSpanStart(appointment));
+          const last = dayEnd(getJobSpanEnd(appointment));
+          while (cursor.getTime() <= last.getTime()) {
+            if (cursor.getMonth() === currentDate.getMonth() && cursor.getFullYear() === currentDate.getFullYear()) {
+              dates.push(toLocalDateString(cursor));
+            }
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          return dates;
+        })
       ).size,
-    [selectedMonthAppointments]
+    [currentDate, selectedMonthAppointments]
   );
   const busiestMonthDay = useMemo(() => {
     const counts = new Map<string, { date: Date; count: number }>();
     for (const appointment of selectedMonthAppointments) {
-      const date = new Date(appointment.startTime);
-      const key = toLocalDateString(date);
-      const existing = counts.get(key);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        counts.set(key, { date, count: 1 });
+      const cursor = dayStart(getJobSpanStart(appointment));
+      const last = dayEnd(getJobSpanEnd(appointment));
+      while (cursor.getTime() <= last.getTime()) {
+        if (cursor.getMonth() === currentDate.getMonth() && cursor.getFullYear() === currentDate.getFullYear()) {
+          const key = toLocalDateString(cursor);
+          const existing = counts.get(key);
+          if (existing) {
+            existing.count += 1;
+          } else {
+            counts.set(key, { date: new Date(cursor), count: 1 });
+          }
+        }
+        cursor.setDate(cursor.getDate() + 1);
       }
     }
     return Array.from(counts.values()).sort((a, b) => b.count - a.count)[0] ?? null;
-  }, [selectedMonthAppointments]);
+  }, [currentDate, selectedMonthAppointments]);
   const availableViews = isMobileLayout ? (["day", "week", "month"] as const) : (["week", "day", "month"] as const);
 
   return (
@@ -426,12 +456,13 @@ export default function CalendarPage() {
                   </div>
                 </div>
 
-                <div className="surface-panel rounded-[1.5rem] p-4">
-                  <div className="space-y-1">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected date</p>
-                    <h3 className="text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
-                  </div>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <div className={cn("surface-panel rounded-[1.5rem] p-4", isMobileLayout && "h-[19rem] max-h-[19rem] overflow-hidden")}>
+                  <div className="flex h-full flex-col">
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected date</p>
+                      <h3 className="text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                     <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
                       <p className="font-semibold text-foreground">{selectedDayAppointments.length}</p>
                       <p className="mt-1 text-muted-foreground">Booked</p>
@@ -444,53 +475,74 @@ export default function CalendarPage() {
                       <p className="font-semibold text-foreground">{selectedDayUnassigned}</p>
                       <p className="mt-1 text-muted-foreground">Open</p>
                     </div>
-                  </div>
-                  {selectedDayAppointments.length > 0 ? (
-                    <div className="mt-3 space-y-2">
-                      {selectedDayAppointments.slice(0, 5).map((appointment) => (
-                        <button
-                          key={appointment.id}
-                          type="button"
-                          onClick={() => handleApptClick(appointment)}
-                          className="flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88"
-                        >
-                          <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                            {formatPanelTime(appointment.startTime)}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="truncate text-sm font-semibold text-foreground">
-                                {appointment.title ||
-                                  (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
-                              </p>
-                              <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                {appointment.status.replace("_", " ")}
-                              </span>
-                            </div>
-                            <p className="truncate text-xs text-muted-foreground">
-                              {appointment.vehicle
-                                ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
-                                : appointment.assignedStaff
-                                  ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-                                  : "Unassigned"}
+                    </div>
+                    {selectedDayOnSiteJobs.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {selectedDayOnSiteJobs.slice(0, 3).map((appointment) => (
+                          <button
+                            key={`${appointment.id}-presence`}
+                            type="button"
+                            onClick={() => handleApptClick(appointment)}
+                            className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
+                          >
+                            <span className="h-2 w-2 rounded-full bg-sky-500" />
+                            <span className="max-w-[11rem] truncate">
+                              {appointment.title ||
+                                (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Job")}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className={cn("mt-3", isMobileLayout && "flex-1")}>
+                      {selectedDayAppointments.length > 0 ? (
+                        <div className={cn("space-y-2", isMobileLayout && "max-h-[11.75rem] overflow-y-auto pr-1")}>
+                          {selectedDayAppointments.slice(0, 5).map((appointment) => (
+                            <button
+                              key={appointment.id}
+                              type="button"
+                              onClick={() => handleApptClick(appointment)}
+                              className="flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88"
+                            >
+                              <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                {formatPanelTime(appointment.startTime)}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="truncate text-sm font-semibold text-foreground">
+                                    {appointment.title ||
+                                      (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                                  </p>
+                                  <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                    {appointment.status.replace("_", " ")}
+                                  </span>
+                                </div>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {appointment.vehicle
+                                    ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+                                    : appointment.assignedStaff
+                                      ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+                                      : "Unassigned"}
+                                </p>
+                              </div>
+                            </button>
+                          ))}
+                          {selectedDayAppointments.length > 5 ? (
+                            <p className="px-1 text-xs text-muted-foreground">+{selectedDayAppointments.length - 5} more on this date</p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className={cn("space-y-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-5", isMobileLayout && "h-full")}>
+                          <p className="text-sm font-medium text-foreground">No appointments on this date</p>
+                          {busiestMonthDay ? (
+                            <p className="text-xs text-muted-foreground">
+                              Busiest day this month: {formatPanelDate(busiestMonthDay.date)} ({busiestMonthDay.count})
                             </p>
-                          </div>
-                        </button>
-                      ))}
-                      {selectedDayAppointments.length > 5 ? (
-                        <p className="px-1 text-xs text-muted-foreground">+{selectedDayAppointments.length - 5} more on this date</p>
-                      ) : null}
+                          ) : null}
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="mt-3 space-y-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-5">
-                      <p className="text-sm font-medium text-foreground">No appointments on this date</p>
-                      {busiestMonthDay ? (
-                        <p className="text-xs text-muted-foreground">
-                          Busiest day this month: {formatPanelDate(busiestMonthDay.date)} ({busiestMonthDay.count})
-                        </p>
-                      ) : null}
-                    </div>
-                  )}
+                  </div>
                 </div>
               </>
             ) : null}
@@ -624,6 +676,32 @@ export default function CalendarPage() {
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day agenda</p>
                     </div>
                   </div>
+                  {selectedDayOnSiteJobs.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Vehicles on site</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedDayOnSiteJobs.slice(0, 4).map((appointment) => (
+                          <button
+                            key={`${appointment.id}-day-presence`}
+                            type="button"
+                            onClick={() => handleApptClick(appointment)}
+                            className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
+                          >
+                            <span className="h-2 w-2 rounded-full bg-sky-500" />
+                            <span className="max-w-[11rem] truncate">
+                              {appointment.title ||
+                                (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Job")}
+                            </span>
+                          </button>
+                        ))}
+                        {selectedDayOnSiteJobs.length > 4 ? (
+                          <span className="inline-flex items-center rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
+                            +{selectedDayOnSiteJobs.length - 4} more
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                   {selectedDayAppointments.length > 0 ? (
                     <div className="mt-3 space-y-2">
                       {selectedDayAppointments.slice(0, 6).map((appointment) => (

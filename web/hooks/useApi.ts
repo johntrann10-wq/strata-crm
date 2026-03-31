@@ -71,6 +71,7 @@ export function useFindOne(
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -141,6 +142,7 @@ export function useFindMany(
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };

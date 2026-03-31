@@ -116,6 +116,14 @@ export default function NewAppointmentPage() {
   });
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [isMultiDayJob, setIsMultiDayJob] = useState(false);
+  const [jobPhase, setJobPhase] = useState("scheduled");
+  const [jobStartDate, setJobStartDate] = useState("");
+  const [jobStartTime, setJobStartTime] = useState("");
+  const [expectedCompletionDate, setExpectedCompletionDate] = useState("");
+  const [expectedCompletionTime, setExpectedCompletionTime] = useState("");
+  const [pickupReadyDate, setPickupReadyDate] = useState("");
+  const [pickupReadyTime, setPickupReadyTime] = useState("");
   const [mobileAddress, setMobileAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
@@ -335,6 +343,17 @@ export default function NewAppointmentPage() {
     return addMinutes(startDateTime, effectiveDuration);
   }, [startDateTime, effectiveDuration]);
 
+  useEffect(() => {
+    if (!selectedDate) return;
+    const yyyyMmDd = format(selectedDate, "yyyy-MM-dd");
+    setJobStartDate((current) => current || yyyyMmDd);
+    setJobStartTime((current) => current || startTime);
+    if (isMultiDayJob) {
+      setExpectedCompletionDate((current) => current || format(addMinutes(selectedDate, 24 * 60), "yyyy-MM-dd"));
+      setExpectedCompletionTime((current) => current || startTime);
+    }
+  }, [isMultiDayJob, selectedDate, startTime]);
+
   // Set selected client from prefilled data when arriving via URL param
   useEffect(() => {
     if (prefilledClientData && selectedClientId === null) {
@@ -540,6 +559,10 @@ export default function NewAppointmentPage() {
       setFormError("Invalid date/time combination.");
       return;
     }
+    if (isMultiDayJob && (!expectedCompletionDate || !expectedCompletionTime)) {
+      setFormError("Please enter an expected completion date and time for the multi-day job.");
+      return;
+    }
     if (isMobile && !mobileAddress.trim()) {
       setFormError("Please enter the service address for this mobile appointment.");
       return;
@@ -557,6 +580,16 @@ export default function NewAppointmentPage() {
 
     setIsSubmitting(true);
     try {
+      const jobStartDateTime =
+        isMultiDayJob && jobStartDate && jobStartTime
+          ? new Date(`${jobStartDate}T${jobStartTime}`)
+          : startDateTime;
+      const expectedCompletionDateTime =
+        isMultiDayJob && expectedCompletionDate && expectedCompletionTime
+          ? new Date(`${expectedCompletionDate}T${expectedCompletionTime}`)
+          : undefined;
+      const pickupReadyDateTime =
+        pickupReadyDate && pickupReadyTime ? new Date(`${pickupReadyDate}T${pickupReadyTime}`) : undefined;
       const clientNotes = notes.trim();
       const mobileAddressNote = isMobile && mobileAddress.trim() ? `Mobile service address: ${mobileAddress.trim()}` : "";
       const persistedNotes = [mobileAddressNote, clientNotes].filter(Boolean).join("\n\n") || undefined;
@@ -571,6 +604,11 @@ export default function NewAppointmentPage() {
         vehicleId: selectedVehicleId!,
         startTime: startDateTime.toISOString(),
         endTime: endDateTime ? endDateTime.toISOString() : undefined,
+        jobStartTime: jobStartDateTime ? jobStartDateTime.toISOString() : undefined,
+        expectedCompletionTime: expectedCompletionDateTime ? expectedCompletionDateTime.toISOString() : undefined,
+        pickupReadyTime: pickupReadyDateTime ? pickupReadyDateTime.toISOString() : undefined,
+        vehicleOnSite: isMultiDayJob || undefined,
+        jobPhase: isMultiDayJob ? jobPhase : undefined,
         title: autoTitle || undefined,
         assignedStaffId: selectedStaffId ?? undefined,
         locationId: selectedLocationId ?? undefined,
@@ -1363,6 +1401,97 @@ export default function NewAppointmentPage() {
                   </div>
                 </div>
 
+                <div className="space-y-2 sm:col-span-2">
+                  <div
+                    className={cn(
+                      "flex items-start gap-3 rounded-lg border p-3 transition-colors",
+                      isMultiDayJob ? "border-primary bg-primary/5" : "border-border"
+                    )}
+                    onClick={() => setIsMultiDayJob((value) => !value)}
+                  >
+                    <SelectionIndicator checked={isMultiDayJob} />
+                    <div>
+                      <Label className="cursor-pointer font-medium">Multi-day / on-site job</Label>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Track the vehicle across multiple days without blocking every hour on the calendar.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {isMultiDayJob ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="job-start-date">Job Span Start</Label>
+                      <Input
+                        id="job-start-date"
+                        type="date"
+                        value={jobStartDate}
+                        onChange={(e) => setJobStartDate(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="job-start-time">Span Start Time</Label>
+                      <Input
+                        id="job-start-time"
+                        type="time"
+                        value={jobStartTime}
+                        onChange={(e) => setJobStartTime(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="expected-completion-date">Expected Completion</Label>
+                      <Input
+                        id="expected-completion-date"
+                        type="date"
+                        value={expectedCompletionDate}
+                        onChange={(e) => setExpectedCompletionDate(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="expected-completion-time">Completion Time</Label>
+                      <Input
+                        id="expected-completion-time"
+                        type="time"
+                        value={expectedCompletionTime}
+                        onChange={(e) => setExpectedCompletionTime(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Job Phase</Label>
+                      <Select value={jobPhase} onValueChange={setJobPhase}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="scheduled">Scheduled</SelectItem>
+                          <SelectItem value="active_work">Active work</SelectItem>
+                          <SelectItem value="waiting">Waiting</SelectItem>
+                          <SelectItem value="curing">Curing</SelectItem>
+                          <SelectItem value="hold">Hold</SelectItem>
+                          <SelectItem value="pickup_ready">Pickup ready</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pickup-ready-date">Pickup Ready (optional)</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          id="pickup-ready-date"
+                          type="date"
+                          value={pickupReadyDate}
+                          onChange={(e) => setPickupReadyDate(e.target.value)}
+                        />
+                        <Input
+                          type="time"
+                          value={pickupReadyTime}
+                          onChange={(e) => setPickupReadyTime(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+
                 {/* Staff */}
                 <div className="space-y-2">
                   <Label>Assigned Staff</Label>
@@ -1399,16 +1528,16 @@ export default function NewAppointmentPage() {
                 <div className="space-y-2">
                   <Label>Location (optional)</Label>
                   <Select
-                    value={selectedLocationId ?? ""}
+                    value={selectedLocationId ?? "none"}
                     onValueChange={(val) =>
-                      setSelectedLocationId(val === "" ? null : val)
+                      setSelectedLocationId(val === "none" ? null : val)
                     }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Any / No Location" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Any / No Location</SelectItem>
+                      <SelectItem value="none">Any / No Location</SelectItem>
                       {locationsData.map((loc) => (
                         <SelectItem key={loc.id} value={loc.id}>
                           {loc.name}

@@ -28,7 +28,6 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
@@ -93,6 +92,15 @@ const STATUS_LABELS: Record<string, string> = {
   completed: "Completed",
   cancelled: "Cancelled",
   "no-show": "No Show",
+};
+
+const JOB_PHASE_LABELS: Record<string, string> = {
+  scheduled: "Scheduled",
+  active_work: "Active work",
+  waiting: "Waiting",
+  curing: "Curing",
+  hold: "Hold",
+  pickup_ready: "Pickup ready",
 };
 
 function toDateInputValue(date: Date | string | null | undefined): string {
@@ -318,6 +326,33 @@ function WorkflowWarningCard({
   );
 }
 
+function FormSelect({
+  className,
+  value,
+  onChange,
+  children,
+  ...props
+}: Omit<JSX.IntrinsicElements["select"], "onChange"> & {
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <select
+        className={cn(
+          "border-input/90 h-10 w-full appearance-none rounded-xl border bg-background/85 px-3.5 py-2 pr-10 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50",
+          className
+        )}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        {...props}
+      >
+        {children}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+    </div>
+  );
+}
+
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -344,6 +379,14 @@ export default function AppointmentDetail() {
   const [editDate, setEditDate] = useState("");
   const [editStartTime, setEditStartTime] = useState("");
   const [editEndTime, setEditEndTime] = useState("");
+  const [editJobStartDate, setEditJobStartDate] = useState("");
+  const [editJobStartTime, setEditJobStartTime] = useState("");
+  const [editExpectedCompletionDate, setEditExpectedCompletionDate] = useState("");
+  const [editExpectedCompletionTime, setEditExpectedCompletionTime] = useState("");
+  const [editPickupReadyDate, setEditPickupReadyDate] = useState("");
+  const [editPickupReadyTime, setEditPickupReadyTime] = useState("");
+  const [editVehicleOnSite, setEditVehicleOnSite] = useState(false);
+  const [editJobPhase, setEditJobPhase] = useState("scheduled");
   const [editStaffId, setEditStaffId] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editInternalNotes, setEditInternalNotes] = useState("");
@@ -369,6 +412,11 @@ export default function AppointmentDetail() {
         title: true,
         startTime: true,
         endTime: true,
+        jobStartTime: true,
+        expectedCompletionTime: true,
+        pickupReadyTime: true,
+        vehicleOnSite: true,
+        jobPhase: true,
         status: true,
         notes: true,
         internalNotes: true,
@@ -683,6 +731,14 @@ export default function AppointmentDetail() {
       setEditDate(toDateInputValue(appointment.startTime));
       setEditStartTime(toTimeInputValue(appointment.startTime));
       setEditEndTime(toTimeInputValue(appointment.endTime));
+      setEditJobStartDate(toDateInputValue((appointment as any).jobStartTime ?? appointment.startTime));
+      setEditJobStartTime(toTimeInputValue((appointment as any).jobStartTime ?? appointment.startTime));
+      setEditExpectedCompletionDate(toDateInputValue((appointment as any).expectedCompletionTime));
+      setEditExpectedCompletionTime(toTimeInputValue((appointment as any).expectedCompletionTime));
+      setEditPickupReadyDate(toDateInputValue((appointment as any).pickupReadyTime));
+      setEditPickupReadyTime(toTimeInputValue((appointment as any).pickupReadyTime));
+      setEditVehicleOnSite(Boolean((appointment as any).vehicleOnSite));
+      setEditJobPhase(String((appointment as any).jobPhase ?? "scheduled"));
       setEditStaffId(appointment.assignedStaff?.id ?? "");
       setEditNotes(appointment.notes ?? "");
       setEditInternalNotes(appointment.internalNotes ?? "");
@@ -696,12 +752,27 @@ export default function AppointmentDetail() {
       editDate && editStartTime ? new Date(`${editDate}T${editStartTime}`) : undefined;
     const endTime =
       editDate && editEndTime ? new Date(`${editDate}T${editEndTime}`) : undefined;
+    const jobStartDateTime =
+      editVehicleOnSite && editJobStartDate && editJobStartTime
+        ? new Date(`${editJobStartDate}T${editJobStartTime}`)
+        : undefined;
+    const expectedCompletionDateTime =
+      editVehicleOnSite && editExpectedCompletionDate && editExpectedCompletionTime
+        ? new Date(`${editExpectedCompletionDate}T${editExpectedCompletionTime}`)
+        : null;
+    const pickupReadyDateTime =
+      editPickupReadyDate && editPickupReadyTime ? new Date(`${editPickupReadyDate}T${editPickupReadyTime}`) : null;
 
       const result = await runUpdate({
         id: appointment.id,
         title: editTitle || null,
         startTime,
         endTime,
+        jobStartTime: editVehicleOnSite ? jobStartDateTime : null,
+        expectedCompletionTime: editVehicleOnSite ? expectedCompletionDateTime : null,
+        pickupReadyTime: pickupReadyDateTime,
+        vehicleOnSite: editVehicleOnSite,
+        jobPhase: editVehicleOnSite ? editJobPhase : "scheduled",
         assignedStaffId: editStaffId || undefined,
         notes: editNotes,
         internalNotes: editInternalNotes,
@@ -1398,6 +1469,32 @@ export default function AppointmentDetail() {
                     </div>
                   </div>
 
+                  {(appointment as any).vehicleOnSite ? (
+                    <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job lifecycle</p>
+                      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Span start</p>
+                          <p className="text-sm font-medium">{formatDateTime((appointment as any).jobStartTime ?? appointment.startTime)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Expected completion</p>
+                          <p className="text-sm font-medium">{formatDateTime((appointment as any).expectedCompletionTime)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Phase</p>
+                          <p className="text-sm font-medium">{JOB_PHASE_LABELS[String((appointment as any).jobPhase ?? "scheduled")] ?? "Scheduled"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Pickup</p>
+                          <p className="text-sm font-medium">
+                            {(appointment as any).pickupReadyTime ? formatDateTime((appointment as any).pickupReadyTime) : "Not scheduled"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
                   {appointment.isMobile && (
                     <div className="flex items-start gap-3">
                       <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -1486,21 +1583,24 @@ export default function AppointmentDetail() {
                 </CardHeader>
                 <CardContent className={showMobileServices ? "space-y-4" : "hidden space-y-4 lg:block"}>
                   <div className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center">
-                    <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
-                      <SelectTrigger className="sm:flex-1">
-                        <SelectValue placeholder={servicesFetching ? "Loading services..." : "Add a service from your catalog"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Select a service</SelectItem>
-                        {availableServices.map((service) => (
-                          <SelectItem key={service.id} value={service.id}>
-                            {service.name ?? "Service"}
-                            {service.category ? ` - ${service.category}` : ""}
-                            {service.price != null ? ` - ${formatCurrency(Number(service.price))}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormSelect
+                      className="sm:flex-1"
+                      value={selectedServiceId}
+                      onChange={setSelectedServiceId}
+                      disabled={servicesFetching}
+                      aria-label="Add a service from your catalog"
+                    >
+                      <option value="__none__">
+                        {servicesFetching ? "Loading services..." : "Add a service from your catalog"}
+                      </option>
+                      {availableServices.map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {service.name ?? "Service"}
+                          {service.category ? ` - ${service.category}` : ""}
+                          {service.price != null ? ` - ${formatCurrency(Number(service.price))}` : ""}
+                        </option>
+                      ))}
+                    </FormSelect>
                     <Button onClick={() => void handleAddService()} disabled={addingService || selectedServiceId === "__none__"}>
                       {addingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                       Add service
@@ -1825,20 +1925,15 @@ export default function AppointmentDetail() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="deposit-payment-method">Method</Label>
-              <Select value={depositPaymentMethod} onValueChange={setDepositPaymentMethod}>
-                <SelectTrigger id="deposit-payment-method">
-                  <SelectValue placeholder="Select method" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="card">Card</SelectItem>
-                  <SelectItem value="check">Check</SelectItem>
-                  <SelectItem value="venmo">Venmo</SelectItem>
-                  <SelectItem value="cashapp">CashApp</SelectItem>
-                  <SelectItem value="zelle">Zelle</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
+              <FormSelect id="deposit-payment-method" value={depositPaymentMethod} onChange={setDepositPaymentMethod}>
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="check">Check</option>
+                <option value="venmo">Venmo</option>
+                <option value="cashapp">CashApp</option>
+                <option value="zelle">Zelle</option>
+                <option value="other">Other</option>
+              </FormSelect>
             </div>
             <div className="space-y-2">
               <Label htmlFor="deposit-payment-date">Paid On</Label>
@@ -1941,25 +2036,104 @@ export default function AppointmentDetail() {
               </div>
             </div>
 
+            <div className="space-y-3 rounded-lg border border-border/70 p-3">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="edit-vehicle-on-site"
+                  checked={editVehicleOnSite}
+                  onCheckedChange={(checked) => setEditVehicleOnSite(Boolean(checked))}
+                />
+                <div>
+                  <Label htmlFor="edit-vehicle-on-site">Multi-day / on-site job</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Keep vehicle presence visible without blocking the full schedule.
+                  </p>
+                </div>
+              </div>
+
+              {editVehicleOnSite ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-job-start-date">Job Span Start</Label>
+                    <Input
+                      id="edit-job-start-date"
+                      type="date"
+                      value={editJobStartDate}
+                      onChange={(e) => setEditJobStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-job-start-time">Span Start Time</Label>
+                    <Input
+                      id="edit-job-start-time"
+                      type="time"
+                      value={editJobStartTime}
+                      onChange={(e) => setEditJobStartTime(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-expected-completion-date">Expected Completion</Label>
+                    <Input
+                      id="edit-expected-completion-date"
+                      type="date"
+                      value={editExpectedCompletionDate}
+                      onChange={(e) => setEditExpectedCompletionDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-expected-completion-time">Completion Time</Label>
+                    <Input
+                      id="edit-expected-completion-time"
+                      type="time"
+                      value={editExpectedCompletionTime}
+                      onChange={(e) => setEditExpectedCompletionTime(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Job Phase</Label>
+                    <FormSelect value={editJobPhase} onChange={setEditJobPhase}>
+                      <option value="scheduled">Scheduled</option>
+                      <option value="active_work">Active work</option>
+                      <option value="waiting">Waiting</option>
+                      <option value="curing">Curing</option>
+                      <option value="hold">Hold</option>
+                      <option value="pickup_ready">Pickup ready</option>
+                    </FormSelect>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-pickup-ready-date">Pickup Ready</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        id="edit-pickup-ready-date"
+                        type="date"
+                        value={editPickupReadyDate}
+                        onChange={(e) => setEditPickupReadyDate(e.target.value)}
+                      />
+                      <Input
+                        type="time"
+                        value={editPickupReadyTime}
+                        onChange={(e) => setEditPickupReadyTime(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             {/* Assigned Staff */}
             <div className="space-y-2">
               <Label>Assigned Staff</Label>
-              <Select
+              <FormSelect
                 value={editStaffId || "__unassigned__"}
-                onValueChange={(val) => setEditStaffId(val === "__unassigned__" ? "" : val)}
+                onChange={(val) => setEditStaffId(val === "__unassigned__" ? "" : val)}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Unassigned" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__unassigned__">Unassigned</SelectItem>
-                  {(staffForEdit as any[])?.map((staff: any) => (
-                    <SelectItem key={staff.id} value={staff.id}>
-                      {staff.firstName} {staff.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="__unassigned__">Unassigned</option>
+                {(staffForEdit as any[])?.map((staff: any) => (
+                  <option key={staff.id} value={staff.id}>
+                    {staff.firstName} {staff.lastName}
+                  </option>
+                ))}
+              </FormSelect>
             </div>
 
             {/* Notes */}
