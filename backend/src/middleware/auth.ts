@@ -26,26 +26,19 @@ function requireJwtSecret() {
   throw new Error("JWT_SECRET is required");
 }
 function getUserIdFromRequest(req: Request): string | null {
-  // JWT has explicit precedence when Authorization header is present.
-  // If the header is present but invalid, we do NOT fall back to session
-  // (prevents JWT/session conflicts).
+  // Protected API auth is JWT-only. Invalid or missing bearer tokens
+  // should fail closed instead of falling back to a different session source.
   const authHeader = req.headers.authorization ?? "";
   const bearerPrefix = "Bearer ";
-  if (authHeader.trim() !== "") {
-    if (!authHeader.startsWith(bearerPrefix)) return null;
-    const rawToken = authHeader.slice(bearerPrefix.length).trim();
-    if (!rawToken) return null;
-    try {
-      const payload = jwt.verify(rawToken, requireJwtSecret()) as { userId?: string };
-      return payload.userId ?? null;
-    } catch {
-      return null;
-    }
+  if (!authHeader.startsWith(bearerPrefix)) return null;
+  const rawToken = authHeader.slice(bearerPrefix.length).trim();
+  if (!rawToken) return null;
+  try {
+    const payload = jwt.verify(rawToken, requireJwtSecret()) as { userId?: string };
+    return payload.userId ?? null;
+  } catch {
+    return null;
   }
-
-  // No Authorization header -> optional session-based auth fallback.
-  const sessionUserId = (req.session as { userId?: string } | undefined)?.userId;
-  return sessionUserId ?? null;
 }
 export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const userId = getUserIdFromRequest(req);
@@ -66,7 +59,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   }
   next();
 }
-/** Optional auth: set req.userId/businessId if token/session exists, but do not require. */
+/** Optional auth: set req.userId/businessId if a bearer token exists, but do not require. */
 export async function optionalAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const userId = getUserIdFromRequest(req);
   if (!userId) {

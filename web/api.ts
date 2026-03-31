@@ -1,8 +1,5 @@
 import {
-  clearAuthToken,
-  clearCurrentBusinessId,
-  clearCurrentLocationId,
-  emitAuthEvent,
+  clearAuthState,
   getAuthToken,
   getCurrentBusinessId,
   setAuthToken,
@@ -142,10 +139,7 @@ async function request<T = unknown>(
     }
     if (res.status === 401 || res.status === 403) {
       // Invalid/expired token: clear local auth so boot + protected pages can redirect predictably.
-      clearAuthToken();
-      clearCurrentBusinessId();
-      clearCurrentLocationId();
-      emitAuthEvent("auth:invalid", { status: res.status, path });
+      clearAuthState("auth:invalid", { status: res.status, path });
       recordReliabilityDiagnostic({
         source: "auth.invalid",
         severity: "warning",

@@ -27,7 +27,7 @@ import { NavDrawer } from "@/components/shared/NavDrawer";
 import { Home, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "../../api";
-import { clearAuthToken, clearCurrentBusinessId, clearCurrentLocationId, emitAuthEvent } from "@/lib/auth";
+import { clearAuthState } from "@/lib/auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -175,10 +175,7 @@ const SignOutOption = () => {
     } catch {
       // JWT sign-out is local-first; backend failure should not trap the user.
     } finally {
-      clearAuthToken();
-      clearCurrentBusinessId();
-      clearCurrentLocationId();
-      emitAuthEvent("auth:logout");
+      clearAuthState("auth:logout");
       if (typeof window !== "undefined") {
         window.location.replace("/sign-in");
         return;

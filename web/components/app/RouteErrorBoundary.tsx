@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useNavigate, useRouteError } from "react-router";
-import { clearAuthToken, clearCurrentBusinessId, clearCurrentLocationId, emitAuthEvent } from "@/lib/auth";
+import { clearAuthState } from "@/lib/auth";
 
 // Keep UI stable and avoid printing raw stacks.
 export function RouteErrorBoundary() {
@@ -24,10 +24,7 @@ export function RouteErrorBoundary() {
 
   useEffect(() => {
     if (status === 401 || status === 403) {
-      clearAuthToken();
-      clearCurrentBusinessId();
-      clearCurrentLocationId();
-      emitAuthEvent("auth:invalid");
+      clearAuthState("auth:invalid");
       navigate("/sign-in", { replace: true });
     }
   }, [status, navigate]);

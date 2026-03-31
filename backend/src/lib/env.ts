@@ -63,19 +63,6 @@ function applyNonProductionDefaults(): void {
   process.env.PORT ??= "3001";
   process.env.LOG_LEVEL ??= "info";
   process.env.API_BASE ??= "http://localhost:3001";
-  process.env.SESSION_SECRET ??= "dev-session-secret-not-for-production";
-}
-
-function ensureSessionSecret(): void {
-  if (!process.env.SESSION_SECRET?.trim()) {
-    const jwt = process.env.JWT_SECRET?.trim();
-    if (jwt) {
-      process.env.SESSION_SECRET = jwt;
-      logger.info("SESSION_SECRET not set; using JWT_SECRET for session signing");
-    } else {
-      process.env.SESSION_SECRET = "dev-session-secret-not-for-production";
-    }
-  }
 }
 
 function ensureLogLevel(): void {
@@ -116,7 +103,6 @@ function validateProductionEnv(): void {
   requireEnv("FRONTEND_URL");
   requireEnv("PORT");
   ensureLogLevel();
-  ensureSessionSecret();
 
   if (isGoogleOAuthEnabled()) {
     requireEnv("GOOGLE_CLIENT_ID");
@@ -129,7 +115,6 @@ function validateNonProductionEnv(): void {
   applyNonProductionDefaults();
   requireEnv("DATABASE_URL");
   ensureLogLevel();
-  ensureSessionSecret();
 }
 
 /** Validate env at startup: production requires core secrets only; optional services stay off until configured. */

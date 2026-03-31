@@ -71,7 +71,6 @@ describe.skipIf(skipEmbeddedCriticalPath)("Critical path smoke (backend integrat
     // Ensure backend imports validate env against our embedded DB.
     process.env.DATABASE_URL = dbUrl;
     process.env.JWT_SECRET ||= "test-jwt-secret";
-    process.env.SESSION_SECRET ||= "test-session-secret";
     process.env.FRONTEND_URL ||= "http://localhost:5173";
     process.env.SMTP_HOST ||= "smtp.gmail.com";
     process.env.SMTP_PORT ||= "465";

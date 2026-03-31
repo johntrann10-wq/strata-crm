@@ -40,11 +40,12 @@ import { getEnabledModules } from "../lib/modules";
 import { useFindMany, useFindOne, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
 import {
-  clearAuthToken,
+  clearAuthState,
   clearCurrentBusinessId,
   clearCurrentLocationId,
   getCurrentBusinessId,
   getCurrentLocationId,
+  readBroadcastAuthEvent,
   setCurrentBusinessId,
   setCurrentLocationId,
 } from "@/lib/auth";
@@ -646,6 +647,14 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const [billingCheckDone, setBillingCheckDone] = useState(false);
   const effectiveUserId = clientUserId;
 
+  const resetClientAuthState = useCallback(() => {
+    setClientUserId(null);
+    setTenantBusinesses([]);
+    setCurrentBusinessIdState(null);
+    setCurrentLocationIdState(null);
+    setAuthCheckDone(true);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     api.user
@@ -679,38 +688,21 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       .catch(() => {
         if (!cancelled) {
           // Invalid/expired token: clear local state and force the user back to sign-in.
-          clearAuthToken();
-          clearCurrentBusinessId();
-          clearCurrentLocationId();
-          setTenantBusinesses([]);
-          setCurrentBusinessIdState(null);
-          setCurrentLocationIdState(null);
-          setAuthCheckDone(true);
+          clearAuthState("auth:invalid");
+          resetClientAuthState();
         }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [resetClientAuthState]);
 
   useEffect(() => {
     const onInvalid = () => {
-      setClientUserId(null);
-      setTenantBusinesses([]);
-      setCurrentBusinessIdState(null);
-      clearCurrentBusinessId();
-      setCurrentLocationIdState(null);
-      clearCurrentLocationId();
-      setAuthCheckDone(true);
+      resetClientAuthState();
     };
     const onLogout = () => {
-      setClientUserId(null);
-      setTenantBusinesses([]);
-      setCurrentBusinessIdState(null);
-      clearCurrentBusinessId();
-      setCurrentLocationIdState(null);
-      clearCurrentLocationId();
-      setAuthCheckDone(true);
+      resetClientAuthState();
     };
     const onSubscriptionRequired = () => {
       setBillingCheckDone(true);
@@ -725,15 +717,24 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         }
       );
     };
+    const onStorage = (event: StorageEvent) => {
+      const authEvent = readBroadcastAuthEvent(event);
+      if (!authEvent) return;
+      if (authEvent.name === "auth:invalid" || authEvent.name === "auth:logout") {
+        resetClientAuthState();
+      }
+    };
     window.addEventListener("auth:invalid", onInvalid as EventListener);
     window.addEventListener("auth:logout", onLogout as EventListener);
     window.addEventListener("subscription:required", onSubscriptionRequired as EventListener);
+    window.addEventListener("storage", onStorage);
     return () => {
       window.removeEventListener("auth:invalid", onInvalid as EventListener);
       window.removeEventListener("auth:logout", onLogout as EventListener);
       window.removeEventListener("subscription:required", onSubscriptionRequired as EventListener);
+      window.removeEventListener("storage", onStorage);
     };
-  }, []);
+  }, [resetClientAuthState]);
 
   const [{ data: user, fetching: userFetching, error: userError }, refetchUser] = useFindOne(
     api.user,

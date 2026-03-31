@@ -6,7 +6,6 @@ if (!process.env.DATABASE_URL) {
 // Backend env validation: ensure required env vars exist during tests.
 // These are safe placeholders because integration tests stub/skip external calls.
 process.env.JWT_SECRET ??= "test-jwt-secret";
-process.env.SESSION_SECRET ??= "test-session-secret";
 process.env.FRONTEND_URL ??= "http://localhost:5173";
 process.env.API_BASE ??= "http://localhost:3001";
 

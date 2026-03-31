@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import cookieParser from "cookie-parser";
-import session from "express-session";
 import { requestId, requestLogging } from "./middleware/logging.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { noStore, securityHeaders } from "./middleware/security.js";
@@ -53,14 +52,6 @@ app.post(
 
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
-app.use(
-  (session as (opts: { secret: string; resave: boolean; saveUninitialized: boolean; cookie: object }) => express.RequestHandler)({
-    secret: process.env.SESSION_SECRET!,
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === "production", httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 },
-  })
-);
 app.use(requestId);
 app.use(requestLogging);
 

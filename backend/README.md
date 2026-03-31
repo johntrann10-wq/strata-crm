@@ -4,17 +4,17 @@ Production-ready Node + TypeScript API for Strata (auto shop management). Replac
 
 ## Stack
 
-- **Express** — HTTP server
-- **Drizzle ORM** — PostgreSQL with migrations
-- **express-session** — session auth (cookie-based)
-- **Zod** — request validation
-- **Nodemailer** — SMTP email with customizable templates
+- **Express** - HTTP server
+- **Drizzle ORM** - PostgreSQL with migrations
+- **JWT auth** - bearer-token auth for the SPA/API
+- **Zod** - request validation
+- **Nodemailer** - SMTP email with customizable templates
 
 ## Setup
 
 ```bash
 yarn install
-cp .env.example .env   # set DATABASE_URL, SMTP_*, SESSION_SECRET
+cp .env.example .env   # set DATABASE_URL, JWT_SECRET, SMTP_*
 yarn db:generate       # generate migrations
 yarn db:migrate        # run migrations
 yarn dev               # start dev server (port 3001)
@@ -41,7 +41,7 @@ All routes are under `/api/`. Auth uses JWTs sent by the frontend via `Authoriza
 
 ## Multi-tenant
 
-Every request is scoped by `req.businessId` (derived from the signed-in user’s owned business). All resource routes enforce tenant isolation.
+Every request is scoped by `req.businessId` (derived from the signed-in user's owned business). All resource routes enforce tenant isolation.
 
 ## Email templates
 
