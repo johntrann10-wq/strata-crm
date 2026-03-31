@@ -90,6 +90,25 @@ export default function NewInvoicePage() {
     pause: !selectedClientId,
   });
 
+  const [{ data: appointmentRecord }] = useFindOne(api.appointment, appointmentIdParam ?? undefined, {
+    select: {
+      id: true,
+      client: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+      },
+      vehicle: {
+        id: true,
+        year: true,
+        make: true,
+        model: true,
+      },
+    },
+    pause: !appointmentIdParam,
+  });
+
   const [{ data: quoteData }] = useFindOne(api.quote, quoteIdParam ?? undefined, {
     select: {
       id: true,
@@ -184,17 +203,25 @@ export default function NewInvoicePage() {
 
   // Pre-fill client from linked quote
   useEffect(() => {
-    if (!quoteData || !quoteIdParam) return;
+    if (!quoteData || !quoteIdParam || appointmentIdParam) return;
     const cid = (quoteData as { clientId?: string }).clientId;
     if (cid && !selectedClientId) setSelectedClientId(cid);
-  }, [quoteData, quoteIdParam, selectedClientId]);
+  }, [quoteData, quoteIdParam, selectedClientId, appointmentIdParam]);
 
   // Pre-fill client from URL param
   useEffect(() => {
+    if (appointmentIdParam) return;
     if (clientFromParam && !selectedClientId) {
       setSelectedClientId(clientFromParam.id);
     }
-  }, [clientFromParam]);
+  }, [clientFromParam, selectedClientId, appointmentIdParam]);
+
+  useEffect(() => {
+    const appointmentClientId = (appointmentRecord as { client?: { id?: string | null } | null } | null)?.client?.id;
+    if (appointmentClientId && selectedClientId !== appointmentClientId) {
+      setSelectedClientId(appointmentClientId);
+    }
+  }, [appointmentRecord, selectedClientId]);
 
   // Debounce client search query
   useEffect(() => {
@@ -274,6 +301,9 @@ export default function NewInvoicePage() {
 
   const serviceRecords = (servicesData ?? []) as ServiceRecord[];
   const addonLinks = (packageAddonLinks ?? []) as AddonLinkRecord[];
+  const lockedAppointmentClient = (appointmentRecord as { client?: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null } | null } | null)?.client ?? null;
+  const isClientLockedToAppointment = !!appointmentIdParam;
+  const effectiveClientRecord = isClientLockedToAppointment ? lockedAppointmentClient : selectedClientRecord ?? clientFromParam ?? null;
   const packageTemplates = serviceRecords
     .filter((service) => !service.isAddon)
     .map((service) => {
@@ -293,7 +323,9 @@ export default function NewInvoicePage() {
 
 
   const doSubmit = async (mode: 'draft' | 'sent') => {
-    if (!selectedClientId) {
+    const effectiveClientId = isClientLockedToAppointment ? lockedAppointmentClient?.id ?? "" : selectedClientId;
+
+    if (!effectiveClientId) {
       toast.error("Please select a client");
       return;
     }
@@ -323,7 +355,7 @@ export default function NewInvoicePage() {
 
     try {
       const invoiceResult = await createInvoice({
-        clientId: selectedClientId,
+        clientId: effectiveClientId,
         appointmentId: appointmentIdParam ?? undefined,
         quoteId: quoteIdParam ?? undefined,
         status: "draft",
@@ -390,7 +422,7 @@ export default function NewInvoicePage() {
         subtitle="Turn completed work into a clear bill with obvious totals, due date, and delivery intent."
       />
 
-      {clientIdParam && selectedClientId && (
+      {clientIdParam && selectedClientId && !isClientLockedToAppointment && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm mb-4">
           <Check className="h-4 w-4 shrink-0" />
           <span>Client was carried in from the previous workflow.</span>
@@ -406,7 +438,9 @@ export default function NewInvoicePage() {
       {appointmentIdParam && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm mb-6">
           <FileText className="h-4 w-4 shrink-0" />
-          <span>Creating invoice linked to appointment. Services have been pre-filled.</span>
+          <span>
+            Creating invoice linked to appointment. The client is locked to that appointment and the services have been pre-filled.
+          </span>
           <Link
             to={`/appointments/${appointmentIdParam}`}
             className="ml-auto shrink-0 underline font-medium"
@@ -441,73 +475,86 @@ export default function NewInvoicePage() {
               <Label>
                 Client <span className="text-red-500">*</span>
               </Label>
-              <Popover open={clientComboOpen} onOpenChange={setClientComboOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={clientComboOpen}
-                    className="w-full justify-between font-normal"
-                  >
-                    {selectedClientRecord
-                      ? `${selectedClientRecord.firstName} ${selectedClientRecord.lastName}`
-                      : selectedClientId
-                      ? "Loading…"
-                      : "Select a client…"}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0" align="start">
-                  <Command shouldFilter={false}>
-                    <CommandInput
-                      placeholder="Type to search clients…"
-                      value={clientSearchQuery}
-                      onValueChange={setClientSearchQuery}
-                    />
-                    <CommandList>
-                      <CommandEmpty>
-                        {clientSearchQuery.length < 2
-                          ? "Start typing to search clients..."
-                          : fetchingClients
-                          ? "Loading…"
-                          : "No clients found."}
-                      </CommandEmpty>
-                      <CommandGroup>
-                        {clients?.map((client) => (
-                          <CommandItem
-                            key={client.id}
-                            value={client.id}
-                            onSelect={() => {
-                              setSelectedClientId(client.id);
-                              setClientComboOpen(false);
-                              setClientSearchQuery("");
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                selectedClientId === client.id ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            <div>
-                              <div className="font-medium">
-                                {client.firstName} {client.lastName}
+              {isClientLockedToAppointment ? (
+                <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+                  <div className="font-medium">
+                    {lockedAppointmentClient
+                      ? `${lockedAppointmentClient.firstName ?? ""} ${lockedAppointmentClient.lastName ?? ""}`.trim() || "Linked client"
+                      : "Loading linked client…"}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Client is locked because this invoice is linked to the appointment.
+                  </p>
+                </div>
+              ) : (
+                <Popover open={clientComboOpen} onOpenChange={setClientComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={clientComboOpen}
+                      className="w-full justify-between font-normal"
+                    >
+                      {effectiveClientRecord
+                        ? `${effectiveClientRecord.firstName} ${effectiveClientRecord.lastName}`
+                        : selectedClientId
+                        ? "Loading…"
+                        : "Select a client…"}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Type to search clients…"
+                        value={clientSearchQuery}
+                        onValueChange={setClientSearchQuery}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          {clientSearchQuery.length < 2
+                            ? "Start typing to search clients..."
+                            : fetchingClients
+                            ? "Loading…"
+                            : "No clients found."}
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {clients?.map((client) => (
+                            <CommandItem
+                              key={client.id}
+                              value={client.id}
+                              onSelect={() => {
+                                setSelectedClientId(client.id);
+                                setClientComboOpen(false);
+                                setClientSearchQuery("");
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedClientId === client.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div>
+                                <div className="font-medium">
+                                  {client.firstName} {client.lastName}
+                                </div>
+                                {client.email && (
+                                  <div className="text-xs text-muted-foreground">{client.email}</div>
+                                )}
                               </div>
-                              {client.email && (
-                                <div className="text-xs text-muted-foreground">{client.email}</div>
-                              )}
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-              {selectedClientRecord?.email ? (
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+              {effectiveClientRecord?.email ? (
                 <p className="text-xs text-muted-foreground">
-                  Invoice communication will go to {selectedClientRecord.email}.
+                  Invoice communication will go to {effectiveClientRecord.email}.
                 </p>
               ) : null}
             </div>
