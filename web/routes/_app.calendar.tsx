@@ -456,47 +456,52 @@ export default function CalendarPage() {
                   </div>
                 </div>
 
-                <div className={cn("surface-panel rounded-[1.5rem] p-4", isMobileLayout && "h-[19rem] max-h-[19rem] overflow-hidden")}>
-                  <div className="flex h-full flex-col">
+                <div
+                  className={cn(
+                    "surface-panel rounded-[1.5rem] p-4",
+                    isMobileLayout && "h-[19rem] min-h-[19rem] max-h-[19rem] overflow-hidden"
+                  )}
+                >
+                  <div className="flex h-full min-h-0 flex-col">
                     <div className="space-y-1">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected date</p>
                       <h3 className="text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                    <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                      <p className="font-semibold text-foreground">{selectedDayAppointments.length}</p>
-                      <p className="mt-1 text-muted-foreground">Booked</p>
-                    </div>
-                    <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                      <p className="font-semibold text-foreground">{formatCurrency(selectedDayRevenue)}</p>
-                      <p className="mt-1 text-muted-foreground">Revenue</p>
-                    </div>
-                    <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                      <p className="font-semibold text-foreground">{selectedDayUnassigned}</p>
-                      <p className="mt-1 text-muted-foreground">Open</p>
-                    </div>
-                    </div>
-                    {selectedDayOnSiteJobs.length > 0 ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {selectedDayOnSiteJobs.slice(0, 3).map((appointment) => (
-                          <button
-                            key={`${appointment.id}-presence`}
-                            type="button"
-                            onClick={() => handleApptClick(appointment)}
-                            className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
-                          >
-                            <span className="h-2 w-2 rounded-full bg-sky-500" />
-                            <span className="max-w-[11rem] truncate">
-                              {appointment.title ||
-                                (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Job")}
-                            </span>
-                          </button>
-                        ))}
+                      <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                        <p className="font-semibold text-foreground">{selectedDayAppointments.length}</p>
+                        <p className="mt-1 text-muted-foreground">Booked</p>
                       </div>
-                    ) : null}
-                    <div className={cn("mt-3", isMobileLayout && "flex-1")}>
+                      <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                        <p className="font-semibold text-foreground">{formatCurrency(selectedDayRevenue)}</p>
+                        <p className="mt-1 text-muted-foreground">Revenue</p>
+                      </div>
+                      <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                        <p className="font-semibold text-foreground">{selectedDayUnassigned}</p>
+                        <p className="mt-1 text-muted-foreground">Open</p>
+                      </div>
+                    </div>
+                    <div className={cn("mt-3 min-h-0", isMobileLayout && "flex flex-1 flex-col overflow-hidden")}>
+                      {selectedDayOnSiteJobs.length > 0 ? (
+                        <div className="mb-3 flex shrink-0 flex-wrap gap-2">
+                          {selectedDayOnSiteJobs.slice(0, 3).map((appointment) => (
+                            <button
+                              key={`${appointment.id}-presence`}
+                              type="button"
+                              onClick={() => handleApptClick(appointment)}
+                              className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
+                            >
+                              <span className="h-2 w-2 rounded-full bg-sky-500" />
+                              <span className="max-w-[11rem] truncate">
+                                {appointment.title ||
+                                  (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Job")}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                       {selectedDayAppointments.length > 0 ? (
-                        <div className={cn("space-y-2", isMobileLayout && "max-h-[11.75rem] overflow-y-auto pr-1")}>
+                        <div className={cn("space-y-2", isMobileLayout && "min-h-0 flex-1 overflow-y-auto pr-1")}>
                           {selectedDayAppointments.slice(0, 5).map((appointment) => (
                             <button
                               key={appointment.id}
@@ -532,7 +537,12 @@ export default function CalendarPage() {
                           ) : null}
                         </div>
                       ) : (
-                        <div className={cn("space-y-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-5", isMobileLayout && "h-full")}>
+                        <div
+                          className={cn(
+                            "space-y-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-5",
+                            isMobileLayout && "h-full min-h-0 overflow-hidden"
+                          )}
+                        >
                           <p className="text-sm font-medium text-foreground">No appointments on this date</p>
                           {busiestMonthDay ? (
                             <p className="text-xs text-muted-foreground">
