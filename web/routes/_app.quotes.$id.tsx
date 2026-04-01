@@ -37,6 +37,7 @@ import { printAuthenticatedDocument } from "@/lib/printDocument";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -1033,6 +1034,7 @@ export default function QuoteDetailPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Line Item</DialogTitle>
+            <DialogDescription>Add a service or item to this quote and preview the total before saving it.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">

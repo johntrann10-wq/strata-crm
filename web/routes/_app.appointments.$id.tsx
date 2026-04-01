@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1906,6 +1906,9 @@ export default function AppointmentDetail() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Record Deposit</DialogTitle>
+            <DialogDescription>
+              Record the payment details for this appointment deposit without changing the rest of the appointment.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -1990,6 +1993,9 @@ export default function AppointmentDetail() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Appointment</DialogTitle>
+            <DialogDescription>
+              Update the appointment details, timing, assignment, and notes for this booking.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             {/* Title */}

@@ -1,6 +1,6 @@
 import { UserIcon } from "@/components/shared/UserIcon";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useActionForm } from "../hooks/useApi";
@@ -79,6 +79,7 @@ const EditProfileModal = (props: { open: boolean; onClose: () => void }) => {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit profile</DialogTitle>
+          <DialogDescription>Update the name shown across your Strata workspace.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit}>
           <div className="flex flex-col gap-5">
@@ -128,6 +129,7 @@ const ChangePasswordModal = (props: { open: boolean; onClose: () => void }) => {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Change password</DialogTitle>
+          <DialogDescription>Enter your current password and choose a new password for your account.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit}>
           <div className="flex flex-col gap-5">
