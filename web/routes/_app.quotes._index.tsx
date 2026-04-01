@@ -260,9 +260,11 @@ export default function QuotesIndexPage() {
           setSearchParams(next);
         }}
       >
-        <TabsList>
-          <TabsTrigger value="all">All Quotes</TabsTrigger>
-          <TabsTrigger value="accepted">
+        <TabsList className="flex w-full gap-2 overflow-x-auto rounded-xl bg-transparent p-0 sm:grid sm:w-auto sm:grid-cols-5 xl:w-full">
+          <TabsTrigger value="all" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
+            All Quotes
+          </TabsTrigger>
+          <TabsTrigger value="accepted" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
             Ready to Book
             {allRows.filter((record) => String((record as Record<string, any>).status ?? "") === "accepted").length > 0 && (
               <span className="ml-1 rounded bg-green-100 text-green-700 px-1.5 py-0.5 text-xs font-medium">
@@ -270,7 +272,7 @@ export default function QuotesIndexPage() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="aging">
+          <TabsTrigger value="aging" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
             Aging
             {agingRows.length > 0 && (
               <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
@@ -278,7 +280,7 @@ export default function QuotesIndexPage() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="followup">
+          <TabsTrigger value="followup" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
             Follow-up
             {followUpRows.length > 0 && (
               <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
@@ -286,7 +288,7 @@ export default function QuotesIndexPage() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="lost">
+          <TabsTrigger value="lost" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
             Lost Quotes
             {lostRows.length > 0 && (
               <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">

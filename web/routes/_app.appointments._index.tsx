@@ -385,44 +385,53 @@ export default function AppointmentsPage() {
             }
 
             return (
-              <Link
+              <div
                 key={appointment.id}
-                to={`/appointments/${appointment.id}`}
-                className="block rounded-xl border bg-white p-3 transition-colors hover:border-primary sm:rounded-lg sm:p-4 lg:p-0"
+                className="rounded-xl border bg-white p-3 transition-colors hover:border-primary sm:rounded-lg sm:p-4 lg:p-0"
               >
                 <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1.8fr)_190px_150px_190px_auto] lg:items-center lg:gap-4 lg:px-4 lg:py-3">
                   <div className="min-w-0 flex-1 space-y-1 lg:min-w-0">
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={appointment.status ?? ""} type="appointment" />
-                      <span className="font-medium">{appointment.title || clientName || "Appointment"}</span>
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {clientName || "Walk-in customer"}
-                      {vehicleLabel ? ` - ${vehicleLabel}` : ""}
-                    </div>
+                    <Link
+                      to={`/appointments/${appointment.id}`}
+                      className="block rounded-lg transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={appointment.status ?? ""} type="appointment" />
+                        <span className="font-medium">{appointment.title || clientName || "Appointment"}</span>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {clientName || "Walk-in customer"}
+                        {vehicleLabel ? ` - ${vehicleLabel}` : ""}
+                      </div>
+                    </Link>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-2 sm:gap-x-6 sm:text-sm lg:block">
-                    <span className="block">{formattedTime || "Unscheduled"}</span>
-                    <span className="mt-1 hidden text-xs text-muted-foreground lg:block">
-                      {appointment.endTime ? `Ends ${format(new Date(appointment.endTime), "h:mm a")}` : "No end time"}
-                    </span>
+                    <Link
+                      to={`/appointments/${appointment.id}`}
+                      className="block rounded-lg transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <span className="block">{formattedTime || "Unscheduled"}</span>
+                      <span className="mt-1 hidden text-xs text-muted-foreground lg:block">
+                        {appointment.endTime ? `Ends ${format(new Date(appointment.endTime), "h:mm a")}` : "No end time"}
+                      </span>
+                    </Link>
                   </div>
-                  <div className="text-xs text-muted-foreground sm:text-sm">
+                  <Link
+                    to={`/appointments/${appointment.id}`}
+                    className="block rounded-lg text-xs text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-sm"
+                  >
                     {appointment.location?.name ?? "No location set"}
-                  </div>
-                  <div className="text-xs text-muted-foreground sm:text-sm">
+                  </Link>
+                  <Link
+                    to={`/appointments/${appointment.id}`}
+                    className="block rounded-lg text-xs text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-sm"
+                  >
                     <span className="block">{techName}</span>
                     <span className="mt-1 hidden text-xs text-muted-foreground lg:block">
                       {appointment.endTime ? format(new Date(appointment.endTime), "h:mm a") : "No end time"}
                     </span>
-                  </div>
-                  <div
-                    className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:justify-end lg:gap-2"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                  >
+                  </Link>
+                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:justify-end lg:gap-2">
                     {myStaffRecord && !appointment.assignedStaff?.id ? (
                       <Button
                         variant="outline"
@@ -467,7 +476,7 @@ export default function AppointmentsPage() {
                     <ChevronRight className="ml-auto hidden h-4 w-4 text-muted-foreground sm:block" />
                   </div>
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>
