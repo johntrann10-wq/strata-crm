@@ -797,8 +797,8 @@ export default function SignedIn() {
 
   return (
     <div className="pb-6 md:pb-8">
-      <div className="page-content page-section max-w-7xl space-y-5">
-        <section className="overflow-hidden rounded-[32px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_24%),radial-gradient(circle_at_top_right,rgba(15,23,42,0.08),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] px-4 py-5 shadow-[0_22px_60px_rgba(15,23,42,0.08)] sm:px-6 sm:py-6">
+      <div className="page-content page-section max-w-7xl space-y-4 sm:space-y-5">
+        <section className="overflow-hidden rounded-[28px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_24%),radial-gradient(circle_at_top_right,rgba(15,23,42,0.08),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] px-4 py-4 shadow-[0_18px_45px_rgba(15,23,42,0.08)] sm:rounded-[32px] sm:px-6 sm:py-6 sm:shadow-[0_22px_60px_rgba(15,23,42,0.08)]">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-orange-600">Control center</p>
@@ -842,6 +842,9 @@ export default function SignedIn() {
                   <div className="mt-1.5 text-[1.5rem] font-semibold tracking-[-0.05em] text-slate-950 sm:mt-2 sm:text-[1.8rem]">
                     {signal.value}
                   </div>
+                  <p className="mt-1 min-h-[2.25rem] text-sm leading-5 text-slate-500">
+                    {signal.detail}
+                  </p>
                 </Link>
               ))}
             </div>
@@ -869,7 +872,7 @@ export default function SignedIn() {
         </section>
 
         {(loadingActivationChecklist || activationChecklist.completed < activationChecklist.total) ? (
-          <section className="rounded-[28px] border border-border/70 bg-card px-4 py-5 shadow-sm sm:px-5 sm:py-6">
+          <section className="rounded-[26px] border border-border/70 bg-card px-4 py-4 shadow-sm sm:rounded-[28px] sm:px-5 sm:py-6">
             {loadingActivationChecklist ? (
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -1625,8 +1628,8 @@ function DashboardSection({
   }, [mobileCollapsed]);
 
   return (
-    <section className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
+    <section className="space-y-3">
+      <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
         <div className="flex min-w-0 items-center gap-2">
           <h2 className="text-base font-semibold sm:text-lg">{title}</h2>
           {isCompactMobile ? (
@@ -1642,7 +1645,7 @@ function DashboardSection({
         </div>
         <Link
           to={seeAllHref}
-          className="inline-flex min-h-[44px] items-center py-2 text-sm font-medium text-orange-600 hover:text-orange-700"
+          className="inline-flex min-h-[40px] items-center py-1 text-sm font-medium text-orange-600 hover:text-orange-700"
         >
           {seeAllLabel}
         </Link>
@@ -1651,21 +1654,21 @@ function DashboardSection({
         <button
           type="button"
           onClick={() => setCollapsed(false)}
-          className="w-full rounded-xl border border-dashed bg-muted/10 px-4 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/20"
+          className="w-full rounded-2xl border border-dashed border-border/80 bg-muted/10 px-4 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/20"
         >
           Tap to view this section.
         </button>
         
       ) : null}
       {!collapsed && error ? (
-        <div className="flex gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-4 text-sm text-destructive">
+        <div className="flex gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-4 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
           <p>{sectionErrorMessage(error)}</p>
         </div>
       ) : !collapsed && isLoading ? (
         <ListSkeleton rows={skeletonRows} />
       ) : !collapsed && isEmpty ? (
-        <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center">
+        <div className="rounded-2xl border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center">
           <p className="mb-4 text-sm text-muted-foreground">{emptyMessage}</p>
           <Button asChild size="lg" className="min-h-[48px] rounded-xl">
             <Link to={emptyCta.href}>{emptyCta.label}</Link>
@@ -1680,7 +1683,7 @@ function DashboardSection({
 
 function ListSkeleton({ rows }: { rows: number }) {
   return (
-    <div className="overflow-hidden rounded-xl border divide-y divide-border bg-card" aria-busy="true" aria-label="Loading">
+    <div className="overflow-hidden rounded-2xl border border-border/70 divide-y divide-border bg-card" aria-busy="true" aria-label="Loading">
       {Array.from({ length: rows }).map((_, index) => (
         <div key={index} className="flex min-h-[56px] items-center gap-3 px-4 py-3">
           <Skeleton className="h-4 w-16" />
@@ -1710,13 +1713,13 @@ function MetricCard({
   compactValue?: boolean;
 }) {
   const content = (
-    <div className="rounded-[24px] border border-border/70 bg-card p-4 shadow-sm">
+    <div className="h-full rounded-[22px] border border-border/70 bg-card p-4 shadow-sm sm:rounded-[24px]">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-muted-foreground">{label}</p>
+        <p className="min-w-0 text-sm font-medium text-muted-foreground">{label}</p>
         <div className="text-orange-600">{icon}</div>
       </div>
-      <p className={cn("font-semibold tracking-tight", compactValue ? "text-lg" : "text-2xl")}>{value}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
+      <p className={cn("text-slate-950 font-semibold tracking-tight", compactValue ? "text-lg" : "text-2xl")}>{value}</p>
+      <p className="mt-1 min-h-[2.5rem] text-sm leading-5 text-muted-foreground">{detail}</p>
     </div>
   );
   return href ? (
@@ -1743,10 +1746,10 @@ function QuickAction({
     <Link
       to={href}
       className={cn(
-        "flex min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 font-semibold transition-transform active:scale-[0.98]",
+        "flex min-h-[52px] items-center justify-start gap-2 rounded-2xl px-4 text-left font-semibold shadow-sm transition-transform active:scale-[0.98] sm:justify-center sm:text-center",
         primary
           ? "bg-orange-500 text-sm text-white shadow-sm hover:bg-orange-600 sm:text-base"
-          : "border-2 border-border bg-card text-sm hover:bg-muted/80 sm:text-base"
+          : "border border-border/70 bg-card text-sm hover:bg-muted/80 sm:text-base"
       )}
     >
       {icon}
@@ -1902,8 +1905,8 @@ function ActivationChecklistCard({
   }>;
 
   return (
-    <div className="space-y-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="space-y-4 sm:space-y-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">System readiness</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -1925,7 +1928,7 @@ function ActivationChecklistCard({
       </div>
 
       {!allDone && nextItem ? (
-        <div className="rounded-[1.75rem] border border-orange-200/70 bg-[linear-gradient(135deg,rgba(255,247,237,0.98),rgba(255,255,255,0.96))] p-5 shadow-[0_18px_50px_rgba(249,115,22,0.12)]">
+        <div className="rounded-[1.6rem] border border-orange-200/70 bg-[linear-gradient(135deg,rgba(255,247,237,0.98),rgba(255,255,255,0.96))] p-4 shadow-[0_18px_50px_rgba(249,115,22,0.12)] sm:rounded-[1.75rem] sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Required next action</p>
@@ -1945,7 +1948,7 @@ function ActivationChecklistCard({
           </div>
         </div>
       ) : (
-        <div className="space-y-4 rounded-[1.75rem] border border-emerald-200/70 bg-[linear-gradient(135deg,rgba(236,253,245,0.96),rgba(255,255,255,0.98))] p-5 shadow-[0_18px_50px_rgba(16,185,129,0.12)]">
+        <div className="space-y-4 rounded-[1.6rem] border border-emerald-200/70 bg-[linear-gradient(135deg,rgba(236,253,245,0.96),rgba(255,255,255,0.98))] p-4 shadow-[0_18px_50px_rgba(16,185,129,0.12)] sm:rounded-[1.75rem] sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Control center</p>
@@ -1968,12 +1971,13 @@ function ActivationChecklistCard({
 
           <div className="grid gap-3 lg:grid-cols-3">
             {businessPulse.map((item) => (
-              <div key={item.label} className="rounded-2xl border border-white/70 bg-white/75 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
-                <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{item.value}</p>
-                <Button asChild variant="ghost" className="mt-3 h-auto px-0 text-sm font-semibold text-slate-900 hover:bg-transparent hover:text-slate-700">
-                  <Link to={item.href}>{item.actionLabel}</Link>
-                </Button>
+                <div key={item.label} className="rounded-2xl border border-white/70 bg-white/75 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
+                  <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{item.value}</p>
+                  <p className="mt-1 min-h-[2.5rem] text-sm leading-5 text-slate-600">{item.detail}</p>
+                  <Button asChild variant="ghost" className="mt-3 h-auto px-0 text-sm font-semibold text-slate-900 hover:bg-transparent hover:text-slate-700">
+                    <Link to={item.href}>{item.actionLabel}</Link>
+                  </Button>
               </div>
             ))}
           </div>
@@ -1983,6 +1987,7 @@ function ActivationChecklistCard({
               optimizationPrompts.slice(0, 4).map((prompt) => (
                 <div key={prompt.title} className="rounded-2xl border border-border/70 bg-white/70 p-4">
                   <p className="text-sm font-semibold text-slate-950">{prompt.title}</p>
+                  <p className="mt-1 text-sm leading-5 text-slate-600">{prompt.detail}</p>
                   <Button asChild variant="outline" className="mt-3 rounded-xl">
                     <Link to={prompt.href}>{prompt.actionLabel}</Link>
                   </Button>
@@ -2013,6 +2018,7 @@ function ActivationChecklistCard({
                     <Circle className="h-4 w-4 text-muted-foreground" />
                     <p className="font-medium">{item.label}</p>
                   </div>
+                  <p className="mt-2 text-sm leading-5 text-muted-foreground">{item.detail}</p>
                 </div>
               </div>
             </div>
@@ -2064,8 +2070,8 @@ function DailyOperationsCard({
   const nextSteps = activationChecklist.items.filter((item) => !item.done).slice(0, 3);
 
   return (
-    <section className="rounded-[28px] border border-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] px-4 py-5 shadow-sm sm:px-5 sm:py-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+    <section className="rounded-[26px] border border-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] px-4 py-4 shadow-sm sm:rounded-[28px] sm:px-5 sm:py-6">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             {isOperational ? "Operations overview" : "Core system setup"}
@@ -2157,6 +2163,7 @@ function OperatingLane({
     <div className="rounded-[1.4rem] border border-border/70 bg-white/85 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</p>
       <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{value}</p>
+      <p className="mt-1 text-sm leading-5 text-slate-600">{detail}</p>
       <Button asChild variant="ghost" className="mt-3 h-auto px-0 text-sm font-semibold text-slate-900 hover:bg-transparent hover:text-slate-700">
         <Link to={href}>{actionLabel}</Link>
       </Button>
