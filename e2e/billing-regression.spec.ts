@@ -28,13 +28,21 @@ test.describe("Billing regression", () => {
       await page.waitForURL(/\/quotes\/(?!new(?:[/?]|$))[^/?]+/);
       quoteId = /^\/quotes\/([^/?]+)/.exec(new URL(page.url()).pathname)?.[1] ?? "";
       expect(quoteId).not.toBe("");
-      await expect(page.getByText(/exterior detail package/i)).toBeVisible();
+      await expect(page.getByText(/exterior detail package/i).first()).toBeVisible();
       await expect(page.getByRole("button", { name: /^send quote$/i }).first()).toBeVisible();
 
       await page.reload();
       await expect(page).toHaveURL(new RegExp(`/quotes/${quoteId}`));
-      await expect(page.getByText(/exterior detail package/i)).toBeVisible();
+      await expect(page.getByText(/exterior detail package/i).first()).toBeVisible();
       await expect(page.getByRole("button", { name: /^send quote$/i }).first()).toBeVisible();
+
+      const quotePrintResponsePromise = page.waitForResponse((response) =>
+        response.url().includes(`/api/quotes/${quoteId}/html`) && response.request().method() === "GET"
+      );
+      await page.getByRole("button", { name: /^print$/i }).first().click();
+      const quotePrintResponse = await quotePrintResponsePromise;
+      expect(quotePrintResponse.ok()).toBe(true);
+      await expect(page.getByText(/could not open printable estimate/i)).toHaveCount(0);
 
       const sendResponsePromise = page.waitForResponse((response) =>
         response.url().includes(`/api/quotes/${quoteId}/send`) && response.request().method() === "POST"
@@ -46,6 +54,38 @@ test.describe("Billing regression", () => {
       await page.reload();
       await expect(page.getByRole("button", { name: /^resend quote$/i }).first()).toBeVisible();
       expect(state.quotes.find((quote) => quote.id === quoteId)?.status).toBe("sent");
+    });
+
+    await test.step("Accepted quotes hand off into appointment booking", async () => {
+      const acceptResponsePromise = page.waitForResponse((response) =>
+        response.url().includes(`/api/quotes/${quoteId}`) && ["POST", "PATCH", "PUT"].includes(response.request().method())
+      );
+      await page.getByRole("button", { name: /^mark as accepted$/i }).click();
+      const acceptResponse = await acceptResponsePromise;
+      expect(acceptResponse.ok()).toBe(true);
+      await expect(page.getByText(/quote marked as accepted/i)).toBeVisible();
+      await expect(page.getByText(/quote accepted/i).first()).toBeVisible();
+
+      await page.getByRole("link", { name: /book appointment/i }).first().click();
+      await page.waitForURL(/\/appointments\/new\?/);
+      await expect(page.getByRole("heading", { name: /new appointment/i })).toBeVisible();
+      await expect(page.getByText(/services pre-filled from quote/i)).toBeVisible();
+      await expect(page.getByText(/exterior detail package/i).first()).toBeVisible();
+
+      const appointmentCreateResponsePromise = page.waitForResponse((response) =>
+        response.url().includes("/api/appointments") && response.request().method() === "POST"
+      );
+      await page.getByRole("button", { name: /^save appointment$/i }).click();
+      const appointmentCreateResponse = await appointmentCreateResponsePromise;
+      expect(appointmentCreateResponse.ok()).toBe(true);
+
+      await page.waitForURL(/\/appointments\/[^/?]+/);
+      await expect(page.getByText(/appointment created/i)).toBeVisible();
+      await expect(page.getByText(/exterior detail package/i).first()).toBeVisible();
+
+      await page.goto(`/quotes/${quoteId}`);
+      await expect(page.getByRole("button", { name: /^already scheduled$/i })).toBeVisible();
+      await expect(page.getByRole("link", { name: /open scheduled job/i })).toBeVisible();
     });
 
     await test.step("Create invoice, send it, record payment, and survive reloads", async () => {
@@ -69,6 +109,14 @@ test.describe("Billing regression", () => {
       await expect(page.getByText(/detailing invoice/i)).toBeVisible();
       await expect(page.getByRole("button", { name: /^record payment$/i }).first()).toBeVisible();
       await expect(page.getByRole("button", { name: /^resend invoice$/i }).first()).toBeVisible();
+
+      const invoicePrintResponsePromise = page.waitForResponse((response) =>
+        response.url().includes(`/api/invoices/${invoiceId}/html`) && response.request().method() === "GET"
+      );
+      await page.getByRole("button", { name: /^print$/i }).first().click();
+      const invoicePrintResponse = await invoicePrintResponsePromise;
+      expect(invoicePrintResponse.ok()).toBe(true);
+      await expect(page.getByText(/could not print invoice/i)).toHaveCount(0);
 
       const paymentResponsePromise = page.waitForResponse((response) =>
         response.url().includes("/api/payments") && response.request().method() === "POST"

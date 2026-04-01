@@ -18,6 +18,28 @@ type VehicleRecord = {
   licensePlate?: string | null;
 };
 
+type StaffRecord = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  active: boolean;
+};
+
+type ServiceRecord = {
+  id: string;
+  businessId: string;
+  name: string;
+  active: boolean;
+  price: number;
+  durationMinutes: number;
+  category: string;
+  categoryId?: string | null;
+  categoryLabel?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+};
+
 type QuoteLineItemRecord = {
   id: string;
   description: string;
@@ -37,7 +59,9 @@ type QuoteRecord = {
   total: number;
   sentAt?: string | null;
   followUpSentAt?: string | null;
+  acceptedAt?: string | null;
   expiresAt?: string | null;
+  appointmentId?: string | null;
   client: ClientRecord | null;
   vehicle: VehicleRecord | null;
   lineItems: { edges: Array<{ node: QuoteLineItemRecord }> };
@@ -84,10 +108,61 @@ type InvoiceRecord = {
   payments: PaymentRecord[];
 };
 
+type AppointmentRecord = {
+  id: string;
+  clientId: string;
+  vehicleId: string | null;
+  quoteId?: string | null;
+  assignedStaffId?: string | null;
+  title: string;
+  startTime: string;
+  endTime: string;
+  jobStartTime: string | null;
+  expectedCompletionTime: string | null;
+  pickupReadyTime: string | null;
+  vehicleOnSite: boolean;
+  jobPhase: string;
+  status: string;
+  notes: string | null;
+  internalNotes: string | null;
+  isMobile: boolean;
+  mobileAddress: string | null;
+  totalPrice: number;
+  depositAmount: number | null;
+  depositPaid: boolean;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  reminderSent: boolean;
+  reviewRequestSent: boolean;
+  technicianNotes: string | null;
+  rescheduleCount: number;
+  invoicedAt: string | null;
+  paidAt: string | null;
+  client: ClientRecord | null;
+  vehicle: VehicleRecord | null;
+  assignedStaff: Pick<StaffRecord, "id" | "firstName" | "lastName"> | null;
+  business: { id: string };
+};
+
+type AppointmentServiceRecord = {
+  id: string;
+  appointmentId: string;
+  serviceId: string;
+  quantity: number;
+  unitPrice: number;
+  service: {
+    id: string;
+    name: string;
+    category: string;
+    durationMinutes: number;
+  };
+};
+
 type BillingMockState = {
   quotes: QuoteRecord[];
   invoices: InvoiceRecord[];
   payments: PaymentRecord[];
+  appointments: AppointmentRecord[];
 };
 
 const BUSINESS_ID = "biz-billing";
@@ -115,6 +190,30 @@ const vehicle: VehicleRecord = {
   color: "Black",
   licensePlate: "DETAIL1",
 };
+
+const staffMember: StaffRecord = {
+  id: "staff-1",
+  firstName: "Jamie",
+  lastName: "Rivera",
+  role: "technician",
+  active: true,
+};
+
+const serviceCatalog: ServiceRecord[] = [
+  {
+    id: "svc-1",
+    businessId: BUSINESS_ID,
+    name: "Exterior detail package",
+    active: true,
+    price: 199,
+    durationMinutes: 180,
+    category: "Detailing",
+    categoryId: "cat-detailing",
+    categoryLabel: "Detailing",
+    notes: "Premium exterior detail service",
+    createdAt: "2026-03-01T17:00:00.000Z",
+  },
+];
 
 function toJson(body: unknown) {
   return JSON.stringify(body);
@@ -158,7 +257,9 @@ function buildQuoteRecord(id: string, payload: Record<string, any>): QuoteRecord
     total,
     sentAt: null,
     followUpSentAt: null,
+    acceptedAt: null,
     expiresAt: payload.expiresAt ? String(payload.expiresAt) : null,
+    appointmentId: null,
     client,
     vehicle,
     lineItems: {
@@ -218,11 +319,98 @@ function paidTotal(invoice: InvoiceRecord): number {
   );
 }
 
+function buildQuoteHtml(quote: QuoteRecord): string {
+  const clientName = quote.client ? `${quote.client.firstName} ${quote.client.lastName}` : "Client";
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Quote ${quote.id}</title>
+  </head>
+  <body>
+    <main>
+      <h1>Estimate for ${clientName}</h1>
+      <p>Total ${quote.total.toFixed(2)}</p>
+    </main>
+  </body>
+</html>`;
+}
+
+function buildInvoiceHtml(invoice: InvoiceRecord): string {
+  const clientName = invoice.client ? `${invoice.client.firstName} ${invoice.client.lastName}` : "Client";
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Invoice ${invoice.invoiceNumber}</title>
+  </head>
+  <body>
+    <main>
+      <h1>Invoice ${invoice.invoiceNumber}</h1>
+      <p>${clientName}</p>
+      <p>Total ${invoice.total.toFixed(2)}</p>
+    </main>
+  </body>
+</html>`;
+}
+
+function buildAppointmentRecord(id: string, payload: Record<string, any>): AppointmentRecord {
+  const startTime = String(payload.startTime ?? new Date().toISOString());
+  const durationMinutes = Number(payload.totalDuration ?? payload.durationMinutes ?? 180) || 180;
+  const endTime = new Date(new Date(startTime).getTime() + durationMinutes * 60_000).toISOString();
+  const vehicleRecord = payload.vehicleId ? vehicle : null;
+  const title =
+    payload.title ??
+    (payload.serviceIds?.length
+      ? serviceCatalog
+          .filter((service) => (payload.serviceIds as string[]).includes(service.id))
+          .map((service) => service.name)
+          .join(", ")
+      : "Scheduled appointment");
+
+  return {
+    id,
+    clientId: client.id,
+    vehicleId: payload.vehicleId ? String(payload.vehicleId) : null,
+    quoteId: payload.quoteId ? String(payload.quoteId) : null,
+    assignedStaffId: payload.assignedStaffId ? String(payload.assignedStaffId) : staffMember.id,
+    title: String(title),
+    startTime,
+    endTime,
+    jobStartTime: payload.jobStartTime ? String(payload.jobStartTime) : null,
+    expectedCompletionTime: payload.expectedCompletionTime ? String(payload.expectedCompletionTime) : null,
+    pickupReadyTime: payload.pickupReadyTime ? String(payload.pickupReadyTime) : null,
+    vehicleOnSite: Boolean(payload.vehicleOnSite ?? false),
+    jobPhase: String(payload.jobPhase ?? "scheduled"),
+    status: String(payload.status ?? "scheduled"),
+    notes: payload.notes ? String(payload.notes) : null,
+    internalNotes: payload.internalNotes ? String(payload.internalNotes) : null,
+    isMobile: Boolean(payload.isMobile ?? false),
+    mobileAddress: payload.mobileAddress ? String(payload.mobileAddress) : null,
+    totalPrice: currency(Number(payload.totalPrice ?? 0) || 0),
+    depositAmount: payload.depositAmount != null ? Number(payload.depositAmount) : null,
+    depositPaid: Boolean(payload.depositPaid ?? false),
+    completedAt: null,
+    cancelledAt: null,
+    reminderSent: false,
+    reviewRequestSent: false,
+    technicianNotes: null,
+    rescheduleCount: 0,
+    invoicedAt: null,
+    paidAt: null,
+    client,
+    vehicle: vehicleRecord,
+    assignedStaff: { id: staffMember.id, firstName: staffMember.firstName, lastName: staffMember.lastName },
+    business: { id: BUSINESS_ID },
+  };
+}
+
 export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> {
   const state: BillingMockState = {
     quotes: [],
     invoices: [],
     payments: [],
+    appointments: [],
   };
 
   await page.route("**/api/auth/sign-in", async (route) => {
@@ -360,12 +548,26 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
     }
 
     if (path === "/services") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records: [] }) });
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records: serviceCatalog }) });
+      return;
+    }
+
+    if (path === "/staff") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records: [staffMember] }) });
       return;
     }
 
     if (path === "/quotes" && method === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records: state.quotes }) });
+      const appointmentId = url.searchParams.get("appointmentId");
+      const clientId = url.searchParams.get("clientId");
+      const vehicleId = url.searchParams.get("vehicleId");
+      const records = state.quotes.filter((quote) => {
+        if (appointmentId && quote.appointmentId !== appointmentId) return false;
+        if (clientId && quote.clientId !== clientId) return false;
+        if (vehicleId && quote.vehicleId !== vehicleId) return false;
+        return true;
+      });
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records }) });
       return;
     }
 
@@ -379,7 +581,34 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
 
     if (path.startsWith("/quotes/") && method === "GET") {
       const quoteId = path.split("/")[2];
+      if (path.endsWith("/html")) {
+        const found = state.quotes.find((quote) => quote.id === quoteId);
+        await route.fulfill({
+          status: found ? 200 : 404,
+          contentType: "text/html; charset=utf-8",
+          body: found ? buildQuoteHtml(found) : "<html><body>Quote not found</body></html>",
+        });
+        return;
+      }
       const found = state.quotes.find((quote) => quote.id === quoteId);
+      await route.fulfill({
+        status: found ? 200 : 404,
+        contentType: "application/json",
+        body: toJson(found ?? { message: "Quote not found" }),
+      });
+      return;
+    }
+
+    if (path.startsWith("/quotes/") && !path.endsWith("/send") && method !== "GET") {
+      const quoteId = path.split("/")[2];
+      const found = state.quotes.find((quote) => quote.id === quoteId);
+      const payload = parseBody(route);
+      if (found) {
+        Object.assign(found, payload);
+        if (payload.status === "accepted" && !found.acceptedAt) {
+          found.acceptedAt = new Date().toISOString();
+        }
+      }
       await route.fulfill({
         status: found ? 200 : 404,
         contentType: "application/json",
@@ -408,8 +637,84 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
       return;
     }
 
+    if (path === "/appointments" && method === "GET") {
+      const clientId = url.searchParams.get("clientId");
+      const vehicleId = url.searchParams.get("vehicleId");
+      const records = state.appointments.filter((appointment) => {
+        if (clientId && appointment.clientId !== clientId) return false;
+        if (vehicleId && appointment.vehicleId !== vehicleId) return false;
+        return true;
+      });
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records }) });
+      return;
+    }
+
+    if (path === "/appointments" && method === "POST") {
+      const payload = parseBody(route);
+      const created = buildAppointmentRecord(`appointment-${state.appointments.length + 1}`, payload);
+      state.appointments.push(created);
+      const quoteId = created.quoteId;
+      if (quoteId) {
+        const quote = state.quotes.find((entry) => entry.id === quoteId);
+        if (quote) {
+          quote.appointmentId = created.id;
+        }
+      }
+      await route.fulfill({ status: 201, contentType: "application/json", body: toJson({ ...created, deliveryStatus: "emailed" }) });
+      return;
+    }
+
+    if (path.startsWith("/appointments/") && method === "GET") {
+      const appointmentId = path.split("/")[2];
+      const found = state.appointments.find((appointment) => appointment.id === appointmentId);
+      await route.fulfill({
+        status: found ? 200 : 404,
+        contentType: "application/json",
+        body: toJson(found ?? { message: "Appointment not found" }),
+      });
+      return;
+    }
+
+    if (path === "/appointment-services" && method === "GET") {
+      const appointmentId = url.searchParams.get("appointmentId");
+      const appointment = state.appointments.find((entry) => entry.id === appointmentId);
+      const serviceIds = appointment?.quoteId
+        ? state.quotes
+            .find((quote) => quote.id === appointment.quoteId)
+            ?.lineItems.edges.map((edge) => serviceCatalog.find((service) => service.name === edge.node.description)?.id)
+            .filter(Boolean) as string[] | undefined
+        : [];
+      const records: AppointmentServiceRecord[] = (serviceIds ?? []).map((serviceId, index) => {
+        const service = serviceCatalog.find((entry) => entry.id === serviceId)!;
+        return {
+          id: `appointment-service-${index + 1}`,
+          appointmentId: appointmentId ?? "",
+          serviceId,
+          quantity: 1,
+          unitPrice: service.price,
+          service: {
+            id: service.id,
+            name: service.name,
+            category: service.category,
+            durationMinutes: service.durationMinutes,
+          },
+        };
+      });
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records }) });
+      return;
+    }
+
     if (path === "/invoices" && method === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records: state.invoices }) });
+      const appointmentId = url.searchParams.get("appointmentId");
+      const quoteId = url.searchParams.get("quoteId");
+      const clientId = url.searchParams.get("clientId");
+      const records = state.invoices.filter((invoice) => {
+        if (appointmentId && invoice.appointmentId !== appointmentId) return false;
+        if (quoteId && invoice.quoteId !== quoteId) return false;
+        if (clientId && invoice.clientId !== clientId) return false;
+        return true;
+      });
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records }) });
       return;
     }
 
@@ -423,6 +728,15 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
 
     if (path.startsWith("/invoices/") && method === "GET") {
       const invoiceId = path.split("/")[2];
+      if (path.endsWith("/html")) {
+        const found = state.invoices.find((invoice) => invoice.id === invoiceId);
+        await route.fulfill({
+          status: found ? 200 : 404,
+          contentType: "text/html; charset=utf-8",
+          body: found ? buildInvoiceHtml(found) : "<html><body>Invoice not found</body></html>",
+        });
+        return;
+      }
       const found = state.invoices.find((invoice) => invoice.id === invoiceId);
       await route.fulfill({
         status: found ? 200 : 404,
