@@ -518,7 +518,7 @@ export default function CalendarPage() {
                                     {appointment.title ||
                                       (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
                                   </p>
-                                  <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                  <span className="max-w-[6.75rem] shrink-0 truncate rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                                     {appointment.status.replace("_", " ")}
                                   </span>
                                 </div>

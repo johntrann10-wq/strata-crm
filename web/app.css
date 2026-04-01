@@ -122,6 +122,9 @@ body,
     @apply border-border outline-ring/50;
   }
   html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    overflow-x: clip;
     background:
       radial-gradient(circle at top left, hsl(25 88% 95% / 0.95), transparent 28%),
       radial-gradient(circle at top right, hsl(35 44% 94% / 0.75), transparent 24%),
@@ -129,6 +132,7 @@ body,
   }
   body {
     @apply bg-transparent text-foreground;
+    overflow-x: clip;
   }
 }
 
