@@ -423,10 +423,15 @@ export default function CalendarPage() {
             ) : null}
           </div>
 
-          <aside className={cn("space-y-4 xl:sticky xl:top-24 xl:self-start", isMobileLayout && "space-y-3")}>
+          <aside
+            className={cn(
+              "space-y-4 xl:sticky xl:top-24 xl:self-start",
+              isMobileLayout && "min-w-0 max-w-full overflow-hidden space-y-3"
+            )}
+          >
             {view === "month" ? (
               <>
-                <div className="surface-panel rounded-[1.6rem] p-4">
+                <div className={cn("surface-panel min-w-0 max-w-full rounded-[1.6rem] p-4", isMobileLayout && "overflow-hidden")}>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Month overview</p>
                     <h2 className="mt-1 text-lg font-semibold text-foreground">
@@ -458,8 +463,8 @@ export default function CalendarPage() {
 
                 <div
                   className={cn(
-                    "surface-panel min-w-0 rounded-[1.5rem] p-4",
-                    isMobileLayout && "h-[19rem] min-h-[19rem] max-h-[19rem] overflow-hidden"
+                    "surface-panel min-w-0 max-w-full rounded-[1.5rem] p-4",
+                    isMobileLayout && "h-[19rem] min-h-[19rem] max-h-[19rem] overflow-hidden [contain:layout_paint]"
                   )}
                 >
                   <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -467,18 +472,24 @@ export default function CalendarPage() {
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected date</p>
                       <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
                     </div>
-                    <div className="mt-3 grid min-w-0 grid-cols-3 gap-2 text-xs">
-                      <div className="min-w-0 rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                        <p className="truncate font-semibold text-foreground">{selectedDayAppointments.length}</p>
-                        <p className="mt-1 text-muted-foreground">Booked</p>
+                    <div className="mt-3 grid min-w-0 gap-2 text-xs [grid-template-columns:repeat(3,minmax(0,1fr))]">
+                      <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                        <p className={cn("truncate font-semibold text-foreground", isMobileLayout && "text-[13px] leading-none")}>
+                          {selectedDayAppointments.length}
+                        </p>
+                        <p className="mt-1 truncate text-muted-foreground">Booked</p>
                       </div>
-                      <div className="min-w-0 rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                        <p className="truncate font-semibold text-foreground">{formatCurrency(selectedDayRevenue)}</p>
-                        <p className="mt-1 text-muted-foreground">Revenue</p>
+                      <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                        <p className={cn("truncate font-semibold text-foreground", isMobileLayout && "text-[13px] leading-none tracking-tight")}>
+                          {formatCurrency(selectedDayRevenue)}
+                        </p>
+                        <p className="mt-1 truncate text-muted-foreground">Revenue</p>
                       </div>
-                      <div className="min-w-0 rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                        <p className="truncate font-semibold text-foreground">{selectedDayUnassigned}</p>
-                        <p className="mt-1 text-muted-foreground">Open</p>
+                      <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                        <p className={cn("truncate font-semibold text-foreground", isMobileLayout && "text-[13px] leading-none")}>
+                          {selectedDayUnassigned}
+                        </p>
+                        <p className="mt-1 truncate text-muted-foreground">Open</p>
                       </div>
                     </div>
                     <div className={cn("mt-3 min-h-0 min-w-0", isMobileLayout && "flex flex-1 flex-col overflow-hidden")}>
@@ -489,7 +500,10 @@ export default function CalendarPage() {
                               key={`${appointment.id}-presence`}
                               type="button"
                               onClick={() => handleApptClick(appointment)}
-                              className="inline-flex max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-full border border-border/60 bg-background/80 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
+                              className={cn(
+                                "inline-flex max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-full border border-border/60 bg-background/80 px-3 py-1.5 font-semibold text-muted-foreground",
+                                isMobileLayout && "px-2.5 py-1 text-[10px] leading-none"
+                              )}
                             >
                               <span className="h-2 w-2 rounded-full bg-sky-500" />
                               <span className="min-w-0 max-w-full truncate">
@@ -501,28 +515,41 @@ export default function CalendarPage() {
                         </div>
                       ) : null}
                       {selectedDayAppointments.length > 0 ? (
-                        <div className={cn("min-w-0 space-y-2", isMobileLayout && "min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1")}>
+                        <div
+                          className={cn(
+                            "min-w-0 space-y-2",
+                            isMobileLayout && "min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1 [overscroll-behavior:contain]"
+                          )}
+                        >
                           {selectedDayAppointments.slice(0, 5).map((appointment) => (
                             <button
                               key={appointment.id}
                               type="button"
                               onClick={() => handleApptClick(appointment)}
-                              className="flex w-full min-w-0 items-start gap-3 overflow-hidden rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88"
+                              className={cn(
+                                "flex w-full min-w-0 items-start gap-3 overflow-hidden rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88",
+                                isMobileLayout && "gap-2.5 px-3 py-2.5"
+                              )}
                             >
                               <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                                 {formatPanelTime(appointment.startTime)}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex min-w-0 items-start justify-between gap-2">
-                                  <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                                  <p className={cn("min-w-0 flex-1 truncate font-semibold text-foreground", isMobileLayout ? "text-[13px] leading-4" : "text-sm")}>
                                     {appointment.title ||
                                       (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
                                   </p>
-                                  <span className="max-w-[6.75rem] shrink-0 truncate rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                  <span
+                                    className={cn(
+                                      "max-w-[6.75rem] shrink-0 truncate rounded-full border border-border/70 bg-background px-2 py-0.5 font-semibold uppercase tracking-[0.12em] text-muted-foreground",
+                                      isMobileLayout && "max-w-[5.5rem] text-[9px] leading-none"
+                                    )}
+                                  >
                                     {appointment.status.replace("_", " ")}
                                   </span>
                                 </div>
-                                <p className="truncate text-xs text-muted-foreground">
+                                <p className={cn("truncate text-muted-foreground", isMobileLayout ? "text-[11px] leading-4" : "text-xs")}>
                                   {appointment.vehicle
                                     ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
                                     : appointment.assignedStaff
