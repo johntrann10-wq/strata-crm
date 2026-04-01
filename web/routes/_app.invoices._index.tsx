@@ -314,9 +314,13 @@ export default function InvoicesIndexPage() {
         <CardContent className="p-0">
           <div className="px-4 pt-4">
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FilterTab)}>
-              <TabsList className="mb-4">
+              <TabsList className="mb-4 flex w-full gap-2 overflow-x-auto rounded-xl bg-transparent p-0 sm:grid sm:w-auto sm:grid-cols-8 xl:w-full">
                 {FILTER_TABS.map((tab) => (
-                  <TabsTrigger key={tab} value={tab} className="capitalize">
+                  <TabsTrigger
+                    key={tab}
+                    value={tab}
+                    className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 capitalize data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5"
+                  >
                     {tab}
                     {tab === "overdue" && overdueInvoices.length > 0 ? (
                       <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">

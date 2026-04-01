@@ -114,9 +114,7 @@ export default function AppointmentsPage() {
     setActiveLocationId(currentLocationId ?? "all");
   }, [currentLocationId]);
 
-  const handleQuickStatus = async (event: Event | React.SyntheticEvent, appointmentId: string, newStatus: string) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleQuickStatusChange = async (appointmentId: string, newStatus: string) => {
     const result = await runUpdateStatus({ id: appointmentId, status: newStatus });
     if (result?.error) {
       toast.error("Failed: " + result.error.message);
@@ -129,6 +127,12 @@ export default function AppointmentsPage() {
       }
       void refetch();
     }
+  };
+
+  const handleQuickStatus = async (event: Event | React.SyntheticEvent, appointmentId: string, newStatus: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await handleQuickStatusChange(appointmentId, newStatus);
   };
 
   const handleAssignToMe = async (event: Event | React.SyntheticEvent, appointmentId: string) => {
@@ -444,21 +448,48 @@ export default function AppointmentsPage() {
                       </Button>
                     ) : null}
                     {(QUICK_TRANSITIONS[appointment.status ?? ""]?.length ?? 0) > 0 ? (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="min-h-[38px] px-2 text-xs lg:min-w-[92px]">
-                            Status
-                            <ChevronDown className="ml-1 h-3 w-3" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                      <>
+                        <label className="sr-only" htmlFor={`appointment-status-${appointment.id}`}>
+                          Change status
+                        </label>
+                        <select
+                          id={`appointment-status-${appointment.id}`}
+                          className="min-h-[38px] rounded-lg border border-border/90 bg-background px-2 text-xs text-foreground sm:hidden"
+                          defaultValue=""
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={(event) => {
+                            const nextStatus = event.currentTarget.value;
+                            if (!nextStatus) return;
+                            void handleQuickStatusChange(appointment.id, nextStatus);
+                            event.currentTarget.value = "";
+                          }}
+                        >
+                          <option value="">Status</option>
                           {QUICK_TRANSITIONS[appointment.status ?? ""].map((status) => (
-                            <DropdownMenuItem key={status} onSelect={(event) => handleQuickStatus(event, appointment.id, status)}>
+                            <option key={status} value={status}>
                               {formatStatus(status)}
-                            </DropdownMenuItem>
+                            </option>
                           ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        </select>
+
+                        <div className="hidden sm:block">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button type="button" variant="outline" size="sm" className="min-h-[38px] px-2 text-xs lg:min-w-[92px]">
+                                Status
+                                <ChevronDown className="ml-1 h-3 w-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {QUICK_TRANSITIONS[appointment.status ?? ""].map((status) => (
+                                <DropdownMenuItem key={status} onSelect={(event) => handleQuickStatus(event, appointment.id, status)}>
+                                  {formatStatus(status)}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </>
                     ) : null}
                     {quoteHref ? (
                       <Button asChild variant="outline" size="sm" className="min-h-[38px] px-2 text-xs lg:min-w-[76px]">
