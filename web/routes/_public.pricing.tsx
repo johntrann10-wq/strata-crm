@@ -92,6 +92,12 @@ const included = [
   "Dashboard, daily workflow visibility, and operational follow-through",
 ];
 
+const pricingAssurances = [
+  "First month free so the team can test the daily workflow before committing",
+  "One plan instead of feature tiers that hold back core operations",
+  "Built for shops that need scheduling, CRM, and billing together",
+];
+
 const buyerReasons = [
   {
     title: "Affordable automotive shop software",
@@ -122,6 +128,17 @@ const faqs = [
     question: "Can I start with a simple setup and grow into it?",
     answer:
       "Yes. The product is designed to feel simple for a first-time operator while still preserving enough operational depth for a growing shop.",
+  },
+];
+
+const switchComparison = [
+  {
+    label: "What you leave behind",
+    points: ["Booking in one tool", "Customer and vehicle notes in another", "Quotes and invoices disconnected from the schedule"],
+  },
+  {
+    label: "What you get in Strata",
+    points: ["One connected workflow", "Shared client and vehicle context", "Scheduling to invoice continuity"],
   },
 ];
 
@@ -222,6 +239,43 @@ export default function PricingPage() {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+          <div className="rounded-[28px] border border-orange-100 bg-gray-950 p-6 text-white shadow-[0_16px_60px_rgba(15,23,42,0.12)] sm:p-7">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-300">Why this pricing converts better</p>
+            <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
+              Buyers do not have to decode tiers just to know if Strata fits.
+            </h2>
+            <div className="mt-5 space-y-3">
+              {pricingAssurances.map((item) => (
+                <div key={item} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-300" />
+                  <p className="text-sm leading-6 text-white/82">{item}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {switchComparison.map((column) => (
+              <div
+                key={column.label}
+                className="rounded-[28px] border border-orange-100 bg-[linear-gradient(180deg,#ffffff_0%,#fff8f3_100%)] p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]"
+              >
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">{column.label}</p>
+                <div className="mt-4 space-y-3">
+                  {column.points.map((point) => (
+                    <div key={point} className="rounded-2xl border border-orange-100/80 bg-white/85 px-4 py-3 text-sm leading-6 text-gray-700">
+                      {point}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

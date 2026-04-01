@@ -68,6 +68,24 @@ const trustPoints = [
   "Client, vehicle, quote, appointment, job, invoice, and payment history in one place",
 ];
 
+const switchReasons = [
+  {
+    title: "Stop stitching together calendar, notes, and invoices",
+    description:
+      "Replace the patchwork of separate booking tools, spreadsheets, texts, and invoice apps with one connected operating flow.",
+  },
+  {
+    title: "Make the front desk faster under real shop pressure",
+    description:
+      "See the schedule, customer, vehicle, and next action quickly enough to answer the phone, book work, and keep the day moving.",
+  },
+  {
+    title: "Keep your team aligned when work gets busy",
+    description:
+      "Service history, job status, approvals, invoices, and payments stay tied together so staff do not lose context between handoffs.",
+  },
+];
+
 const audienceTags = [
   "Auto detailing",
   "Tint and PPF",
@@ -124,6 +142,18 @@ const proofStats = [
   { value: "1 system", label: "for scheduling, CRM, jobs, and billing" },
   { value: "0 guesswork", label: "about the next step in the workflow" },
   { value: "$29/mo", label: "with the first month free" },
+];
+
+const riskReversal = [
+  "Start with the first month free before committing long term",
+  "Use one clear plan instead of decoding feature tiers",
+  "Set up clients, vehicles, services, and scheduling in one workspace",
+];
+
+const buyerTriggers = [
+  "Your scheduler, notes, and invoices all live in different tools",
+  "Staff keep asking where the last quote, vehicle note, or payment update went",
+  "Booking work feels slower than it should because context is scattered",
 ];
 
 const objections = [
@@ -300,11 +330,15 @@ export default function LandingPage() {
 
             <div className="space-y-4">
               <h1 className="max-w-4xl text-balance text-4xl font-extrabold tracking-tight text-gray-950 sm:text-5xl lg:text-6xl">
-                Automotive service business software that feels clear from the first day.
+                Automotive shop software that replaces admin sprawl with one clear daily operating flow.
               </h1>
               <p className="max-w-3xl text-lg leading-8 text-gray-600 sm:text-xl">
                 Strata CRM helps automotive service businesses manage appointments, clients, vehicles, jobs, quotes, invoices,
                 and payments without the clutter, guesswork, and broken flow of outdated shop software.
+              </p>
+              <p className="max-w-3xl text-base leading-7 text-gray-600">
+                If your shop is juggling a booking calendar, customer notes, vehicle history, quotes, and invoices across too many places,
+                Strata is designed to bring that work back into one faster, easier system.
               </p>
             </div>
 
@@ -406,6 +440,37 @@ export default function LandingPage() {
                 View pricing
               </Link>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+          <div className="rounded-[28px] border border-orange-100 bg-white/94 p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)] sm:p-7">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Why buyers start looking</p>
+            <h2 className="mt-3 text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
+              Most shops do not need more software. They need less fragmentation.
+            </h2>
+            <div className="mt-5 space-y-3">
+              {buyerTriggers.map((item) => (
+                <div key={item} className="flex items-start gap-3 rounded-2xl border border-orange-100 bg-orange-50/55 px-4 py-4">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-500" />
+                  <p className="text-sm leading-6 text-gray-700">{item}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+            {switchReasons.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-[28px] border border-orange-100 bg-[linear-gradient(180deg,#ffffff_0%,#fff8f3_100%)] p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]"
+              >
+                <h3 className="text-lg font-semibold tracking-tight text-gray-950">{item.title}</h3>
+                <p className="mt-3 text-sm leading-6 text-gray-600">{item.description}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -536,6 +601,56 @@ export default function LandingPage() {
               <p className="mt-1 text-sm leading-6 text-white/72">{stat.label}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
+          <div className="rounded-[30px] border border-orange-100 bg-white/94 p-6 shadow-[0_12px_50px_rgba(15,23,42,0.05)] sm:p-8">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Why it feels lower risk</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
+              A simpler buying decision for shops that want operational clarity fast.
+            </h2>
+            <div className="mt-6 grid gap-3">
+              {riskReversal.map((item) => (
+                <div key={item} className="flex items-start gap-3 rounded-2xl border border-orange-100 bg-orange-50/55 px-4 py-4">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-orange-500" />
+                  <p className="text-sm leading-6 text-gray-700">{item}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[30px] border border-orange-100 bg-gray-950 p-6 text-white shadow-[0_16px_60px_rgba(15,23,42,0.12)] sm:p-8">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-300">Best fit</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight">
+              Strongest for owners who already know generic tools are slowing the shop down.
+            </h2>
+            <p className="mt-4 text-sm leading-7 text-white/72">
+              Strata is a stronger fit when your team is past the point of “just use a calendar and figure the rest out,” but you still want software that stays clean and fast to use.
+            </p>
+            <div className="mt-6 flex flex-col gap-3">
+              <Link
+                to="/sign-up"
+                className={cn(
+                  buttonVariants({ size: "lg" }),
+                  "min-h-[54px] rounded-2xl bg-white text-base font-semibold text-gray-950 hover:bg-orange-50"
+                )}
+              >
+                Start free
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+              <Link
+                to="/pricing"
+                className={cn(
+                  buttonVariants({ size: "lg", variant: "outline" }),
+                  "min-h-[54px] rounded-2xl border-white/20 bg-transparent text-base font-semibold text-white hover:bg-white/10"
+                )}
+              >
+                See pricing and fit
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 
