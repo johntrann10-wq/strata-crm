@@ -39,7 +39,7 @@ export default function ClientsPage() {
     pause: !businessId,
   });
 
-  const visibleClients = clients ?? [];
+  const visibleClients = useMemo(() => clients ?? [], [clients]);
   const isLoading = (!businessId && !clientsError) || (!!businessId && fetchingClients && !clients);
   const isRefetching = fetchingClients && !!clients;
   const clientsWithPhone = useMemo(() => visibleClients.filter((client) => Boolean(client.phone)).length, [visibleClients]);

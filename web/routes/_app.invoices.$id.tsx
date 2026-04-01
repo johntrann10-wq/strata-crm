@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, Link, useOutletContext, useSearchParams } from "react-router";
 import { useFindOne, useAction, useFindMany } from "../hooks/useApi";
 import { API_BASE, api } from "../api";
@@ -355,13 +355,13 @@ export default function InvoiceDetailPage() {
   const totalPaid = paymentsList.reduce((sum, p) => sum + (p.reversedAt ? 0 : Number(p.amount || 0)), 0);
   const remainingBalance = Number((invoice as Record<string, unknown>)?.total || 0) - totalPaid;
 
-  const handleOpenPaymentDialog = () => {
+  const handleOpenPaymentDialog = useCallback(() => {
     setPaymentAmount(remainingBalance > 0 ? remainingBalance.toFixed(2) : "0.00");
     setPaymentMethod("cash");
     setPaymentDate(new Date().toISOString().split("T")[0]);
     setPaymentNotes("");
     setRecordPaymentOpen(true);
-  };
+  }, [remainingBalance]);
 
   useEffect(() => {
     if (!invoice?.id) return;
@@ -371,7 +371,7 @@ export default function InvoiceDetailPage() {
     const next = new URLSearchParams(searchParams);
     next.delete("recordPayment");
     setSearchParams(next, { replace: true });
-  }, [invoice?.id, invoice?.status, searchParams, setSearchParams]);
+  }, [handleOpenPaymentDialog, invoice?.id, invoice?.status, searchParams, setSearchParams]);
 
   const handleRecordPayment = async () => {
     if (!invoice?.id) return;

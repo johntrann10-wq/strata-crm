@@ -409,12 +409,24 @@ export default function ServicesPage() {
   const [{ fetching: createAddonLinkFetching }, runCreateAddonLink] = useAction(api.serviceAddonLink.create);
   const [{ fetching: deleteAddonLinkFetching }, runDeleteAddonLink] = useAction(api.serviceAddonLink.delete);
 
-  const categories = ((categoriesData ?? []) as CategoryRecord[]).filter((category) => category.active !== false);
-  const inactiveCategories = ((categoriesData ?? []) as CategoryRecord[]).filter((category) => category.active === false);
-  const services = (servicesData ?? []) as ServiceRecord[];
-  const addonLinks = (addonLinksData ?? []) as AddonLinkRecord[];
-  const managedCategories = supportsCategoryManagement ? categories : [];
-  const managedInactiveCategories = supportsCategoryManagement ? inactiveCategories : [];
+  const categories = useMemo(
+    () => ((categoriesData ?? []) as CategoryRecord[]).filter((category) => category.active !== false),
+    [categoriesData]
+  );
+  const inactiveCategories = useMemo(
+    () => ((categoriesData ?? []) as CategoryRecord[]).filter((category) => category.active === false),
+    [categoriesData]
+  );
+  const services = useMemo(() => (servicesData ?? []) as ServiceRecord[], [servicesData]);
+  const addonLinks = useMemo(() => (addonLinksData ?? []) as AddonLinkRecord[], [addonLinksData]);
+  const managedCategories = useMemo(
+    () => (supportsCategoryManagement ? categories : []),
+    [categories, supportsCategoryManagement]
+  );
+  const managedInactiveCategories = useMemo(
+    () => (supportsCategoryManagement ? inactiveCategories : []),
+    [inactiveCategories, supportsCategoryManagement]
+  );
 
   useEffect(() => {
     let cancelled = false;

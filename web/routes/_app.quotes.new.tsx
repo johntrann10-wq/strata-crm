@@ -150,7 +150,7 @@ export default function NewQuotePage() {
     if (selectedClientId && vehicles && vehicles.length === 1 && selectedVehicleId === "") {
       setSelectedVehicleId(vehicles[0].id);
     }
-  }, [vehicles, selectedClientId]);
+  }, [selectedClientId, selectedVehicleId, vehicles]);
 
   // Filtered clients for combobox
   const filteredClients = clients?.filter((c) => {

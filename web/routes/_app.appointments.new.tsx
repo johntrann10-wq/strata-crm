@@ -148,6 +148,8 @@ export default function NewAppointmentPage() {
   const [debouncedClientQuery, setDebouncedClientQuery] = useState<string>("");
   const [serviceSearchQuery, setServiceSearchQuery] = useState("");
   const [expandedServiceCategories, setExpandedServiceCategories] = useState<string[]>([]);
+  const dateParam = searchParams.get("date");
+  const timeParam = searchParams.get("time");
 
   // Pre-fill client, date and time from URL query params
   useEffect(() => {
@@ -157,22 +159,19 @@ export default function NewAppointmentPage() {
     if (vehicleIdParam && selectedVehicleId === null) {
       setSelectedVehicleId(vehicleIdParam);
     }
-    const timeParam = searchParams.get("time");
     if (timeParam) setStartTime(timeParam);
-    const dateParam = searchParams.get("date");
     if (dateParam && !selectedDate) {
       const d = new Date(dateParam + "T12:00:00");
       if (!isNaN(d.getTime())) setSelectedDate(d);
     }
-  }, [searchParams, clientIdParam, vehicleIdParam, selectedClientId, selectedVehicleId]);
+  }, [clientIdParam, dateParam, selectedClientId, selectedDate, selectedVehicleId, timeParam, vehicleIdParam]);
 
   // Default selectedDate to today on the client when no date param is provided
   useEffect(() => {
-    const dateParam = searchParams.get("date");
     if (!dateParam && selectedDate === undefined) {
       setSelectedDate(new Date());
     }
-  }, []);
+  }, [dateParam, selectedDate]);
 
   useEffect(() => {
     if (creationPreset.defaultMobile) {
@@ -359,14 +358,14 @@ export default function NewAppointmentPage() {
     if (prefilledClientData && selectedClientId === null) {
       setSelectedClientId(prefilledClientData.id);
     }
-  }, [prefilledClientData]);
+  }, [prefilledClientData, selectedClientId]);
 
   // Auto-select sole vehicle when client has exactly one vehicle
   useEffect(() => {
     if (vehiclesData && vehiclesData.length === 1 && selectedVehicleId === null) {
       setSelectedVehicleId(vehiclesData[0].id);
     }
-  }, [vehiclesData, selectedClientId]);
+  }, [selectedVehicleId, vehiclesData]);
 
   // Pre-select vehicle from linked quote
   useEffect(() => {
@@ -643,12 +642,12 @@ export default function NewAppointmentPage() {
     }
   };
 
+  const vehicles = useMemo(() => vehiclesData ?? [], [vehiclesData]);
+  const clients = useMemo(() => clientsData ?? [], [clientsData]);
+  const services = useMemo(() => servicesData ?? [], [servicesData]);
   const selectedClient =
-    clientsData?.find((c) => c.id === selectedClientId) ??
+    clients.find((c) => c.id === selectedClientId) ??
     (prefilledClientData?.id === selectedClientId ? prefilledClientData : undefined);
-  const vehicles = vehiclesData ?? [];
-  const clients = clientsData ?? [];
-  const services = servicesData ?? [];
   const requiresServiceSelection = services.length > 0;
   const addonLinks = (packageAddonLinks ?? []) as Array<{ parentServiceId: string; addonServiceId: string }>;
   const packageTemplates = services

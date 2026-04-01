@@ -577,7 +577,7 @@ export default function AppointmentDetail() {
         invoiceId: null,
       });
     };
-  }, [appointment, invoice]);
+  }, [appointment, invoice, setPageContext]);
 
   const existingServiceIds = new Set(
     ((appointmentServices ?? []) as Array<{ serviceId?: string | null }>).map((service) => service.serviceId).filter(Boolean)

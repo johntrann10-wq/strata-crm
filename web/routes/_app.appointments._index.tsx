@@ -175,7 +175,10 @@ export default function AppointmentsPage() {
   } as any);
 
   const isInitialLoad = appointmentsFetching && appointments === undefined;
-  const records = (Array.isArray(appointments) ? appointments : []) as AppointmentListRecord[];
+  const records = useMemo(
+    () => (Array.isArray(appointments) ? appointments : []) as AppointmentListRecord[],
+    [appointments]
+  );
   const staffRecords = ((staffRaw ?? []) as StaffRecord[]).filter(Boolean);
   const locationRecords = ((locationsRaw ?? []) as LocationRecord[]).filter(Boolean);
   const myStaffRecord = useMemo(

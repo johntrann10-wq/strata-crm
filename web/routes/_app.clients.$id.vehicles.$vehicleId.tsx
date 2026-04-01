@@ -226,7 +226,7 @@ export default function VehicleDetailPage() {
       toast.success("Vehicle updated");
       navigate(`/clients/${id}/vehicles/${vehicleId}${searchParams.has("from") ? `?from=${encodeURIComponent(returnTo)}` : ""}`);
     }
-  }, [updateResult.data, navigate, id, vehicleId]);
+  }, [updateResult.data, navigate, id, returnTo, searchParams, vehicleId]);
 
   useEffect(() => {
     if (updateResult.error) {
@@ -239,7 +239,7 @@ export default function VehicleDetailPage() {
       toast.success("Vehicle deleted");
       navigate(returnTo);
     }
-  }, [deleteResult.data, navigate, id]);
+  }, [deleteResult.data, navigate, returnTo]);
 
   useEffect(() => {
     if (deleteResult.error) {

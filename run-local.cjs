@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * One-command local run: ensures backend/.env and DB, then starts backend and frontend.
- * Requires: Node, Docker (for Postgres). Run from repo root: node run-local.js
+ * Requires: Node, Docker (for Postgres). Run from repo root: node run-local.cjs
  */
 const { spawn } = require("child_process");
 const fs = require("fs");
@@ -27,18 +27,10 @@ function ensureBackendEnv() {
   }
 }
 
-function run(cmd, args, opts = {}) {
-  return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { stdio: "inherit", shell: true, ...opts });
-    p.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`))));
-  });
-}
-
 async function main() {
   console.log("Strata local run\n");
   ensureBackendEnv();
   const backendDir = path.join(__dirname, "backend");
-  // Backend with embedded Postgres (no Docker needed)
   const backend = spawn(npmCmd, ["run", "dev:with-db"], { cwd: backendDir, stdio: "inherit", shell: true });
   await new Promise((r) => setTimeout(r, 5000));
   const frontend = spawn(npmCmd, ["run", "dev"], { cwd: __dirname, stdio: "inherit", shell: true });

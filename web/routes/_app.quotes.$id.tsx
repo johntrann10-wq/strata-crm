@@ -227,7 +227,7 @@ export default function QuoteDetailPage() {
         void refetch();
       });
     }
-  }, [quote?.id, quote?.status, quote?.expiresAt]);
+  }, [id, quote, refetch, runUpdate]);
 
   const handleSend = async (payload?: {
     message?: string;

@@ -292,15 +292,21 @@ export default function SignedIn() {
     pause: !businessId,
   });
 
-  const appointments = (appointmentsRaw ?? []) as AppointmentRecord[];
-  const unpaidInvoices = (invoicesRaw ?? []) as InvoiceRecord[];
-  const pendingQuotes = (quotesRaw ?? []) as QuoteRecord[];
-  const jobs = (jobsRaw ?? []) as JobRecord[];
-  const upcomingAppointments = (upcomingAppointmentsRaw ?? []) as AppointmentRecord[];
-  const staffRecords = (staffRaw ?? []) as StaffRecord[];
+  const appointments = useMemo(() => (appointmentsRaw ?? []) as AppointmentRecord[], [appointmentsRaw]);
+  const unpaidInvoices = useMemo(() => (invoicesRaw ?? []) as InvoiceRecord[], [invoicesRaw]);
+  const pendingQuotes = useMemo(() => (quotesRaw ?? []) as QuoteRecord[], [quotesRaw]);
+  const jobs = useMemo(() => (jobsRaw ?? []) as JobRecord[], [jobsRaw]);
+  const upcomingAppointments = useMemo(
+    () => (upcomingAppointmentsRaw ?? []) as AppointmentRecord[],
+    [upcomingAppointmentsRaw]
+  );
+  const staffRecords = useMemo(() => (staffRaw ?? []) as StaffRecord[], [staffRaw]);
   const activityRecords = (activityRaw ?? []) as ActivityRecord[];
   const recentClients = (recentClientsRaw ?? []) as ClientRecord[];
-  const locationRecords = (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>;
+  const locationRecords = useMemo(
+    () => (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>,
+    [locationsRaw]
+  );
   const activationBusiness = ((activationBusinessRaw ?? [])[0] ?? null) as BusinessSetupRecord | null;
   const activeLocationName = useMemo(
     () => locationRecords.find((location) => location.id === currentLocationId)?.name?.trim() || null,

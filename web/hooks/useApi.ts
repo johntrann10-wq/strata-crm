@@ -59,6 +59,77 @@ function stableKey(value: unknown): string {
   }
 }
 
+function buildFindOneOpts(
+  select: FindOneOpts["select"],
+  pause: FindOneOpts["pause"],
+  live: FindOneOpts["live"]
+): FindOneOpts | undefined {
+  if (select == null && pause == null && live == null) return undefined;
+  return { select, pause, live };
+}
+
+function buildFindManyOpts(
+  filter: FindManyOpts["filter"],
+  sort: FindManyOpts["sort"],
+  first: FindManyOpts["first"],
+  select: FindManyOpts["select"],
+  search: FindManyOpts["search"],
+  status: FindManyOpts["status"],
+  lost: FindManyOpts["lost"],
+  pending: FindManyOpts["pending"],
+  unpaid: FindManyOpts["unpaid"],
+  unbilled: FindManyOpts["unbilled"],
+  startGte: FindManyOpts["startGte"],
+  startLte: FindManyOpts["startLte"],
+  clientId: FindManyOpts["clientId"],
+  vehicleId: FindManyOpts["vehicleId"],
+  locationId: FindManyOpts["locationId"],
+  pause: FindManyOpts["pause"],
+  live: FindManyOpts["live"]
+): FindManyOpts | undefined {
+  if (
+    filter == null &&
+    sort == null &&
+    first == null &&
+    select == null &&
+    search == null &&
+    status == null &&
+    lost == null &&
+    pending == null &&
+    unpaid == null &&
+    unbilled == null &&
+    startGte == null &&
+    startLte == null &&
+    clientId == null &&
+    vehicleId == null &&
+    locationId == null &&
+    pause == null &&
+    live == null
+  ) {
+    return undefined;
+  }
+
+  return {
+    filter,
+    sort,
+    first,
+    select,
+    search,
+    status,
+    lost,
+    pending,
+    unpaid,
+    unbilled,
+    startGte,
+    startLte,
+    clientId,
+    vehicleId,
+    locationId,
+    pause,
+    live,
+  };
+}
+
 export function useFindOne(
   model: { findOne: (id: string, opts?: FindOneOpts) => Promise<any> },
   id: string | null | undefined,
@@ -91,7 +162,17 @@ export function useFindOne(
     () => `${stableKey(opts?.select)}|${opts?.pause ? "1" : "0"}|${opts?.live ? "1" : "0"}`,
     [opts?.select, opts?.pause, opts?.live]
   );
-  const stableOpts = useMemo(() => opts, [optsKey]);
+  const stableOptsRef = useRef<{ key: string; value: FindOneOpts | undefined }>({
+    key: "",
+    value: undefined,
+  });
+  if (stableOptsRef.current.key !== optsKey) {
+    stableOptsRef.current = {
+      key: optsKey,
+      value: buildFindOneOpts(opts?.select, opts?.pause, opts?.live),
+    };
+  }
+  const stableOpts = stableOptsRef.current.value;
 
   const refetch = useCallback(async () => {
     if (id == null || id === "") {
@@ -190,7 +271,35 @@ export function useFindMany(
       opts?.live,
     ]
   );
-  const stableOpts = useMemo(() => opts, [optsKey]);
+  const stableOptsRef = useRef<{ key: string; value: FindManyOpts | undefined }>({
+    key: "",
+    value: undefined,
+  });
+  if (stableOptsRef.current.key !== optsKey) {
+    stableOptsRef.current = {
+      key: optsKey,
+      value: buildFindManyOpts(
+        opts?.filter,
+        opts?.sort,
+        opts?.first,
+        opts?.select,
+        opts?.search,
+        opts?.status,
+        opts?.lost,
+        opts?.pending,
+        opts?.unpaid,
+        opts?.unbilled,
+        opts?.startGte,
+        opts?.startLte,
+        opts?.clientId,
+        opts?.vehicleId,
+        opts?.locationId,
+        opts?.pause,
+        opts?.live
+      ),
+    };
+  }
+  const stableOpts = stableOptsRef.current.value;
 
   useEffect(() => {
     if (stableOpts?.pause) {
@@ -252,6 +361,7 @@ export function useFindFirst(
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -308,7 +418,35 @@ export function useFindFirst(
       opts?.live,
     ]
   );
-  const stableOpts = useMemo(() => opts, [optsKey]);
+  const stableOptsRef = useRef<{ key: string; value: FindManyOpts | undefined }>({
+    key: "",
+    value: undefined,
+  });
+  if (stableOptsRef.current.key !== optsKey) {
+    stableOptsRef.current = {
+      key: optsKey,
+      value: buildFindManyOpts(
+        opts?.filter,
+        opts?.sort,
+        opts?.first,
+        opts?.select,
+        opts?.search,
+        opts?.status,
+        opts?.lost,
+        opts?.pending,
+        opts?.unpaid,
+        opts?.unbilled,
+        opts?.startGte,
+        opts?.startLte,
+        opts?.clientId,
+        opts?.vehicleId,
+        opts?.locationId,
+        opts?.pause,
+        opts?.live
+      ),
+    };
+  }
+  const stableOpts = stableOptsRef.current.value;
 
   useEffect(() => {
     if (stableOpts?.pause) return;
@@ -363,6 +501,7 @@ export function useAction(actionFn: ActionFn) {
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -435,10 +574,13 @@ export function useActionForm(
   actionFn: (params: Record<string, unknown>) => Promise<any>,
   options?: ActionFormOptions
 ) {
-  const [values, setValues] = useState<Record<string, unknown>>(options?.defaultValues ?? {});
+  const defaultValues = options?.defaultValues;
+  const onSuccess = options?.onSuccess;
+  const send = options?.send;
+  const [values, setValues] = useState<Record<string, unknown>>(defaultValues ?? {});
   useEffect(() => {
-    if (options?.defaultValues != null) setValues(options.defaultValues);
-  }, [options?.defaultValues]);
+    if (defaultValues != null) setValues(defaultValues);
+  }, [defaultValues]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitSuccessful, setIsSubmitSuccessful] = useState(false);
   const [errors, setErrors] = useState<Record<string, { message?: string }>>({});
@@ -462,12 +604,12 @@ export function useActionForm(
       if (form instanceof HTMLFormElement) {
         const fd = new FormData(form);
         payload = Object.fromEntries(fd.entries()) as Record<string, unknown>;
-        if (options?.send?.length) {
-          payload = Object.fromEntries(options.send.map((k) => [k, payload[k]]));
+        if (send?.length) {
+          payload = Object.fromEntries(send.map((k) => [k, payload[k]]));
         }
       } else {
-        payload = options?.send
-          ? Object.fromEntries(options.send.map((k) => [k, values[k]]))
+        payload = send
+          ? Object.fromEntries(send.map((k) => [k, values[k]]))
           : { ...values };
       }
       return actionFn(payload)
@@ -479,31 +621,31 @@ export function useActionForm(
           }
           persistAuthTokenFromResponse(res);
           setIsSubmitSuccessful(true);
-          options?.onSuccess?.();
+          onSuccess?.();
         })
         .catch((err: Error) => {
           let msg = err.message;
-        if (msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("Load failed")) {
-          msg =
-            "Cannot reach the API. Locally: run the backend and ensure Vite proxies /api to it. Production: set STRATA_API_ORIGIN on Vercel/Netlify (same-origin /api proxy) or VITE_API_URL / NEXT_PUBLIC_API_URL at build time; see DEPLOY.md.";
-        }
-        recordReliabilityDiagnostic({
-          source: "form.error",
-          severity: "error",
-          message: msg,
-          detail: `Action form submission failed for ${actionFn.name || "anonymous action"}`,
-        });
-        setErrors({ root: { message: msg } });
-      })
+          if (msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("Load failed")) {
+            msg =
+              "Cannot reach the API. Locally: run the backend and ensure Vite proxies /api to it. Production: set STRATA_API_ORIGIN on Vercel/Netlify (same-origin /api proxy) or VITE_API_URL / NEXT_PUBLIC_API_URL at build time; see DEPLOY.md.";
+          }
+          recordReliabilityDiagnostic({
+            source: "form.error",
+            severity: "error",
+            message: msg,
+            detail: `Action form submission failed for ${actionFn.name || "anonymous action"}`,
+          });
+          setErrors({ root: { message: msg } });
+        })
         .finally(() => setIsSubmitting(false));
     },
-    [actionFn, values, options?.onSuccess, options?.send]
+    [actionFn, onSuccess, send, values]
   );
 
   const reset = useCallback((nextValues?: Record<string, unknown>) => {
-    setValues(nextValues ?? options?.defaultValues ?? {});
+    setValues(nextValues ?? defaultValues ?? {});
     setErrors({});
-  }, [options?.defaultValues]);
+  }, [defaultValues]);
 
   return {
     register,

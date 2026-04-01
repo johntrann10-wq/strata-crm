@@ -67,7 +67,7 @@ export default function NewInvoicePage() {
     pause: !businessId,
   });
 
-  const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState(() => clientIdParam ?? "");
   const [clientSearchQuery, setClientSearchQuery] = useState("");
   const [debouncedClientQuery, setDebouncedClientQuery] = useState("");
 
@@ -202,7 +202,7 @@ export default function NewInvoicePage() {
     if (notes === "" && (quoteData as any).notes) {
       setNotes((quoteData as any).notes);
     }
-  }, [quoteData]);
+  }, [lineItems, notes, quoteData, taxRate]);
 
   // Pre-fill client from linked quote
   useEffect(() => {
@@ -270,7 +270,7 @@ export default function NewInvoicePage() {
         );
       }
     }
-  }, [apptServices, appointmentRecord]);
+  }, [apptServices, appointmentRecord, lineItems]);
 
   // Set default tax rate from business when loaded
   useEffect(() => {

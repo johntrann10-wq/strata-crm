@@ -113,7 +113,7 @@ export function QuickBookSheet({
       setBookingDate(initialDate ?? getToday());
       setBookingTime(initialTime ?? getNextHour());
     }
-  }, [open]);
+  }, [initialDate, initialTime, open]);
 
   // Fetch clients
   const [{ data: clients, fetching: clientsFetching, error: clientsError }] = useFindMany(api.client, {

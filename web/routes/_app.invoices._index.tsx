@@ -126,7 +126,7 @@ export default function InvoicesIndexPage() {
     void runGetMetrics().then(() => {
       hasLoadedMetrics.current = true;
     });
-  }, [businessId]);
+  }, [businessId, runGetMetrics]);
 
   useEffect(() => {
     setPageSize(25);
