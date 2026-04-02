@@ -28,12 +28,6 @@ export class HybridVehicleCatalogProvider implements VehicleCatalogProvider {
   }
 
   async listMakes(year: number): Promise<VehicleCatalogOption[]> {
-    try {
-      const records = dedupeOptions(await this.nhtsa.listMakes(year));
-      if (records.length > 0) return records;
-    } catch {
-      // Fall back to the curated catalog when NHTSA is unavailable.
-    }
     return this.curated.listMakes(year);
   }
 

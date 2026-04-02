@@ -27,29 +27,24 @@ describe("vehicle catalog provider", () => {
     expect(trims.find((entry) => entry.value === "SE")?.bodyStyle).toBe("Sedan");
   });
 
-  it("uses the broader NHTSA catalog for make and model selection when available", async () => {
+  it("keeps the make list fast while using the broader NHTSA catalog for models when available", async () => {
     const provider = getVehicleCatalogProvider();
 
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/GetAllMakes?format=json")) {
+      if (url.includes("/GetModelsForMakeIdYear/makeId/tesla/modelyear/2024?format=json")) {
         return new Response(
-          JSON.stringify({
-            Results: [
-              { Make_ID: 1, Make_Name: "Toyota" },
-              { Make_ID: 2, Make_Name: "Rivian" },
-            ],
-          }),
+          JSON.stringify({ Results: [] }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
 
-      if (url.includes("/GetModelsForMakeIdYear/makeId/2/modelyear/2024?format=json")) {
+      if (url.includes("/GetModelsForMakeYear/make/Tesla/modelyear/2024?format=json")) {
         return new Response(
           JSON.stringify({
             Results: [
-              { Model_ID: 101, Model_Name: "R1T" },
-              { Model_ID: 102, Model_Name: "R1S" },
+              { Model_ID: 101, Model_Name: "Cybertruck" },
+              { Model_ID: 102, Model_Name: "Model X" },
             ],
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
@@ -60,11 +55,12 @@ describe("vehicle catalog provider", () => {
     });
 
     const makes = await provider.listMakes(2024);
-    const rivian = makes.find((entry) => entry.value === "Rivian");
-    expect(rivian).toBeDefined();
+    const tesla = makes.find((entry) => entry.value === "Tesla");
+    expect(tesla).toBeDefined();
+    expect(makes.some((entry) => entry.value === "Rivian")).toBe(false);
 
-    const models = await provider.listModels(2024, rivian!.id, rivian!.value);
-    expect(models.map((entry) => entry.value)).toContain("R1T");
-    expect(models.map((entry) => entry.value)).toContain("R1S");
+    const models = await provider.listModels(2024, tesla!.id, tesla!.value);
+    expect(models.map((entry) => entry.value)).toContain("Cybertruck");
+    expect(models.map((entry) => entry.value)).toContain("Model X");
   });
 });
