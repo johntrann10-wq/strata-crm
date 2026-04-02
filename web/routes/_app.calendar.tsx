@@ -697,43 +697,17 @@ export default function CalendarPage() {
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day agenda</p>
                     </div>
                   </div>
-                  {selectedDayOnSiteJobs.length > 0 ? (
+                  {selectedDayAgendaItems.length > 0 ? (
                     <div className="mt-3 space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Vehicles on site</p>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedDayOnSiteJobs.slice(0, 4).map((appointment) => (
-                          <button
-                            key={`${appointment.id}-day-presence`}
-                            type="button"
-                            onClick={() => handleApptClick(appointment)}
-                            className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
-                          >
-                            <span className="h-2 w-2 rounded-full bg-sky-500" />
-                            <span className="max-w-[11rem] truncate">
-                              {appointment.title ||
-                                (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Job")}
-                            </span>
-                          </button>
-                        ))}
-                        {selectedDayOnSiteJobs.length > 4 ? (
-                          <span className="inline-flex items-center rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
-                            +{selectedDayOnSiteJobs.length - 4} more
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                  {selectedDayAppointments.length > 0 ? (
-                    <div className="mt-3 space-y-2">
-                      {selectedDayAppointments.slice(0, 6).map((appointment) => (
+                      {selectedDayAgendaItems.slice(0, 6).map(({ appointment, kind }) => (
                         <button
-                          key={appointment.id}
+                          key={`${appointment.id}-${kind}-day`}
                           type="button"
                           onClick={() => handleApptClick(appointment)}
                           className="flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88"
                         >
                           <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                            {formatPanelTime(appointment.startTime)}
+                            {kind === "onsite" ? "On site" : formatPanelTime(appointment.startTime)}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
@@ -742,21 +716,25 @@ export default function CalendarPage() {
                                   (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
                               </p>
                               <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                {appointment.status.replace("_", " ")}
+                                {kind === "onsite" ? getJobPhaseLabel(appointment.jobPhase) : appointment.status.replace("_", " ")}
                               </span>
                             </div>
                             <p className="truncate text-xs text-muted-foreground">
-                              {appointment.vehicle
-                                ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
-                                : appointment.assignedStaff
-                                  ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-                                  : "Unassigned"}
+                              {kind === "onsite"
+                                ? appointment.vehicle
+                                  ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} on site`
+                                  : "Vehicle on site"
+                                : appointment.vehicle
+                                  ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+                                  : appointment.assignedStaff
+                                    ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+                                    : "Unassigned"}
                             </p>
                           </div>
                         </button>
                       ))}
-                      {selectedDayAppointments.length > 6 ? (
-                        <p className="px-1 text-xs text-muted-foreground">+{selectedDayAppointments.length - 6} more on this day</p>
+                      {selectedDayAgendaItems.length > 6 ? (
+                        <p className="px-1 text-xs text-muted-foreground">+{selectedDayAgendaItems.length - 6} more on this day</p>
                       ) : null}
                     </div>
                   ) : (
