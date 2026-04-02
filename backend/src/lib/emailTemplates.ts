@@ -20,6 +20,7 @@ function renderClientShell(options: {
   ctaLabel?: string;
   ctaUrl?: string;
   ctaHint?: string;
+  showCtaHint?: boolean;
   footerNote?: string;
 }) {
   const cta =
@@ -27,7 +28,11 @@ function renderClientShell(options: {
       ? `<div style="margin-top:20px;">
           <a href="${options.ctaUrl}" style="display:inline-block;padding:12px 18px;background:#ea580c;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:700;font-size:14px;">${options.ctaLabel}</a>
         </div>
-        <p style="margin:12px 0 0;color:#64748b;font-size:13px;line-height:1.5;">${options.ctaHint ?? `${options.ctaLabel}: ${options.ctaUrl}`}</p>`
+        ${
+          options.showCtaHint
+            ? `<p style="margin:12px 0 0;color:#64748b;font-size:13px;line-height:1.5;">${options.ctaHint ?? `${options.ctaLabel}: ${options.ctaUrl}`}</p>`
+            : ""
+        }`
       : "";
 
   const footer = options.footerNote
@@ -171,6 +176,7 @@ export const reviewRequest: BuiltinEmailTemplate = {
     ctaLabel: "Leave a review",
     ctaUrl: "{{reviewUrl}}",
     ctaHint: `Review link: {{reviewUrl}}`,
+    showCtaHint: false,
   }),
   bodyText: `{{businessName}}
 
@@ -196,6 +202,7 @@ export const lapsedClientReengagement: BuiltinEmailTemplate = {
     ctaLabel: "Book now",
     ctaUrl: "{{bookUrl}}",
     ctaHint: `Booking link: {{bookUrl}}`,
+    showCtaHint: false,
   }),
   bodyText: `{{businessName}}
 
@@ -260,6 +267,7 @@ const builtins: Record<string, BuiltinEmailTemplate> = {
       ctaLabel: "View quote",
       ctaUrl: "{{quoteUrl}}",
       ctaHint: `Quote link: {{quoteUrl}}`,
+      showCtaHint: false,
       footerNote: "If you have any questions, reply to this email and our team will help.",
     }),
     bodyText: `{{businessName}}
@@ -288,6 +296,7 @@ If you have any questions, reply to this email and our team will help.`,
       ctaLabel: "Review quote",
       ctaUrl: "{{quoteUrl}}",
       ctaHint: `Quote link: {{quoteUrl}}`,
+      showCtaHint: false,
       footerNote: "If you are ready to move forward, reply to this email and we will help with the next step.",
     }),
     bodyText: `{{businessName}}
@@ -316,6 +325,7 @@ If you are ready to move forward, reply to this email and we will help with the 
       ctaLabel: "View invoice",
       ctaUrl: "{{invoiceUrl}}",
       ctaHint: `Invoice link: {{invoiceUrl}}`,
+      showCtaHint: false,
       footerNote: "If you have any questions, reply to this email and our team will help.",
     }),
     bodyText: `{{businessName}}
