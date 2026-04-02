@@ -1162,22 +1162,22 @@ export default function SignedIn() {
                       to={`/jobs/${job.id}`}
                       className="flex min-h-[68px] min-w-0 max-w-full items-center gap-3 overflow-hidden px-4 py-3 transition-colors hover:bg-muted/40 active:bg-muted/70"
                     >
-                      <div className="w-[72px] shrink-0">
+                      <div className="w-[72px] shrink-0 overflow-hidden">
                         <p className="font-mono text-sm font-medium text-foreground">{formatSafe(job.scheduledStart, "h:mm a")}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
                           {job.assignedStaff
                             ? `${job.assignedStaff.firstName ?? ""} ${job.assignedStaff.lastName ?? ""}`.trim() || "Assigned"
                             : "Unassigned"}
                         </p>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-base font-medium">
+                      <div className="min-w-0 max-w-full flex-1 overflow-hidden">
+                        <p className="max-w-full truncate text-base font-medium">
                           {job.title?.trim() ||
                             (job.client
                               ? `${job.client.firstName ?? ""} ${job.client.lastName ?? ""}`.trim()
                               : "Job")}
                         </p>
-                        <p className="truncate text-sm text-muted-foreground">
+                        <p className="max-w-full truncate text-sm text-muted-foreground">
                           {job.vehicle
                             ? [job.vehicle.year, job.vehicle.make, job.vehicle.model].filter(Boolean).join(" ")
                             : "No vehicle on file"}
