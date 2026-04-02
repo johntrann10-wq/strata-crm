@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarIcon, Plus } from "lucide-react";
-import { getJobPhaseLabel, getJobPhaseTone, getJobSpanEnd, hasLaborOnDay, hasPresenceOnDay, isMultiDayJob } from "@/lib/calendarJobSpans";
+import { getCalendarDaySnapshot, getJobPhaseLabel, getJobPhaseTone, getJobSpanEnd } from "@/lib/calendarJobSpans";
 import {
   START_HOUR,
   END_HOUR,
@@ -41,26 +41,15 @@ export function DayView({
 }: DayViewProps) {
   const [dragOverMinute, setDragOverMinute] = useState<number | null>(null);
 
-  const dayAppts = useMemo(
-    () => appointments.filter((a) => hasLaborOnDay(a, currentDate)),
-    [appointments, currentDate]
-  );
-  const onSiteJobs = useMemo(
-    () =>
-      appointments.filter(
-        (apt) => isMultiDayJob(apt) && hasPresenceOnDay(apt, currentDate)
-      ),
-    [appointments, currentDate]
-  );
-  const onSiteOnlyJobs = useMemo(() => {
-    const bookedIds = new Set(dayAppts.map((appointment) => appointment.id));
-    return onSiteJobs.filter((appointment) => !bookedIds.has(appointment.id));
-  }, [dayAppts, onSiteJobs]);
+  const daySnapshot = useMemo(() => getCalendarDaySnapshot(appointments, currentDate), [appointments, currentDate]);
+  const dayAppts = daySnapshot.dayAppts;
+  const onSiteJobs = daySnapshot.daySpans;
+  const onSiteOnlyJobs = daySnapshot.onSiteOnlyJobs;
 
   const today = useMemo(() => new Date(), []);
   const isToday = isSameDay(currentDate, today);
   const unassignedCount = dayAppts.filter((apt) => !apt.assignedStaffId).length;
-  const activeItemCount = dayAppts.length + onSiteOnlyJobs.length;
+  const activeItemCount = daySnapshot.activeItemCount;
   const nowLineTop = useMemo(() => {
     if (!isToday) return null;
     const currentDecimal = today.getHours() + today.getMinutes() / 60;

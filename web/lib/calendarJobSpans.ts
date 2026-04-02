@@ -1,4 +1,5 @@
 export type CalendarJobLike = {
+  id?: string;
   startTime: string;
   endTime?: string | null;
   jobStartTime?: string | null;
@@ -6,6 +7,12 @@ export type CalendarJobLike = {
   pickupReadyTime?: string | null;
   vehicleOnSite?: boolean | null;
   jobPhase?: string | null;
+  status?: string | null;
+};
+
+export type CalendarAgendaItem<T extends CalendarJobLike> = {
+  appointment: T;
+  kind: "booked" | "onsite";
 };
 
 export function dayStart(date: Date): Date {
@@ -58,6 +65,39 @@ export function isMultiDayJob(appointment: CalendarJobLike): boolean {
     appointment.vehicleOnSite === true &&
     dayStart(start).getTime() !== dayStart(end).getTime()
   );
+}
+
+export function isVisibleCalendarAppointment(appointment: CalendarJobLike): boolean {
+  return appointment.status !== "cancelled" && appointment.status !== "no-show";
+}
+
+export function getActiveCalendarAppointments<T extends CalendarJobLike>(appointments: T[]): T[] {
+  return appointments.filter((appointment) => isVisibleCalendarAppointment(appointment));
+}
+
+export function getCalendarDaySnapshot<T extends CalendarJobLike & { id: string }>(appointments: T[], date: Date) {
+  const activeAppointments = getActiveCalendarAppointments(appointments);
+  const dayAppts = activeAppointments.filter((appointment) => hasLaborOnDay(appointment, date));
+  const daySpans = activeAppointments.filter((appointment) => isMultiDayJob(appointment) && hasPresenceOnDay(appointment, date));
+  const bookedIds = new Set(dayAppts.map((appointment) => appointment.id));
+  const onSiteOnlyJobs = daySpans.filter((appointment) => !bookedIds.has(appointment.id));
+  const agendaItems: CalendarAgendaItem<T>[] = [
+    ...dayAppts.map((appointment) => ({ appointment, kind: "booked" as const })),
+    ...onSiteOnlyJobs.map((appointment) => ({ appointment, kind: "onsite" as const })),
+  ].sort((a, b) => {
+    const aTime = a.kind === "onsite" ? getJobSpanStart(a.appointment).getTime() : getWorkStart(a.appointment).getTime();
+    const bTime = b.kind === "onsite" ? getJobSpanStart(b.appointment).getTime() : getWorkStart(b.appointment).getTime();
+    return aTime - bTime;
+  });
+
+  return {
+    activeAppointments,
+    dayAppts,
+    daySpans,
+    onSiteOnlyJobs,
+    agendaItems,
+    activeItemCount: dayAppts.length + onSiteOnlyJobs.length,
+  };
 }
 
 export function getJobPhaseLabel(phase: string | null | undefined): string {

@@ -19,7 +19,7 @@ import {
   getViewRange,
   navigateDate,
 } from "../components/CalendarViews";
-import { dayEnd, dayStart, getJobPhaseLabel, getJobSpanEnd, getJobSpanStart, hasLaborOnDay, hasPresenceOnDay, isMultiDayJob } from "@/lib/calendarJobSpans";
+import { dayEnd, dayStart, getCalendarDaySnapshot, getJobPhaseLabel, getJobSpanEnd, getJobSpanStart, getActiveCalendarAppointments, hasLaborOnDay } from "@/lib/calendarJobSpans";
 
 function toLocalDateString(date: Date): string {
   const year = date.getFullYear();
@@ -146,9 +146,7 @@ export default function CalendarPage() {
 
   const isToday = currentDate.toDateString() === new Date().toDateString();
 
-  const activeAppointments = appointments.filter(
-    (appointment) => appointment.status !== "cancelled" && appointment.status !== "no-show"
-  );
+  const activeAppointments = useMemo(() => getActiveCalendarAppointments(appointments), [appointments]);
 
   function handlePrev() {
     setCurrentDate((d) => navigateDate(d, view, -1));
@@ -186,31 +184,12 @@ export default function CalendarPage() {
     }`);
   }
 
-  const selectedDayAppointments = useMemo(
-    () => activeAppointments.filter((appointment) => hasLaborOnDay(appointment, currentDate)),
-    [activeAppointments, currentDate]
-  );
-  const selectedDayOnSiteJobs = useMemo(
-    () => activeAppointments.filter((appointment) => isMultiDayJob(appointment) && hasPresenceOnDay(appointment, currentDate)),
-    [activeAppointments, currentDate]
-  );
-  const selectedDayOnSiteOnlyJobs = useMemo(() => {
-    const bookedIds = new Set(selectedDayAppointments.map((appointment) => appointment.id));
-    return selectedDayOnSiteJobs.filter((appointment) => !bookedIds.has(appointment.id));
-  }, [selectedDayAppointments, selectedDayOnSiteJobs]);
-  const selectedDayAgendaItems = useMemo(
-    () =>
-      [
-        ...selectedDayAppointments.map((appointment) => ({ appointment, kind: "booked" as const })),
-        ...selectedDayOnSiteOnlyJobs.map((appointment) => ({ appointment, kind: "onsite" as const })),
-      ].sort((a, b) => {
-        const aTime = a.kind === "onsite" ? getJobSpanStart(a.appointment).getTime() : new Date(a.appointment.startTime).getTime();
-        const bTime = b.kind === "onsite" ? getJobSpanStart(b.appointment).getTime() : new Date(b.appointment.startTime).getTime();
-        return aTime - bTime;
-      }),
-    [selectedDayAppointments, selectedDayOnSiteOnlyJobs]
-  );
-  const selectedDayActiveItems = selectedDayAppointments.length + selectedDayOnSiteOnlyJobs.length;
+  const selectedDaySnapshot = useMemo(() => getCalendarDaySnapshot(activeAppointments, currentDate), [activeAppointments, currentDate]);
+  const selectedDayAppointments = selectedDaySnapshot.dayAppts;
+  const selectedDayOnSiteJobs = selectedDaySnapshot.daySpans;
+  const selectedDayOnSiteOnlyJobs = selectedDaySnapshot.onSiteOnlyJobs;
+  const selectedDayAgendaItems = selectedDaySnapshot.agendaItems;
+  const selectedDayActiveItems = selectedDaySnapshot.activeItemCount;
   const selectedDayRevenue = selectedDayAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
   const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
   const selectedDayConflicts = selectedDayAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
