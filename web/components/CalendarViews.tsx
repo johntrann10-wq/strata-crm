@@ -736,17 +736,22 @@ export function MonthView({
                       >
                         {day.getDate()}
                       </span>
-                      <div className="flex items-center gap-1 sm:gap-2">
+                      <div className="flex min-w-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                        {dayAppts.length > 0 ? (
+                          <span className="max-w-full truncate rounded-full bg-muted/85 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-foreground/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+                            {currencyFormatter.format(dayRevenue)}
+                          </span>
+                        ) : null}
                         {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
                       </div>
                     </div>
 
                     <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                      <div className="pointer-events-none mb-1 space-y-1">
+                      <div className="pointer-events-none mb-1 space-y-0.5">
                         {daySpans.slice(0, 2).map((apt) => (
                           <div
                             key={`${apt.id}-span`}
-                            className="flex items-center gap-1.5 overflow-hidden rounded-full border border-border/60 bg-background/90 px-1.5 py-[3px] text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground shadow-sm sm:px-2"
+                            className="flex items-center gap-1 overflow-hidden rounded-full border border-border/60 bg-background/90 px-1.5 py-[2px] text-[8.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground shadow-sm sm:gap-1.5 sm:px-2 sm:py-[3px] sm:text-[9px] sm:tracking-[0.12em]"
                           >
                             <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", getJobPhaseTone(apt.jobPhase))} />
                             <span className="truncate">{apt.title || apt.client?.lastName || "Job"}</span>
@@ -759,11 +764,6 @@ export function MonthView({
 
                       <div className="mt-auto space-y-1">
                         <DayStatusDots appointments={dayAppts} />
-                        {dayAppts.length > 0 ? (
-                          <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                            {currencyFormatter.format(dayRevenue)}
-                          </div>
-                        ) : null}
                       </div>
                     </div>
                   </div>
