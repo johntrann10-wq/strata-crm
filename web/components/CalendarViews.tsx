@@ -667,6 +667,10 @@ export function MonthView({
 }: MonthViewProps) {
   const grid = useMemo(() => getMonthGrid(currentDate), [currentDate]);
   const today = useMemo(() => new Date(), []);
+  const activeAppointments = useMemo(
+    () => appointments.filter((appointment) => appointment.status !== "cancelled" && appointment.status !== "no-show"),
+    [appointments]
+  );
   const currencyFormatter = useMemo(
     () =>
       new Intl.NumberFormat("en-US", {
@@ -694,8 +698,8 @@ export function MonthView({
               const isCurrentMonth = day.getMonth() === currentDate.getMonth();
               const isToday = isSameDay(day, today);
               const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
-              const dayAppts = appointments.filter((a) => hasLaborOnDay(a, day));
-              const daySpans = appointments.filter((a) => isMultiDayJob(a) && hasPresenceOnDay(a, day));
+              const dayAppts = activeAppointments.filter((a) => hasLaborOnDay(a, day));
+              const daySpans = activeAppointments.filter((a) => isMultiDayJob(a) && hasPresenceOnDay(a, day));
               const dayRevenue = dayAppts.reduce((total, apt) => total + Number(apt.totalPrice ?? 0), 0);
               const hasConflict = !!conflictIds && dayAppts.some((a) => conflictIds.has(a.id));
               const dayLabel = day.toLocaleDateString("en-US", {
