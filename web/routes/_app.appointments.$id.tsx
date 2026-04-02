@@ -406,6 +406,7 @@ export default function AppointmentDetail() {
   const [editStaffId, setEditStaffId] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editInternalNotes, setEditInternalNotes] = useState("");
+  const [editClientId, setEditClientId] = useState("");
   const [editVehicleId, setEditVehicleId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("__none__");
   const [depositPaymentAmount, setDepositPaymentAmount] = useState("");
@@ -531,6 +532,20 @@ export default function AppointmentDetail() {
     select: { id: true, firstName: true, lastName: true },
     first: 50,
     pause: !appointment?.business?.id,
+  } as any);
+  const [{ data: clientsForEdit, fetching: clientsForEditFetching }] = useFindMany(api.client, {
+    filter: { businessId: { equals: appointment?.business?.id } },
+    select: { id: true, firstName: true, lastName: true, phone: true, email: true },
+    sort: { firstName: "Ascending" },
+    first: 200,
+    pause: !appointment?.business?.id,
+  } as any);
+  const [{ data: vehiclesForEdit, fetching: vehiclesForEditFetching }] = useFindMany(api.vehicle, {
+    filter: editClientId ? { clientId: { equals: editClientId } } : { id: { equals: "" } },
+    select: { id: true, year: true, make: true, model: true, color: true, licensePlate: true },
+    sort: { updatedAt: "Descending" },
+    first: 100,
+    pause: !editClientId,
   } as any);
   const [{ data: serviceCatalog, fetching: servicesFetching }] = useFindMany(api.service, {
     first: 200,
@@ -743,10 +758,10 @@ export default function AppointmentDetail() {
   };
 
   const handleOpenEditDialog = () => {
-    if (appointment) {
-      setEditTitle(appointment.title ?? "");
-      setEditDate(toDateInputValue(appointment.startTime));
-      setEditStartTime(toTimeInputValue(appointment.startTime));
+      if (appointment) {
+        setEditTitle(appointment.title ?? "");
+        setEditDate(toDateInputValue(appointment.startTime));
+        setEditStartTime(toTimeInputValue(appointment.startTime));
       setEditEndTime(toTimeInputValue(appointment.endTime));
       setEditJobStartDate(toDateInputValue((appointment as any).jobStartTime ?? appointment.startTime));
       setEditJobStartTime(toTimeInputValue((appointment as any).jobStartTime ?? appointment.startTime));
@@ -755,16 +770,22 @@ export default function AppointmentDetail() {
       setEditPickupReadyDate(toDateInputValue((appointment as any).pickupReadyTime));
       setEditPickupReadyTime(toTimeInputValue((appointment as any).pickupReadyTime));
       setEditVehicleOnSite(Boolean((appointment as any).vehicleOnSite));
-      setEditJobPhase(String((appointment as any).jobPhase ?? "scheduled"));
-      setEditStaffId(appointment.assignedStaff?.id ?? "");
-      setEditNotes(appointment.notes ?? "");
-      setEditInternalNotes(appointment.internalNotes ?? "");
-    }
-    setShowEditDialog(true);
-  };
+        setEditJobPhase(String((appointment as any).jobPhase ?? "scheduled"));
+        setEditStaffId(appointment.assignedStaff?.id ?? "");
+        setEditNotes(appointment.notes ?? "");
+        setEditInternalNotes(appointment.internalNotes ?? "");
+        setEditClientId(appointment.client?.id ?? "");
+        setEditVehicleId(appointment.vehicle?.id ?? "");
+      }
+      setShowEditDialog(true);
+    };
 
   const handleSaveEdit = async () => {
     if (!appointment) return;
+    if (editClientId && !editVehicleId) {
+      toast.error("Select a vehicle for the chosen client before saving.");
+      return;
+    }
     const startTime =
       editDate && editStartTime ? new Date(`${editDate}T${editStartTime}`) : undefined;
     const endTime =
@@ -780,11 +801,13 @@ export default function AppointmentDetail() {
     const pickupReadyDateTime =
       editPickupReadyDate && editPickupReadyTime ? new Date(`${editPickupReadyDate}T${editPickupReadyTime}`) : null;
 
-      const result = await runUpdate({
-        id: appointment.id,
-        title: editTitle || null,
-        startTime,
-        endTime,
+        const result = await runUpdate({
+          id: appointment.id,
+          clientId: editClientId || undefined,
+          vehicleId: editVehicleId || undefined,
+          title: editTitle || null,
+          startTime,
+          endTime,
         jobStartTime: editVehicleOnSite ? jobStartDateTime : null,
         expectedCompletionTime: editVehicleOnSite ? expectedCompletionDateTime : null,
         pickupReadyTime: pickupReadyDateTime,
@@ -912,6 +935,21 @@ export default function AppointmentDetail() {
   const hasPlaceholderVehicle =
     appointment.vehicle?.make === "Unspecified" &&
     appointment.vehicle?.model === "Vehicle";
+  const clientOptions = ((clientsForEdit as any[]) ?? []) as Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    phone?: string | null;
+    email?: string | null;
+  }>;
+  const vehicleOptions = ((vehiclesForEdit as any[]) ?? []) as Array<{
+    id: string;
+    year?: number | null;
+    make?: string | null;
+    model?: string | null;
+    color?: string | null;
+    licensePlate?: string | null;
+  }>;
   const appointmentLocationLabel = appointment.isMobile
     ? appointment.mobileAddress || "Mobile service"
     : "In-shop service";
@@ -2119,6 +2157,59 @@ export default function AppointmentDetail() {
                 value={editDate}
                 onChange={(e) => setEditDate(e.target.value)}
               />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Client</Label>
+                <FormSelect
+                  value={editClientId || "__keep__"}
+                  onChange={(value) => {
+                    const nextClientId = value === "__keep__" ? "" : value;
+                    setEditClientId(nextClientId);
+                    setEditVehicleId("");
+                  }}
+                >
+                  <option value="__keep__">
+                    {clientsForEditFetching ? "Loading clients..." : "Select client"}
+                  </option>
+                  {clientOptions.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {[`${client.firstName} ${client.lastName}`, client.phone ?? client.email ?? null]
+                        .filter(Boolean)
+                        .join(" - ")}
+                    </option>
+                  ))}
+                </FormSelect>
+              </div>
+              <div className="space-y-2">
+                <Label>Vehicle</Label>
+                <FormSelect
+                  value={editVehicleId || "__none__"}
+                  onChange={(value) => setEditVehicleId(value === "__none__" ? "" : value)}
+                  disabled={!editClientId || vehiclesForEditFetching}
+                >
+                  <option value="__none__">
+                    {!editClientId
+                      ? "Select client first"
+                      : vehiclesForEditFetching
+                        ? "Loading vehicles..."
+                        : "Select vehicle"}
+                  </option>
+                  {vehicleOptions.map((vehicle) => (
+                    <option key={vehicle.id} value={vehicle.id}>
+                      {[vehicle.year, vehicle.make, vehicle.model, vehicle.color, vehicle.licensePlate]
+                        .filter(Boolean)
+                        .join(" ")}
+                    </option>
+                  ))}
+                </FormSelect>
+                {editClientId && !vehiclesForEditFetching && vehicleOptions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    This client has no vehicles on file yet.
+                  </p>
+                ) : null}
+              </div>
             </div>
 
             {/* Start Time / End Time */}

@@ -308,6 +308,8 @@ const createSchema = z.object({
 });
 const updateSchema = z
   .object({
+    clientId: z.string().uuid().optional(),
+    vehicleId: z.string().uuid().optional(),
     startTime: z.string().datetime().optional(),
     endTime: z.string().datetime().optional(),
     jobStartTime: z.string().datetime().nullable().optional(),
@@ -1243,6 +1245,8 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
       pickupReadyTime: appointments.pickupReadyTime,
       vehicleOnSite: appointments.vehicleOnSite,
       assignedStaffId: appointments.assignedStaffId,
+      clientId: appointments.clientId,
+      vehicleId: appointments.vehicleId,
     })
     .from(appointments)
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
@@ -1263,6 +1267,39 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   if (parsed.data.locationId != null) {
     const hasLocation = await locationExistsForBusiness(parsed.data.locationId, bid);
     if (!hasLocation) throw new BadRequestError("Location not found or access denied.");
+  }
+
+  let nextClientId = existing.clientId as string;
+  let nextVehicleId = existing.vehicleId as string;
+
+  if (parsed.data.clientId != null) {
+    const [clientRow] = await db
+      .select({ id: clients.id })
+      .from(clients)
+      .where(and(eq(clients.id, parsed.data.clientId), eq(clients.businessId, bid)))
+      .limit(1);
+    if (!clientRow) throw new BadRequestError("Client not found or access denied.");
+    nextClientId = clientRow.id;
+  }
+
+  if (parsed.data.vehicleId != null) {
+    const [vehicleRow] = await db
+      .select({ id: vehicles.id, clientId: vehicles.clientId })
+      .from(vehicles)
+      .where(and(eq(vehicles.id, parsed.data.vehicleId), eq(vehicles.businessId, bid)))
+      .limit(1);
+    if (!vehicleRow) throw new BadRequestError("Vehicle not found or access denied.");
+    nextVehicleId = vehicleRow.id;
+    nextClientId = parsed.data.clientId ?? vehicleRow.clientId;
+  } else if (parsed.data.clientId != null) {
+    const [currentVehicle] = await db
+      .select({ clientId: vehicles.clientId })
+      .from(vehicles)
+      .where(and(eq(vehicles.id, existing.vehicleId as string), eq(vehicles.businessId, bid)))
+      .limit(1);
+    if (currentVehicle && currentVehicle.clientId !== nextClientId) {
+      throw new BadRequestError("Select a vehicle that belongs to the chosen client.");
+    }
   }
 
   const startTime = parsed.data.startTime != null ? new Date(parsed.data.startTime) : (existing.startTime as Date);
@@ -1324,6 +1361,10 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   if (parsed.data.title != null) updates.title = parsed.data.title;
   if (parsed.data.assignedStaffId != null) updates.assignedStaffId = parsed.data.assignedStaffId;
   if (parsed.data.locationId != null) updates.locationId = parsed.data.locationId;
+  if (parsed.data.clientId != null || parsed.data.vehicleId != null) {
+    updates.clientId = nextClientId;
+    updates.vehicleId = nextVehicleId;
+  }
   if (parsed.data.depositAmount != null) updates.depositAmount = String(parsed.data.depositAmount);
   if (parsed.data.notes != null) updates.notes = parsed.data.notes.trim() || null;
   if (parsed.data.internalNotes != null) updates.internalNotes = parsed.data.internalNotes.trim() || null;
