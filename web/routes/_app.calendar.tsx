@@ -73,9 +73,18 @@ export default function CalendarPage() {
     [currentDate, view]
   );
 
+  const { queryStart, queryEnd } = useMemo(() => {
+    const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999);
+    return {
+      queryStart: viewStart.getTime() < monthStart.getTime() ? viewStart : monthStart,
+      queryEnd: viewEnd.getTime() > monthEnd.getTime() ? viewEnd : monthEnd,
+    };
+  }, [currentDate, viewEnd, viewStart]);
+
   const { startGte, startLte } = useMemo(
-    () => ({ startGte: viewStart.toISOString(), startLte: viewEnd.toISOString() }),
-    [viewStart, viewEnd]
+    () => ({ startGte: queryStart.toISOString(), startLte: queryEnd.toISOString() }),
+    [queryEnd, queryStart]
   );
 
   const [{ data: appointmentsData, fetching, error }, refetchAppointments] = useFindMany(api.appointment, {
@@ -102,7 +111,7 @@ export default function CalendarPage() {
       vehicle: { make: true, model: true, year: true },
       assignedStaff: { firstName: true, lastName: true },
     },
-    first: 250,
+    first: 500,
   });
 
   const [{ data: locationsRaw }] = useFindMany(api.location, {
