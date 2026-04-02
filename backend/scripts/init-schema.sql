@@ -35,6 +35,40 @@ DO $$ BEGIN
   CREATE TYPE service_category AS ENUM ('detail', 'tint', 'ppf', 'mechanical', 'tire', 'body', 'other');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+DO $$ BEGIN
+  CREATE TYPE membership_role AS ENUM ('owner', 'admin', 'manager', 'service_advisor', 'technician');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE membership_status AS ENUM ('invited', 'active', 'suspended');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE permission AS ENUM (
+    'dashboard.view',
+    'customers.read',
+    'customers.write',
+    'vehicles.read',
+    'vehicles.write',
+    'services.read',
+    'services.write',
+    'quotes.read',
+    'quotes.write',
+    'appointments.read',
+    'appointments.write',
+    'jobs.read',
+    'jobs.write',
+    'invoices.read',
+    'invoices.write',
+    'payments.read',
+    'payments.write',
+    'team.read',
+    'team.write',
+    'settings.read',
+    'settings.write'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Tables
 CREATE TABLE IF NOT EXISTS users (
@@ -76,6 +110,37 @@ CREATE TABLE IF NOT EXISTS businesses (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS business_memberships (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role membership_role NOT NULL,
+  status membership_status NOT NULL DEFAULT 'active',
+  is_default boolean NOT NULL DEFAULT false,
+  invited_by_user_id uuid REFERENCES users(id),
+  invited_at timestamptz,
+  joined_at timestamptz,
+  last_active_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS business_memberships_business_user_unique
+  ON business_memberships (business_id, user_id);
+
+CREATE TABLE IF NOT EXISTS role_permission_grants (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid REFERENCES businesses(id) ON DELETE CASCADE,
+  role membership_role NOT NULL,
+  permission permission NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS role_permission_grants_scope_role_permission_unique
+  ON role_permission_grants (business_id, role, permission);
 
 CREATE TABLE IF NOT EXISTS clients (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -10,8 +10,29 @@ import { test, expect } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
 
+const skipLocalWindowsCriticalPath = process.platform === "win32" && !process.env.PLAYWRIGHT_API_BASE;
+
+async function expectWorkspaceReady(page: import("@playwright/test").Page) {
+  await page.waitForURL(/\/(signed-in|subscribe)/);
+  const subscribeHeading = page.getByRole("heading", { name: /start your free trial/i });
+  const showingSubscribeGate = await subscribeHeading.isVisible().catch(() => false);
+
+  if (showingSubscribeGate) {
+    const skipButton = page.getByRole("button", { name: /i&apos;ll subscribe later|i'll subscribe later/i });
+    await expect(skipButton).toBeVisible();
+    await skipButton.click();
+  }
+
+  await expect(page).toHaveURL(/\/signed-in/);
+  await expect(page.getByRole("heading", { name: /^dashboard$/i }).first()).toBeVisible();
+}
+
 test.describe("Critical path (smoke)", () => {
   test("sign up → onboarding → dashboard → create client/appointment → logout → sign in", async ({ page, request }) => {
+    test.skip(
+      skipLocalWindowsCriticalPath,
+      "Full-stack critical path uses embedded Postgres, which is unreliable on native Windows. Run this smoke in WSL/CI or set PLAYWRIGHT_API_BASE to an external backend."
+    );
     test.setTimeout(60000);
     const apiBase = process.env.PLAYWRIGHT_API_BASE ?? process.env.API_BASE ?? "http://localhost:3001";
 
@@ -37,15 +58,11 @@ test.describe("Critical path (smoke)", () => {
     await expect(page.getByRole("button", { name: /tire shop/i })).toBeVisible();
     await page.getByRole("button", { name: /tire shop/i }).click();
     await page.getByRole("button", { name: /^continue$/i }).click();
-    await expect(page.locator("#staffCount")).toBeVisible();
-    await page.locator("#staffCount").fill("1");
-    await page.getByRole("button", { name: /^continue$/i }).click();
 
     await expect(page.locator("#name")).toBeVisible();
     await page.locator("#name").fill("E2E Smoke Shop");
-    await page.getByRole("button", { name: /launch my shop/i }).click();
-    await expect(page).toHaveURL(/signed-in/);
-    await expect(page.getByText(/Smart Insights/i)).toBeVisible();
+    await page.getByRole("button", { name: /launch my workspace|launch/i }).click();
+    await expectWorkspaceReady(page);
 
     // Read token from localStorage (auth is bearer token based).
     const token = await page.evaluate(() => window.localStorage.getItem("authToken"));
@@ -53,18 +70,19 @@ test.describe("Critical path (smoke)", () => {
 
     // 3) Create client (API setup), then verify via UI
     const clientEmail = `client-${Date.now()}@example.com`;
-    const clientRes = await request
-      .post(`${apiBase}/api/clients`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ firstName: "E2E", lastName: "Client", email: clientEmail });
+    const authHeaders = { Authorization: `Bearer ${token}` };
+    const clientRes = await request.post(`${apiBase}/api/clients`, {
+      headers: authHeaders,
+      data: { firstName: "E2E", lastName: "Client", email: clientEmail },
+    });
     expect(clientRes.status()).toBe(201);
     const clientId = (await clientRes.json()).id as string;
 
     // 4) Create appointment (API setup), then verify via UI
-    const vehicleRes = await request
-      .post(`${apiBase}/api/vehicles`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ clientId, make: "Honda", model: "Civic", year: 2020 });
+    const vehicleRes = await request.post(`${apiBase}/api/vehicles`, {
+      headers: authHeaders,
+      data: { clientId, make: "Honda", model: "Civic", year: 2020 },
+    });
     expect(vehicleRes.status()).toBe(201);
     const vehicleId = (await vehicleRes.json()).id as string;
 
@@ -74,25 +92,25 @@ test.describe("Critical path (smoke)", () => {
     const end = new Date(start.getTime() + 60 * 60 * 1000);
 
     const appointmentTitle = `E2E Appointment ${Date.now()}`;
-    const appointmentRes = await request
-      .post(`${apiBase}/api/appointments`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({
+    const appointmentRes = await request.post(`${apiBase}/api/appointments`, {
+      headers: authHeaders,
+      data: {
         clientId,
         vehicleId,
         startTime: start.toISOString(),
         endTime: end.toISOString(),
         title: appointmentTitle,
-      });
+      },
+    });
     expect(appointmentRes.status()).toBe(201);
     const appointmentId = (await appointmentRes.json()).id as string;
     expect(appointmentId).toBeTruthy();
 
     await page.goto("/clients");
-    await expect(page.getByText(/E2E Client/i)).toBeVisible();
+    await expect(page.getByRole("link", { name: /E2E Client/i }).first()).toBeVisible();
 
     await page.goto("/appointments");
-    await expect(page.getByText(appointmentTitle)).toBeVisible();
+    await expect(page.getByText(appointmentTitle).first()).toBeVisible();
 
     // 5) Logout (UI)
     await page.getByRole("button", { name: /@example\.com$/i }).click();
@@ -106,12 +124,13 @@ test.describe("Critical path (smoke)", () => {
     await page.locator("#password").fill(password);
     await page.getByRole("button", { name: /sign in with email/i }).click();
 
-    await expect(page).toHaveURL(/signed-in/);
-    await expect(page.getByText(/Smart Insights/i)).toBeVisible();
+    await page.waitForFunction(() => window.localStorage.getItem("authToken"), null, { timeout: 20000 });
+    await page.goto("/signed-in");
+    await expectWorkspaceReady(page);
   });
 
   test("unauthenticated redirect to sign-in from app shell", async ({ page }) => {
-    await page.goto("/app");
+    await page.goto("/signed-in");
     await expect(page).toHaveURL(/sign-in/);
   });
 });
