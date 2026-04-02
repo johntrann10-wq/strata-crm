@@ -307,6 +307,12 @@ export function formatDuration(startISO: string, endISO: string | null): string 
   return `${hours}h ${minutes}m`;
 }
 
+export function formatStatusLabel(status: string | null | undefined): string {
+  return String(status ?? "scheduled")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export function staffInitials(staff: { firstName: string; lastName: string } | null): string {
   if (!staff) return "?";
   return `${staff.firstName.charAt(0)}${staff.lastName.charAt(0)}`.toUpperCase();
@@ -402,6 +408,14 @@ export function AppointmentBlock({
 
   const style = getStatusStyle(apt.status);
   const dense = height < 74;
+  const statusLabel = formatStatusLabel(apt.status);
+  const timeLabel = `${formatTime(start)}${apt.endTime ? ` - ${formatTime(end)}` : ""}`;
+  const vehicleLabel = apt.vehicle
+    ? [apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")
+    : null;
+  const staffLabel = apt.assignedStaff
+    ? `${apt.assignedStaff.firstName} ${apt.assignedStaff.lastName}`
+    : "Unassigned";
 
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
@@ -423,12 +437,12 @@ export function AppointmentBlock({
     <button
       type="button"
       className={cn(
-        "absolute left-1.5 right-1.5 overflow-hidden rounded-xl border bg-white/98 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all select-none",
+        "absolute left-1.5 right-1.5 overflow-hidden rounded-2xl border bg-white/98 px-3 py-2.5 text-left shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all select-none",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
         style.surface,
         style.text,
         style.border,
-        hovered && !isDragging && "shadow-md -translate-y-px",
+        hovered && !isDragging && "shadow-[0_14px_30px_rgba(15,23,42,0.12)] -translate-y-px",
         isDragging ? "cursor-grabbing opacity-50" : "cursor-grab",
         isConflict && "ring-1 ring-rose-300"
       )}
@@ -444,38 +458,51 @@ export function AppointmentBlock({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex items-start gap-2">
-        <span className={cn("mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full", style.accent)} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className={cn("truncate font-semibold", dense ? "text-[11px]" : "text-[12px]")}>{apptLabel(apt)}</p>
-              <p className={cn("truncate text-muted-foreground", dense ? "text-[10px]" : "text-[11px]")}>
-                {formatTime(start)}
-                {apt.endTime ? ` - ${formatTime(end)}` : ""}
-              </p>
-            </div>
-            <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 font-medium", style.pill, dense ? "text-[9px]" : "text-[10px]")}>
-              {formatDuration(apt.startTime, apt.endTime)}
-            </span>
-          </div>
-
-          {!dense && apt.vehicle ? (
-            <p className="mt-1 truncate text-[11px] text-muted-foreground">
-              {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
+      <span className={cn("absolute inset-y-1.5 left-1 w-1 rounded-full", style.accent)} />
+      <div className="min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className={cn("truncate font-semibold tracking-[-0.01em]", dense ? "text-[11px]" : "text-[12px]")}>
+              {apptLabel(apt)}
             </p>
-          ) : null}
-
-          {height > 92 ? (
-            <div className="mt-1.5 flex items-center justify-between gap-2">
-              <p className="truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                {apt.assignedStaff ? `${apt.assignedStaff.firstName} ${apt.assignedStaff.lastName}` : "Unassigned"}
-              </p>
-              {apt.isMobile ? <span className="text-[10px] font-medium text-muted-foreground">Mobile</span> : null}
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+              <span className={cn("rounded-full bg-slate-950/5 px-1.5 py-0.5 font-medium text-slate-700", dense ? "text-[9px]" : "text-[10px]")}>
+                {formatTime(start)}
+              </span>
+              <span className={cn("text-muted-foreground", dense ? "text-[9px]" : "text-[10px]")}>
+                {formatDuration(apt.startTime, apt.endTime)}
+              </span>
             </div>
-          ) : null}
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 font-medium", style.pill, dense ? "text-[9px]" : "text-[10px]")}>
+              {dense ? statusLabel.split(" ")[0] : statusLabel}
+            </span>
+            {isConflict ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600" /> : null}
+          </div>
         </div>
-        {isConflict ? <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-600" /> : null}
+
+        {!dense && vehicleLabel ? (
+          <p className="mt-1 truncate text-[11px] text-slate-600">
+            {vehicleLabel}
+          </p>
+        ) : null}
+
+        {height > 92 ? (
+          <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/50 pt-1.5">
+            <p className="truncate text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+              {staffLabel}
+            </p>
+            <div className="flex items-center gap-1.5">
+              {apt.isMobile ? <span className="text-[10px] font-medium text-muted-foreground">Mobile</span> : null}
+              {isMultiDayJob(apt) ? (
+                <span className="rounded-full border border-border/60 bg-background/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                  {getJobPhaseLabel(apt.jobPhase)}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
     </button>
   );
@@ -670,7 +697,7 @@ export function MonthView({
               const daySpans = appointments.filter((a) => isMultiDayJob(a) && hasPresenceOnDay(a, day));
               const dayRevenue = dayAppts.reduce((total, apt) => total + Number(apt.totalPrice ?? 0), 0);
               const hasConflict = !!conflictIds && dayAppts.some((a) => conflictIds.has(a.id));
-              const mobileDots = dayAppts.slice(0, 3);
+              const mobilePreview = dayAppts[0];
               const dayLabel = day.toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "long",
@@ -724,7 +751,7 @@ export function MonthView({
                         {daySpans.slice(0, 2).map((apt) => (
                           <div
                             key={`${apt.id}-span`}
-                            className="flex items-center gap-1.5 overflow-hidden rounded-full border border-border/60 bg-background/75 px-1.5 py-[3px] text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2"
+                            className="flex items-center gap-1.5 overflow-hidden rounded-full border border-border/60 bg-background/90 px-1.5 py-[3px] text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground shadow-sm sm:px-2"
                           >
                             <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", getJobPhaseTone(apt.jobPhase))} />
                             <span className="truncate">{apt.title || apt.client?.lastName || "Job"}</span>
@@ -735,13 +762,20 @@ export function MonthView({
                         ) : null}
                       </div>
 
-                      <div className="pointer-events-none flex items-center gap-1 md:hidden">
-                        {mobileDots.map((apt) => {
-                          const status = getStatusStyle(apt.status);
-                          return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full", status.accent)} />;
-                        })}
-                        {dayAppts.length > mobileDots.length ? (
-                          <span className="text-[9px] font-medium text-muted-foreground">+{dayAppts.length - mobileDots.length}</span>
+                      <div className="pointer-events-none md:hidden">
+                        {mobilePreview ? (
+                          <div className="overflow-hidden rounded-lg border border-border/70 bg-background/88 px-1.5 py-1 shadow-sm">
+                            <div className="flex items-center gap-1.5">
+                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", getStatusStyle(mobilePreview.status).accent)} />
+                              <span className="truncate text-[9px] font-semibold text-foreground">
+                                {apptLabel(mobilePreview)}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex items-center justify-between gap-1 text-[8.5px] text-muted-foreground">
+                              <span className="truncate">{formatTime(new Date(mobilePreview.startTime))}</span>
+                              {dayAppts.length > 1 ? <span className="shrink-0">+{dayAppts.length - 1}</span> : null}
+                            </div>
+                          </div>
                         ) : null}
                       </div>
 
@@ -753,7 +787,7 @@ export function MonthView({
                               key={apt.id}
                               type="button"
                               className={cn(
-                                "!pointer-events-auto flex w-full items-center gap-1.5 rounded-md border px-1.5 py-1 text-left shadow-sm transition-colors sm:gap-2 sm:rounded-lg sm:px-2 sm:py-1.5",
+                                "!pointer-events-auto flex w-full flex-col items-start gap-1 rounded-xl border px-2 py-1.5 text-left shadow-sm transition-colors sm:gap-1.5 sm:px-2.5 sm:py-2",
                                 index === 1 && "hidden sm:flex",
                                 "hover:opacity-95",
                                 status.surface,
@@ -765,15 +799,27 @@ export function MonthView({
                                 onApptClick(apt);
                               }}
                             >
-                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full sm:h-2 sm:w-2", status.accent)} />
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-[10px] font-semibold sm:text-[11px]">{apptLabel(apt)}</p>
-                                <p className="truncate text-[9px] opacity-75 sm:text-[10px]">
-                                  {formatTime(new Date(apt.startTime))}
-                                </p>
+                              <div className="flex w-full items-start justify-between gap-2">
+                                <div className="min-w-0 flex items-center gap-1.5">
+                                  <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full sm:h-2 sm:w-2", status.accent)} />
+                                  <p className="truncate text-[10px] font-semibold sm:text-[11px]">{apptLabel(apt)}</p>
+                                </div>
+                                <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium", status.pill)}>
+                                  {formatStatusLabel(apt.status)}
+                                </span>
+                              </div>
+                              <div className="flex w-full items-center justify-between gap-2 text-[9px] text-muted-foreground sm:text-[10px]">
+                                <span className="truncate">{formatTime(new Date(apt.startTime))}</span>
+                                <span className="truncate">
+                                  {apt.vehicle
+                                    ? [apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")
+                                    : apt.assignedStaff
+                                      ? `${apt.assignedStaff.firstName} ${apt.assignedStaff.lastName}`
+                                      : "Unassigned"}
+                                </span>
                               </div>
                               {isMultiDayJob(apt) ? (
-                                <span className="hidden rounded-full border border-border/60 bg-background/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground sm:inline-flex">
+                                <span className="rounded-full border border-border/60 bg-background/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                                   {getJobPhaseLabel(apt.jobPhase)}
                                 </span>
                               ) : null}

@@ -455,12 +455,12 @@ function AppLayoutInner({
     <div className="flex min-h-dvh flex-col md:h-screen md:flex-row md:overflow-hidden">
       <CommandPalette enabledModules={enabledModules} hasBusiness={!!businessId} />
 
-      {/* Desktop sidebar â€“ fixed, visible on md+ screens */}
+      {/* Desktop sidebar - fixed, visible on md+ screens */}
       <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:w-64 z-20">
         <SidebarNav enabledModules={enabledModules} onOpenCommandPalette={() => setOpen(true)} />
       </aside>
 
-      {/* Mobile sidebar â€“ Sheet that slides in from the left */}
+      {/* Mobile sidebar - Sheet that slides in from the left */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
           side="left"
@@ -502,7 +502,7 @@ function AppLayoutInner({
               {(businessName || activeLocationName) ? (
                 <p className="truncate text-[10px] text-muted-foreground">
                   {businessName ? businessName : "No business selected"}
-                  {activeLocationName ? ` · ${activeLocationName}` : ""}
+                  {activeLocationName ? ` - ${activeLocationName}` : ""}
                 </p>
               ) : null}
             </div>
@@ -526,7 +526,7 @@ function AppLayoutInner({
                   {(businessName || activeLocationName) ? (
                     <p className="mt-1 text-[11px] text-muted-foreground sm:text-sm">
                       {businessName ? businessName : "No business selected"}
-                      {activeLocationName ? ` · ${activeLocationName}` : ""}
+                      {activeLocationName ? ` - ${activeLocationName}` : ""}
                     </p>
                   ) : null}
                 </div>

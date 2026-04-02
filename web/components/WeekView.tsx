@@ -165,7 +165,7 @@ export function WeekView({
                   key={`${apt.id}-span`}
                   type="button"
                   onClick={() => onApptClick(apt)}
-                  className="absolute flex h-5 items-center gap-1.5 overflow-hidden rounded-full border border-border/60 bg-background/92 px-2 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground shadow-sm"
+                  className="absolute flex h-6 items-center gap-1.5 overflow-hidden rounded-full border border-border/60 bg-background/95 px-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground shadow-sm"
                   style={{
                     top: `${laneIndex * 28 + 6}px`,
                     left: `${(startIndex / 7) * 100}%`,
@@ -174,7 +174,7 @@ export function WeekView({
                 >
                   <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", getJobPhaseTone(apt.jobPhase))} />
                   <span className="truncate">{apt.title || apt.client?.lastName || "Job"}</span>
-                  <span className="hidden truncate md:inline">{getJobPhaseLabel(apt.jobPhase)}</span>
+                  <span className="hidden truncate rounded-full bg-muted px-1.5 py-0.5 text-[9px] md:inline-flex">{getJobPhaseLabel(apt.jobPhase)}</span>
                 </button>
               ))
             )}
@@ -207,9 +207,9 @@ export function WeekView({
             const dayAppts = appointments.filter((apt) => hasLaborOnDay(apt, day));
             const isTodayColumn = isSameDay(day, today);
 
-            return (
-              <div
-                key={di}
+          return (
+            <div
+              key={di}
                 className={cn(
                   "relative border-r border-border/60 last:border-r-0",
                   "bg-background hover:bg-muted/10",
@@ -256,7 +256,7 @@ export function WeekView({
                   setDragOverInfo(null);
                   onReschedule?.(appointmentId, newStart, newEnd);
                 }}
-              >
+            >
                 {TIME_HOURS.map((hour) => (
                   <div
                     key={hour}
@@ -313,6 +313,7 @@ export function WeekView({
                     isConflict={conflictIds?.has(apt.id)}
                   />
                 ))}
+
               </div>
             );
           })}

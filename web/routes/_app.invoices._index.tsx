@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useOutletContext, useSearchParams } from "react-router";
 import { AlertCircle, FileText, Loader2, PlusCircle, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -333,7 +333,112 @@ export default function InvoicesIndexPage() {
             </Tabs>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="space-y-3 p-4 md:hidden">
+            {isLoading
+              ? Array.from({ length: 4 }).map((_, index) => (
+                  <Card key={index} className="rounded-2xl border-border/70">
+                    <CardContent className="space-y-3 p-4">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-4 w-24" />
+                      <div className="flex gap-2">
+                        <Skeleton className="h-8 w-20" />
+                        <Skeleton className="h-8 w-16" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              : invoicesError
+                ? (
+                  <div className="rounded-xl border border-destructive/50 bg-destructive/10 px-4 py-6 text-center text-sm text-muted-foreground">
+                    Could not load this list. Use "Try again" above.
+                  </div>
+                )
+                : displayedInvoices.length === 0
+                  ? (
+                    <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <FileText className="h-8 w-8 opacity-30" />
+                        <p className="font-medium">No invoices found</p>
+                        <p className="text-xs">
+                          {activeTab === "all"
+                            ? debouncedSearch
+                              ? "Try a different invoice number, client, or vehicle."
+                              : "Create the first invoice so Strata starts tracking real money, not just jobs."
+                            : `No ${activeTab} invoices match this view.`}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                  : displayedInvoices.map((invoice) => {
+                      const vehicleLabel = invoice.vehicle
+                        ? [invoice.vehicle.year, invoice.vehicle.make, invoice.vehicle.model].filter(Boolean).join(" ")
+                        : "-";
+                      const outstanding = balanceAmount(invoice);
+                      const paid = paidAmount(invoice);
+                      const primaryAmount = primaryInvoiceAmount(invoice);
+                      const hasPaymentHistory = paid > 0;
+                      const lastSent = formatFreshness((invoice as any).lastSentAt, "Sent");
+                      const lastPaid = formatFreshness((invoice as any).lastPaidAt, "Paid");
+                      const clientName = invoice.client
+                        ? `${invoice.client.firstName} ${invoice.client.lastName}`.trim()
+                        : "-";
+
+                      return (
+                        <InvoiceMobileCard
+                          key={invoice.id}
+                          title={invoice.invoiceNumber ?? `#${invoice.id.slice(0, 8)}`}
+                          subtitle={vehicleLabel !== "-" ? `${clientName} - ${vehicleLabel}` : clientName}
+                          status={String(invoice.status ?? "")}
+                          amount={formatCurrency(primaryAmount)}
+                          overdue={isOverdueInvoice(invoice)}
+                          accent={
+                            overdueInvoices.some((entry) => entry.id === invoice.id)
+                              ? "danger"
+                              : String(invoice.status ?? "") === "paid"
+                                ? "success"
+                                : String(invoice.status ?? "") === "partial"
+                                  ? "warn"
+                                  : "default"
+                          }
+                          lines={[
+                            `Created ${formatDate(invoice.createdAt)}`,
+                            `Due ${formatDate(invoice.dueDate)}`,
+                            hasPaymentHistory ? `Paid ${formatCurrency(paid)}` : null,
+                            [lastSent, lastPaid].filter(Boolean).join(" - ") || null,
+                          ]}
+                          href={linkWithQueueState(`/invoices/${invoice.id}`)}
+                          actions={
+                            <>
+                              {["draft", "sent", "partial"].includes(String(invoice.status ?? "")) ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 px-3 text-xs"
+                                  disabled={sendingInvoiceId !== null}
+                                  onClick={() => void handleSendInvoice(invoice.id)}
+                                >
+                                  {sendingInvoiceId === invoice.id ? (
+                                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                  ) : null}
+                                  {invoice.status === "draft" ? "Send" : "Resend"}
+                                </Button>
+                              ) : null}
+                              {["sent", "partial"].includes(String(invoice.status ?? "")) ? (
+                                <Button asChild size="sm" variant="outline" className="h-8 px-3 text-xs">
+                                  <Link to={linkWithQueueState(`/invoices/${invoice.id}`)}>
+                                    {outstanding > 0 ? `Collect ${formatCurrency(outstanding)}` : "Collect"}
+                                  </Link>
+                                </Button>
+                              ) : null}
+                            </>
+                          }
+                        />
+                      );
+                    })}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30">
@@ -548,6 +653,70 @@ function FollowupCard({
       <Button asChild size="sm" variant="outline" className="mt-3">
         <Link to={href}>{actionLabel}</Link>
       </Button>
+    </div>
+  );
+}
+
+function InvoiceMobileCard({
+  title,
+  subtitle,
+  status,
+  amount,
+  lines,
+  href,
+  actions,
+  overdue = false,
+  accent = "default",
+}: {
+  title: string;
+  subtitle: string;
+  status: string;
+  amount: string;
+  lines: Array<string | null | undefined>;
+  href: string;
+  actions?: ReactNode;
+  overdue?: boolean;
+  accent?: "default" | "warn" | "success" | "danger";
+}) {
+  const toneClass =
+    accent === "danger"
+      ? "border-red-200/80 bg-red-50/70"
+      : accent === "warn"
+        ? "border-amber-200/80 bg-amber-50/70"
+        : accent === "success"
+          ? "border-emerald-200/80 bg-emerald-50/70"
+          : "border-border/70 bg-card/98";
+
+  return (
+    <div className={cn("rounded-2xl border p-4 shadow-sm", toneClass)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <Link to={href} className="block min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+            <p className="mt-1 truncate text-sm text-muted-foreground">{subtitle}</p>
+          </Link>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <StatusBadge status={status} type="invoice" />
+          <span className="text-sm font-semibold tabular-nums text-foreground">{amount}</span>
+          {overdue ? (
+            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-red-700">
+              Overdue
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+        {lines.filter(Boolean).map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {actions}
+        <Button asChild size="sm" variant="ghost" className="h-8 px-3 text-xs">
+          <Link to={href}>Open</Link>
+        </Button>
+      </div>
     </div>
   );
 }

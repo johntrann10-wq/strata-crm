@@ -7,7 +7,7 @@ import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } fro
 import type { AuthOutletContext } from "./_app";
 import { api } from "../api";
 import { useFindMany, useAction } from "../hooks/useApi";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../components/shared/PageHeader";
@@ -175,9 +175,9 @@ export default function QuotesIndexPage() {
   };
 
   const formatCurrency = (amount: number | string | null | undefined) => {
-    if (amount == null || amount === "") return "—";
+    if (amount == null || amount === "") return "-";
     const n = Number(amount);
-    if (Number.isNaN(n)) return "—";
+    if (Number.isNaN(n)) return "-";
     return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
   };
 
@@ -240,7 +240,7 @@ export default function QuotesIndexPage() {
             debouncedSearch ? `Search: ${debouncedSearch}` : null,
           ]
             .filter(Boolean)
-            .join(" • ") || null
+            .join(" - ") || null
         }
         onClear={() => {
           setSearch("");
@@ -331,7 +331,98 @@ export default function QuotesIndexPage() {
               }
             />
           ) : (
-            <div className="border rounded-lg overflow-hidden">
+            <>
+            <div className="space-y-3 md:hidden">
+              {allRows.map((record) => {
+                const row = record as Record<string, any>;
+                const client = row.client as Record<string, any> | undefined;
+                const vehicle = row.vehicle as Record<string, any> | undefined;
+                const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
+                const vehicleLabel = vehicle
+                  ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
+                  : "-";
+                const qid = String(row.id);
+                const quoteStatus = String(row.status ?? "");
+                const canSend = ["draft", "sent"].includes(quoteStatus);
+                const canFollowUp = ["sent"].includes(quoteStatus);
+                const canBook = quoteStatus === "accepted" && !!row.clientId;
+                const canInvoice = quoteStatus === "accepted" && !!row.clientId;
+                const freshness = [
+                  formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
+                  formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
+                ]
+                  .filter(Boolean)
+                  .join(" - ");
+                const bookHref = canBook
+                  ? linkWithQueueState(
+                      `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
+                        currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+                      }`
+                    )
+                  : null;
+                const invoiceHref = canInvoice
+                  ? linkWithQueueState(`/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`)
+                  : null;
+                return (
+                  <QuoteMobileCard
+                    key={qid}
+                    title={fullName}
+                    subtitle={vehicleLabel}
+                    status={quoteStatus}
+                    amount={formatCurrency(row.total)}
+                    accent={agingRows.some((quote) => String((quote as any).id) === qid) ? "warn" : "default"}
+                    lines={[
+                      row.createdAt ? `Created ${new Date(row.createdAt as string).toLocaleDateString()}` : "Created -",
+                      freshness,
+                    ]}
+                    href={linkWithQueueState(`/quotes/${qid}`)}
+                    actions={
+                      <>
+                        {canSend ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-3 text-xs"
+                            disabled={sendingQuoteId !== null}
+                            onClick={() => void handleSendQuote(qid)}
+                          >
+                            {sendingQuoteId === qid ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                            {quoteStatus === "draft" ? "Send" : "Resend"}
+                          </Button>
+                        ) : null}
+                        {canFollowUp ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-3 text-xs"
+                            disabled={sendingId !== null}
+                            onClick={() => void handleSendFollowUp(qid)}
+                          >
+                            {sendingId === qid ? (
+                              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Send className="mr-1 h-3.5 w-3.5" />
+                            )}
+                            Follow up
+                          </Button>
+                        ) : null}
+                        {canBook && bookHref ? (
+                          <Button asChild size="sm" variant="outline" className="h-8 px-3 text-xs">
+                            <Link to={bookHref}>Book</Link>
+                          </Button>
+                        ) : null}
+                        {canInvoice && invoiceHref ? (
+                          <Button asChild size="sm" variant="outline" className="h-8 px-3 text-xs">
+                            <Link to={invoiceHref}>Invoice</Link>
+                          </Button>
+                        ) : null}
+                      </>
+                    }
+                  />
+                );
+              })}
+            </div>
+            <div className="hidden overflow-hidden rounded-lg border md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -349,10 +440,10 @@ export default function QuotesIndexPage() {
                     const row = record as Record<string, any>;
                     const client = row.client as Record<string, any> | undefined;
                     const vehicle = row.vehicle as Record<string, any> | undefined;
-                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "—";
+                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
                     const vehicleLabel = vehicle
                       ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
-                      : "—";
+                      : "-";
                     const qid = String(row.id);
                     const quoteStatus = String(row.status ?? "");
                     const canSend = ["draft", "sent"].includes(quoteStatus);
@@ -364,7 +455,7 @@ export default function QuotesIndexPage() {
                       formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
                     ]
                       .filter(Boolean)
-                      .join(" · ");
+                      .join(" - ");
                     const bookHref = canBook
                       ? linkWithQueueState(
                           `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
@@ -401,11 +492,11 @@ export default function QuotesIndexPage() {
                         <TableCell>{formatCurrency(row.total)}</TableCell>
                         <TableCell>
                           <div className="space-y-1">
-                            <div>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "—"}</div>
+                            <div>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "-"}</div>
                             {freshness ? <div className="text-xs text-muted-foreground">{freshness}</div> : null}
                           </div>
                         </TableCell>
-                        <TableCell>{row.expiresAt ? new Date(row.expiresAt as string).toLocaleDateString() : "—"}</TableCell>
+                        <TableCell>{row.expiresAt ? new Date(row.expiresAt as string).toLocaleDateString() : "-"}</TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-2">
                             {canSend ? (
@@ -480,6 +571,7 @@ export default function QuotesIndexPage() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </TabsContent>
 
@@ -497,7 +589,56 @@ export default function QuotesIndexPage() {
             }
 
             return (
-              <div className="border rounded-lg overflow-hidden">
+              <>
+              <div className="space-y-3 md:hidden">
+                {acceptedRows.map((record) => {
+                  const row = record as Record<string, any>;
+                  const client = row.client as Record<string, any> | undefined;
+                  const vehicle = row.vehicle as Record<string, any> | undefined;
+                  const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
+                  const vehicleLabel = vehicle
+                    ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
+                    : "-";
+                  const qid = String(row.id);
+                  const bookHref = row.clientId
+                    ? linkWithQueueState(
+                        `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
+                          currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+                        }`
+                      )
+                    : null;
+                  const invoiceHref = row.clientId
+                    ? linkWithQueueState(`/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`)
+                    : null;
+                  return (
+                    <QuoteMobileCard
+                      key={qid}
+                      title={fullName}
+                      subtitle={vehicleLabel}
+                      status={String(row.status ?? "")}
+                      amount={formatCurrency(row.total)}
+                      accent="success"
+                      lines={[row.acceptedAt ? `Accepted ${new Date(row.acceptedAt as string).toLocaleDateString()}` : "Accepted -"]}
+                      href={linkWithQueueState(`/quotes/${qid}`)}
+                      actions={
+                        <>
+                          {bookHref ? (
+                            <Button asChild size="sm" variant="outline" className="h-8 px-3 text-xs">
+                              <Link to={bookHref}>Book</Link>
+                            </Button>
+                          ) : null}
+                          {invoiceHref ? (
+                            <Button asChild size="sm" variant="outline" className="h-8 px-3 text-xs">
+                              <Link to={invoiceHref}>Invoice</Link>
+                            </Button>
+                          ) : null}
+                        </>
+                      }
+                    />
+                  );
+                })}
+              </div>
+              <div className="hidden overflow-hidden rounded-lg border md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -513,18 +654,20 @@ export default function QuotesIndexPage() {
                       const row = record as Record<string, any>;
                       const client = row.client as Record<string, any> | undefined;
                       const vehicle = row.vehicle as Record<string, any> | undefined;
-                      const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "—";
+                      const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
                       const vehicleLabel = vehicle
                         ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
-                        : "—";
+                        : "-";
                       const qid = String(row.id);
                       const bookHref = row.clientId
-                        ? `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
-                            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-                          }`
+                        ? linkWithQueueState(
+                            `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
+                              currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+                            }`
+                          )
                         : null;
                       const invoiceHref = row.clientId
-                        ? `/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`
+                        ? linkWithQueueState(`/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`)
                         : null;
                       return (
                         <TableRow key={qid} className="cursor-pointer bg-green-50/40" onClick={() => navigate(linkWithQueueState(`/quotes/${qid}`))}>
@@ -543,7 +686,7 @@ export default function QuotesIndexPage() {
                           </TableCell>
                           <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
                           <TableCell>{formatCurrency(row.total)}</TableCell>
-                          <TableCell>{row.acceptedAt ? new Date(row.acceptedAt as string).toLocaleDateString() : "—"}</TableCell>
+                          <TableCell>{row.acceptedAt ? new Date(row.acceptedAt as string).toLocaleDateString() : "-"}</TableCell>
                           <TableCell>
                             <div className="flex justify-end gap-2">
                               {bookHref ? (
@@ -573,6 +716,7 @@ export default function QuotesIndexPage() {
                   </TableBody>
                 </Table>
               </div>
+              </>
             );
           })()}
         </TabsContent>
@@ -585,7 +729,55 @@ export default function QuotesIndexPage() {
               description="No quotes older than 3 days need attention right now."
             />
           ) : (
-            <div className="border rounded-lg overflow-hidden">
+            <>
+            <div className="space-y-3 md:hidden">
+              {agingRows.map((record) => {
+                const row = record as Record<string, any>;
+                const client = row.client as Record<string, any> | undefined;
+                const vehicle = row.vehicle as Record<string, any> | undefined;
+                const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
+                const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "-";
+                const qid = String(row.id);
+                const freshness = [
+                  formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
+                  formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
+                ]
+                  .filter(Boolean)
+                  .join(" - ");
+                return (
+                  <QuoteMobileCard
+                    key={qid}
+                    title={fullName}
+                    subtitle={vehicleLabel}
+                    status={String(row.status ?? "")}
+                    amount={formatCurrency(row.total)}
+                    accent="warn"
+                    lines={[
+                      row.createdAt ? `Created ${new Date(row.createdAt as string).toLocaleDateString()}` : "Created -",
+                      freshness || getDaysAgo(row.createdAt as string),
+                    ]}
+                    href={linkWithQueueState(`/quotes/${qid}`)}
+                    actions={
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-3 text-xs"
+                        disabled={sendingId !== null}
+                        onClick={() => void handleSendFollowUp(qid)}
+                      >
+                        {sendingId === qid ? (
+                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Send className="mr-1 h-3.5 w-3.5" />
+                        )}
+                        Follow up
+                      </Button>
+                    }
+                  />
+                );
+              })}
+            </div>
+            <div className="hidden overflow-hidden rounded-lg border md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -602,8 +794,8 @@ export default function QuotesIndexPage() {
                     const row = record as Record<string, any>;
                     const client = row.client as Record<string, any> | undefined;
                     const vehicle = row.vehicle as Record<string, any> | undefined;
-                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "—";
-                    const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "—";
+                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
+                    const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "-";
                     const qid = String(row.id);
                     const isLoading = sendingId === qid;
                     const freshness = [
@@ -611,7 +803,7 @@ export default function QuotesIndexPage() {
                       formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
                     ]
                       .filter(Boolean)
-                      .join(" · ");
+                      .join(" - ");
                     return (
                       <TableRow key={qid} className="cursor-pointer bg-amber-50/50" onClick={() => navigate(linkWithQueueState(`/quotes/${qid}`))}>
                         <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
@@ -620,7 +812,7 @@ export default function QuotesIndexPage() {
                         <TableCell>{formatCurrency(row.total)}</TableCell>
                         <TableCell>
                           <div className="space-y-1">
-                            <div>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "—"}</div>
+                            <div>{row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : "-"}</div>
                             {freshness ? <div className="text-xs text-muted-foreground">{freshness}</div> : null}
                           </div>
                         </TableCell>
@@ -652,6 +844,7 @@ export default function QuotesIndexPage() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </TabsContent>
 
@@ -663,7 +856,48 @@ export default function QuotesIndexPage() {
               description="No sent or accepted quotes are waiting on another touch right now."
             />
           ) : (
-            <div className="border rounded-lg overflow-hidden">
+            <>
+            <div className="space-y-3 md:hidden">
+              {followUpRows.map((record) => {
+                const row = record as Record<string, any>;
+                const client = row.client as Record<string, any> | undefined;
+                const vehicle = row.vehicle as Record<string, any> | undefined;
+                const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
+                const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "-";
+                const qid = String(row.id);
+                const freshness = [
+                  formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
+                  formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
+                ]
+                  .filter(Boolean)
+                  .join(" - ");
+                return (
+                  <QuoteMobileCard
+                    key={qid}
+                    title={fullName}
+                    subtitle={vehicleLabel}
+                    status={String(row.status ?? "")}
+                    amount={formatCurrency(row.total)}
+                    accent="warn"
+                    lines={[freshness || "No outreach recorded"]}
+                    href={linkWithQueueState(`/quotes/${qid}`)}
+                    actions={
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-3 text-xs"
+                        disabled={sendingId !== null}
+                        onClick={() => void handleSendFollowUp(qid)}
+                      >
+                        {sendingId === qid ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
+                        Follow up
+                      </Button>
+                    }
+                  />
+                );
+              })}
+            </div>
+            <div className="hidden overflow-hidden rounded-lg border md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -680,15 +914,15 @@ export default function QuotesIndexPage() {
                     const row = record as Record<string, any>;
                     const client = row.client as Record<string, any> | undefined;
                     const vehicle = row.vehicle as Record<string, any> | undefined;
-                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "—";
-                    const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "—";
+                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
+                    const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "-";
                     const qid = String(row.id);
                     const freshness = [
                       formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
                       formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
                     ]
                       .filter(Boolean)
-                      .join(" · ");
+                      .join(" - ");
                     return (
                       <TableRow key={qid} className="cursor-pointer bg-amber-50/40" onClick={() => navigate(linkWithQueueState(`/quotes/${qid}`))}>
                         <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
@@ -724,6 +958,7 @@ export default function QuotesIndexPage() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </TabsContent>
 
@@ -744,7 +979,50 @@ export default function QuotesIndexPage() {
               description="All quotes have been followed up or converted."
             />
           ) : (
-            <div className={cn("bg-white border rounded-lg overflow-hidden transition-opacity", isRefetchingLost && "opacity-60")}>
+            <>
+            <div className={cn("space-y-3 md:hidden transition-opacity", isRefetchingLost && "opacity-60")}>
+              {lostRows.map((quote) => {
+                const q = quote as Record<string, any>;
+                const client = q.client as Record<string, any> | undefined;
+                const vehicle = q.vehicle as Record<string, any> | undefined;
+                const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "Unknown Client";
+                const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "No vehicle";
+                const qid = String(q.id ?? "");
+                const isLoading = sendingId === qid;
+                return (
+                  <QuoteMobileCard
+                    key={qid}
+                    title={fullName}
+                    subtitle={vehicleLabel}
+                    status={String(q.status ?? "")}
+                    amount={formatCurrency(q.total as number | string | null | undefined)}
+                    accent="warn"
+                    lines={[
+                      q.createdAt ? `Created ${new Date(q.createdAt as string).toLocaleDateString()}` : "Created -",
+                      getDaysAgo(q.createdAt as string),
+                    ]}
+                    href={linkWithQueueState(`/quotes/${qid}`)}
+                    actions={
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-3 text-xs"
+                        disabled={sendingId !== null}
+                        onClick={() => void handleSendFollowUp(qid)}
+                      >
+                        {isLoading ? (
+                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Send className="mr-1 h-3.5 w-3.5" />
+                        )}
+                        Record follow-up
+                      </Button>
+                    }
+                  />
+                );
+              })}
+            </div>
+            <div className={cn("hidden overflow-hidden rounded-lg border bg-white transition-opacity md:block", isRefetchingLost && "opacity-60")}>
               {lostRows.map((quote) => {
                 const q = quote as Record<string, any>;
                 const client = q.client as Record<string, any> | undefined;
@@ -756,10 +1034,10 @@ export default function QuotesIndexPage() {
                     key={qid}
                     className="flex items-center justify-between border-b last:border-0 px-4 py-3"
                   >
-                    <div className="flex flex-col">
-                      <span className="font-medium text-sm">{fullName}</span>
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate font-medium text-sm">{fullName}</span>
                       <span className="text-xs text-muted-foreground">
-                        {getDaysAgo(q.createdAt as string)} · {formatCurrency(q.total as number | string | null | undefined)}
+                        {getDaysAgo(q.createdAt as string)} - {formatCurrency(q.total as number | string | null | undefined)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -768,7 +1046,7 @@ export default function QuotesIndexPage() {
                         size="sm"
                         variant="outline"
                         disabled={sendingId !== null}
-                        onClick={() => handleSendFollowUp(qid)}
+                        onClick={() => void handleSendFollowUp(qid)}
                       >
                         {isLoading ? (
                           <Loader2 className="h-4 w-4 animate-spin mr-1" />
@@ -782,6 +1060,7 @@ export default function QuotesIndexPage() {
                 );
               })}
             </div>
+            </>
           )}
         </TabsContent>
       </Tabs>
@@ -817,6 +1096,61 @@ function FollowupCard({
       <Button asChild size="sm" variant="outline" className="mt-3">
         <Link to={href}>{actionLabel}</Link>
       </Button>
+    </div>
+  );
+}
+
+function QuoteMobileCard({
+  title,
+  subtitle,
+  status,
+  amount,
+  lines,
+  href,
+  actions,
+  accent = "default",
+}: {
+  title: string;
+  subtitle: string;
+  status: string;
+  amount: string;
+  lines: Array<string | null | undefined>;
+  href: string;
+  actions?: ReactNode;
+  accent?: "default" | "warn" | "success";
+}) {
+  const toneClass =
+    accent === "warn"
+      ? "border-amber-200/80 bg-amber-50/70"
+      : accent === "success"
+        ? "border-emerald-200/80 bg-emerald-50/70"
+        : "border-border/70 bg-card/98";
+
+  return (
+    <div className={cn("rounded-2xl border p-4 shadow-sm", toneClass)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <Link to={href} className="block min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+            <p className="mt-1 truncate text-sm text-muted-foreground">{subtitle}</p>
+          </Link>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <StatusBadge status={status} type="quote" />
+          <span className="text-sm font-semibold tabular-nums text-foreground">{amount}</span>
+        </div>
+      </div>
+      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+        {lines.filter(Boolean).map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {actions}
+        <Button asChild size="sm" variant="ghost" className="h-8 px-3 text-xs">
+          <Link to={href}>Open</Link>
+        </Button>
+      </div>
     </div>
   );
 }
