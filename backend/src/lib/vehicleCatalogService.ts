@@ -1,7 +1,7 @@
-import { CuratedVehicleCatalogProvider } from "./curatedVehicleCatalogProvider.js";
+import { HybridVehicleCatalogProvider } from "./hybridVehicleCatalogProvider.js";
 import type { VehicleCatalogProvider } from "./vehicleCatalogProvider.js";
 
-const provider: VehicleCatalogProvider = new CuratedVehicleCatalogProvider();
+const provider: VehicleCatalogProvider = new HybridVehicleCatalogProvider();
 
 export function getVehicleCatalogProvider(): VehicleCatalogProvider {
   return provider;
