@@ -5,7 +5,13 @@
  */
 
 /** Placeholders: clientName, businessName, dateTime, vehicle, address, serviceSummary, confirmationUrl (use - or leave blank if missing) */
-export const appointmentConfirmation = {
+type BuiltinEmailTemplate = {
+  subject: string;
+  bodyHtml: string;
+  bodyText: string;
+};
+
+export const appointmentConfirmation: BuiltinEmailTemplate = {
   subject: "Appointment confirmed - {{businessName}}",
   bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
   <div class="wrap" style="max-width:620px;margin:0 auto;padding:28px 18px;background:#f3f6fa;">
@@ -31,10 +37,23 @@ export const appointmentConfirmation = {
     </div>
     <p class="footer" style="margin-top:18px;font-size:12px;color:#94a3b8;text-align:center;">{{businessName}}</p>
   </div></body></html>`,
+  bodyText: `{{businessName}}
+
+Appointment confirmed
+
+Hi {{clientName}},
+
+Your appointment is confirmed for {{dateTime}}.
+
+Vehicle: {{vehicle}}
+Address: {{address}}
+Service details: {{serviceSummary}}
+
+If you need to reschedule or update anything before the appointment, reply to this email or contact the shop directly.`,
 };
 
 /** Placeholders: clientName, businessName, dateTime, vehicle, serviceSummary */
-export const appointmentReminder = {
+export const appointmentReminder: BuiltinEmailTemplate = {
   subject: "Reminder: appointment tomorrow - {{businessName}}",
   bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
   <div class="wrap" style="max-width:560px;margin:0 auto;padding:24px;">
@@ -49,10 +68,21 @@ export const appointmentReminder = {
     </div>
     <p class="footer" style="margin-top:24px;font-size:12px;color:#9ca3af;">{{businessName}}</p>
   </div></body></html>`,
+  bodyText: `{{businessName}}
+
+Appointment reminder
+
+Hi {{clientName}},
+
+This is a friendly reminder that your appointment is scheduled for {{dateTime}}.
+Vehicle: {{vehicle}}
+Service details: {{serviceSummary}}
+
+See you soon!`,
 };
 
 /** Placeholders: clientName, businessName, amount, invoiceNumber, paidAt, method */
-export const paymentReceipt = {
+export const paymentReceipt: BuiltinEmailTemplate = {
   subject: "Payment receipt - {{businessName}}",
   bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
   <div class="wrap" style="max-width:560px;margin:0 auto;padding:24px;">
@@ -65,10 +95,20 @@ export const paymentReceipt = {
     </div>
     <p class="footer" style="margin-top:24px;font-size:12px;color:#9ca3af;">{{businessName}}</p>
   </div></body></html>`,
+  bodyText: `{{businessName}}
+
+Payment received
+
+Hi {{clientName}},
+
+We received your payment of {{amount}} for invoice {{invoiceNumber}}.
+Paid on {{paidAt}} via {{method}}.
+
+Thank you!`,
 };
 
 /** Placeholders: clientName, businessName, reviewUrl, serviceSummary */
-export const reviewRequest = {
+export const reviewRequest: BuiltinEmailTemplate = {
   subject: "How did we do? - {{businessName}}",
   bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
   <div class="wrap" style="max-width:560px;margin:0 auto;padding:24px;">
@@ -82,10 +122,20 @@ export const reviewRequest = {
     </div>
     <p class="footer" style="margin-top:24px;font-size:12px;color:#9ca3af;">{{businessName}}</p>
   </div></body></html>`,
+  bodyText: `{{businessName}}
+
+We'd love your feedback
+
+Hi {{clientName}},
+
+Thank you for choosing us. Your opinion helps us improve.
+{{serviceSummary}}
+
+Leave a review: {{reviewUrl}}`,
 };
 
 /** Placeholders: clientName, businessName, lastVisit, bookUrl, serviceSummary */
-export const lapsedClientReengagement = {
+export const lapsedClientReengagement: BuiltinEmailTemplate = {
   subject: "We miss you - {{businessName}}",
   bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
   <div class="wrap" style="max-width:560px;margin:0 auto;padding:24px;">
@@ -99,10 +149,20 @@ export const lapsedClientReengagement = {
     </div>
     <p class="footer" style="margin-top:24px;font-size:12px;color:#9ca3af;">{{businessName}}</p>
   </div></body></html>`,
+  bodyText: `{{businessName}}
+
+We'd love to see you again
+
+Hi {{clientName}},
+
+It's been a while since your last visit ({{lastVisit}}). We're here whenever you're ready to book.
+{{serviceSummary}}
+
+Book now: {{bookUrl}}`,
 };
 
 /** Placeholders: businessName, weekStart, weekEnd, completedCount, revenueTotal, openInvoicesCount, overdueCount, staffUtilization */
-export const weeklySummary = {
+export const weeklySummary: BuiltinEmailTemplate = {
   subject: "Your week at a glance - {{businessName}}",
   bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
   <div class="wrap" style="max-width:560px;margin:0 auto;padding:24px;">
@@ -119,9 +179,20 @@ export const weeklySummary = {
     </div>
     <p class="footer" style="margin-top:24px;font-size:12px;color:#9ca3af;">Strata - {{businessName}}</p>
   </div></body></html>`,
+  bodyText: `{{businessName}}
+
+Weekly summary ({{weekStart}} - {{weekEnd}})
+
+Completed appointments: {{completedCount}}
+Revenue: {{revenueTotal}}
+Open invoices: {{openInvoicesCount}}
+Overdue invoices: {{overdueCount}}
+Staff utilization: {{staffUtilization}}
+
+Strata - {{businessName}}`,
 };
 
-const builtins: Record<string, { subject: string; bodyHtml: string }> = {
+const builtins: Record<string, BuiltinEmailTemplate> = {
   appointment_confirmation: appointmentConfirmation,
   appointment_reminder: appointmentReminder,
   payment_receipt: paymentReceipt,
@@ -149,6 +220,18 @@ const builtins: Record<string, { subject: string; bodyHtml: string }> = {
         </div>
       </div>
     </div></body></html>`,
+    bodyText: `{{businessName}}
+
+Your quote is ready
+
+Hi {{clientName}},
+
+We prepared a quote for {{vehicle}} totaling {{amount}}.
+
+Next step: Review the quote details, pricing, and scope, then let us know when you are ready to move forward.
+{{message}}
+
+View quote: {{quoteUrl}}`,
   },
   quote_follow_up: {
     subject: "Following up on your quote from {{businessName}}",
@@ -163,6 +246,16 @@ const builtins: Record<string, { subject: string; bodyHtml: string }> = {
         <p><a href="{{quoteUrl}}" style="display:inline-block;padding:10px 20px;background:#ea580c;color:#fff;text-decoration:none;border-radius:6px;">Review quote</a></p>
       </div>
     </div></body></html>`,
+    bodyText: `{{businessName}}
+
+Checking in on your quote
+
+Hi {{clientName}},
+
+We wanted to follow up on your quote for {{vehicle}} totaling {{amount}}.
+{{message}}
+
+Review quote: {{quoteUrl}}`,
   },
   invoice_sent: {
     subject: "Your invoice from {{businessName}}",
@@ -185,10 +278,22 @@ const builtins: Record<string, { subject: string; bodyHtml: string }> = {
         </div>
       </div>
     </div></body></html>`,
+    bodyText: `{{businessName}}
+
+Your invoice is ready
+
+Hi {{clientName}},
+
+Invoice {{invoiceNumber}} is ready for {{amount}}.
+
+Billing summary: Open the invoice to review the completed work, payment status, and your service record details.
+{{message}}
+
+View invoice: {{invoiceUrl}}`,
   },
 };
 
-export function getBuiltinTemplate(slug: string): { subject: string; bodyHtml: string } | null {
+export function getBuiltinTemplate(slug: string): BuiltinEmailTemplate | null {
   return builtins[slug] ?? null;
 }
 

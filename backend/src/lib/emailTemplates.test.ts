@@ -8,6 +8,7 @@ describe("builtin email templates", () => {
       expect(template, `missing template for ${slug}`).toBeTruthy();
       expect(template?.subject?.trim().length).toBeGreaterThan(0);
       expect(template?.bodyHtml?.trim().length).toBeGreaterThan(0);
+      expect(template?.bodyText?.trim().length).toBeGreaterThan(0);
     }
   });
 

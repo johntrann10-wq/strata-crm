@@ -48,6 +48,15 @@ export function getConfiguredEmailSender(): string | null {
   return getConfiguredSmtpSender();
 }
 
+export function getConfiguredEmailReplyTo(): string | null {
+  const explicit =
+    process.env.EMAIL_REPLY_TO?.trim() ||
+    process.env.RESEND_REPLY_TO?.trim() ||
+    process.env.SMTP_REPLY_TO?.trim();
+  if (explicit) return explicit;
+  return getConfiguredEmailSender();
+}
+
 /** True when Stripe secret key looks like a real key (sk_…). */
 export function isStripeConfigured(): boolean {
   const key = process.env.STRIPE_SECRET_KEY?.trim();

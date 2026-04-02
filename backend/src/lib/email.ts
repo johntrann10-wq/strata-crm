@@ -10,7 +10,7 @@ import { eq, and, isNull, isNotNull, sql } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { escapeHtml } from "./escape.js";
 import { getBuiltinTemplate } from "./emailTemplates.js";
-import { getConfiguredEmailSender, isEmailConfigured, isResendConfigured, isSmtpConfigured } from "./env.js";
+import { getConfiguredEmailReplyTo, getConfiguredEmailSender, isEmailConfigured, isResendConfigured, isSmtpConfigured } from "./env.js";
 
 let transporter: nodemailer.Transporter | null = null;
 let fallbackTransporter: nodemailer.Transporter | null = null;
@@ -91,6 +91,30 @@ function getFromAddress(): string {
   const configured = getConfiguredEmailSender();
   if (configured) return configured;
   throw new Error("SMTP sender address is not configured");
+}
+
+function getReplyToAddress(): string | undefined {
+  return getConfiguredEmailReplyTo() ?? undefined;
+}
+
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|h1|h2|h3|h4|h5|h6|li|tr)>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "- ")
+    .replace(/<a [^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, "$2: $1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }
 
 async function sendMailWithTimeout(
@@ -174,13 +198,16 @@ export async function sendTemplatedEmailInternal(
   const vars = options.vars ?? {};
   const subject = options.subject ?? (template ? replaceVars(template.subject, vars, false) : "Notification");
   const bodyHtml = template ? replaceVars(template.bodyHtml, vars, true) : "<p>No template found.</p>";
-  const bodyText = template?.bodyText ? replaceVars(template.bodyText, vars, false) : undefined;
+  const bodyText = template?.bodyText
+    ? replaceVars(template.bodyText, vars, false)
+    : htmlToPlainText(bodyHtml);
   const recipient = options.to.trim();
   if (!recipient) {
     throw new Error("Recipient email address is required");
   }
   const payload = {
     from: getFromAddress(),
+    replyTo: getReplyToAddress(),
     to: recipient,
     subject,
     html: bodyHtml,
