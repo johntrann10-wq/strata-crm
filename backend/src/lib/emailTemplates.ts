@@ -200,25 +200,23 @@ const builtins: Record<string, BuiltinEmailTemplate> = {
   lapsed_client_reengagement: lapsedClientReengagement,
   weekly_summary: weeklySummary,
   quote_sent: {
-    subject: "Your quote from {{businessName}}",
-    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
-    <div style="max-width:620px;margin:0 auto;padding:28px 18px;background:#f3f6fa;">
-      <div style="overflow:hidden;background:#fff;border-radius:20px;box-shadow:0 18px 50px rgba(15,23,42,0.12);border:1px solid rgba(148,163,184,0.18);">
-        <div style="height:6px;background:linear-gradient(90deg,#f97316,#fb923c 38%,#0f172a);"></div>
-        <div style="padding:28px;background:radial-gradient(circle at top right,rgba(249,115,22,0.14),transparent 30%),linear-gradient(180deg,rgba(248,250,252,0.96),#fff);">
+    subject: "Quote for {{vehicle}} from {{businessName}}",
+    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#f8fafc;color:#0f172a;font-family:Arial,sans-serif;">
+    <div style="max-width:620px;margin:0 auto;padding:24px 16px;">
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;">
         <div style="font-size:18px;font-weight:700;color:#0f172a;">{{businessName}}</div>
-        <div style="margin-top:10px;display:inline-flex;border-radius:999px;padding:6px 10px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;">Estimate ready</div>
-        <h1 style="font-size:28px;line-height:1.05;letter-spacing:-0.03em;margin:14px 0 16px;color:#0f172a;">Your quote is ready</h1>
-        <p>Hi {{clientName}},</p>
-        <p style="color:#475569;">We prepared a quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>
-        <div style="margin:18px 0;border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:18px;">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#94a3b8;">Next step</div>
-          <div style="margin-top:6px;color:#475569;">Review the quote details, pricing, and scope, then let us know when you are ready to move forward.</div>
+        <h1 style="font-size:24px;line-height:1.2;margin:16px 0 12px;color:#0f172a;">Your quote is ready</h1>
+        <p style="margin:0 0 12px;">Hi {{clientName}},</p>
+        <p style="margin:0 0 14px;color:#334155;">We prepared a quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>
+        <div style="margin:16px 0;padding:16px;border-radius:12px;border:1px solid #e2e8f0;background:#f8fafc;">
+          <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;">Next step</div>
+          <div style="margin-top:6px;color:#334155;">Review the quote details and reply if you would like any changes before scheduling.</div>
         </div>
-        <p style="color:#475569;">{{message}}</p>
-        <p style="margin:22px 0 0;"><a href="{{quoteUrl}}" style="display:inline-block;padding:12px 22px;background:#ea580c;color:#fff;text-decoration:none;border-radius:999px;font-weight:700;">View quote</a></p>
-        </div>
+        <p style="margin:0 0 14px;color:#334155;">{{message}}</p>
+        <p style="margin:0 0 14px;color:#334155;">View your quote here: <a href="{{quoteUrl}}" style="color:#c2410c;">{{quoteUrl}}</a></p>
+        <p style="margin:0;color:#64748b;font-size:14px;">If you have any questions, reply to this email and our team will help.</p>
       </div>
+      <p style="margin:14px 0 0;text-align:center;font-size:12px;color:#94a3b8;">{{businessName}}</p>
     </div></body></html>`,
     bodyText: `{{businessName}}
 
@@ -228,22 +226,25 @@ Hi {{clientName}},
 
 We prepared a quote for {{vehicle}} totaling {{amount}}.
 
-Next step: Review the quote details, pricing, and scope, then let us know when you are ready to move forward.
+Next step: Review the quote details and reply if you would like any changes before scheduling.
 {{message}}
 
-View quote: {{quoteUrl}}`,
+View quote: {{quoteUrl}}
+
+If you have any questions, reply to this email and our team will help.`,
   },
   quote_follow_up: {
-    subject: "Following up on your quote from {{businessName}}",
-    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
-    <div style="max-width:560px;margin:0 auto;padding:24px;">
-      <div style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);padding:24px;">
+    subject: "Checking in on your {{businessName}} quote",
+    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#f8fafc;color:#0f172a;font-family:Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;">
         <div style="font-size:18px;font-weight:700;">{{businessName}}</div>
-        <h1 style="font-size:20px;margin:0 0 16px;">Checking in on your quote</h1>
-        <p>Hi {{clientName}},</p>
-        <p>We wanted to follow up on your quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>
-        <p>{{message}}</p>
-        <p><a href="{{quoteUrl}}" style="display:inline-block;padding:10px 20px;background:#ea580c;color:#fff;text-decoration:none;border-radius:6px;">Review quote</a></p>
+        <h1 style="font-size:22px;line-height:1.25;margin:16px 0 12px;">Checking in on your quote</h1>
+        <p style="margin:0 0 12px;">Hi {{clientName}},</p>
+        <p style="margin:0 0 14px;color:#334155;">We wanted to follow up on your quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>
+        <p style="margin:0 0 14px;color:#334155;">{{message}}</p>
+        <p style="margin:0 0 14px;color:#334155;">Review your quote here: <a href="{{quoteUrl}}" style="color:#c2410c;">{{quoteUrl}}</a></p>
+        <p style="margin:0;color:#64748b;font-size:14px;">If you are ready to move forward, reply to this email and we will help with the next step.</p>
       </div>
     </div></body></html>`,
     bodyText: `{{businessName}}
@@ -255,28 +256,28 @@ Hi {{clientName}},
 We wanted to follow up on your quote for {{vehicle}} totaling {{amount}}.
 {{message}}
 
-Review quote: {{quoteUrl}}`,
+Review quote: {{quoteUrl}}
+
+If you are ready to move forward, reply to this email and we will help with the next step.`,
   },
   invoice_sent: {
-    subject: "Your invoice from {{businessName}}",
-    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
-    <div style="max-width:620px;margin:0 auto;padding:28px 18px;background:#f3f6fa;">
-      <div style="overflow:hidden;background:#fff;border-radius:20px;box-shadow:0 18px 50px rgba(15,23,42,0.12);border:1px solid rgba(148,163,184,0.18);">
-        <div style="height:6px;background:linear-gradient(90deg,#f97316,#fb923c 38%,#0f172a);"></div>
-        <div style="padding:28px;background:radial-gradient(circle at top right,rgba(249,115,22,0.14),transparent 30%),linear-gradient(180deg,rgba(248,250,252,0.96),#fff);">
+    subject: "Invoice {{invoiceNumber}} from {{businessName}}",
+    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#f8fafc;color:#0f172a;font-family:Arial,sans-serif;">
+    <div style="max-width:620px;margin:0 auto;padding:24px 16px;">
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;">
         <div style="font-size:18px;font-weight:700;color:#0f172a;">{{businessName}}</div>
-        <div style="margin-top:10px;display:inline-flex;border-radius:999px;padding:6px 10px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;">Invoice ready</div>
-        <h1 style="font-size:28px;line-height:1.05;letter-spacing:-0.03em;margin:14px 0 16px;color:#0f172a;">Your invoice is ready</h1>
-        <p>Hi {{clientName}},</p>
-        <p style="color:#475569;">Invoice <strong>{{invoiceNumber}}</strong> is ready for <strong>{{amount}}</strong>.</p>
-        <div style="margin:18px 0;border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:18px;">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#94a3b8;">Billing summary</div>
-          <div style="margin-top:6px;color:#475569;">Open the invoice to review the completed work, payment status, and your service record details.</div>
+        <h1 style="font-size:24px;line-height:1.2;margin:16px 0 12px;color:#0f172a;">Your invoice is ready</h1>
+        <p style="margin:0 0 12px;">Hi {{clientName}},</p>
+        <p style="margin:0 0 14px;color:#334155;">Invoice <strong>{{invoiceNumber}}</strong> is ready for <strong>{{amount}}</strong>.</p>
+        <div style="margin:16px 0;padding:16px;border-radius:12px;border:1px solid #e2e8f0;background:#f8fafc;">
+          <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;">Details</div>
+          <div style="margin-top:6px;color:#334155;">Open the invoice to review the completed work, payment status, and your service record.</div>
         </div>
-        <p style="color:#475569;">{{message}}</p>
-        <p style="margin:22px 0 0;"><a href="{{invoiceUrl}}" style="display:inline-block;padding:12px 22px;background:#ea580c;color:#fff;text-decoration:none;border-radius:999px;font-weight:700;">View invoice</a></p>
-        </div>
+        <p style="margin:0 0 14px;color:#334155;">{{message}}</p>
+        <p style="margin:0 0 14px;color:#334155;">View your invoice here: <a href="{{invoiceUrl}}" style="color:#c2410c;">{{invoiceUrl}}</a></p>
+        <p style="margin:0;color:#64748b;font-size:14px;">If you have any questions, reply to this email and our team will help.</p>
       </div>
+      <p style="margin:14px 0 0;text-align:center;font-size:12px;color:#94a3b8;">{{businessName}}</p>
     </div></body></html>`,
     bodyText: `{{businessName}}
 
@@ -286,10 +287,12 @@ Hi {{clientName}},
 
 Invoice {{invoiceNumber}} is ready for {{amount}}.
 
-Billing summary: Open the invoice to review the completed work, payment status, and your service record details.
+Details: Open the invoice to review the completed work, payment status, and your service record.
 {{message}}
 
-View invoice: {{invoiceUrl}}`,
+View invoice: {{invoiceUrl}}
+
+If you have any questions, reply to this email and our team will help.`,
   },
 };
 
