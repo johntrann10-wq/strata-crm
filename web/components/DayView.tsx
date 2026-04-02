@@ -52,10 +52,15 @@ export function DayView({
       ),
     [appointments, currentDate]
   );
+  const onSiteOnlyJobs = useMemo(() => {
+    const bookedIds = new Set(dayAppts.map((appointment) => appointment.id));
+    return onSiteJobs.filter((appointment) => !bookedIds.has(appointment.id));
+  }, [dayAppts, onSiteJobs]);
 
   const today = useMemo(() => new Date(), []);
   const isToday = isSameDay(currentDate, today);
   const unassignedCount = dayAppts.filter((apt) => !apt.assignedStaffId).length;
+  const activeItemCount = dayAppts.length + onSiteOnlyJobs.length;
   const nowLineTop = useMemo(() => {
     if (!isToday) return null;
     const currentDecimal = today.getHours() + today.getMinutes() / 60;
@@ -87,7 +92,7 @@ export function DayView({
                 })}
               </p>
               <p className="text-xs text-muted-foreground">
-                {dayAppts.length} {dayAppts.length === 1 ? "appointment" : "appointments"}
+                {activeItemCount} {activeItemCount === 1 ? "item" : "items"} on calendar
                 {unassignedCount > 0 ? ` - ${unassignedCount} unassigned` : ""}
               </p>
             </div>
@@ -101,6 +106,11 @@ export function DayView({
               <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
                 {dayAppts.length} booked
               </span>
+              {onSiteOnlyJobs.length > 0 ? (
+                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                  {onSiteOnlyJobs.length} on site
+                </span>
+              ) : null}
               {unassignedCount > 0 ? (
                 <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
                   {unassignedCount} unassigned
@@ -262,11 +272,11 @@ export function DayView({
                 day: "numeric",
               })}
             </p>
-            <p className="text-xs text-muted-foreground">
-              {dayAppts.length} {dayAppts.length === 1 ? "appointment" : "appointments"}
-              {unassignedCount > 0 ? ` - ${unassignedCount} unassigned` : ""}
-            </p>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            {activeItemCount} {activeItemCount === 1 ? "item" : "items"} on calendar
+            {unassignedCount > 0 ? ` - ${unassignedCount} unassigned` : ""}
+          </p>
+        </div>
           <Button size="sm" onClick={() => onSlotClick(currentDate)}>
             <Plus className="mr-2 h-4 w-4" />
             New appointment
@@ -277,6 +287,11 @@ export function DayView({
             <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
               {dayAppts.length} booked
             </span>
+            {onSiteOnlyJobs.length > 0 ? (
+              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                {onSiteOnlyJobs.length} on site
+              </span>
+            ) : null}
             {unassignedCount > 0 ? (
               <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
                 {unassignedCount} unassigned

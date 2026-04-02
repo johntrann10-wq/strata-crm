@@ -194,6 +194,11 @@ export default function CalendarPage() {
     () => activeAppointments.filter((appointment) => isMultiDayJob(appointment) && hasPresenceOnDay(appointment, currentDate)),
     [activeAppointments, currentDate]
   );
+  const selectedDayOnSiteOnlyJobs = useMemo(() => {
+    const bookedIds = new Set(selectedDayAppointments.map((appointment) => appointment.id));
+    return selectedDayOnSiteJobs.filter((appointment) => !bookedIds.has(appointment.id));
+  }, [selectedDayAppointments, selectedDayOnSiteJobs]);
+  const selectedDayActiveItems = selectedDayAppointments.length + selectedDayOnSiteOnlyJobs.length;
   const selectedDayRevenue = selectedDayAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
   const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
   const selectedDayConflicts = selectedDayAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
@@ -478,12 +483,12 @@ export default function CalendarPage() {
                       <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
                     </div>
                     <div className="mt-3 grid min-w-0 gap-2 text-xs [grid-template-columns:repeat(3,minmax(0,1fr))]">
-                      <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                        <p className={cn("truncate font-semibold text-foreground", isMobileLayout && "text-[13px] leading-none")}>
-                          {selectedDayAppointments.length}
-                        </p>
-                        <p className="mt-1 truncate text-muted-foreground">Booked</p>
-                      </div>
+                        <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                          <p className={cn("truncate font-semibold text-foreground", isMobileLayout && "text-[13px] leading-none")}>
+                            {selectedDayActiveItems}
+                          </p>
+                          <p className="mt-1 truncate text-muted-foreground">Active</p>
+                        </div>
                       <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 px-3 py-2">
                         <p className={cn("truncate font-semibold text-foreground", isMobileLayout && "text-[13px] leading-none tracking-tight")}>
                           {formatCurrency(selectedDayRevenue)}
@@ -693,10 +698,10 @@ export default function CalendarPage() {
                     <h2 className="mt-1 text-lg font-semibold text-foreground">{formatPanelDate(currentDate)}</h2>
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
-                      <p className="mt-2 text-2xl font-semibold text-foreground">{selectedDayAppointments.length}</p>
-                    </div>
+                      <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
+                        <p className="mt-2 text-2xl font-semibold text-foreground">{selectedDayActiveItems}</p>
+                      </div>
                     <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Revenue</p>
                       <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(selectedDayRevenue)}</p>
