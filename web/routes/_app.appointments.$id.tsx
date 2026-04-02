@@ -353,6 +353,22 @@ function FormSelect({
   );
 }
 
+const TIME_OPTIONS = Array.from({ length: 96 }, (_, index) => {
+  const hours = Math.floor(index / 4);
+  const minutes = (index % 4) * 15;
+  const value = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
+  return {
+    value,
+    label: date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }),
+  };
+});
+
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -2073,24 +2089,35 @@ export default function AppointmentDetail() {
             </div>
 
             {/* Start Time / End Time */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="edit-start-time">Start Time</Label>
-                <Input
+                <FormSelect
                   id="edit-start-time"
-                  type="time"
                   value={editStartTime}
-                  onChange={(e) => setEditStartTime(e.target.value)}
-                />
+                  onChange={setEditStartTime}
+                >
+                  {TIME_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </FormSelect>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-end-time">End Time</Label>
-                <Input
+                <FormSelect
                   id="edit-end-time"
-                  type="time"
                   value={editEndTime}
-                  onChange={(e) => setEditEndTime(e.target.value)}
-                />
+                  onChange={setEditEndTime}
+                >
+                  <option value="">No end time</option>
+                  {TIME_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </FormSelect>
               </div>
             </div>
 
@@ -2122,12 +2149,17 @@ export default function AppointmentDetail() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-job-start-time">Span Start Time</Label>
-                    <Input
+                    <FormSelect
                       id="edit-job-start-time"
-                      type="time"
                       value={editJobStartTime}
-                      onChange={(e) => setEditJobStartTime(e.target.value)}
-                    />
+                      onChange={setEditJobStartTime}
+                    >
+                      {TIME_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </FormSelect>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-expected-completion-date">Expected Completion</Label>
@@ -2140,12 +2172,17 @@ export default function AppointmentDetail() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-expected-completion-time">Completion Time</Label>
-                    <Input
+                    <FormSelect
                       id="edit-expected-completion-time"
-                      type="time"
                       value={editExpectedCompletionTime}
-                      onChange={(e) => setEditExpectedCompletionTime(e.target.value)}
-                    />
+                      onChange={setEditExpectedCompletionTime}
+                    >
+                      {TIME_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </FormSelect>
                   </div>
                   <div className="space-y-2">
                     <Label>Job Phase</Label>
@@ -2160,18 +2197,24 @@ export default function AppointmentDetail() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-pickup-ready-date">Pickup Ready</Label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <Input
                         id="edit-pickup-ready-date"
                         type="date"
                         value={editPickupReadyDate}
                         onChange={(e) => setEditPickupReadyDate(e.target.value)}
                       />
-                      <Input
-                        type="time"
+                      <FormSelect
                         value={editPickupReadyTime}
-                        onChange={(e) => setEditPickupReadyTime(e.target.value)}
-                      />
+                        onChange={setEditPickupReadyTime}
+                      >
+                        <option value="">Not set</option>
+                        {TIME_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </FormSelect>
                     </div>
                   </div>
                 </div>

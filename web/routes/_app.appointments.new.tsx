@@ -91,6 +91,20 @@ function SelectionIndicator({ checked }: { checked: boolean }) {
   );
 }
 
+function buildQuarterHourOptions() {
+  return Array.from({ length: 96 }, (_, index) => {
+    const hours = Math.floor(index / 4);
+    const minutes = (index % 4) * 15;
+    const value = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return {
+      value,
+      label: format(date, "h:mm a"),
+    };
+  });
+}
+
 export default function NewAppointmentPage() {
   const { user, businessId, businessType, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
@@ -423,12 +437,13 @@ export default function NewAppointmentPage() {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   };
 
-  const timeInputClassName =
-    "h-12 pl-9 text-base font-semibold [font-variant-numeric:tabular-nums] sm:text-sm";
+  const timeOptions = useMemo(() => buildQuarterHourOptions(), []);
+  const timeSelectTriggerClassName =
+    "h-11 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
   const dateInputClassName =
-    "h-12 text-base font-semibold [font-variant-numeric:tabular-nums] sm:text-sm";
+    "h-11 text-sm font-medium [font-variant-numeric:tabular-nums]";
   const readOnlyTimeClassName =
-    "h-12 pl-9 bg-muted/50 text-base font-semibold text-muted-foreground [font-variant-numeric:tabular-nums] cursor-default sm:text-sm";
+    "flex h-11 w-full items-center rounded-xl border border-input/90 bg-muted/40 px-3 text-sm font-medium text-muted-foreground [font-variant-numeric:tabular-nums]";
 
   const notifyAppointmentConfirmation = (deliveryStatus?: string | null, deliveryError?: string | null) => {
     if (deliveryStatus === "emailed") {
@@ -1297,17 +1312,18 @@ export default function NewAppointmentPage() {
                   <Label htmlFor="startTime">
                     Start Time <span className="text-destructive">*</span>
                   </Label>
-                  <div className="relative">
-                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                    <Input
-                      id="startTime"
-                      type="time"
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      step="900"
-                      className={timeInputClassName}
-                    />
-                  </div>
+                  <Select value={startTime} onValueChange={setStartTime}>
+                    <SelectTrigger id="startTime" className={timeSelectTriggerClassName}>
+                      <SelectValue placeholder="Select a start time" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {timeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* Estimated end time */}
@@ -1361,14 +1377,18 @@ export default function NewAppointmentPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="job-start-time">Span Start Time</Label>
-                      <Input
-                        id="job-start-time"
-                        type="time"
-                        value={jobStartTime}
-                        onChange={(e) => setJobStartTime(e.target.value)}
-                        step="900"
-                        className={timeInputClassName.replace("pl-9 ", "")}
-                      />
+                      <Select value={jobStartTime} onValueChange={setJobStartTime}>
+                        <SelectTrigger id="job-start-time" className={timeSelectTriggerClassName}>
+                          <SelectValue placeholder="Select a time" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-72">
+                          {timeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="expected-completion-date">Expected Completion</Label>
@@ -1382,14 +1402,18 @@ export default function NewAppointmentPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="expected-completion-time">Completion Time</Label>
-                      <Input
-                        id="expected-completion-time"
-                        type="time"
-                        value={expectedCompletionTime}
-                        onChange={(e) => setExpectedCompletionTime(e.target.value)}
-                        step="900"
-                        className={timeInputClassName.replace("pl-9 ", "")}
-                      />
+                      <Select value={expectedCompletionTime} onValueChange={setExpectedCompletionTime}>
+                        <SelectTrigger id="expected-completion-time" className={timeSelectTriggerClassName}>
+                          <SelectValue placeholder="Select a time" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-72">
+                          {timeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label>Job Phase</Label>
@@ -1409,7 +1433,7 @@ export default function NewAppointmentPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="pickup-ready-date">Pickup Ready (optional)</Label>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Input
                           id="pickup-ready-date"
                           type="date"
@@ -1417,13 +1441,18 @@ export default function NewAppointmentPage() {
                           onChange={(e) => setPickupReadyDate(e.target.value)}
                           className={dateInputClassName}
                         />
-                        <Input
-                          type="time"
-                          value={pickupReadyTime}
-                          onChange={(e) => setPickupReadyTime(e.target.value)}
-                          step="900"
-                          className={timeInputClassName.replace("pl-9 ", "")}
-                        />
+                        <Select value={pickupReadyTime} onValueChange={setPickupReadyTime}>
+                          <SelectTrigger className={timeSelectTriggerClassName}>
+                            <SelectValue placeholder="Select time" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-72">
+                            {timeOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </>
