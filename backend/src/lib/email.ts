@@ -5,7 +5,7 @@
  */
 import nodemailer from "nodemailer";
 import { db } from "../db/index.js";
-import { emailTemplates, notificationLogs } from "../db/schema.js";
+import { businesses, emailTemplates, notificationLogs } from "../db/schema.js";
 import { eq, and, isNull, isNotNull, sql } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { escapeHtml } from "./escape.js";
@@ -149,6 +149,30 @@ async function sendMailWithTimeout(
 
 export type TemplateVars = Record<string, string | number | undefined>;
 
+async function getBusinessContactVars(businessId: string | null | undefined): Promise<TemplateVars> {
+  if (!businessId) return {};
+  const [business] = await db
+    .select({
+      email: businesses.email,
+      phone: businesses.phone,
+      address: businesses.address,
+      city: businesses.city,
+      state: businesses.state,
+      zip: businesses.zip,
+    })
+    .from(businesses)
+    .where(eq(businesses.id, businessId))
+    .limit(1);
+
+  const businessAddress = [business?.address, business?.city, business?.state, business?.zip].filter(Boolean).join(", ");
+
+  return {
+    businessEmail: business?.email?.trim() || undefined,
+    businessPhone: business?.phone?.trim() || undefined,
+    businessAddress: businessAddress.trim() || undefined,
+  };
+}
+
 function replaceVars(template: string, vars: TemplateVars, escapeForHtml: boolean): string {
   let out = template;
   for (const [key, value] of Object.entries(vars)) {
@@ -195,7 +219,11 @@ export async function sendTemplatedEmailInternal(
   options: { to: string; subject?: string; templateSlug: string; businessId?: string | null; vars?: TemplateVars }
 ): Promise<void> {
   const template = await getTemplate(options.templateSlug, options.businessId ?? null);
-  const vars = options.vars ?? {};
+  const contactVars = await getBusinessContactVars(options.businessId ?? null);
+  const vars = {
+    ...contactVars,
+    ...(options.vars ?? {}),
+  };
   const subject = options.subject ?? (template ? replaceVars(template.subject, vars, false) : "Notification");
   const bodyHtml = template ? replaceVars(template.bodyHtml, vars, true) : "<p>No template found.</p>";
   const bodyText = template?.bodyText

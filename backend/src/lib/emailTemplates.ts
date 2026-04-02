@@ -92,7 +92,7 @@ export const appointmentConfirmation: BuiltinEmailTemplate = {
       ]) +
       `<div style="margin-top:14px;">${renderInfoCard(
         "Need to change anything?",
-        "If you need to reschedule or update anything before the appointment, contact the shop directly."
+        "If you need to reschedule or update anything before the appointment, contact us directly.<br>{{businessPhone}}<br>{{businessEmail}}<br>{{businessAddress}}"
       )}</div>`,
   }),
   bodyText: `{{businessName}}
@@ -107,7 +107,10 @@ Vehicle: {{vehicle}}
 Address: {{address}}
 Service details: {{serviceSummary}}
 
-If you need to reschedule or update anything before the appointment, contact the shop directly.`,
+If you need to reschedule or update anything before the appointment, contact us directly.
+{{businessPhone}}
+{{businessEmail}}
+{{businessAddress}}`,
 };
 
 /** Placeholders: clientName, businessName, dateTime, vehicle, serviceSummary */
@@ -268,7 +271,7 @@ const builtins: Record<string, BuiltinEmailTemplate> = {
       ctaUrl: "{{quoteUrl}}",
       ctaHint: `Quote link: {{quoteUrl}}`,
       showCtaHint: false,
-      footerNote: "If you have any questions, contact the shop directly.",
+      footerNote: "If you have any questions, contact us directly.<br>{{businessPhone}}<br>{{businessEmail}}<br>{{businessAddress}}",
     }),
     bodyText: `{{businessName}}
 
@@ -283,7 +286,10 @@ Next step: Review the quote details and contact the shop if you would like any c
 
 View quote: {{quoteUrl}}
 
-If you have any questions, contact the shop directly.`,
+If you have any questions, contact us directly.
+{{businessPhone}}
+{{businessEmail}}
+{{businessAddress}}`,
   },
   quote_follow_up: {
     subject: "Checking in on your {{businessName}} quote",
@@ -297,7 +303,7 @@ If you have any questions, contact the shop directly.`,
       ctaUrl: "{{quoteUrl}}",
       ctaHint: `Quote link: {{quoteUrl}}`,
       showCtaHint: false,
-      footerNote: "If you are ready to move forward, contact the shop directly and we will help with the next step.",
+      footerNote: "If you are ready to move forward, contact us directly and we will help with the next step.<br>{{businessPhone}}<br>{{businessEmail}}<br>{{businessAddress}}",
     }),
     bodyText: `{{businessName}}
 
@@ -310,7 +316,10 @@ We wanted to follow up on your quote for {{vehicle}} totaling {{amount}}.
 
 Review quote: {{quoteUrl}}
 
-If you are ready to move forward, contact the shop directly and we will help with the next step.`,
+If you are ready to move forward, contact us directly and we will help with the next step.
+{{businessPhone}}
+{{businessEmail}}
+{{businessAddress}}`,
   },
   invoice_sent: {
     subject: "Invoice {{invoiceNumber}} from {{businessName}}",
@@ -326,7 +335,7 @@ If you are ready to move forward, contact the shop directly and we will help wit
       ctaUrl: "{{invoiceUrl}}",
       ctaHint: `Invoice link: {{invoiceUrl}}`,
       showCtaHint: false,
-      footerNote: "If you have any questions, contact the shop directly.",
+      footerNote: "If you have any questions, contact us directly.<br>{{businessPhone}}<br>{{businessEmail}}<br>{{businessAddress}}",
     }),
     bodyText: `{{businessName}}
 
@@ -341,7 +350,10 @@ Details: Open the invoice to review the completed work, payment status, and your
 
 View invoice: {{invoiceUrl}}
 
-If you have any questions, contact the shop directly.`,
+If you have any questions, contact us directly.
+{{businessPhone}}
+{{businessEmail}}
+{{businessAddress}}`,
   },
 };
 
