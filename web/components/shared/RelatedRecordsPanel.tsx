@@ -74,7 +74,7 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
             Related Records
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Jump across work, billing, and client history without losing context.
+            Open the connected quote, invoice, client, or vehicle record from here.
           </p>
         </div>
       </div>

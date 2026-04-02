@@ -1044,8 +1044,8 @@ export default function AppointmentDetail() {
             <div>
               <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.5rem]">{pageTitle}</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                Run the appointment from one place. Client context, vehicle context, status, billing, and handoff
-                decisions should all feel obvious here.
+                Check the client, vehicle, schedule, and payment details here, then move the appointment forward
+                without losing your place.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
