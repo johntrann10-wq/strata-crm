@@ -431,7 +431,12 @@ export default function CalendarPage() {
           >
             {view === "month" ? (
               <>
-                <div className={cn("surface-panel min-w-0 max-w-full rounded-[1.6rem] p-4", isMobileLayout && "overflow-hidden")}>
+                <div
+                  className={cn(
+                    "surface-panel min-w-0 max-w-full rounded-[1.6rem] p-4",
+                    isMobileLayout && "order-2 overflow-hidden xl:order-none"
+                  )}
+                >
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Month overview</p>
                     <h2 className="mt-1 text-lg font-semibold text-foreground">
@@ -464,7 +469,7 @@ export default function CalendarPage() {
                 <div
                   className={cn(
                     "surface-panel min-w-0 max-w-full rounded-[1.5rem] p-4",
-                    isMobileLayout && "h-[19rem] min-h-[19rem] max-h-[19rem] overflow-hidden [contain:layout_paint]"
+                    isMobileLayout && "order-1 h-[19rem] min-h-[19rem] max-h-[19rem] overflow-hidden [contain:layout_paint] xl:order-none"
                   )}
                 >
                   <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
