@@ -687,7 +687,7 @@ export function MonthView({
         ))}
       </div>
 
-      <div className="grid h-[22.5rem] min-h-[22.5rem] min-w-0 grid-rows-6 overflow-hidden [grid-template-rows:repeat(6,minmax(0,1fr))] sm:h-[24rem] sm:min-h-[24rem] md:h-auto md:min-h-0 md:flex-1 md:auto-rows-fr md:[grid-template-rows:repeat(6,minmax(0,1fr))]">
+      <div className="grid h-[24.5rem] min-h-[24.5rem] min-w-0 grid-rows-6 overflow-hidden [grid-template-rows:repeat(6,minmax(0,1fr))] sm:h-[25rem] sm:min-h-[25rem] md:h-auto md:min-h-0 md:flex-1 md:auto-rows-fr md:[grid-template-rows:repeat(6,minmax(0,1fr))]">
         {grid.map((week, wi) => (
           <div key={wi} className="grid min-h-0 grid-cols-7 border-b border-border/60 last:border-b-0">
             {week.map((day, di) => {
@@ -711,7 +711,7 @@ export function MonthView({
                   tabIndex={0}
                   aria-label={`Open ${dayLabel}`}
                   className={cn(
-                    "group relative flex h-full min-h-0 touch-manipulation select-none flex-col border-r border-border/60 px-1 py-1 text-left transition-colors last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-2",
+                    "group relative flex h-full min-h-0 touch-manipulation select-none flex-col border-r border-border/60 px-1.5 py-1.5 text-left transition-colors last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-2",
                     "hover:bg-muted/35",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
@@ -730,7 +730,7 @@ export function MonthView({
                     <div className="flex items-start justify-between gap-1 sm:mb-2 sm:items-center sm:gap-2">
                       <span
                         className={cn(
-                          "inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold sm:h-8 sm:w-8 sm:text-sm",
+                          "inline-flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold sm:h-8 sm:w-8 sm:text-sm",
                           isToday ? "bg-primary text-primary-foreground" : "text-foreground"
                         )}
                       >
