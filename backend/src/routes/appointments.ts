@@ -286,8 +286,8 @@ const appointmentJobPhaseSchema = z.enum([
   "pickup_ready",
 ]);
 const createSchema = z.object({
-  clientId: z.string().uuid(),
-  vehicleId: z.string().uuid(),
+  clientId: z.string().uuid().optional(),
+  vehicleId: z.string().uuid().optional(),
   startTime: z.string().datetime(),
   endTime: z.string().datetime().optional(),
   jobStartTime: z.string().datetime().optional(),
@@ -940,19 +940,8 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
 
-  // Tenancy: client and vehicle must belong to this business; vehicle must belong to client
-  const [client] = await db
-    .select({ id: clients.id })
-    .from(clients)
-    .where(and(eq(clients.id, parsed.data.clientId), eq(clients.businessId, bid)))
-    .limit(1);
-  if (!client) throw new BadRequestError("Client not found or access denied.");
-  const [vehicle] = await db
-    .select({ id: vehicles.id })
-    .from(vehicles)
-    .where(and(eq(vehicles.id, parsed.data.vehicleId), eq(vehicles.businessId, bid), eq(vehicles.clientId, parsed.data.clientId)))
-    .limit(1);
-  if (!vehicle) throw new BadRequestError("Vehicle not found, or does not belong to this client or business.");
+  let effectiveClientId = parsed.data.clientId ?? null;
+  let effectiveVehicleId = parsed.data.vehicleId ?? null;
 
   if (parsed.data.quoteId) {
     const [q] = await db
@@ -966,10 +955,34 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       .where(and(eq(quotes.id, parsed.data.quoteId), eq(quotes.businessId, bid)))
       .limit(1);
     if (!q) throw new BadRequestError("Quote not found.");
-    if (q.clientId !== parsed.data.clientId) throw new BadRequestError("Appointment client must match the quote.");
-    if (!q.vehicleId || q.vehicleId !== parsed.data.vehicleId) {
+    effectiveClientId ??= q.clientId;
+    effectiveVehicleId ??= q.vehicleId;
+    if (q.clientId !== effectiveClientId) throw new BadRequestError("Appointment client must match the quote.");
+    if (!q.vehicleId || q.vehicleId !== effectiveVehicleId) {
       throw new BadRequestError("Appointment vehicle must match the quote (add a vehicle to the quote first).");
     }
+  }
+
+  if (effectiveClientId) {
+    const [client] = await db
+      .select({ id: clients.id })
+      .from(clients)
+      .where(and(eq(clients.id, effectiveClientId), eq(clients.businessId, bid)))
+      .limit(1);
+    if (!client) throw new BadRequestError("Client not found or access denied.");
+  }
+
+  if (effectiveVehicleId) {
+    const [vehicle] = await db
+      .select({ id: vehicles.id, clientId: vehicles.clientId })
+      .from(vehicles)
+      .where(and(eq(vehicles.id, effectiveVehicleId), eq(vehicles.businessId, bid)))
+      .limit(1);
+    if (!vehicle) throw new BadRequestError("Vehicle not found or access denied.");
+    if (effectiveClientId && vehicle.clientId !== effectiveClientId) {
+      throw new BadRequestError("Vehicle does not belong to the selected client.");
+    }
+    effectiveClientId ??= vehicle.clientId;
   }
 
   if (parsed.data.assignedStaffId) {
@@ -1027,6 +1040,39 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   const createdAt = new Date();
   const appointmentId = randomUUID();
   const created = await db.transaction(async (tx) => {
+    if (!effectiveClientId) {
+      const [placeholderClient] = await tx
+        .insert(clients)
+        .values({
+          businessId: bid,
+          firstName: "Walk-in",
+          lastName: "Customer",
+          notes: "Auto-created while booking an appointment without a selected client.",
+          internalNotes: "System-generated booking placeholder.",
+          createdAt,
+          updatedAt: createdAt,
+        })
+        .returning({ id: clients.id });
+      effectiveClientId = placeholderClient.id;
+    }
+
+    if (!effectiveVehicleId) {
+      const [placeholderVehicle] = await tx
+        .insert(vehicles)
+        .values({
+          businessId: bid,
+          clientId: effectiveClientId,
+          make: "Unspecified",
+          model: "Vehicle",
+          displayName: "Unspecified Vehicle",
+          notes: "Auto-created while booking an appointment without a selected vehicle.",
+          createdAt,
+          updatedAt: createdAt,
+        })
+        .returning({ id: vehicles.id });
+      effectiveVehicleId = placeholderVehicle.id;
+    }
+
     let selectedServicesTotal = 0;
     let attachedAnyService = false;
     let apt: CreatedAppointmentRecord | undefined;
@@ -1036,8 +1082,8 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
         .values({
           id: appointmentId,
           businessId: bid,
-          clientId: parsed.data.clientId,
-          vehicleId: parsed.data.vehicleId,
+          clientId: effectiveClientId,
+          vehicleId: effectiveVehicleId,
           startTime,
           endTime,
           jobStartTime,
@@ -1062,8 +1108,8 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       const fallbackValues: Record<string, unknown> = {
         id: appointmentId,
         businessId: bid,
-        clientId: parsed.data.clientId,
-        vehicleId: parsed.data.vehicleId,
+        clientId: effectiveClientId,
+        vehicleId: effectiveVehicleId,
         startTime,
       };
       if (columns.has("end_time")) fallbackValues.endTime = endTime;

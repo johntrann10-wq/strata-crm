@@ -142,8 +142,6 @@ export default function NewAppointmentPage() {
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(currentLocationId);
   const [showQuotePrefilledBadge, setShowQuotePrefilledBadge] = useState(false);
   const hasPrefilledFromQuote = useRef(false);
-  const notesRef = useRef<HTMLTextAreaElement | null>(null);
-  const internalNotesRef = useRef<HTMLTextAreaElement | null>(null);
   const [clientSearchQuery, setClientSearchQuery] = useState<string>("");
   const [debouncedClientQuery, setDebouncedClientQuery] = useState<string>("");
   const [serviceSearchQuery, setServiceSearchQuery] = useState("");
@@ -420,6 +418,13 @@ export default function NewAppointmentPage() {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   };
 
+  const timeInputClassName =
+    "h-12 pl-9 text-base font-semibold [font-variant-numeric:tabular-nums] sm:text-sm";
+  const dateInputClassName =
+    "h-12 text-base font-semibold [font-variant-numeric:tabular-nums] sm:text-sm";
+  const readOnlyTimeClassName =
+    "h-12 pl-9 bg-muted/50 text-base font-semibold text-muted-foreground [font-variant-numeric:tabular-nums] cursor-default sm:text-sm";
+
   const notifyAppointmentConfirmation = (deliveryStatus?: string | null, deliveryError?: string | null) => {
     if (deliveryStatus === "emailed") {
       toast.success("Appointment created and confirmation emailed");
@@ -447,30 +452,6 @@ export default function NewAppointmentPage() {
     setClientSearchOpen(false);
     setClientSearchQuery("");
   };
-
-  const applyTemplateToNotes = useCallback(
-    (
-      template: string,
-      setter: React.Dispatch<React.SetStateAction<string>>,
-      inputRef: React.RefObject<HTMLTextAreaElement | null>,
-      successMessage: string
-    ) => {
-      let applied = false;
-      setter((current) => {
-        if (current.includes(template)) {
-          return current;
-        }
-        applied = true;
-        return current.trim() ? `${current.trim()}\n\n${template}` : template;
-      });
-      window.requestAnimationFrame(() => {
-        inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-        inputRef.current?.focus();
-      });
-      toast.success(applied ? successMessage : "Notes were already applied");
-    },
-    []
-  );
 
   const toggleService = (serviceId: string) => {
     setSelectedServiceIds((prev) =>
@@ -542,10 +523,6 @@ export default function NewAppointmentPage() {
       return;
     }
 
-    if (!selectedClientId) {
-      setFormError("Please select a client.");
-      return;
-    }
     if (!selectedDate) {
       setFormError("Please select a date.");
       return;
@@ -564,11 +541,6 @@ export default function NewAppointmentPage() {
     }
     if (isMobile && !mobileAddress.trim()) {
       setFormError("Please enter the service address for this mobile appointment.");
-      return;
-    }
-
-    if (selectedClientId && !selectedVehicleId) {
-      setVehicleError("Please select a vehicle for this appointment. If the client has no vehicles, use the 'Add Vehicle Now' button above.");
       return;
     }
 
@@ -599,8 +571,8 @@ export default function NewAppointmentPage() {
             .join(" + ")
         : "Appointment";
       const result = await createAppointment({
-        clientId: selectedClientId,
-        vehicleId: selectedVehicleId!,
+        clientId: selectedClientId ?? undefined,
+        vehicleId: selectedVehicleId ?? undefined,
         startTime: startDateTime.toISOString(),
         endTime: endDateTime ? endDateTime.toISOString() : undefined,
         jobStartTime: jobStartDateTime ? jobStartDateTime.toISOString() : undefined,
@@ -858,9 +830,7 @@ export default function NewAppointmentPage() {
             <CardContent className="space-y-4">
               {/* Client searchable select */}
               <div className="space-y-2">
-                <Label>
-                  Client <span className="text-destructive">*</span>
-                </Label>
+                <Label>Client</Label>
                 <Popover open={clientSearchOpen} onOpenChange={setClientSearchOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -929,17 +899,17 @@ export default function NewAppointmentPage() {
 
               {/* Vehicle select */}
               <div className="space-y-2">
-                <Label>Vehicle <span className="text-destructive">*</span></Label>
+                <Label>Vehicle</Label>
                 {selectedClientId && vehiclesData && vehicles.length === 0 && (
                   <Alert className="border-amber-200 bg-amber-50 text-amber-800">
                     <AlertDescription>
-                      This client has no vehicles on file. Add one below before booking the appointment.
+                      This client has no vehicles on file. Add one below now, or keep booking without a vehicle.
                     </AlertDescription>
                   </Alert>
                 )}
                 {!selectedClientId ? (
                   <p className="text-sm text-muted-foreground italic">
-                    Select a client first to load their vehicles.
+                    Client is optional. Pick one first if you want to attach a vehicle.
                   </p>
                 ) : vehiclesFetching ? (
                   <p className="text-sm text-muted-foreground">
@@ -948,7 +918,7 @@ export default function NewAppointmentPage() {
                 ) : vehicles.length === 0 ? (
                   <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
                     <p className="text-sm text-muted-foreground italic">
-                      No vehicles on file for this client. Add one now to keep booking moving.
+                      No vehicles on file for this client. Add one now if you want to link the appointment to a vehicle.
                     </p>
                     <VehicleCatalogFields value={quickVehicleForm} setValue={setQuickVehicleForm} compact />
                     {quickVehicleError ? <p className="text-xs text-destructive">{quickVehicleError}</p> : null}
@@ -978,9 +948,7 @@ export default function NewAppointmentPage() {
                     </SelectContent>
                   </Select>
                 )}
-                {vehicleError && (
-                  <p className="text-xs text-destructive mt-1">{vehicleError}</p>
-                )}
+                {vehicleError && <p className="text-xs text-destructive mt-1">{vehicleError}</p>}
               </div>
             </CardContent>
           </Card>
@@ -991,51 +959,6 @@ export default function NewAppointmentPage() {
               <CardTitle className="text-base font-semibold">Services</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="mb-4 rounded-xl border border-border/70 bg-muted/30 p-3 sm:p-4">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">{creationPreset.title}</p>
-                  <div className="grid gap-2 sm:flex sm:flex-row sm:flex-wrap">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="justify-start sm:justify-center"
-                      onClick={() =>
-                        applyTemplateToNotes(
-                          creationPreset.appointmentClientNotes,
-                          setNotes,
-                          notesRef,
-                          "Client intake notes applied"
-                        )
-                      }
-                    >
-                      Apply client intake
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="justify-start sm:justify-center"
-                      onClick={() =>
-                        applyTemplateToNotes(
-                          creationPreset.appointmentInternalNotes,
-                          setInternalNotes,
-                          internalNotesRef,
-                          "Internal handoff notes applied"
-                        )
-                      }
-                    >
-                      Apply internal handoff
-                    </Button>
-                    {creationPreset.defaultMobile ? (
-                      <Button type="button" variant="outline" size="sm" className="justify-start sm:justify-center" onClick={() => setIsMobile(true)}>
-                        Mark as mobile
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-
               {servicesFetching ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1376,7 +1299,8 @@ export default function NewAppointmentPage() {
                       type="time"
                       value={startTime}
                       onChange={(e) => setStartTime(e.target.value)}
-                      className="pl-9"
+                      step="900"
+                      className={timeInputClassName}
                     />
                   </div>
                 </div>
@@ -1395,7 +1319,7 @@ export default function NewAppointmentPage() {
                           : "—"
                       }
                       readOnly
-                      className="pl-9 bg-muted/50 text-muted-foreground cursor-default"
+                      className={readOnlyTimeClassName}
                     />
                   </div>
                 </div>
@@ -1427,6 +1351,7 @@ export default function NewAppointmentPage() {
                         type="date"
                         value={jobStartDate}
                         onChange={(e) => setJobStartDate(e.target.value)}
+                        className={dateInputClassName}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1436,6 +1361,8 @@ export default function NewAppointmentPage() {
                         type="time"
                         value={jobStartTime}
                         onChange={(e) => setJobStartTime(e.target.value)}
+                        step="900"
+                        className={timeInputClassName.replace("pl-9 ", "")}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1445,6 +1372,7 @@ export default function NewAppointmentPage() {
                         type="date"
                         value={expectedCompletionDate}
                         onChange={(e) => setExpectedCompletionDate(e.target.value)}
+                        className={dateInputClassName}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1454,6 +1382,8 @@ export default function NewAppointmentPage() {
                         type="time"
                         value={expectedCompletionTime}
                         onChange={(e) => setExpectedCompletionTime(e.target.value)}
+                        step="900"
+                        className={timeInputClassName.replace("pl-9 ", "")}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1480,11 +1410,14 @@ export default function NewAppointmentPage() {
                           type="date"
                           value={pickupReadyDate}
                           onChange={(e) => setPickupReadyDate(e.target.value)}
+                          className={dateInputClassName}
                         />
                         <Input
                           type="time"
                           value={pickupReadyTime}
                           onChange={(e) => setPickupReadyTime(e.target.value)}
+                          step="900"
+                          className={timeInputClassName.replace("pl-9 ", "")}
                         />
                       </div>
                     </div>
@@ -1643,7 +1576,6 @@ export default function NewAppointmentPage() {
                   <Label htmlFor="notes">Notes</Label>
                   <Textarea
                     id="notes"
-                    ref={notesRef}
                     placeholder="Notes about this appointment (visible to client)..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
@@ -1655,7 +1587,6 @@ export default function NewAppointmentPage() {
                   <Label htmlFor="internalNotes">Internal Notes</Label>
                   <Textarea
                     id="internalNotes"
-                    ref={internalNotesRef}
                     placeholder="Internal notes (not visible to client)..."
                     value={internalNotes}
                     onChange={(e) => setInternalNotes(e.target.value)}
