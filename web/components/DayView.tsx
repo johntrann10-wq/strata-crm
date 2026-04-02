@@ -43,7 +43,7 @@ export function DayView({
 
   const daySnapshot = useMemo(() => getCalendarDaySnapshot(appointments, currentDate), [appointments, currentDate]);
   const dayAppts = daySnapshot.dayAppts;
-  const onSiteJobs = daySnapshot.daySpans;
+  const agendaItems = daySnapshot.agendaItems;
   const onSiteOnlyJobs = daySnapshot.onSiteOnlyJobs;
 
   const today = useMemo(() => new Date(), []);
@@ -110,29 +110,11 @@ export function DayView({
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
-          {onSiteJobs.length > 0 ? (
-            <div className="mb-3 space-y-2 rounded-2xl border border-border/70 bg-muted/10 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Vehicles on site</p>
-              {onSiteJobs.slice(0, 3).map((apt) => (
-                <button
-                  key={`${apt.id}-onsite-mobile`}
-                  type="button"
-                  onClick={() => onApptClick(apt)}
-                  className="flex w-full items-center gap-2 rounded-xl border border-border/60 bg-background/85 px-3 py-2 text-left"
-                >
-                  <span className={cn("h-2 w-2 shrink-0 rounded-full", getJobPhaseTone(apt.jobPhase))} />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{apptLabel(apt)}</span>
-                  <span className="text-[11px] font-medium text-muted-foreground">{getJobPhaseLabel(apt.jobPhase)}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          {dayAppts.length === 0 ? (
+          {activeItemCount === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 text-center">
               <CalendarIcon className="h-12 w-12 text-muted-foreground" />
               <div>
-                <p className="text-base font-semibold text-foreground">Nothing booked yet</p>
+                <p className="text-base font-semibold text-foreground">Nothing on calendar yet</p>
               </div>
               <Button onClick={() => onSlotClick(currentDate)}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -141,11 +123,11 @@ export function DayView({
             </div>
           ) : (
             <div className="space-y-3">
-              {dayAppts.map((apt) => {
-                const style = getStatusStyle(apt.status);
+              {agendaItems.map(({ appointment, kind }) => {
+                const style = getStatusStyle(appointment.status);
                 return (
                   <button
-                    key={apt.id}
+                    key={`${appointment.id}-${kind}-mobile`}
                     type="button"
                     className={cn(
                       "w-full rounded-2xl border bg-white px-4 py-4 text-left shadow-sm transition-all hover:-translate-y-px hover:shadow-md",
@@ -156,32 +138,41 @@ export function DayView({
                     )}
                     onClick={(event) => {
                       event.stopPropagation();
-                      onApptClick(apt);
+                      onApptClick(appointment);
                     }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-base font-semibold">{apptLabel(apt)}</p>
+                        <p className="truncate text-base font-semibold">{apptLabel(appointment)}</p>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          {formatTime(new Date(apt.startTime))}
-                          {apt.endTime ? ` - ${formatTime(new Date(apt.endTime))}` : ""}
+                          {kind === "onsite"
+                            ? "On site"
+                            : `${formatTime(new Date(appointment.startTime))}${appointment.endTime ? ` - ${formatTime(new Date(appointment.endTime))}` : ""}`}
                         </p>
                       </div>
                       <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize", style.pill)}>
-                        {apt.status.replace("_", " ")}
+                        {kind === "onsite" ? getJobPhaseLabel(appointment.jobPhase) : appointment.status.replace("_", " ")}
                       </span>
                     </div>
 
-                    {apt.vehicle ? (
+                    {appointment.vehicle ? (
                       <p className="mt-3 text-sm text-muted-foreground">
-                        {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
+                        {kind === "onsite"
+                          ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} on site`
+                          : [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")}
                       </p>
                     ) : null}
 
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>{apt.assignedStaff ? `${apt.assignedStaff.firstName} ${apt.assignedStaff.lastName}` : "Unassigned"}</span>
-                      {apt.isMobile ? <span>Mobile</span> : null}
-                      {conflictIds?.has(apt.id) ? <span className="font-semibold text-rose-700">Conflict</span> : null}
+                      <span>
+                        {kind === "onsite"
+                          ? "Vehicle on site"
+                          : appointment.assignedStaff
+                            ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+                            : "Unassigned"}
+                      </span>
+                      {appointment.isMobile ? <span>Mobile</span> : null}
+                      {conflictIds?.has(appointment.id) ? <span className="font-semibold text-rose-700">Conflict</span> : null}
                     </div>
                   </button>
                 );
@@ -293,20 +284,32 @@ export function DayView({
       <StaffWorkloadBar appointments={dayAppts} />
 
       <div id="day-scroll-container" className="flex-1 overflow-y-auto">
-        {onSiteJobs.length > 0 ? (
+        {onSiteOnlyJobs.length > 0 ? (
           <div className="border-b border-border/60 bg-muted/10 px-4 py-3">
-            <div className="flex flex-wrap gap-2">
-              {onSiteJobs.map((apt) => (
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">On-site jobs</p>
+            <div className="space-y-2">
+              {onSiteOnlyJobs.map((apt) => (
                 <button
                   key={`${apt.id}-onsite`}
                   type="button"
                   onClick={() => onApptClick(apt)}
-                  className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/85 px-3 py-1.5 text-xs font-semibold text-muted-foreground"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-background/85 px-3 py-3 text-left"
                 >
-                  <span className={cn("h-2 w-2 rounded-full", getJobPhaseTone(apt.jobPhase))} />
-                  <span className="max-w-[14rem] truncate">{apptLabel(apt)}</span>
-                  <span>{getJobPhaseLabel(apt.jobPhase)}</span>
-                  <span className="hidden sm:inline">until {getJobSpanEnd(apt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                  <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(apt.jobPhase))} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{apptLabel(apt)}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {apt.vehicle
+                        ? `${[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")} on site`
+                        : "Vehicle on site"}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-[11px] font-semibold text-muted-foreground">{getJobPhaseLabel(apt.jobPhase)}</p>
+                    <p className="hidden text-[11px] text-muted-foreground sm:block">
+                      until {getJobSpanEnd(apt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </p>
+                  </div>
                 </button>
               ))}
             </div>
