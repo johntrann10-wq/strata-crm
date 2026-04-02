@@ -400,6 +400,7 @@ export default function AppointmentDetail() {
   const [showMobileServices, setShowMobileServices] = useState(false);
   const [showMobileNotes, setShowMobileNotes] = useState(false);
   const [showMobileWorkflowTools, setShowMobileWorkflowTools] = useState(false);
+  const [showMobileActions, setShowMobileActions] = useState(false);
   const [editServiceIds, setEditServiceIds] = useState<string[]>([]);
 
   const [{ data: appointment, fetching, error }, refetchAppointment] = useFindOne(
@@ -1281,106 +1282,157 @@ export default function AppointmentDetail() {
             </Button>
           ) : null}
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" aria-label="More appointment actions">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              {appointment.status !== "completed" &&
-              appointment.status !== "cancelled" &&
-              appointment.status !== "no-show" ? (
-                <DropdownMenuItem onClick={handleOpenEditDialog}>
-                  <Edit2 className="mr-2 h-4 w-4" />
-                  Edit appointment
-                </DropdownMenuItem>
-              ) : null}
-              {appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
-                <DropdownMenuItem onClick={() => void handleSendConfirmation()}>
-                  <FileText className="mr-2 h-4 w-4" />
-                  Send confirmation
-                </DropdownMenuItem>
-              ) : null}
-              {!invoiceFetching && !invoice && appointment.status !== "cancelled" ? (
-                <DropdownMenuItem asChild>
-                  <Link
-                    to={`/invoices/new?appointmentId=${appointment.id}${
-                      appointment.client?.id ? `&clientId=${appointment.client.id}` : ""
-                    }`}
+          <Dialog open={showMobileActions} onOpenChange={setShowMobileActions}>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="More appointment actions"
+              onClick={() => setShowMobileActions(true)}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Appointment actions</DialogTitle>
+                <DialogDescription>
+                  Open the next workflow step for this appointment without leaving the detail view guessing.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-2">
+                {appointment.status !== "completed" &&
+                appointment.status !== "cancelled" &&
+                appointment.status !== "no-show" ? (
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => {
+                      setShowMobileActions(false);
+                      handleOpenEditDialog();
+                    }}
+                  >
+                    <Edit2 className="mr-2 h-4 w-4" />
+                    Edit appointment
+                  </Button>
+                ) : null}
+                {appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => {
+                      setShowMobileActions(false);
+                      void handleSendConfirmation();
+                    }}
                   >
                     <FileText className="mr-2 h-4 w-4" />
-                    Create invoice
-                  </Link>
-                </DropdownMenuItem>
-              ) : null}
-              {!quoteFetching && !quote && appointment.status !== "cancelled" && appointment.client?.id ? (
-                <DropdownMenuItem asChild>
-                  <Link to={`/quotes/new?appointmentId=${appointment.id}&clientId=${appointment.client.id}`}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    Create quote
-                  </Link>
-                </DropdownMenuItem>
-              ) : null}
+                    Send confirmation
+                  </Button>
+                ) : null}
+                {!invoiceFetching && !invoice && appointment.status !== "cancelled" ? (
+                  <Button asChild variant="outline" className="justify-start">
+                    <Link
+                      to={`/invoices/new?appointmentId=${appointment.id}${
+                        appointment.client?.id ? `&clientId=${appointment.client.id}` : ""
+                      }`}
+                      onClick={() => setShowMobileActions(false)}
+                    >
+                      <FileText className="mr-2 h-4 w-4" />
+                      Create invoice
+                    </Link>
+                  </Button>
+                ) : null}
+                {!quoteFetching && !quote && appointment.status !== "cancelled" && appointment.client?.id ? (
+                  <Button asChild variant="outline" className="justify-start">
+                    <Link
+                      to={`/quotes/new?appointmentId=${appointment.id}&clientId=${appointment.client.id}`}
+                      onClick={() => setShowMobileActions(false)}
+                    >
+                      <FileText className="mr-2 h-4 w-4" />
+                      Create quote
+                    </Link>
+                  </Button>
+                ) : null}
                 {invoice ? (
-                  <DropdownMenuItem asChild>
-                    <Link to={`/invoices/${invoice.id}`}>
+                  <Button asChild variant="outline" className="justify-start">
+                    <Link to={`/invoices/${invoice.id}`} onClick={() => setShowMobileActions(false)}>
                       <FileText className="mr-2 h-4 w-4" />
                       View invoice
-                  </Link>
-                </DropdownMenuItem>
+                    </Link>
+                  </Button>
                 ) : null}
                 {invoice && invoiceAllowsPayment(invoice.status) && invoice.status !== "paid" ? (
-                  <DropdownMenuItem asChild>
-                    <Link to={`/invoices/${invoice.id}?recordPayment=1`}>
+                  <Button asChild variant="outline" className="justify-start">
+                    <Link to={`/invoices/${invoice.id}?recordPayment=1`} onClick={() => setShowMobileActions(false)}>
                       <DollarSign className="mr-2 h-4 w-4" />
                       Record payment
                     </Link>
-                  </DropdownMenuItem>
+                  </Button>
                 ) : null}
                 {quote ? (
-                  <DropdownMenuItem asChild>
-                    <Link to={`/quotes/${quote.id}`}>
+                  <Button asChild variant="outline" className="justify-start">
+                    <Link to={`/quotes/${quote.id}`} onClick={() => setShowMobileActions(false)}>
                       <FileText className="mr-2 h-4 w-4" />
                       View quote
                     </Link>
-                  </DropdownMenuItem>
+                  </Button>
                 ) : null}
                 {appointment.depositAmount != null && appointment.depositAmount > 0 && !appointment.depositPaid ? (
-                  <DropdownMenuItem onClick={handleOpenDepositDialog}>
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => {
+                      setShowMobileActions(false);
+                      handleOpenDepositDialog();
+                    }}
+                  >
                     <DollarSign className="mr-2 h-4 w-4" />
                     Record deposit
-                  </DropdownMenuItem>
+                  </Button>
                 ) : null}
                 {appointment.depositPaid ? (
-                  <DropdownMenuItem onClick={() => setReverseDepositOpen(true)}>
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => {
+                      setShowMobileActions(false);
+                      setReverseDepositOpen(true);
+                    }}
+                  >
                     <RotateCcw className="mr-2 h-4 w-4" />
                     Reverse deposit
-                  </DropdownMenuItem>
+                  </Button>
                 ) : null}
                 {(VALID_TRANSITIONS[appointment.status] ?? []).map((status) => (
-                <DropdownMenuItem
-                  key={status}
-                  onClick={() => void handleStatusChange(status)}
-                  className="capitalize"
-                >
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Mark {status.replace("-", " ")}
-                </DropdownMenuItem>
-              ))}
-              {appointment.status !== "cancelled" &&
-              appointment.status !== "completed" &&
-              appointment.status !== "no-show" ? (
-                <DropdownMenuItem
-                  className="text-red-700 focus:text-red-700"
-                  onClick={() => setShowCancelDialog(true)}
-                >
-                  <X className="mr-2 h-4 w-4" />
-                  Cancel appointment
-                </DropdownMenuItem>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <Button
+                    key={status}
+                    variant="outline"
+                    className="justify-start capitalize"
+                    onClick={() => {
+                      setShowMobileActions(false);
+                      void handleStatusChange(status);
+                    }}
+                  >
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Mark {status.replace("-", " ")}
+                  </Button>
+                ))}
+                {appointment.status !== "cancelled" &&
+                appointment.status !== "completed" &&
+                appointment.status !== "no-show" ? (
+                  <Button
+                    variant="outline"
+                    className="justify-start border-red-200 text-red-700 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => {
+                      setShowMobileActions(false);
+                      setShowCancelDialog(true);
+                    }}
+                  >
+                    <X className="mr-2 h-4 w-4" />
+                    Cancel appointment
+                  </Button>
+                ) : null}
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
