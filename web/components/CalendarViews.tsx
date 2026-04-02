@@ -502,7 +502,7 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
           return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2", status.accent)} />;
         })}
       </div>
-      <span className="block text-[10px] font-medium text-muted-foreground">
+      <span className="inline-flex rounded-full bg-muted/85 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-foreground/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
         {appointments.length} appt{appointments.length === 1 ? "" : "s"}
       </span>
     </div>
