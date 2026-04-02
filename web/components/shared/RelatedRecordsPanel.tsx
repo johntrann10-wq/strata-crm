@@ -67,9 +67,9 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
   }
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-card/95 p-4 shadow-sm">
+    <div className="max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card/95 p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             Related Records
           </p>
@@ -78,7 +78,7 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
           </p>
         </div>
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+      <div className="max-w-full flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
         {records.map((record) => {
           const { icon: Icon, colorClass } = typeConfig[record.type];
           return (

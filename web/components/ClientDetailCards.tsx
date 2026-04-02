@@ -71,7 +71,7 @@ export function VehiclesCard({ id, vehicles }: VehiclesCardProps) {
   const addVehicleHref = `/clients/${id}/vehicles/new?next=client&from=${encodeURIComponent(currentPath)}`;
 
   return (
-    <Card className="border-border/70 shadow-sm">
+    <Card className="max-w-full overflow-hidden border-border/70 shadow-sm">
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -93,11 +93,11 @@ export function VehiclesCard({ id, vehicles }: VehiclesCardProps) {
               <Link
                 key={vehicle.id}
                 to={`/clients/${id}/vehicles/${vehicle.id}?from=${encodeURIComponent(currentPath)}`}
-                className="block rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/40 hover:border-primary/30"
+                className="block max-w-full overflow-hidden rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/40 hover:border-primary/30"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-col gap-1">
-                    <p className="text-sm font-semibold">
+                    <p className="truncate text-sm font-semibold">
                       {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Unknown Vehicle"}
                     </p>
                     <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
@@ -316,7 +316,7 @@ export function AppointmentHistoryCard({ id, appointments, totalSpend }: Appoint
   const newAppointmentHref = `/appointments/new?clientId=${id}&from=${encodeURIComponent(currentPath)}`;
 
   return (
-    <Card className="border-border/70 shadow-sm">
+    <Card className="max-w-full overflow-hidden border-border/70 shadow-sm">
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-1">

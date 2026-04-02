@@ -543,18 +543,18 @@ export default function ClientDetailPage() {
           </AlertDialogContent>
         </AlertDialog>
 
-        <section className="overflow-hidden rounded-[30px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.12),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
+        <section className="max-w-full overflow-hidden rounded-[30px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.12),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_360px]">
-            <div className="space-y-5">
+            <div className="min-w-0 space-y-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-start gap-4">
                   <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] bg-slate-950 text-lg font-semibold tracking-[0.14em] text-white shadow-[0_14px_30px_rgba(15,23,42,0.18)]">
                     {clientInitials}
                   </div>
-                  <div className="space-y-2">
+                  <div className="min-w-0 space-y-2">
                     <div>
                       <h2 className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">{clientDisplayName}</h2>
-                      <p className="mt-1 text-sm text-slate-600">
+                      <p className="mt-1 break-words text-sm text-slate-600">
                         {clientSinceLabel ? `Client since ${clientSinceLabel}` : "Client record"}
                         {client.email ? ` · ${client.email}` : ""}
                         {client.phone ? ` · ${client.phone}` : ""}
@@ -563,11 +563,11 @@ export default function ClientDetailPage() {
                   </div>
                 </div>
                 <div className="grid gap-2 sm:min-w-[220px]">
-                  <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
+                  <div className="min-w-0 rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Primary vehicle</p>
-                    <p className="mt-1 text-sm font-medium text-slate-900">{primaryVehicleLabel}</p>
+                    <p className="mt-1 break-words text-sm font-medium text-slate-900">{primaryVehicleLabel}</p>
                   </div>
-                  <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
+                  <div className="min-w-0 rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Next action</p>
                     <p className="mt-1 text-sm font-medium text-slate-900">{nextStepLabel}</p>
                   </div>
@@ -601,7 +601,7 @@ export default function ClientDetailPage() {
               </div>
             </div>
 
-            <div className="rounded-[26px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.24)]">
+            <div className="min-w-0 max-w-full overflow-hidden rounded-[26px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.24)]">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Actions</p>
               <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Client workflow</h3>
               <div className="mt-5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
@@ -614,16 +614,16 @@ export default function ClientDetailPage() {
           </div>
         </section>
 
-        <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
+        <div className="grid max-w-full gap-3 grid-cols-2 xl:grid-cols-4">
           <WorkflowMetricCard icon={ClipboardList} label="Active jobs" value={String(activeJobsCount)} detail={activeJobsCount > 0 ? "In progress" : "Clear"} />
           <WorkflowMetricCard icon={Receipt} label="Open quotes" value={`$${openQuoteValue.toFixed(2)}`} detail={`${quoteList.filter((quote) => ["draft", "sent"].includes(String((quote as any).status ?? ""))).length} open`} />
           <WorkflowMetricCard icon={FileText} label="Unpaid invoices" value={formatCurrency(unpaidInvoiceValue)} detail={`${invoiceList.filter((invoice) => ["sent", "partial"].includes(String((invoice as any).status ?? ""))).length} open`} />
           <WorkflowMetricCard icon={Car} label="Vehicles" value={String(vehicleList.length)} detail={vehicleList.length > 0 ? "On file" : "None"} />
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-          <div className="space-y-6">
-            <Card className="border-white/65">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
+          <div className="min-w-0 space-y-6">
+            <Card className="max-w-full overflow-hidden border-white/65">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -721,7 +721,7 @@ export default function ClientDetailPage() {
             <RelatedRecordsPanel records={relatedRecords} loading={false} />
           </div>
 
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             <RelationshipSnapshotCard
               nextAppointment={nextAppointment}
               lastAppointment={lastCompletedAppointment}
@@ -746,7 +746,7 @@ export default function ClientDetailPage() {
 
             <TimelineCard title="Client timeline" items={clientTimeline} empty="No client history recorded yet." />
 
-            <Card className="border-white/65">
+            <Card className="max-w-full overflow-hidden border-white/65">
               <CardHeader className="pb-4">
                 <CardTitle>Active workflow</CardTitle>
               </CardHeader>
@@ -796,7 +796,7 @@ function RelationshipSnapshotCard({
   openQuoteValue: number;
 }) {
   return (
-    <Card className="border-white/65">
+    <Card className="max-w-full overflow-hidden border-white/65">
       <CardHeader className="pb-4">
         <CardTitle>Account snapshot</CardTitle>
       </CardHeader>
@@ -849,7 +849,7 @@ function TimelineCard({
   };
 
   return (
-    <Card className="border-white/65">
+    <Card className="max-w-full overflow-hidden border-white/65">
       <CardHeader className="pb-4">
         <CardTitle>{title}</CardTitle>
       </CardHeader>
@@ -861,7 +861,7 @@ function TimelineCard({
             <Link
               key={item.id}
               to={item.href}
-              className="flex items-start gap-3 rounded-[1rem] border border-white/65 bg-white/76 px-3 py-3 transition-colors hover:bg-white/90"
+              className="flex max-w-full items-start gap-3 overflow-hidden rounded-[1rem] border border-white/65 bg-white/76 px-3 py-3 transition-colors hover:bg-white/90"
             >
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
                 <Clock3 className="h-4 w-4" />
@@ -870,7 +870,7 @@ function TimelineCard({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-foreground">{item.label}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
+                    <p className="mt-1 break-words text-sm text-muted-foreground">{item.detail}</p>
                   </div>
                   <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${toneClass[item.tone]}`}>
                     {item.tone}
@@ -891,9 +891,9 @@ function TimelineCard({
 
 function SummaryField({ label, value }: { label: string; value?: string | null }) {
   return (
-    <div className="rounded-[1rem] border border-white/65 bg-white/76 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+    <div className="max-w-full overflow-hidden rounded-[1rem] border border-white/65 bg-white/76 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm font-medium text-foreground">{value || "Not provided"}</p>
+      <p className="mt-1 break-words text-sm font-medium text-foreground">{value || "Not provided"}</p>
     </div>
   );
 }

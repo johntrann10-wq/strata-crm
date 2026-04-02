@@ -1635,10 +1635,11 @@ function DashboardSection({
           {isCompactMobile ? (
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground"
+              className="inline-flex min-h-[36px] items-center gap-2 rounded-full border border-border/70 bg-background px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm transition-colors hover:bg-muted/60"
               aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
               onClick={() => setCollapsed((current) => !current)}
             >
+              <span>{collapsed ? "Show" : "Hide"}</span>
               <ChevronDown className={cn("h-4 w-4 transition-transform", collapsed ? "-rotate-90" : "rotate-0")} />
             </button>
           ) : null}
@@ -1654,9 +1655,10 @@ function DashboardSection({
         <button
           type="button"
           onClick={() => setCollapsed(false)}
-          className="w-full rounded-2xl border border-dashed border-border/80 bg-muted/10 px-4 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/20"
+          className="w-full rounded-2xl border border-dashed border-border/80 bg-muted/10 px-4 py-3 text-left transition-colors hover:bg-muted/20"
         >
-          Tap to view this section.
+          <span className="block text-sm font-medium text-foreground">{title}</span>
+          <span className="mt-1 block text-sm text-muted-foreground">Tap to open this section.</span>
         </button>
         
       ) : null}

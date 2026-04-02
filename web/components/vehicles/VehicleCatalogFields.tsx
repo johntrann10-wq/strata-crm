@@ -43,6 +43,20 @@ export function VehicleCatalogFields({ value, setValue, compact = false }: Props
   const [loadingTrims, setLoadingTrims] = useState(false);
   const [lookingUpVin, setLookingUpVin] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [useNativeMobileSelects, setUseNativeMobileSelects] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(max-width: 640px)");
+    const sync = () => setUseNativeMobileSelects(media.matches);
+    sync();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", sync);
+      return () => media.removeEventListener("change", sync);
+    }
+    media.addListener(sync);
+    return () => media.removeListener(sync);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -176,6 +190,9 @@ export function VehicleCatalogFields({ value, setValue, compact = false }: Props
 
   const yearChoices = years.length > 0 ? years : [];
 
+  const mobileSelectClassName =
+    "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -269,115 +286,227 @@ export function VehicleCatalogFields({ value, setValue, compact = false }: Props
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
           <div className="space-y-2">
             <Label>Year</Label>
-            <Select value={value.year} onValueChange={(selectedYear) => updateValue({ year: selectedYear, make: "", makeId: "", model: "", modelId: "", trim: "", bodyStyle: "", engine: "", source: "nhtsa_vpic", sourceVehicleId: "" })}>
-              <SelectTrigger>
-                <SelectValue placeholder={loadingYears ? "Loading years..." : "Select year"} />
-              </SelectTrigger>
-              <SelectContent>
+            {useNativeMobileSelects ? (
+              <select
+                className={mobileSelectClassName}
+                value={value.year}
+                onChange={(event) =>
+                  updateValue({
+                    year: event.target.value,
+                    make: "",
+                    makeId: "",
+                    model: "",
+                    modelId: "",
+                    trim: "",
+                    bodyStyle: "",
+                    engine: "",
+                    source: "nhtsa_vpic",
+                    sourceVehicleId: "",
+                  })
+                }
+                disabled={loadingYears}
+              >
+                <option value="">{loadingYears ? "Loading years..." : "Select year"}</option>
                 {yearChoices.map((entry) => (
-                  <SelectItem key={entry.id} value={String(entry.year)}>
+                  <option key={entry.id} value={String(entry.year)}>
                     {entry.label}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+              </select>
+            ) : (
+              <Select value={value.year} onValueChange={(selectedYear) => updateValue({ year: selectedYear, make: "", makeId: "", model: "", modelId: "", trim: "", bodyStyle: "", engine: "", source: "nhtsa_vpic", sourceVehicleId: "" })}>
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingYears ? "Loading years..." : "Select year"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {yearChoices.map((entry) => (
+                    <SelectItem key={entry.id} value={String(entry.year)}>
+                      {entry.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label>
               Make <span className="text-destructive">*</span>
             </Label>
-            <Select
-              value={value.makeId}
-              onValueChange={(nextMakeId) => {
-                const selected = makes.find((entry) => entry.id === nextMakeId);
-                updateValue({
-                  makeId: nextMakeId,
-                  make: selected?.value ?? "",
-                  model: "",
-                  modelId: "",
-                  trim: "",
-                  bodyStyle: "",
-                  engine: "",
-                  source: selected?.source ?? "nhtsa_vpic",
-                  sourceVehicleId: selected?.sourceVehicleId ?? "",
-                });
-              }}
-              disabled={!value.year || loadingMakes}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={loadingMakes ? "Loading makes..." : "Select make"} />
-              </SelectTrigger>
-              <SelectContent>
+            {useNativeMobileSelects ? (
+              <select
+                className={mobileSelectClassName}
+                value={value.makeId}
+                onChange={(event) => {
+                  const nextMakeId = event.target.value;
+                  const selected = makes.find((entry) => entry.id === nextMakeId);
+                  updateValue({
+                    makeId: nextMakeId,
+                    make: selected?.value ?? "",
+                    model: "",
+                    modelId: "",
+                    trim: "",
+                    bodyStyle: "",
+                    engine: "",
+                    source: selected?.source ?? "nhtsa_vpic",
+                    sourceVehicleId: selected?.sourceVehicleId ?? "",
+                  });
+                }}
+                disabled={!value.year || loadingMakes}
+              >
+                <option value="">{loadingMakes ? "Loading makes..." : "Select make"}</option>
                 {makes.map((entry) => (
-                  <SelectItem key={entry.id} value={entry.id}>
+                  <option key={entry.id} value={entry.id}>
                     {entry.label}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+              </select>
+            ) : (
+              <Select
+                value={value.makeId}
+                onValueChange={(nextMakeId) => {
+                  const selected = makes.find((entry) => entry.id === nextMakeId);
+                  updateValue({
+                    makeId: nextMakeId,
+                    make: selected?.value ?? "",
+                    model: "",
+                    modelId: "",
+                    trim: "",
+                    bodyStyle: "",
+                    engine: "",
+                    source: selected?.source ?? "nhtsa_vpic",
+                    sourceVehicleId: selected?.sourceVehicleId ?? "",
+                  });
+                }}
+                disabled={!value.year || loadingMakes}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingMakes ? "Loading makes..." : "Select make"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {makes.map((entry) => (
+                    <SelectItem key={entry.id} value={entry.id}>
+                      {entry.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label>
               Model <span className="text-destructive">*</span>
             </Label>
-            <Select
-              value={value.modelId}
-              onValueChange={(nextModelId) => {
-                const selected = models.find((entry) => entry.id === nextModelId);
-                updateValue({
-                  modelId: nextModelId,
-                  model: selected?.value ?? "",
-                  trim: "",
-                  bodyStyle: "",
-                  engine: "",
-                  source: selected?.source ?? "nhtsa_vpic",
-                  sourceVehicleId: selected?.sourceVehicleId ?? "",
-                });
-              }}
-              disabled={!value.makeId || loadingModels}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={loadingModels ? "Loading models..." : "Select model"} />
-              </SelectTrigger>
-              <SelectContent>
-                {models.map((entry) => (
-                  <SelectItem key={entry.id} value={entry.id}>
-                    {entry.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Trim</Label>
-            {trims.length > 0 ? (
-              <Select
-                value={value.trim}
-                onValueChange={(nextTrim) => {
-                  const selected = trims.find((entry) => entry.value === nextTrim);
+            {useNativeMobileSelects ? (
+              <select
+                className={mobileSelectClassName}
+                value={value.modelId}
+                onChange={(event) => {
+                  const nextModelId = event.target.value;
+                  const selected = models.find((entry) => entry.id === nextModelId);
                   updateValue({
-                    trim: nextTrim,
-                    bodyStyle: selected?.bodyStyle ?? value.bodyStyle,
-                    engine: selected?.engine ?? value.engine,
-                    sourceVehicleId: selected?.sourceVehicleId ?? value.sourceVehicleId,
+                    modelId: nextModelId,
+                    model: selected?.value ?? "",
+                    trim: "",
+                    bodyStyle: "",
+                    engine: "",
+                    source: selected?.source ?? "nhtsa_vpic",
+                    sourceVehicleId: selected?.sourceVehicleId ?? "",
                   });
                 }}
-                disabled={loadingTrims}
+                disabled={!value.makeId || loadingModels}
+              >
+                <option value="">{loadingModels ? "Loading models..." : "Select model"}</option>
+                {models.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <Select
+                value={value.modelId}
+                onValueChange={(nextModelId) => {
+                  const selected = models.find((entry) => entry.id === nextModelId);
+                  updateValue({
+                    modelId: nextModelId,
+                    model: selected?.value ?? "",
+                    trim: "",
+                    bodyStyle: "",
+                    engine: "",
+                    source: selected?.source ?? "nhtsa_vpic",
+                    sourceVehicleId: selected?.sourceVehicleId ?? "",
+                  });
+                }}
+                disabled={!value.makeId || loadingModels}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={loadingTrims ? "Loading trims..." : "Select trim"} />
+                  <SelectValue placeholder={loadingModels ? "Loading models..." : "Select model"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {trims.map((entry) => (
-                    <SelectItem key={entry.id} value={entry.value}>
+                  {models.map((entry) => (
+                    <SelectItem key={entry.id} value={entry.id}>
                       {entry.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Trim</Label>
+            {trims.length > 0 ? (
+              useNativeMobileSelects ? (
+                <select
+                  className={mobileSelectClassName}
+                  value={value.trim}
+                  onChange={(event) => {
+                    const nextTrim = event.target.value;
+                    const selected = trims.find((entry) => entry.value === nextTrim);
+                    updateValue({
+                      trim: nextTrim,
+                      bodyStyle: selected?.bodyStyle ?? value.bodyStyle,
+                      engine: selected?.engine ?? value.engine,
+                      sourceVehicleId: selected?.sourceVehicleId ?? value.sourceVehicleId,
+                    });
+                  }}
+                  disabled={loadingTrims}
+                >
+                  <option value="">{loadingTrims ? "Loading trims..." : "Select trim"}</option>
+                  {trims.map((entry) => (
+                    <option key={entry.id} value={entry.value}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Select
+                  value={value.trim}
+                  onValueChange={(nextTrim) => {
+                    const selected = trims.find((entry) => entry.value === nextTrim);
+                    updateValue({
+                      trim: nextTrim,
+                      bodyStyle: selected?.bodyStyle ?? value.bodyStyle,
+                      engine: selected?.engine ?? value.engine,
+                      sourceVehicleId: selected?.sourceVehicleId ?? value.sourceVehicleId,
+                    });
+                  }}
+                  disabled={loadingTrims}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingTrims ? "Loading trims..." : "Select trim"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {trims.map((entry) => (
+                      <SelectItem key={entry.id} value={entry.value}>
+                        {entry.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )
             ) : (
               <Input
                 value={value.trim}
@@ -422,4 +551,3 @@ export function VehicleCatalogFields({ value, setValue, compact = false }: Props
     </div>
   );
 }
-

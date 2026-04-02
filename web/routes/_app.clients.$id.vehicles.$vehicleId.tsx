@@ -576,9 +576,9 @@ export default function VehicleDetailPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-          <div className="space-y-6">
-            <Card className="border-border/70 shadow-sm">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <div className="min-w-0 space-y-6">
+            <Card className="max-w-full overflow-hidden border-border/70 shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle>Vehicle Details</CardTitle>
               </CardHeader>
@@ -732,7 +732,7 @@ export default function VehicleDetailPage() {
             />
           </div>
 
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             <VehicleMemoryCard
               nextAppointment={nextAppointment as Record<string, unknown> | undefined}
               lastVisit={lastVisit as Record<string, unknown> | undefined}
@@ -745,7 +745,7 @@ export default function VehicleDetailPage() {
               openQuoteValue={openQuotes.reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0)}
             />
 
-            <Card className="border-border/70 shadow-sm">
+            <Card className="max-w-full overflow-hidden border-border/70 shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle>Vehicle Quick Actions</CardTitle>
               </CardHeader>
@@ -782,7 +782,7 @@ export default function VehicleDetailPage() {
               loading={appointmentsFetching || quotesFetching || invoicesFetching || jobsFetching}
             />
 
-            <Card className="border-border/70 shadow-sm">
+            <Card className="max-w-full overflow-hidden border-border/70 shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle>Vehicle workflow history</CardTitle>
               </CardHeader>
@@ -794,11 +794,11 @@ export default function VehicleDetailPage() {
                     <Link
                       key={record.id}
                       to={record.href}
-                      className="flex items-center justify-between rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/40"
+                      className="flex max-w-full items-center justify-between gap-3 overflow-hidden rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/40"
                     >
                       <div className="min-w-0">
-                        <p className="font-medium">{record.label}</p>
-                        <p className="text-sm text-muted-foreground">{record.detail}</p>
+                        <p className="truncate font-medium">{record.label}</p>
+                        <p className="break-words text-sm text-muted-foreground">{record.detail}</p>
                         <p className="mt-1 text-xs text-muted-foreground">{formatTimelineWhen(record.when)}</p>
                       </div>
                       {record.status ? (
@@ -839,9 +839,9 @@ export default function VehicleDetailPage() {
 
 function SummaryField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-background/90 px-3 py-3">
+    <div className="max-w-full overflow-hidden rounded-xl border border-border/70 bg-background/90 px-3 py-3">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
+      <p className="mt-1 break-words text-sm font-medium text-foreground">{value}</p>
     </div>
   );
 }
@@ -862,7 +862,7 @@ function VehicleMemoryCard({
   openQuoteValue: number;
 }) {
   return (
-    <Card className="border-border/70 shadow-sm">
+    <Card className="max-w-full overflow-hidden border-border/70 shadow-sm">
       <CardHeader className="pb-4">
         <CardTitle>Vehicle Service Snapshot</CardTitle>
       </CardHeader>
@@ -922,7 +922,7 @@ function VehicleMetricCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-card/95 p-4 shadow-sm">
+    <div className="max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card/95 p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{label}</p>
         <Icon className="h-4 w-4 text-muted-foreground" />
@@ -947,15 +947,15 @@ function QuickVehicleAction({
   return (
     <Link
       to={href}
-      className="block rounded-xl border border-border/70 bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/30"
+      className="block max-w-full overflow-hidden rounded-xl border border-border/70 bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/30"
     >
       <div className="flex items-start gap-3">
         <div className="rounded-lg bg-primary/10 p-2 text-primary">
           <Icon className="h-4 w-4" />
         </div>
-        <div className="space-y-1">
-          <p className="text-sm font-medium">{title}</p>
-          <p className="text-xs text-muted-foreground">{detail}</p>
+        <div className="min-w-0 space-y-1">
+          <p className="truncate text-sm font-medium">{title}</p>
+          <p className="break-words text-xs text-muted-foreground">{detail}</p>
         </div>
       </div>
     </Link>
@@ -983,11 +983,11 @@ function VehicleRevenueCard({
       : "border-amber-200 bg-amber-50/80";
 
   return (
-    <div className={`rounded-xl border p-4 ${toneClass}`}>
+    <div className={`max-w-full overflow-hidden rounded-xl border p-4 ${toneClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{title}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+          <p className="mt-1 break-words text-xs text-muted-foreground">{detail}</p>
         </div>
         <p className="text-sm font-semibold">{amount}</p>
       </div>
