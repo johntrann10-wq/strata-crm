@@ -502,7 +502,7 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
           return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2", status.accent)} />;
         })}
       </div>
-      <span className="inline-flex rounded-full bg-muted/85 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-foreground/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+      <span className="hidden sm:inline-flex rounded-full bg-muted/85 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-foreground/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
         {appointments.length} appt{appointments.length === 1 ? "" : "s"}
       </span>
     </div>
@@ -738,7 +738,7 @@ export function MonthView({
                       </span>
                       <div className="flex min-w-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
                         {dayAppts.length > 0 ? (
-                          <span className="max-w-full truncate rounded-full bg-muted/85 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-foreground/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+                          <span className="hidden sm:inline-flex max-w-full truncate rounded-full bg-muted/85 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-foreground/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
                             {currencyFormatter.format(dayRevenue)}
                           </span>
                         ) : null}
