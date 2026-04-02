@@ -426,7 +426,7 @@ export default function CalendarPage() {
           <aside
             className={cn(
               "space-y-4 xl:sticky xl:top-24 xl:self-start",
-              isMobileLayout && "min-w-0 max-w-full overflow-hidden space-y-3"
+              isMobileLayout && "flex min-w-0 max-w-full flex-col overflow-hidden space-y-3"
             )}
           >
             {view === "month" ? (
