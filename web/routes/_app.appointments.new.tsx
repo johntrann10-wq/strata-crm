@@ -100,6 +100,7 @@ export default function NewAppointmentPage() {
   const quoteIdParam = searchParams.get("quoteId");
   const clientIdParam = searchParams.get("clientId");
   const vehicleIdParam = searchParams.get("vehicleId");
+  const locationIdParam = searchParams.get("locationId");
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/appointments";
   const hasQueueReturn = searchParams.has("from");
 
@@ -139,7 +140,7 @@ export default function NewAppointmentPage() {
   });
   const [quickVehicleError, setQuickVehicleError] = useState('');
   const [savingVehicle, setSavingVehicle] = useState(false);
-  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(currentLocationId);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(() => locationIdParam ?? currentLocationId);
   const [showQuotePrefilledBadge, setShowQuotePrefilledBadge] = useState(false);
   const hasPrefilledFromQuote = useRef(false);
   const [clientSearchQuery, setClientSearchQuery] = useState<string>("");
@@ -178,8 +179,12 @@ export default function NewAppointmentPage() {
   }, [creationPreset.defaultMobile]);
 
   useEffect(() => {
+    if (locationIdParam) {
+      setSelectedLocationId(locationIdParam);
+      return;
+    }
     setSelectedLocationId(currentLocationId);
-  }, [currentLocationId]);
+  }, [currentLocationId, locationIdParam]);
 
   // Debounce client search query
   useEffect(() => {
@@ -775,9 +780,9 @@ export default function NewAppointmentPage() {
               </Button>
               <div className="min-w-0">
                 <h1 className="mt-2 text-2xl font-bold tracking-tight sm:mt-3 sm:text-[2rem]">New Appointment</h1>
-                {currentLocationId && locationsData?.some((location) => location.id === currentLocationId) ? (
+                {selectedLocationId && locationsData?.some((location) => location.id === selectedLocationId) ? (
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Defaulting to {locationsData.find((location) => location.id === currentLocationId)?.name ?? "current location"}
+                    Defaulting to {locationsData.find((location) => location.id === selectedLocationId)?.name ?? "current location"}
                   </p>
                 ) : null}
               </div>
