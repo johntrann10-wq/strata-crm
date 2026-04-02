@@ -490,17 +490,21 @@ export function AppointmentBlock({
 function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   if (appointments.length === 0) return null;
 
+  const orderedAppointments = [...appointments].sort(
+    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+  );
+
   return (
-    <div className="pointer-events-none min-w-0">
-      <div className="flex flex-wrap items-center gap-1">
-        {appointments.map((apt) => {
+    <div className="pointer-events-none min-w-0 space-y-1">
+      <div className="grid grid-cols-6 gap-1 sm:grid-cols-8">
+        {orderedAppointments.map((apt) => {
           const status = getStatusStyle(apt.status);
           return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2", status.accent)} />;
         })}
-        <span className="ml-1 text-[10px] font-medium text-muted-foreground">
-          {appointments.length} appt{appointments.length === 1 ? "" : "s"}
-        </span>
       </div>
+      <span className="block text-[10px] font-medium text-muted-foreground">
+        {appointments.length} appt{appointments.length === 1 ? "" : "s"}
+      </span>
     </div>
   );
 }
