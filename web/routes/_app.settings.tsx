@@ -301,6 +301,7 @@ export default function SettingsPage() {
   const { user, businessId, membershipRole, permissions } = useOutletContext<AuthOutletContext>();
   const [activeTab, setActiveTab] = useState("profile");
   const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
+  const [appointmentBufferInput, setAppointmentBufferInput] = useState(String(DEFAULT_FORM.appointmentBufferMinutes));
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -384,6 +385,7 @@ export default function SettingsPage() {
       appointmentBufferMinutes: business.appointmentBufferMinutes ?? 15,
       timezone: business.timezone ?? "America/New_York",
     });
+    setAppointmentBufferInput(String(business.appointmentBufferMinutes ?? 15));
   }, [business]);
 
   useEffect(() => {
@@ -445,6 +447,14 @@ export default function SettingsPage() {
 
   const handleFieldChange = (field: keyof FormData, value: string | number) => {
     setFormData((current) => ({ ...current, [field]: value }));
+  };
+
+  const normalizeAppointmentBufferInput = (value: string) => {
+    const trimmed = value.trim();
+    const parsed = Number.parseInt(trimmed, 10);
+    const nextValue = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    setAppointmentBufferInput(String(nextValue));
+    handleFieldChange("appointmentBufferMinutes", nextValue);
   };
 
   const openCreateLocation = () => {
@@ -871,10 +881,16 @@ export default function SettingsPage() {
                         min={0}
                         step={5}
                         className="rounded-r-none"
-                        value={formData.appointmentBufferMinutes}
-                        onChange={(e) =>
-                          handleFieldChange("appointmentBufferMinutes", parseInt(e.target.value, 10) || 0)
-                        }
+                        value={appointmentBufferInput}
+                        onChange={(e) => {
+                          setAppointmentBufferInput(e.target.value);
+                          if (e.target.value.trim() === "") return;
+                          const parsed = Number.parseInt(e.target.value, 10);
+                          if (Number.isFinite(parsed) && parsed >= 0) {
+                            handleFieldChange("appointmentBufferMinutes", parsed);
+                          }
+                        }}
+                        onBlur={(e) => normalizeAppointmentBufferInput(e.target.value)}
                       />
                       <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
                         min
