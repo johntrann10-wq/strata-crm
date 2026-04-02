@@ -126,6 +126,7 @@ export default function QuoteDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDeclineDialog, setShowDeclineDialog] = useState(false);
   const [showDeleteQliDialog, setShowDeleteQliDialog] = useState(false);
+  const [showMobileActions, setShowMobileActions] = useState(false);
   const [pendingDeleteQliId, setPendingDeleteQliId] = useState<string | null>(null);
   const [editingQliId, setEditingQliId] = useState<string | null>(null);
   const [editQliValues, setEditQliValues] = useState<{ description: string; qty: number; unitPrice: number }>({ description: "", qty: 1, unitPrice: 0 });
@@ -506,32 +507,53 @@ export default function QuoteDetailPage() {
                   Mark as sent
                 </Button>
               ) : null}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" aria-label="More quote actions">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
-                  {quote.status === "sent" ? (
-                    <DropdownMenuItem onClick={() => setShowDeclineDialog(true)}>
-                      <X className="mr-2 h-4 w-4" />
-                      Mark declined
-                    </DropdownMenuItem>
-                  ) : null}
-                  <DropdownMenuItem
-                    className="text-red-700 focus:text-red-700"
-                    onClick={() => setShowDeleteDialog(true)}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete quote
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button variant="outline" size="icon" aria-label="More quote actions" onClick={() => setShowMobileActions(true)}>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         }
       />
+
+      <Dialog open={showMobileActions} onOpenChange={setShowMobileActions}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Quote actions</DialogTitle>
+            <DialogDescription>Handle follow-up actions without leaving this quote.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 py-2">
+            {quote.status === "sent" ? (
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => {
+                  setShowMobileActions(false);
+                  setShowDeclineDialog(true);
+                }}
+              >
+                <X className="mr-2 h-4 w-4" />
+                Mark declined
+              </Button>
+            ) : null}
+            <Button
+              variant="destructive"
+              className="justify-start"
+              onClick={() => {
+                setShowMobileActions(false);
+                setShowDeleteDialog(true);
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete quote
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMobileActions(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid gap-3 md:grid-cols-4">
         <Card className="border-border/70">

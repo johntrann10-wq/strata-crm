@@ -233,6 +233,7 @@ export default function InvoiceDetailPage() {
   const [addLineItemOpen, setAddLineItemOpen] = useState(false);
   const [paymentToReverse, setPaymentToReverse] = useState<string | null>(null);
   const [showVoidDialog, setShowVoidDialog] = useState(false);
+  const [showMobileActions, setShowMobileActions] = useState(false);
 
   // Payment form state
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -705,46 +706,71 @@ export default function InvoiceDetailPage() {
                 </Button>
               ) : null}
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" aria-label="More invoice actions">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
-                  {status !== "void" ? (
-                    <DropdownMenuItem
-                      onClick={() =>
-                        void openPrintableInvoice(invoice.id, (invoice.business as { id?: string } | undefined)?.id).catch((error) => {
-                          toast.error(error instanceof Error ? error.message : "Could not print invoice");
-                        })
-                      }
-                    >
-                      <Printer className="mr-2 h-4 w-4" />
-                      Print invoice
-                    </DropdownMenuItem>
-                  ) : null}
-                  {(status === "draft" || status === "sent" || status === "partial") && !invoiceAllowsPayment(status) ? (
-                    <DropdownMenuItem onClick={() => void handleMarkAsSent()} disabled={sendingToClient}>
-                      <Send className="mr-2 h-4 w-4" />
-                      Mark as sent
-                    </DropdownMenuItem>
-                  ) : null}
-                  {status !== "void" && status !== "paid" ? (
-                    <DropdownMenuItem
-                      className="text-red-700 focus:text-red-700"
-                      onClick={() => setShowVoidDialog(true)}
-                    >
-                      <Ban className="mr-2 h-4 w-4" />
-                      Void invoice
-                    </DropdownMenuItem>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button variant="outline" size="icon" aria-label="More invoice actions" onClick={() => setShowMobileActions(true)}>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         }
       />
+
+      <Dialog open={showMobileActions} onOpenChange={setShowMobileActions}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Invoice actions</DialogTitle>
+            <DialogDescription>Take the next billing action without losing your place.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 py-2">
+            {status !== "void" ? (
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => {
+                  setShowMobileActions(false);
+                  void openPrintableInvoice(invoice.id, (invoice.business as { id?: string } | undefined)?.id).catch((error) => {
+                    toast.error(error instanceof Error ? error.message : "Could not print invoice");
+                  });
+                }}
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Print invoice
+              </Button>
+            ) : null}
+            {(status === "draft" || status === "sent" || status === "partial") && !invoiceAllowsPayment(status) ? (
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => {
+                  setShowMobileActions(false);
+                  void handleMarkAsSent();
+                }}
+                disabled={sendingToClient}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Mark as sent
+              </Button>
+            ) : null}
+            {status !== "void" && status !== "paid" ? (
+              <Button
+                variant="destructive"
+                className="justify-start"
+                onClick={() => {
+                  setShowMobileActions(false);
+                  setShowVoidDialog(true);
+                }}
+              >
+                <Ban className="mr-2 h-4 w-4" />
+                Void invoice
+              </Button>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMobileActions(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={showVoidDialog} onOpenChange={setShowVoidDialog}>
         <AlertDialogContent>
