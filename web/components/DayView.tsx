@@ -134,7 +134,7 @@ export function DayView({
                       style.surface,
                       style.text,
                       style.border,
-                      conflictIds?.has(apt.id) && "ring-1 ring-rose-300"
+                      conflictIds?.has(appointment.id) && "ring-1 ring-rose-300"
                     )}
                     onClick={(event) => {
                       event.stopPropagation();
