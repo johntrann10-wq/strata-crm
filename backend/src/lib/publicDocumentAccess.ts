@@ -1,4 +1,4 @@
-import jwt from "jsonwebtoken";
+import { createScopedPublicDocumentToken, verifyScopedPublicDocumentToken } from "./jwt.js";
 
 type PublicDocumentKind = "quote" | "invoice";
 
@@ -8,29 +8,20 @@ type PublicDocumentTokenPayload = {
   businessId: string;
 };
 
-function requireJwtSecret() {
-  const secret = process.env.JWT_SECRET?.trim();
-  if (!secret) throw new Error("JWT_SECRET is required");
-  return secret;
-}
-
 export function createPublicDocumentToken(payload: PublicDocumentTokenPayload): string {
-  return jwt.sign(payload, requireJwtSecret(), { expiresIn: "30d" });
+  return createScopedPublicDocumentToken(payload);
 }
 
 export function verifyPublicDocumentToken(
   token: string,
   expected: { kind: PublicDocumentKind; entityId: string }
 ): PublicDocumentTokenPayload | null {
-  try {
-    const payload = jwt.verify(token, requireJwtSecret()) as PublicDocumentTokenPayload;
-    if (payload.kind !== expected.kind) return null;
-    if (payload.entityId !== expected.entityId) return null;
-    if (!payload.businessId) return null;
-    return payload;
-  } catch {
-    return null;
-  }
+  const payload = verifyScopedPublicDocumentToken<PublicDocumentTokenPayload>(token);
+  if (!payload) return null;
+  if (payload.kind !== expected.kind) return null;
+  if (payload.entityId !== expected.entityId) return null;
+  if (!payload.businessId) return null;
+  return payload;
 }
 
 function normalizeUrl(value: string | undefined | null): string | null {

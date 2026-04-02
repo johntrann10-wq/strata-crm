@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
 import { UnauthorizedError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { resolveTenantContext } from "../lib/tenantContext.js";
 import type { MembershipRole } from "../lib/permissions.js";
+import { verifyAccessToken } from "../lib/jwt.js";
 export interface SessionUser {
   id: string;
   email?: string;
@@ -20,11 +20,6 @@ declare global {
     }
   }
 }
-function requireJwtSecret() {
-  const secret = process.env.JWT_SECRET;
-  if (secret && secret.trim() !== "") return secret;
-  throw new Error("JWT_SECRET is required");
-}
 function getUserIdFromRequest(req: Request): string | null {
   // Protected API auth is JWT-only. Invalid or missing bearer tokens
   // should fail closed instead of falling back to a different session source.
@@ -33,12 +28,8 @@ function getUserIdFromRequest(req: Request): string | null {
   if (!authHeader.startsWith(bearerPrefix)) return null;
   const rawToken = authHeader.slice(bearerPrefix.length).trim();
   if (!rawToken) return null;
-  try {
-    const payload = jwt.verify(rawToken, requireJwtSecret()) as { userId?: string };
-    return payload.userId ?? null;
-  } catch {
-    return null;
-  }
+  const payload = verifyAccessToken(rawToken);
+  return payload?.userId ?? null;
 }
 export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const userId = getUserIdFromRequest(req);

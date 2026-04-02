@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import request from "supertest";
+import jwt from "jsonwebtoken";
 import { app } from "../app.js";
 
 describe("Reliability integration", () => {
@@ -26,5 +27,14 @@ describe("Reliability integration", () => {
       const res = await request(app).get(path).set("Authorization", "Bearer invalid-token");
       expect(res.status, `GET ${path}`).toBe(401);
     }
+  });
+
+  it("rejects bearer tokens that do not match the expected issuer and audience", async () => {
+    const forgedToken = jwt.sign({ userId: "user-123" }, process.env.JWT_SECRET ?? "dev-jwt-secret-not-for-production", {
+      expiresIn: "7d",
+    });
+
+    const res = await request(app).get("/api/clients").set("Authorization", `Bearer ${forgedToken}`);
+    expect(res.status).toBe(401);
   });
 });

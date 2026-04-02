@@ -1,6 +1,5 @@
 import "dotenv/config";
 import express from "express";
-import cookieParser from "cookie-parser";
 import { requestId, requestLogging } from "./middleware/logging.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { noStore, securityHeaders } from "./middleware/security.js";
@@ -51,7 +50,6 @@ app.post(
 );
 
 app.use(express.json({ limit: "1mb" }));
-app.use(cookieParser());
 app.use(requestId);
 app.use(requestLogging);
 

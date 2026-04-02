@@ -1,7 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { db } from "../db/index.js";
 import { businessMemberships, businesses, users } from "../db/schema.js";
 import { and, eq, inArray } from "drizzle-orm";
@@ -12,12 +11,21 @@ import { wrapAsync } from "../lib/asyncHandler.js";
 import { randomUUID } from "crypto";
 import { getDefaultPermissionsForRole } from "../lib/permissions.js";
 import { createInMemoryRateLimiter } from "../middleware/security.js";
-const signInSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
+import { createAccessToken, verifyAccessToken } from "../lib/jwt.js";
+
+const MAX_EMAIL_LENGTH = 320;
+const MAX_PASSWORD_LENGTH = 72;
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("strata-dummy-password", 10);
+
+const signInSchema = z.object({
+  email: z.string().email().max(MAX_EMAIL_LENGTH),
+  password: z.string().min(1).max(MAX_PASSWORD_LENGTH),
+});
 const signUpSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
+  email: z.string().email().max(MAX_EMAIL_LENGTH),
+  password: z.string().min(8).max(MAX_PASSWORD_LENGTH),
+  firstName: z.string().trim().max(80).optional(),
+  lastName: z.string().trim().max(80).optional(),
 });
 export const authRouter = Router();
 
@@ -39,6 +47,18 @@ const signUpLimiter = createInMemoryRateLimiter({
     const email = typeof (body as { email?: unknown })?.email === "string" ? normalizeEmail((body as { email: string }).email) : "";
     return `auth:sign-up:${ip}:${email}`;
   },
+});
+
+const googleOAuthStartLimiter = createInMemoryRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  message: "Too many Google sign-in attempts. Please try again shortly.",
+});
+
+const googleOAuthCallbackLimiter = createInMemoryRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  message: "Too many Google callback attempts. Please try again shortly.",
 });
 
 export function normalizeEmail(email: string): string {
@@ -78,27 +98,14 @@ export function resolveGoogleStateRedirect(input: unknown): string {
   }
 }
 
-function requireJwtSecret() {
-  const secret = process.env.JWT_SECRET;
-  if (secret && secret.trim() !== "") return secret;
-  throw new Error("JWT_SECRET is required");
-}
-function createToken(userId: string): string {
-  const secret = requireJwtSecret();
-  return jwt.sign({ userId }, secret, { expiresIn: "7d" });
-}
 function getUserIdFromAuthHeader(req: Request): string | null {
   const authHeader = req.headers.authorization ?? "";
   const bearerPrefix = "Bearer ";
   if (!authHeader.startsWith(bearerPrefix)) return null;
   const rawToken = authHeader.slice(bearerPrefix.length).trim();
   if (!rawToken) return null;
-  try {
-    const payload = jwt.verify(rawToken, requireJwtSecret()) as { userId?: string };
-    return payload.userId ?? null;
-  } catch {
-    return null;
-  }
+  const payload = verifyAccessToken(rawToken);
+  return payload?.userId ?? null;
 }
 
 function isTenantSchemaDriftError(error: unknown): boolean {
@@ -157,7 +164,7 @@ authRouter.get(
       res.status(401).json({ message: "Not signed in" });
       return;
     }
-    const token = createToken(user.id);
+    const token = createAccessToken(user.id);
     res.json({
       data: {
         ...serializeAuthUser(user),
@@ -284,10 +291,10 @@ authRouter.post(
     const email = normalizeEmail(parsed.data.email);
     const { password } = parsed.data;
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
     if (!user || !user.passwordHash) throw new UnauthorizedError("Invalid email or password.");
-    const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) throw new UnauthorizedError("Invalid email or password.");
-    const token = createToken(user.id);
+    const token = createAccessToken(user.id);
     logger.info("User signed in", { userId: user.id, email: user.email });
     res.json({
       data: {
@@ -371,7 +378,7 @@ authRouter.post(
     }
 
     if (!user) throw new BadRequestError("Failed to create account.");
-    const token = createToken(user.id);
+    const token = createAccessToken(user.id);
     res.status(201).json({
       data: {
         ...serializeAuthUser(user),
@@ -389,6 +396,7 @@ authRouter.post("/sign-out", (_req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 authRouter.get(
   "/google/start",
+  googleOAuthStartLimiter.middleware,
   wrapAsync(async (req: Request, res: Response) => {
     if (!googleClient) {
       throw new BadRequestError("Google sign-in is not configured.");
@@ -404,6 +412,7 @@ authRouter.get(
 );
 authRouter.get(
   "/google/callback",
+  googleOAuthCallbackLimiter.middleware,
   wrapAsync(async (req: Request, res: Response) => {
     if (!googleClient) {
       throw new BadRequestError("Google sign-in is not configured.");
@@ -447,7 +456,7 @@ authRouter.get(
     } else {
       logger.info("User signed in via Google", { userId: user.id, email: user.email });
     }
-    const token = createToken(user.id);
+    const token = createAccessToken(user.id);
     const redirectPath = resolveGoogleStateRedirect(req.query.state);
     const frontendUrl = process.env.FRONTEND_URL ?? "";
     const baseRedirect = frontendUrl ? `${frontendUrl}${redirectPath}` : redirectPath;

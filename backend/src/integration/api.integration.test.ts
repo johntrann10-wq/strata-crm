@@ -13,6 +13,9 @@ describe("API integration", () => {
     expect(res.body).toEqual({ ok: true });
     expect(res.headers["x-content-type-options"]).toBe("nosniff");
     expect(res.headers["x-frame-options"]).toBe("DENY");
+    expect(res.headers["cross-origin-opener-policy"]).toBe("same-origin");
+    expect(res.headers["cross-origin-resource-policy"]).toBe("same-origin");
+    expect(res.headers["origin-agent-cluster"]).toBe("?1");
   });
 
   it("GET /api/appointments without auth returns 401", async () => {
