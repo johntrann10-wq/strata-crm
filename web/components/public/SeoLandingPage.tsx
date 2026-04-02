@@ -23,17 +23,36 @@ export function buildSeoMeta(page: SeoPageConfig) {
     { property: "og:url", content: url },
     { property: "og:type", content: "article" },
     { property: "og:image", content: socialImageUrl },
+    { property: "og:image:secure_url", content: socialImageUrl },
     { property: "og:image:alt", content: "Strata CRM marketing preview for automotive service business software." },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
     { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:url", content: url },
     { name: "twitter:title", content: page.seoTitle },
     { name: "twitter:description", content: page.seoDescription },
     { name: "twitter:image", content: socialImageUrl },
+    { name: "twitter:image:alt", content: "Strata CRM marketing preview for automotive service business software." },
   ];
 }
 
 export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
   const adjacentFeaturePages = featureSeoPages.filter((entry) => entry.path !== page.path);
   const adjacentComparisonPages = comparisonSeoPages.filter((entry) => entry.path !== page.path).slice(0, 3);
+  const answerFaqs = [
+    {
+      question: `What is ${page.navLabel.toLowerCase()} in Strata CRM?`,
+      answer: `${page.navLabel} in Strata CRM is software for ${page.audience.toLowerCase()} that keeps scheduling, customer records, vehicle history, quotes, invoices, and daily workflow in one system.`,
+    },
+    {
+      question: `Who is ${page.navLabel.toLowerCase()} best for?`,
+      answer: page.audience,
+    },
+    {
+      question: `What problem does ${page.navLabel.toLowerCase()} solve?`,
+      answer: page.pains[0],
+    },
+  ];
   const pageSchema = {
     "@context": "https://schema.org",
     "@graph": [
@@ -86,6 +105,17 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
             item: `https://stratacrm.app${page.path}`,
           },
         ],
+      },
+      {
+        "@type": "FAQPage",
+        mainEntity: answerFaqs.map((item) => ({
+          "@type": "Question",
+          name: item.question,
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: item.answer,
+          },
+        })),
       },
     ],
   };
@@ -177,6 +207,22 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
                 <p className="text-sm leading-6 text-gray-700">{pain}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="rounded-[28px] border border-orange-100 bg-[linear-gradient(180deg,#fff7ef_0%,#ffffff_100%)] p-6 shadow-[0_12px_50px_rgba(15,23,42,0.05)] sm:p-8">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Quick answers</p>
+            <div className="mt-5 grid gap-4 lg:grid-cols-3">
+              {answerFaqs.map((item) => (
+                <div key={item.question} className="rounded-2xl border border-orange-100 bg-white/90 px-5 py-5">
+                  <h2 className="text-lg font-semibold tracking-tight text-gray-950">{item.question}</h2>
+                  <p className="mt-3 text-sm leading-6 text-gray-600">{item.answer}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

@@ -103,6 +103,24 @@ const featureSections = [
   },
 ];
 
+const featureFaqs = [
+  {
+    question: "What features does Strata CRM include for automotive shops?",
+    answer:
+      "Strata CRM includes scheduling, calendar workflow, client and vehicle records, quotes, invoices, payment visibility, appointment confirmations, and daily shop workflow organization.",
+  },
+  {
+    question: "Who is Strata CRM built for?",
+    answer:
+      "Strata CRM is built for automotive service businesses including detailing, tint, wrap, PPF, mechanic, performance, tire, mobile service, and mixed automotive shops.",
+  },
+  {
+    question: "Why is Strata different from generic business software?",
+    answer:
+      "Strata keeps scheduling, CRM, vehicle history, quotes, invoices, and job workflow connected in one operating system instead of forcing shops to stitch together separate admin tools.",
+  },
+];
+
 const featuresSchema = {
   "@context": "https://schema.org",
   "@graph": [
@@ -161,21 +179,42 @@ const featuresSchema = {
         name: section.title,
       })),
     },
+    {
+      "@type": "FAQPage",
+      mainEntity: featureFaqs.map((item) => ({
+        "@type": "Question",
+        name: item.question,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: item.answer,
+        },
+      })),
+    },
   ],
 };
 
 export function meta() {
+  const socialImageUrl = "https://stratacrm.app/social-preview.png";
   return [
     { title: featuresTitle },
     { name: "description", content: featuresDescription },
     { name: "robots", content: "index,follow" },
+    { property: "og:site_name", content: "Strata CRM" },
     { property: "og:title", content: featuresTitle },
     { property: "og:description", content: featuresDescription },
     { property: "og:url", content: "https://stratacrm.app/features" },
     { property: "og:type", content: "website" },
+    { property: "og:image", content: socialImageUrl },
+    { property: "og:image:secure_url", content: socialImageUrl },
+    { property: "og:image:alt", content: "Strata CRM features preview for automotive service business software." },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
     { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:url", content: "https://stratacrm.app/features" },
     { name: "twitter:title", content: featuresTitle },
     { name: "twitter:description", content: featuresDescription },
+    { name: "twitter:image", content: socialImageUrl },
+    { name: "twitter:image:alt", content: "Strata CRM features preview for automotive service business software." },
   ];
 }
 
@@ -354,6 +393,25 @@ export default function FeaturesHubPage() {
                 </Link>
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="mx-auto max-w-6xl rounded-[30px] border border-orange-100 bg-[linear-gradient(180deg,#fff7ef_0%,#ffffff_100%)] p-6 shadow-[0_12px_50px_rgba(15,23,42,0.05)] sm:p-8">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Quick answers</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
+              Clear answers for buyers comparing automotive shop software.
+            </h2>
+          </div>
+          <div className="mt-6 grid gap-4 lg:grid-cols-3">
+            {featureFaqs.map((item) => (
+              <div key={item.question} className="rounded-2xl border border-orange-100 bg-white/90 px-5 py-5">
+                <h3 className="text-lg font-semibold tracking-tight text-gray-950">{item.question}</h3>
+                <p className="mt-3 text-sm leading-6 text-gray-600">{item.answer}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>

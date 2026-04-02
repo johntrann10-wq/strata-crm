@@ -143,17 +143,27 @@ const switchComparison = [
 ];
 
 export function meta() {
+  const socialImageUrl = "https://stratacrm.app/social-preview.png";
   return [
     { title: pricingTitle },
     { name: "description", content: pricingDescription },
     { name: "robots", content: "index,follow" },
+    { property: "og:site_name", content: "Strata CRM" },
     { property: "og:title", content: pricingTitle },
     { property: "og:description", content: pricingDescription },
     { property: "og:url", content: "https://stratacrm.app/pricing" },
     { property: "og:type", content: "website" },
+    { property: "og:image", content: socialImageUrl },
+    { property: "og:image:secure_url", content: socialImageUrl },
+    { property: "og:image:alt", content: "Strata CRM pricing preview for automotive service business software." },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
     { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:url", content: "https://stratacrm.app/pricing" },
     { name: "twitter:title", content: pricingTitle },
     { name: "twitter:description", content: pricingDescription },
+    { name: "twitter:image", content: socialImageUrl },
+    { name: "twitter:image:alt", content: "Strata CRM pricing preview for automotive service business software." },
   ];
 }
 

@@ -26,6 +26,49 @@ const defaultDescription =
   "Strata helps automotive service businesses run scheduling, clients, vehicles, jobs, quotes, invoices, and payments in one clear operating system.";
 const socialImageUrl = `${siteUrl}${socialPreviewHref}`;
 const googleSiteVerification = "8J8smTWAQcFyKEfHd6HqfOQ2K1G4afNezGJNNFN4RBM";
+const organizationSchema = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${siteUrl}/#organization`,
+      name: "Strata CRM",
+      url: siteUrl,
+      logo: {
+        "@type": "ImageObject",
+        url: socialImageUrl,
+      },
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${siteUrl}/#website`,
+      url: siteUrl,
+      name: "Strata CRM",
+      description: defaultDescription,
+      publisher: {
+        "@id": `${siteUrl}/#organization`,
+      },
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": `${siteUrl}/#software`,
+      name: "Strata CRM",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      description: defaultDescription,
+      url: siteUrl,
+      image: socialImageUrl,
+      offers: {
+        "@type": "Offer",
+        price: "29",
+        priceCurrency: "USD",
+      },
+      brand: {
+        "@id": `${siteUrl}/#organization`,
+      },
+    },
+  ],
+};
 
 function isIndexableMarketingPath(pathname: string) {
   if (pathname === "/") return true;
@@ -120,6 +163,7 @@ function BrowserErrorReporter() {
 export const links = () => [
   { rel: "icon", href: faviconHref, type: "image/svg+xml" },
   { rel: "shortcut icon", href: faviconHref, type: "image/svg+xml" },
+  { rel: "icon", href: appleTouchIconHref, type: "image/png", sizes: "180x180" },
   { rel: "apple-touch-icon", href: appleTouchIconHref },
 ];
 
@@ -128,6 +172,8 @@ export const meta = () => [
   { name: "viewport", content: "width=device-width, initial-scale=1" },
   { title: defaultTitle },
   { name: "description", content: defaultDescription },
+  { name: "application-name", content: "Strata CRM" },
+  { name: "theme-color", content: "#f97316" },
   { name: "google-site-verification", content: googleSiteVerification },
   { name: "apple-mobile-web-app-title", content: "Strata CRM" },
   { property: "og:site_name", content: "Strata CRM" },
@@ -136,6 +182,7 @@ export const meta = () => [
   { property: "og:title", content: defaultTitle },
   { property: "og:description", content: defaultDescription },
   { property: "og:image", content: socialImageUrl },
+  { property: "og:image:secure_url", content: socialImageUrl },
   {
     property: "og:image:alt",
     content: "Strata CRM preview showing a premium automotive shop operations dashboard.",
@@ -143,9 +190,11 @@ export const meta = () => [
   { property: "og:image:width", content: "1200" },
   { property: "og:image:height", content: "630" },
   { name: "twitter:card", content: "summary_large_image" },
+  { name: "twitter:url", content: siteUrl },
   { name: "twitter:title", content: defaultTitle },
   { name: "twitter:description", content: defaultDescription },
   { name: "twitter:image", content: socialImageUrl },
+  { name: "twitter:image:alt", content: "Strata CRM preview showing a premium automotive shop operations dashboard." },
 ];
 
 export type RootOutletContext = {
@@ -200,6 +249,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
         <Links />
         <link rel="canonical" href={canonicalUrl} />
         <meta name="robots" content={robotsContent} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }} />
         {!isProduction && <script type="module" src="/@vite/client" async />}
       </head>
       <body>
