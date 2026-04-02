@@ -265,7 +265,7 @@ const builtins: Record<string, BuiltinEmailTemplate> = {
       title: "Your quote is ready",
       introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">We prepared a quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>`,
       bodyHtml:
-        renderInfoCard("Next step", "Review the quote details and contact the shop if you would like any changes before scheduling.") +
+        renderInfoCard("Next step", "Review the quote details and contact us if you would like any changes before scheduling.") +
         renderInfoCard("Message from the shop", "{{message}}"),
       ctaLabel: "View quote",
       ctaUrl: "{{quoteUrl}}",
@@ -281,7 +281,7 @@ Hi {{clientName}},
 
 We prepared a quote for {{vehicle}} totaling {{amount}}.
 
-Next step: Review the quote details and contact the shop if you would like any changes before scheduling.
+Next step: Review the quote details and contact us if you would like any changes before scheduling.
 {{message}}
 
 View quote: {{quoteUrl}}
