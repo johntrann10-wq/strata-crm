@@ -71,7 +71,7 @@ export default function QuotesIndexPage() {
       next.delete("q");
     }
     if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true });
+      setSearchParams(next, { replace: true, preventScrollReset: true });
     }
   }, [debouncedSearch, searchParams, setSearchParams]);
 
@@ -248,7 +248,7 @@ export default function QuotesIndexPage() {
           const next = new URLSearchParams(searchParams);
           next.delete("q");
           next.set("tab", "all");
-          setSearchParams(next, { replace: true });
+          setSearchParams(next, { replace: true, preventScrollReset: true });
         }}
       />
 
@@ -257,7 +257,7 @@ export default function QuotesIndexPage() {
         onValueChange={(value) => {
           const next = new URLSearchParams(searchParams);
           next.set("tab", value);
-          setSearchParams(next);
+          setSearchParams(next, { preventScrollReset: true });
         }}
       >
         <TabsList className="flex w-full gap-2 overflow-x-auto rounded-xl bg-transparent p-0 sm:grid sm:w-auto sm:grid-cols-5 xl:w-full">

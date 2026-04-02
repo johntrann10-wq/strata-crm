@@ -149,7 +149,7 @@ export default function InvoicesIndexPage() {
       next.delete("q");
     }
     if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true });
+      setSearchParams(next, { replace: true, preventScrollReset: true });
     }
   }, [activeTab, debouncedSearch, searchParams, setSearchParams]);
 
