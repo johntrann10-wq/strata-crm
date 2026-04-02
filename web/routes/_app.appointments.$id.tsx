@@ -907,6 +907,11 @@ export default function AppointmentDetail() {
   const appointmentVehicleLabel = appointment.vehicle
     ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
     : "No vehicle attached";
+  const hasPlaceholderClient =
+    appointment.client?.firstName === "Walk-in" && appointment.client?.lastName === "Customer";
+  const hasPlaceholderVehicle =
+    appointment.vehicle?.make === "Unspecified" &&
+    appointment.vehicle?.model === "Vehicle";
   const appointmentLocationLabel = appointment.isMobile
     ? appointment.mobileAddress || "Mobile service"
     : "In-shop service";
@@ -932,7 +937,9 @@ export default function AppointmentDetail() {
         type: "vehicle",
         id: appointment.vehicle.id,
         label: `${appointment.vehicle.year ?? ""} ${appointment.vehicle.make} ${appointment.vehicle.model}`.trim(),
-        href: withReturn(`/clients/${appointment.client?.id ?? ""}`),
+        href: appointment.client?.id
+          ? withReturn(`/clients/${appointment.client.id}/vehicles/${appointment.vehicle.id}`)
+          : null,
       });
     }
     if (invoice) {
@@ -1467,6 +1474,32 @@ export default function AppointmentDetail() {
         invoicedAt={(appointment as any).invoicedAt ?? null}
         paidAt={(appointment as any).paidAt ?? null}
       />
+
+      {(hasPlaceholderClient || hasPlaceholderVehicle) && (
+        <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div className="space-y-1">
+              <p className="font-medium">This appointment is still using placeholder booking records.</p>
+              <p className="text-amber-800">
+                Attach the real client and vehicle before sending documents or relying on this record for follow-up.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 pl-6">
+            {hasPlaceholderClient ? (
+              <Button variant="outline" size="sm" asChild className="border-amber-300 bg-background/70 hover:bg-background">
+                <Link to={withReturn("/clients")}>Open clients</Link>
+              </Button>
+            ) : null}
+            {hasPlaceholderVehicle && appointment.client?.id ? (
+              <Button variant="outline" size="sm" asChild className="border-amber-300 bg-background/70 hover:bg-background">
+                <Link to={withReturn(`/clients/${appointment.client.id}`)}>Open client record</Link>
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {appointment && (
         <ContextualNextStep
