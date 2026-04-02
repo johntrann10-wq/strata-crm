@@ -488,21 +488,19 @@ export function AppointmentBlock({
 }
 
 function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
-  const previewDots = appointments.slice(0, 3);
-
   if (appointments.length === 0) return null;
 
   return (
-    <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-      <div className="flex shrink-0 items-center gap-1">
-        {previewDots.map((apt) => {
+    <div className="pointer-events-none min-w-0">
+      <div className="flex flex-wrap items-center gap-1">
+        {appointments.map((apt) => {
           const status = getStatusStyle(apt.status);
           return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2", status.accent)} />;
         })}
+        <span className="ml-1 text-[10px] font-medium text-muted-foreground">
+          {appointments.length} appt{appointments.length === 1 ? "" : "s"}
+        </span>
       </div>
-      <span className="truncate text-[10px] font-medium text-muted-foreground">
-        {appointments.length} appt{appointments.length === 1 ? "" : "s"}
-      </span>
     </div>
   );
 }
@@ -755,12 +753,10 @@ export function MonthView({
                         ) : null}
                       </div>
 
-                      <div className="mt-auto flex items-end gap-2">
-                        <div className="min-w-0 flex-1 overflow-hidden">
-                          <DayStatusDots appointments={dayAppts} />
-                        </div>
+                      <div className="mt-auto space-y-1">
+                        <DayStatusDots appointments={dayAppts} />
                         {dayAppts.length > 0 ? (
-                          <div className="ml-auto shrink-0 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                          <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                             {currencyFormatter.format(dayRevenue)}
                           </div>
                         ) : null}
