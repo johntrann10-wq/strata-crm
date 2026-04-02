@@ -497,10 +497,10 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
       <div className="flex items-center gap-1">
         {previewDots.map((apt) => {
           const status = getStatusStyle(apt.status);
-          return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full", status.accent)} />;
+          return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2", status.accent)} />;
         })}
       </div>
-      <span className="text-[9px] font-medium text-muted-foreground sm:text-[10px]">
+      <span className="text-[10px] font-medium text-muted-foreground">
         {appointments.length} appt{appointments.length === 1 ? "" : "s"}
       </span>
     </div>
@@ -735,11 +735,6 @@ export function MonthView({
                         {day.getDate()}
                       </span>
                       <div className="flex items-center gap-1 sm:gap-2">
-                        {dayAppts.length > 0 ? (
-                          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium leading-none text-muted-foreground sm:px-2 sm:text-[10px]">
-                            {dayAppts.length}
-                          </span>
-                        ) : null}
                         {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
                       </div>
                     </div>
@@ -760,14 +755,15 @@ export function MonthView({
                         ) : null}
                       </div>
 
-                      <DayStatusDots appointments={dayAppts} />
-                    </div>
-
-                    {dayAppts.length > 0 ? (
-                      <div className="mt-auto pt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                        {currencyFormatter.format(dayRevenue)}
+                      <div className="mt-auto flex items-end justify-between gap-2">
+                        <DayStatusDots appointments={dayAppts} />
+                        {dayAppts.length > 0 ? (
+                          <div className="shrink-0 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                            {currencyFormatter.format(dayRevenue)}
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
+                    </div>
                   </div>
                 </div>
               );
