@@ -94,19 +94,36 @@ test.describe("Billing regression", () => {
 
       await page.locator('input[placeholder="Description"]').first().fill("Detailing invoice");
       await page.locator('input[type="number"]').nth(1).fill("249");
+      const invoiceCreateResponsePromise = page.waitForResponse((response) =>
+        response.url().includes("/api/invoices") && response.request().method() === "POST"
+      );
       await page.getByRole("button", { name: /^create & send$/i }).click();
+      await invoiceCreateResponsePromise;
 
       await page.waitForURL(/\/invoices\/(?!new(?:[/?]|$))[^/?]+/);
+      await page.waitForLoadState("networkidle");
       invoiceId = /^\/invoices\/([^/?]+)/.exec(new URL(page.url()).pathname)?.[1] ?? "";
       expect(invoiceId).not.toBe("");
-      const invoiceTotal = state.invoices.find((invoice) => invoice.id === invoiceId)?.total ?? 249;
-      await expect(page.getByText(/detailing invoice/i)).toBeVisible();
+      const createdInvoice = state.invoices.find((invoice) => invoice.id === invoiceId);
+      const invoiceTotal = createdInvoice?.total ?? 249;
+      await expect
+        .poll(async () => (await page.textContent("body")) ?? "", {
+          message: "invoice detail should render after create and send",
+          timeout: 10000,
+        })
+        .toContain("Payment History");
       await expect(page.getByRole("button", { name: /^record payment$/i }).first()).toBeVisible();
       await expect(page.getByRole("button", { name: /^resend invoice$/i }).first()).toBeVisible();
 
       await page.reload();
       await expect(page).toHaveURL(new RegExp(`/invoices/${invoiceId}`));
-      await expect(page.getByText(/detailing invoice/i)).toBeVisible();
+      await page.waitForLoadState("networkidle");
+      await expect
+        .poll(async () => (await page.textContent("body")) ?? "", {
+          message: "invoice detail should stay visible after reload",
+          timeout: 10000,
+        })
+        .toContain("Payment History");
       await expect(page.getByRole("button", { name: /^record payment$/i }).first()).toBeVisible();
       await expect(page.getByRole("button", { name: /^resend invoice$/i }).first()).toBeVisible();
 

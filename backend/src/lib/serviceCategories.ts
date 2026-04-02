@@ -33,13 +33,21 @@ export async function ensureBusinessServiceCategories(
 ): Promise<Map<string, string>> {
   if (requested.length === 0) return new Map();
 
-  const normalized = requested
-    .map((item, index) => ({
-      key: item.key?.trim() || null,
-      name: item.name.trim(),
-      sortOrder: item.sortOrder ?? index,
-    }))
-    .filter((item) => item.name.length > 0);
+  const normalizedMap = new Map<string, { key: string | null; name: string; sortOrder: number }>();
+  for (const [index, item] of requested.entries()) {
+    const key = item.key?.trim() || null;
+    const name = item.name.trim();
+    if (!name) continue;
+    const identity = key ? `key:${key}` : `name:${name.toLowerCase()}`;
+    if (!normalizedMap.has(identity)) {
+      normalizedMap.set(identity, {
+        key,
+        name,
+        sortOrder: item.sortOrder ?? index,
+      });
+    }
+  }
+  const normalized = [...normalizedMap.values()];
 
   if (normalized.length === 0) return new Map();
 

@@ -76,6 +76,19 @@ test.describe("Mobile auth flow", () => {
     await page.getByRole("button", { name: /sign in with email/i }).click();
 
     await page.waitForURL(/\/(signed-in|onboarding)/);
+    const pathname = new URL(page.url()).pathname;
+
+    if (pathname.includes("/onboarding")) {
+      await expect(
+        page.getByRole("heading", {
+          name: /choose your shop type|launch your workspace/i,
+        }).first()
+      ).toBeVisible();
+      return;
+    }
+
+    await expect(page).toHaveURL(/\/signed-in/);
+    await expect(page.getByRole("heading", { name: /something went wrong/i })).toHaveCount(0);
     await expect(page.locator("main")).toBeVisible();
   });
 });

@@ -22,9 +22,12 @@ export const UserIcon = ({ user, className }: { user: User; className?: string }
 };
 
 const getInitials = (user: User) => {
-  if (user.firstName || user.lastName) {
-    return ((user.firstName?.slice(0, 1) ?? "") + (user.lastName?.slice(0, 1) ?? "")).toUpperCase();
-  } else {
-    return user.email.slice(0, 1);
+  const firstInitial = typeof user.firstName === "string" ? user.firstName.slice(0, 1) : "";
+  const lastInitial = typeof user.lastName === "string" ? user.lastName.slice(0, 1) : "";
+
+  if (firstInitial || lastInitial) {
+    return `${firstInitial}${lastInitial}`.toUpperCase();
   }
+
+  return typeof user.email === "string" && user.email.length > 0 ? user.email.slice(0, 1) : "?";
 };
