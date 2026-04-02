@@ -11,32 +11,85 @@ type BuiltinEmailTemplate = {
   bodyText: string;
 };
 
-export const appointmentConfirmation: BuiltinEmailTemplate = {
-  subject: "Appointment confirmed - {{businessName}}",
-  bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
-  <div class="wrap" style="max-width:620px;margin:0 auto;padding:28px 18px;background:#f3f6fa;">
-    <div class="card" style="overflow:hidden;background:#fff;border-radius:20px;box-shadow:0 18px 50px rgba(15,23,42,0.12);border:1px solid rgba(148,163,184,0.18);">
-      <div style="height:6px;background:linear-gradient(90deg,#f97316,#fb923c 38%,#0f172a);"></div>
-      <div style="padding:28px 28px 24px;background:radial-gradient(circle at top right,rgba(249,115,22,0.14),transparent 30%),linear-gradient(180deg,rgba(248,250,252,0.96),#fff);">
-      <div class="brand" style="font-size:18px;font-weight:700;color:#0f172a;">{{businessName}}</div>
-      <div style="margin-top:10px;display:inline-flex;border-radius:999px;padding:6px 10px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;">Confirmed booking</div>
-      <h1 style="font-size:28px;line-height:1.05;letter-spacing:-0.03em;margin:14px 0 12px;color:#0f172a;">Appointment confirmed</h1>
-      <p>Hi {{clientName}},</p>
-      <p style="color:#475569;">Your appointment is confirmed for <strong>{{dateTime}}</strong>.</p>
-      <div style="margin:18px 0;border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:18px;">
-        <div style="display:grid;gap:12px;">
-          <div><div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#94a3b8;">Vehicle</div><div style="margin-top:4px;color:#0f172a;font-weight:600;">{{vehicle}}</div></div>
-          <div><div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#94a3b8;">Address</div><div style="margin-top:4px;color:#0f172a;font-weight:600;">{{address}}</div></div>
-          <div><div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#94a3b8;">Service details</div><div style="margin-top:4px;color:#475569;">{{serviceSummary}}</div></div>
+function renderClientShell(options: {
+  businessName: string;
+  eyebrow: string;
+  title: string;
+  introHtml: string;
+  bodyHtml: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+  ctaHint?: string;
+  footerNote?: string;
+}) {
+  const cta =
+    options.ctaLabel && options.ctaUrl
+      ? `<div style="margin-top:20px;">
+          <a href="${options.ctaUrl}" style="display:inline-block;padding:12px 18px;background:#ea580c;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:700;font-size:14px;">${options.ctaLabel}</a>
         </div>
-      </div>
-      <div style="border-radius:16px;border:1px solid rgba(15,23,42,0.08);background:linear-gradient(180deg,rgba(15,23,42,0.03),rgba(255,255,255,0.98));padding:16px;color:#475569;font-size:14px;">
-        If you need to reschedule or update anything before the appointment, reply to this email or contact the shop directly.
-      </div>
+        <p style="margin:12px 0 0;color:#64748b;font-size:13px;line-height:1.5;">${options.ctaHint ?? `${options.ctaLabel}: ${options.ctaUrl}`}</p>`
+      : "";
+
+  const footer = options.footerNote
+    ? `<p style="margin:18px 0 0;color:#64748b;font-size:14px;line-height:1.6;">${options.footerNote}</p>`
+    : "";
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#eef2f7;color:#0f172a;font-family:Arial,sans-serif;">
+  <div style="max-width:640px;margin:0 auto;padding:28px 16px;">
+    <div style="background:linear-gradient(180deg,#ffffff,rgba(255,255,255,0.98));border:1px solid rgba(148,163,184,0.22);border-radius:22px;overflow:hidden;box-shadow:0 24px 60px rgba(15,23,42,0.10);">
+      <div style="height:6px;background:linear-gradient(90deg,#f97316,#fb923c 40%,#0f172a);"></div>
+      <div style="padding:28px;">
+        <div style="font-size:18px;font-weight:700;color:#0f172a;">${options.businessName}</div>
+        <div style="margin-top:12px;display:inline-flex;border-radius:999px;padding:6px 10px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;">${options.eyebrow}</div>
+        <h1 style="font-size:28px;line-height:1.08;letter-spacing:-0.03em;margin:16px 0 12px;color:#0f172a;">${options.title}</h1>
+        <div style="color:#334155;font-size:15px;line-height:1.65;">${options.introHtml}</div>
+        <div style="margin-top:18px;">${options.bodyHtml}</div>
+        ${cta}
+        ${footer}
       </div>
     </div>
-    <p class="footer" style="margin-top:18px;font-size:12px;color:#94a3b8;text-align:center;">{{businessName}}</p>
-  </div></body></html>`,
+    <p style="margin:16px 0 0;text-align:center;font-size:12px;color:#94a3b8;">${options.businessName}</p>
+  </div></body></html>`;
+}
+
+function renderInfoCard(title: string, bodyHtml: string) {
+  return `<div style="margin:0 0 14px;border:1px solid #e2e8f0;border-radius:16px;background:#f8fafc;padding:16px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#64748b;">${title}</div>
+    <div style="margin-top:8px;color:#334155;font-size:14px;line-height:1.6;">${bodyHtml}</div>
+  </div>`;
+}
+
+function renderDetailGrid(rows: Array<{ label: string; value: string }>) {
+  return `<div style="border:1px solid #e2e8f0;border-radius:16px;background:#ffffff;padding:18px;">
+    ${rows
+      .map(
+        (row) => `<div style="padding:${row === rows[0] ? "0" : "12px 0 0"};">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#94a3b8;">${row.label}</div>
+          <div style="margin-top:4px;color:#0f172a;font-weight:600;line-height:1.5;">${row.value}</div>
+        </div>`
+      )
+      .join("")}
+  </div>`;
+}
+
+export const appointmentConfirmation: BuiltinEmailTemplate = {
+  subject: "Appointment confirmed - {{businessName}}",
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Confirmed booking",
+    title: "Appointment confirmed",
+    introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">Your appointment is confirmed for <strong>{{dateTime}}</strong>.</p>`,
+    bodyHtml:
+      renderDetailGrid([
+        { label: "Vehicle", value: "{{vehicle}}" },
+        { label: "Address", value: "{{address}}" },
+        { label: "Service details", value: "{{serviceSummary}}" },
+      ]) +
+      `<div style="margin-top:14px;">${renderInfoCard(
+        "Need to change anything?",
+        "If you need to reschedule or update anything before the appointment, reply to this email or contact the shop directly."
+      )}</div>`,
+  }),
   bodyText: `{{businessName}}
 
 Appointment confirmed
@@ -55,19 +108,18 @@ If you need to reschedule or update anything before the appointment, reply to th
 /** Placeholders: clientName, businessName, dateTime, vehicle, serviceSummary */
 export const appointmentReminder: BuiltinEmailTemplate = {
   subject: "Reminder: appointment tomorrow - {{businessName}}",
-  bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
-  <div class="wrap" style="max-width:560px;margin:0 auto;padding:24px;">
-    <div class="card" style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);padding:24px;">
-      <div class="brand" style="font-size:18px;font-weight:700;">{{businessName}}</div>
-      <h1 style="font-size:20px;margin:0 0 16px;">Appointment reminder</h1>
-      <p>Hi {{clientName}},</p>
-      <p>This is a friendly reminder that your appointment is scheduled for <strong>{{dateTime}}</strong>.</p>
-      <p>Vehicle: {{vehicle}}</p>
-      <p>{{serviceSummary}}</p>
-      <p class="muted" style="color:#6b7280;font-size:14px;">See you soon!</p>
-    </div>
-    <p class="footer" style="margin-top:24px;font-size:12px;color:#9ca3af;">{{businessName}}</p>
-  </div></body></html>`,
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Upcoming visit",
+    title: "Appointment reminder",
+    introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">This is a friendly reminder that your appointment is scheduled for <strong>{{dateTime}}</strong>.</p>`,
+    bodyHtml:
+      renderDetailGrid([
+        { label: "Vehicle", value: "{{vehicle}}" },
+        { label: "Service details", value: "{{serviceSummary}}" },
+      ]) +
+      `<div style="margin-top:14px;">${renderInfoCard("See you soon", "We look forward to taking care of your vehicle.")}</div>`,
+  }),
   bodyText: `{{businessName}}
 
 Appointment reminder
@@ -84,17 +136,17 @@ See you soon!`,
 /** Placeholders: clientName, businessName, amount, invoiceNumber, paidAt, method */
 export const paymentReceipt: BuiltinEmailTemplate = {
   subject: "Payment receipt - {{businessName}}",
-  bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
-  <div class="wrap" style="max-width:560px;margin:0 auto;padding:24px;">
-    <div class="card" style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);padding:24px;">
-      <div class="brand" style="font-size:18px;font-weight:700;">{{businessName}}</div>
-      <h1 style="font-size:20px;margin:0 0 16px;">Payment received</h1>
-      <p>Hi {{clientName}},</p>
-      <p>We received your payment of <strong>{{amount}}</strong> for invoice {{invoiceNumber}}.</p>
-      <p class="muted" style="color:#6b7280;">Paid on {{paidAt}} via {{method}}. Thank you!</p>
-    </div>
-    <p class="footer" style="margin-top:24px;font-size:12px;color:#9ca3af;">{{businessName}}</p>
-  </div></body></html>`,
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Payment received",
+    title: "Payment receipt",
+    introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">We received your payment of <strong>{{amount}}</strong> for invoice <strong>{{invoiceNumber}}</strong>.</p>`,
+    bodyHtml: renderDetailGrid([
+      { label: "Paid on", value: "{{paidAt}}" },
+      { label: "Method", value: "{{method}}" },
+    ]),
+    footerNote: "Thank you for your business.",
+  }),
   bodyText: `{{businessName}}
 
 Payment received
@@ -110,18 +162,16 @@ Thank you!`,
 /** Placeholders: clientName, businessName, reviewUrl, serviceSummary */
 export const reviewRequest: BuiltinEmailTemplate = {
   subject: "How did we do? - {{businessName}}",
-  bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
-  <div class="wrap" style="max-width:560px;margin:0 auto;padding:24px;">
-    <div class="card" style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);padding:24px;">
-      <div class="brand" style="font-size:18px;font-weight:700;">{{businessName}}</div>
-      <h1 style="font-size:20px;margin:0 0 16px;">We'd love your feedback</h1>
-      <p>Hi {{clientName}},</p>
-      <p>Thank you for choosing us. Your opinion helps us improve.</p>
-      <p>{{serviceSummary}}</p>
-      <p><a href="{{reviewUrl}}" style="display:inline-block;padding:10px 20px;background:#ea580c;color:#fff;text-decoration:none;border-radius:6px;">Leave a review</a></p>
-    </div>
-    <p class="footer" style="margin-top:24px;font-size:12px;color:#9ca3af;">{{businessName}}</p>
-  </div></body></html>`,
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Feedback request",
+    title: "We'd love your feedback",
+    introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">Thank you for choosing us. Your opinion helps us improve.</p>`,
+    bodyHtml: renderInfoCard("Your visit", "{{serviceSummary}}"),
+    ctaLabel: "Leave a review",
+    ctaUrl: "{{reviewUrl}}",
+    ctaHint: `Review link: {{reviewUrl}}`,
+  }),
   bodyText: `{{businessName}}
 
 We'd love your feedback
@@ -137,18 +187,16 @@ Leave a review: {{reviewUrl}}`,
 /** Placeholders: clientName, businessName, lastVisit, bookUrl, serviceSummary */
 export const lapsedClientReengagement: BuiltinEmailTemplate = {
   subject: "We miss you - {{businessName}}",
-  bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">
-  <div class="wrap" style="max-width:560px;margin:0 auto;padding:24px;">
-    <div class="card" style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);padding:24px;">
-      <div class="brand" style="font-size:18px;font-weight:700;">{{businessName}}</div>
-      <h1 style="font-size:20px;margin:0 0 16px;">We'd love to see you again</h1>
-      <p>Hi {{clientName}},</p>
-      <p>It's been a while since your last visit ({{lastVisit}}). We're here whenever you're ready to book.</p>
-      <p>{{serviceSummary}}</p>
-      <p><a href="{{bookUrl}}" style="display:inline-block;padding:10px 20px;background:#ea580c;color:#fff;text-decoration:none;border-radius:6px;">Book now</a></p>
-    </div>
-    <p class="footer" style="margin-top:24px;font-size:12px;color:#9ca3af;">{{businessName}}</p>
-  </div></body></html>`,
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "We miss you",
+    title: "We'd love to see you again",
+    introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">It's been a while since your last visit (<strong>{{lastVisit}}</strong>). We're here whenever you're ready to book.</p>`,
+    bodyHtml: renderInfoCard("Recommended next visit", "{{serviceSummary}}"),
+    ctaLabel: "Book now",
+    ctaUrl: "{{bookUrl}}",
+    ctaHint: `Booking link: {{bookUrl}}`,
+  }),
   bodyText: `{{businessName}}
 
 We'd love to see you again
@@ -201,23 +249,19 @@ const builtins: Record<string, BuiltinEmailTemplate> = {
   weekly_summary: weeklySummary,
   quote_sent: {
     subject: "Quote for {{vehicle}} from {{businessName}}",
-    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#f8fafc;color:#0f172a;font-family:Arial,sans-serif;">
-    <div style="max-width:620px;margin:0 auto;padding:24px 16px;">
-      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;">
-        <div style="font-size:18px;font-weight:700;color:#0f172a;">{{businessName}}</div>
-        <h1 style="font-size:24px;line-height:1.2;margin:16px 0 12px;color:#0f172a;">Your quote is ready</h1>
-        <p style="margin:0 0 12px;">Hi {{clientName}},</p>
-        <p style="margin:0 0 14px;color:#334155;">We prepared a quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>
-        <div style="margin:16px 0;padding:16px;border-radius:12px;border:1px solid #e2e8f0;background:#f8fafc;">
-          <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;">Next step</div>
-          <div style="margin-top:6px;color:#334155;">Review the quote details and reply if you would like any changes before scheduling.</div>
-        </div>
-        <p style="margin:0 0 14px;color:#334155;">{{message}}</p>
-        <p style="margin:0 0 14px;color:#334155;">View your quote here: <a href="{{quoteUrl}}" style="color:#c2410c;">{{quoteUrl}}</a></p>
-        <p style="margin:0;color:#64748b;font-size:14px;">If you have any questions, reply to this email and our team will help.</p>
-      </div>
-      <p style="margin:14px 0 0;text-align:center;font-size:12px;color:#94a3b8;">{{businessName}}</p>
-    </div></body></html>`,
+    bodyHtml: renderClientShell({
+      businessName: "{{businessName}}",
+      eyebrow: "Estimate ready",
+      title: "Your quote is ready",
+      introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">We prepared a quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>`,
+      bodyHtml:
+        renderInfoCard("Next step", "Review the quote details and reply if you would like any changes before scheduling.") +
+        renderInfoCard("Message from the shop", "{{message}}"),
+      ctaLabel: "View quote",
+      ctaUrl: "{{quoteUrl}}",
+      ctaHint: `Quote link: {{quoteUrl}}`,
+      footerNote: "If you have any questions, reply to this email and our team will help.",
+    }),
     bodyText: `{{businessName}}
 
 Your quote is ready
@@ -235,18 +279,17 @@ If you have any questions, reply to this email and our team will help.`,
   },
   quote_follow_up: {
     subject: "Checking in on your {{businessName}} quote",
-    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#f8fafc;color:#0f172a;font-family:Arial,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
-      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;">
-        <div style="font-size:18px;font-weight:700;">{{businessName}}</div>
-        <h1 style="font-size:22px;line-height:1.25;margin:16px 0 12px;">Checking in on your quote</h1>
-        <p style="margin:0 0 12px;">Hi {{clientName}},</p>
-        <p style="margin:0 0 14px;color:#334155;">We wanted to follow up on your quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>
-        <p style="margin:0 0 14px;color:#334155;">{{message}}</p>
-        <p style="margin:0 0 14px;color:#334155;">Review your quote here: <a href="{{quoteUrl}}" style="color:#c2410c;">{{quoteUrl}}</a></p>
-        <p style="margin:0;color:#64748b;font-size:14px;">If you are ready to move forward, reply to this email and we will help with the next step.</p>
-      </div>
-    </div></body></html>`,
+    bodyHtml: renderClientShell({
+      businessName: "{{businessName}}",
+      eyebrow: "Follow-up",
+      title: "Checking in on your quote",
+      introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">We wanted to follow up on your quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>`,
+      bodyHtml: renderInfoCard("Message from the shop", "{{message}}"),
+      ctaLabel: "Review quote",
+      ctaUrl: "{{quoteUrl}}",
+      ctaHint: `Quote link: {{quoteUrl}}`,
+      footerNote: "If you are ready to move forward, reply to this email and we will help with the next step.",
+    }),
     bodyText: `{{businessName}}
 
 Checking in on your quote
@@ -262,23 +305,19 @@ If you are ready to move forward, reply to this email and we will help with the 
   },
   invoice_sent: {
     subject: "Invoice {{invoiceNumber}} from {{businessName}}",
-    bodyHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#f8fafc;color:#0f172a;font-family:Arial,sans-serif;">
-    <div style="max-width:620px;margin:0 auto;padding:24px 16px;">
-      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;">
-        <div style="font-size:18px;font-weight:700;color:#0f172a;">{{businessName}}</div>
-        <h1 style="font-size:24px;line-height:1.2;margin:16px 0 12px;color:#0f172a;">Your invoice is ready</h1>
-        <p style="margin:0 0 12px;">Hi {{clientName}},</p>
-        <p style="margin:0 0 14px;color:#334155;">Invoice <strong>{{invoiceNumber}}</strong> is ready for <strong>{{amount}}</strong>.</p>
-        <div style="margin:16px 0;padding:16px;border-radius:12px;border:1px solid #e2e8f0;background:#f8fafc;">
-          <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;">Details</div>
-          <div style="margin-top:6px;color:#334155;">Open the invoice to review the completed work, payment status, and your service record.</div>
-        </div>
-        <p style="margin:0 0 14px;color:#334155;">{{message}}</p>
-        <p style="margin:0 0 14px;color:#334155;">View your invoice here: <a href="{{invoiceUrl}}" style="color:#c2410c;">{{invoiceUrl}}</a></p>
-        <p style="margin:0;color:#64748b;font-size:14px;">If you have any questions, reply to this email and our team will help.</p>
-      </div>
-      <p style="margin:14px 0 0;text-align:center;font-size:12px;color:#94a3b8;">{{businessName}}</p>
-    </div></body></html>`,
+    bodyHtml: renderClientShell({
+      businessName: "{{businessName}}",
+      eyebrow: "Invoice ready",
+      title: "Your invoice is ready",
+      introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">Invoice <strong>{{invoiceNumber}}</strong> is ready for <strong>{{amount}}</strong>.</p>`,
+      bodyHtml:
+        renderInfoCard("Details", "Open the invoice to review the completed work, payment status, and your service record.") +
+        renderInfoCard("Message from the shop", "{{message}}"),
+      ctaLabel: "View invoice",
+      ctaUrl: "{{invoiceUrl}}",
+      ctaHint: `Invoice link: {{invoiceUrl}}`,
+      footerNote: "If you have any questions, reply to this email and our team will help.",
+    }),
     bodyText: `{{businessName}}
 
 Your invoice is ready
