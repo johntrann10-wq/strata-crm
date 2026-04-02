@@ -91,6 +91,67 @@ function SelectionIndicator({ checked }: { checked: boolean }) {
   );
 }
 
+function ResponsiveTimeSelect({
+  id,
+  value,
+  onChange,
+  options,
+  placeholder,
+  desktopClassName,
+  mobileClassName,
+  useNative,
+}: {
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  placeholder: string;
+  desktopClassName?: string;
+  mobileClassName?: string;
+  useNative: boolean;
+}) {
+  if (useNative) {
+    return (
+      <div className="relative">
+        <select
+          id={id}
+          className={cn(
+            "h-11 w-full appearance-none rounded-xl border border-input/90 bg-background px-3 pr-10 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40",
+            mobileClassName
+          )}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <option value="" disabled>
+            {placeholder}
+          </option>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <ChevronLeft className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-180 text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger id={id} className={desktopClassName}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent className="max-h-72">
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function buildQuarterHourOptions() {
   return Array.from({ length: 96 }, (_, index) => {
     const hours = Math.floor(index / 4);
@@ -131,6 +192,7 @@ export default function NewAppointmentPage() {
   });
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [isSmallViewport, setIsSmallViewport] = useState(false);
   const [isMultiDayJob, setIsMultiDayJob] = useState(false);
   const [jobPhase, setJobPhase] = useState("scheduled");
   const [jobStartDate, setJobStartDate] = useState("");
@@ -191,6 +253,15 @@ export default function NewAppointmentPage() {
       setIsMobile(true);
     }
   }, [creationPreset.defaultMobile]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 640px)");
+    const sync = () => setIsSmallViewport(media.matches);
+    sync();
+    media.addEventListener?.("change", sync);
+    return () => media.removeEventListener?.("change", sync);
+  }, []);
 
   useEffect(() => {
     if (locationIdParam) {
@@ -440,10 +511,12 @@ export default function NewAppointmentPage() {
   const timeOptions = useMemo(() => buildQuarterHourOptions(), []);
   const timeSelectTriggerClassName =
     "h-11 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
+  const mobileTimeSelectClassName =
+    "bg-background/85 text-base font-normal";
   const dateInputClassName =
     "h-11 text-sm font-medium [font-variant-numeric:tabular-nums]";
   const readOnlyTimeClassName =
-    "flex h-11 w-full items-center rounded-xl border border-input/90 bg-muted/40 px-3 text-sm font-medium text-muted-foreground [font-variant-numeric:tabular-nums]";
+    "flex h-11 w-full items-center rounded-xl border border-input/90 bg-muted/40 pl-10 pr-3 text-sm font-medium text-muted-foreground [font-variant-numeric:tabular-nums]";
 
   const notifyAppointmentConfirmation = (deliveryStatus?: string | null, deliveryError?: string | null) => {
     if (deliveryStatus === "emailed") {
@@ -1312,18 +1385,16 @@ export default function NewAppointmentPage() {
                   <Label htmlFor="startTime">
                     Start Time <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={startTime} onValueChange={setStartTime}>
-                    <SelectTrigger id="startTime" className={timeSelectTriggerClassName}>
-                      <SelectValue placeholder="Select a start time" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-72">
-                      {timeOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <ResponsiveTimeSelect
+                    id="startTime"
+                    value={startTime}
+                    onChange={setStartTime}
+                    options={timeOptions}
+                    placeholder="Select a start time"
+                    desktopClassName={timeSelectTriggerClassName}
+                    mobileClassName={mobileTimeSelectClassName}
+                    useNative={isSmallViewport}
+                  />
                 </div>
 
                 {/* Estimated end time */}
@@ -1377,18 +1448,16 @@ export default function NewAppointmentPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="job-start-time">Span Start Time</Label>
-                      <Select value={jobStartTime} onValueChange={setJobStartTime}>
-                        <SelectTrigger id="job-start-time" className={timeSelectTriggerClassName}>
-                          <SelectValue placeholder="Select a time" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-72">
-                          {timeOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <ResponsiveTimeSelect
+                        id="job-start-time"
+                        value={jobStartTime}
+                        onChange={setJobStartTime}
+                        options={timeOptions}
+                        placeholder="Select a time"
+                        desktopClassName={timeSelectTriggerClassName}
+                        mobileClassName={mobileTimeSelectClassName}
+                        useNative={isSmallViewport}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="expected-completion-date">Expected Completion</Label>
@@ -1402,18 +1471,16 @@ export default function NewAppointmentPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="expected-completion-time">Completion Time</Label>
-                      <Select value={expectedCompletionTime} onValueChange={setExpectedCompletionTime}>
-                        <SelectTrigger id="expected-completion-time" className={timeSelectTriggerClassName}>
-                          <SelectValue placeholder="Select a time" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-72">
-                          {timeOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <ResponsiveTimeSelect
+                        id="expected-completion-time"
+                        value={expectedCompletionTime}
+                        onChange={setExpectedCompletionTime}
+                        options={timeOptions}
+                        placeholder="Select a time"
+                        desktopClassName={timeSelectTriggerClassName}
+                        mobileClassName={mobileTimeSelectClassName}
+                        useNative={isSmallViewport}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Job Phase</Label>
@@ -1441,18 +1508,15 @@ export default function NewAppointmentPage() {
                           onChange={(e) => setPickupReadyDate(e.target.value)}
                           className={dateInputClassName}
                         />
-                        <Select value={pickupReadyTime} onValueChange={setPickupReadyTime}>
-                          <SelectTrigger className={timeSelectTriggerClassName}>
-                            <SelectValue placeholder="Select time" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-72">
-                            {timeOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <ResponsiveTimeSelect
+                          value={pickupReadyTime}
+                          onChange={setPickupReadyTime}
+                          options={timeOptions}
+                          placeholder="Select time"
+                          desktopClassName={timeSelectTriggerClassName}
+                          mobileClassName={mobileTimeSelectClassName}
+                          useNative={isSmallViewport}
+                        />
                       </div>
                     </div>
                   </>
