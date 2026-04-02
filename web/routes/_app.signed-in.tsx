@@ -982,7 +982,7 @@ export default function SignedIn() {
           />
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
+        <div className="grid min-w-0 max-w-full gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
           <DashboardSection
             title="Today's Schedule"
             seeAllHref="/appointments"
@@ -1094,7 +1094,7 @@ export default function SignedIn() {
             </ul>
           </DashboardSection>
 
-          <div className="space-y-5">
+          <div className="min-w-0 max-w-full space-y-5">
             <DashboardSection
               title="Priority Actions"
               seeAllHref={priorityActions[0]?.href ?? "/appointments"}
