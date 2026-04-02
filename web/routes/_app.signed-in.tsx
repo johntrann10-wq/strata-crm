@@ -1155,12 +1155,12 @@ export default function SignedIn() {
               skeletonRows={3}
               mobileCollapsed
             >
-              <ul className="overflow-hidden rounded-2xl border divide-y divide-border bg-card">
+              <ul className="max-w-full overflow-hidden rounded-2xl border divide-y divide-border bg-card">
                 {activeJobs.slice(0, 5).map((job) => (
                   <li key={job.id}>
                     <Link
                       to={`/jobs/${job.id}`}
-                      className="flex min-h-[68px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 active:bg-muted/70"
+                      className="flex min-h-[68px] min-w-0 max-w-full items-center gap-3 overflow-hidden px-4 py-3 transition-colors hover:bg-muted/40 active:bg-muted/70"
                     >
                       <div className="w-[72px] shrink-0">
                         <p className="font-mono text-sm font-medium text-foreground">{formatSafe(job.scheduledStart, "h:mm a")}</p>
@@ -1230,10 +1230,12 @@ export default function SignedIn() {
                           </Button>
                         ) : null}
                       </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <StatusBadge status={job.status ?? "scheduled"} type="job" />
+                      <div className="flex max-w-[7.5rem] shrink-0 flex-col items-end gap-2 overflow-hidden">
+                        <div className="max-w-full overflow-hidden">
+                          <StatusBadge status={job.status ?? "scheduled"} type="job" />
+                        </div>
                         {job.totalPrice ? (
-                          <span className="text-sm font-semibold tabular-nums text-foreground">
+                          <span className="max-w-full truncate text-sm font-semibold tabular-nums text-foreground">
                             {formatCurrency(job.totalPrice)}
                           </span>
                         ) : null}
@@ -1628,8 +1630,8 @@ function DashboardSection({
   }, [mobileCollapsed]);
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+    <section className="min-w-0 max-w-full space-y-3">
+      <div className="flex min-w-0 max-w-full flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
         <div className="flex min-w-0 items-center gap-2">
           <h2 className="text-base font-semibold sm:text-lg">{title}</h2>
           {isCompactMobile ? (
@@ -1646,7 +1648,7 @@ function DashboardSection({
         </div>
         <Link
           to={seeAllHref}
-          className="inline-flex min-h-[40px] items-center py-1 text-sm font-medium text-orange-600 hover:text-orange-700"
+          className="inline-flex min-h-[40px] min-w-0 items-center py-1 text-sm font-medium text-orange-600 hover:text-orange-700"
         >
           {seeAllLabel}
         </Link>
