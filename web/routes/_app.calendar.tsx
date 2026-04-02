@@ -19,7 +19,7 @@ import {
   getViewRange,
   navigateDate,
 } from "../components/CalendarViews";
-import { dayEnd, dayStart, getJobSpanEnd, getJobSpanStart, hasLaborOnDay, hasPresenceOnDay, isMultiDayJob } from "@/lib/calendarJobSpans";
+import { dayEnd, dayStart, getJobPhaseLabel, getJobSpanEnd, getJobSpanStart, hasLaborOnDay, hasPresenceOnDay, isMultiDayJob } from "@/lib/calendarJobSpans";
 
 function toLocalDateString(date: Date): string {
   const year = date.getFullYear();
@@ -198,6 +198,18 @@ export default function CalendarPage() {
     const bookedIds = new Set(selectedDayAppointments.map((appointment) => appointment.id));
     return selectedDayOnSiteJobs.filter((appointment) => !bookedIds.has(appointment.id));
   }, [selectedDayAppointments, selectedDayOnSiteJobs]);
+  const selectedDayAgendaItems = useMemo(
+    () =>
+      [
+        ...selectedDayAppointments.map((appointment) => ({ appointment, kind: "booked" as const })),
+        ...selectedDayOnSiteOnlyJobs.map((appointment) => ({ appointment, kind: "onsite" as const })),
+      ].sort((a, b) => {
+        const aTime = a.kind === "onsite" ? getJobSpanStart(a.appointment).getTime() : new Date(a.appointment.startTime).getTime();
+        const bTime = b.kind === "onsite" ? getJobSpanStart(b.appointment).getTime() : new Date(b.appointment.startTime).getTime();
+        return aTime - bTime;
+      }),
+    [selectedDayAppointments, selectedDayOnSiteOnlyJobs]
+  );
   const selectedDayActiveItems = selectedDayAppointments.length + selectedDayOnSiteOnlyJobs.length;
   const selectedDayRevenue = selectedDayAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
   const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
@@ -503,37 +515,16 @@ export default function CalendarPage() {
                       </div>
                     </div>
                     <div className={cn("mt-3 min-h-0 min-w-0", isMobileLayout && "flex flex-1 flex-col overflow-hidden")}>
-                      {selectedDayOnSiteJobs.length > 0 ? (
-                        <div className="mb-3 flex min-w-0 shrink-0 flex-wrap gap-2 overflow-x-hidden">
-                          {selectedDayOnSiteJobs.slice(0, 3).map((appointment) => (
-                            <button
-                              key={`${appointment.id}-presence`}
-                              type="button"
-                              onClick={() => handleApptClick(appointment)}
-                              className={cn(
-                                "inline-flex max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-full border border-border/60 bg-background/80 px-3 py-1.5 font-semibold text-muted-foreground",
-                                isMobileLayout && "px-2.5 py-1 text-[10px] leading-none"
-                              )}
-                            >
-                              <span className="h-2 w-2 rounded-full bg-sky-500" />
-                              <span className="min-w-0 max-w-full truncate">
-                                {appointment.title ||
-                                  (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Job")}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                      {selectedDayAppointments.length > 0 ? (
+                      {selectedDayAgendaItems.length > 0 ? (
                         <div
                           className={cn(
                             "min-w-0 space-y-2",
                             isMobileLayout && "min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1 [overscroll-behavior:contain]"
                           )}
                         >
-                          {selectedDayAppointments.slice(0, 5).map((appointment) => (
+                          {selectedDayAgendaItems.slice(0, 5).map(({ appointment, kind }) => (
                             <button
-                              key={appointment.id}
+                              key={`${appointment.id}-${kind}`}
                               type="button"
                               onClick={() => handleApptClick(appointment)}
                               className={cn(
@@ -542,7 +533,7 @@ export default function CalendarPage() {
                               )}
                             >
                               <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                {formatPanelTime(appointment.startTime)}
+                                {kind === "onsite" ? "On site" : formatPanelTime(appointment.startTime)}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex min-w-0 items-start justify-between gap-2">
@@ -556,21 +547,25 @@ export default function CalendarPage() {
                                       isMobileLayout && "max-w-[5.5rem] text-[9px] leading-none"
                                     )}
                                   >
-                                    {appointment.status.replace("_", " ")}
+                                    {kind === "onsite" ? getJobPhaseLabel(appointment.jobPhase) : appointment.status.replace("_", " ")}
                                   </span>
                                 </div>
                                 <p className={cn("truncate text-muted-foreground", isMobileLayout ? "text-[11px] leading-4" : "text-xs")}>
-                                  {appointment.vehicle
-                                    ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
-                                    : appointment.assignedStaff
-                                      ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-                                      : "Unassigned"}
+                                  {kind === "onsite"
+                                    ? appointment.vehicle
+                                      ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} on site`
+                                      : "Vehicle on site"
+                                    : appointment.vehicle
+                                      ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+                                      : appointment.assignedStaff
+                                        ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+                                        : "Unassigned"}
                                 </p>
                               </div>
                             </button>
                           ))}
-                          {selectedDayAppointments.length > 5 ? (
-                            <p className="px-1 text-xs text-muted-foreground">+{selectedDayAppointments.length - 5} more on this date</p>
+                          {selectedDayAgendaItems.length > 5 ? (
+                            <p className="px-1 text-xs text-muted-foreground">+{selectedDayAgendaItems.length - 5} more on this date</p>
                           ) : null}
                         </div>
                       ) : (
