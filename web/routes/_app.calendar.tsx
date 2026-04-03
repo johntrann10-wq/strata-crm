@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useNavigate, useOutletContext } from "react-router";
+import { useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AlertTriangle, Ban, CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
 import { api } from "../api";
@@ -164,9 +164,15 @@ function mobileDateInputClassName(isMobileLayout: boolean) {
 export default function CalendarPage() {
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedView = searchParams.get("view");
+  const initialView =
+    requestedView === "month" || requestedView === "week" || requestedView === "day"
+      ? requestedView
+      : null;
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [view, setView] = useState<"month" | "week" | "day">("week");
+  const [view, setView] = useState<"month" | "week" | "day">(initialView ?? "week");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [conflictDismissed, setConflictDismissed] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
@@ -186,14 +192,21 @@ export default function CalendarPage() {
       const mobile = window.innerWidth < 768;
       setIsMobileLayout(mobile);
       if (!layoutInitializedRef.current) {
-        setView(mobile ? "month" : "week");
+        setView(initialView ?? (mobile ? "month" : "week"));
         layoutInitializedRef.current = true;
       }
     };
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
-  }, []);
+  }, [initialView]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (next.get("view") === view) return;
+    next.set("view", view);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, view]);
 
   const { start: viewStart, end: viewEnd } = useMemo(
     () => getViewRange(currentDate, view),

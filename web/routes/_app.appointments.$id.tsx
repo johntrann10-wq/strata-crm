@@ -377,7 +377,7 @@ export default function AppointmentDetail() {
   const canEditCollaboration = permissions.has("appointments.write");
   const { setPageContext } = usePageContext();
   const intakePreset = getIntakePreset(businessType);
-  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/appointments";
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/calendar?view=month";
   const hasQueueReturn = searchParams.has("from");
   const withReturn = (pathname: string) =>
     `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(returnTo)}`;

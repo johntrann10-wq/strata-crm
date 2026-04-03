@@ -176,7 +176,7 @@ export default function NewAppointmentPage() {
   const clientIdParam = searchParams.get("clientId");
   const vehicleIdParam = searchParams.get("vehicleId");
   const locationIdParam = searchParams.get("locationId");
-  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/appointments";
+  const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/calendar?view=month";
   const hasQueueReturn = searchParams.has("from");
 
   // Form state
