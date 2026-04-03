@@ -37,6 +37,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { CommandPaletteProvider, useCommandPalette } from "../components/shared/CommandPaletteContext";
 import { CommandPalette } from "../components/shared/CommandPalette";
 import { getEnabledModules } from "../lib/modules";
+import { getPreferredAuthorizedAppPath } from "../lib/permissionRouting";
 import { useFindMany, useFindOne, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
@@ -92,6 +93,7 @@ type AppNavItem = {
   href: string;
   end: boolean;
   module?: string;
+  permission?: string;
   description: string;
 };
 
@@ -100,34 +102,34 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
     id: "operations",
     label: "Operations",
     items: [
-      { icon: LayoutDashboard, label: "Dashboard", href: "/signed-in", end: true, description: "Run today's operation from one command surface." },
-      { icon: Calendar, label: "Calendar", href: "/calendar", end: false, module: "calendar", description: "Plan the schedule and see the shop at a glance." },
-      { icon: Calendar, label: "Schedule", href: "/appointments", end: false, module: "appointments", description: "Work the appointment queue and move bookings forward." },
-      { icon: ClipboardList, label: "Jobs", href: "/jobs", end: false, module: "jobs", description: "Track live work orders, staffing, and completion." },
+      { icon: LayoutDashboard, label: "Dashboard", href: "/signed-in", end: true, permission: "dashboard.view", description: "Run today's operation from one command surface." },
+      { icon: Calendar, label: "Calendar", href: "/calendar", end: false, module: "calendar", permission: "appointments.read", description: "Plan the schedule and see the shop at a glance." },
+      { icon: Calendar, label: "Schedule", href: "/appointments", end: false, module: "appointments", permission: "appointments.read", description: "Work the appointment queue and move bookings forward." },
+      { icon: ClipboardList, label: "Jobs", href: "/jobs", end: false, module: "jobs", permission: "jobs.read", description: "Track live work orders, staffing, and completion." },
     ],
   },
   {
     id: "sales",
     label: "Sales & Billing",
     items: [
-      { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes", description: "Turn estimates into approved work faster." },
-      { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices", description: "Stay on top of collections, sends, and cash flow." },
+      { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes", permission: "quotes.read", description: "Turn estimates into approved work faster." },
+      { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices", permission: "invoices.read", description: "Stay on top of collections, sends, and cash flow." },
     ],
   },
   {
     id: "crm",
     label: "CRM",
     items: [
-      { icon: Users, label: "Clients", href: "/clients", end: false, module: "clients", description: "Find customers quickly and act from their history." },
-      { icon: PhoneCall, label: "Leads", href: "/leads", end: false, module: "clients", description: "Capture call-in opportunities fast and move them straight into work." },
+      { icon: Users, label: "Clients", href: "/clients", end: false, module: "clients", permission: "customers.read", description: "Find customers quickly and act from their history." },
+      { icon: PhoneCall, label: "Leads", href: "/leads", end: false, module: "clients", permission: "customers.read", description: "Capture call-in opportunities fast and move them straight into work." },
     ],
   },
   {
     id: "setup",
     label: "Catalog & Admin",
     items: [
-      { icon: Wrench, label: "Services", href: "/services", end: false, module: "services", description: "Manage services, packages, and starter presets." },
-      { icon: Settings, label: "Settings", href: "/settings", end: false, description: "Update team, locations, business profile, and billing." },
+      { icon: Wrench, label: "Services", href: "/services", end: false, module: "services", permission: "services.read", description: "Manage services, packages, and starter presets." },
+      { icon: Settings, label: "Settings", href: "/settings", end: false, permission: "settings.read", description: "Update team, locations, business profile, and billing." },
     ],
   },
 ];
@@ -181,6 +183,7 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
 const SidebarNav = memo(function SidebarNav({
   onItemClick,
   enabledModules,
+  permissions,
   onOpenCommandPalette,
   businessId,
   currentLocationId,
@@ -192,6 +195,7 @@ const SidebarNav = memo(function SidebarNav({
 }: {
   onItemClick?: () => void;
   enabledModules: Set<string>;
+  permissions: Set<string>;
   onOpenCommandPalette: () => void;
   businessId?: string | null;
   currentLocationId?: string | null;
@@ -202,17 +206,22 @@ const SidebarNav = memo(function SidebarNav({
   tenantBusinesses?: AuthOutletContext["tenantBusinesses"];
 }) {
   const location = useLocation();
+  const homeHref = useMemo(() => getPreferredAuthorizedAppPath(permissions, enabledModules), [permissions, enabledModules]);
   const visibleSections = navSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => !item.module || enabledModules.has(item.module)),
+      items: section.items.filter(
+        (item) =>
+          (!item.module || enabledModules.has(item.module)) &&
+          (!item.permission || permissions.has(item.permission))
+      ),
     }))
     .filter((section) => section.items.length > 0);
 
   return (
     <div className="flex flex-col h-full bg-[hsl(220,20%,10%)]">
       <div className="border-b border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0))] px-5 py-4">
-        <Link to="/signed-in" className="flex items-center gap-2.5" onClick={onItemClick}>
+        <Link to={homeHref} className="flex items-center gap-2.5" onClick={onItemClick}>
           <StrataLogoLockup
             markClassName="h-9 w-9"
             wordmarkClassName="text-[15px] font-semibold tracking-tight text-white"
@@ -380,16 +389,40 @@ function AppLayoutInner({
     for (const section of navSections) {
       for (const item of section.items) {
         if (item.module && !enabledModules.has(item.module)) continue;
+        if (item.permission && !permissions.has(item.permission)) continue;
         if (isNavItemActive(location.pathname, item)) {
           return { item, section };
         }
       }
     }
-    return { item: navSections[0].items[0], section: navSections[0] };
-  }, [enabledModules, location.pathname]);
+    const firstVisibleSection = navSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter(
+          (item) =>
+            (!item.module || enabledModules.has(item.module)) &&
+            (!item.permission || permissions.has(item.permission))
+        ),
+      }))
+      .find((section) => section.items.length > 0);
+
+    if (firstVisibleSection) {
+      return { item: firstVisibleSection.items[0], section: firstVisibleSection };
+    }
+
+    return {
+      item: { icon: Settings, label: "Profile", href: "/profile", end: false, description: "Manage your account." },
+      section: { id: "setup" as const, label: "Account", items: [] },
+    };
+  }, [enabledModules, permissions, location.pathname]);
   const activeSectionItems = useMemo(
-    () => activeNavEntry.section.items.filter((item) => !item.module || enabledModules.has(item.module)),
-    [activeNavEntry.section.items, enabledModules]
+    () =>
+      activeNavEntry.section.items.filter(
+        (item) =>
+          (!item.module || enabledModules.has(item.module)) &&
+          (!item.permission || permissions.has(item.permission))
+      ),
+    [activeNavEntry.section.items, enabledModules, permissions]
   );
   const activeLocationName = useMemo(
     () => locationRecords.find((entry) => entry.id === currentLocationId)?.name?.trim() || null,
@@ -457,7 +490,7 @@ function AppLayoutInner({
 
       {/* Desktop sidebar - fixed, visible on md+ screens */}
       <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:w-64 z-20">
-        <SidebarNav enabledModules={enabledModules} onOpenCommandPalette={() => setOpen(true)} />
+        <SidebarNav enabledModules={enabledModules} permissions={permissions} onOpenCommandPalette={() => setOpen(true)} />
       </aside>
 
       {/* Mobile sidebar - Sheet that slides in from the left */}
@@ -469,6 +502,7 @@ function AppLayoutInner({
           <SidebarNav
             onItemClick={() => setMobileOpen(false)}
             enabledModules={enabledModules}
+            permissions={permissions}
             onOpenCommandPalette={() => setOpen(true)}
             businessId={businessId}
             currentLocationId={currentLocationId}
@@ -791,13 +825,17 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
 
   const handleBusinessChange = useCallback(
     (businessId: string) => {
+      const targetBusiness = tenantBusinesses.find((tenantBusiness) => tenantBusiness.id === businessId) ?? null;
+      const targetModules = getEnabledModules(targetBusiness?.type ?? null) as Set<string>;
+      const targetPermissions = new Set(targetBusiness?.permissions ?? []);
+      const destination = getPreferredAuthorizedAppPath(targetPermissions, targetModules);
       setCurrentBusinessIdState(businessId);
       setCurrentBusinessId(businessId);
       setCurrentLocationIdState(null);
       clearCurrentLocationId();
-      navigate("/signed-in");
+      navigate(destination);
     },
-    [navigate]
+    [navigate, tenantBusinesses]
   );
 
   const handleLocationChange = useCallback((locationId: string | null) => {

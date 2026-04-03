@@ -32,6 +32,7 @@ import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { toast } from "sonner";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { parseLeadRecord } from "../lib/leads";
+import { getPreferredAuthorizedAppPath } from "@/lib/permissionRouting";
 import {
   buildActivationChecklist,
   isAcclimatedWorkspace,
@@ -202,7 +203,20 @@ const ACTIVATION_CHECKLIST_ICONS: Record<ActivationChecklistKey, ReactNode> = {
 };
 
 export default function SignedIn() {
-  const { businessName, businessId, user, currentLocationId } = useOutletContext<AuthOutletContext & { businessId?: string }>();
+  const outletContext = useOutletContext<AuthOutletContext & { businessId?: string }>();
+  if (!outletContext.permissions.has("dashboard.view")) {
+    return <Navigate to={getPreferredAuthorizedAppPath(outletContext.permissions, outletContext.enabledModules)} replace />;
+  }
+
+  return <SignedInDashboard outletContext={outletContext} />;
+}
+
+function SignedInDashboard({
+  outletContext,
+}: {
+  outletContext: AuthOutletContext & { businessId?: string };
+}) {
+  const { businessName, businessId, user, currentLocationId } = outletContext;
   const [filterNow, setFilterNow] = useState(() => new Date());
   const [refreshing, setRefreshing] = useState(false);
   const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
