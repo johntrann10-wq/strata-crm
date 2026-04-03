@@ -25,7 +25,7 @@ import {
   navigateDate,
 } from "../components/CalendarViews";
 import { dayEnd, dayStart, getCalendarDaySnapshot, getJobPhaseLabel, getJobSpanEnd, getJobSpanStart, getActiveCalendarAppointments, hasLaborOnDay } from "@/lib/calendarJobSpans";
-import { buildCalendarBlockInternalNotes, getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock, parseCalendarBlock, type CalendarBlockMode, type CalendarBlockPreset } from "@/lib/calendarBlocks";
+import { buildCalendarBlockInternalNotes, getCalendarBlockLabel, getCalendarBlockNote, isCalendarBlockAppointment, isFullDayCalendarBlock, parseCalendarBlock, type CalendarBlockMode } from "@/lib/calendarBlocks";
 
 function toLocalDateString(date: Date): string {
   const year = date.getFullYear();
@@ -152,12 +152,6 @@ function ResponsiveTimeSelect({
   );
 }
 
-function getCalendarBlockNote(internalNotes: string | null | undefined): string | null {
-  const [, ...rest] = String(internalNotes ?? "").split(/\r?\n/);
-  const note = rest.join("\n").trim();
-  return note.length > 0 ? note : null;
-}
-
 export default function CalendarPage() {
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
@@ -168,7 +162,6 @@ export default function CalendarPage() {
   const [conflictDismissed, setConflictDismissed] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
   const [blockMode, setBlockMode] = useState<CalendarBlockMode>("time");
-  const [blockPreset, setBlockPreset] = useState<CalendarBlockPreset>("unavailable");
   const [blockStartDate, setBlockStartDate] = useState(() => toLocalDateString(new Date()));
   const [blockEndDate, setBlockEndDate] = useState(() => toLocalDateString(new Date()));
   const [blockStartTime, setBlockStartTime] = useState("09:00");
@@ -343,7 +336,6 @@ export default function CalendarPage() {
     const selectedDate = toLocalDateString(currentDate);
     setEditingBlockId(null);
     setBlockMode("time");
-    setBlockPreset("unavailable");
     setBlockStartDate(selectedDate);
     setBlockEndDate(selectedDate);
     setBlockStartTime("09:00");
@@ -359,7 +351,6 @@ export default function CalendarPage() {
     const endDate = toLocalDateString(new Date(block.endTime));
     setEditingBlockId(block.id);
     setBlockMode(parsed?.mode ?? "time");
-    setBlockPreset(parsed?.preset ?? "unavailable");
     setBlockStartDate(startDate);
     setBlockEndDate(startDate === endDate ? startDate : endDate);
     setBlockStartTime(block.startTime ? new Date(block.startTime).toTimeString().slice(0, 5) : "09:00");
@@ -405,9 +396,10 @@ export default function CalendarPage() {
       }
     }
 
-    const title = getCalendarBlockLabel({ title: null, internalNotes: buildCalendarBlockInternalNotes({ mode: blockMode, preset: blockPreset }) });
+    const previewNotes = buildCalendarBlockInternalNotes({ mode: blockMode }, blockNotes);
+    const title = getCalendarBlockLabel({ title: null, internalNotes: previewNotes });
     const internalNotes = buildCalendarBlockInternalNotes(
-      { mode: blockMode, preset: blockPreset },
+      { mode: blockMode },
       blockNotes
     );
     const assignedStaffId = blockStaffId === "none" ? undefined : blockStaffId;
@@ -1094,34 +1086,6 @@ export default function CalendarPage() {
             </div>
           </DialogHeader>
           <form className="space-y-5 px-5 py-5 sm:px-6 sm:py-6" onSubmit={handleCreateBlock}>
-            <div className="space-y-2.5">
-              <Label htmlFor="block-preset">Block type</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {(
-                  [
-                    { value: "unavailable", label: "Unavailable" },
-                    { value: "vacation", label: "Vacation" },
-                    { value: "personal", label: "Personal" },
-                    { value: "shop-closed", label: "Shop closed" },
-                  ] as const
-                ).map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setBlockPreset(option.value)}
-                    className={cn(
-                      "rounded-2xl border px-3 py-3 text-left text-sm font-medium transition-colors",
-                      blockPreset === option.value
-                        ? "border-slate-900 bg-slate-900 text-white shadow-[0_14px_28px_rgba(15,23,42,0.16)]"
-                        : "border-border/70 bg-white text-foreground hover:bg-muted/40"
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div className="space-y-2.5">
               <Label htmlFor="block-mode">Coverage</Label>
               <div className="inline-flex w-full rounded-2xl border border-border/70 bg-muted/20 p-1">

@@ -1,24 +1,11 @@
 export type CalendarBlockMode = "time" | "full-day";
 
-export type CalendarBlockPreset =
-  | "vacation"
-  | "unavailable"
-  | "personal"
-  | "shop-closed";
-
 export type CalendarBlockMetadata = {
   mode: CalendarBlockMode;
-  preset: CalendarBlockPreset;
+  preset?: string | null;
 };
 
 const CALENDAR_BLOCK_PREFIX = "[[calendar-block:";
-
-const BLOCK_LABELS: Record<CalendarBlockPreset, string> = {
-  vacation: "Vacation",
-  unavailable: "Unavailable",
-  personal: "Personal block",
-  "shop-closed": "Shop closed",
-};
 
 export function parseCalendarBlock(
   internalNotes: string | null | undefined
@@ -31,21 +18,17 @@ export function parseCalendarBlock(
   const payload = firstLine
     .slice(CALENDAR_BLOCK_PREFIX.length, -2)
     .split(":")
-    .map((part) => part.trim());
+    .map((part) => part.trim())
+    .filter(Boolean);
 
-  if (payload.length !== 2) return null;
+  if (payload.length < 1 || payload.length > 2) return null;
 
   const [mode, preset] = payload;
-  if (
-    (mode !== "time" && mode !== "full-day") ||
-    !["vacation", "unavailable", "personal", "shop-closed"].includes(preset)
-  ) {
-    return null;
-  }
+  if (mode !== "time" && mode !== "full-day") return null;
 
   return {
     mode: mode as CalendarBlockMode,
-    preset: preset as CalendarBlockPreset,
+    preset: preset || null,
   };
 }
 
@@ -53,9 +36,17 @@ export function buildCalendarBlockInternalNotes(
   metadata: CalendarBlockMetadata,
   note?: string | null
 ): string {
-  const marker = `${CALENDAR_BLOCK_PREFIX}${metadata.mode}:${metadata.preset}]]`;
+  const marker = `${CALENDAR_BLOCK_PREFIX}${metadata.mode}]]`;
   const trimmedNote = String(note ?? "").trim();
   return trimmedNote ? `${marker}\n\n${trimmedNote}` : marker;
+}
+
+export function getCalendarBlockNote(
+  internalNotes: string | null | undefined
+): string | null {
+  const [, ...rest] = String(internalNotes ?? "").split(/\r?\n/);
+  const note = rest.join("\n").trim();
+  return note.length > 0 ? note : null;
 }
 
 export function isCalendarBlockAppointment(appointment: {
@@ -78,6 +69,5 @@ export function getCalendarBlockLabel(
   fallback = "Blocked time"
 ): string {
   if (appointment.title?.trim()) return appointment.title.trim();
-  const parsed = parseCalendarBlock(appointment.internalNotes);
-  return parsed ? BLOCK_LABELS[parsed.preset] : fallback;
+  return getCalendarBlockNote(appointment.internalNotes)?.split(/\r?\n/, 1)[0]?.trim() || fallback;
 }
