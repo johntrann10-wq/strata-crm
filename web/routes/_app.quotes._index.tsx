@@ -19,6 +19,66 @@ import { formatFreshness, isOlderThanDays, safeDate } from "../lib/queueDateUtil
 
 const QUOTE_TABS = ["all", "accepted", "aging", "followup", "lost"] as const;
 type QuoteTab = (typeof QUOTE_TABS)[number];
+type QuoteRecord = Record<string, any>;
+
+function getQuotePersonLabels(
+  row: QuoteRecord,
+  {
+    fallbackName = "-",
+    fallbackVehicle = "-",
+  }: {
+    fallbackName?: string;
+    fallbackVehicle?: string;
+  } = {},
+) {
+  const client = row.client as QuoteRecord | undefined;
+  const vehicle = row.vehicle as QuoteRecord | undefined;
+
+  return {
+    fullName: [client?.firstName, client?.lastName].filter(Boolean).join(" ") || fallbackName,
+    vehicleLabel: vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : fallbackVehicle,
+  };
+}
+
+function getQuoteFreshness(row: QuoteRecord) {
+  return [
+    formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
+    formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
+  ]
+    .filter(Boolean)
+    .join(" - ");
+}
+
+function getQuoteQueueLinks(
+  row: QuoteRecord,
+  currentLocationId: string | null | undefined,
+  linkWithQueueState: (pathname: string) => string,
+) {
+  const qid = String(row.id);
+  const quoteStatus = String(row.status ?? "");
+  const canSend = ["draft", "sent"].includes(quoteStatus);
+  const canFollowUp = quoteStatus === "sent";
+  const canBook = quoteStatus === "accepted" && !!row.clientId;
+  const canInvoice = quoteStatus === "accepted" && !!row.clientId;
+
+  return {
+    qid,
+    quoteStatus,
+    canSend,
+    canFollowUp,
+    canBook,
+    canInvoice,
+    detailHref: linkWithQueueState(`/quotes/${qid}`),
+    bookHref: canBook
+      ? linkWithQueueState(
+          `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
+            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+          }`,
+        )
+      : null,
+    invoiceHref: canInvoice ? linkWithQueueState(`/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`) : null,
+  };
+}
 
 export default function QuotesIndexPage() {
   const location = useLocation();
@@ -318,35 +378,11 @@ export default function QuotesIndexPage() {
             <>
             <div className="space-y-3 md:hidden">
               {allRows.map((record) => {
-                const row = record as Record<string, any>;
-                const client = row.client as Record<string, any> | undefined;
-                const vehicle = row.vehicle as Record<string, any> | undefined;
-                const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
-                const vehicleLabel = vehicle
-                  ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
-                  : "-";
-                const qid = String(row.id);
-                const quoteStatus = String(row.status ?? "");
-                const canSend = ["draft", "sent"].includes(quoteStatus);
-                const canFollowUp = ["sent"].includes(quoteStatus);
-                const canBook = quoteStatus === "accepted" && !!row.clientId;
-                const canInvoice = quoteStatus === "accepted" && !!row.clientId;
-                const freshness = [
-                  formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
-                  formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
-                ]
-                  .filter(Boolean)
-                  .join(" - ");
-                const bookHref = canBook
-                  ? linkWithQueueState(
-                      `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
-                        currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-                      }`
-                    )
-                  : null;
-                const invoiceHref = canInvoice
-                  ? linkWithQueueState(`/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`)
-                  : null;
+                const row = record as QuoteRecord;
+                const { fullName, vehicleLabel } = getQuotePersonLabels(row);
+                const freshness = getQuoteFreshness(row);
+                const { qid, quoteStatus, canSend, canFollowUp, canBook, canInvoice, detailHref, bookHref, invoiceHref } =
+                  getQuoteQueueLinks(row, currentLocationId, linkWithQueueState);
                 return (
                   <QuoteMobileCard
                     key={qid}
@@ -359,7 +395,7 @@ export default function QuotesIndexPage() {
                       row.createdAt ? `Created ${new Date(row.createdAt as string).toLocaleDateString()}` : "Created -",
                       freshness,
                     ]}
-                    href={linkWithQueueState(`/quotes/${qid}`)}
+                    href={detailHref}
                     actions={
                       <>
                         {canSend ? (
@@ -421,40 +457,16 @@ export default function QuotesIndexPage() {
                 </TableHeader>
                 <TableBody>
                   {allRows.map((record) => {
-                    const row = record as Record<string, any>;
-                    const client = row.client as Record<string, any> | undefined;
-                    const vehicle = row.vehicle as Record<string, any> | undefined;
-                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
-                    const vehicleLabel = vehicle
-                      ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
-                      : "-";
-                    const qid = String(row.id);
-                    const quoteStatus = String(row.status ?? "");
-                    const canSend = ["draft", "sent"].includes(quoteStatus);
-                    const canFollowUp = ["sent"].includes(quoteStatus);
-                    const canBook = quoteStatus === "accepted" && !!row.clientId;
-                    const canInvoice = quoteStatus === "accepted" && !!row.clientId;
-                    const freshness = [
-                      formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
-                      formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
-                    ]
-                      .filter(Boolean)
-                      .join(" - ");
-                    const bookHref = canBook
-                      ? linkWithQueueState(
-                          `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
-                            currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-                          }`
-                        )
-                      : null;
-                    const invoiceHref = canInvoice
-                      ? linkWithQueueState(`/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`)
-                      : null;
+                    const row = record as QuoteRecord;
+                    const { fullName, vehicleLabel } = getQuotePersonLabels(row);
+                    const freshness = getQuoteFreshness(row);
+                    const { qid, quoteStatus, canSend, canFollowUp, canBook, canInvoice, detailHref, bookHref, invoiceHref } =
+                      getQuoteQueueLinks(row, currentLocationId, linkWithQueueState);
                     return (
                       <TableRow
                         key={qid}
                         className={cn("cursor-pointer", agingRows.some((quote) => String((quote as any).id) === qid) && "bg-amber-50/50")}
-                        onClick={() => navigate(linkWithQueueState(`/quotes/${qid}`))}
+                        onClick={() => navigate(detailHref)}
                       >
                         <TableCell>
                           {row.clientId ? (
@@ -541,7 +553,7 @@ export default function QuotesIndexPage() {
                             ) : null}
                             <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
                               <Link
-                                to={linkWithQueueState(`/quotes/${qid}`)}
+                                to={detailHref}
                                 onClick={(event) => event.stopPropagation()}
                               >
                                 Open
@@ -576,24 +588,13 @@ export default function QuotesIndexPage() {
               <>
               <div className="space-y-3 md:hidden">
                 {acceptedRows.map((record) => {
-                  const row = record as Record<string, any>;
-                  const client = row.client as Record<string, any> | undefined;
-                  const vehicle = row.vehicle as Record<string, any> | undefined;
-                  const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
-                  const vehicleLabel = vehicle
-                    ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
-                    : "-";
-                  const qid = String(row.id);
-                  const bookHref = row.clientId
-                    ? linkWithQueueState(
-                        `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
-                          currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-                        }`
-                      )
-                    : null;
-                  const invoiceHref = row.clientId
-                    ? linkWithQueueState(`/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`)
-                    : null;
+                  const row = record as QuoteRecord;
+                  const { fullName, vehicleLabel } = getQuotePersonLabels(row);
+                  const { qid, detailHref, bookHref, invoiceHref } = getQuoteQueueLinks(
+                    row,
+                    currentLocationId,
+                    linkWithQueueState,
+                  );
                   return (
                     <QuoteMobileCard
                       key={qid}
@@ -603,7 +604,7 @@ export default function QuotesIndexPage() {
                       amount={formatCurrency(row.total)}
                       accent="success"
                       lines={[row.acceptedAt ? `Accepted ${new Date(row.acceptedAt as string).toLocaleDateString()}` : "Accepted -"]}
-                      href={linkWithQueueState(`/quotes/${qid}`)}
+                      href={detailHref}
                       actions={
                         <>
                           {bookHref ? (
@@ -635,26 +636,15 @@ export default function QuotesIndexPage() {
                   </TableHeader>
                   <TableBody>
                     {acceptedRows.map((record) => {
-                      const row = record as Record<string, any>;
-                      const client = row.client as Record<string, any> | undefined;
-                      const vehicle = row.vehicle as Record<string, any> | undefined;
-                      const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
-                      const vehicleLabel = vehicle
-                        ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
-                        : "-";
-                      const qid = String(row.id);
-                      const bookHref = row.clientId
-                        ? linkWithQueueState(
-                            `/appointments/new?clientId=${String(row.clientId)}&quoteId=${qid}${
-                              currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-                            }`
-                          )
-                        : null;
-                      const invoiceHref = row.clientId
-                        ? linkWithQueueState(`/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`)
-                        : null;
+                      const row = record as QuoteRecord;
+                      const { fullName, vehicleLabel } = getQuotePersonLabels(row);
+                      const { qid, detailHref, bookHref, invoiceHref } = getQuoteQueueLinks(
+                        row,
+                        currentLocationId,
+                        linkWithQueueState,
+                      );
                       return (
-                        <TableRow key={qid} className="cursor-pointer bg-green-50/40" onClick={() => navigate(linkWithQueueState(`/quotes/${qid}`))}>
+                        <TableRow key={qid} className="cursor-pointer bg-green-50/40" onClick={() => navigate(detailHref)}>
                           <TableCell>
                             {row.clientId ? (
                               <Link
@@ -688,7 +678,7 @@ export default function QuotesIndexPage() {
                                 </Button>
                               ) : null}
                               <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
-                                <Link to={linkWithQueueState(`/quotes/${qid}`)} onClick={(event) => event.stopPropagation()}>
+                                <Link to={detailHref} onClick={(event) => event.stopPropagation()}>
                                   Open
                                 </Link>
                               </Button>
@@ -716,18 +706,10 @@ export default function QuotesIndexPage() {
             <>
             <div className="space-y-3 md:hidden">
               {agingRows.map((record) => {
-                const row = record as Record<string, any>;
-                const client = row.client as Record<string, any> | undefined;
-                const vehicle = row.vehicle as Record<string, any> | undefined;
-                const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
-                const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "-";
-                const qid = String(row.id);
-                const freshness = [
-                  formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
-                  formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
-                ]
-                  .filter(Boolean)
-                  .join(" - ");
+                const row = record as QuoteRecord;
+                const { fullName, vehicleLabel } = getQuotePersonLabels(row);
+                const { qid, detailHref } = getQuoteQueueLinks(row, currentLocationId, linkWithQueueState);
+                const freshness = getQuoteFreshness(row);
                 return (
                   <QuoteMobileCard
                     key={qid}
@@ -740,7 +722,7 @@ export default function QuotesIndexPage() {
                       row.createdAt ? `Created ${new Date(row.createdAt as string).toLocaleDateString()}` : "Created -",
                       freshness || getDaysAgo(row.createdAt as string),
                     ]}
-                    href={linkWithQueueState(`/quotes/${qid}`)}
+                    href={detailHref}
                     actions={
                       <Button
                         size="sm"
@@ -775,21 +757,13 @@ export default function QuotesIndexPage() {
                 </TableHeader>
                 <TableBody>
                   {agingRows.map((record) => {
-                    const row = record as Record<string, any>;
-                    const client = row.client as Record<string, any> | undefined;
-                    const vehicle = row.vehicle as Record<string, any> | undefined;
-                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
-                    const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "-";
-                    const qid = String(row.id);
+                    const row = record as QuoteRecord;
+                    const { fullName, vehicleLabel } = getQuotePersonLabels(row);
+                    const { qid, detailHref } = getQuoteQueueLinks(row, currentLocationId, linkWithQueueState);
                     const isLoading = sendingId === qid;
-                    const freshness = [
-                      formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
-                      formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
-                    ]
-                      .filter(Boolean)
-                      .join(" - ");
+                    const freshness = getQuoteFreshness(row);
                     return (
-                      <TableRow key={qid} className="cursor-pointer bg-amber-50/50" onClick={() => navigate(linkWithQueueState(`/quotes/${qid}`))}>
+                      <TableRow key={qid} className="cursor-pointer bg-amber-50/50" onClick={() => navigate(detailHref)}>
                         <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
                         <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
                         <TableCell><StatusBadge status={String(row.status ?? "")} type="quote" /></TableCell>
@@ -843,18 +817,10 @@ export default function QuotesIndexPage() {
             <>
             <div className="space-y-3 md:hidden">
               {followUpRows.map((record) => {
-                const row = record as Record<string, any>;
-                const client = row.client as Record<string, any> | undefined;
-                const vehicle = row.vehicle as Record<string, any> | undefined;
-                const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
-                const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "-";
-                const qid = String(row.id);
-                const freshness = [
-                  formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
-                  formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
-                ]
-                  .filter(Boolean)
-                  .join(" - ");
+                const row = record as QuoteRecord;
+                const { fullName, vehicleLabel } = getQuotePersonLabels(row);
+                const { qid, detailHref } = getQuoteQueueLinks(row, currentLocationId, linkWithQueueState);
+                const freshness = getQuoteFreshness(row);
                 return (
                   <QuoteMobileCard
                     key={qid}
@@ -864,7 +830,7 @@ export default function QuotesIndexPage() {
                     amount={formatCurrency(row.total)}
                     accent="warn"
                     lines={[freshness || "No outreach recorded"]}
-                    href={linkWithQueueState(`/quotes/${qid}`)}
+                    href={detailHref}
                     actions={
                       <Button
                         size="sm"
@@ -895,20 +861,12 @@ export default function QuotesIndexPage() {
                 </TableHeader>
                 <TableBody>
                   {followUpRows.map((record) => {
-                    const row = record as Record<string, any>;
-                    const client = row.client as Record<string, any> | undefined;
-                    const vehicle = row.vehicle as Record<string, any> | undefined;
-                    const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "-";
-                    const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "-";
-                    const qid = String(row.id);
-                    const freshness = [
-                      formatFreshness((row.sentAt as string | null | undefined) ?? null, "Sent"),
-                      formatFreshness((row.followUpSentAt as string | null | undefined) ?? null, "Followed up"),
-                    ]
-                      .filter(Boolean)
-                      .join(" - ");
+                    const row = record as QuoteRecord;
+                    const { fullName, vehicleLabel } = getQuotePersonLabels(row);
+                    const { qid, detailHref } = getQuoteQueueLinks(row, currentLocationId, linkWithQueueState);
+                    const freshness = getQuoteFreshness(row);
                     return (
-                      <TableRow key={qid} className="cursor-pointer bg-amber-50/40" onClick={() => navigate(linkWithQueueState(`/quotes/${qid}`))}>
+                      <TableRow key={qid} className="cursor-pointer bg-amber-50/40" onClick={() => navigate(detailHref)}>
                         <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
                         <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
                         <TableCell><StatusBadge status={String(row.status ?? "")} type="quote" /></TableCell>
@@ -930,7 +888,7 @@ export default function QuotesIndexPage() {
                               Follow up
                             </Button>
                             <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
-                              <Link to={linkWithQueueState(`/quotes/${qid}`)} onClick={(event) => event.stopPropagation()}>
+                              <Link to={detailHref} onClick={(event) => event.stopPropagation()}>
                                 Open
                               </Link>
                             </Button>
@@ -966,12 +924,13 @@ export default function QuotesIndexPage() {
             <>
             <div className={cn("space-y-3 md:hidden transition-opacity", isRefetchingLost && "opacity-60")}>
               {lostRows.map((quote) => {
-                const q = quote as Record<string, any>;
-                const client = q.client as Record<string, any> | undefined;
-                const vehicle = q.vehicle as Record<string, any> | undefined;
-                const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "Unknown Client";
-                const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "No vehicle";
+                const q = quote as QuoteRecord;
+                const { fullName, vehicleLabel } = getQuotePersonLabels(q, {
+                  fallbackName: "Unknown Client",
+                  fallbackVehicle: "No vehicle",
+                });
                 const qid = String(q.id ?? "");
+                const detailHref = linkWithQueueState(`/quotes/${qid}`);
                 const isLoading = sendingId === qid;
                 return (
                   <QuoteMobileCard
@@ -985,7 +944,7 @@ export default function QuotesIndexPage() {
                       q.createdAt ? `Created ${new Date(q.createdAt as string).toLocaleDateString()}` : "Created -",
                       getDaysAgo(q.createdAt as string),
                     ]}
-                    href={linkWithQueueState(`/quotes/${qid}`)}
+                    href={detailHref}
                     actions={
                       <Button
                         size="sm"
@@ -1008,9 +967,8 @@ export default function QuotesIndexPage() {
             </div>
             <div className={cn("hidden overflow-hidden rounded-lg border bg-white transition-opacity md:block", isRefetchingLost && "opacity-60")}>
               {lostRows.map((quote) => {
-                const q = quote as Record<string, any>;
-                const client = q.client as Record<string, any> | undefined;
-                const fullName = [client?.firstName, client?.lastName].filter(Boolean).join(" ") || "Unknown Client";
+                const q = quote as QuoteRecord;
+                const { fullName } = getQuotePersonLabels(q, { fallbackName: "Unknown Client" });
                 const qid = String(q.id ?? "");
                 const isLoading = sendingId === qid;
                 return (
