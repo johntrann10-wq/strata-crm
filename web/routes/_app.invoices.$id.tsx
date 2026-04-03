@@ -107,6 +107,16 @@ function capitalize(str: string | null | undefined): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+function getClientDisplayName(client: Record<string, any> | null | undefined) {
+  if (!client) return null;
+  return [client.firstName, client.lastName].filter(Boolean).join(" ").trim() || "No client";
+}
+
+function getAppointmentVehicleLabel(appointment: Record<string, any> | null | undefined) {
+  const vehicle = appointment?.vehicle as Record<string, any> | undefined;
+  return vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : null;
+}
+
 async function openPrintableInvoice(invoiceId: string, businessId?: string | null) {
   await printAuthenticatedDocument({
     url: `${API_BASE}/api/invoices/${encodeURIComponent(invoiceId)}/html`,
@@ -567,6 +577,9 @@ export default function InvoiceDetailPage() {
 
   const clientData = invoice.client as any;
   const appointmentData = invoice.appointment as any;
+  const quoteData = (invoice as any).quote;
+  const clientDisplayName = getClientDisplayName(clientData);
+  const appointmentVehicleLabel = getAppointmentVehicleLabel(appointmentData);
 
   const relatedRecords: RelatedRecord[] = [];
   if (clientData) {
@@ -594,7 +607,6 @@ export default function InvoiceDetailPage() {
       actionLabel: clientData?.id ? "Quote" : undefined,
     });
   }
-  const quoteData = (invoice as any).quote;
   if (quoteData) {
     relatedRecords.push({
       type: "quote",
@@ -629,11 +641,7 @@ export default function InvoiceDetailPage() {
             {capitalize(status)}
           </Badge>
         }
-        subtitle={
-          clientData
-            ? `${clientData.firstName} ${clientData.lastName} - ${formatCurrency(invoice.total)} total`
-            : `${formatCurrency(invoice.total)} total`
-        }
+        subtitle={clientDisplayName ? `${clientDisplayName} - ${formatCurrency(invoice.total)} total` : `${formatCurrency(invoice.total)} total`}
         right={
           <div className="flex items-center justify-end gap-2">
             <div className="hidden sm:flex sm:flex-wrap sm:justify-end sm:gap-2">
@@ -824,7 +832,7 @@ export default function InvoiceDetailPage() {
           <CardContent className="space-y-1 p-4">
             <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Client</p>
             <p className="truncate text-lg font-semibold">
-              {clientData ? `${clientData.firstName} ${clientData.lastName}` : "No client"}
+              {clientDisplayName ?? "No client"}
             </p>
             <p className="truncate text-sm text-muted-foreground">{clientData?.email || clientData?.phone || "No direct contact on file"}</p>
           </CardContent>
@@ -1036,7 +1044,7 @@ export default function InvoiceDetailPage() {
 
           <CommunicationCard
             title="Client communication"
-            recipientName={clientData ? `${clientData.firstName} ${clientData.lastName}` : null}
+            recipientName={clientDisplayName}
             recipient={clientData?.email}
             primaryLabel={status === "sent" ? "Resend invoice" : "Send invoice"}
             activities={((activityLogs ?? []) as any[]).filter((record) => record.type === "invoice.sent")}
@@ -1062,7 +1070,7 @@ export default function InvoiceDetailPage() {
                   to={`/clients/${clientData.id}`}
                   className="font-medium hover:underline text-primary"
                 >
-                  {clientData.firstName} {clientData.lastName}
+                  {clientDisplayName}
                 </Link>
                 {clientData.email && (
                   <p className="text-muted-foreground">{clientData.email}</p>
@@ -1081,12 +1089,7 @@ export default function InvoiceDetailPage() {
                 <CardTitle className="text-base font-semibold">Appointment</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                {appointmentData.vehicle && (
-                  <p className="font-medium">
-                    {appointmentData.vehicle.year} {appointmentData.vehicle.make}{" "}
-                    {appointmentData.vehicle.model}
-                  </p>
-                )}
+                {appointmentVehicleLabel ? <p className="font-medium">{appointmentVehicleLabel}</p> : null}
                 <p className="text-muted-foreground">
                   {formatDate(appointmentData.startTime)}
                 </p>
