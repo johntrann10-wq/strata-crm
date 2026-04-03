@@ -190,6 +190,26 @@ async function buildSafeAuthContext(userId: string) {
 }
 
 async function activateInvitedMemberships(userId: string) {
+  const invitedMemberships = await db
+    .select({
+      businessId: businessMemberships.businessId,
+      role: businessMemberships.role,
+      businessName: businesses.name,
+    })
+    .from(businessMemberships)
+    .leftJoin(businesses, eq(businessMemberships.businessId, businesses.id))
+    .where(and(eq(businessMemberships.userId, userId), eq(businessMemberships.status, "invited")))
+    .catch((error) => {
+      if (!isTenantSchemaDriftError(error)) throw error;
+      logger.warn("business membership schema unavailable during invite activation lookup", {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    });
+
+  if (invitedMemberships.length === 0) return [];
+
   try {
     await db
       .update(businessMemberships)
@@ -204,6 +224,40 @@ async function activateInvitedMemberships(userId: string) {
     logger.warn("business membership schema unavailable during invite activation", {
       userId,
       error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return invitedMemberships;
+}
+
+function formatRoleLabel(role: string): string {
+  return role.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+async function sendActivatedMembershipEmails(
+  req: Request,
+  user: { email: string; firstName: string | null },
+  memberships: Array<{ businessId: string; role: string; businessName: string | null }>
+) {
+  if (!isEmailConfigured() || memberships.length === 0) return;
+  const frontendBaseUrl = resolveFrontendBaseUrl(req);
+
+  for (const membership of memberships) {
+    const params = new URLSearchParams({
+      email: user.email,
+      redirectPath: "/signed-in",
+    });
+    const signInUrl = `${frontendBaseUrl}/sign-in?${params.toString()}`;
+    await sendTemplatedEmail({
+      to: user.email,
+      businessId: membership.businessId,
+      templateSlug: "team_access_ready",
+      vars: {
+        userName: user.firstName?.trim() || user.email,
+        businessName: membership.businessName?.trim() || "your shop",
+        roleLabel: formatRoleLabel(membership.role),
+        signInUrl,
+      },
     });
   }
 }
@@ -355,7 +409,8 @@ authRouter.post(
     const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
     if (!user || !user.passwordHash) throw new UnauthorizedError("Invalid email or password.");
     if (!ok) throw new UnauthorizedError("Invalid email or password.");
-    await activateInvitedMemberships(user.id);
+    const activatedMemberships = await activateInvitedMemberships(user.id);
+    await sendActivatedMembershipEmails(req, { email: user.email, firstName: user.firstName }, activatedMemberships);
     const token = createAccessToken(user.id);
     logger.info("User signed in", { userId: user.id, email: user.email });
     res.json({
@@ -420,6 +475,24 @@ authRouter.post(
         }
       }
 
+      const invitedMemberships = await db
+        .select({
+          businessId: businessMemberships.businessId,
+          role: businessMemberships.role,
+          businessName: businesses.name,
+        })
+        .from(businessMemberships)
+        .leftJoin(businesses, eq(businessMemberships.businessId, businesses.id))
+        .where(and(eq(businessMemberships.userId, existing.id), eq(businessMemberships.status, "invited")))
+        .catch((error) => {
+          if (!isTenantSchemaDriftError(error)) throw error;
+          logger.warn("business membership schema unavailable during invited account claim lookup", {
+            userId: existing.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return [];
+        });
+
       const [claimedUser] = await db.transaction(async (tx) => {
         const [updatedUser] = await tx
           .update(users)
@@ -460,6 +533,7 @@ authRouter.post(
       });
 
       user = claimedUser;
+      await sendActivatedMembershipEmails(req, { email: claimedUser.email, firstName: claimedUser.firstName }, invitedMemberships);
       logger.info("Invited user claimed account", { userId: existing.id, email });
     } else {
       const [createdUser] = await db
@@ -619,7 +693,8 @@ authRouter.get(
       user = created;
       logger.info("User signed up via Google", { userId: user.id, email: user.email });
     } else {
-      await activateInvitedMemberships(user.id);
+      const activatedMemberships = await activateInvitedMemberships(user.id);
+      await sendActivatedMembershipEmails(req, { email: user.email, firstName: user.firstName }, activatedMemberships);
       logger.info("User signed in via Google", { userId: user.id, email: user.email });
     }
     const token = createAccessToken(user.id);

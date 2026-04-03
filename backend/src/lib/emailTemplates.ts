@@ -317,6 +317,38 @@ If you already use Strata, keep using {{inviteEmail}} so we can attach this shop
 
 This invite link expires in 7 days. If it expires, ask your shop owner or admin to resend it.`,
   },
+  team_access_ready: {
+    subject: "Your Strata team access is ready for {{businessName}}",
+    bodyHtml: renderClientShell({
+      businessName: "{{businessName}}",
+      eyebrow: "Team access",
+      title: "Your access is ready",
+      introHtml: `<p style="margin:0;">Hi {{userName}},</p><p style="margin:10px 0 0;">Your access to <strong>{{businessName}}</strong> on Strata is now active as a <strong>{{roleLabel}}</strong>.</p>`,
+      bodyHtml:
+        renderInfoCard(
+          "What you can do now",
+          "Sign in with your Strata email to view your schedule, assigned work, and the tools your shop gave you access to."
+        ) +
+        renderInfoCard("Sign in", "Use the secure link below to open Strata and access your shop account."),
+      ctaLabel: "Open Strata",
+      ctaUrl: "{{signInUrl}}",
+      ctaHint: "Open Strata: {{signInUrl}}",
+      showCtaHint: true,
+      footerNote: "If this access looks wrong, contact your shop owner or admin before using the account.",
+    }),
+    bodyText: `{{businessName}}
+
+Your access is ready
+
+Hi {{userName}},
+
+Your access to {{businessName}} on Strata is now active as a {{roleLabel}}.
+
+Sign in here:
+{{signInUrl}}
+
+If this access looks wrong, contact your shop owner or admin before using the account.`,
+  },
   appointment_confirmation: appointmentConfirmation,
   appointment_reminder: appointmentReminder,
   payment_receipt: paymentReceipt,

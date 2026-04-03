@@ -739,13 +739,28 @@ export default function SettingsPage() {
     refetchTeam();
 
     const savedRecord = result.data as StaffRecord | null;
-    if (!editingStaff && savedRecord?.membershipStatus === "invited") {
-      if (savedRecord.inviteDelivery === "sent") {
-        toast.success("Team member added and invite email sent");
-      } else if (savedRecord.inviteDelivery === "not_configured") {
-        toast.warning("Team member added, but invite email could not be sent because transactional email is not configured");
+    if (savedRecord?.inviteDelivery === "sent") {
+      if (savedRecord.membershipStatus === "invited") {
+        toast.success(editingStaff ? "Team member updated and invite email sent" : "Team member added and invite email sent");
       } else {
-        toast.success("Team member added");
+        toast.success(editingStaff ? "Team member updated and access email sent" : "Team member added and access email sent");
+      }
+      return;
+    }
+
+    if (savedRecord?.inviteDelivery === "not_configured") {
+      if (savedRecord.membershipStatus === "invited") {
+        toast.warning(
+          editingStaff
+            ? "Team member updated, but invite email could not be sent because transactional email is not configured"
+            : "Team member added, but invite email could not be sent because transactional email is not configured"
+        );
+      } else {
+        toast.warning(
+          editingStaff
+            ? "Team member updated, but access email could not be sent because transactional email is not configured"
+            : "Team member added, but access email could not be sent because transactional email is not configured"
+        );
       }
       return;
     }

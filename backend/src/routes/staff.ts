@@ -119,6 +119,39 @@ async function sendTeamInvite(req: Request, invitee: { id: string; email: string
   return { inviteDelivery: "sent" as const };
 }
 
+async function sendTeamAccessReady(req: Request, recipient: { email: string; firstName: string | null }, role: string) {
+  if (!isEmailConfigured()) {
+    return { inviteDelivery: "not_configured" as const };
+  }
+
+  const tenantId = businessId(req);
+  const [business] = await db
+    .select({ name: businesses.name })
+    .from(businesses)
+    .where(eq(businesses.id, tenantId))
+    .limit(1);
+  const businessName = business?.name?.trim() || "your shop";
+  const signInParams = new URLSearchParams({
+    email: recipient.email,
+    redirectPath: "/signed-in",
+  });
+  const signInUrl = `${resolveFrontendBaseUrl(req)}/sign-in?${signInParams.toString()}`;
+
+  await sendTemplatedEmail({
+    to: recipient.email,
+    businessId: tenantId,
+    templateSlug: "team_access_ready",
+    vars: {
+      userName: recipient.firstName?.trim() || recipient.email,
+      businessName,
+      roleLabel: formatRoleLabel(role),
+      signInUrl,
+    },
+  });
+
+  return { inviteDelivery: "sent" as const };
+}
+
 function isStaffSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const cause = "cause" in error ? (error as { cause?: unknown }).cause : error;
@@ -298,17 +331,26 @@ staffRouter.post("/", requireAuth, requireTenant, requirePermission("team.write"
   });
 
   const inviteResult =
-    membershipStatus === "invited" && email && newUserId
-      ? await sendTeamInvite(
-          req,
-          {
-            id: newUserId,
-            email,
-            firstName: parsed.data.firstName,
-            lastName: parsed.data.lastName,
-          },
-          role
-        )
+    email && newUserId
+      ? membershipStatus === "invited"
+        ? await sendTeamInvite(
+            req,
+            {
+              id: newUserId,
+              email,
+              firstName: parsed.data.firstName,
+              lastName: parsed.data.lastName,
+            },
+            role
+          )
+        : await sendTeamAccessReady(
+            req,
+            {
+              email,
+              firstName: parsed.data.firstName,
+            },
+            role
+          )
       : { inviteDelivery: "not_needed" as const };
 
   res.status(201).json({
@@ -501,17 +543,31 @@ staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.wr
       }
     }
 
-    if (targetUserId && !existing.userId && email && nextMembershipStatus === "invited") {
-      inviteDelivery = (await sendTeamInvite(
-        req,
-        {
-          id: targetUserId,
-          email,
-          firstName: updatedStaff.firstName,
-          lastName: updatedStaff.lastName,
-        },
-        parsed.data.role ?? updatedStaff.role ?? "technician"
-      )).inviteDelivery;
+    if (targetUserId && !existing.userId && email) {
+      inviteDelivery =
+        nextMembershipStatus === "invited"
+          ? (
+              await sendTeamInvite(
+                req,
+                {
+                  id: targetUserId,
+                  email,
+                  firstName: updatedStaff.firstName,
+                  lastName: updatedStaff.lastName,
+                },
+                parsed.data.role ?? updatedStaff.role ?? "technician"
+              )
+            ).inviteDelivery
+          : (
+              await sendTeamAccessReady(
+                req,
+                {
+                  email,
+                  firstName: updatedStaff.firstName,
+                },
+                parsed.data.role ?? updatedStaff.role ?? "technician"
+              )
+            ).inviteDelivery;
     }
 
     return [updatedStaff];
