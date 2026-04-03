@@ -391,6 +391,11 @@ export const api = {
   job: resource("jobs"),
   invoice: {
     ...resource("invoices"),
+    createStripePaymentSession: (params: Record<string, unknown>) =>
+      request<{ url: string }>("/invoices/" + (params?.id ?? "") + "/create-payment-session", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
     sendToClient: (params: Record<string, unknown>) =>
       request<unknown>("/invoices/" + (params?.id ?? "") + "/sendToClient", {
         method: "POST",

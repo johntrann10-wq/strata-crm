@@ -23,6 +23,10 @@ export function isStripePortalConfigured(): boolean {
   return !!stripe;
 }
 
+export function isStripeInvoiceCheckoutConfigured(): boolean {
+  return !!stripe;
+}
+
 export async function createCheckoutSession(params: {
   businessId: string;
   customerEmail: string;
@@ -53,4 +57,57 @@ export async function createPortalSession(params: {
     return_url: params.returnUrl,
   });
   return { url: session.url };
+}
+
+export async function createInvoicePaymentCheckoutSession(params: {
+  businessId: string;
+  invoiceId: string;
+  invoiceNumber: string | null;
+  amountCents: number;
+  currency?: string | null;
+  customerEmail?: string | null;
+  customerName?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+}): Promise<{ url: string } | null> {
+  if (!stripe) return null;
+  const amountCents = Math.max(0, Math.round(params.amountCents));
+  if (amountCents <= 0) return null;
+  const currency = (params.currency ?? "usd").trim().toLowerCase() || "usd";
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    customer_email: params.customerEmail ?? undefined,
+    customer_creation: "always",
+    expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+    line_items: [
+      {
+        price_data: {
+          currency,
+          unit_amount: amountCents,
+          product_data: {
+            name: params.invoiceNumber ? `Invoice ${params.invoiceNumber}` : "Invoice payment",
+            description: params.customerName ? `Payment for ${params.customerName}` : undefined,
+          },
+        },
+        quantity: 1,
+      },
+    ],
+    success_url: params.successUrl,
+    cancel_url: params.cancelUrl,
+    metadata: {
+      purpose: "invoice_payment",
+      businessId: params.businessId,
+      invoiceId: params.invoiceId,
+      invoiceNumber: params.invoiceNumber ?? "",
+    },
+    payment_intent_data: {
+      metadata: {
+        purpose: "invoice_payment",
+        businessId: params.businessId,
+        invoiceId: params.invoiceId,
+        invoiceNumber: params.invoiceNumber ?? "",
+      },
+    },
+  });
+  return { url: session.url! };
 }

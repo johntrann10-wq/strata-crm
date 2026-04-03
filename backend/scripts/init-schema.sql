@@ -403,6 +403,10 @@ CREATE TABLE IF NOT EXISTS payments (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_checkout_session_id text;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_payment_intent_id text;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_charge_id text;
+
 CREATE TABLE IF NOT EXISTS quotes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   business_id uuid NOT NULL REFERENCES businesses(id),

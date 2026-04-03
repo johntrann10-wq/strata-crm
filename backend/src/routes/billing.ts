@@ -3,7 +3,7 @@
  */
 import { Router, Request, Response } from "express";
 import { db } from "../db/index.js";
-import { businesses, users } from "../db/schema.js";
+import { businesses, invoices, users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import Stripe from "stripe";
 import {
@@ -19,6 +19,9 @@ import { BadRequestError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { isStripeConfigured } from "../lib/env.js";
+import { withIdempotency } from "../lib/idempotency.js";
+import { createActivityLog } from "../lib/activity.js";
+import { recordInvoicePayment } from "../lib/invoicePayments.js";
 
 export const billingRouter = Router();
 
@@ -154,19 +157,90 @@ export async function handleStripeWebhook(
   try {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
-      const businessId = session.metadata?.businessId;
-      if (businessId && session.customer && session.subscription) {
-        await db
-          .update(businesses)
-          .set({
-            stripeCustomerId: typeof session.customer === "string" ? session.customer : session.customer.id,
-            stripeSubscriptionId: typeof session.subscription === "string" ? session.subscription : session.subscription.id,
-            subscriptionStatus: "trialing",
-            trialEndsAt: null, // set by subscription.updated
-            currentPeriodEnd: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(businesses.id, businessId));
+      const purpose = session.metadata?.purpose;
+      if (purpose === "invoice_payment") {
+        const businessId = session.metadata?.businessId;
+        const invoiceId = session.metadata?.invoiceId;
+        const sessionAmountTotal = session.amount_total;
+        if (!businessId || !invoiceId || sessionAmountTotal == null) {
+          logger.warn("Stripe invoice checkout completed without required metadata", {
+            sessionId: session.id,
+            businessId,
+            invoiceId,
+          });
+        } else {
+          const idempotencyKey = `stripe-checkout-session-${session.id}`;
+          try {
+            const payment = await withIdempotency(
+              idempotencyKey,
+              { businessId, operation: "payment.create" },
+              async () =>
+                db.transaction(async (tx) =>
+                  recordInvoicePayment(
+                    {
+                      businessId,
+                      invoiceId,
+                      amount: sessionAmountTotal / 100,
+                      method: "card",
+                      paidAt: new Date(),
+                      idempotencyKey,
+                      notes: "Paid through Stripe Checkout",
+                      referenceNumber: session.id,
+                      stripeCheckoutSessionId: session.id,
+                      stripePaymentIntentId:
+                        typeof session.payment_intent === "string"
+                          ? session.payment_intent
+                          : session.payment_intent?.id ?? null,
+                    },
+                    tx
+                  )
+                )
+            );
+            const [invoice] = await db
+              .select({ invoiceNumber: invoices.invoiceNumber })
+              .from(invoices)
+              .where(eq(invoices.id, invoiceId))
+              .limit(1);
+            await createActivityLog({
+              businessId,
+              action: "invoice.payment_received",
+              entityType: "invoice",
+              entityId: invoiceId,
+              metadata: {
+                paymentId: payment.id,
+                invoiceNumber: invoice?.invoiceNumber ?? null,
+                amount: payment.amount,
+                source: "stripe_checkout",
+                stripeCheckoutSessionId: session.id,
+              },
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!message.toLowerCase().includes("duplicate request")) {
+              throw error;
+            }
+            logger.info("Stripe invoice checkout webhook duplicate ignored", {
+              sessionId: session.id,
+              businessId,
+              invoiceId,
+            });
+          }
+        }
+      } else {
+        const businessId = session.metadata?.businessId;
+        if (businessId && session.customer && session.subscription) {
+          await db
+            .update(businesses)
+            .set({
+              stripeCustomerId: typeof session.customer === "string" ? session.customer : session.customer.id,
+              stripeSubscriptionId: typeof session.subscription === "string" ? session.subscription : session.subscription.id,
+              subscriptionStatus: "trialing",
+              trialEndsAt: null, // set by subscription.updated
+              currentPeriodEnd: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(businesses.id, businessId));
+        }
       }
     } else if (
       event.type === "customer.subscription.updated" ||
