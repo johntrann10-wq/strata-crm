@@ -21,6 +21,13 @@ const QUOTE_TABS = ["all", "accepted", "aging", "followup", "lost"] as const;
 type QuoteTab = (typeof QUOTE_TABS)[number];
 type QuoteRecord = Record<string, any>;
 
+type QuoteQueueCollections = {
+  acceptedRows: QuoteRecord[];
+  agingRows: QuoteRecord[];
+  followUpRows: QuoteRecord[];
+  openPipelineValue: number;
+};
+
 function getQuotePersonLabels(
   row: QuoteRecord,
   {
@@ -78,6 +85,48 @@ function getQuoteQueueLinks(
       : null,
     invoiceHref: canInvoice ? linkWithQueueState(`/invoices/new?clientId=${String(row.clientId)}&quoteId=${qid}`) : null,
   };
+}
+
+function getQuoteQueueCollections(allRows: QuoteRecord[]): QuoteQueueCollections {
+  const acceptedRows = allRows.filter((record) => String((record as Record<string, any>).status ?? "") === "accepted");
+  const agingRows = allRows.filter((record) => {
+    const row = record as Record<string, any>;
+    const createdAt = safeDate(String(row.createdAt ?? ""));
+    return ["draft", "sent"].includes(String(row.status ?? "")) && !!createdAt && Date.now() - createdAt.getTime() >= 3 * 24 * 60 * 60 * 1000;
+  });
+  const followUpRows = allRows.filter((record) => {
+    const row = record as Record<string, any>;
+    const status = String(row.status ?? "");
+    if (!["sent", "accepted"].includes(status)) return false;
+    const sentAt = (row.sentAt as string | null | undefined) ?? null;
+    const followUpSentAt = (row.followUpSentAt as string | null | undefined) ?? null;
+    return !safeDate(followUpSentAt) ? isOlderThanDays(sentAt, 2) : isOlderThanDays(followUpSentAt, 5);
+  });
+  const openPipelineValue = allRows
+    .filter((record) => ["draft", "sent", "accepted"].includes(String((record as Record<string, any>).status ?? "")))
+    .reduce((sum, record) => sum + Number((record as Record<string, any>).total ?? 0), 0);
+
+  return {
+    acceptedRows,
+    agingRows,
+    followUpRows,
+    openPipelineValue,
+  };
+}
+
+function getQuoteTabResultCount(
+  activeTab: QuoteTab,
+  allRows: QuoteRecord[],
+  acceptedRows: QuoteRecord[],
+  agingRows: QuoteRecord[],
+  followUpRows: QuoteRecord[],
+  lostRows: QuoteRecord[],
+) {
+  if (activeTab === "accepted") return acceptedRows.length;
+  if (activeTab === "aging") return agingRows.length;
+  if (activeTab === "followup") return followUpRows.length;
+  if (activeTab === "lost") return lostRows.length;
+  return allRows.length;
 }
 
 export default function QuotesIndexPage() {
@@ -143,27 +192,9 @@ export default function QuotesIndexPage() {
   const isFirstLoadAll = allFetching && allQuotes === undefined;
   const allRows = Array.isArray(allQuotes) ? allQuotes : [];
   const lostRows = Array.isArray(lostQuotes) ? lostQuotes : [];
-  const acceptedRows = allRows.filter((record) => String((record as Record<string, any>).status ?? "") === "accepted");
-  const agingRows = allRows.filter((record) => {
-    const row = record as Record<string, any>;
-    const createdAt = safeDate(String(row.createdAt ?? ""));
-    return ["draft", "sent"].includes(String(row.status ?? "")) && !!createdAt && Date.now() - createdAt.getTime() >= 3 * 24 * 60 * 60 * 1000;
-  });
-  const followUpRows = allRows.filter((record) => {
-    const row = record as Record<string, any>;
-    const status = String(row.status ?? "");
-    if (!["sent", "accepted"].includes(status)) return false;
-    const sentAt = (row.sentAt as string | null | undefined) ?? null;
-    const followUpSentAt = (row.followUpSentAt as string | null | undefined) ?? null;
-    return !safeDate(followUpSentAt)
-      ? isOlderThanDays(sentAt, 2)
-      : isOlderThanDays(followUpSentAt, 5);
-  });
+  const { acceptedRows, agingRows, followUpRows, openPipelineValue } = getQuoteQueueCollections(allRows);
   const [, runSendQuote] = useAction(api.quote.send);
   const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
-  const openPipelineValue = allRows
-    .filter((record) => ["draft", "sent", "accepted"].includes(String((record as Record<string, any>).status ?? "")))
-    .reduce((sum, record) => sum + Number((record as Record<string, any>).total ?? 0), 0);
 
   const handleSendQuote = async (quoteId: string) => {
     setSendingQuoteId(quoteId);
@@ -266,17 +297,7 @@ export default function QuotesIndexPage() {
         onSearchChange={setSearch}
         placeholder="Search clients, vehicles, or quote id..."
         loading={allFetching && allRows.length > 0}
-        resultCount={
-          activeTab === "accepted"
-            ? allRows.filter((record) => String((record as Record<string, any>).status ?? "") === "accepted").length
-            : activeTab === "aging"
-              ? agingRows.length
-              : activeTab === "followup"
-                ? followUpRows.length
-                : activeTab === "lost"
-                  ? lostRows.length
-                  : allRows.length
-        }
+        resultCount={getQuoteTabResultCount(activeTab, allRows, acceptedRows, agingRows, followUpRows, lostRows)}
         noun="quotes"
         filtersLabel={
           [
@@ -310,9 +331,9 @@ export default function QuotesIndexPage() {
           </TabsTrigger>
           <TabsTrigger value="accepted" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
             Ready to Book
-            {allRows.filter((record) => String((record as Record<string, any>).status ?? "") === "accepted").length > 0 && (
+            {acceptedRows.length > 0 && (
               <span className="ml-1 rounded bg-green-100 text-green-700 px-1.5 py-0.5 text-xs font-medium">
-                {allRows.filter((record) => String((record as Record<string, any>).status ?? "") === "accepted").length}
+                {acceptedRows.length}
               </span>
             )}
           </TabsTrigger>
