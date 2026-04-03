@@ -1161,7 +1161,7 @@ export default function CalendarPage() {
                       setBlockStartDate(event.target.value);
                       if (blockMode === "time") setBlockEndDate(event.target.value);
                     }}
-                    className="h-11 rounded-xl"
+                    className={cn("rounded-xl", isMobileLayout ? "h-10 text-sm" : "h-11")}
                   />
                 </div>
                 {blockMode === "full-day" ? (
@@ -1172,7 +1172,7 @@ export default function CalendarPage() {
                       type="date"
                       value={blockEndDate}
                       onChange={(event) => setBlockEndDate(event.target.value)}
-                      className="h-11 rounded-xl"
+                      className={cn("rounded-xl", isMobileLayout ? "h-10 text-sm" : "h-11")}
                     />
                   </div>
                 ) : null}
