@@ -71,6 +71,7 @@ import { getCurrentBusinessId } from "@/lib/auth";
 import { getTransactionalEmailErrorMessage } from "@/lib/transactionalEmail";
 import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
 import { printAuthenticatedDocument } from "@/lib/printDocument";
+import { getInvoiceCollectionSummary } from "@/lib/paymentStates";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
@@ -648,6 +649,13 @@ export default function InvoiceDetailPage() {
   const status = invoice.status ?? "draft";
   const dueDateValue = invoice?.dueDate ? new Date(invoice.dueDate) : null;
   const isOverdue = !!dueDateValue && ["sent", "partial"].includes(status) && dueDateValue.getTime() < Date.now();
+  const collectionSummary = getInvoiceCollectionSummary({
+    status,
+    total: invoice.total,
+    totalPaid,
+    remainingBalance,
+    isOverdue,
+  });
   const canEditLineItems = status !== "paid" && status !== "void";
 
   const clientData = invoice.client as any;
@@ -952,12 +960,15 @@ export default function InvoiceDetailPage() {
           {/* Payment History */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Payment History</CardTitle>
+              <CardTitle className="text-base font-semibold">
+                Payment History
+                {paymentsList.length > 0 ? ` (${paymentsList.filter((payment) => !payment.reversedAt).length} active)` : ""}
+              </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {paymentsList.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">
-                  No payments recorded yet.
+                  No payments recorded yet. Manual collections and Stripe payments will appear here.
                 </div>
               ) : (
                 <Table>
@@ -1022,14 +1033,8 @@ export default function InvoiceDetailPage() {
         <div className="space-y-6">
           {invoiceAllowsPayment(status) && canWritePayments ? (
             <CollectionActionCard
-              title={isOverdue ? "Overdue balance" : "Collect payment"}
-              detail={
-                isOverdue
-                  ? `Invoice is past due. Balance remaining ${formatCurrency(remainingBalance)}.`
-                  : status === "partial"
-                    ? `Partial payment recorded. ${formatCurrency(remainingBalance)} still due.`
-                    : "Record payment or follow up with the customer."
-              }
+              title={collectionSummary.title}
+              detail={collectionSummary.detail}
               amount={formatCurrency(remainingBalance)}
               primaryLabel="Record payment"
               tertiaryLabel={billingStatus?.stripeConnectReady && remainingBalance > 0 ? "Pay with Stripe" : undefined}

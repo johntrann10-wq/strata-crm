@@ -1393,7 +1393,7 @@ export default function AppointmentDetail() {
             {appointment.depositAmount != null && appointment.depositAmount > 0 && !appointment.depositPaid && (
               <Button variant="outline" size="sm" onClick={handleOpenDepositDialog}>
                 <DollarSign className="h-4 w-4 mr-2" />
-                Record Deposit
+                Collect Deposit
               </Button>
             )}
           </div>
@@ -1567,7 +1567,7 @@ export default function AppointmentDetail() {
                     }}
                   >
                     <DollarSign className="mr-2 h-4 w-4" />
-                    Record deposit
+                    Collect deposit
                   </Button>
                 ) : null}
                 {appointment.depositPaid ? (
@@ -1791,9 +1791,9 @@ export default function AppointmentDetail() {
                         </p>
                         <p className="text-sm">
                           {appointment.depositPaid ? (
-                            <span className="text-green-600 font-medium">Paid</span>
+                            <span className="text-green-600 font-medium">Collected</span>
                           ) : (
-                            <span className="text-amber-600 font-medium">Unpaid</span>
+                            <span className="text-amber-600 font-medium">Waiting on collection</span>
                           )}
                         </p>
                       </div>
@@ -2103,8 +2103,8 @@ export default function AppointmentDetail() {
                 depositActionLabel={
                   appointment.depositAmount != null && appointment.depositAmount > 0
                     ? appointment.depositPaid
-                      ? "Deposit recorded"
-                      : "Record deposit"
+                      ? "Deposit collected"
+                      : "Collect deposit"
                     : null
                 }
                 onDepositAction={
@@ -2118,7 +2118,7 @@ export default function AppointmentDetail() {
                   appointment.depositAmount <= 0 ||
                   appointment.depositPaid === true
                 }
-                secondaryDepositActionLabel={appointment.depositPaid ? "Reverse deposit" : null}
+                secondaryDepositActionLabel={appointment.depositPaid ? "Reverse deposit collection" : null}
                 onSecondaryDepositAction={appointment.depositPaid ? () => setReverseDepositOpen(true) : null}
                 secondaryDepositActionDisabled={reversingDeposit}
               />
@@ -2214,9 +2214,9 @@ export default function AppointmentDetail() {
       <Dialog open={recordDepositOpen} onOpenChange={setRecordDepositOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Record Deposit</DialogTitle>
+            <DialogTitle>Collect Deposit</DialogTitle>
             <DialogDescription>
-              Record the payment details for this appointment deposit without changing the rest of the appointment.
+              Collect the appointment deposit now without changing the rest of the booking.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -2232,7 +2232,7 @@ export default function AppointmentDetail() {
                 placeholder="0.00"
               />
               <p className="text-xs text-muted-foreground">
-                Deposit due: {formatCurrency(Number(appointment.depositAmount ?? 0))}
+                Deposit to collect: {formatCurrency(Number(appointment.depositAmount ?? 0))}
               </p>
             </div>
             <div className="space-y-2">
@@ -2273,7 +2273,7 @@ export default function AppointmentDetail() {
             </Button>
             <Button onClick={() => void handleRecordDepositPayment()} disabled={recordingDeposit}>
               {recordingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Record Deposit
+              Collect Deposit
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2282,9 +2282,9 @@ export default function AppointmentDetail() {
       <AlertDialog open={reverseDepositOpen} onOpenChange={setReverseDepositOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Reverse deposit payment?</AlertDialogTitle>
+            <AlertDialogTitle>Reverse deposit collection?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will mark the appointment deposit as unpaid again. Use this if the manual deposit record was entered by mistake.
+              This will mark the appointment deposit as uncollected again. Use this if the manual deposit record was entered by mistake.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

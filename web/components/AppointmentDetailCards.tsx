@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { getDepositSummary } from "@/lib/paymentStates";
 import {
   User,
   Car,
@@ -253,12 +254,12 @@ export function FinancialSummaryCard({
   onSecondaryDepositAction,
   secondaryDepositActionDisabled = false,
 }: FinancialSummaryCardProps) {
-  const showBalanceDue =
-    depositPaid === true &&
-    totalPrice != null &&
-    depositAmount != null;
-
-  const balanceDue = showBalanceDue ? totalPrice! - depositAmount! : null;
+  const depositSummary = getDepositSummary({
+    totalPrice,
+    depositAmount,
+    depositPaid,
+  });
+  const showBalanceDue = totalPrice != null && depositSummary.remainingBalance > 0;
 
   return (
     <Card>
@@ -277,27 +278,31 @@ export function FinancialSummaryCard({
         </div>
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Deposit</span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 text-right">
             <span className="font-medium">
-              {depositAmount != null ? formatCurrency(depositAmount) : "—"}
+              {depositSummary.hasDeposit ? formatCurrency(depositSummary.depositAmount) : "—"}
             </span>
-            {depositPaid ? (
-              <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 text-xs">
-                Paid
-              </Badge>
-            ) : (
-              <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 text-xs">
-                Unpaid
-              </Badge>
-            )}
+            <Badge
+              className={cn(
+                "text-xs hover:bg-inherit",
+                depositPaid
+                  ? "bg-green-100 text-green-800 border-green-200"
+                  : depositSummary.hasDeposit
+                    ? "bg-amber-100 text-amber-800 border-amber-200"
+                    : "bg-slate-100 text-slate-700 border-slate-200"
+              )}
+            >
+              {depositSummary.stateLabel}
+            </Badge>
           </div>
         </div>
-        {showBalanceDue && balanceDue != null && (
+        <p className="text-xs text-muted-foreground">{depositSummary.detail}</p>
+        {showBalanceDue ? (
           <div className="flex items-center justify-between text-sm pt-1 border-t">
-            <span className="text-muted-foreground">Balance Due</span>
-            <span className="font-semibold">{formatCurrency(balanceDue)}</span>
+            <span className="text-muted-foreground">Remaining balance</span>
+            <span className="font-semibold">{formatCurrency(depositSummary.remainingBalance)}</span>
           </div>
-        )}
+        ) : null}
         {(depositActionLabel && onDepositAction) || (secondaryDepositActionLabel && onSecondaryDepositAction) ? (
           <div className="flex flex-col gap-2 pt-2">
             {depositActionLabel && onDepositAction ? (
