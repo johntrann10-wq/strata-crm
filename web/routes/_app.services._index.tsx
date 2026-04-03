@@ -100,6 +100,31 @@ const defaultServiceFormData: ServiceFormData = {
   isAddon: false,
 };
 
+function MobileFilterSelect({
+  value,
+  onChange,
+  children,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <select
+      className={cn(
+        "h-10 w-full rounded-xl border border-input bg-background px-3 text-sm shadow-sm outline-none transition-[color,box-shadow,border-color] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40",
+        className
+      )}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {children}
+    </select>
+  );
+}
+
 function formatPrice(price: number | string): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -362,6 +387,7 @@ function ServiceCard({
 export default function ServicesPage() {
   const { businessId } = useOutletContext<AuthOutletContext>();
   const [search, setSearch] = useState("");
+  const [isSmallViewport, setIsSmallViewport] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [serviceTab, setServiceTab] = useState<"active" | "inactive">("active");
   const [supportsCategoryManagement, setSupportsCategoryManagement] = useState(true);
@@ -371,6 +397,15 @@ export default function ServicesPage() {
   const [deleteCategory, setDeleteCategory] = useState<CategoryRecord | null>(null);
   const [categoryName, setCategoryName] = useState("");
   const [moveDeleteServicesTo, setMoveDeleteServicesTo] = useState<string>(UNCATEGORIZED_VALUE);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 640px)");
+    const sync = () => setIsSmallViewport(media.matches);
+    sync();
+    media.addEventListener?.("change", sync);
+    return () => media.removeEventListener?.("change", sync);
+  }, []);
 
   const [createServiceOpen, setCreateServiceOpen] = useState(false);
   const [editService, setEditService] = useState<ServiceRecord | null>(null);
@@ -720,22 +755,49 @@ export default function ServicesPage() {
         onClear={() => { setSearch(""); setCategoryFilter("all"); setServiceTab("active"); }}
         actions={
           <div className="flex gap-2">
-            <Select value={serviceTab} onValueChange={(value) => setServiceTab(value as "active" | "inactive")}>
-              <SelectTrigger className="min-w-[140px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="min-w-[180px]"><SelectValue placeholder="All categories" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All categories</SelectItem>
-                {categoryOptions.map((category) => (
-                  <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {isSmallViewport ? (
+              <>
+                <MobileFilterSelect
+                  value={serviceTab}
+                  onChange={(value) => setServiceTab(value as "active" | "inactive")}
+                  className="min-w-[140px]"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </MobileFilterSelect>
+                <MobileFilterSelect
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
+                  className="min-w-[180px]"
+                >
+                  <option value="all">All categories</option>
+                  {categoryOptions.map((category) => (
+                    <option key={category.value} value={category.value}>
+                      {category.label}
+                    </option>
+                  ))}
+                </MobileFilterSelect>
+              </>
+            ) : (
+              <>
+                <Select value={serviceTab} onValueChange={(value) => setServiceTab(value as "active" | "inactive")}>
+                  <SelectTrigger className="min-w-[140px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="min-w-[180px]"><SelectValue placeholder="All categories" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All categories</SelectItem>
+                    {categoryOptions.map((category) => (
+                      <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
           </div>
         }
       />
