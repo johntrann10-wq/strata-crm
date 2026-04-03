@@ -4,6 +4,7 @@ import { useFindFirst, useFindMany, useFindOne, useAction } from "../hooks/useAp
 import { format, addMinutes } from "date-fns";
 import {
   CalendarIcon,
+  ChevronDown,
   ChevronLeft,
   Check,
   ChevronsUpDown,
@@ -552,13 +553,15 @@ export default function NewAppointmentPage() {
 
   const timeOptions = useMemo(() => buildQuarterHourOptions(), []);
   const timeSelectTriggerClassName =
-    "h-11 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
+    "h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
   const mobileTimeSelectClassName =
-    "bg-background/85 text-base font-normal";
+    "h-10 bg-background/85 text-base font-normal";
   const dateInputClassName =
-    "h-11 text-sm font-medium [font-variant-numeric:tabular-nums]";
+    "h-10 px-3 text-sm font-medium [font-variant-numeric:tabular-nums]";
   const readOnlyTimeClassName =
-    "flex h-11 w-full items-center rounded-xl border border-input/90 bg-muted/40 pl-10 pr-3 text-sm font-medium text-muted-foreground [font-variant-numeric:tabular-nums]";
+    "flex h-10 w-full items-center rounded-xl border border-input/90 bg-muted/40 pl-10 pr-3 text-sm font-medium text-muted-foreground [font-variant-numeric:tabular-nums]";
+  const mobileFormSelectClassName =
+    "h-10 w-full appearance-none rounded-xl border border-input/90 bg-background/85 px-3 pr-10 text-base font-normal text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none";
 
   const notifyAppointmentConfirmation = (deliveryStatus?: string | null, deliveryError?: string | null) => {
     if (deliveryStatus === "emailed") {
@@ -1474,19 +1477,37 @@ export default function NewAppointmentPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Job Phase</Label>
-                      <Select value={jobPhase} onValueChange={setJobPhase}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="scheduled">Scheduled</SelectItem>
-                          <SelectItem value="active_work">Active work</SelectItem>
-                          <SelectItem value="waiting">Waiting</SelectItem>
-                          <SelectItem value="curing">Curing</SelectItem>
-                          <SelectItem value="hold">Hold</SelectItem>
-                          <SelectItem value="pickup_ready">Pickup ready</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      {isSmallViewport ? (
+                        <div className="relative">
+                          <select
+                            value={jobPhase}
+                            onChange={(event) => setJobPhase(event.target.value)}
+                            className={mobileFormSelectClassName}
+                          >
+                            <option value="scheduled">Scheduled</option>
+                            <option value="active_work">Active work</option>
+                            <option value="waiting">Waiting</option>
+                            <option value="curing">Curing</option>
+                            <option value="hold">Hold</option>
+                            <option value="pickup_ready">Pickup ready</option>
+                          </select>
+                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        </div>
+                      ) : (
+                        <Select value={jobPhase} onValueChange={setJobPhase}>
+                          <SelectTrigger className={timeSelectTriggerClassName}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="scheduled">Scheduled</SelectItem>
+                            <SelectItem value="active_work">Active work</SelectItem>
+                            <SelectItem value="waiting">Waiting</SelectItem>
+                            <SelectItem value="curing">Curing</SelectItem>
+                            <SelectItem value="hold">Hold</SelectItem>
+                            <SelectItem value="pickup_ready">Pickup ready</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="pickup-ready-date">Pickup Ready (optional)</Label>
@@ -1515,13 +1536,37 @@ export default function NewAppointmentPage() {
                 {/* Staff */}
                 <div className="space-y-2">
                   <Label>Assigned Staff</Label>
+                  {isSmallViewport ? (
+                    <div className="relative">
+                      <select
+                        value={selectedStaffId ?? "none"}
+                        onChange={(event) =>
+                          setSelectedStaffId(event.target.value === "none" ? null : event.target.value)
+                        }
+                        className={mobileFormSelectClassName}
+                        disabled={staffFetching}
+                      >
+                        <option value="none">No staff assigned</option>
+                        {staffFetching ? <option value="loading">Loading...</option> : null}
+                        {!staffFetching
+                          ? staff.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.firstName} {s.lastName}
+                                {s.role ? ` - ${s.role}` : ""}
+                              </option>
+                            ))
+                          : null}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    </div>
+                  ) : (
                   <Select
                     value={selectedStaffId ?? "none"}
                     onValueChange={(val) =>
                       setSelectedStaffId(val === "none" ? null : val)
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={timeSelectTriggerClassName}>
                       <SelectValue placeholder="No staff assigned" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1540,6 +1585,7 @@ export default function NewAppointmentPage() {
                       )}
                     </SelectContent>
                   </Select>
+                  )}
                 </div>
               </div>
 
