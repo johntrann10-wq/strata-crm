@@ -12,6 +12,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:init": "node scripts/run-init.cjs",
     "db:studio": "drizzle-kit studio",
+    "cleanup:placeholder-bookings": "tsx scripts/cleanup-placeholder-bookings.ts",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts"
   },
