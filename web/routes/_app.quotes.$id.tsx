@@ -110,6 +110,85 @@ async function openPrintableQuote(quoteId: string, businessId?: string | null) {
   });
 }
 
+type QuoteDetailRecord = {
+  id: string;
+  status: string;
+  total: number | null;
+  client: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+  vehicle: {
+    id: string;
+    year: string | number | null;
+    make: string | null;
+    model: string | null;
+  } | null;
+  lineItems: {
+    edges: Array<{ node: { id: string } }>;
+  };
+};
+
+function getQuoteClientName(quote: QuoteDetailRecord) {
+  return [quote.client.firstName, quote.client.lastName].filter(Boolean).join(" ").trim() || "Unknown client";
+}
+
+function getQuoteVehicleLabel(vehicle: QuoteDetailRecord["vehicle"]) {
+  if (!vehicle) return "";
+  return [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ").trim();
+}
+
+function getQuoteHeaderSubtitle(quote: QuoteDetailRecord) {
+  const totalLineItems = quote.lineItems.edges.length;
+  const lineItemSummary = `${totalLineItems} line item${totalLineItems === 1 ? "" : "s"} - ${formatCurrency(quote.total)}`;
+  const vehicleLabel = getQuoteVehicleLabel(quote.vehicle);
+  return vehicleLabel ? `${vehicleLabel} - ${lineItemSummary}` : lineItemSummary;
+}
+
+function buildQuoteRelatedRecords(
+  quote: QuoteDetailRecord & { appointmentId?: string | null },
+  currentLocationId?: string | null,
+): RelatedRecord[] {
+  const relatedRecords: RelatedRecord[] = [];
+
+  if (quote.client && quote.vehicle) {
+    relatedRecords.push({
+      type: "client",
+      id: quote.client.id,
+      label: getQuoteClientName(quote),
+      href: `/clients/${quote.client.id}/vehicles/${quote.vehicle.id}`,
+      actionHref: `/appointments/new?clientId=${quote.client.id}&vehicleId=${quote.vehicle.id}${
+        currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
+      }`,
+      actionLabel: "Book",
+    });
+    relatedRecords.push({
+      type: "vehicle",
+      id: quote.vehicle.id,
+      label: getQuoteVehicleLabel(quote.vehicle),
+      href: `/clients/${quote.client.id}`,
+      actionHref: `/invoices/new?clientId=${quote.client.id}&quoteId=${quote.id}`,
+      actionLabel: "Invoice",
+    });
+  }
+
+  if (quote.appointmentId) {
+    relatedRecords.push({
+      type: "appointment",
+      id: quote.appointmentId,
+      label: "Scheduled appointment",
+      href: `/appointments/${quote.appointmentId}`,
+      actionHref: `/invoices/new?clientId=${quote.client.id}&quoteId=${quote.id}`,
+      actionLabel: "Invoice",
+    });
+  }
+
+  return relatedRecords;
+}
+
 export default function QuoteDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -383,41 +462,8 @@ export default function QuoteDetailPage() {
     );
   }
 
-  const relatedRecords: RelatedRecord[] = [];
-  if (quote.client && quote.vehicle) {
-    relatedRecords.push({
-      type: "client",
-      id: quote.client.id,
-      label: quote.client.firstName + " " + quote.client.lastName,
-      href: `/clients/${quote.client.id}/vehicles/${quote.vehicle.id}`,
-      actionHref: `/appointments/new?clientId=${quote.client.id}&vehicleId=${quote.vehicle.id}${
-        currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
-      }`,
-      actionLabel: "Book",
-    });
-    relatedRecords.push({
-      type: "vehicle",
-      id: quote.vehicle.id,
-      label: [quote.vehicle.year, quote.vehicle.make, quote.vehicle.model]
-        .filter(Boolean)
-        .join(" "),
-      href: `/clients/${quote.client.id}`,
-      actionHref: `/invoices/new?clientId=${quote.client.id}&quoteId=${quote.id}`,
-      actionLabel: "Invoice",
-    });
-  }
-  if ((quote as any).appointmentId) {
-    relatedRecords.push({
-      type: "appointment",
-      id: (quote as any).appointmentId,
-      label: "Scheduled appointment",
-      href: `/appointments/${(quote as any).appointmentId}`,
-      actionHref: `/invoices/new?clientId=${quote.client.id}&quoteId=${quote.id}`,
-      actionLabel: "Invoice",
-    });
-  }
-
-  const clientName = `${quote.client.firstName} ${quote.client.lastName}`;
+  const relatedRecords = buildQuoteRelatedRecords(quote as QuoteDetailRecord & { appointmentId?: string | null }, currentLocationId);
+  const clientName = getQuoteClientName(quote as QuoteDetailRecord);
   const totalLineItems = quote.lineItems.edges.length;
   const expiresSoon =
     !!quote.expiresAt &&
@@ -431,11 +477,7 @@ export default function QuoteDetailPage() {
         backTo={returnTo}
         title={`Quote for ${clientName}`}
         badge={<StatusBadge status={quote.status} />}
-        subtitle={
-          quote.vehicle
-            ? `${quote.vehicle.year} ${quote.vehicle.make} ${quote.vehicle.model} - ${totalLineItems} line item${totalLineItems === 1 ? "" : "s"} - ${formatCurrency(quote.total)}`
-            : `${totalLineItems} line item${totalLineItems === 1 ? "" : "s"} - ${formatCurrency(quote.total)}`
-        }
+        subtitle={getQuoteHeaderSubtitle(quote as QuoteDetailRecord)}
         right={
           <div className="flex items-center justify-end gap-2">
             <div className="hidden sm:flex sm:flex-wrap sm:justify-end sm:gap-2">
