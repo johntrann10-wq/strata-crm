@@ -183,6 +183,72 @@ function isOlderThanDays(value: string | Date | null | undefined, days: number):
   return Date.now() - parsed.getTime() >= days * 24 * 60 * 60 * 1000;
 }
 
+type AppointmentDetailRecord = {
+  id: string;
+  title?: string | null;
+  status?: string | null;
+  isMobile?: boolean | null;
+  mobileAddress?: string | null;
+  totalPrice?: number | null;
+  client?: {
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null;
+  vehicle?: {
+    id: string;
+    year?: number | null;
+    make?: string | null;
+    model?: string | null;
+  } | null;
+  assignedStaff?: {
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null;
+};
+
+function getAppointmentDetailClientName(appointment: AppointmentDetailRecord) {
+  if (!appointment.client) return "Internal block";
+  return [appointment.client.firstName, appointment.client.lastName].filter(Boolean).join(" ").trim();
+}
+
+function getAppointmentDetailVehicleLabel(appointment: AppointmentDetailRecord) {
+  if (!appointment.vehicle) return "No vehicle attached";
+  return [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ").trim();
+}
+
+function getAppointmentDisplayState(
+  appointment: AppointmentDetailRecord,
+  appointmentServicesLength: number,
+  isInternalCalendarBlock: boolean,
+  blockCoverageLabel: string | null,
+) {
+  const appointmentClientName = getAppointmentDetailClientName(appointment);
+  const appointmentVehicleLabel = getAppointmentDetailVehicleLabel(appointment);
+  const appointmentLocationLabel = appointment.isMobile ? appointment.mobileAddress || "Mobile service" : "In-shop service";
+  const appointmentValueLabel =
+    appointment.totalPrice != null && appointment.totalPrice > 0
+      ? formatCurrency(appointment.totalPrice)
+      : appointmentServicesLength > 0
+        ? `${appointmentServicesLength} booked service${appointmentServicesLength === 1 ? "" : "s"}`
+        : "No pricing attached yet";
+  const appointmentSubjectLabel = isInternalCalendarBlock ? blockCoverageLabel ?? "Internal block" : appointmentClientName;
+  const appointmentSecondaryLabel = isInternalCalendarBlock
+    ? appointment.assignedStaff
+      ? [appointment.assignedStaff.firstName, appointment.assignedStaff.lastName].filter(Boolean).join(" ").trim()
+      : "Business-wide block"
+    : appointmentVehicleLabel;
+
+  return {
+    appointmentClientName,
+    appointmentVehicleLabel,
+    appointmentLocationLabel,
+    appointmentValueLabel,
+    appointmentSubjectLabel,
+    appointmentSecondaryLabel,
+  };
+}
+
 function JobLifecycleStepper({
   status,
   invoicedAt,
@@ -934,12 +1000,19 @@ export default function AppointmentDetail() {
     ["sent", "partial"].includes(String((invoice as any).status ?? "")) &&
     !safeDate((invoice as any).lastPaidAt ?? null) &&
     isOlderThanDays((invoice as any).lastSentAt ?? null, 3);
-  const appointmentClientName = appointment.client
-    ? `${appointment.client.firstName} ${appointment.client.lastName}`
-    : "Internal block";
-  const appointmentVehicleLabel = appointment.vehicle
-    ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
-    : "No vehicle attached";
+  const {
+    appointmentClientName,
+    appointmentVehicleLabel,
+    appointmentLocationLabel,
+    appointmentValueLabel,
+    appointmentSubjectLabel,
+    appointmentSecondaryLabel,
+  } = getAppointmentDisplayState(
+    appointment as AppointmentDetailRecord,
+    appointmentServices?.length ?? 0,
+    isInternalCalendarBlock,
+    blockCoverageLabel
+  );
   const hasPlaceholderClient =
     appointment.client?.firstName === "Walk-in" && appointment.client?.lastName === "Customer";
   const hasPlaceholderVehicle =
@@ -961,23 +1034,6 @@ export default function AppointmentDetail() {
     color?: string | null;
     licensePlate?: string | null;
   }>;
-  const appointmentLocationLabel = appointment.isMobile
-    ? appointment.mobileAddress || "Mobile service"
-    : "In-shop service";
-  const appointmentValueLabel =
-    appointment.totalPrice != null && appointment.totalPrice > 0
-      ? formatCurrency(appointment.totalPrice)
-      : appointmentServices && appointmentServices.length > 0
-        ? `${appointmentServices.length} booked service${appointmentServices.length === 1 ? "" : "s"}`
-        : "No pricing attached yet";
-  const appointmentSubjectLabel = isInternalCalendarBlock
-    ? blockCoverageLabel ?? "Internal block"
-    : appointmentClientName;
-  const appointmentSecondaryLabel = isInternalCalendarBlock
-    ? (appointment.assignedStaff
-        ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-        : "Business-wide block")
-    : appointmentVehicleLabel;
   const canQuickEditAppointment =
     appointment.status !== "completed" &&
     appointment.status !== "cancelled" &&
