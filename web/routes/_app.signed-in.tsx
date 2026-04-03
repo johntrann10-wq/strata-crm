@@ -32,6 +32,11 @@ import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { toast } from "sonner";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { parseLeadRecord } from "../lib/leads";
+import {
+  buildActivationChecklist,
+  isAcclimatedWorkspace,
+  type ActivationChecklistKey,
+} from "@/lib/dashboardReadiness";
 
 type AppointmentRecord = {
   id: string;
@@ -186,6 +191,15 @@ function sectionErrorMessage(err: Error): string {
   }
   return err.message || "Could not load this section.";
 }
+
+const ACTIVATION_CHECKLIST_ICONS: Record<ActivationChecklistKey, ReactNode> = {
+  client: <Users className="h-4 w-4" />,
+  vehicle: <Car className="h-4 w-4" />,
+  services: <Wrench className="h-4 w-4" />,
+  appointment: <CalendarPlus className="h-4 w-4" />,
+  invoice: <FileText className="h-4 w-4" />,
+  booking_basics: <Settings2 className="h-4 w-4" />,
+};
 
 export default function SignedIn() {
   const { businessName, businessId, user, currentLocationId } = useOutletContext<AuthOutletContext & { businessId?: string }>();
@@ -467,78 +481,16 @@ export default function SignedIn() {
 
     return actions.slice(0, 4);
   }, [depositDueValue, depositsAwaitingPayment, pendingQuotes, staleInvoiceCollections, todayAppointments]);
-  const activationChecklist = useMemo(() => {
-    const bookingBasicsReady = Boolean(
-      activationBusiness?.operatingHours &&
-        activationBusiness.appointmentBufferMinutes != null
-    );
-    const bufferMinutes = Number(activationBusiness?.appointmentBufferMinutes ?? 0);
-    const items = [
-      {
-        key: "client",
-        label: "Add your first client",
-        detail: "Start your CRM with the first real customer record.",
-        done: activationClients.length > 0,
-        href: "/clients/new",
-        actionLabel: "Add client",
-        icon: <Users className="h-4 w-4" />,
-      },
-      {
-        key: "vehicle",
-        label: "Add your first vehicle",
-        detail: "Attach a real vehicle so scheduling and history work correctly.",
-        done: activationVehiclesCount > 0,
-        href: "/clients",
-        actionLabel: "Add vehicle",
-        icon: <Car className="h-4 w-4" />,
-      },
-      {
-        key: "services",
-        label: "Review loaded services",
-        detail: "Your starter menu is preloaded. Confirm the catalog before you start booking.",
-        done: activationServicesCount > 0,
-        href: "/services",
-        actionLabel: "Open services",
-        icon: <Wrench className="h-4 w-4" />,
-      },
-      {
-        key: "appointment",
-        label: "Book your first appointment",
-        detail: "Put a real job on the board so the calendar becomes useful immediately.",
-        done: activationAppointments.length > 0,
-        href: scheduleJobHref,
-        actionLabel: "New appointment",
-        icon: <CalendarPlus className="h-4 w-4" />,
-      },
-      {
-        key: "invoice",
-        label: "Generate your first invoice",
-        detail: "Turn completed work into a payable invoice so billing is ready from day one.",
-        done: activationInvoicesCount > 0,
-        href: "/invoices/new",
-        actionLabel: "New invoice",
-        icon: <FileText className="h-4 w-4" />,
-      },
-      {
-        key: "booking_basics",
-        label: "Confirm booking basics",
-        detail: bookingBasicsReady
-          ? `Hours loaded and ${bufferMinutes} minute booking buffer ready.`
-          : "Verify hours, booking buffer, and default billing basics.",
-        done: bookingBasicsReady,
-        href: "/settings",
-        actionLabel: "Open settings",
-        icon: <Settings2 className="h-4 w-4" />,
-      },
-    ];
-    const completed = items.filter((item) => item.done).length;
-    return {
-      items,
-      completed,
-      total: items.length,
-      percent: Math.round((completed / items.length) * 100),
-    };
-  }, [
+  const activationChecklistBase = useMemo(() => buildActivationChecklist({
+    operatingHours: activationBusiness?.operatingHours,
+    appointmentBufferMinutes: activationBusiness?.appointmentBufferMinutes ?? null,
+    activationClientsCount: activationClients.length,
+    activationVehiclesCount,
+    activationServicesCount,
+    activationAppointmentsCount: activationAppointments.length,
+    activationInvoicesCount,
+    scheduleJobHref,
+  }), [
     activationBusiness?.appointmentBufferMinutes,
     activationBusiness?.operatingHours,
     activationAppointments.length,
@@ -548,21 +500,27 @@ export default function SignedIn() {
     activationVehiclesCount,
     scheduleJobHref,
   ]);
-  const acclimatedWorkspace = useMemo(() => {
-    const coreReady =
-      activationClients.length > 0 &&
-      activationVehiclesCount > 0 &&
-      activationServicesCount > 0 &&
-      activationAppointments.length > 0 &&
-      activationInvoicesCount > 0;
-    const activeOperatingSignals =
-      activationClients.length >= 3 ||
-      activeJobs.length > 0 ||
-      todayAppointments.length > 0 ||
-      pendingApprovalsCount > 0 ||
-      unpaidRevenue > 0;
-    return coreReady && activeOperatingSignals;
-  }, [
+  const activationChecklist = useMemo(
+    () => ({
+      ...activationChecklistBase,
+      items: activationChecklistBase.items.map((item) => ({
+        ...item,
+        icon: ACTIVATION_CHECKLIST_ICONS[item.key],
+      })),
+    }),
+    [activationChecklistBase]
+  );
+  const acclimatedWorkspace = useMemo(() => isAcclimatedWorkspace({
+    activationClientsCount: activationClients.length,
+    activationVehiclesCount,
+    activationServicesCount,
+    activationAppointmentsCount: activationAppointments.length,
+    activationInvoicesCount,
+    activeJobsCount: activeJobs.length,
+    todayAppointmentsCount: todayAppointments.length,
+    pendingApprovalsCount,
+    unpaidRevenue,
+  }), [
     activationAppointments.length,
     activationClients.length,
     activationInvoicesCount,
