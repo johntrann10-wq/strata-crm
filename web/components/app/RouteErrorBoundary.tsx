@@ -23,11 +23,41 @@ export function RouteErrorBoundary() {
   }, [routeError]);
 
   useEffect(() => {
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       clearAuthState("auth:invalid");
       navigate("/sign-in", { replace: true });
     }
   }, [status, navigate]);
+
+  if (status === 403) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="mx-auto flex flex-col items-center justify-center gap-6 px-4 py-16 text-center">
+          <div>
+            <h1 className="text-4xl font-bold text-foreground">Access restricted</h1>
+            <p className="mt-3 text-muted-foreground">
+              You are signed in, but this page is not available for your current role.
+            </p>
+            {detail ? <p className="mt-2 text-xs text-muted-foreground">{detail}</p> : null}
+          </div>
+          <div className="flex gap-3">
+            <button
+              className="rounded-md border border-input bg-muted px-4 py-2 text-sm"
+              onClick={() => navigate(-1)}
+            >
+              Go back
+            </button>
+            <button
+              className="rounded-md border border-input bg-muted px-4 py-2 text-sm"
+              onClick={() => navigate("/profile")}
+            >
+              Open profile
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // 404/missing-feature: show "coming soon" without confusing the user.
   if (status === 404) {
@@ -78,4 +108,3 @@ export function RouteErrorBoundary() {
     </div>
   );
 }
-

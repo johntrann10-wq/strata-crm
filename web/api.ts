@@ -139,7 +139,7 @@ async function request<T = unknown>(
     if (res.status === 402 && path.startsWith("/businesses")) {
       return { records: [] } as T;
     }
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       // Invalid/expired token: clear local auth so boot + protected pages can redirect predictably.
       clearAuthState("auth:invalid", { status: res.status, path });
       recordReliabilityDiagnostic({
