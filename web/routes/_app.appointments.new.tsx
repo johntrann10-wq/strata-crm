@@ -75,6 +75,123 @@ const toMoneyNumber = (value: unknown): number => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
+type ServiceCatalogRecord = {
+  id: string;
+  name: string;
+  price?: number | string | null;
+  durationMinutes?: number | null;
+  category?: string | null;
+  categoryId?: string | null;
+  categoryLabel?: string | null;
+  notes?: string | null;
+  isAddon?: boolean | null;
+};
+
+type PackageAddonLinkRecord = {
+  parentServiceId: string;
+  addonServiceId: string;
+};
+
+function getServiceSearchHaystack(service: ServiceCatalogRecord) {
+  return [service.name, service.notes, service.categoryLabel ?? formatServiceCategory(service.category)]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function buildPackageTemplates(
+  services: ServiceCatalogRecord[],
+  addonLinks: PackageAddonLinkRecord[],
+) {
+  return services
+    .filter((service) => !service.isAddon)
+    .map((service) => {
+      const linkedAddons = addonLinks
+        .filter((link) => link.parentServiceId === service.id)
+        .map((link) => services.find((candidate) => candidate.id === link.addonServiceId))
+        .filter(Boolean) as ServiceCatalogRecord[];
+
+      return {
+        baseService: service,
+        linkedAddons,
+        totalPackagePrice:
+          Number(service.price ?? 0) + linkedAddons.reduce((sum, addon) => sum + Number(addon.price ?? 0), 0),
+        totalPackageDuration:
+          Number(service.durationMinutes ?? 0) +
+          linkedAddons.reduce((sum, addon) => sum + Number(addon.durationMinutes ?? 0), 0),
+      };
+    })
+    .filter((entry) => entry.linkedAddons.length > 0);
+}
+
+function buildGroupedServices(
+  services: ServiceCatalogRecord[],
+  recommendedCategories: string[],
+  normalizedServiceSearch: string,
+) {
+  const groups = new Map<string, { title: string; categoryKey: string; services: ServiceCatalogRecord[] }>();
+
+  for (const service of services) {
+    const haystack = getServiceSearchHaystack(service);
+    if (normalizedServiceSearch && !haystack.includes(normalizedServiceSearch)) continue;
+    const categoryKey = String(service.category ?? "other");
+    const title = service.categoryLabel ?? formatServiceCategory(service.category);
+    const key = service.categoryId ? `category:${service.categoryId}` : `legacy:${title.toLowerCase()}`;
+    const existing = groups.get(key);
+    if (existing) existing.services.push(service);
+    else groups.set(key, { title, categoryKey, services: [service] });
+  }
+
+  return Array.from(groups.entries())
+    .sort(([, left], [, right]) => {
+      const leftRecommended = recommendedCategories.includes(left.categoryKey);
+      const rightRecommended = recommendedCategories.includes(right.categoryKey);
+      if (leftRecommended !== rightRecommended) return leftRecommended ? -1 : 1;
+      return left.title.localeCompare(right.title);
+    })
+    .map(([groupKey, group]) => ({
+      category: groupKey,
+      categoryKey: group.categoryKey,
+      title: group.title,
+      recommended: recommendedCategories.includes(group.categoryKey),
+      services: group.services.sort((a, b) => a.name.localeCompare(b.name)),
+    }));
+}
+
+function findDirectServiceSearchResults(
+  services: ServiceCatalogRecord[],
+  normalizedServiceSearch: string,
+) {
+  if (!normalizedServiceSearch) return [];
+
+  return services
+    .filter((service) => getServiceSearchHaystack(service).includes(normalizedServiceSearch))
+    .sort((left, right) => {
+      const leftStartsWith = left.name.toLowerCase().startsWith(normalizedServiceSearch);
+      const rightStartsWith = right.name.toLowerCase().startsWith(normalizedServiceSearch);
+      if (leftStartsWith !== rightStartsWith) return leftStartsWith ? -1 : 1;
+      return left.name.localeCompare(right.name);
+    })
+    .slice(0, 8);
+}
+
+function getSelectedServiceCategoryKeys(
+  services: ServiceCatalogRecord[],
+  selectedServiceIds: string[],
+) {
+  return Array.from(
+    new Set(
+      services
+        .filter((service) => selectedServiceIds.includes(service.id))
+        .map((service) =>
+          service.categoryId
+            ? `category:${service.categoryId}`
+            : `legacy:${String(service.categoryLabel ?? formatServiceCategory(service.category)).toLowerCase()}`
+        )
+    )
+  );
+}
+
 function SelectionIndicator({ checked }: { checked: boolean }) {
   return (
     <span
@@ -641,26 +758,14 @@ export default function NewAppointmentPage() {
     clients.find((c) => c.id === selectedClientId) ??
     (prefilledClientData?.id === selectedClientId ? prefilledClientData : undefined);
   const requiresServiceSelection = services.length > 0;
-  const addonLinks = (packageAddonLinks ?? []) as Array<{ parentServiceId: string; addonServiceId: string }>;
-  const packageTemplates = services
-    .filter((service) => !service.isAddon)
-    .map((service) => {
-      const linkedAddons = addonLinks
-        .filter((link) => link.parentServiceId === service.id)
-        .map((link) => services.find((candidate) => candidate.id === link.addonServiceId))
-        .filter(Boolean);
-      return {
-        baseService: service,
-        linkedAddons,
-        totalPackagePrice:
-          Number(service.price ?? 0) +
-          linkedAddons.reduce((sum, addon) => sum + Number(addon?.price ?? 0), 0),
-        totalPackageDuration:
-          Number(service.durationMinutes ?? 0) +
-          linkedAddons.reduce((sum, addon) => sum + Number(addon?.durationMinutes ?? 0), 0),
-      };
-    })
-    .filter((entry) => entry.linkedAddons.length > 0);
+  const addonLinks = useMemo(
+    () => (packageAddonLinks ?? []) as Array<{ parentServiceId: string; addonServiceId: string }>,
+    [packageAddonLinks]
+  );
+  const packageTemplates = useMemo(
+    () => buildPackageTemplates(services as ServiceCatalogRecord[], addonLinks),
+    [addonLinks, services]
+  );
   const normalizedServiceSearch = serviceSearchQuery.trim().toLowerCase();
   const recommendedPackageTemplates = packageTemplates.filter((pkg) =>
     creationPreset.recommendedCategories.includes(String(pkg.baseService.category ?? "other")) &&
@@ -689,54 +794,14 @@ export default function NewAppointmentPage() {
         .toLowerCase()
         .includes(normalizedServiceSearch || "")
   );
-  const groupedServices = useMemo(() => {
-    const groups = new Map<string, { title: string; categoryKey: string; services: typeof services }>();
-    for (const service of services) {
-      const haystack = [service.name, service.notes, service.categoryLabel ?? formatServiceCategory(service.category)]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      if (normalizedServiceSearch && !haystack.includes(normalizedServiceSearch)) continue;
-      const categoryKey = String(service.category ?? "other");
-      const title = service.categoryLabel ?? formatServiceCategory(service.category);
-      const key = service.categoryId ? `category:${service.categoryId}` : `legacy:${title.toLowerCase()}`;
-      const existing = groups.get(key);
-      if (existing) existing.services.push(service);
-      else groups.set(key, { title, categoryKey, services: [service] });
-    }
-    return Array.from(groups.entries())
-      .sort(([, left], [, right]) => {
-        const leftRecommended = creationPreset.recommendedCategories.includes(left.categoryKey);
-        const rightRecommended = creationPreset.recommendedCategories.includes(right.categoryKey);
-        if (leftRecommended !== rightRecommended) return leftRecommended ? -1 : 1;
-        return left.title.localeCompare(right.title);
-      })
-      .map(([groupKey, group]) => ({
-        category: groupKey,
-        categoryKey: group.categoryKey,
-        title: group.title,
-        recommended: creationPreset.recommendedCategories.includes(group.categoryKey),
-        services: group.services.sort((a, b) => a.name.localeCompare(b.name)),
-      }));
-  }, [creationPreset.recommendedCategories, normalizedServiceSearch, services]);
-  const directServiceSearchResults = useMemo(() => {
-    if (!normalizedServiceSearch) return [];
-    return services
-      .filter((service) => {
-        const haystack = [service.name, service.notes, service.categoryLabel ?? formatServiceCategory(service.category)]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return haystack.includes(normalizedServiceSearch);
-      })
-      .sort((left, right) => {
-        const leftStartsWith = left.name.toLowerCase().startsWith(normalizedServiceSearch);
-        const rightStartsWith = right.name.toLowerCase().startsWith(normalizedServiceSearch);
-        if (leftStartsWith !== rightStartsWith) return leftStartsWith ? -1 : 1;
-        return left.name.localeCompare(right.name);
-      })
-      .slice(0, 8);
-  }, [normalizedServiceSearch, services]);
+  const groupedServices = useMemo(
+    () => buildGroupedServices(services as ServiceCatalogRecord[], creationPreset.recommendedCategories, normalizedServiceSearch),
+    [creationPreset.recommendedCategories, normalizedServiceSearch, services]
+  );
+  const directServiceSearchResults = useMemo(
+    () => findDirectServiceSearchResults(services as ServiceCatalogRecord[], normalizedServiceSearch),
+    [normalizedServiceSearch, services]
+  );
   const selectedServices = useMemo(
     () => services.filter((service) => selectedServiceIds.includes(service.id)),
     [selectedServiceIds, services]
@@ -750,17 +815,7 @@ export default function NewAppointmentPage() {
 
     if (selectedServiceIds.length === 0) return;
 
-    const selectedCategories = Array.from(
-      new Set(
-        services
-          .filter((service) => selectedServiceIds.includes(service.id))
-          .map((service) =>
-            service.categoryId
-              ? `category:${service.categoryId}`
-              : `legacy:${String(service.categoryLabel ?? formatServiceCategory(service.category)).toLowerCase()}`
-          )
-      )
-    );
+    const selectedCategories = getSelectedServiceCategoryKeys(services as ServiceCatalogRecord[], selectedServiceIds);
 
     setExpandedServiceCategories((current) =>
       Array.from(new Set([...current, ...selectedCategories]))
