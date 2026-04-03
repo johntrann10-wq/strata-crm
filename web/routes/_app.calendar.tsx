@@ -152,6 +152,15 @@ function ResponsiveTimeSelect({
   );
 }
 
+function mobileDateInputClassName(isMobileLayout: boolean) {
+  return cn(
+    "w-full min-w-0 max-w-full rounded-xl border border-input/90 bg-background shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
+    isMobileLayout
+      ? "h-10 px-3 text-sm"
+      : "h-11"
+  );
+}
+
 export default function CalendarPage() {
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
@@ -1125,7 +1134,7 @@ export default function CalendarPage() {
                       setBlockStartDate(event.target.value);
                       if (blockMode === "time") setBlockEndDate(event.target.value);
                     }}
-                    className={cn("rounded-xl", isMobileLayout ? "h-10 text-sm" : "h-11")}
+                    className={mobileDateInputClassName(isMobileLayout)}
                   />
                 </div>
                 {blockMode === "full-day" ? (
@@ -1136,7 +1145,7 @@ export default function CalendarPage() {
                       type="date"
                       value={blockEndDate}
                       onChange={(event) => setBlockEndDate(event.target.value)}
-                      className={cn("rounded-xl", isMobileLayout ? "h-10 text-sm" : "h-11")}
+                      className={mobileDateInputClassName(isMobileLayout)}
                     />
                   </div>
                 ) : null}
