@@ -9,6 +9,7 @@ import type { RootOutletContext } from "../root";
 // let the app layout handle auth once the app loads.
 export default function PublicLayout() {
   const context = useOutletContext<RootOutletContext>();
+  const supportEmail = "support@stratacrm.com";
 
   return (
     <div className="flex h-full flex-col">
@@ -41,6 +42,22 @@ export default function PublicLayout() {
               <p className="max-w-xs text-sm leading-6 text-gray-600">
                 Modern automotive service business software for scheduling, clients, vehicles, jobs, quotes, invoices, and payments.
               </p>
+              <a
+                href={`mailto:${supportEmail}`}
+                className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 transition-colors hover:text-gray-950"
+              >
+                Email support: {supportEmail}
+              </a>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {["Secure sign-in", "Customer-ready invoices", "Built for real shop workflows"].map((signal) => (
+                  <span
+                    key={signal}
+                    className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[11px] font-medium tracking-[0.08em] text-orange-800"
+                  >
+                    {signal}
+                  </span>
+                ))}
+              </div>
               <Link to="/pricing" className="text-sm font-medium text-orange-700 transition-colors hover:text-orange-800">
                 View Strata pricing
               </Link>
@@ -98,7 +115,10 @@ export default function PublicLayout() {
           </div>
 
           <div className="mt-8 border-t border-gray-200 pt-4">
-            <p className="text-sm text-gray-500">Copyright {new Date().getFullYear()} Strata. All rights reserved.</p>
+            <div className="flex flex-col gap-2 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between">
+              <p>Copyright {new Date().getFullYear()} Strata. All rights reserved.</p>
+              <p>Support, onboarding help, and launch questions: {supportEmail}</p>
+            </div>
           </div>
         </div>
       </footer>
