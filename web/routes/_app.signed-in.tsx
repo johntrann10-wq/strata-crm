@@ -42,6 +42,7 @@ type AppointmentRecord = {
   totalPrice?: number | string | null;
   depositAmount?: number | string | null;
   depositPaid?: boolean | null;
+  internalNotes?: string | null;
   client: { firstName?: string | null; lastName?: string | null } | null;
   vehicle: { make?: string | null; model?: string | null; year?: number | null } | null;
   assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
@@ -149,6 +150,10 @@ function invoiceBalance(invoice: InvoiceRecord): number {
       ? Number(invoice.remainingBalance)
       : Number(invoice.total ?? 0);
   return Number.isFinite(raw) ? raw : 0;
+}
+
+function isCalendarBlockRecord(internalNotes: string | null | undefined): boolean {
+  return String(internalNotes ?? "").trim().startsWith("[[calendar-block:");
 }
 
 function notifyAppointmentConfirmation(
@@ -274,23 +279,23 @@ export default function SignedIn() {
     pause: !businessId,
   } as any);
   const [{ data: activationClientsRaw, fetching: fetchingActivationClients }] = useFindMany(api.client, {
-    first: 1,
+    first: 100,
     pause: !businessId,
   });
   const [{ data: activationVehiclesRaw, fetching: fetchingActivationVehicles }] = useFindMany(api.vehicle, {
-    first: 1,
+    first: 25,
     pause: !businessId,
   });
   const [{ data: activationServicesRaw, fetching: fetchingActivationServices }] = useFindMany(api.service, {
-    first: 1,
+    first: 25,
     pause: !businessId,
   });
   const [{ data: activationAppointmentsRaw, fetching: fetchingActivationAppointments }] = useFindMany(api.appointment, {
-    first: 1,
+    first: 100,
     pause: !businessId,
   });
   const [{ data: activationInvoicesRaw, fetching: fetchingActivationInvoices }] = useFindMany(api.invoice, {
-    first: 1,
+    first: 25,
     pause: !businessId,
   });
 
@@ -311,6 +316,15 @@ export default function SignedIn() {
   const activationClients = useMemo(
     () => ((activationClientsRaw ?? []) as ClientRecord[]).filter((client) => !parseLeadRecord(client.notes).isLead),
     [activationClientsRaw]
+  );
+  const activationAppointments = useMemo(
+    () =>
+      ((activationAppointmentsRaw ?? []) as AppointmentRecord[]).filter(
+        (appointment) =>
+          !isCalendarBlockRecord(appointment.internalNotes) &&
+          !["cancelled", "no-show"].includes(String(appointment.status ?? ""))
+      ),
+    [activationAppointmentsRaw]
   );
   const locationRecords = useMemo(
     () => (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>,
@@ -488,7 +502,7 @@ export default function SignedIn() {
         key: "appointment",
         label: "Book your first appointment",
         detail: "Put a real job on the board so the calendar becomes useful immediately.",
-        done: (activationAppointmentsRaw?.length ?? 0) > 0,
+        done: activationAppointments.length > 0,
         href: scheduleJobHref,
         actionLabel: "New appointment",
         icon: <CalendarPlus className="h-4 w-4" />,
@@ -524,7 +538,7 @@ export default function SignedIn() {
   }, [
     activationBusiness?.appointmentBufferMinutes,
     activationBusiness?.operatingHours,
-    activationAppointmentsRaw?.length,
+    activationAppointments.length,
     activationClients.length,
     activationInvoicesRaw?.length,
     activationServicesRaw?.length,
