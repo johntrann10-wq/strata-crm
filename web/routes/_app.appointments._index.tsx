@@ -95,12 +95,39 @@ function matchesTab(status: string | null | undefined, tab: AppointmentStatusTab
   return status === tab;
 }
 
+function MobileFilterSelect({
+  value,
+  onChange,
+  children,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+  ariaLabel: string;
+}) {
+  return (
+    <div className="relative sm:hidden">
+      <select
+        aria-label={ariaLabel}
+        className="border-input/90 h-10 w-full appearance-none rounded-xl border bg-background/85 px-3.5 py-2 pr-10 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {children}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+    </div>
+  );
+}
+
 export default function AppointmentsPage() {
   const { businessId, user, currentLocationId, setCurrentLocationId } = useOutletContext<AuthOutletContext>();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeTab, setActiveTab] = useState<AppointmentView>("all");
   const [activeLocationId, setActiveLocationId] = useState<string>(currentLocationId ?? "all");
+  const [isSmallViewport, setIsSmallViewport] = useState(false);
 
   const [, runUpdateStatus] = useAction(api.appointment.updateStatus);
   const [, runUpdateAppointment] = useAction(api.appointment.update);
@@ -113,6 +140,15 @@ export default function AppointmentsPage() {
   useEffect(() => {
     setActiveLocationId(currentLocationId ?? "all");
   }, [currentLocationId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 640px)");
+    const sync = () => setIsSmallViewport(media.matches);
+    sync();
+    media.addEventListener?.("change", sync);
+    return () => media.removeEventListener?.("change", sync);
+  }, []);
 
   const handleQuickStatusChange = async (appointmentId: string, newStatus: string) => {
     const result = await runUpdateStatus({ id: appointmentId, status: newStatus });
@@ -220,27 +256,45 @@ export default function AppointmentsPage() {
         subtitle="Service board"
         right={
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            <Select
-              value={activeLocationId}
-              onValueChange={(value) => {
-                setActiveLocationId(value);
-                setCurrentLocationId(value === "all" ? null : value);
-              }}
-            >
-              <SelectTrigger className="w-full lg:w-52">
-                <SelectValue placeholder="All locations" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All locations</SelectItem>
+            {isSmallViewport ? (
+              <MobileFilterSelect
+                value={activeLocationId}
+                ariaLabel="Filter appointments by location"
+                onChange={(value) => {
+                  setActiveLocationId(value);
+                  setCurrentLocationId(value === "all" ? null : value);
+                }}
+              >
+                <option value="all">All locations</option>
                 {locationRecords.map((location) => (
-                  <SelectItem key={location.id} value={location.id}>
+                  <option key={location.id} value={location.id}>
                     {location.name?.trim() || "Unnamed location"}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+              </MobileFilterSelect>
+            ) : (
+              <Select
+                value={activeLocationId}
+                onValueChange={(value) => {
+                  setActiveLocationId(value);
+                  setCurrentLocationId(value === "all" ? null : value);
+                }}
+              >
+                <SelectTrigger className="hidden w-full lg:w-52 sm:flex">
+                  <SelectValue placeholder="All locations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All locations</SelectItem>
+                  {locationRecords.map((location) => (
+                    <SelectItem key={location.id} value={location.id}>
+                      {location.name?.trim() || "Unnamed location"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Button asChild variant="outline" className="w-full lg:w-auto">
-              <Link to="/calendar">
+              <Link to="/calendar?view=month">
                 <Calendar className="mr-2 h-4 w-4" />
                 Open Calendar
               </Link>
