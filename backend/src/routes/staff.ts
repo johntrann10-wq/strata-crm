@@ -96,6 +96,37 @@ async function buildInviteContext(req: Request, invitee: { id: string; email: st
   };
 }
 
+async function getInviteTarget(req: Request, staffId: string) {
+  const tenantId = businessId(req);
+  const [existing] = await db
+    .select()
+    .from(staff)
+    .where(and(eq(staff.id, staffId), eq(staff.businessId, tenantId), isNull(staff.deletedAt)))
+    .limit(1);
+  if (!existing) throw new NotFoundError("Staff not found.");
+  if (!existing.userId || !existing.email) {
+    throw new BadRequestError("This team member does not have a login email to invite.");
+  }
+
+  const [membership] = await db
+    .select({ role: businessMemberships.role, status: businessMemberships.status })
+    .from(businessMemberships)
+    .where(and(eq(businessMemberships.businessId, tenantId), eq(businessMemberships.userId, existing.userId)))
+    .limit(1);
+
+  if (!membership) {
+    throw new BadRequestError("This team member is missing a business membership record.");
+  }
+  if (membership.status !== "invited") {
+    throw new BadRequestError("Only invited team members can use invite links.");
+  }
+
+  return {
+    existing,
+    membership,
+  };
+}
+
 async function sendTeamInvite(req: Request, invitee: { id: string; email: string; firstName: string | null; lastName: string | null }, role: string) {
   if (!isEmailConfigured()) {
     return { inviteDelivery: "not_configured" as const };
@@ -605,35 +636,13 @@ staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.wr
 
 staffRouter.post("/:id/resend-invite", requireAuth, requireTenant, requirePermission("team.write"), async (req: Request, res: Response) => {
   requireTeamManager(req);
-
-  const [existing] = await db
-    .select()
-    .from(staff)
-    .where(and(eq(staff.id, req.params.id), eq(staff.businessId, businessId(req)), isNull(staff.deletedAt)))
-    .limit(1);
-  if (!existing) throw new NotFoundError("Staff not found.");
-  if (!existing.userId || !existing.email) {
-    throw new BadRequestError("This team member does not have a login email to invite.");
-  }
-
-  const [membership] = await db
-    .select({ role: businessMemberships.role, status: businessMemberships.status })
-    .from(businessMemberships)
-    .where(and(eq(businessMemberships.businessId, businessId(req)), eq(businessMemberships.userId, existing.userId)))
-    .limit(1);
-
-  if (!membership) {
-    throw new BadRequestError("This team member is missing a business membership record.");
-  }
-  if (membership.status !== "invited") {
-    throw new BadRequestError("Only invited team members can be re-invited.");
-  }
+  const { existing, membership } = await getInviteTarget(req, req.params.id);
 
   const inviteResult = await sendTeamInvite(
     req,
     {
-      id: existing.userId,
-      email: normalizeEmail(existing.email),
+      id: existing.userId!,
+      email: normalizeEmail(existing.email!),
       firstName: existing.firstName,
       lastName: existing.lastName,
     },
@@ -643,6 +652,27 @@ staffRouter.post("/:id/resend-invite", requireAuth, requireTenant, requirePermis
   res.json({
     ok: true,
     inviteDelivery: inviteResult.inviteDelivery,
+  });
+});
+
+staffRouter.post("/:id/invite-link", requireAuth, requireTenant, requirePermission("team.write"), async (req: Request, res: Response) => {
+  requireTeamManager(req);
+  const { existing, membership } = await getInviteTarget(req, req.params.id);
+  const context = await buildInviteContext(
+    req,
+    {
+      id: existing.userId!,
+      email: normalizeEmail(existing.email!),
+      firstName: existing.firstName,
+      lastName: existing.lastName,
+    },
+    membership.role ?? existing.role ?? "technician"
+  );
+
+  res.json({
+    ok: true,
+    inviteUrl: context.inviteUrl,
+    inviteEmail: normalizeEmail(existing.email!),
   });
 });
 

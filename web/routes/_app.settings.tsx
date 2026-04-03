@@ -549,6 +549,7 @@ export default function SettingsPage() {
   const [{ fetching: updatingStaff }, updateStaff] = useAction(api.staff.update);
   const [{ fetching: deletingStaff }, deleteStaff] = useAction(api.staff.delete);
   const [{ fetching: resendingStaffInvite }, resendStaffInvite] = useAction(api.staff.resendInvite);
+  const [{ fetching: copyingStaffInvite }, getStaffInviteLink] = useAction(api.staff.inviteLink);
   const [{ data: presetSummary }, getBusinessPreset] = useAction(api.getBusinessPreset);
   const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
   const preset = presetSummary as BusinessPresetActionResult | undefined;
@@ -793,6 +794,27 @@ export default function SettingsPage() {
       toast.warning("Invite could not be emailed because transactional email is not configured");
     } else {
       toast.success("Invite processed");
+    }
+  };
+
+  const handleCopyStaffInviteLink = async (teamMember: StaffRecord) => {
+    const result = await getStaffInviteLink({ id: teamMember.id });
+    if (result.error) {
+      toast.error(result.error.message ?? "Could not create invite link.");
+      return;
+    }
+
+    const inviteUrl = (result.data as { inviteUrl?: string } | null)?.inviteUrl;
+    if (!inviteUrl) {
+      toast.error("Invite link was not returned.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      toast.success("Invite link copied");
+    } catch {
+      toast.error("Could not copy invite link.");
     }
   };
 
@@ -1503,21 +1525,33 @@ export default function SettingsPage() {
                             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${accessState.badgeClassName}`}>
                               {accessState.label}
                             </span>
-                            <div className="flex items-center gap-2">
-                              {accessState.status === "invited" && teamMember.email ? (
+                              <div className="flex items-center gap-2">
+                                {accessState.status === "invited" && teamMember.email ? (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-9"
+                                      onClick={() => handleCopyStaffInviteLink(teamMember)}
+                                      disabled={!canManageTeam || copyingStaffInvite}
+                                    >
+                                      {copyingStaffInvite ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                                      Copy invite link
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-9"
+                                      onClick={() => handleResendStaffInvite(teamMember)}
+                                      disabled={!canManageTeam || resendingStaffInvite}
+                                    >
+                                      {resendingStaffInvite ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                                      Resend invite
+                                    </Button>
+                                  </>
+                                ) : null}
                                 <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-9"
-                                  onClick={() => handleResendStaffInvite(teamMember)}
-                                  disabled={!canManageTeam || resendingStaffInvite}
-                                >
-                                  {resendingStaffInvite ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                                  Resend invite
-                                </Button>
-                              ) : null}
-                              <Button
-                                variant="ghost"
+                                  variant="ghost"
                                 size="icon"
                                 className="h-9 w-9"
                                 onClick={() => openEditTeamMember(teamMember)}
