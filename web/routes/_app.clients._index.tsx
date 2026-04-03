@@ -5,6 +5,7 @@ import { AlertCircle, CalendarClock, Loader2, Mail, Phone, Search, UserPlus, Use
 import { useFindMany } from "../hooks/useApi";
 import { api, ApiError } from "../api";
 import type { AuthOutletContext } from "./_app";
+import { parseLeadRecord } from "../lib/leads";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "../components/shared/PageHeader";
@@ -39,7 +40,10 @@ export default function ClientsPage() {
     pause: !businessId,
   });
 
-  const visibleClients = useMemo(() => clients ?? [], [clients]);
+  const visibleClients = useMemo(
+    () => (clients ?? []).filter((client) => !parseLeadRecord(client.notes).isLead),
+    [clients]
+  );
   const isLoading = (!businessId && !clientsError) || (!!businessId && fetchingClients && !clients);
   const isRefetching = fetchingClients && !!clients;
   const clientsWithPhone = useMemo(() => visibleClients.filter((client) => Boolean(client.phone)).length, [visibleClients]);
