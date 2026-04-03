@@ -379,8 +379,12 @@ function AppLayoutInner({
     [businessType]
   );
   const permissions = useMemo(
-    () => new Set((resolvedBusiness?.permissions as string[] | undefined) ?? []),
-    [resolvedBusiness]
+    () =>
+      new Set(
+        currentMembership?.permissions ??
+          ((resolvedBusiness as { permissions?: string[] } | null)?.permissions ?? [])
+      ),
+    [currentMembership, resolvedBusiness]
   );
   const [{ data: locations }] = useFindMany(api.location, {
     first: 100,
