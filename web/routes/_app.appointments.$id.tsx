@@ -29,6 +29,15 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
@@ -66,6 +75,7 @@ import {
   Trash2,
   RotateCcw,
   MoreHorizontal,
+  CalendarDays,
 } from "lucide-react";
 
 const APPOINTMENT_STATUSES = [
@@ -354,8 +364,139 @@ function FormSelect({
   );
 }
 
-const editDateInputClassName =
-  "border-input/90 h-10 w-full min-w-0 rounded-xl border bg-background/85 px-3.5 py-2 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40";
+function formatPickerDate(value: string): string {
+  if (!value) return "Pick a date";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "Pick a date";
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function ResponsiveTimeSelect({
+  id,
+  value,
+  onChange,
+  options,
+  placeholder,
+  useNative,
+  allowEmpty = false,
+}: {
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  placeholder: string;
+  useNative: boolean;
+  allowEmpty?: boolean;
+}) {
+  const desktopClassName =
+    "h-11 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
+  const mobileClassName =
+    "border-input/90 h-11 w-full appearance-none rounded-xl border bg-background/85 px-3.5 py-2 pr-10 text-base font-normal shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40";
+
+  if (useNative) {
+    return (
+      <div className="relative">
+        <select
+          id={id}
+          className={mobileClassName}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          {allowEmpty ? <option value="">{placeholder}</option> : null}
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <Select
+      value={allowEmpty && value === "" ? "__empty__" : value}
+      onValueChange={(nextValue) => onChange(allowEmpty && nextValue === "__empty__" ? "" : nextValue)}
+    >
+      <SelectTrigger id={id} className={desktopClassName}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent className="max-h-72">
+        {allowEmpty ? <SelectItem value="__empty__">{placeholder}</SelectItem> : null}
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function FormDatePicker({
+  id,
+  value,
+  onChange,
+  placeholder,
+  allowClear = false,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  allowClear?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = value ? new Date(`${value}T12:00:00`) : undefined;
+
+  return (
+    <div className="space-y-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            id={id}
+            type="button"
+            variant="outline"
+            className={cn(
+              "h-11 w-full justify-start rounded-xl border-input/90 bg-background/85 px-3.5 text-left text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
+              !value && "text-muted-foreground"
+            )}
+          >
+            <CalendarDays className="mr-2 h-4 w-4" />
+            {value ? formatPickerDate(value) : placeholder}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={selectedDate}
+            onSelect={(date) => {
+              onChange(date ? toDateInputValue(date) : "");
+              setOpen(false);
+            }}
+            initialFocus
+          />
+        </PopoverContent>
+      </Popover>
+      {allowClear && value ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-auto px-0 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => onChange("")}
+        >
+          Clear date
+        </Button>
+      ) : null}
+    </div>
+  );
+}
 
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, index) => {
   const hours = Math.floor(index / 4);
@@ -423,6 +564,16 @@ export default function AppointmentDetail() {
   const [showMobileWorkflowTools, setShowMobileWorkflowTools] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [editServiceIds, setEditServiceIds] = useState<string[]>([]);
+  const [isSmallViewport, setIsSmallViewport] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 640px)");
+    const sync = () => setIsSmallViewport(media.matches);
+    sync();
+    media.addEventListener?.("change", sync);
+    return () => media.removeEventListener?.("change", sync);
+  }, []);
 
   const [{ data: appointment, fetching, error }, refetchAppointment] = useFindOne(
     api.appointment,
@@ -2268,12 +2419,11 @@ export default function AppointmentDetail() {
             {/* Date */}
             <div className="space-y-2">
               <Label htmlFor="edit-date">Date</Label>
-              <Input
+              <FormDatePicker
                 id="edit-date"
-                type="date"
-                className={editDateInputClassName}
                 value={editDate}
-                onChange={(e) => setEditDate(e.target.value)}
+                onChange={setEditDate}
+                placeholder="Pick a date"
               />
             </div>
 
@@ -2334,32 +2484,26 @@ export default function AppointmentDetail() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="edit-start-time">Start Time</Label>
-                <FormSelect
+                <ResponsiveTimeSelect
                   id="edit-start-time"
                   value={editStartTime}
                   onChange={setEditStartTime}
-                >
-                  {TIME_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </FormSelect>
+                  options={TIME_OPTIONS}
+                  placeholder="Select a start time"
+                  useNative={isSmallViewport}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-end-time">End Time</Label>
-                <FormSelect
+                <ResponsiveTimeSelect
                   id="edit-end-time"
                   value={editEndTime}
                   onChange={setEditEndTime}
-                >
-                  <option value="">No end time</option>
-                  {TIME_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </FormSelect>
+                  options={TIME_OPTIONS}
+                  placeholder="No end time"
+                  useNative={isSmallViewport}
+                  allowEmpty
+                />
               </div>
             </div>
 
@@ -2382,51 +2526,43 @@ export default function AppointmentDetail() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="edit-job-start-date">Job Span Start</Label>
-                    <Input
+                    <FormDatePicker
                       id="edit-job-start-date"
-                      type="date"
-                      className={editDateInputClassName}
                       value={editJobStartDate}
-                      onChange={(e) => setEditJobStartDate(e.target.value)}
+                      onChange={setEditJobStartDate}
+                      placeholder="Pick a date"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-job-start-time">Span Start Time</Label>
-                    <FormSelect
+                    <ResponsiveTimeSelect
                       id="edit-job-start-time"
                       value={editJobStartTime}
                       onChange={setEditJobStartTime}
-                    >
-                      {TIME_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </FormSelect>
+                      options={TIME_OPTIONS}
+                      placeholder="Select a time"
+                      useNative={isSmallViewport}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-expected-completion-date">Expected Completion</Label>
-                    <Input
+                    <FormDatePicker
                       id="edit-expected-completion-date"
-                      type="date"
-                      className={editDateInputClassName}
                       value={editExpectedCompletionDate}
-                      onChange={(e) => setEditExpectedCompletionDate(e.target.value)}
+                      onChange={setEditExpectedCompletionDate}
+                      placeholder="Pick a date"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-expected-completion-time">Completion Time</Label>
-                    <FormSelect
+                    <ResponsiveTimeSelect
                       id="edit-expected-completion-time"
                       value={editExpectedCompletionTime}
                       onChange={setEditExpectedCompletionTime}
-                    >
-                      {TIME_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </FormSelect>
+                      options={TIME_OPTIONS}
+                      placeholder="Select a time"
+                      useNative={isSmallViewport}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Job Phase</Label>
@@ -2442,24 +2578,21 @@ export default function AppointmentDetail() {
                   <div className="space-y-2">
                     <Label htmlFor="edit-pickup-ready-date">Pickup Ready</Label>
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                      <Input
+                      <FormDatePicker
                         id="edit-pickup-ready-date"
-                        type="date"
-                        className={editDateInputClassName}
                         value={editPickupReadyDate}
-                        onChange={(e) => setEditPickupReadyDate(e.target.value)}
+                        onChange={setEditPickupReadyDate}
+                        placeholder="Pick a date"
+                        allowClear
                       />
-                      <FormSelect
+                      <ResponsiveTimeSelect
                         value={editPickupReadyTime}
                         onChange={setEditPickupReadyTime}
-                      >
-                        <option value="">Not set</option>
-                        {TIME_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </FormSelect>
+                        options={TIME_OPTIONS}
+                        placeholder="Not set"
+                        useNative={isSmallViewport}
+                        allowEmpty
+                      />
                     </div>
                   </div>
                 </div>
