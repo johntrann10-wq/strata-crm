@@ -16,15 +16,10 @@ import type { AuthOutletContext } from "./_app";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
+import { formatFreshness, formatShortDate, isOlderThanDays, safeDate } from "../lib/queueDateUtils";
 
 const FILTER_TABS = ["all", "overdue", "stale", "draft", "sent", "paid", "partial", "void"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
-
-function safeDate(value: string | Date | null | undefined): Date | null {
-  if (!value) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
 
 function formatCurrency(amount: number | string | null | undefined): string {
   if (amount == null || amount === "") return "-";
@@ -38,23 +33,7 @@ function formatCurrency(amount: number | string | null | undefined): string {
 }
 
 function formatDate(dateStr: string | Date | null | undefined): string {
-  if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatFreshness(dateStr: string | Date | null | undefined, label: string): string | null {
-  if (!dateStr) return null;
-  return `${label} ${formatDate(dateStr)}`;
-}
-
-function isOlderThanDays(value: string | Date | null | undefined, days: number): boolean {
-  const parsed = safeDate(value);
-  if (!parsed) return false;
-  return Date.now() - parsed.getTime() >= days * 24 * 60 * 60 * 1000;
+  return formatShortDate(dateStr) ?? "-";
 }
 
 function isOverdueInvoice(invoice: { status?: string | null; dueDate?: string | Date | null | undefined }) {
@@ -378,8 +357,8 @@ export default function InvoicesIndexPage() {
                       const paid = paidAmount(invoice);
                       const primaryAmount = primaryInvoiceAmount(invoice);
                       const hasPaymentHistory = paid > 0;
-                      const lastSent = formatFreshness((invoice as any).lastSentAt, "Sent");
-                      const lastPaid = formatFreshness((invoice as any).lastPaidAt, "Paid");
+                      const lastSent = formatFreshness((invoice as any).lastSentAt, "Sent", formatShortDate);
+                      const lastPaid = formatFreshness((invoice as any).lastPaidAt, "Paid", formatShortDate);
                       const clientName = invoice.client
                         ? `${invoice.client.firstName} ${invoice.client.lastName}`.trim()
                         : "-";
@@ -516,8 +495,8 @@ export default function InvoicesIndexPage() {
                           const paid = paidAmount(invoice);
                           const primaryAmount = primaryInvoiceAmount(invoice);
                           const hasPaymentHistory = paid > 0;
-                          const lastSent = formatFreshness((invoice as any).lastSentAt, "Sent");
-                          const lastPaid = formatFreshness((invoice as any).lastPaidAt, "Paid");
+                          const lastSent = formatFreshness((invoice as any).lastSentAt, "Sent", formatShortDate);
+                          const lastPaid = formatFreshness((invoice as any).lastPaidAt, "Paid", formatShortDate);
 
                           return (
                             <tr

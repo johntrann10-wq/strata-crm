@@ -15,23 +15,7 @@ import { EmptyState } from "../components/shared/EmptyState";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { StatusBadge } from "../components/shared/StatusBadge";
-
-function safeDate(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function formatFreshness(value: string | null | undefined, label: string): string | null {
-  const parsed = safeDate(value);
-  return parsed ? `${label} ${parsed.toLocaleDateString()}` : null;
-}
-
-function isOlderThanDays(value: string | null | undefined, days: number): boolean {
-  const parsed = safeDate(value);
-  if (!parsed) return false;
-  return Date.now() - parsed.getTime() >= days * 24 * 60 * 60 * 1000;
-}
+import { formatFreshness, isOlderThanDays, safeDate } from "../lib/queueDateUtils";
 
 const QUOTE_TABS = ["all", "accepted", "aging", "followup", "lost"] as const;
 type QuoteTab = (typeof QUOTE_TABS)[number];
