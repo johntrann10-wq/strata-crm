@@ -33,6 +33,7 @@ export function isStripeConnectConfigured(): boolean {
 
 export type StripeConnectAccountState = {
   accountId: string;
+  accountType: Stripe.Account["type"];
   detailsSubmitted: boolean;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
@@ -40,13 +41,14 @@ export type StripeConnectAccountState = {
 };
 
 export function getStripeConnectAccountState(
-  account: Pick<Stripe.Account, "id" | "details_submitted" | "charges_enabled" | "payouts_enabled">
+  account: Pick<Stripe.Account, "id" | "type" | "details_submitted" | "charges_enabled" | "payouts_enabled">
 ): StripeConnectAccountState {
   const detailsSubmitted = !!account.details_submitted;
   const chargesEnabled = !!account.charges_enabled;
   const payoutsEnabled = !!account.payouts_enabled;
   return {
     accountId: account.id,
+    accountType: account.type,
     detailsSubmitted,
     chargesEnabled,
     payoutsEnabled,
@@ -93,7 +95,7 @@ export async function createConnectAccount(params: {
 }): Promise<StripeConnectAccountState | null> {
   if (!stripe) return null;
   const account = await stripe.accounts.create({
-    type: "express",
+    type: "standard",
     country: "US",
     email: params.email ?? undefined,
     business_type: "company",
@@ -130,6 +132,11 @@ export async function createConnectLoginLink(params: {
   accountId: string;
 }): Promise<{ url: string } | null> {
   if (!stripe) return null;
+  const account = await stripe.accounts.retrieve(params.accountId);
+  if (account.deleted) return null;
+  if (account.type === "standard") {
+    return { url: "https://dashboard.stripe.com/" };
+  }
   const link = await stripe.accounts.createLoginLink(params.accountId);
   return { url: link.url };
 }
