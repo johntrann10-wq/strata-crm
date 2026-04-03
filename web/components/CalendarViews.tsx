@@ -504,12 +504,14 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   const orderedAppointments = [...appointments].sort(
     (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
   );
-  const dotAppointments = orderedAppointments.filter((apt) => !isFullDayCalendarBlock(apt));
+  const countLabel = orderedAppointments.some((apt) => isCalendarBlockAppointment(apt))
+    ? `${appointments.length} item${appointments.length === 1 ? "" : "s"}`
+    : `${appointments.length} appt${appointments.length === 1 ? "" : "s"}`;
 
   return (
     <div className="pointer-events-none min-w-0 space-y-1">
       <div className="grid grid-cols-6 gap-1 sm:grid-cols-8">
-        {dotAppointments.map((apt) => {
+        {orderedAppointments.map((apt) => {
           const status = getStatusStyle(apt.status);
           return (
             <span
@@ -523,7 +525,7 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
         })}
       </div>
       <span className="hidden sm:inline-flex text-[10px] font-semibold leading-none text-foreground/80">
-        {appointments.length} appt{appointments.length === 1 ? "" : "s"}
+        {countLabel}
       </span>
     </div>
   );
@@ -716,7 +718,6 @@ export function MonthView({
               const isToday = isSameDay(day, today);
               const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
               const { dayAppts, daySpans } = getCalendarDaySnapshot(activeAppointments, day);
-              const hasFullDayBlock = dayAppts.some((apt) => isFullDayCalendarBlock(apt));
               const dayRevenue = dayAppts.reduce((total, apt) => total + Number(apt.totalPrice ?? 0), 0);
               const hasConflict = !!conflictIds && dayAppts.some((a) => conflictIds.has(a.id));
               const dayLabel = day.toLocaleDateString("en-US", {
@@ -758,14 +759,6 @@ export function MonthView({
                         {day.getDate()}
                       </span>
                       <div className="flex min-w-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-                        {hasFullDayBlock ? (
-                          <span
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-[11px] font-bold lowercase text-slate-700"
-                            title="Full-day block"
-                          >
-                            x
-                          </span>
-                        ) : null}
                         {dayAppts.length > 0 ? (
                           <span className="hidden sm:inline-flex max-w-full truncate text-[10px] font-semibold leading-none text-foreground/80">
                             {currencyFormatter.format(dayRevenue)}

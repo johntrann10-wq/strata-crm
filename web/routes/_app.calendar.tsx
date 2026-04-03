@@ -72,6 +72,12 @@ function eachDateInclusive(startValue: string, endValue: string): Date[] {
   return dates;
 }
 
+function getCalendarBlockNote(internalNotes: string | null | undefined): string | null {
+  const [, ...rest] = String(internalNotes ?? "").split(/\r?\n/);
+  const note = rest.join("\n").trim();
+  return note.length > 0 ? note : null;
+}
+
 export default function CalendarPage() {
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
@@ -89,6 +95,7 @@ export default function CalendarPage() {
   const [blockEndTime, setBlockEndTime] = useState("10:00");
   const [blockStaffId, setBlockStaffId] = useState("none");
   const [blockNotes, setBlockNotes] = useState("");
+  const [selectedBlock, setSelectedBlock] = useState<ApptRecord | null>(null);
   const layoutInitializedRef = useRef(false);
 
   useEffect(() => {
@@ -232,6 +239,10 @@ export default function CalendarPage() {
   }
 
   function handleApptClick(apt: ApptRecord) {
+    if (isCalendarBlockAppointment(apt)) {
+      setSelectedBlock(apt);
+      return;
+    }
     navigate(`/appointments/${apt.id}`);
   }
 
@@ -291,11 +302,11 @@ export default function CalendarPage() {
       const dayValue = toLocalDateString(date);
       const startTime =
         blockMode === "full-day"
-          ? combineDateAndTime(dayValue, `${String(START_HOUR).padStart(2, "0")}:00`)
+          ? combineDateAndTime(dayValue, "00:00")
           : combineDateAndTime(dayValue, blockStartTime);
       const endTime =
         blockMode === "full-day"
-          ? combineDateAndTime(dayValue, `${String(END_HOUR).padStart(2, "0")}:00`)
+          ? combineDateAndTime(dayValue, "23:59")
           : combineDateAndTime(dayValue, blockEndTime);
 
       const result = await createAppointment({
@@ -926,9 +937,6 @@ export default function CalendarPage() {
               <DialogTitle className="mt-3 text-left text-xl font-semibold tracking-[-0.03em] text-slate-950">
                 Block time
               </DialogTitle>
-              <DialogDescription className="mt-2 text-left text-sm leading-6">
-                Mark vacation, unavailable time, or a shop closure without creating a customer appointment.
-              </DialogDescription>
             </div>
           </DialogHeader>
           <form className="space-y-5 px-5 py-5 sm:px-6 sm:py-6" onSubmit={handleCreateBlock}>
@@ -1027,11 +1035,7 @@ export default function CalendarPage() {
                     <Input id="block-end-time" type="time" step={900} value={blockEndTime} onChange={(event) => setBlockEndTime(event.target.value)} className="h-11 rounded-xl" />
                   </div>
                 </div>
-              ) : (
-                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
-                  Full-day blocks are best for vacation, closures, and days you want fully unavailable on the calendar.
-                </div>
-              )}
+              ) : null}
             </div>
 
             <div className="space-y-2">
@@ -1071,6 +1075,72 @@ export default function CalendarPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={selectedBlock != null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedBlock(null);
+        }}
+      >
+        <DialogContent className="max-w-[calc(100vw-1.5rem)] rounded-[1.5rem] sm:max-w-md">
+          {selectedBlock ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-left text-xl font-semibold tracking-[-0.03em] text-slate-950">
+                  {getCalendarBlockLabel(selectedBlock)}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                  <dl className="space-y-3 text-sm">
+                    <div className="flex items-start justify-between gap-4">
+                      <dt className="text-muted-foreground">Coverage</dt>
+                      <dd className="text-right font-medium text-foreground">
+                        {isFullDayCalendarBlock(selectedBlock) ? "Full day" : "Specific time"}
+                      </dd>
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <dt className="text-muted-foreground">Scheduled</dt>
+                      <dd className="text-right font-medium text-foreground">
+                        {isFullDayCalendarBlock(selectedBlock)
+                          ? formatPanelDate(new Date(selectedBlock.startTime))
+                          : `${formatPanelDate(new Date(selectedBlock.startTime))} · ${formatPanelTime(selectedBlock.startTime)} - ${formatPanelTime(selectedBlock.endTime)}`}
+                      </dd>
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <dt className="text-muted-foreground">Applies to</dt>
+                      <dd className="text-right font-medium text-foreground">
+                        {selectedBlock.assignedStaff
+                          ? `${selectedBlock.assignedStaff.firstName} ${selectedBlock.assignedStaff.lastName}`
+                          : "Business-wide"}
+                      </dd>
+                    </div>
+                    {activeLocationName ? (
+                      <div className="flex items-start justify-between gap-4">
+                        <dt className="text-muted-foreground">Location</dt>
+                        <dd className="text-right font-medium text-foreground">{activeLocationName}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                </div>
+                {getCalendarBlockNote(selectedBlock.internalNotes) ? (
+                  <div className="space-y-2">
+                    <Label>Internal note</Label>
+                    <div className="rounded-2xl border border-border/70 bg-background px-4 py-3 text-sm leading-6 text-foreground">
+                      {getCalendarBlockNote(selectedBlock.internalNotes)}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setSelectedBlock(null)}>
+                  Close
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
         </DialogContent>
       </Dialog>
 
