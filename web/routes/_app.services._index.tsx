@@ -100,6 +100,8 @@ const defaultServiceFormData: ServiceFormData = {
   isAddon: false,
 };
 
+type ServiceTab = "active" | "inactive";
+
 function MobileFilterSelect({
   value,
   onChange,
@@ -150,6 +152,78 @@ function serviceToFormData(service: ServiceRecord): ServiceFormData {
     notes: service.notes ?? "",
     taxable: service.taxable ?? true,
     isAddon: service.isAddon ?? false,
+  };
+}
+
+function filterServices(
+  services: ServiceRecord[],
+  {
+    search,
+    categoryFilter,
+    serviceTab,
+  }: {
+    search: string;
+    categoryFilter: string;
+    serviceTab: ServiceTab;
+  },
+) {
+  const normalizedSearch = search.trim().toLowerCase();
+  return services.filter((service) => {
+    const matchesActive = serviceTab === "active" ? service.active !== false : service.active === false;
+    const categoryValue = service.categoryId ?? UNCATEGORIZED_VALUE;
+    const matchesCategory = categoryFilter === "all" ? true : categoryValue === categoryFilter;
+    const haystack = [service.name, service.notes, service.categoryLabel ?? formatServiceCategory(service.category)]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const matchesSearch = normalizedSearch ? haystack.includes(normalizedSearch) : true;
+    return matchesActive && matchesCategory && matchesSearch;
+  });
+}
+
+function groupServicesByCategory(
+  visibleServices: ServiceRecord[],
+  categoryById: Map<string, CategoryRecord>,
+) {
+  const grouped = new Map<
+    string,
+    {
+      title: string;
+      order: number;
+      services: ServiceRecord[];
+    }
+  >();
+
+  for (const service of visibleServices) {
+    const groupId = service.categoryId ?? UNCATEGORIZED_VALUE;
+    const category = service.categoryId ? categoryById.get(service.categoryId) : null;
+    const title = category?.name ?? service.categoryLabel ?? "Uncategorized";
+    const order = category?.sortOrder ?? 9999;
+    const existing = grouped.get(groupId);
+    if (existing) {
+      existing.services.push(service);
+    } else {
+      grouped.set(groupId, { title, order, services: [service] });
+    }
+  }
+
+  return [...grouped.entries()]
+    .sort((a, b) => {
+      if (a[1].order !== b[1].order) return a[1].order - b[1].order;
+      return a[1].title.localeCompare(b[1].title);
+    })
+    .map(([id, value]) => ({ id, ...value }));
+}
+
+function getServiceMetrics(services: ServiceRecord[], deleteCategory: CategoryRecord | null) {
+  const activeServicesCount = services.filter((service) => service.active !== false).length;
+  const activeAddonCount = services.filter((service) => service.active !== false && service.isAddon).length;
+  const canMoveCategoryDelete = deleteCategory ? services.some((service) => service.categoryId === deleteCategory.id) : false;
+
+  return {
+    activeServicesCount,
+    activeAddonCount,
+    canMoveCategoryDelete,
   };
 }
 
@@ -389,7 +463,7 @@ export default function ServicesPage() {
   const [search, setSearch] = useState("");
   const [isSmallViewport, setIsSmallViewport] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [serviceTab, setServiceTab] = useState<"active" | "inactive">("active");
+  const [serviceTab, setServiceTab] = useState<ServiceTab>("active");
   const [supportsCategoryManagement, setSupportsCategoryManagement] = useState(true);
 
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
@@ -488,38 +562,21 @@ export default function ServicesPage() {
     [managedCategories]
   );
 
-  const normalizedSearch = search.trim().toLowerCase();
-  const visibleServices = services.filter((service) => {
-    const matchesActive = serviceTab === "active" ? service.active !== false : service.active === false;
-    const categoryValue = service.categoryId ?? UNCATEGORIZED_VALUE;
-    const matchesCategory = categoryFilter === "all" ? true : categoryValue === categoryFilter;
-    const haystack = [service.name, service.notes, service.categoryLabel ?? formatServiceCategory(service.category)]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    const matchesSearch = normalizedSearch ? haystack.includes(normalizedSearch) : true;
-    return matchesActive && matchesCategory && matchesSearch;
-  });
+  const visibleServices = useMemo(
+    () => filterServices(services, { search, categoryFilter, serviceTab }),
+    [services, search, categoryFilter, serviceTab]
+  );
 
-  const serviceGroups = useMemo(() => {
-    const bucket = new Map<string, { id: string; title: string; order: number; services: ServiceRecord[] }>();
-    for (const service of visibleServices) {
-      const groupId = service.categoryId ?? UNCATEGORIZED_VALUE;
-      const category = service.categoryId ? categoryById.get(service.categoryId) : null;
-      const title = category?.name ?? service.categoryLabel ?? "Uncategorized";
-      const order = category?.sortOrder ?? 9999;
-      if (!bucket.has(groupId)) bucket.set(groupId, { id: groupId, title, order, services: [] });
-      bucket.get(groupId)!.services.push(service);
-    }
-    return Array.from(bucket.values())
-      .sort((left, right) => left.order - right.order || left.title.localeCompare(right.title))
-      .map((group) => ({
+  const serviceGroups = useMemo(
+    () =>
+      groupServicesByCategory(visibleServices, categoryById).map((group) => ({
         ...group,
         services: group.services.sort(
           (left, right) => Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0) || left.name.localeCompare(right.name)
         ),
-      }));
-  }, [categoryById, visibleServices]);
+      })),
+    [categoryById, visibleServices]
+  );
 
   const packageSummaries = useMemo(
     () =>
@@ -543,9 +600,10 @@ export default function ServicesPage() {
     [addonLinks, services]
   );
 
-  const activeServicesCount = services.filter((service) => service.active !== false).length;
-  const activeAddonCount = services.filter((service) => service.active !== false && service.isAddon).length;
-  const canMoveCategoryDelete = deleteCategory ? services.some((service) => service.categoryId === deleteCategory.id) : false;
+  const { activeServicesCount, activeAddonCount, canMoveCategoryDelete } = useMemo(
+    () => getServiceMetrics(services, deleteCategory),
+    [services, deleteCategory]
+  );
   const isFirstLoad = (servicesFetching || categoriesFetching) && !servicesData && !categoriesData;
 
   const openCreateService = (categoryId?: string | null) => {
