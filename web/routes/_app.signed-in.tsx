@@ -440,8 +440,8 @@ export default function SignedIn() {
     if (depositsAwaitingPayment.length > 0) {
       actions.push({
         key: "deposits",
-        label: "Collect pending deposits",
-        detail: `${depositsAwaitingPayment.length} appointment${depositsAwaitingPayment.length === 1 ? "" : "s"} still need ${formatCurrency(depositDueValue)} in deposits.`,
+        label: "Collect required deposits",
+        detail: `${depositsAwaitingPayment.length} appointment${depositsAwaitingPayment.length === 1 ? "" : "s"} still need ${formatCurrency(depositDueValue)} collected before work starts.`,
         href: "/appointments",
         cta: "Review deposits",
         tone: "urgent",
@@ -451,7 +451,7 @@ export default function SignedIn() {
       actions.push({
         key: "collections",
         label: "Follow up on unpaid invoices",
-        detail: `${staleInvoiceCollections.length} invoice${staleInvoiceCollections.length === 1 ? "" : "s"} need collection attention.`,
+        detail: `${staleInvoiceCollections.length} invoice${staleInvoiceCollections.length === 1 ? "" : "s"} need collection follow-up.`,
         href: "/invoices?tab=stale",
         cta: "Open collections",
         tone: "urgent",
@@ -592,8 +592,8 @@ export default function SignedIn() {
         value: unpaidRevenue > 0 ? formatCurrency(unpaidRevenue) : "Clear",
         detail:
           unpaidInvoices.length > 0
-            ? `${unpaidInvoices.length} invoice${unpaidInvoices.length === 1 ? "" : "s"} waiting`
-            : "No unpaid invoices",
+            ? `${unpaidInvoices.length} invoice${unpaidInvoices.length === 1 ? "" : "s"} still need collection`
+            : "No invoices waiting on collection",
         href: "/invoices",
       },
       {
@@ -1332,23 +1332,23 @@ export default function SignedIn() {
             </DashboardSection>
 
             <DashboardSection
-              title="Deposits Awaiting Payment"
+              title="Deposits To Collect"
               seeAllHref="/appointments"
               seeAllLabel="All appointments"
               error={apptsError}
               isLoading={loadingAppts}
               isEmpty={!loadingAppts && !apptsError && depositsAwaitingPayment.length === 0}
-              emptyMessage="No deposits are waiting on today's board."
+              emptyMessage="No deposits need collection on today's board."
               emptyCta={{ href: scheduleJobHref, label: "Open schedule" }}
               skeletonRows={2}
               mobileCollapsed
             >
               <div className="space-y-3">
                 <div className="rounded-2xl border bg-card px-4 py-4">
-                  <p className="text-sm font-medium text-muted-foreground">Deposit value still due</p>
+                  <p className="text-sm font-medium text-muted-foreground">Deposit collection still due</p>
                   <p className="mt-2 text-2xl font-semibold tracking-tight">{formatCurrency(depositDueValue)}</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {depositsAwaitingPayment.length} appointment{depositsAwaitingPayment.length === 1 ? "" : "s"} waiting on deposit
+                    {depositsAwaitingPayment.length} appointment{depositsAwaitingPayment.length === 1 ? "" : "s"} still need deposit collection
                   </p>
                 </div>
                 <ul className="overflow-hidden rounded-2xl border divide-y divide-border bg-card">
@@ -1368,7 +1368,7 @@ export default function SignedIn() {
                               : appointment.title ?? "Appointment"}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            Deposit due {formatCurrency(appointment.depositAmount)}
+                            Collect {formatCurrency(appointment.depositAmount)} deposit
                           </p>
                         </div>
                         <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -1839,7 +1839,7 @@ function ActivationChecklistCard({
       value: unpaidRevenue > 0 ? formatCurrency(unpaidRevenue) : "Clear",
       detail:
         pendingApprovalsCount > 0
-          ? `${pendingApprovalsCount} billing or approval action${pendingApprovalsCount === 1 ? "" : "s"} need attention.`
+          ? `${pendingApprovalsCount} quote, collection, or deposit action${pendingApprovalsCount === 1 ? "" : "s"} need attention.`
           : "Quotes and invoices look under control right now.",
       href: pendingApprovalsCount > 0 ? "/quotes" : "/invoices",
       actionLabel: pendingApprovalsCount > 0 ? "Review queue" : "Open invoices",
@@ -1865,7 +1865,7 @@ function ActivationChecklistCard({
       : null,
     pendingApprovalsCount > 0
       ? {
-          title: "Clear the money queue",
+          title: "Clear billing follow-up",
           detail: `${pendingApprovalsCount} quote, invoice, or deposit action${pendingApprovalsCount === 1 ? "" : "s"} still need follow-up.`,
           href: pendingApprovalsCount > 0 ? "/quotes" : "/invoices",
           actionLabel: "Review billing",
@@ -1881,7 +1881,7 @@ function ActivationChecklistCard({
       : null,
     depositCount > 0
       ? {
-          title: "Collect pending deposits",
+          title: "Collect required deposits",
           detail: `${depositCount} appointment${depositCount === 1 ? "" : "s"} still need deposit collection before the work starts.`,
           href: "/appointments",
           actionLabel: "Review deposits",
@@ -2127,7 +2127,7 @@ function DailyOperationsCard({
               value={activeJobs > 0 ? `${activeJobs} active job${activeJobs === 1 ? "" : "s"}` : "No live work"}
               detail={
                 depositCount > 0
-                  ? `${depositCount} deposit${depositCount === 1 ? "" : "s"} still need attention.`
+                  ? `${depositCount} deposit collection${depositCount === 1 ? "" : "s"} still need attention.`
                   : "Keep status, notes, and handoffs current so the team stays aligned."
               }
               href="/jobs"

@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import { formatFreshness, formatShortDate, isOlderThanDays, safeDate } from "../lib/queueDateUtils";
+import { getInvoiceCollectionSummary } from "../lib/paymentStates";
 
 const FILTER_TABS = ["all", "overdue", "stale", "draft", "sent", "paid", "partial", "void"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
@@ -100,6 +101,13 @@ function getInvoiceDisplayState(invoice: InvoiceRecord) {
   const lastSent = formatFreshness((invoice as any).lastSentAt, "Sent", formatShortDate);
   const lastPaid = formatFreshness((invoice as any).lastPaidAt, "Paid", formatShortDate);
   const isOverdue = isOverdueInvoice(invoice);
+  const collectionSummary = getInvoiceCollectionSummary({
+    status: invoice.status,
+    total: invoice.total,
+    totalPaid: invoice.totalPaid,
+    remainingBalance: invoice.remainingBalance,
+    isOverdue,
+  });
 
   return {
     vehicleLabel,
@@ -111,6 +119,7 @@ function getInvoiceDisplayState(invoice: InvoiceRecord) {
     lastSent,
     lastPaid,
     isOverdue,
+    collectionSummary,
   };
 }
 
@@ -228,7 +237,7 @@ export default function InvoicesIndexPage() {
             {isRefetching ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : null}
           </span>
         }
-        subtitle="Manage receivables, search invoice history, and keep outstanding balances and collection pressure visible."
+        subtitle="Manage billing, review collection follow-up, and keep invoice cash flow visible."
         right={
           <Button asChild>
             <Link to={linkWithQueueState("/invoices/new")}>
@@ -248,7 +257,7 @@ export default function InvoicesIndexPage() {
             </p>
           </div>
           <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Outstanding</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Awaiting collection</p>
             <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-amber-700">
               {formatCurrency((invoiceMetrics as any)?.outstandingBalance ?? 0)}
             </p>
@@ -313,7 +322,7 @@ export default function InvoicesIndexPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <FollowupCard
             tone="danger"
-            title="Overdue invoices need collection"
+            title="Overdue balances need follow-up"
             detail={`${overdueInvoices.length} invoice${overdueInvoices.length === 1 ? "" : "s"} are past due`}
             amount={formatCurrency(overdueInvoices.reduce((sum, invoice) => sum + balanceAmount(invoice), 0))}
             href={`/invoices/${overdueInvoices[0].id}`}
@@ -383,7 +392,7 @@ export default function InvoicesIndexPage() {
                     </div>
                   )
                   : displayedInvoices.map((invoice) => {
-                      const { vehicleLabel, outstanding, paid, primaryAmount, hasPaymentHistory, lastSent, lastPaid, clientName, isOverdue } =
+                      const { vehicleLabel, outstanding, primaryAmount, lastSent, lastPaid, clientName, isOverdue, collectionSummary } =
                         getInvoiceDisplayState(invoice);
 
                       return (
@@ -406,7 +415,7 @@ export default function InvoicesIndexPage() {
                           lines={[
                             `Created ${formatDate(invoice.createdAt)}`,
                             `Due ${formatDate(invoice.dueDate)}`,
-                            hasPaymentHistory ? `Paid ${formatCurrency(paid)}` : null,
+                            collectionSummary.title,
                             [lastSent, lastPaid].filter(Boolean).join(" - ") || null,
                           ]}
                           href={linkWithQueueState(`/invoices/${invoice.id}`)}
@@ -429,7 +438,7 @@ export default function InvoicesIndexPage() {
                               {["sent", "partial"].includes(String(invoice.status ?? "")) ? (
                                 <Button asChild size="sm" variant="outline" className="h-8 px-3 text-xs">
                                   <Link to={linkWithQueueState(`/invoices/${invoice.id}`)}>
-                                    {outstanding > 0 ? `Collect ${formatCurrency(outstanding)}` : "Collect"}
+                                    {outstanding > 0 ? `Collect ${formatCurrency(outstanding)}` : "Collect payment"}
                                   </Link>
                                 </Button>
                               ) : null}
@@ -511,7 +520,7 @@ export default function InvoicesIndexPage() {
                         </tr>
                       )
                       : displayedInvoices.map((invoice) => {
-                          const { vehicleLabel, outstanding, paid, primaryAmount, hasPaymentHistory, lastSent, lastPaid, isOverdue } =
+                          const { vehicleLabel, outstanding, paid, primaryAmount, hasPaymentHistory, lastSent, lastPaid, isOverdue, collectionSummary } =
                             getInvoiceDisplayState(invoice);
 
                           return (
@@ -544,6 +553,7 @@ export default function InvoicesIndexPage() {
                                     Total {formatCurrency(invoice.total)}
                                     {hasPaymentHistory ? ` · Paid ${formatCurrency(paid)}` : ""}
                                   </div>
+                                  <div className="text-xs text-muted-foreground">{collectionSummary.detail}</div>
                                   {lastSent || lastPaid ? (
                                     <div className="text-xs text-muted-foreground">
                                       {[lastSent, lastPaid].filter(Boolean).join(" · ")}
@@ -587,7 +597,7 @@ export default function InvoicesIndexPage() {
                                   {["sent", "partial"].includes(String(invoice.status ?? "")) ? (
                                     <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
                                       <Link to={linkWithQueueState(`/invoices/${invoice.id}`)}>
-                                        {outstanding > 0 ? `Collect ${formatCurrency(outstanding)}` : "Collect"}
+                                        {outstanding > 0 ? `Collect ${formatCurrency(outstanding)}` : "Collect payment"}
                                       </Link>
                                     </Button>
                                   ) : null}
