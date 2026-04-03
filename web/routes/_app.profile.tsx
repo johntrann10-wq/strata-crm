@@ -37,7 +37,11 @@ export default function ProfilePage() {
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
         <Card className="border-white/65">
-          <CardContent className="flex flex-col gap-5 p-6 sm:flex-row sm:items-start sm:justify-between">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">User</CardTitle>
+            <CardDescription>Keep your identity and core account details current across the workspace.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5 pt-0 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex gap-4">
               <UserIcon user={user} className="h-16 w-16" />
               <div className="space-y-1">
