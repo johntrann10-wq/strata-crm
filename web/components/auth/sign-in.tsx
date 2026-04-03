@@ -94,9 +94,14 @@ export const SignInComponent = (props: {
 
             {/* Password Field */}
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="password" className="text-[12px] font-medium text-foreground/80 mb-1.5 block">
-                Password
-              </label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label htmlFor="password" className="text-[12px] font-medium text-foreground/80 block">
+                  Password
+                </label>
+                <Link to={`/forgot-password${search}`} className="text-[12px] font-medium text-orange-600 hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
               <Input
                 id="password"
                 type="password"

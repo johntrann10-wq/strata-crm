@@ -12,6 +12,9 @@ import { randomUUID } from "crypto";
 import { getDefaultPermissionsForRole } from "../lib/permissions.js";
 import { createInMemoryRateLimiter } from "../middleware/security.js";
 import { createAccessToken, verifyAccessToken } from "../lib/jwt.js";
+import { createPasswordResetToken, verifyPasswordResetToken } from "../lib/jwt.js";
+import { sendTemplatedEmail } from "../lib/email.js";
+import { isEmailConfigured } from "../lib/env.js";
 
 const MAX_EMAIL_LENGTH = 320;
 const MAX_PASSWORD_LENGTH = 72;
@@ -26,6 +29,13 @@ const signUpSchema = z.object({
   password: z.string().min(8).max(MAX_PASSWORD_LENGTH),
   firstName: z.string().trim().max(80).optional(),
   lastName: z.string().trim().max(80).optional(),
+});
+const forgotPasswordSchema = z.object({
+  email: z.string().email().max(MAX_EMAIL_LENGTH),
+});
+const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  password: z.string().min(8).max(MAX_PASSWORD_LENGTH),
 });
 export const authRouter = Router();
 
@@ -47,6 +57,21 @@ const signUpLimiter = createInMemoryRateLimiter({
     const email = typeof (body as { email?: unknown })?.email === "string" ? normalizeEmail((body as { email: string }).email) : "";
     return `auth:sign-up:${ip}:${email}`;
   },
+});
+const forgotPasswordLimiter = createInMemoryRateLimiter({
+  windowMs: 30 * 60 * 1000,
+  max: 6,
+  message: "Too many password reset requests. Please wait a bit before trying again.",
+  key: ({ ip, body }) => {
+    const email = typeof (body as { email?: unknown })?.email === "string" ? normalizeEmail((body as { email: string }).email) : "";
+    return `auth:forgot-password:${ip}:${email}`;
+  },
+});
+
+const resetPasswordLimiter = createInMemoryRateLimiter({
+  windowMs: 30 * 60 * 1000,
+  max: 12,
+  message: "Too many password reset attempts. Please wait a bit before trying again.",
 });
 
 const googleOAuthStartLimiter = createInMemoryRateLimiter({
@@ -70,12 +95,16 @@ function serializeAuthUser(user: {
   email: string;
   firstName: string | null;
   lastName: string | null;
+  googleProfileId?: string | null;
+  passwordHash?: string | null;
 }) {
   return {
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
+    googleProfileId: user.googleProfileId ?? null,
+    hasPassword: Boolean(user.passwordHash),
     googleImageUrl: null,
     profilePicture: null,
   };
@@ -96,6 +125,19 @@ export function resolveGoogleStateRedirect(input: unknown): string {
   } catch {
     return "/signed-in";
   }
+}
+
+function resolveFrontendBaseUrl(req: Request): string {
+  const configured = process.env.FRONTEND_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  const origin = req.get("origin")?.trim();
+  if (origin && /^https?:\/\//i.test(origin)) return origin.replace(/\/+$/, "");
+  const host = req.get("host")?.trim();
+  if (host) {
+    const protocol = req.secure || req.get("x-forwarded-proto") === "https" ? "https" : "http";
+    return `${protocol}://${host}`.replace(/\/+$/, "");
+  }
+  throw new BadRequestError("Password reset is not configured.");
 }
 
 function getUserIdFromAuthHeader(req: Request): string | null {
@@ -156,7 +198,7 @@ authRouter.get(
       return;
     }
     const [user] = await db
-      .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName })
+      .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName, googleProfileId: users.googleProfileId, passwordHash: users.passwordHash })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -338,7 +380,14 @@ authRouter.post(
             updatedAt: new Date(),
           })
           .where(eq(users.id, existing.id))
-          .returning({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName });
+          .returning({
+            id: users.id,
+            email: users.email,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            googleProfileId: users.googleProfileId,
+            passwordHash: users.passwordHash,
+          });
 
         try {
           await tx
@@ -372,7 +421,14 @@ authRouter.post(
           firstName: firstName ?? null,
           lastName: lastName ?? null,
         })
-        .returning({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName });
+        .returning({
+          id: users.id,
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          googleProfileId: users.googleProfileId,
+          passwordHash: users.passwordHash,
+        });
       user = createdUser;
       logger.info("User signed up", { userId: user?.id, email: user?.email });
     }
@@ -385,6 +441,65 @@ authRouter.post(
         token,
       },
     });
+  })
+);
+authRouter.post(
+  "/forgot-password",
+  forgotPasswordLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = forgotPasswordSchema.safeParse(req.body);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
+    const email = normalizeEmail(parsed.data.email);
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+
+    if (user) {
+      if (!isEmailConfigured()) {
+        throw new BadRequestError("Transactional email is not configured.");
+      }
+      const frontendBaseUrl = resolveFrontendBaseUrl(req);
+      const token = createPasswordResetToken(user.id, user.email);
+      const resetUrl = `${frontendBaseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+      await sendTemplatedEmail({
+        to: user.email,
+        templateSlug: "password_reset",
+        vars: {
+          userName: user.firstName?.trim() || user.email,
+          resetUrl,
+        },
+      });
+      logger.info("Password reset email sent", { userId: user.id, email: user.email });
+    }
+
+    res.json({
+      ok: true,
+      message: "If an account exists for that email, a password reset link has been sent.",
+    });
+  })
+);
+authRouter.post(
+  "/reset-password",
+  resetPasswordLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
+    const verified = verifyPasswordResetToken(parsed.data.token);
+    if (!verified?.userId || !verified?.email) {
+      throw new BadRequestError("This password reset link is invalid or has expired.");
+    }
+    const [user] = await db.select().from(users).where(eq(users.id, verified.userId)).limit(1);
+    if (!user || normalizeEmail(user.email) !== normalizeEmail(verified.email)) {
+      throw new BadRequestError("This password reset link is invalid or has expired.");
+    }
+    if (user.passwordHash) {
+      const matchesCurrent = await bcrypt.compare(parsed.data.password, user.passwordHash);
+      if (matchesCurrent) {
+        throw new BadRequestError("Choose a different password from your current one.");
+      }
+    }
+    const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+    await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, user.id));
+    logger.info("Password reset completed", { userId: user.id, email: user.email });
+    res.json({ ok: true });
   })
 );
 authRouter.post("/sign-out", (_req: Request, res: Response) => {

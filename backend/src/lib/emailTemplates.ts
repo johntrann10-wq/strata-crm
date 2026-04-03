@@ -251,6 +251,35 @@ Strata - {{businessName}}`,
 };
 
 const builtins: Record<string, BuiltinEmailTemplate> = {
+  password_reset: {
+    subject: "Reset your Strata password",
+    bodyHtml: renderClientShell({
+      businessName: "Strata",
+      eyebrow: "Account security",
+      title: "Reset your password",
+      introHtml: `<p style="margin:0;">Hi {{userName}},</p><p style="margin:10px 0 0;">We received a request to reset the password for your Strata account.</p>`,
+      bodyHtml:
+        renderInfoCard("What happens next", "Use the secure link below to choose a new password. This link expires in 1 hour.") +
+        renderInfoCard("Did not request this?", "You can ignore this email if you did not ask to reset your password. Your current password will stay unchanged."),
+      ctaLabel: "Reset password",
+      ctaUrl: "{{resetUrl}}",
+      ctaHint: `Reset password: {{resetUrl}}`,
+      showCtaHint: true,
+      footerNote: "Need help? Contact Strata support.",
+    }),
+    bodyText: `Strata
+
+Reset your password
+
+Hi {{userName}},
+
+We received a request to reset the password for your Strata account.
+
+Use this secure link to choose a new password. This link expires in 1 hour:
+{{resetUrl}}
+
+If you did not request this, you can ignore this email and your password will stay unchanged.`,
+  },
   appointment_confirmation: appointmentConfirmation,
   appointment_reminder: appointmentReminder,
   payment_receipt: paymentReceipt,

@@ -7,6 +7,7 @@ import { GoogleMark } from "./GoogleMark";
 import { Link, useLocation } from "react-router";
 import { api, API_BASE } from "../../api";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
+import { useState, type FormEvent } from "react";
 
 function buildGoogleAuthHref(search: string): string {
   const params = new URLSearchParams(search);
@@ -31,6 +32,20 @@ export const SignUpComponent = (props: {
     register,
     formState: { errors, isSubmitting },
   } = useActionForm(api.user.signUp, props.options);
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    const formData = new FormData(event.currentTarget);
+    const password = String(formData.get("password") ?? "");
+    const confirmPassword = String(formData.get("confirmPassword") ?? "");
+    if (password !== confirmPassword) {
+      event.preventDefault();
+      setConfirmPasswordError("Passwords do not match.");
+      return;
+    }
+    setConfirmPasswordError(null);
+    void submit(event);
+  };
 
   return (
     <div className="w-full max-w-sm">
@@ -53,7 +68,7 @@ export const SignUpComponent = (props: {
 
       {/* Form card */}
       <Card className="shadow-sm border border-border rounded-2xl p-8">
-        <form onSubmit={submit}>
+        <form onSubmit={handleSubmit}>
           <div className="flex flex-col gap-5">
             {/* Google button */}
             <Button
@@ -72,6 +87,33 @@ export const SignUpComponent = (props: {
               <div className="flex-1 h-px bg-border" />
               <span className="text-[12px] text-muted-foreground">or</span>
               <div className="flex-1 h-px bg-border" />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="firstName" className="text-[13px] font-medium text-foreground">
+                  First name
+                </Label>
+                <Input
+                  id="firstName"
+                  placeholder="Jane"
+                  autoComplete="given-name"
+                  {...register("firstName")}
+                  className="h-9 text-[13px] rounded-lg shadow-none"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="lastName" className="text-[13px] font-medium text-foreground">
+                  Last name
+                </Label>
+                <Input
+                  id="lastName"
+                  placeholder="Doe"
+                  autoComplete="family-name"
+                  {...register("lastName")}
+                  className="h-9 text-[13px] rounded-lg shadow-none"
+                />
+              </div>
             </div>
 
             {/* Email field */}
@@ -105,6 +147,23 @@ export const SignUpComponent = (props: {
                 {...register("password")}
                 className={`h-9 text-[13px] rounded-lg shadow-none${errors?.root?.message ? " border-destructive" : ""}`}
               />
+              <p className="text-[12px] text-muted-foreground">Use at least 8 characters so your account is easier to protect.</p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="confirmPassword" className="text-[13px] font-medium text-foreground">
+                Confirm password
+              </Label>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                placeholder="••••••••"
+                autoComplete="off"
+                onChange={() => setConfirmPasswordError(null)}
+                className={`h-9 text-[13px] rounded-lg shadow-none${confirmPasswordError ? " border-destructive" : ""}`}
+              />
+              {confirmPasswordError ? <p className="text-[12px] text-destructive">{confirmPasswordError}</p> : null}
             </div>
 
             {/* Submit button */}

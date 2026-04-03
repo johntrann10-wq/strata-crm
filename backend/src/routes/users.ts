@@ -13,6 +13,9 @@ const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
   newPassword: z.string().min(8, "New password must be at least 8 characters"),
 });
+const setPasswordSchema = z.object({
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
+});
 
 /** POST /api/users/change-password — authenticated user updates password. */
 usersRouter.post("/change-password", requireAuth, async (req: Request, res: Response) => {
@@ -33,6 +36,24 @@ usersRouter.post("/change-password", requireAuth, async (req: Request, res: Resp
   }
   const ok = await bcrypt.compare(currentPassword, user.passwordHash);
   if (!ok) throw new BadRequestError("Current password is incorrect.");
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
+  res.json({ ok: true });
+});
+
+usersRouter.post("/set-password", requireAuth, async (req: Request, res: Response) => {
+  const parsed = setPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0]?.message;
+    throw new BadRequestError(first ?? "Invalid input");
+  }
+  const { newPassword } = parsed.data;
+  const userId = req.userId!;
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) throw new NotFoundError("User not found.");
+  if (user.passwordHash) {
+    throw new BadRequestError("This account already has a password. Use change password instead.");
+  }
   const passwordHash = await bcrypt.hash(newPassword, 10);
   await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
   res.json({ ok: true });

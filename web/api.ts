@@ -12,6 +12,8 @@ export type AuthUserData = {
   email: string;
   firstName: string | null;
   lastName: string | null;
+  googleProfileId: string | null;
+  hasPassword: boolean;
   token: string;
 };
 
@@ -556,6 +558,16 @@ export const api = {
         assertAuthEnvelope(body, "/auth/sign-up");
         return body;
       }),
+    forgotPassword: (params: Record<string, unknown>) =>
+      request<{ ok: boolean; message?: string }>("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    resetPassword: (params: Record<string, unknown>) =>
+      request<{ ok: boolean }>("/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
     signOut: () => request("/auth/sign-out", { method: "POST" }),
     /** Validates JWT, returns user + fresh token (persisted to localStorage). */
     me: () =>
@@ -575,6 +587,11 @@ export const api = {
       }),
     changePassword: (params: Record<string, unknown>) =>
       request<unknown>("/users/change-password", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    setPassword: (params: Record<string, unknown>) =>
+      request<unknown>("/users/set-password", {
         method: "POST",
         body: JSON.stringify(params),
       }),
