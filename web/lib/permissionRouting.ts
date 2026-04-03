@@ -14,6 +14,19 @@ const ROUTE_PREFERENCES: Array<{ href: string; permission?: string; module?: str
   { href: "/settings", permission: "settings.read" },
 ];
 
+const PATH_ACCESS_RULES: Array<{ prefix: string; permission?: string; module?: string }> = [
+  { prefix: "/signed-in", permission: "dashboard.view" },
+  { prefix: "/calendar", permission: "appointments.read", module: "calendar" },
+  { prefix: "/appointments", permission: "appointments.read", module: "appointments" },
+  { prefix: "/jobs", permission: "jobs.read", module: "jobs" },
+  { prefix: "/quotes", permission: "quotes.read", module: "quotes" },
+  { prefix: "/invoices", permission: "invoices.read", module: "invoices" },
+  { prefix: "/clients", permission: "customers.read", module: "clients" },
+  { prefix: "/leads", permission: "customers.read", module: "clients" },
+  { prefix: "/services", permission: "services.read", module: "services" },
+  { prefix: "/settings", permission: "settings.read" },
+];
+
 export function getPreferredAuthorizedAppPath(
   permissions: PermissionCollection,
   enabledModules?: ModuleCollection
@@ -28,4 +41,19 @@ export function getPreferredAuthorizedAppPath(
   }
 
   return "/profile";
+}
+
+export function canAccessAppPath(
+  pathname: string,
+  permissions: PermissionCollection,
+  enabledModules?: ModuleCollection
+): boolean {
+  const permissionSet = permissions instanceof Set ? permissions : new Set(permissions);
+  const moduleSet = enabledModules ? (enabledModules instanceof Set ? enabledModules : new Set(enabledModules)) : null;
+
+  const matchedRule = PATH_ACCESS_RULES.find((rule) => pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`));
+  if (!matchedRule) return true;
+  if (matchedRule.permission && !permissionSet.has(matchedRule.permission)) return false;
+  if (matchedRule.module && moduleSet && !moduleSet.has(matchedRule.module)) return false;
+  return true;
 }

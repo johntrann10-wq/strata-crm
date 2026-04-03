@@ -37,7 +37,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { CommandPaletteProvider, useCommandPalette } from "../components/shared/CommandPaletteContext";
 import { CommandPalette } from "../components/shared/CommandPalette";
 import { getEnabledModules } from "../lib/modules";
-import { getPreferredAuthorizedAppPath } from "../lib/permissionRouting";
+import { canAccessAppPath, getPreferredAuthorizedAppPath } from "../lib/permissionRouting";
 import { useFindMany, useFindOne, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
@@ -775,15 +775,23 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     effectiveUserId ?? "",
     { select: { id: true, firstName: true, lastName: true, email: true }, pause: !effectiveUserId }
   );
-  const [{ data: business, fetching: businessFetching, error: businessError }, refetchBusiness] = useFindOne(
-    api.business,
-    currentBusinessId ?? "",
-    { pause: !effectiveUserId || !currentBusinessId }
-  );
-
   const currentMembership = useMemo(
     () => tenantBusinesses.find((tenantBusiness) => tenantBusiness.id === currentBusinessId) ?? null,
     [tenantBusinesses, currentBusinessId]
+  );
+  const currentPermissions = useMemo(
+    () => new Set(currentMembership?.permissions ?? []),
+    [currentMembership]
+  );
+  const currentEnabledModules = useMemo(
+    () => getEnabledModules(currentMembership?.type ?? null) as Set<string>,
+    [currentMembership?.type]
+  );
+  const canReadSettings = currentPermissions.has("settings.read");
+  const [{ data: business, fetching: businessFetching, error: businessError }, refetchBusiness] = useFindOne(
+    api.business,
+    currentBusinessId ?? "",
+    { pause: !effectiveUserId || !currentBusinessId || !canReadSettings }
   );
   const allowWithoutBusiness = pathAllowsMissingBusiness(location.pathname);
   const allowWithoutSubscription =
@@ -798,7 +806,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
 
   useEffect(() => {
     let cancelled = false;
-    if (!effectiveUserId || !currentBusinessId) {
+    if (!effectiveUserId || !currentBusinessId || allowWithoutSubscription) {
       setBillingStatus(null);
       setBillingCheckDone(true);
       return;
@@ -821,7 +829,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     return () => {
       cancelled = true;
     };
-  }, [effectiveUserId, currentBusinessId]);
+  }, [effectiveUserId, currentBusinessId, allowWithoutSubscription]);
 
   const handleBusinessChange = useCallback(
     (businessId: string) => {
@@ -847,10 +855,23 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const redirectTarget = useMemo(() => {
     if (!authCheckDone) return null;
     if (!effectiveUserId) return signInPath;
+    if (!canAccessAppPath(location.pathname, currentPermissions, currentEnabledModules)) {
+      return getPreferredAuthorizedAppPath(currentPermissions, currentEnabledModules);
+    }
     if (userFetching || businessFetching || businessError) return null;
     if (allowWithoutBusiness) return null;
-    if (!business) return "/onboarding";
-    if ((business as { onboardingComplete?: boolean }).onboardingComplete === false) return "/onboarding";
+    const resolvedBusiness =
+      business ??
+      (currentMembership
+        ? {
+            id: currentMembership.id,
+            name: currentMembership.name,
+            type: currentMembership.type,
+            onboardingComplete: true,
+          }
+        : null);
+    if (!resolvedBusiness) return "/onboarding";
+    if ((resolvedBusiness as { onboardingComplete?: boolean }).onboardingComplete === false) return "/onboarding";
     const isSubscribed = billingStatus?.status === "active" || billingStatus?.status === "trialing";
     if (billingCheckDone && !allowWithoutSubscription && billingStatus?.billingEnforced && !isSubscribed) {
       return "/subscribe";
@@ -860,12 +881,16 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     authCheckDone,
     effectiveUserId,
     signInPath,
+    location.pathname,
+    currentPermissions,
+    currentEnabledModules,
     userFetching,
     businessFetching,
     businessError,
     allowWithoutBusiness,
     allowWithoutSubscription,
     business,
+    currentMembership,
     billingStatus,
     billingCheckDone,
   ]);
@@ -916,7 +941,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
 
   // When no business exists yet (or onboarding is incomplete), block CRM routes until redirect runs
   // or allow account/onboarding-only screens (see `pathAllowsMissingBusiness`).
-  if (businessError && !allowWithoutBusiness) {
+  if (businessError && !allowWithoutBusiness && canReadSettings) {
     return (
       <div className="h-screen flex flex-col items-center justify-center gap-4 p-6 max-w-md mx-auto text-center">
         <p className="text-muted-foreground">{businessError.message}</p>
@@ -926,7 +951,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       </div>
     );
   }
-  if (!business && !allowWithoutBusiness) {
+  if (!business && !allowWithoutBusiness && canReadSettings) {
     if (tenantBusinesses.length === 0) return null;
     return (
       <div className="h-screen flex items-center justify-center">
@@ -935,6 +960,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     );
   }
   if (
+    canReadSettings &&
     business &&
     (business as { onboardingComplete?: boolean }).onboardingComplete === false &&
     !allowWithoutBusiness
