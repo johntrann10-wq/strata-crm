@@ -72,6 +72,9 @@ type LeadEntry = {
   searchableText: string;
 };
 
+type LeadStatusFilter = LeadStatus | "all" | "active";
+type LeadSourceFilter = LeadSource | "all";
+
 function createEmptyLeadForm(): LeadFormData {
   return {
     firstName: "",
@@ -150,6 +153,42 @@ function badgeVariantForStatus(status: LeadStatus): "default" | "secondary" | "o
   return "outline";
 }
 
+function filterLeadEntries(
+  leadRecords: LeadEntry[],
+  {
+    searchQuery,
+    statusFilter,
+    sourceFilter,
+  }: {
+    searchQuery: string;
+    statusFilter: LeadStatusFilter;
+    sourceFilter: LeadSourceFilter;
+  },
+) {
+  const query = searchQuery.trim().toLowerCase();
+  return leadRecords.filter((entry) => {
+    if (statusFilter === "active" && !ACTIVE_STATUSES.includes(entry.lead.status)) return false;
+    if (statusFilter !== "active" && statusFilter !== "all" && entry.lead.status !== statusFilter) return false;
+    if (sourceFilter !== "all" && entry.lead.source !== sourceFilter) return false;
+    if (query && !entry.searchableText.includes(query)) return false;
+    return true;
+  });
+}
+
+function getLeadMetrics(leadRecords: LeadEntry[]) {
+  return {
+    activeLeadCount: leadRecords.filter((entry) => !["converted", "lost"].includes(entry.lead.status)).length,
+    newLeadCount: leadRecords.filter((entry) => entry.lead.status === "new").length,
+    quotedLeadCount: leadRecords.filter((entry) => entry.lead.status === "quoted").length,
+    bookedLeadCount: leadRecords.filter((entry) => entry.lead.status === "booked").length,
+    contactReadyLeadCount: leadRecords.filter((entry) => Boolean(entry.client.phone || entry.client.email)).length,
+    knownVehicleLeadCount: leadRecords.filter((entry) => Boolean(entry.lead.vehicle?.trim())).length,
+    missingNextStepCount: leadRecords.filter(
+      (entry) => ACTIVE_STATUSES.includes(entry.lead.status) && !entry.lead.nextStep?.trim(),
+    ).length,
+  };
+}
+
 function MobileLeadSelect({
   value,
   onChange,
@@ -189,8 +228,8 @@ export default function LeadsPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
   const [submitMode, setSubmitMode] = useState<SubmitMode>("lead");
-  const [statusFilter, setStatusFilter] = useState<LeadStatus | "all" | "active">("active");
-  const [sourceFilter, setSourceFilter] = useState<LeadSource | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<LeadStatusFilter>("active");
+  const [sourceFilter, setSourceFilter] = useState<LeadSourceFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const submitModeRef = useRef<SubmitMode>("lead");
@@ -239,38 +278,18 @@ export default function LeadsPage() {
   }, [recentClientsRaw]);
 
   const visibleLeads = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return leadRecords.filter((entry) => {
-      if (statusFilter === "active" && !ACTIVE_STATUSES.includes(entry.lead.status)) return false;
-      if (statusFilter !== "active" && statusFilter !== "all" && entry.lead.status !== statusFilter) return false;
-      if (sourceFilter !== "all" && entry.lead.source !== sourceFilter) return false;
-      if (query && !entry.searchableText.includes(query)) return false;
-      return true;
-    });
+    return filterLeadEntries(leadRecords, { searchQuery, statusFilter, sourceFilter });
   }, [leadRecords, searchQuery, sourceFilter, statusFilter]);
 
-  const activeLeadCount = useMemo(
-    () => leadRecords.filter((entry) => !["converted", "lost"].includes(entry.lead.status)).length,
-    [leadRecords]
-  );
-  const newLeadCount = useMemo(() => leadRecords.filter((entry) => entry.lead.status === "new").length, [leadRecords]);
-  const quotedLeadCount = useMemo(() => leadRecords.filter((entry) => entry.lead.status === "quoted").length, [leadRecords]);
-  const bookedLeadCount = useMemo(() => leadRecords.filter((entry) => entry.lead.status === "booked").length, [leadRecords]);
-  const contactReadyLeadCount = useMemo(
-    () => leadRecords.filter((entry) => Boolean(entry.client.phone || entry.client.email)).length,
-    [leadRecords]
-  );
-  const knownVehicleLeadCount = useMemo(
-    () => leadRecords.filter((entry) => Boolean(entry.lead.vehicle?.trim())).length,
-    [leadRecords]
-  );
-  const missingNextStepCount = useMemo(
-    () =>
-      leadRecords.filter(
-        (entry) => ACTIVE_STATUSES.includes(entry.lead.status) && !entry.lead.nextStep?.trim()
-      ).length,
-    [leadRecords]
-  );
+  const {
+    activeLeadCount,
+    newLeadCount,
+    quotedLeadCount,
+    bookedLeadCount,
+    contactReadyLeadCount,
+    knownVehicleLeadCount,
+    missingNextStepCount,
+  } = useMemo(() => getLeadMetrics(leadRecords), [leadRecords]);
 
   const setSubmitIntent = (mode: SubmitMode) => {
     submitModeRef.current = mode;
