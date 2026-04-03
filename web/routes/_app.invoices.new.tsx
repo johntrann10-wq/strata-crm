@@ -48,6 +48,90 @@ type AddonLinkRecord = {
   addonServiceId: string;
 };
 
+type ClientPickerRecord = {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+};
+
+type AppointmentServicePrefillRecord = {
+  quantity?: number | string | null;
+  unitPrice?: number | string | null;
+  service?: { name?: string | null; price?: number | string | null } | null;
+};
+
+function buildAppointmentInvoiceItems(
+  appointmentServices: AppointmentServicePrefillRecord[],
+  appointmentTitle: string,
+  appointmentTotalPrice: number,
+) {
+  const appointmentItems = appointmentServices.map((appointmentService) => ({
+    id: crypto.randomUUID(),
+    description: appointmentService.service?.name ?? "Service",
+    qty: Number(appointmentService.quantity ?? 1) || 1,
+    unitPrice: Number(appointmentService.unitPrice ?? appointmentService.service?.price ?? 0) || 0,
+  }));
+
+  const appointmentSubtotal = appointmentItems.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
+  const needsAdjustment =
+    Number.isFinite(appointmentTotalPrice) &&
+    appointmentTotalPrice > 0 &&
+    Math.abs(appointmentTotalPrice - appointmentSubtotal) >= 0.01;
+
+  if (!needsAdjustment) return appointmentItems;
+
+  return [
+    ...appointmentItems,
+    {
+      id: crypto.randomUUID(),
+      description: `${appointmentTitle || "Appointment"} price adjustment`,
+      qty: 1,
+      unitPrice: Number((appointmentTotalPrice - appointmentSubtotal).toFixed(2)),
+    },
+  ];
+}
+
+function buildInvoicePackageTemplates(
+  services: ServiceRecord[],
+  addonLinks: AddonLinkRecord[],
+) {
+  return services
+    .filter((service) => !service.isAddon)
+    .map((service) => {
+      const linkedAddons = addonLinks
+        .filter((link) => link.parentServiceId === service.id)
+        .map((link) => services.find((candidate) => candidate.id === link.addonServiceId))
+        .filter(Boolean) as ServiceRecord[];
+
+      return {
+        baseService: service,
+        linkedAddons,
+        totalPrice:
+          Number(service.price ?? 0) +
+          linkedAddons.reduce((sum, addon) => sum + Number(addon.price ?? 0), 0),
+      };
+    })
+    .filter((entry) => entry.linkedAddons.length > 0);
+}
+
+function getUniqueClientPickerRecords(records: Array<ClientPickerRecord | null | undefined>) {
+  return Array.from(
+    new Map(
+      records
+        .filter(Boolean)
+        .map((record) => [record!.id, record!])
+    ).values()
+  );
+}
+
+function getEffectiveInvoiceClientRecord(
+  selectedClientId: string,
+  records: ClientPickerRecord[],
+) {
+  return records.find((client) => client.id === selectedClientId) ?? null;
+}
+
 export default function NewInvoicePage() {
   const navigate = useNavigate();
   const { user, businessId, businessType } = useOutletContext<AuthOutletContext>();
@@ -243,30 +327,12 @@ export default function NewInvoicePage() {
         lineItems[0].qty === 1 &&
         lineItems[0].unitPrice === 0;
       if (isBlankPlaceholder) {
-        const appointmentItems = apptServices.map((apptService) => ({
-          id: crypto.randomUUID(),
-          description: apptService.service?.name ?? "Service",
-          qty: Number((apptService as { quantity?: number | string | null }).quantity ?? 1) || 1,
-          unitPrice:
-            Number((apptService as { unitPrice?: number | string | null }).unitPrice ?? apptService.service?.price ?? 0) || 0,
-        }));
-
-        const appointmentSubtotal = appointmentItems.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
-        const appointmentTotal = Number((appointmentRecord as { totalPrice?: number | string | null } | null)?.totalPrice ?? 0);
-        const needsAdjustment = Number.isFinite(appointmentTotal) && appointmentTotal > 0 && Math.abs(appointmentTotal - appointmentSubtotal) >= 0.01;
-
         setLineItems(
-          needsAdjustment
-            ? [
-                ...appointmentItems,
-                {
-                  id: crypto.randomUUID(),
-                  description: `${(appointmentRecord as { title?: string | null } | null)?.title || "Appointment"} price adjustment`,
-                  qty: 1,
-                  unitPrice: Number((appointmentTotal - appointmentSubtotal).toFixed(2)),
-                },
-              ]
-            : appointmentItems
+          buildAppointmentInvoiceItems(
+            apptServices as AppointmentServicePrefillRecord[],
+            (appointmentRecord as { title?: string | null } | null)?.title || "Appointment",
+            Number((appointmentRecord as { totalPrice?: number | string | null } | null)?.totalPrice ?? 0)
+          )
         );
       }
     }
@@ -324,31 +390,15 @@ export default function NewInvoicePage() {
   const lockedAppointmentClient = (appointmentRecord as { client?: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null } | null } | null)?.client ?? null;
   const appointmentClientId = lockedAppointmentClient?.id ?? "";
   const isClientLockedToAppointment = Boolean(appointmentIdParam && appointmentClientId);
-  const searchableClientRecords = [selectedClientRecord, clientFromParam, ...(clients ?? [])].filter(Boolean) as Array<{
-    id: string;
-    firstName?: string | null;
-    lastName?: string | null;
-    email?: string | null;
-  }>;
+  const searchableClientRecords = getUniqueClientPickerRecords([
+    selectedClientRecord as ClientPickerRecord | null | undefined,
+    clientFromParam as ClientPickerRecord | null | undefined,
+    ...((clients ?? []) as ClientPickerRecord[]),
+  ]);
   const effectiveClientRecord = isClientLockedToAppointment
     ? lockedAppointmentClient
-    : searchableClientRecords.find((client) => client.id === selectedClientId) ?? null;
-  const packageTemplates = serviceRecords
-    .filter((service) => !service.isAddon)
-    .map((service) => {
-      const linkedAddons = addonLinks
-        .filter((link) => link.parentServiceId === service.id)
-        .map((link) => serviceRecords.find((candidate) => candidate.id === link.addonServiceId))
-        .filter(Boolean) as ServiceRecord[];
-      return {
-        baseService: service,
-        linkedAddons,
-        totalPrice:
-          Number(service.price ?? 0) +
-          linkedAddons.reduce((sum, addon) => sum + Number(addon.price ?? 0), 0),
-      };
-    })
-    .filter((entry) => entry.linkedAddons.length > 0);
+    : getEffectiveInvoiceClientRecord(selectedClientId, searchableClientRecords);
+  const packageTemplates = buildInvoicePackageTemplates(serviceRecords, addonLinks);
 
 
   const doSubmit = async (mode: 'draft' | 'sent') => {
