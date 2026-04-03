@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
@@ -908,10 +909,18 @@ export default function AppointmentDetail() {
   }
 
   const pageTitle =
-    appointment.title ||
-    (appointment.client
-      ? `${appointment.client.firstName} ${appointment.client.lastName}`
-      : "Appointment");
+    isCalendarBlockAppointment(appointment)
+      ? getCalendarBlockLabel(appointment)
+      : appointment.title ||
+        (appointment.client
+          ? `${appointment.client.firstName} ${appointment.client.lastName}`
+          : "Appointment");
+  const isInternalCalendarBlock = isCalendarBlockAppointment(appointment);
+  const blockCoverageLabel = isInternalCalendarBlock
+    ? isFullDayCalendarBlock(appointment)
+      ? "Full-day block"
+      : "Timed block"
+    : null;
 
   const isActionLoading = updatingStatus || completing || cancelling || sendingConfirmation;
   const quoteNeedsFollowUp = !!quote && ["sent", "accepted"].includes(String((quote as any).status ?? "")) && (
@@ -960,6 +969,14 @@ export default function AppointmentDetail() {
       : appointmentServices && appointmentServices.length > 0
         ? `${appointmentServices.length} booked service${appointmentServices.length === 1 ? "" : "s"}`
         : "No pricing attached yet";
+  const appointmentSubjectLabel = isInternalCalendarBlock
+    ? blockCoverageLabel ?? "Internal block"
+    : appointmentClientName;
+  const appointmentSecondaryLabel = isInternalCalendarBlock
+    ? (appointment.assignedStaff
+        ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+        : "Business-wide block")
+    : appointmentVehicleLabel;
 
   const relatedRecords: RelatedRecord[] = [];
   if (appointment) {
@@ -1107,15 +1124,18 @@ export default function AppointmentDetail() {
             <div>
               <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.5rem]">{pageTitle}</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                Check the client, vehicle, schedule, and payment details here, then move the appointment forward
-                without losing your place.
+                {isInternalCalendarBlock
+                  ? "Review the blocked time, assigned team coverage, and notes here without mixing it up with a customer job."
+                  : "Check the client, vehicle, schedule, and payment details here, then move the appointment forward without losing your place."}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Booked for</p>
-                <p className="mt-2 text-base font-semibold text-slate-950">{appointmentClientName}</p>
-                <p className="mt-1 text-sm text-slate-600">{appointmentVehicleLabel}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  {isInternalCalendarBlock ? "Block" : "Booked for"}
+                </p>
+                <p className="mt-2 text-base font-semibold text-slate-950">{appointmentSubjectLabel}</p>
+                <p className="mt-1 text-sm text-slate-600">{appointmentSecondaryLabel}</p>
               </div>
               <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Scheduled</p>
@@ -1123,7 +1143,9 @@ export default function AppointmentDetail() {
                 <p className="mt-1 text-sm text-slate-600">{formatTime(appointment.startTime)}</p>
               </div>
               <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Work in play</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  {isInternalCalendarBlock ? "Coverage" : "Work in play"}
+                </p>
                 <p className="mt-2 text-base font-semibold text-slate-950">{appointmentValueLabel}</p>
                 <p className="mt-1 text-sm text-slate-600">{appointmentLocationLabel}</p>
               </div>
@@ -1208,7 +1230,7 @@ export default function AppointmentDetail() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
+          {!isInternalCalendarBlock && appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
             <Button variant="outline" size="sm" onClick={() => void handleSendConfirmation()} disabled={isActionLoading}>
               {sendingConfirmation ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1261,7 +1283,7 @@ export default function AppointmentDetail() {
             </Button>
           )}
 
-          {!invoiceFetching && !invoice && appointment.status !== "cancelled" && (
+          {!isInternalCalendarBlock && !invoiceFetching && !invoice && appointment.status !== "cancelled" && (
             <Button variant="outline" size="sm" asChild>
               <Link
                 to={`/invoices/new?appointmentId=${appointment.id}${
@@ -1274,7 +1296,7 @@ export default function AppointmentDetail() {
             </Button>
           )}
 
-          {!quoteFetching && !quote && appointment.status !== "cancelled" && appointment.client?.id && (
+          {!isInternalCalendarBlock && !quoteFetching && !quote && appointment.status !== "cancelled" && appointment.client?.id && (
             <Button variant="outline" size="sm" asChild>
               <Link
                 to={`/quotes/new?appointmentId=${appointment.id}&clientId=${appointment.client.id}`}
@@ -1285,7 +1307,7 @@ export default function AppointmentDetail() {
             </Button>
           )}
 
-            {invoice && (
+            {!isInternalCalendarBlock && invoice && (
               <Button variant="outline" size="sm" asChild>
                 <Link to={`/invoices/${invoice.id}`}>
                   <FileText className="h-4 w-4 mr-2" />
@@ -1294,7 +1316,7 @@ export default function AppointmentDetail() {
               </Button>
             )}
 
-            {invoice && invoiceAllowsPayment(invoice.status) && invoice.status !== "paid" && (
+            {!isInternalCalendarBlock && invoice && invoiceAllowsPayment(invoice.status) && invoice.status !== "paid" && (
               <Button variant="outline" size="sm" asChild>
                 <Link to={`/invoices/${invoice.id}?recordPayment=1`}>
                   <DollarSign className="h-4 w-4 mr-2" />
@@ -1303,7 +1325,7 @@ export default function AppointmentDetail() {
               </Button>
             )}
 
-            {quote && (
+            {!isInternalCalendarBlock && quote && (
               <Button variant="outline" size="sm" asChild>
                 <Link to={`/quotes/${quote.id}`}>
                   <FileText className="h-4 w-4 mr-2" />
@@ -1514,7 +1536,7 @@ export default function AppointmentDetail() {
         paidAt={(appointment as any).paidAt ?? null}
       />
 
-      {(hasPlaceholderClient || hasPlaceholderVehicle || missingLinkedRecords) && (
+      {!isInternalCalendarBlock && (hasPlaceholderClient || hasPlaceholderVehicle || missingLinkedRecords) && (
         <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -1554,7 +1576,7 @@ export default function AppointmentDetail() {
         </div>
       )}
 
-      {appointment && (
+      {appointment && !isInternalCalendarBlock ? (
         <ContextualNextStep
           entityType="appointment"
           status={appointment.status}
@@ -1565,11 +1587,11 @@ export default function AppointmentDetail() {
           }}
           onActionClick={handleContextualAction}
         />
-      )}
+      ) : null}
 
-      <RelatedRecordsPanel records={relatedRecords} loading={fetching} />
+      {!isInternalCalendarBlock ? <RelatedRecordsPanel records={relatedRecords} loading={fetching} /> : null}
 
-      {(quoteNeedsFollowUp || invoiceNeedsFollowUp) && (
+      {!isInternalCalendarBlock && (quoteNeedsFollowUp || invoiceNeedsFollowUp) && (
         <div className="grid gap-3 md:grid-cols-2">
           {quoteNeedsFollowUp ? (
             <WorkflowWarningCard
@@ -1933,14 +1955,48 @@ export default function AppointmentDetail() {
 
             {/* Right column */}
             <div className="space-y-4">
-              {/* Client Card */}
-              <ClientCard client={appointment.client} />
-
-              {/* Vehicle Card */}
-              <VehicleCard vehicle={appointment.vehicle} clientId={appointment.client?.id} />
-
-              {/* Invoice Card */}
-              <InvoiceCard invoice={invoice} invoiceFetching={invoiceFetching} appointmentId={appointment.id} />
+              {isInternalCalendarBlock ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Block details</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <div className="flex items-start gap-3">
+                      <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">
+                          {isFullDayCalendarBlock(appointment) ? "Full day blocked" : "Specific time blocked"}
+                        </p>
+                        <p className="text-muted-foreground">{formatDateTime(appointment.startTime)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <User className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">Coverage</p>
+                        <p className="text-muted-foreground">
+                          {appointment.assignedStaff
+                            ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+                            : "Business-wide block"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">Location</p>
+                        <p className="text-muted-foreground">{appointmentLocationLabel}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  <ClientCard client={appointment.client} />
+                  <VehicleCard vehicle={appointment.vehicle} clientId={appointment.client?.id} />
+                  <InvoiceCard invoice={invoice} invoiceFetching={invoiceFetching} appointmentId={appointment.id} />
+                </>
+              )}
 
               {/* Financial Summary Card */}
               <FinancialSummaryCard 
@@ -1970,24 +2026,26 @@ export default function AppointmentDetail() {
                 secondaryDepositActionDisabled={reversingDeposit}
               />
 
-              <CommunicationCard
-                title="Client communication"
-                recipientName={
-                  appointment.client
-                    ? `${appointment.client.firstName} ${appointment.client.lastName}`
-                    : null
-                }
-                recipient={appointment.client?.email}
-                primaryLabel="Send confirmation"
-                activities={((activityLogs ?? []) as any[]).filter(
-                  (record) =>
-                    record.type === "appointment.confirmation_sent" ||
-                    record.type === "appointment.confirmation_failed"
-                )}
-                sending={sendingConfirmation}
-                canSend={permissions.has("appointments.write")}
-                onPrimarySend={handleSendConfirmation}
-              />
+              {!isInternalCalendarBlock ? (
+                <CommunicationCard
+                  title="Client communication"
+                  recipientName={
+                    appointment.client
+                      ? `${appointment.client.firstName} ${appointment.client.lastName}`
+                      : null
+                  }
+                  recipient={appointment.client?.email}
+                  primaryLabel="Send confirmation"
+                  activities={((activityLogs ?? []) as any[]).filter(
+                    (record) =>
+                      record.type === "appointment.confirmation_sent" ||
+                      record.type === "appointment.confirmation_failed"
+                  )}
+                  sending={sendingConfirmation}
+                  canSend={permissions.has("appointments.write")}
+                  onPrimarySend={handleSendConfirmation}
+                />
+              ) : null}
 
               <Card className="lg:hidden">
                 <CardHeader className="pb-3">

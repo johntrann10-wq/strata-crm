@@ -263,7 +263,9 @@ export default function CalendarPage() {
       return;
     }
 
-    if (blockEndDate < blockStartDate) {
+    const effectiveEndDate = blockMode === "time" ? blockStartDate : blockEndDate;
+
+    if (effectiveEndDate < blockStartDate) {
       toast.error("End date must be on or after start date.");
       return;
     }
@@ -277,7 +279,7 @@ export default function CalendarPage() {
       }
     }
 
-    const dates = eachDateInclusive(blockStartDate, blockEndDate);
+    const dates = eachDateInclusive(blockStartDate, effectiveEndDate);
     const title = getCalendarBlockLabel({ title: null, internalNotes: buildCalendarBlockInternalNotes({ mode: blockMode, preset: blockPreset }) });
     const internalNotes = buildCalendarBlockInternalNotes(
       { mode: blockMode, preset: blockPreset },
@@ -914,70 +916,123 @@ export default function CalendarPage() {
       </div>
 
       <Dialog open={showBlockDialog} onOpenChange={setShowBlockDialog}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-w-[calc(100vw-1.5rem)] rounded-[1.75rem] p-0 sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Block time</DialogTitle>
-            <DialogDescription>
-              Add a simple unavailable block for vacation, time off, or shop-wide closures without creating a customer booking.
-            </DialogDescription>
+            <div className="rounded-t-[1.75rem] border-b border-border/60 bg-[radial-gradient(circle_at_top_left,rgba(148,163,184,0.14),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 py-5 sm:px-6">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <Ban className="h-3.5 w-3.5" />
+                Unavailable time
+              </div>
+              <DialogTitle className="mt-3 text-left text-xl font-semibold tracking-[-0.03em] text-slate-950">
+                Block time
+              </DialogTitle>
+              <DialogDescription className="mt-2 text-left text-sm leading-6">
+                Mark vacation, unavailable time, or a shop closure without creating a customer appointment.
+              </DialogDescription>
+            </div>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handleCreateBlock}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="block-preset">Block type</Label>
-                <select
-                  id="block-preset"
-                  value={blockPreset}
-                  onChange={(event) => setBlockPreset(event.target.value as CalendarBlockPreset)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="unavailable">Unavailable</option>
-                  <option value="vacation">Vacation</option>
-                  <option value="personal">Personal block</option>
-                  <option value="shop-closed">Shop closed</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="block-mode">Coverage</Label>
-                <select
-                  id="block-mode"
-                  value={blockMode}
-                  onChange={(event) => setBlockMode(event.target.value as CalendarBlockMode)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="time">Specific time</option>
-                  <option value="full-day">Full day</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="block-start-date">Start date</Label>
-                <Input id="block-start-date" type="date" value={blockStartDate} onChange={(event) => setBlockStartDate(event.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="block-end-date">End date</Label>
-                <Input id="block-end-date" type="date" value={blockEndDate} onChange={(event) => setBlockEndDate(event.target.value)} />
+          <form className="space-y-5 px-5 py-5 sm:px-6 sm:py-6" onSubmit={handleCreateBlock}>
+            <div className="space-y-2.5">
+              <Label htmlFor="block-preset">Block type</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    { value: "unavailable", label: "Unavailable" },
+                    { value: "vacation", label: "Vacation" },
+                    { value: "personal", label: "Personal" },
+                    { value: "shop-closed", label: "Shop closed" },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setBlockPreset(option.value)}
+                    className={cn(
+                      "rounded-2xl border px-3 py-3 text-left text-sm font-medium transition-colors",
+                      blockPreset === option.value
+                        ? "border-slate-900 bg-slate-900 text-white shadow-[0_14px_28px_rgba(15,23,42,0.16)]"
+                        : "border-border/70 bg-white text-foreground hover:bg-muted/40"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {blockMode === "time" ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="block-start-time">Start time</Label>
-                  <Input id="block-start-time" type="time" step={900} value={blockStartTime} onChange={(event) => setBlockStartTime(event.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="block-end-time">End time</Label>
-                  <Input id="block-end-time" type="time" step={900} value={blockEndTime} onChange={(event) => setBlockEndTime(event.target.value)} />
-                </div>
+            <div className="space-y-2.5">
+              <Label htmlFor="block-mode">Coverage</Label>
+              <div className="inline-flex w-full rounded-2xl border border-border/70 bg-muted/20 p-1">
+                {(
+                  [
+                    { value: "time", label: "Specific time" },
+                    { value: "full-day", label: "Full day" },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.value}
+                    id={option.value === "time" ? "block-mode" : undefined}
+                    type="button"
+                    onClick={() => setBlockMode(option.value)}
+                    className={cn(
+                      "flex-1 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                      blockMode === option.value
+                        ? "bg-white text-foreground shadow-sm"
+                        : "text-muted-foreground"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
-            ) : (
-              <div className="rounded-2xl border border-border/70 bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
-                Full-day blocks cover the calendar day and show as an <span className="font-semibold text-foreground">x</span> in month view.
+            </div>
+
+            <div className="rounded-[1.4rem] border border-border/70 bg-white/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+              <div className={cn("grid gap-3", blockMode === "full-day" ? "sm:grid-cols-2" : "sm:grid-cols-1")}>
+                <div className="space-y-2">
+                  <Label htmlFor="block-start-date">{blockMode === "time" ? "Date" : "Start date"}</Label>
+                  <Input
+                    id="block-start-date"
+                    type="date"
+                    value={blockStartDate}
+                    onChange={(event) => {
+                      setBlockStartDate(event.target.value);
+                      if (blockMode === "time") setBlockEndDate(event.target.value);
+                    }}
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+                {blockMode === "full-day" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="block-end-date">End date</Label>
+                    <Input
+                      id="block-end-date"
+                      type="date"
+                      value={blockEndDate}
+                      onChange={(event) => setBlockEndDate(event.target.value)}
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                ) : null}
               </div>
-            )}
+
+              {blockMode === "time" ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="block-start-time">Start time</Label>
+                    <Input id="block-start-time" type="time" step={900} value={blockStartTime} onChange={(event) => setBlockStartTime(event.target.value)} className="h-11 rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="block-end-time">End time</Label>
+                    <Input id="block-end-time" type="time" step={900} value={blockEndTime} onChange={(event) => setBlockEndTime(event.target.value)} className="h-11 rounded-xl" />
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+                  Full-day blocks are best for vacation, closures, and days you want fully unavailable on the calendar.
+                </div>
+              )}
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="block-staff">Team member</Label>
@@ -985,7 +1040,7 @@ export default function CalendarPage() {
                 id="block-staff"
                 value={blockStaffId}
                 onChange={(event) => setBlockStaffId(event.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="none">Business-wide block</option>
                 {((staffRaw ?? []) as Array<{ id: string; firstName: string; lastName: string }>).map((staffMember) => (
@@ -1003,15 +1058,15 @@ export default function CalendarPage() {
                 value={blockNotes}
                 onChange={(event) => setBlockNotes(event.target.value)}
                 placeholder="Optional note for the team..."
-                className="min-h-[88px] resize-none"
+                className="min-h-[96px] resize-none rounded-2xl"
               />
             </div>
 
-            <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button type="button" variant="outline" onClick={() => setShowBlockDialog(false)} disabled={creatingBlock}>
+            <DialogFooter className="flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row">
+              <Button type="button" variant="outline" onClick={() => setShowBlockDialog(false)} disabled={creatingBlock} className="h-11 rounded-xl">
                 Cancel
               </Button>
-              <Button type="submit" disabled={creatingBlock}>
+              <Button type="submit" disabled={creatingBlock} className="h-11 rounded-xl">
                 {creatingBlock ? "Saving..." : "Save block"}
               </Button>
             </DialogFooter>
