@@ -326,6 +326,9 @@ export default function SignedIn() {
       ),
     [activationAppointmentsRaw]
   );
+  const activationVehiclesCount = (activationVehiclesRaw?.length ?? 0);
+  const activationServicesCount = (activationServicesRaw?.length ?? 0);
+  const activationInvoicesCount = (activationInvoicesRaw?.length ?? 0);
   const locationRecords = useMemo(
     () => (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>,
     [locationsRaw]
@@ -484,7 +487,7 @@ export default function SignedIn() {
         key: "vehicle",
         label: "Add your first vehicle",
         detail: "Attach a real vehicle so scheduling and history work correctly.",
-        done: (activationVehiclesRaw?.length ?? 0) > 0,
+        done: activationVehiclesCount > 0,
         href: "/clients",
         actionLabel: "Add vehicle",
         icon: <Car className="h-4 w-4" />,
@@ -493,7 +496,7 @@ export default function SignedIn() {
         key: "services",
         label: "Review loaded services",
         detail: "Your starter menu is preloaded. Confirm the catalog before you start booking.",
-        done: (activationServicesRaw?.length ?? 0) > 0,
+        done: activationServicesCount > 0,
         href: "/services",
         actionLabel: "Open services",
         icon: <Wrench className="h-4 w-4" />,
@@ -511,7 +514,7 @@ export default function SignedIn() {
         key: "invoice",
         label: "Generate your first invoice",
         detail: "Turn completed work into a payable invoice so billing is ready from day one.",
-        done: (activationInvoicesRaw?.length ?? 0) > 0,
+        done: activationInvoicesCount > 0,
         href: "/invoices/new",
         actionLabel: "New invoice",
         icon: <FileText className="h-4 w-4" />,
@@ -540,10 +543,35 @@ export default function SignedIn() {
     activationBusiness?.operatingHours,
     activationAppointments.length,
     activationClients.length,
-    activationInvoicesRaw?.length,
-    activationServicesRaw?.length,
-    activationVehiclesRaw?.length,
+    activationInvoicesCount,
+    activationServicesCount,
+    activationVehiclesCount,
     scheduleJobHref,
+  ]);
+  const acclimatedWorkspace = useMemo(() => {
+    const coreReady =
+      activationClients.length > 0 &&
+      activationVehiclesCount > 0 &&
+      activationServicesCount > 0 &&
+      activationAppointments.length > 0 &&
+      activationInvoicesCount > 0;
+    const activeOperatingSignals =
+      activationClients.length >= 3 ||
+      activeJobs.length > 0 ||
+      todayAppointments.length > 0 ||
+      pendingApprovalsCount > 0 ||
+      unpaidRevenue > 0;
+    return coreReady && activeOperatingSignals;
+  }, [
+    activationAppointments.length,
+    activationClients.length,
+    activationInvoicesCount,
+    activationServicesCount,
+    activationVehiclesCount,
+    activeJobs.length,
+    todayAppointments.length,
+    pendingApprovalsCount,
+    unpaidRevenue,
   ]);
   const loadingActivationChecklist =
     (fetchingActivationBusiness && activationBusinessRaw === undefined) ||
@@ -894,7 +922,7 @@ export default function SignedIn() {
           </div>
         </section>
 
-        {(loadingActivationChecklist || activationChecklist.completed < activationChecklist.total) ? (
+        {(loadingActivationChecklist || (!acclimatedWorkspace && activationChecklist.completed < activationChecklist.total)) ? (
           <section className="rounded-[26px] border border-border/70 bg-card px-4 py-4 shadow-sm sm:rounded-[28px] sm:px-5 sm:py-6">
             {loadingActivationChecklist ? (
               <div className="space-y-4">
@@ -932,6 +960,7 @@ export default function SignedIn() {
 
         <DailyOperationsCard
           activationChecklist={activationChecklist}
+          acclimatedWorkspace={acclimatedWorkspace}
           todayAppointments={todayAppointments.length}
           nextUpcomingAppointment={upcomingAppointments[0] ?? null}
           activeJobs={activeJobs.length}
@@ -2063,6 +2092,7 @@ function ActivationChecklistCard({
 
 function DailyOperationsCard({
   activationChecklist,
+  acclimatedWorkspace,
   todayAppointments,
   nextUpcomingAppointment,
   activeJobs,
@@ -2084,6 +2114,7 @@ function DailyOperationsCard({
       actionLabel: string;
     }>;
   };
+  acclimatedWorkspace: boolean;
   todayAppointments: number;
   nextUpcomingAppointment: AppointmentRecord | null;
   activeJobs: number;
@@ -2093,7 +2124,7 @@ function DailyOperationsCard({
   depositCount: number;
   todayScheduleHref: string;
 }) {
-  const isOperational = activationChecklist.completed >= 4;
+  const isOperational = acclimatedWorkspace || activationChecklist.completed >= 4;
   const nextSteps = activationChecklist.items.filter((item) => !item.done).slice(0, 3);
 
   return (
