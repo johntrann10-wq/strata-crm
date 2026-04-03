@@ -779,63 +779,9 @@ invoicesRouter.post(
   requireAuth,
   requireTenant,
   wrapAsync(async (req: Request, res: Response) => {
-    const bid = businessId(req);
-    const [row] = await db
-      .select({
-        id: invoices.id,
-        invoiceNumber: invoices.invoiceNumber,
-        status: invoices.status,
-        total: invoices.total,
-        clientId: invoices.clientId,
-        businessCurrency: businesses.currency,
-        clientFirstName: clients.firstName,
-        clientLastName: clients.lastName,
-        clientEmail: clients.email,
-      })
-      .from(invoices)
-      .leftJoin(clients, eq(invoices.clientId, clients.id))
-      .leftJoin(businesses, eq(invoices.businessId, businesses.id))
-      .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, bid)))
-      .limit(1);
-    if (!row) throw new NotFoundError("Invoice not found.");
-    if (row.status === "void") throw new BadRequestError("Cannot collect payment for a void invoice.");
-
-    const totalPaid = await getActiveInvoicePaymentTotal(row.id);
-    const remainingBalance = Math.max(0, Number(row.total ?? 0) - totalPaid);
-    if (remainingBalance <= 0) {
-      throw new BadRequestError("Invoice does not have a remaining balance.");
-    }
-
-    const base = process.env.FRONTEND_URL!;
-    const customerName = [row.clientFirstName, row.clientLastName].filter(Boolean).join(" ").trim() || null;
-    const result = await createInvoicePaymentCheckoutSession({
-      businessId: bid,
-      invoiceId: row.id,
-      invoiceNumber: row.invoiceNumber ?? null,
-      amountCents: Math.round(remainingBalance * 100),
-      currency: row.businessCurrency ?? "USD",
-      customerEmail: row.clientEmail?.trim() || null,
-      customerName,
-      successUrl: `${base}/invoices/${row.id}?stripe=success`,
-      cancelUrl: `${base}/invoices/${row.id}?stripe=canceled`,
-    });
-    if (!result) {
-      throw new BadRequestError("Stripe invoice checkout is not configured on the backend.");
-    }
-
-    await createActivityLog({
-      businessId: bid,
-      action: "invoice.payment_checkout_created",
-      entityType: "invoice",
-      entityId: row.id,
-      userId: req.userId ?? null,
-      metadata: {
-        invoiceNumber: row.invoiceNumber ?? null,
-        remainingBalance,
-      },
-    });
-
-    res.json(result);
+    throw new BadRequestError(
+      "Invoice Stripe checkout is disabled until connected-account payouts are implemented safely."
+    );
   })
 );
 

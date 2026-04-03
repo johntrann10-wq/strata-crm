@@ -326,9 +326,6 @@ export default function InvoiceDetailPage() {
   );
 
   const [{ fetching: sendingToClient }, sendToClient] = useAction(api.invoice.sendToClient);
-  const [{ fetching: creatingStripePaymentSession }, createStripePaymentSession] = useAction(
-    api.invoice.createStripePaymentSession
-  );
   const [{ fetching: voidingInvoice }, voidInvoiceAction] = useAction(api.invoice.voidInvoice);
   const [{ fetching: creatingPayment }, createPayment] = useAction(api.payment.create);
   const [{ fetching: reversingPayment }, reversePayment] = useAction(api.payment.reversePayment);
@@ -387,20 +384,6 @@ export default function InvoiceDetailPage() {
     setSearchParams(next, { replace: true });
   }, [handleOpenPaymentDialog, invoice?.id, invoice?.status, searchParams, setSearchParams]);
 
-  useEffect(() => {
-    const stripeState = searchParams.get("stripe");
-    if (!invoice?.id || !stripeState) return;
-    if (stripeState === "success") {
-      toast.success("Stripe payment submitted. Refreshing invoice status...");
-      void refetch();
-    } else if (stripeState === "canceled") {
-      toast.message("Stripe checkout was canceled.");
-    }
-    const next = new URLSearchParams(searchParams);
-    next.delete("stripe");
-    setSearchParams(next, { replace: true });
-  }, [invoice?.id, refetch, searchParams, setSearchParams]);
-
   const handleRecordPayment = async () => {
     if (!invoice?.id) return;
     const amountNum = parseFloat(paymentAmount);
@@ -425,21 +408,6 @@ export default function InvoiceDetailPage() {
     } else {
       toast.error("Failed to record payment: " + result.error.message);
     }
-  };
-
-  const handleStripeCheckout = async () => {
-    if (!invoice?.id) return;
-    const result = await createStripePaymentSession({ id: invoice.id });
-    if (result.error) {
-      toast.error("Failed to start Stripe checkout: " + result.error.message);
-      return;
-    }
-    const url = (result.data as { url?: string } | undefined)?.url;
-    if (!url) {
-      toast.error("Stripe checkout did not return a payment link.");
-      return;
-    }
-    window.location.assign(url);
   };
 
   const handleAddLineItem = async () => {
@@ -712,21 +680,6 @@ export default function InvoiceDetailPage() {
                   Record Payment
                 </Button>
               )}
-              {invoiceAllowsPayment(status) && canWritePayments && (
-                <Button
-                  onClick={() => void handleStripeCheckout()}
-                  variant="outline"
-                  size="sm"
-                  disabled={creatingStripePaymentSession || remainingBalance <= 0}
-                >
-                  {creatingStripePaymentSession ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <CreditCard className="h-4 w-4 mr-2" />
-                  )}
-                  Pay with Stripe
-                </Button>
-              )}
               {status !== "void" && status !== "paid" ? (
                 <Button disabled={voidingInvoice} variant="destructive" size="sm" onClick={() => setShowVoidDialog(true)}>
                   {voidingInvoice ? (
@@ -758,22 +711,6 @@ export default function InvoiceDetailPage() {
                     <Send className="h-4 w-4 mr-2" />
                   )}
                   Mark as sent
-                </Button>
-              ) : null}
-
-              {invoiceAllowsPayment(status) && canWritePayments ? (
-                <Button
-                  onClick={() => void handleStripeCheckout()}
-                  variant="outline"
-                  className="flex-1"
-                  disabled={creatingStripePaymentSession || remainingBalance <= 0}
-                >
-                  {creatingStripePaymentSession ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <CreditCard className="h-4 w-4 mr-2" />
-                  )}
-                  Stripe
                 </Button>
               ) : null}
 
@@ -1026,25 +963,9 @@ export default function InvoiceDetailPage() {
                 void handleMarkAsSent();
               }}
               primaryDisabled={remainingBalance <= 0}
-              secondaryDisabled={sendingToClient || creatingStripePaymentSession}
+              secondaryDisabled={sendingToClient}
               primaryLoading={creatingPayment}
             />
-          ) : null}
-
-          {invoiceAllowsPayment(status) && canWritePayments ? (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => void handleStripeCheckout()}
-              disabled={creatingStripePaymentSession || remainingBalance <= 0}
-            >
-              {creatingStripePaymentSession ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <CreditCard className="mr-2 h-4 w-4" />
-              )}
-              Pay with Stripe Checkout
-            </Button>
           ) : null}
 
           {/* Invoice Details */}
