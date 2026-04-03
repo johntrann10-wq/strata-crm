@@ -554,14 +554,16 @@ export default function NewAppointmentPage() {
   const timeOptions = useMemo(() => buildQuarterHourOptions(), []);
   const timeSelectTriggerClassName =
     "h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
+  const mobileControlClassName =
+    "border-input/90 h-10 w-full appearance-none rounded-xl border bg-background/85 px-3.5 py-2 pr-10 text-sm font-normal shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40";
   const mobileTimeSelectClassName =
-    "h-10 bg-background/85 text-base font-normal";
+    mobileControlClassName;
   const dateInputClassName =
-    "h-10 px-3 text-sm font-medium [font-variant-numeric:tabular-nums]";
+    "h-10 px-3.5 py-2 text-sm font-normal [font-variant-numeric:tabular-nums]";
   const readOnlyTimeClassName =
     "flex h-10 w-full items-center rounded-xl border border-input/90 bg-muted/40 pl-10 pr-3 text-sm font-medium text-muted-foreground [font-variant-numeric:tabular-nums]";
   const mobileFormSelectClassName =
-    "h-10 w-full appearance-none rounded-xl border border-input/90 bg-background/85 px-3 pr-10 text-base font-normal text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none";
+    cn(mobileControlClassName, "text-foreground");
 
   const notifyAppointmentConfirmation = (deliveryStatus?: string | null, deliveryError?: string | null) => {
     if (deliveryStatus === "emailed") {
