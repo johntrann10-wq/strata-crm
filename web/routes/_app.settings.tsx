@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useOutletContext } from "react-router";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useOutletContext, useSearchParams } from "react-router";
 import type { AuthOutletContext } from "./_app";
 import { useAction, useFindFirst, useFindMany, useFindOne } from "../hooks/useApi";
 import { API_BASE, api } from "../api";
@@ -359,14 +359,21 @@ function BillingTab({
   setBillingPortalLoading: (value: boolean) => void;
   membershipRole: AuthOutletContext["membershipRole"];
 }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [stripeConnectLoading, setStripeConnectLoading] = useState(false);
   const [stripeDashboardLoading, setStripeDashboardLoading] = useState(false);
+  const [stripeRefreshLoading, setStripeRefreshLoading] = useState(false);
+
+  const refreshBillingStatus = useCallback(async () => {
+    const result = await api.billing.getStatus();
+    setBillingStatus(result);
+    return result;
+  }, [setBillingStatus]);
 
   useEffect(() => {
     let cancelled = false;
 
-    api.billing
-      .getStatus()
+    refreshBillingStatus()
       .then((result) => {
         if (!cancelled) setBillingStatus(result);
       })
@@ -390,7 +397,32 @@ function BillingTab({
     return () => {
       cancelled = true;
     };
-  }, [setBillingStatus]);
+  }, [refreshBillingStatus, setBillingStatus]);
+
+  useEffect(() => {
+    const stripeConnectState = searchParams.get("stripeConnect");
+    if (!stripeConnectState) return;
+
+    refreshBillingStatus()
+      .then((result) => {
+        if (stripeConnectState === "return") {
+          if (result.stripeConnectReady) {
+            toast.success("Stripe is connected and ready for invoice payments.");
+          } else {
+            toast.message("Stripe account linked. Finish the remaining Stripe requirements to enable charges and payouts.");
+          }
+        } else if (stripeConnectState === "refresh") {
+          toast.message("Stripe setup is still incomplete. Finish the remaining Stripe requirements, then refresh again.");
+        }
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Could not refresh Stripe status.");
+      });
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("stripeConnect");
+    setSearchParams(nextParams, { replace: true });
+  }, [refreshBillingStatus, searchParams, setSearchParams]);
 
   const handleManageSubscription = async () => {
     setBillingPortalLoading(true);
@@ -437,6 +469,24 @@ function BillingTab({
       toast.error(error instanceof Error ? error.message : "Something went wrong.");
     } finally {
       setStripeDashboardLoading(false);
+    }
+  };
+
+  const handleRefreshStripeStatus = async () => {
+    setStripeRefreshLoading(true);
+    try {
+      const result = await refreshBillingStatus();
+      if (result.stripeConnectReady) {
+        toast.success("Stripe is fully ready for connected-account invoice payments.");
+      } else if (result.stripeConnectAccountId) {
+        toast.message("Stripe account linked. Finish the remaining Stripe requirements to enable charges and payouts.");
+      } else {
+        toast.message("No Stripe account is connected yet for this business.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not refresh Stripe status.");
+    } finally {
+      setStripeRefreshLoading(false);
     }
   };
 
@@ -589,7 +639,11 @@ function BillingTab({
               ) : null}
 
               <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-                Customer invoice and deposit checkout stays disabled until the connected-account collection flow is enabled safely. This step only links the business Stripe account and verifies readiness.
+                {billingStatus?.stripeConnectReady
+                  ? "Stripe is ready. Customer invoice payments can now route into this business's connected Stripe account."
+                  : billingStatus?.stripeConnectAccountId
+                    ? "Finish the remaining Stripe onboarding requirements so this business can accept customer payments and receive payouts."
+                    : "Connect a Stripe account for this business so customer invoice payments can route into the business owner's own Stripe account."}
               </div>
 
               {!canManageStripeConnect ? (
@@ -601,6 +655,10 @@ function BillingTab({
                   <Button onClick={handleStripeConnect} disabled={stripeConnectLoading}>
                     {stripeConnectLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     {billingStatus?.stripeConnectAccountId ? "Continue Stripe setup" : "Connect Stripe"}
+                  </Button>
+                  <Button variant="outline" onClick={handleRefreshStripeStatus} disabled={stripeRefreshLoading}>
+                    {stripeRefreshLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Refresh Stripe status
                   </Button>
                   {billingStatus?.stripeConnectAccountId ? (
                     <Button
