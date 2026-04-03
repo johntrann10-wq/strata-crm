@@ -119,6 +119,61 @@ function formatTimelineWhen(value: string | null | undefined): string {
   });
 }
 
+function getVehicleDisplayLabel(vehicle: Record<string, unknown> | null | undefined, fallback = "No vehicle on file yet") {
+  if (!vehicle) return fallback;
+  return [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || fallback;
+}
+
+function getClientDisplayState({
+  client,
+  vehicleList,
+  unpaidInvoiceValue,
+  openQuoteValue,
+  nextAppointment,
+}: {
+  client: Record<string, any>;
+  vehicleList: Array<Record<string, unknown>>;
+  unpaidInvoiceValue: number;
+  openQuoteValue: number;
+  nextAppointment: Record<string, any> | undefined;
+}) {
+  const clientDisplayName = [client.firstName, client.lastName].filter(Boolean).join(" ") || "Client";
+  const clientInitials =
+    [client.firstName, client.lastName]
+      .filter(Boolean)
+      .map((value) => String(value).trim().charAt(0).toUpperCase())
+      .join("")
+      .slice(0, 2) || "C";
+  const primaryVehicleLabel = getVehicleDisplayLabel(vehicleList[0]);
+  const clientSinceLabel = safeDate(client.createdAt)?.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const headerMeta = [client.email, client.phone].filter(Boolean).join(" - ") || "Client record";
+  const openRevenueLabel =
+    unpaidInvoiceValue > 0
+      ? `${formatCurrency(unpaidInvoiceValue)} unpaid`
+      : openQuoteValue > 0
+        ? `${formatCurrency(openQuoteValue)} in quotes`
+        : "No open billing";
+  const nextStepLabel = nextAppointment
+    ? `Next visit ${formatTimelineWhen((nextAppointment.startTime as string | null | undefined) ?? null)}`
+    : vehicleList.length === 0
+      ? "Add vehicle"
+      : "Book or quote";
+
+  return {
+    clientDisplayName,
+    clientInitials,
+    primaryVehicleLabel,
+    clientSinceLabel,
+    headerMeta,
+    openRevenueLabel,
+    nextStepLabel,
+  };
+}
+
 export default function ClientDetailPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -327,33 +382,21 @@ export default function ClientDetailPage() {
     })[0];
   const latestInvoice = [...invoiceList].sort((a, b) => eventDateValue(b as Record<string, unknown>) - eventDateValue(a as Record<string, unknown>))[0];
   const latestQuote = [...quoteList].sort((a, b) => eventDateValue(b as Record<string, unknown>) - eventDateValue(a as Record<string, unknown>))[0];
-  const clientDisplayName = [client.firstName, client.lastName].filter(Boolean).join(" ") || "Client";
-  const clientInitials = [client.firstName, client.lastName]
-    .filter(Boolean)
-    .map((value) => String(value).trim().charAt(0).toUpperCase())
-    .join("")
-    .slice(0, 2) || "C";
-  const primaryVehicleLabel =
-    vehicleList.length > 0
-      ? [vehicleList[0].year, vehicleList[0].make, vehicleList[0].model].filter(Boolean).join(" ")
-      : "No vehicle on file yet";
-  const clientSinceLabel = safeDate(client.createdAt)?.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
+  const {
+    clientDisplayName,
+    clientInitials,
+    primaryVehicleLabel,
+    clientSinceLabel,
+    headerMeta,
+    openRevenueLabel,
+    nextStepLabel,
+  } = getClientDisplayState({
+    client,
+    vehicleList: vehicleList as Array<Record<string, unknown>>,
+    unpaidInvoiceValue,
+    openQuoteValue,
+    nextAppointment: nextAppointment as Record<string, any> | undefined,
   });
-  const headerMeta = [client.email, client.phone].filter(Boolean).join(" - ") || "Client record";
-  const openRevenueLabel =
-    unpaidInvoiceValue > 0
-      ? `${formatCurrency(unpaidInvoiceValue)} unpaid`
-      : openQuoteValue > 0
-        ? `${formatCurrency(openQuoteValue)} in quotes`
-        : "No open billing";
-  const nextStepLabel = nextAppointment
-    ? `Next visit ${formatTimelineWhen((nextAppointment.startTime as string | null | undefined) ?? null)}`
-    : vehicleList.length === 0
-      ? "Add vehicle"
-      : "Book or quote";
   const clientTimeline = [
     ...apptList.map((appointment) => ({
       id: `appointment-${appointment.id}`,
