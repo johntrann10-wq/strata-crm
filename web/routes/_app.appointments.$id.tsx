@@ -1135,11 +1135,11 @@ export default function AppointmentDetail() {
             </div>
             <div>
               <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.5rem]">{pageTitle}</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                {isInternalCalendarBlock
-                  ? "Review the blocked time, assigned team coverage, and notes here without mixing it up with a customer job."
-                  : "Check the client, vehicle, schedule, and payment details here, then move the appointment forward without losing your place."}
-              </p>
+              {isInternalCalendarBlock ? (
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                  Review the blocked time, assigned team coverage, and notes here without mixing it up with a customer job.
+                </p>
+              ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
