@@ -26,7 +26,9 @@ export function verifyPublicDocumentToken(
 
 function normalizeUrl(value: string | undefined | null): string | null {
   const trimmed = value?.trim();
-  return trimmed ? trimmed.replace(/\/+$/, "") : null;
+  if (!trimmed) return null;
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return withProtocol.replace(/\/+$/, "");
 }
 
 export function getPublicApiBaseUrl(): string {
