@@ -175,7 +175,11 @@ export function FormDatePicker({
             {value ? formatPickerDate(value) : placeholder}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
+        <PopoverContent
+          className="w-auto p-0"
+          align="start"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
           <Calendar
             mode="single"
             selected={selectedDate}

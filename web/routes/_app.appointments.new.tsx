@@ -923,7 +923,11 @@ export default function NewAppointmentPage() {
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <PopoverContent
+                    className="w-[--radix-popover-trigger-width] p-0"
+                    align="start"
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                  >
                     <Command>
                       <CommandInput
                         placeholder="Type to search clients…"
@@ -1348,7 +1352,11 @@ export default function NewAppointmentPage() {
                           : "Pick a date"}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
+                    <PopoverContent
+                      className="w-auto p-0"
+                      align="start"
+                      onOpenAutoFocus={(event) => event.preventDefault()}
+                    >
                       <Calendar
                         mode="single"
                         selected={selectedDate}
