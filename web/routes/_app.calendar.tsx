@@ -172,7 +172,7 @@ export default function CalendarPage() {
       : null;
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [view, setView] = useState<"month" | "week" | "day">(initialView ?? "week");
+  const [view, setView] = useState<"month" | "week" | "day">(initialView ?? "month");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [conflictDismissed, setConflictDismissed] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
@@ -192,7 +192,7 @@ export default function CalendarPage() {
       const mobile = window.innerWidth < 768;
       setIsMobileLayout(mobile);
       if (!layoutInitializedRef.current) {
-        setView(initialView ?? (mobile ? "month" : "week"));
+        setView(initialView ?? "month");
         layoutInitializedRef.current = true;
       }
     };
