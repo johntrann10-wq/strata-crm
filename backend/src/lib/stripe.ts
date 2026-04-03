@@ -97,7 +97,7 @@ export async function createConnectAccount(params: {
     country: "US",
     email: params.email ?? undefined,
     business_type: "company",
-    business_profile: {
+    company: {
       name: params.businessName,
     },
     capabilities: {

@@ -19,6 +19,7 @@ import {
   isStripePortalConfigured,
   retrieveConnectAccount,
 } from "../lib/stripe.js";
+import type { StripeConnectAccountState } from "../lib/stripe.js";
 import { requireAuth } from "../middleware/auth.js";
 import { BadRequestError, ForbiddenError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
@@ -37,6 +38,13 @@ function isBillingEnforced(): boolean {
 
 function canManageStripeConnect(req: Request): boolean {
   return req.membershipRole === "owner" || req.membershipRole === "admin";
+}
+
+function getStripeConnectErrorMessage(error: unknown): string {
+  if (error instanceof Stripe.errors.StripeError) {
+    return error.message || "Stripe could not complete the connected account request.";
+  }
+  return error instanceof Error ? error.message : "Stripe could not complete the connected account request.";
 }
 
 async function syncStripeConnectStatus(businessId: string): Promise<{
@@ -78,7 +86,16 @@ async function syncStripeConnectStatus(businessId: string): Promise<{
     };
   }
 
-  const account = await retrieveConnectAccount({ accountId: business.stripeConnectAccountId });
+  let account: StripeConnectAccountState | null = null;
+  try {
+    account = await retrieveConnectAccount({ accountId: business.stripeConnectAccountId });
+  } catch (error) {
+    logger.warn("Stripe Connect status sync failed; using stored account state", {
+      businessId,
+      accountId: business.stripeConnectAccountId,
+      error: getStripeConnectErrorMessage(error),
+    });
+  }
   if (!account) {
     return {
       stripeConnectAccountId: business.stripeConnectAccountId,
@@ -205,11 +222,16 @@ billingRouter.post(
 
     let accountId = business.stripeConnectAccountId ?? null;
     if (!accountId) {
-      const account = await createConnectAccount({
-        businessId,
-        businessName: business.name,
-        email: user?.email ?? null,
-      });
+      let account;
+      try {
+        account = await createConnectAccount({
+          businessId,
+          businessName: business.name,
+          email: user?.email ?? null,
+        });
+      } catch (error) {
+        throw new BadRequestError(getStripeConnectErrorMessage(error));
+      }
       if (!account) {
         throw new BadRequestError("Stripe Connect is not configured on the backend.");
       }
@@ -227,12 +249,22 @@ billingRouter.post(
         .where(eq(businesses.id, businessId));
     }
 
+    const connectAccountId = accountId;
+    if (!connectAccountId) {
+      throw new BadRequestError("Could not create Stripe connected account.");
+    }
+
     const base = process.env.FRONTEND_URL!;
-    const link = await createConnectAccountLink({
-      accountId,
-      refreshUrl: `${base}/settings?tab=billing&stripeConnect=refresh`,
-      returnUrl: `${base}/settings?tab=billing&stripeConnect=return`,
-    });
+    let link;
+    try {
+      link = await createConnectAccountLink({
+        accountId: connectAccountId,
+        refreshUrl: `${base}/settings?tab=billing&stripeConnect=refresh`,
+        returnUrl: `${base}/settings?tab=billing&stripeConnect=return`,
+      });
+    } catch (error) {
+      throw new BadRequestError(getStripeConnectErrorMessage(error));
+    }
     if (!link) {
       throw new BadRequestError("Could not create Stripe onboarding link.");
     }
@@ -264,9 +296,14 @@ billingRouter.post(
       throw new BadRequestError("Connect a Stripe account first.");
     }
 
-    const link = await createConnectLoginLink({
-      accountId: business.stripeConnectAccountId,
-    });
+    let link;
+    try {
+      link = await createConnectLoginLink({
+        accountId: business.stripeConnectAccountId,
+      });
+    } catch (error) {
+      throw new BadRequestError(getStripeConnectErrorMessage(error));
+    }
     if (!link) {
       throw new BadRequestError("Could not create Stripe dashboard link.");
     }
