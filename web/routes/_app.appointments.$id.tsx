@@ -354,6 +354,9 @@ function FormSelect({
   );
 }
 
+const editDateInputClassName =
+  "border-input/90 h-10 w-full min-w-0 rounded-xl border bg-background/85 px-3.5 py-2 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40";
+
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, index) => {
   const hours = Math.floor(index / 4);
   const minutes = (index % 4) * 15;
@@ -2242,7 +2245,8 @@ export default function AppointmentDetail() {
 
       {/* Edit Appointment Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0">
+          <div className="space-y-4 p-5 sm:p-6">
           <DialogHeader>
             <DialogTitle>Edit Appointment</DialogTitle>
             <DialogDescription>
@@ -2267,12 +2271,13 @@ export default function AppointmentDetail() {
               <Input
                 id="edit-date"
                 type="date"
+                className={editDateInputClassName}
                 value={editDate}
                 onChange={(e) => setEditDate(e.target.value)}
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Client</Label>
                 <FormSelect
@@ -2326,7 +2331,7 @@ export default function AppointmentDetail() {
             </div>
 
             {/* Start Time / End Time */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="edit-start-time">Start Time</Label>
                 <FormSelect
@@ -2374,12 +2379,13 @@ export default function AppointmentDetail() {
               </div>
 
               {editVehicleOnSite ? (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="edit-job-start-date">Job Span Start</Label>
                     <Input
                       id="edit-job-start-date"
                       type="date"
+                      className={editDateInputClassName}
                       value={editJobStartDate}
                       onChange={(e) => setEditJobStartDate(e.target.value)}
                     />
@@ -2403,6 +2409,7 @@ export default function AppointmentDetail() {
                     <Input
                       id="edit-expected-completion-date"
                       type="date"
+                      className={editDateInputClassName}
                       value={editExpectedCompletionDate}
                       onChange={(e) => setEditExpectedCompletionDate(e.target.value)}
                     />
@@ -2434,10 +2441,11 @@ export default function AppointmentDetail() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-pickup-ready-date">Pickup Ready</Label>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                       <Input
                         id="edit-pickup-ready-date"
                         type="date"
+                        className={editDateInputClassName}
                         value={editPickupReadyDate}
                         onChange={(e) => setEditPickupReadyDate(e.target.value)}
                       />
@@ -2511,6 +2519,7 @@ export default function AppointmentDetail() {
               Save Changes
             </Button>
           </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
