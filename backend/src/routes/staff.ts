@@ -54,6 +54,13 @@ function formatRoleLabel(role: string): string {
   return role.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function resolveStaffAccessStatus(row: { userId?: string | null; active?: boolean | null }, membershipStatus?: string | null) {
+  if (membershipStatus) return membershipStatus;
+  if (!row.userId) return "roster_only";
+  if (row.active === false) return "suspended";
+  return "active";
+}
+
 async function buildInviteContext(req: Request, invitee: { id: string; email: string; firstName: string | null; lastName: string | null }, role: string) {
   const tenantId = businessId(req);
   const [business] = await db
@@ -170,7 +177,7 @@ staffRouter.get("/", requireAuth, requireTenant, requirePermission("team.read"),
       return {
         ...row,
         membershipRole: membership?.role ?? row.role ?? "technician",
-        membershipStatus: membership?.status ?? (row.active === false ? "suspended" : "active"),
+        membershipStatus: resolveStaffAccessStatus(row, membership?.status),
       };
     }),
   });
@@ -307,7 +314,7 @@ staffRouter.post("/", requireAuth, requireTenant, requirePermission("team.write"
   res.status(201).json({
     ...created,
     membershipRole: role,
-    membershipStatus,
+    membershipStatus: resolveStaffAccessStatus(created, membershipStatus),
     inviteDelivery: inviteResult.inviteDelivery,
   });
 });
@@ -535,7 +542,7 @@ staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.wr
   res.json({
     ...updated,
     membershipRole: membership?.role ?? updated.role ?? "technician",
-    membershipStatus: membership?.status ?? (updated.active === false ? "suspended" : "active"),
+    membershipStatus: resolveStaffAccessStatus(updated, membership?.status),
     inviteDelivery,
   });
 });

@@ -143,6 +143,13 @@ type StaffRecord = {
   active?: boolean | null;
 };
 
+type TeamAccessState = {
+  status: "active" | "invited" | "suspended" | "roster_only";
+  label: string;
+  helperText: string | null;
+  badgeClassName: string;
+};
+
 type BusinessPresetActionResult = BusinessPresetSummary;
 type ApplyBusinessPresetResult =
   | { ok: true; created: number; skipped: number; group: string; appliedCount?: number; expectedCount?: number; fullyApplied?: boolean }
@@ -162,8 +169,41 @@ const STAFF_ROLES = [
   { value: "technician", label: "Technician" },
 ];
 
-function getStaffStatus(teamMember: StaffRecord) {
-  return teamMember.membershipStatus ?? (teamMember.active === false ? "suspended" : "active");
+function getStaffAccessState(teamMember: StaffRecord): TeamAccessState {
+  const status =
+    (teamMember.membershipStatus as TeamAccessState["status"] | null | undefined) ??
+    (!teamMember.userId ? "roster_only" : teamMember.active === false ? "suspended" : "active");
+
+  switch (status) {
+    case "invited":
+      return {
+        status,
+        label: "Invite pending",
+        helperText: teamMember.email ? `Awaiting account claim from ${teamMember.email}` : "Awaiting account claim",
+        badgeClassName: "bg-amber-100 text-amber-900",
+      };
+    case "suspended":
+      return {
+        status,
+        label: "Suspended",
+        helperText: "Sign-in access is suspended for this team member.",
+        badgeClassName: "bg-rose-100 text-rose-900",
+      };
+    case "roster_only":
+      return {
+        status,
+        label: "Roster only",
+        helperText: "No login access yet. Add an email when this person should sign in.",
+        badgeClassName: "bg-slate-200 text-slate-800",
+      };
+    default:
+      return {
+        status: "active",
+        label: "Active access",
+        helperText: teamMember.email ? "Can sign in and access assigned shop tools." : "Active on the shop roster.",
+        badgeClassName: "bg-emerald-100 text-emerald-900",
+      };
+  }
 }
 
 function BillingTab({
@@ -1421,66 +1461,69 @@ export default function SettingsPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {(teamMembers as StaffRecord[]).map((teamMember) => (
-                      <div
-                        key={teamMember.id}
-                        className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="rounded-md bg-primary/10 p-1.5">
-                            <Shield className="h-4 w-4 text-primary" />
+                    {(teamMembers as StaffRecord[]).map((teamMember) => {
+                      const accessState = getStaffAccessState(teamMember);
+                      return (
+                        <div
+                          key={teamMember.id}
+                          className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="rounded-md bg-primary/10 p-1.5">
+                              <Shield className="h-4 w-4 text-primary" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium">
+                                {`${teamMember.firstName ?? ""} ${teamMember.lastName ?? ""}`.trim() || "Unnamed team member"}
+                              </p>
+                              <p className="break-words text-xs text-muted-foreground">
+                                {teamMember.email || "No login email"} - {(teamMember.membershipRole ?? teamMember.role ?? "technician").replace(/_/g, " ")}
+                              </p>
+                              {accessState.helperText ? (
+                                <p className="mt-1 text-xs text-muted-foreground">{accessState.helperText}</p>
+                              ) : null}
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium">
-                              {`${teamMember.firstName ?? ""} ${teamMember.lastName ?? ""}`.trim() || "Unnamed team member"}
-                            </p>
-                            <p className="break-words text-xs text-muted-foreground">
-                              {teamMember.email || "No login email"} - {(teamMember.membershipRole ?? teamMember.role ?? "technician").replace(/_/g, " ")}
-                            </p>
-                            {getStaffStatus(teamMember) === "invited" && teamMember.email ? (
-                              <p className="mt-1 text-xs text-muted-foreground">Awaiting account claim from {teamMember.email}</p>
-                            ) : null}
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 sm:justify-end">
-                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground capitalize">
-                            {getStaffStatus(teamMember)}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            {getStaffStatus(teamMember) === "invited" && teamMember.email ? (
+                          <div className="flex items-center justify-between gap-2 sm:justify-end">
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${accessState.badgeClassName}`}>
+                              {accessState.label}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              {accessState.status === "invited" && teamMember.email ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9"
+                                  onClick={() => handleResendStaffInvite(teamMember)}
+                                  disabled={!canManageTeam || resendingStaffInvite}
+                                >
+                                  {resendingStaffInvite ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                                  Resend invite
+                                </Button>
+                              ) : null}
                               <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-9"
-                                onClick={() => handleResendStaffInvite(teamMember)}
-                                disabled={!canManageTeam || resendingStaffInvite}
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9"
+                                onClick={() => openEditTeamMember(teamMember)}
+                                disabled={!canManageTeam}
                               >
-                                {resendingStaffInvite ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                                Resend invite
+                                <PenLine className="h-3.5 w-3.5" />
                               </Button>
-                            ) : null}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-9 w-9"
-                              onClick={() => openEditTeamMember(teamMember)}
-                              disabled={!canManageTeam}
-                            >
-                              <PenLine className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                              onClick={() => setDeleteStaffId(teamMember.id)}
-                              disabled={!canManageTeam || (teamMember.membershipRole ?? teamMember.role) === "owner"}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                                onClick={() => setDeleteStaffId(teamMember.id)}
+                                disabled={!canManageTeam || (teamMember.membershipRole ?? teamMember.role) === "owner"}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
