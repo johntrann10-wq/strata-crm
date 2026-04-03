@@ -10,8 +10,8 @@ import type { RootOutletContext } from "../root";
 export default function PublicLayout() {
   const context = useOutletContext<RootOutletContext>();
   const supportEmail = "support@stratacrm.com";
-  const supportHours = "Mon-Fri 9am-5pm PT";
-  const extendedSupportHours = "Mon-Sun 8am-8pm PT";
+  const supportHours = "Mon-Fri 9am-5pm PST";
+  const extendedSupportHours = "Mon-Sun 8am-8pm PST";
 
   return (
     <div className="flex h-full flex-col">
