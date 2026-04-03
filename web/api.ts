@@ -615,10 +615,21 @@ export const api = {
         billingEnforced: boolean;
         checkoutConfigured: boolean;
         portalConfigured: boolean;
+        stripeConnectConfigured: boolean;
+        stripeConnectAccountId: string | null;
+        stripeConnectDetailsSubmitted: boolean;
+        stripeConnectChargesEnabled: boolean;
+        stripeConnectPayoutsEnabled: boolean;
+        stripeConnectOnboardedAt: string | null;
+        stripeConnectReady: boolean;
       }>("/billing/status"),
     createCheckoutSession: () =>
       request<{ url: string }>("/billing/create-checkout-session", { method: "POST" }),
     createPortalSession: () =>
       request<{ url: string }>("/billing/portal", { method: "POST" }),
+    createConnectOnboardingLink: () =>
+      request<{ url: string }>("/billing/connect/onboarding-link", { method: "POST" }),
+    createConnectDashboardLink: () =>
+      request<{ url: string }>("/billing/connect/dashboard-link", { method: "POST" }),
   },
 } as const;

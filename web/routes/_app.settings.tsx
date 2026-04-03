@@ -112,6 +112,13 @@ interface BillingStatus {
   status: string | null;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
+  stripeConnectConfigured: boolean;
+  stripeConnectAccountId: string | null;
+  stripeConnectDetailsSubmitted: boolean;
+  stripeConnectChargesEnabled: boolean;
+  stripeConnectPayoutsEnabled: boolean;
+  stripeConnectOnboardedAt: string | null;
+  stripeConnectReady: boolean;
 }
 
 type LocationRecord = {
@@ -159,12 +166,17 @@ function BillingTab({
   setBillingStatus,
   billingPortalLoading,
   setBillingPortalLoading,
+  membershipRole,
 }: {
   billingStatus: BillingStatus | null;
   setBillingStatus: (value: BillingStatus | null) => void;
   billingPortalLoading: boolean;
   setBillingPortalLoading: (value: boolean) => void;
+  membershipRole: AuthOutletContext["membershipRole"];
 }) {
+  const [stripeConnectLoading, setStripeConnectLoading] = useState(false);
+  const [stripeDashboardLoading, setStripeDashboardLoading] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -175,7 +187,18 @@ function BillingTab({
       })
       .catch(() => {
         if (!cancelled) {
-          setBillingStatus({ status: null, trialEndsAt: null, currentPeriodEnd: null });
+          setBillingStatus({
+            status: null,
+            trialEndsAt: null,
+            currentPeriodEnd: null,
+            stripeConnectConfigured: false,
+            stripeConnectAccountId: null,
+            stripeConnectDetailsSubmitted: false,
+            stripeConnectChargesEnabled: false,
+            stripeConnectPayoutsEnabled: false,
+            stripeConnectOnboardedAt: null,
+            stripeConnectReady: false,
+          });
         }
       });
 
@@ -200,77 +223,217 @@ function BillingTab({
     }
   };
 
+  const handleStripeConnect = async () => {
+    setStripeConnectLoading(true);
+    try {
+      const result = await api.billing.createConnectOnboardingLink();
+      if (result?.url) {
+        window.location.href = result.url;
+        return;
+      }
+      toast.error("Could not open Stripe onboarding.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setStripeConnectLoading(false);
+    }
+  };
+
+  const handleOpenStripeDashboard = async () => {
+    setStripeDashboardLoading(true);
+    try {
+      const result = await api.billing.createConnectDashboardLink();
+      if (result?.url) {
+        window.location.href = result.url;
+        return;
+      }
+      toast.error("Could not open Stripe dashboard.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setStripeDashboardLoading(false);
+    }
+  };
+
   const isActive = billingStatus?.status === "active" || billingStatus?.status === "trialing";
   const trialEnd = billingStatus?.trialEndsAt ? new Date(billingStatus.trialEndsAt) : null;
   const periodEnd = billingStatus?.currentPeriodEnd ? new Date(billingStatus.currentPeriodEnd) : null;
+  const stripeConnectOnboardedAt = billingStatus?.stripeConnectOnboardedAt
+    ? new Date(billingStatus.stripeConnectOnboardedAt)
+    : null;
+  const canManageStripeConnect = membershipRole === "owner" || membershipRole === "admin";
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="mb-1 flex items-center gap-3">
-          <div className="rounded-md bg-primary/10 p-2">
-            <CreditCard className="h-5 w-5 text-primary" />
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="mb-1 flex items-center gap-3">
+            <div className="rounded-md bg-primary/10 p-2">
+              <CreditCard className="h-5 w-5 text-primary" />
+            </div>
+            <CardTitle>Plan &amp; Billing</CardTitle>
           </div>
-          <CardTitle>Plan &amp; Billing</CardTitle>
-        </div>
-        <CardDescription>
-          Strata is $29/month. First month free. Manage your subscription and payment method below.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {billingStatus ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={isActive ? "default" : "secondary"}>
-              {billingStatus.status === "trialing"
-                ? "Free trial"
-                : billingStatus.status === "active"
-                  ? "Active"
-                  : billingStatus.status ?? "No subscription"}
-            </Badge>
-            {trialEnd && billingStatus.status === "trialing" ? (
-              <span className="text-sm text-muted-foreground">Trial ends {trialEnd.toLocaleDateString()}</span>
-            ) : null}
-            {periodEnd && billingStatus.status === "active" ? (
-              <span className="text-sm text-muted-foreground">Renews {periodEnd.toLocaleDateString()}</span>
-            ) : null}
+          <CardDescription>
+            Strata is $29/month. First month free. Manage your subscription and payment method below.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {billingStatus ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={isActive ? "default" : "secondary"}>
+                {billingStatus.status === "trialing"
+                  ? "Free trial"
+                  : billingStatus.status === "active"
+                    ? "Active"
+                    : billingStatus.status ?? "No subscription"}
+              </Badge>
+              {trialEnd && billingStatus.status === "trialing" ? (
+                <span className="text-sm text-muted-foreground">Trial ends {trialEnd.toLocaleDateString()}</span>
+              ) : null}
+              {periodEnd && billingStatus.status === "active" ? (
+                <span className="text-sm text-muted-foreground">Renews {periodEnd.toLocaleDateString()}</span>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div>
+            <p className="mb-3 text-sm font-medium">Everything included:</p>
+            <ul className="space-y-2">
+              {BILLING_FEATURES.map((feature) => (
+                <li key={feature} className="flex items-center gap-2 text-sm">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
           </div>
-        ) : null}
 
-        <div>
-          <p className="mb-3 text-sm font-medium">Everything included:</p>
-          <ul className="space-y-2">
-            {BILLING_FEATURES.map((feature) => (
-              <li key={feature} className="flex items-center gap-2 text-sm">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
-                {feature}
-              </li>
-            ))}
-          </ul>
-        </div>
+          <Separator />
 
-        <Separator />
-
-        {isActive ? (
-          <Button onClick={handleManageSubscription} disabled={billingPortalLoading}>
-            {billingPortalLoading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <ExternalLink className="mr-2 h-4 w-4" />
-            )}
-            Manage subscription
-          </Button>
-        ) : billingStatus !== null ? (
-          <div className="space-y-2">
-            <p className="text-sm text-amber-600 dark:text-amber-400">
-              Subscribe to keep using Strata. Your data is saved.
-            </p>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/subscribe">Subscribe now - $29/mo, first month free</Link>
+          {isActive ? (
+            <Button onClick={handleManageSubscription} disabled={billingPortalLoading}>
+              {billingPortalLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <ExternalLink className="mr-2 h-4 w-4" />
+              )}
+              Manage subscription
             </Button>
+          ) : billingStatus !== null ? (
+            <div className="space-y-2">
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                Subscribe to keep using Strata. Your data is saved.
+              </p>
+              <Button asChild variant="outline" size="sm">
+                <Link to="/subscribe">Subscribe now - $29/mo, first month free</Link>
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="mb-1 flex items-center gap-3">
+            <div className="rounded-md bg-primary/10 p-2">
+              <Shield className="h-5 w-5 text-primary" />
+            </div>
+            <CardTitle>Stripe Business Payouts</CardTitle>
           </div>
-        ) : null}
-      </CardContent>
-    </Card>
+          <CardDescription>
+            Connect your business Stripe account through Strata so hosted invoice and deposit payments can route into your own Stripe account safely.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {billingStatus ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant={
+                  billingStatus.stripeConnectReady
+                    ? "default"
+                    : billingStatus.stripeConnectAccountId
+                      ? "secondary"
+                      : "outline"
+                }
+              >
+                {billingStatus.stripeConnectReady
+                  ? "Connected"
+                  : billingStatus.stripeConnectAccountId
+                    ? "Setup incomplete"
+                    : "Not connected"}
+              </Badge>
+              {stripeConnectOnboardedAt ? (
+                <span className="text-sm text-muted-foreground">
+                  Ready since {stripeConnectOnboardedAt.toLocaleDateString()}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!billingStatus?.stripeConnectConfigured ? (
+            <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+              Stripe Connect is not configured on the backend yet. Add the Stripe Connect platform configuration before businesses can link their payout accounts.
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Details submitted</p>
+                  <p className="mt-2 text-sm font-medium">
+                    {billingStatus?.stripeConnectDetailsSubmitted ? "Ready" : "Needs setup"}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Charges enabled</p>
+                  <p className="mt-2 text-sm font-medium">
+                    {billingStatus?.stripeConnectChargesEnabled ? "Enabled" : "Pending"}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Payouts enabled</p>
+                  <p className="mt-2 text-sm font-medium">
+                    {billingStatus?.stripeConnectPayoutsEnabled ? "Enabled" : "Pending"}
+                  </p>
+                </div>
+              </div>
+
+              {billingStatus?.stripeConnectAccountId ? (
+                <p className="text-xs text-muted-foreground">
+                  Connected Stripe account: <span className="font-mono">{billingStatus.stripeConnectAccountId}</span>
+                </p>
+              ) : null}
+
+              <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+                Customer invoice and deposit checkout stays disabled until the connected-account payment flow is enabled safely. This step only links the business payout account and verifies readiness.
+              </div>
+
+              {!canManageStripeConnect ? (
+                <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+                  Only owners and admins can connect or manage the business Stripe account.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button onClick={handleStripeConnect} disabled={stripeConnectLoading}>
+                    {stripeConnectLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {billingStatus?.stripeConnectAccountId ? "Continue Stripe setup" : "Connect Stripe"}
+                  </Button>
+                  {billingStatus?.stripeConnectAccountId ? (
+                    <Button
+                      variant="outline"
+                      onClick={handleOpenStripeDashboard}
+                      disabled={stripeDashboardLoading}
+                    >
+                      {stripeDashboardLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}
+                      Open Stripe dashboard
+                    </Button>
+                  ) : null}
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -1278,6 +1441,7 @@ export default function SettingsPage() {
               setBillingStatus={setBillingStatus}
               billingPortalLoading={billingPortalLoading}
               setBillingPortalLoading={setBillingPortalLoading}
+              membershipRole={membershipRole}
             />
           </TabsContent>
         </Tabs>

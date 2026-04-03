@@ -184,23 +184,31 @@ function CollectionActionCard({
   detail,
   amount,
   primaryLabel,
+  tertiaryLabel,
   secondaryLabel,
   onPrimary,
+  onTertiary,
   onSecondary,
   primaryDisabled,
+  tertiaryDisabled,
   secondaryDisabled,
   primaryLoading,
+  tertiaryLoading,
 }: {
   title: string;
   detail: string;
   amount: string;
   primaryLabel: string;
+  tertiaryLabel?: string;
   secondaryLabel?: string;
   onPrimary: () => void;
+  onTertiary?: () => void;
   onSecondary?: () => void;
   primaryDisabled?: boolean;
+  tertiaryDisabled?: boolean;
   secondaryDisabled?: boolean;
   primaryLoading?: boolean;
+  tertiaryLoading?: boolean;
 }) {
   return (
     <Card className="border-white/65">
@@ -217,6 +225,12 @@ function CollectionActionCard({
             {primaryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
             {primaryLabel}
           </Button>
+          {tertiaryLabel && onTertiary ? (
+            <Button variant="outline" onClick={onTertiary} disabled={tertiaryDisabled}>
+              {tertiaryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
+              {tertiaryLabel}
+            </Button>
+          ) : null}
           {secondaryLabel && onSecondary ? (
             <Button variant="outline" onClick={onSecondary} disabled={secondaryDisabled}>
               <Send className="mr-2 h-4 w-4" />
@@ -244,6 +258,10 @@ export default function InvoiceDetailPage() {
   const [paymentToReverse, setPaymentToReverse] = useState<string | null>(null);
   const [showVoidDialog, setShowVoidDialog] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
+  const [billingStatus, setBillingStatus] = useState<{
+    stripeConnectReady: boolean;
+    stripeConnectAccountId: string | null;
+  } | null>(null);
 
   // Payment form state
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -328,6 +346,9 @@ export default function InvoiceDetailPage() {
   const [{ fetching: sendingToClient }, sendToClient] = useAction(api.invoice.sendToClient);
   const [{ fetching: voidingInvoice }, voidInvoiceAction] = useAction(api.invoice.voidInvoice);
   const [{ fetching: creatingPayment }, createPayment] = useAction(api.payment.create);
+  const [{ fetching: creatingStripePaymentSession }, createStripePaymentSession] = useAction(
+    api.invoice.createStripePaymentSession
+  );
   const [{ fetching: reversingPayment }, reversePayment] = useAction(api.payment.reversePayment);
   const [{ fetching: creatingLineItem }, createLineItem] = useAction(api.invoiceLineItem.create);
   const [{ fetching: updatingLineItem }, updateLineItem] = useAction((params: Record<string, unknown>) =>
@@ -342,6 +363,31 @@ export default function InvoiceDetailPage() {
   );
 
   const { setPageContext } = usePageContext();
+
+  useEffect(() => {
+    let cancelled = false;
+    api.billing
+      .getStatus()
+      .then((result) => {
+        if (!cancelled) {
+          setBillingStatus({
+            stripeConnectReady: !!result.stripeConnectReady,
+            stripeConnectAccountId: result.stripeConnectAccountId ?? null,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBillingStatus({
+            stripeConnectReady: false,
+            stripeConnectAccountId: null,
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!invoice) return;
@@ -384,6 +430,20 @@ export default function InvoiceDetailPage() {
     setSearchParams(next, { replace: true });
   }, [handleOpenPaymentDialog, invoice?.id, invoice?.status, searchParams, setSearchParams]);
 
+  useEffect(() => {
+    const stripePayment = searchParams.get("stripePayment");
+    if (!stripePayment) return;
+    if (stripePayment === "success") {
+      toast.success("Stripe payment submitted. Invoice status will update as soon as Stripe confirms it.");
+      void refetch();
+    } else if (stripePayment === "cancelled") {
+      toast.message("Stripe checkout was cancelled.");
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("stripePayment");
+    setSearchParams(next, { replace: true });
+  }, [refetch, searchParams, setSearchParams]);
+
   const handleRecordPayment = async () => {
     if (!invoice?.id) return;
     const amountNum = parseFloat(paymentAmount);
@@ -408,6 +468,21 @@ export default function InvoiceDetailPage() {
     } else {
       toast.error("Failed to record payment: " + result.error.message);
     }
+  };
+
+  const handleStripeCheckout = async () => {
+    if (!invoice?.id) return;
+    const result = await createStripePaymentSession({ id: invoice.id });
+    if (!result.error) {
+      const url = (result.data as { url?: string } | undefined)?.url;
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+      toast.error("Stripe Checkout link was not returned.");
+      return;
+    }
+    toast.error("Failed to open Stripe Checkout: " + result.error.message);
   };
 
   const handleAddLineItem = async () => {
@@ -957,14 +1032,20 @@ export default function InvoiceDetailPage() {
               }
               amount={formatCurrency(remainingBalance)}
               primaryLabel="Record payment"
+              tertiaryLabel={billingStatus?.stripeConnectReady && remainingBalance > 0 ? "Pay with Stripe" : undefined}
               secondaryLabel={status === "draft" ? "Send invoice first" : "Resend invoice"}
               onPrimary={handleOpenPaymentDialog}
+              onTertiary={() => {
+                void handleStripeCheckout();
+              }}
               onSecondary={() => {
                 void handleMarkAsSent();
               }}
               primaryDisabled={remainingBalance <= 0}
+              tertiaryDisabled={creatingStripePaymentSession || remainingBalance <= 0}
               secondaryDisabled={sendingToClient}
               primaryLoading={creatingPayment}
+              tertiaryLoading={creatingStripePaymentSession}
             />
           ) : null}
 

@@ -107,9 +107,20 @@ CREATE TABLE IF NOT EXISTS businesses (
   subscription_status text,
   trial_ends_at timestamptz,
   current_period_end timestamptz,
+  stripe_connect_account_id text,
+  stripe_connect_details_submitted boolean DEFAULT false,
+  stripe_connect_charges_enabled boolean DEFAULT false,
+  stripe_connect_payouts_enabled boolean DEFAULT false,
+  stripe_connect_onboarded_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_account_id text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_details_submitted boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_charges_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_payouts_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_onboarded_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS business_memberships (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

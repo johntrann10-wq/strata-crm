@@ -27,6 +27,33 @@ export function isStripeInvoiceCheckoutConfigured(): boolean {
   return !!stripe;
 }
 
+export function isStripeConnectConfigured(): boolean {
+  return !!stripe;
+}
+
+export type StripeConnectAccountState = {
+  accountId: string;
+  detailsSubmitted: boolean;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  ready: boolean;
+};
+
+export function getStripeConnectAccountState(
+  account: Pick<Stripe.Account, "id" | "details_submitted" | "charges_enabled" | "payouts_enabled">
+): StripeConnectAccountState {
+  const detailsSubmitted = !!account.details_submitted;
+  const chargesEnabled = !!account.charges_enabled;
+  const payoutsEnabled = !!account.payouts_enabled;
+  return {
+    accountId: account.id,
+    detailsSubmitted,
+    chargesEnabled,
+    payoutsEnabled,
+    ready: detailsSubmitted && chargesEnabled && payoutsEnabled,
+  };
+}
+
 export async function createCheckoutSession(params: {
   businessId: string;
   customerEmail: string;
@@ -59,11 +86,69 @@ export async function createPortalSession(params: {
   return { url: session.url };
 }
 
+export async function createConnectAccount(params: {
+  businessId: string;
+  businessName: string;
+  email?: string | null;
+}): Promise<StripeConnectAccountState | null> {
+  if (!stripe) return null;
+  const account = await stripe.accounts.create({
+    type: "express",
+    country: "US",
+    email: params.email ?? undefined,
+    business_type: "company",
+    business_profile: {
+      name: params.businessName,
+    },
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
+    metadata: {
+      businessId: params.businessId,
+    },
+  });
+  return getStripeConnectAccountState(account);
+}
+
+export async function createConnectAccountLink(params: {
+  accountId: string;
+  refreshUrl: string;
+  returnUrl: string;
+}): Promise<{ url: string } | null> {
+  if (!stripe) return null;
+  const link = await stripe.accountLinks.create({
+    account: params.accountId,
+    refresh_url: params.refreshUrl,
+    return_url: params.returnUrl,
+    type: "account_onboarding",
+  });
+  return { url: link.url };
+}
+
+export async function createConnectLoginLink(params: {
+  accountId: string;
+}): Promise<{ url: string } | null> {
+  if (!stripe) return null;
+  const link = await stripe.accounts.createLoginLink(params.accountId);
+  return { url: link.url };
+}
+
+export async function retrieveConnectAccount(params: {
+  accountId: string;
+}): Promise<StripeConnectAccountState | null> {
+  if (!stripe) return null;
+  const account = await stripe.accounts.retrieve(params.accountId);
+  if (account.deleted) return null;
+  return getStripeConnectAccountState(account);
+}
+
 export async function createInvoicePaymentCheckoutSession(params: {
   businessId: string;
   invoiceId: string;
   invoiceNumber: string | null;
   amountCents: number;
+  connectedAccountId?: string | null;
   currency?: string | null;
   customerEmail?: string | null;
   customerName?: string | null;
@@ -74,6 +159,10 @@ export async function createInvoicePaymentCheckoutSession(params: {
   const amountCents = Math.max(0, Math.round(params.amountCents));
   if (amountCents <= 0) return null;
   const currency = (params.currency ?? "usd").trim().toLowerCase() || "usd";
+  const requestOptions =
+    params.connectedAccountId && params.connectedAccountId.trim()
+      ? { stripeAccount: params.connectedAccountId.trim() }
+      : undefined;
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     customer_email: params.customerEmail ?? undefined,
@@ -108,6 +197,6 @@ export async function createInvoicePaymentCheckoutSession(params: {
         invoiceNumber: params.invoiceNumber ?? "",
       },
     },
-  });
+  }, requestOptions);
   return { url: session.url! };
 }

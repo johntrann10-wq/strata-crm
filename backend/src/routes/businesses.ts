@@ -82,6 +82,11 @@ function coerceBusinessRecord(
     subscriptionStatus: record.subscriptionStatus ?? null,
     trialEndsAt: record.trialEndsAt ?? null,
     currentPeriodEnd: record.currentPeriodEnd ?? null,
+    stripeConnectAccountId: record.stripeConnectAccountId ?? null,
+    stripeConnectDetailsSubmitted: record.stripeConnectDetailsSubmitted ?? false,
+    stripeConnectChargesEnabled: record.stripeConnectChargesEnabled ?? false,
+    stripeConnectPayoutsEnabled: record.stripeConnectPayoutsEnabled ?? false,
+    stripeConnectOnboardedAt: record.stripeConnectOnboardedAt ?? null,
     createdAt: record.createdAt ?? new Date(),
     updatedAt: record.updatedAt ?? new Date(),
   };

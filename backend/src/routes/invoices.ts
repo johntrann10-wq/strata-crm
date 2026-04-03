@@ -15,7 +15,7 @@ import { sendInvoiceEmail } from "../lib/email.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
 import { buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
-import { createInvoicePaymentCheckoutSession } from "../lib/stripe.js";
+import { createInvoicePaymentCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
 import { createActivityLog } from "../lib/activity.js";
 import { getActiveInvoicePaymentTotal, isPaymentSchemaDriftError } from "../lib/invoicePayments.js";
 
@@ -779,9 +779,68 @@ invoicesRouter.post(
   requireAuth,
   requireTenant,
   wrapAsync(async (req: Request, res: Response) => {
-    throw new BadRequestError(
-      "Invoice Stripe checkout is disabled until connected-account payouts are implemented safely."
-    );
+    const bid = businessId(req);
+    const [invoice] = await db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        status: invoices.status,
+        total: invoices.total,
+        clientId: invoices.clientId,
+      })
+      .from(invoices)
+      .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, bid)))
+      .limit(1);
+    if (!invoice) throw new NotFoundError("Invoice not found.");
+    if (invoice.status === "void") throw new BadRequestError("Void invoices cannot accept Stripe payments.");
+    if (invoice.status === "paid") throw new BadRequestError("This invoice is already fully paid.");
+
+    const [business] = await db
+      .select({ stripeConnectAccountId: businesses.stripeConnectAccountId })
+      .from(businesses)
+      .where(eq(businesses.id, bid))
+      .limit(1);
+    if (!business?.stripeConnectAccountId) {
+      throw new BadRequestError("Connect Stripe in Settings before accepting invoice payments.");
+    }
+
+    const account = await retrieveConnectAccount({ accountId: business.stripeConnectAccountId });
+    if (!account) throw new BadRequestError("Could not verify the connected Stripe account.");
+    if (!account.ready) {
+      throw new BadRequestError("Finish Stripe setup in Settings before accepting invoice payments.");
+    }
+
+    const totalPaid = await getActiveInvoicePaymentTotal(invoice.id);
+    const total = Number(invoice.total ?? 0);
+    const remaining = Math.max(0, total - totalPaid);
+    if (remaining <= 0) throw new BadRequestError("This invoice has no remaining balance.");
+
+    const [client] = await db
+      .select({
+        firstName: clients.firstName,
+        lastName: clients.lastName,
+        email: clients.email,
+      })
+      .from(clients)
+      .where(and(eq(clients.id, invoice.clientId), eq(clients.businessId, bid)))
+      .limit(1);
+
+    const clientName = [client?.firstName, client?.lastName].filter(Boolean).join(" ").trim() || null;
+    const base = process.env.FRONTEND_URL!;
+    const returnTo = `${base}/invoices/${encodeURIComponent(invoice.id)}`;
+    const result = await createInvoicePaymentCheckoutSession({
+      businessId: bid,
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber ?? null,
+      amountCents: Math.round(remaining * 100),
+      connectedAccountId: business.stripeConnectAccountId,
+      customerEmail: client?.email ?? null,
+      customerName: clientName,
+      successUrl: `${returnTo}?stripePayment=success`,
+      cancelUrl: `${returnTo}?stripePayment=cancelled`,
+    });
+    if (!result) throw new BadRequestError("Could not create Stripe Checkout session.");
+    res.json(result);
   })
 );
 

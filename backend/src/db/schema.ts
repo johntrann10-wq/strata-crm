@@ -124,6 +124,11 @@ export const businesses = pgTable("businesses", {
   subscriptionStatus: text("subscription_status"), // trialing|active|past_due|canceled|incomplete_expired
   trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  stripeConnectAccountId: text("stripe_connect_account_id"),
+  stripeConnectDetailsSubmitted: boolean("stripe_connect_details_submitted").default(false),
+  stripeConnectChargesEnabled: boolean("stripe_connect_charges_enabled").default(false),
+  stripeConnectPayoutsEnabled: boolean("stripe_connect_payouts_enabled").default(false),
+  stripeConnectOnboardedAt: timestamp("stripe_connect_onboarded_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
