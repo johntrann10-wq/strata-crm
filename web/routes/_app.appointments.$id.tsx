@@ -1193,16 +1193,6 @@ export default function AppointmentDetail() {
               Back
             </Link>
           </Button>
-          <Separator orientation="vertical" className="h-6 shrink-0" />
-          <div className="flex items-center gap-3 flex-wrap min-w-0">
-            <h1 className="text-xl font-semibold text-foreground truncate">{pageTitle}</h1>
-            <StatusBadge status={appointment.status} type="appointment" />
-            {appointment.rescheduleCount != null && appointment.rescheduleCount > 0 && (
-              <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-xs">
-                {appointment.rescheduleCount}x rescheduled
-              </Badge>
-            )}
-          </div>
         </div>
 
         <div className="hidden shrink-0 items-center gap-2 sm:flex sm:flex-wrap">
