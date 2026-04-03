@@ -174,6 +174,145 @@ function getClientDisplayState({
   };
 }
 
+function buildClientTimeline({
+  apptList,
+  jobList,
+  quoteList,
+  invoiceList,
+}: {
+  apptList: Array<Record<string, any>>;
+  jobList: Array<Record<string, any>>;
+  quoteList: Array<Record<string, any>>;
+  invoiceList: Array<Record<string, any>>;
+}) {
+  return [
+    ...apptList.map((appointment) => ({
+      id: `appointment-${appointment.id}`,
+      label: appointment.title ?? "Appointment",
+      detail: appointment.vehicle
+        ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+        : "Appointment activity",
+      when: appointment.startTime,
+      status: appointment.status ?? "scheduled",
+      href: `/appointments/${appointment.id}`,
+      tone: "appointment" as const,
+    })),
+    ...jobList.map((job) => ({
+      id: `job-${String(job.id)}`,
+      label: job.title ?? job.jobNumber ?? "Job",
+      detail: job.scheduledStart ? "Job created from scheduled work" : "Workflow job",
+      when: job.scheduledStart ?? job.createdAt ?? null,
+      status: job.status ?? "scheduled",
+      href: `/jobs/${job.id}`,
+      tone: "job" as const,
+    })),
+    ...quoteList.map((quote) => ({
+      id: `quote-${String(quote.id)}`,
+      label: "Quote",
+      detail:
+        [formatCurrency(quote.total), formatFreshness(quote.followUpSentAt ?? quote.sentAt ?? null, "Touched")]
+          .filter(Boolean)
+          .join(" - ") || "Estimate in progress",
+      when: quote.followUpSentAt ?? quote.sentAt ?? quote.createdAt ?? null,
+      status: quote.status ?? "draft",
+      href: `/quotes/${quote.id}`,
+      tone: "quote" as const,
+    })),
+    ...invoiceList.map((invoice) => ({
+      id: `invoice-${String(invoice.id)}`,
+      label: invoice.invoiceNumber ?? "Invoice",
+      detail:
+        [formatCurrency(invoiceBalance(invoice)), formatFreshness(invoice.lastPaidAt ?? invoice.lastSentAt ?? null, "Updated")]
+          .filter(Boolean)
+          .join(" - ") || "Billing record",
+      when: invoice.lastPaidAt ?? invoice.lastSentAt ?? invoice.createdAt ?? null,
+      status: invoice.status ?? "draft",
+      href: `/invoices/${invoice.id}`,
+      tone: "invoice" as const,
+    })),
+  ]
+    .sort((a, b) => (safeDate(b.when)?.getTime() ?? 0) - (safeDate(a.when)?.getTime() ?? 0))
+    .slice(0, 6);
+}
+
+function buildClientRelatedRecords({
+  id,
+  currentLocationId,
+  jobList,
+  invoiceList,
+  quoteList,
+  apptList,
+}: {
+  id: string | undefined;
+  currentLocationId: string | null | undefined;
+  jobList: Array<Record<string, any>>;
+  invoiceList: Array<Record<string, any>>;
+  quoteList: Array<Record<string, any>>;
+  apptList: Array<Record<string, any>>;
+}) {
+  return [
+    ...jobList.slice(0, 4).map((job) => ({
+      type: "job" as const,
+      id: job.id,
+      label: job.title ?? job.jobNumber ?? "Job",
+      sublabel: job.scheduledStart ? new Date(job.scheduledStart).toLocaleDateString() : undefined,
+      status: job.status ?? undefined,
+      href: `/jobs/${job.id}`,
+      actionHref: String(job.status ?? "") === "completed" ? `/invoices/new?clientId=${id}&appointmentId=${job.id}` : undefined,
+      actionLabel: String(job.status ?? "") === "completed" ? "Invoice" : undefined,
+    })),
+    ...invoiceList.slice(0, 4).map((invoice) => ({
+      type: "invoice" as const,
+      id: invoice.id,
+      label: invoice.invoiceNumber ?? "Invoice",
+      sublabel:
+        [
+          formatCurrency(invoiceBalance(invoice)),
+          formatFreshness(invoice.lastSentAt ?? null, "Sent"),
+          formatFreshness(invoice.lastPaidAt ?? null, "Paid"),
+        ]
+          .filter(Boolean)
+          .join(" - ") || formatCurrency(invoiceBalance(invoice)),
+      status: invoice.status ?? undefined,
+      href: `/invoices/${invoice.id}`,
+      actionHref: ["sent", "partial"].includes(String(invoice.status ?? "")) ? `/invoices/${invoice.id}` : undefined,
+      actionLabel: ["sent", "partial"].includes(String(invoice.status ?? "")) ? "Collect" : undefined,
+    })),
+    ...quoteList.slice(0, 4).map((quote) => ({
+      type: "quote" as const,
+      id: quote.id,
+      label: "Quote",
+      sublabel:
+        [
+          quote.total != null ? `$${Number(quote.total).toFixed(2)}` : null,
+          formatFreshness(quote.sentAt ?? null, "Sent"),
+          formatFreshness(quote.followUpSentAt ?? null, "Followed up"),
+        ]
+          .filter(Boolean)
+          .join(" - ") || undefined,
+      status: quote.status ?? undefined,
+      href: `/quotes/${quote.id}`,
+      actionHref:
+        String(quote.status ?? "") === "accepted"
+          ? `/appointments/new?clientId=${id}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}&quoteId=${quote.id}`
+          : undefined,
+      actionLabel: String(quote.status ?? "") === "accepted" ? "Book" : undefined,
+    })),
+    ...apptList.map((appointment) => ({
+      type: "appointment" as const,
+      id: appointment.id,
+      label: appointment.title ?? "Appointment",
+      sublabel: appointment.startTime ? new Date(appointment.startTime).toLocaleDateString() : undefined,
+      href: `/appointments/${appointment.id}`,
+      actionHref:
+        String(appointment.status ?? "") === "completed"
+          ? `/invoices/new?clientId=${id}&appointmentId=${appointment.id}`
+          : `/quotes/new?clientId=${id}`,
+      actionLabel: String(appointment.status ?? "") === "completed" ? "Invoice" : "Quote",
+    })),
+  ];
+}
+
 export default function ClientDetailPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -397,119 +536,21 @@ export default function ClientDetailPage() {
     openQuoteValue,
     nextAppointment: nextAppointment as Record<string, any> | undefined,
   });
-  const clientTimeline = [
-    ...apptList.map((appointment) => ({
-      id: `appointment-${appointment.id}`,
-      label: appointment.title ?? "Appointment",
-      detail: appointment.vehicle
-        ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
-        : "Appointment activity",
-      when: appointment.startTime,
-      status: appointment.status ?? "scheduled",
-      href: `/appointments/${appointment.id}`,
-      tone: "appointment" as const,
-    })),
-    ...jobList.map((job) => ({
-      id: `job-${String((job as any).id)}`,
-      label: (job as any).title ?? (job as any).jobNumber ?? "Job",
-      detail: (job as any).scheduledStart ? "Job created from scheduled work" : "Workflow job",
-      when: (job as any).scheduledStart ?? (job as any).createdAt ?? null,
-      status: (job as any).status ?? "scheduled",
-      href: `/jobs/${(job as any).id}`,
-      tone: "job" as const,
-    })),
-    ...quoteList.map((quote) => ({
-      id: `quote-${String((quote as any).id)}`,
-      label: "Quote",
-      detail: [formatCurrency((quote as any).total), formatFreshness((quote as any).followUpSentAt ?? (quote as any).sentAt ?? null, "Touched")]
-        .filter(Boolean)
-        .join(" - ") || "Estimate in progress",
-      when: ((quote as any).followUpSentAt as string | null | undefined) ?? ((quote as any).sentAt as string | null | undefined) ?? ((quote as any).createdAt as string | null | undefined) ?? null,
-      status: (quote as any).status ?? "draft",
-      href: `/quotes/${(quote as any).id}`,
-      tone: "quote" as const,
-    })),
-    ...invoiceList.map((invoice) => ({
-      id: `invoice-${String((invoice as any).id)}`,
-      label: (invoice as any).invoiceNumber ?? "Invoice",
-      detail: [formatCurrency(invoiceBalance(invoice as Record<string, unknown>)), formatFreshness((invoice as any).lastPaidAt ?? (invoice as any).lastSentAt ?? null, "Updated")]
-        .filter(Boolean)
-        .join(" - ") || "Billing record",
-      when: ((invoice as any).lastPaidAt as string | null | undefined) ?? ((invoice as any).lastSentAt as string | null | undefined) ?? ((invoice as any).createdAt as string | null | undefined) ?? null,
-      status: (invoice as any).status ?? "draft",
-      href: `/invoices/${(invoice as any).id}`,
-      tone: "invoice" as const,
-    })),
-  ]
-    .sort((a, b) => (safeDate(b.when)?.getTime() ?? 0) - (safeDate(a.when)?.getTime() ?? 0))
-    .slice(0, 6);
+  const clientTimeline = buildClientTimeline({
+    apptList: apptList as Array<Record<string, any>>,
+    jobList: jobList as Array<Record<string, any>>,
+    quoteList: quoteList as Array<Record<string, any>>,
+    invoiceList: invoiceList as Array<Record<string, any>>,
+  });
 
-  const relatedRecords = [
-    ...jobList.slice(0, 4).map((job) => ({
-      type: "job" as const,
-      id: (job as any).id,
-      label: (job as any).title ?? (job as any).jobNumber ?? "Job",
-      sublabel: (job as any).scheduledStart ? new Date((job as any).scheduledStart).toLocaleDateString() : undefined,
-      status: (job as any).status ?? undefined,
-      href: `/jobs/${(job as any).id}`,
-      actionHref:
-        String((job as any).status ?? "") === "completed"
-          ? `/invoices/new?clientId=${id}&appointmentId=${(job as any).id}`
-          : undefined,
-      actionLabel: String((job as any).status ?? "") === "completed" ? "Invoice" : undefined,
-    })),
-    ...invoiceList.slice(0, 4).map((invoice) => ({
-      type: "invoice" as const,
-      id: (invoice as any).id,
-      label: (invoice as any).invoiceNumber ?? "Invoice",
-      sublabel:
-        [
-          formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
-          formatFreshness((invoice as any).lastSentAt ?? null, "Sent"),
-          formatFreshness((invoice as any).lastPaidAt ?? null, "Paid"),
-        ]
-          .filter(Boolean)
-          .join(" - ") || formatCurrency(invoiceBalance(invoice as Record<string, unknown>)),
-      status: (invoice as any).status ?? undefined,
-      href: `/invoices/${(invoice as any).id}`,
-      actionHref: ["sent", "partial"].includes(String((invoice as any).status ?? ""))
-        ? `/invoices/${(invoice as any).id}`
-        : undefined,
-      actionLabel: ["sent", "partial"].includes(String((invoice as any).status ?? "")) ? "Collect" : undefined,
-    })),
-    ...quoteList.slice(0, 4).map((quote) => ({
-      type: "quote" as const,
-      id: (quote as any).id,
-      label: "Quote",
-      sublabel:
-        [
-          (quote as any).total != null ? `$${Number((quote as any).total).toFixed(2)}` : null,
-          formatFreshness((quote as any).sentAt ?? null, "Sent"),
-          formatFreshness((quote as any).followUpSentAt ?? null, "Followed up"),
-        ]
-          .filter(Boolean)
-          .join(" - ") || undefined,
-      status: (quote as any).status ?? undefined,
-      href: `/quotes/${(quote as any).id}`,
-      actionHref:
-        String((quote as any).status ?? "") === "accepted"
-          ? `/appointments/new?clientId=${id}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}&quoteId=${(quote as any).id}`
-          : undefined,
-      actionLabel: String((quote as any).status ?? "") === "accepted" ? "Book" : undefined,
-    })),
-    ...apptList.map((a) => ({
-      type: "appointment" as const,
-      id: a.id,
-      label: a.title ?? "Appointment",
-      sublabel: a.startTime ? new Date(a.startTime).toLocaleDateString() : undefined,
-      href: `/appointments/${a.id}`,
-      actionHref:
-        String((a as any).status ?? "") === "completed"
-          ? `/invoices/new?clientId=${id}&appointmentId=${a.id}`
-          : `/quotes/new?clientId=${id}`,
-      actionLabel: String((a as any).status ?? "") === "completed" ? "Invoice" : "Quote",
-    })),
-  ];
+  const relatedRecords = buildClientRelatedRecords({
+    id,
+    currentLocationId,
+    jobList: jobList as Array<Record<string, any>>,
+    invoiceList: invoiceList as Array<Record<string, any>>,
+    quoteList: quoteList as Array<Record<string, any>>,
+    apptList: apptList as Array<Record<string, any>>,
+  });
 
   return (
     <div className="page-content">
