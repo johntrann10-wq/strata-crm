@@ -154,10 +154,10 @@ function ResponsiveTimeSelect({
 
 function mobileDateInputClassName(isMobileLayout: boolean) {
   return cn(
-    "w-full min-w-0 max-w-full rounded-xl border border-input/90 bg-background shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
+    "w-full min-w-0 max-w-full rounded-xl border border-input/90 bg-background text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40",
     isMobileLayout
-      ? "h-10 px-3 text-sm"
-      : "h-11"
+      ? "h-11 appearance-none px-3"
+      : "h-11 px-3"
   );
 }
 
