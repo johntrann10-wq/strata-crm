@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarIcon, Plus } from "lucide-react";
 import { getCalendarDaySnapshot, getJobPhaseLabel, getJobPhaseTone, getJobSpanEnd } from "@/lib/calendarJobSpans";
@@ -125,15 +126,16 @@ export function DayView({
             <div className="space-y-3">
               {agendaItems.map(({ appointment, kind }) => {
                 const style = getStatusStyle(appointment.status);
+                const isBlock = isCalendarBlockAppointment(appointment);
                 return (
                   <button
                     key={`${appointment.id}-${kind}-mobile`}
                     type="button"
                     className={cn(
                       "w-full rounded-2xl border bg-white px-4 py-4 text-left shadow-sm transition-all hover:-translate-y-px hover:shadow-md",
-                      style.surface,
-                      style.text,
-                      style.border,
+                      isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
+                      isBlock ? "" : style.text,
+                      isBlock ? "" : style.border,
                       conflictIds?.has(appointment.id) && "ring-1 ring-rose-300"
                     )}
                     onClick={(event) => {
@@ -143,15 +145,26 @@ export function DayView({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-base font-semibold">{apptLabel(appointment)}</p>
+                        <p className="truncate text-base font-semibold">
+                          {isBlock ? getCalendarBlockLabel(appointment) : apptLabel(appointment)}
+                        </p>
                         <p className="mt-1 text-sm text-muted-foreground">
                           {kind === "onsite"
                             ? "On site"
                             : `${formatTime(new Date(appointment.startTime))}${appointment.endTime ? ` - ${formatTime(new Date(appointment.endTime))}` : ""}`}
                         </p>
                       </div>
-                      <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize", style.pill)}>
-                        {kind === "onsite" ? getJobPhaseLabel(appointment.jobPhase) : appointment.status.replace("_", " ")}
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize",
+                          isBlock ? "bg-slate-200 text-slate-700" : style.pill
+                        )}
+                      >
+                        {kind === "onsite"
+                          ? getJobPhaseLabel(appointment.jobPhase)
+                          : isBlock
+                            ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
+                            : appointment.status.replace("_", " ")}
                       </span>
                     </div>
 

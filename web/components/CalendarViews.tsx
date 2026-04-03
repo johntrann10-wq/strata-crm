@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { getActiveCalendarAppointments, getCalendarDaySnapshot } from "@/lib/calendarJobSpans";
+import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -227,6 +228,7 @@ export type ApptRecord = {
   title: string | null;
   startTime: string;
   endTime: string | null;
+  internalNotes?: string | null;
   jobStartTime?: string | null;
   expectedCompletionTime?: string | null;
   pickupReadyTime?: string | null;
@@ -320,6 +322,7 @@ export function staffInitials(staff: { firstName: string; lastName: string } | n
 }
 
 export function apptLabel(apt: ApptRecord): string {
+  if (isCalendarBlockAppointment(apt)) return getCalendarBlockLabel(apt);
   if (apt.title) return apt.title;
   if (apt.client) return `${apt.client.firstName} ${apt.client.lastName}`;
   return "Appointment";
@@ -408,6 +411,7 @@ export function AppointmentBlock({
   const height = Math.max((endDecimal - startDecimal) * HOUR_HEIGHT, 42);
 
   const style = getStatusStyle(apt.status);
+  const isBlock = isCalendarBlockAppointment(apt);
   const dense = height < 74;
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -432,9 +436,9 @@ export function AppointmentBlock({
       className={cn(
         "absolute left-1.5 right-1.5 overflow-hidden rounded-xl border bg-white/98 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all select-none",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-        style.surface,
-        style.text,
-        style.border,
+        isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
+        isBlock ? "" : style.text,
+        isBlock ? "" : style.border,
         hovered && !isDragging && "shadow-md -translate-y-px",
         isDragging ? "cursor-grabbing opacity-50" : "cursor-grab",
         isConflict && "ring-1 ring-rose-300"
@@ -452,7 +456,7 @@ export function AppointmentBlock({
       onDragEnd={handleDragEnd}
     >
       <div className="flex items-start gap-2">
-        <span className={cn("mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full", style.accent)} />
+        <span className={cn("mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full", isBlock ? "bg-slate-500" : style.accent)} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -462,8 +466,14 @@ export function AppointmentBlock({
                 {apt.endTime ? ` - ${formatTime(end)}` : ""}
               </p>
             </div>
-            <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 font-medium", style.pill, dense ? "text-[9px]" : "text-[10px]")}>
-              {formatDuration(apt.startTime, apt.endTime)}
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-1.5 py-0.5 font-medium",
+                isBlock ? "bg-slate-200 text-slate-700" : style.pill,
+                dense ? "text-[9px]" : "text-[10px]"
+              )}
+            >
+              {isBlock ? (isFullDayCalendarBlock(apt) ? "All day" : "Blocked") : formatDuration(apt.startTime, apt.endTime)}
             </span>
           </div>
 
@@ -494,13 +504,22 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   const orderedAppointments = [...appointments].sort(
     (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
   );
+  const dotAppointments = orderedAppointments.filter((apt) => !isFullDayCalendarBlock(apt));
 
   return (
     <div className="pointer-events-none min-w-0 space-y-1">
       <div className="grid grid-cols-6 gap-1 sm:grid-cols-8">
-        {orderedAppointments.map((apt) => {
+        {dotAppointments.map((apt) => {
           const status = getStatusStyle(apt.status);
-          return <span key={apt.id} className={cn("h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2", status.accent)} />;
+          return (
+            <span
+              key={apt.id}
+              className={cn(
+                "h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2",
+                isCalendarBlockAppointment(apt) ? "bg-slate-500" : status.accent
+              )}
+            />
+          );
         })}
       </div>
       <span className="hidden sm:inline-flex text-[10px] font-semibold leading-none text-foreground/80">
@@ -697,6 +716,7 @@ export function MonthView({
               const isToday = isSameDay(day, today);
               const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
               const { dayAppts, daySpans } = getCalendarDaySnapshot(activeAppointments, day);
+              const hasFullDayBlock = dayAppts.some((apt) => isFullDayCalendarBlock(apt));
               const dayRevenue = dayAppts.reduce((total, apt) => total + Number(apt.totalPrice ?? 0), 0);
               const hasConflict = !!conflictIds && dayAppts.some((a) => conflictIds.has(a.id));
               const dayLabel = day.toLocaleDateString("en-US", {
@@ -738,6 +758,14 @@ export function MonthView({
                         {day.getDate()}
                       </span>
                       <div className="flex min-w-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                        {hasFullDayBlock ? (
+                          <span
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-[11px] font-bold lowercase text-slate-700"
+                            title="Full-day block"
+                          >
+                            x
+                          </span>
+                        ) : null}
                         {dayAppts.length > 0 ? (
                           <span className="hidden sm:inline-flex max-w-full truncate text-[10px] font-semibold leading-none text-foreground/80">
                             {currencyFormatter.format(dayRevenue)}

@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
-import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
+import { AlertTriangle, Ban, CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
 import { api } from "../api";
 import { useAction, useFindMany } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   type ApptRecord,
   ConflictBanner,
@@ -20,6 +24,7 @@ import {
   navigateDate,
 } from "../components/CalendarViews";
 import { dayEnd, dayStart, getCalendarDaySnapshot, getJobPhaseLabel, getJobSpanEnd, getJobSpanStart, getActiveCalendarAppointments, hasLaborOnDay } from "@/lib/calendarJobSpans";
+import { buildCalendarBlockInternalNotes, getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock, type CalendarBlockMode, type CalendarBlockPreset } from "@/lib/calendarBlocks";
 
 function toLocalDateString(date: Date): string {
   const year = date.getFullYear();
@@ -44,6 +49,29 @@ function formatPanelTime(value: string): string {
   return new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
+function parseDateInput(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+}
+
+function combineDateAndTime(dateValue: string, timeValue: string): Date {
+  const [hours, minutes] = timeValue.split(":").map(Number);
+  const date = parseDateInput(dateValue);
+  date.setHours(hours || 0, minutes || 0, 0, 0);
+  return date;
+}
+
+function eachDateInclusive(startValue: string, endValue: string): Date[] {
+  const cursor = parseDateInput(startValue);
+  const end = parseDateInput(endValue);
+  const dates: Date[] = [];
+  while (cursor.getTime() <= end.getTime()) {
+    dates.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
 export default function CalendarPage() {
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
@@ -52,6 +80,15 @@ export default function CalendarPage() {
   const [view, setView] = useState<"month" | "week" | "day">("week");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [conflictDismissed, setConflictDismissed] = useState(false);
+  const [showBlockDialog, setShowBlockDialog] = useState(false);
+  const [blockMode, setBlockMode] = useState<CalendarBlockMode>("time");
+  const [blockPreset, setBlockPreset] = useState<CalendarBlockPreset>("unavailable");
+  const [blockStartDate, setBlockStartDate] = useState(() => toLocalDateString(new Date()));
+  const [blockEndDate, setBlockEndDate] = useState(() => toLocalDateString(new Date()));
+  const [blockStartTime, setBlockStartTime] = useState("09:00");
+  const [blockEndTime, setBlockEndTime] = useState("10:00");
+  const [blockStaffId, setBlockStaffId] = useState("none");
+  const [blockNotes, setBlockNotes] = useState("");
   const layoutInitializedRef = useRef(false);
 
   useEffect(() => {
@@ -107,6 +144,7 @@ export default function CalendarPage() {
       totalPrice: true,
       assignedStaffId: true,
       isMobile: true,
+      internalNotes: true,
       client: { firstName: true, lastName: true },
       vehicle: { make: true, model: true, year: true },
       assignedStaff: { firstName: true, lastName: true },
@@ -116,6 +154,16 @@ export default function CalendarPage() {
 
   const [{ data: locationsRaw }] = useFindMany(api.location, {
     first: 100,
+    pause: !businessId,
+  } as any);
+  const [{ data: staffRaw }] = useFindMany(api.staff, {
+    filter: {
+      businessId: { equals: businessId ?? "" },
+      active: { equals: true },
+    },
+    select: { id: true, firstName: true, lastName: true },
+    first: 100,
+    sort: { firstName: "Ascending" },
     pause: !businessId,
   } as any);
 
@@ -142,6 +190,7 @@ export default function CalendarPage() {
   }, [appointmentsData]);
 
   const [{ fetching: rescheduling }, runReschedule] = useAction(api.appointment.update);
+  const [{ fetching: creatingBlock }, createAppointment] = useAction(api.appointment.create);
 
   async function handleReschedule(appointmentId: string, newStart: Date, newEnd: Date | null) {
     const result = await runReschedule({ id: appointmentId, startTime: newStart, endTime: newEnd ?? undefined });
@@ -191,6 +240,83 @@ export default function CalendarPage() {
     navigate(`/appointments/new?date=${encodeURIComponent(iso)}${
       currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
     }`);
+  }
+
+  function handleOpenBlockDialog() {
+    const selectedDate = toLocalDateString(currentDate);
+    setBlockMode("time");
+    setBlockPreset("unavailable");
+    setBlockStartDate(selectedDate);
+    setBlockEndDate(selectedDate);
+    setBlockStartTime("09:00");
+    setBlockEndTime("10:00");
+    setBlockStaffId("none");
+    setBlockNotes("");
+    setShowBlockDialog(true);
+  }
+
+  async function handleCreateBlock(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!businessId) {
+      toast.error("Business context is missing.");
+      return;
+    }
+
+    if (blockEndDate < blockStartDate) {
+      toast.error("End date must be on or after start date.");
+      return;
+    }
+
+    if (blockMode === "time") {
+      const start = combineDateAndTime(blockStartDate, blockStartTime);
+      const end = combineDateAndTime(blockStartDate, blockEndTime);
+      if (end.getTime() <= start.getTime()) {
+        toast.error("End time must be after start time.");
+        return;
+      }
+    }
+
+    const dates = eachDateInclusive(blockStartDate, blockEndDate);
+    const title = getCalendarBlockLabel({ title: null, internalNotes: buildCalendarBlockInternalNotes({ mode: blockMode, preset: blockPreset }) });
+    const internalNotes = buildCalendarBlockInternalNotes(
+      { mode: blockMode, preset: blockPreset },
+      blockNotes
+    );
+    const assignedStaffId = blockStaffId === "none" ? undefined : blockStaffId;
+
+    for (const date of dates) {
+      const dayValue = toLocalDateString(date);
+      const startTime =
+        blockMode === "full-day"
+          ? combineDateAndTime(dayValue, `${String(START_HOUR).padStart(2, "0")}:00`)
+          : combineDateAndTime(dayValue, blockStartTime);
+      const endTime =
+        blockMode === "full-day"
+          ? combineDateAndTime(dayValue, `${String(END_HOUR).padStart(2, "0")}:00`)
+          : combineDateAndTime(dayValue, blockEndTime);
+
+      const result = await createAppointment({
+        title,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        status: "scheduled",
+        assignedStaffId,
+        locationId: currentLocationId ?? undefined,
+        internalNotes,
+      } as any);
+
+      if (result.error) {
+        toast.error("Could not create blocked time: " + result.error.message);
+        return;
+      }
+    }
+
+    toast.success(
+      `${dates.length} ${dates.length === 1 ? "calendar block" : "calendar blocks"} created`
+    );
+    setShowBlockDialog(false);
+    void refetchAppointments();
   }
 
   const selectedDaySnapshot = useMemo(() => getCalendarDaySnapshot(activeAppointments, currentDate), [activeAppointments, currentDate]);
@@ -348,6 +474,15 @@ export default function CalendarPage() {
               </div>
 
               <div className="flex flex-col gap-2.5 lg:min-w-[220px] lg:items-end">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="justify-center rounded-2xl border-border/70 bg-white/82 lg:min-w-[220px]"
+                  onClick={handleOpenBlockDialog}
+                >
+                  <Ban className="mr-2 h-4 w-4" />
+                  Block time
+                </Button>
                 <Button size="lg" className="justify-center rounded-2xl shadow-[0_16px_36px_rgba(249,115,22,0.24)] lg:min-w-[220px]" onClick={handleNewAppointment}>
                   <Plus className="mr-2 h-4 w-4" />
                   New appointment
@@ -526,8 +661,10 @@ export default function CalendarPage() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex min-w-0 items-start justify-between gap-2">
                                   <p className={cn("min-w-0 flex-1 truncate font-semibold text-foreground", isMobileLayout ? "text-[13px] leading-4" : "text-sm")}>
-                                    {appointment.title ||
-                                      (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                                    {isCalendarBlockAppointment(appointment)
+                                      ? getCalendarBlockLabel(appointment)
+                                      : appointment.title ||
+                                        (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
                                   </p>
                                   <span
                                     className={cn(
@@ -535,7 +672,11 @@ export default function CalendarPage() {
                                       isMobileLayout && "max-w-[5.5rem] text-[9px] leading-none"
                                     )}
                                   >
-                                    {kind === "onsite" ? getJobPhaseLabel(appointment.jobPhase) : appointment.status.replace("_", " ")}
+                                    {kind === "onsite"
+                                      ? getJobPhaseLabel(appointment.jobPhase)
+                                      : isCalendarBlockAppointment(appointment)
+                                        ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
+                                        : appointment.status.replace("_", " ")}
                                   </span>
                                 </div>
                                 <p className={cn("truncate text-muted-foreground", isMobileLayout ? "text-[11px] leading-4" : "text-xs")}>
@@ -543,6 +684,10 @@ export default function CalendarPage() {
                                     ? appointment.vehicle
                                       ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} on site`
                                       : "Vehicle on site"
+                                    : isCalendarBlockAppointment(appointment)
+                                      ? appointment.assignedStaff
+                                        ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+                                        : "Business-wide block"
                                     : appointment.vehicle
                                       ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
                                       : appointment.assignedStaff
@@ -721,11 +866,17 @@ export default function CalendarPage() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
                               <p className="truncate text-sm font-semibold text-foreground">
-                                {appointment.title ||
-                                  (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                                {isCalendarBlockAppointment(appointment)
+                                  ? getCalendarBlockLabel(appointment)
+                                  : appointment.title ||
+                                    (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
                               </p>
                               <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                {kind === "onsite" ? getJobPhaseLabel(appointment.jobPhase) : appointment.status.replace("_", " ")}
+                                {kind === "onsite"
+                                  ? getJobPhaseLabel(appointment.jobPhase)
+                                  : isCalendarBlockAppointment(appointment)
+                                    ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
+                                    : appointment.status.replace("_", " ")}
                               </span>
                             </div>
                             <p className="truncate text-xs text-muted-foreground">
@@ -733,6 +884,10 @@ export default function CalendarPage() {
                                 ? appointment.vehicle
                                   ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} on site`
                                   : "Vehicle on site"
+                                : isCalendarBlockAppointment(appointment)
+                                  ? appointment.assignedStaff
+                                    ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+                                    : "Business-wide block"
                                 : appointment.vehicle
                                   ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
                                   : appointment.assignedStaff
@@ -757,6 +912,112 @@ export default function CalendarPage() {
           </aside>
         </div>
       </div>
+
+      <Dialog open={showBlockDialog} onOpenChange={setShowBlockDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Block time</DialogTitle>
+            <DialogDescription>
+              Add a simple unavailable block for vacation, time off, or shop-wide closures without creating a customer booking.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleCreateBlock}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="block-preset">Block type</Label>
+                <select
+                  id="block-preset"
+                  value={blockPreset}
+                  onChange={(event) => setBlockPreset(event.target.value as CalendarBlockPreset)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="unavailable">Unavailable</option>
+                  <option value="vacation">Vacation</option>
+                  <option value="personal">Personal block</option>
+                  <option value="shop-closed">Shop closed</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="block-mode">Coverage</Label>
+                <select
+                  id="block-mode"
+                  value={blockMode}
+                  onChange={(event) => setBlockMode(event.target.value as CalendarBlockMode)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="time">Specific time</option>
+                  <option value="full-day">Full day</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="block-start-date">Start date</Label>
+                <Input id="block-start-date" type="date" value={blockStartDate} onChange={(event) => setBlockStartDate(event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="block-end-date">End date</Label>
+                <Input id="block-end-date" type="date" value={blockEndDate} onChange={(event) => setBlockEndDate(event.target.value)} />
+              </div>
+            </div>
+
+            {blockMode === "time" ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="block-start-time">Start time</Label>
+                  <Input id="block-start-time" type="time" step={900} value={blockStartTime} onChange={(event) => setBlockStartTime(event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="block-end-time">End time</Label>
+                  <Input id="block-end-time" type="time" step={900} value={blockEndTime} onChange={(event) => setBlockEndTime(event.target.value)} />
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-border/70 bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
+                Full-day blocks cover the calendar day and show as an <span className="font-semibold text-foreground">x</span> in month view.
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="block-staff">Team member</Label>
+              <select
+                id="block-staff"
+                value={blockStaffId}
+                onChange={(event) => setBlockStaffId(event.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="none">Business-wide block</option>
+                {((staffRaw ?? []) as Array<{ id: string; firstName: string; lastName: string }>).map((staffMember) => (
+                  <option key={staffMember.id} value={staffMember.id}>
+                    {staffMember.firstName} {staffMember.lastName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="block-notes">Internal note</Label>
+              <Textarea
+                id="block-notes"
+                value={blockNotes}
+                onChange={(event) => setBlockNotes(event.target.value)}
+                placeholder="Optional note for the team..."
+                className="min-h-[88px] resize-none"
+              />
+            </div>
+
+            <DialogFooter className="flex-col gap-2 sm:flex-row">
+              <Button type="button" variant="outline" onClick={() => setShowBlockDialog(false)} disabled={creatingBlock}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creatingBlock}>
+                {creatingBlock ? "Saving..." : "Save block"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
