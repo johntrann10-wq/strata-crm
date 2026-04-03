@@ -404,7 +404,7 @@ export default function AppointmentsPage() {
                         <span className="font-medium">{appointment.title || clientName || "Appointment"}</span>
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        {clientName || "Walk-in customer"}
+                        {clientName || "Internal block"}
                         {vehicleLabel ? ` - ${vehicleLabel}` : ""}
                       </div>
                     </Link>

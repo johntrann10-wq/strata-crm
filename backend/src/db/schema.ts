@@ -232,8 +232,8 @@ export const staff = pgTable("staff", {
 export const appointments = pgTable("appointments", {
   id: uuid("id").primaryKey().defaultRandom(),
   businessId: uuid("business_id").notNull().references(() => businesses.id),
-  clientId: uuid("client_id").notNull().references(() => clients.id),
-  vehicleId: uuid("vehicle_id").notNull().references(() => vehicles.id),
+  clientId: uuid("client_id").references(() => clients.id),
+  vehicleId: uuid("vehicle_id").references(() => vehicles.id),
   assignedStaffId: uuid("assigned_staff_id").references(() => staff.id),
   locationId: uuid("location_id").references(() => locations.id),
   title: text("title"),

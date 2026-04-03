@@ -285,8 +285,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS service_addon_links_parent_addon
 CREATE TABLE IF NOT EXISTS appointments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   business_id uuid NOT NULL REFERENCES businesses(id),
-  client_id uuid NOT NULL REFERENCES clients(id),
-  vehicle_id uuid NOT NULL REFERENCES vehicles(id),
+  client_id uuid REFERENCES clients(id),
+  vehicle_id uuid REFERENCES vehicles(id),
   assigned_staff_id uuid REFERENCES staff(id),
   location_id uuid REFERENCES locations(id),
   title text,
@@ -309,6 +309,8 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS expected_completion_time times
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS pickup_ready_time timestamptz;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS vehicle_on_site boolean DEFAULT false;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS job_phase appointment_job_phase DEFAULT 'scheduled';
+ALTER TABLE appointments ALTER COLUMN client_id DROP NOT NULL;
+ALTER TABLE appointments ALTER COLUMN vehicle_id DROP NOT NULL;
 
 UPDATE appointments
 SET

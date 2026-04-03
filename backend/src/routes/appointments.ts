@@ -265,8 +265,8 @@ const createAppointmentReturning = {
 type CreatedAppointmentRecord = {
   id: string;
   businessId: string;
-  clientId: string;
-  vehicleId: string;
+  clientId: string | null;
+  vehicleId: string | null;
   startTime: Date;
   endTime: Date | null;
   jobStartTime: Date | null;
@@ -1042,39 +1042,6 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   const createdAt = new Date();
   const appointmentId = randomUUID();
   const created = await db.transaction(async (tx) => {
-    if (!effectiveClientId) {
-      const [placeholderClient] = await tx
-        .insert(clients)
-        .values({
-          businessId: bid,
-          firstName: "Walk-in",
-          lastName: "Customer",
-          notes: "Auto-created while booking an appointment without a selected client.",
-          internalNotes: "System-generated booking placeholder.",
-          createdAt,
-          updatedAt: createdAt,
-        })
-        .returning({ id: clients.id });
-      effectiveClientId = placeholderClient.id;
-    }
-
-    if (!effectiveVehicleId) {
-      const [placeholderVehicle] = await tx
-        .insert(vehicles)
-        .values({
-          businessId: bid,
-          clientId: effectiveClientId,
-          make: "Unspecified",
-          model: "Vehicle",
-          displayName: "Unspecified Vehicle",
-          notes: "Auto-created while booking an appointment without a selected vehicle.",
-          createdAt,
-          updatedAt: createdAt,
-        })
-        .returning({ id: vehicles.id });
-      effectiveVehicleId = placeholderVehicle.id;
-    }
-
     let selectedServicesTotal = 0;
     let attachedAnyService = false;
     let apt: CreatedAppointmentRecord | undefined;
@@ -1084,8 +1051,8 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
         .values({
           id: appointmentId,
           businessId: bid,
-          clientId: effectiveClientId,
-          vehicleId: effectiveVehicleId,
+          clientId: effectiveClientId ?? null,
+          vehicleId: effectiveVehicleId ?? null,
           startTime,
           endTime,
           jobStartTime,
@@ -1269,8 +1236,8 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
     if (!hasLocation) throw new BadRequestError("Location not found or access denied.");
   }
 
-  let nextClientId = existing.clientId as string;
-  let nextVehicleId = existing.vehicleId as string;
+  let nextClientId = (existing.clientId as string | null) ?? null;
+  let nextVehicleId = (existing.vehicleId as string | null) ?? null;
 
   if (parsed.data.clientId != null) {
     const [clientRow] = await db
@@ -1291,11 +1258,11 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
     if (!vehicleRow) throw new BadRequestError("Vehicle not found or access denied.");
     nextVehicleId = vehicleRow.id;
     nextClientId = parsed.data.clientId ?? vehicleRow.clientId;
-  } else if (parsed.data.clientId != null) {
+  } else if (parsed.data.clientId != null && existing.vehicleId) {
     const [currentVehicle] = await db
       .select({ clientId: vehicles.clientId })
       .from(vehicles)
-      .where(and(eq(vehicles.id, existing.vehicleId as string), eq(vehicles.businessId, bid)))
+      .where(and(eq(vehicles.id, existing.vehicleId), eq(vehicles.businessId, bid)))
       .limit(1);
     if (currentVehicle && currentVehicle.clientId !== nextClientId) {
       throw new BadRequestError("Select a vehicle that belongs to the chosen client.");

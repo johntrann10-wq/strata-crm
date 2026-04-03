@@ -926,7 +926,7 @@ export default function AppointmentDetail() {
     isOlderThanDays((invoice as any).lastSentAt ?? null, 3);
   const appointmentClientName = appointment.client
     ? `${appointment.client.firstName} ${appointment.client.lastName}`
-    : "Walk-in client";
+    : "Internal block";
   const appointmentVehicleLabel = appointment.vehicle
     ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
     : "No vehicle attached";
@@ -935,6 +935,7 @@ export default function AppointmentDetail() {
   const hasPlaceholderVehicle =
     appointment.vehicle?.make === "Unspecified" &&
     appointment.vehicle?.model === "Vehicle";
+  const missingLinkedRecords = !appointment.client || !appointment.vehicle;
   const clientOptions = ((clientsForEdit as any[]) ?? []) as Array<{
     id: string;
     firstName: string;
@@ -1513,18 +1514,32 @@ export default function AppointmentDetail() {
         paidAt={(appointment as any).paidAt ?? null}
       />
 
-      {(hasPlaceholderClient || hasPlaceholderVehicle) && (
+      {(hasPlaceholderClient || hasPlaceholderVehicle || missingLinkedRecords) && (
         <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <div className="space-y-1">
-              <p className="font-medium">This appointment is still using placeholder booking records.</p>
+              <p className="font-medium">
+                {missingLinkedRecords
+                  ? "This appointment is currently an internal block."
+                  : "This appointment is still using placeholder booking records."}
+              </p>
               <p className="text-amber-800">
                 Attach the real client and vehicle before sending documents or relying on this record for follow-up.
               </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 pl-6">
+            {(hasPlaceholderClient || missingLinkedRecords) ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-amber-300 bg-background/70 hover:bg-background"
+                onClick={handleOpenEditDialog}
+              >
+                Attach client and vehicle
+              </Button>
+            ) : null}
             {hasPlaceholderClient ? (
               <Button variant="outline" size="sm" asChild className="border-amber-300 bg-background/70 hover:bg-background">
                 <Link to={withReturn("/clients")}>Open clients</Link>

@@ -662,7 +662,9 @@ export default function NewAppointmentPage() {
             .map((id) => servicesData?.find((s) => s.id === id)?.name)
             .filter(Boolean)
             .join(" + ")
-        : "Appointment";
+        : selectedClientId
+          ? "Appointment"
+          : "Internal block";
       const result = await createAppointment({
         clientId: selectedClientId ?? undefined,
         vehicleId: selectedVehicleId ?? undefined,
@@ -1001,9 +1003,9 @@ export default function NewAppointmentPage() {
                   </Alert>
                 )}
                 {!selectedClientId ? (
-                  <p className="text-sm text-muted-foreground italic">
-                    Client is optional. Pick one first if you want to attach a vehicle.
-                  </p>
+                  <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                    Leave client and vehicle blank to create an internal time block or reminder. Pick a client first if this should be attached to a real customer job.
+                  </div>
                 ) : vehiclesFetching ? (
                   <p className="text-sm text-muted-foreground">
                     Loading vehicles...

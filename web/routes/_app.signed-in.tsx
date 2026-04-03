@@ -31,6 +31,7 @@ import { StatusBadge } from "../components/shared/StatusBadge";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { toast } from "sonner";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
+import { parseLeadRecord } from "../lib/leads";
 
 type AppointmentRecord = {
   id: string;
@@ -92,6 +93,7 @@ type ClientRecord = {
   lastName?: string | null;
   phone?: string | null;
   email?: string | null;
+  notes?: string | null;
   createdAt?: string | null;
 };
 
@@ -302,7 +304,14 @@ export default function SignedIn() {
   );
   const staffRecords = useMemo(() => (staffRaw ?? []) as StaffRecord[], [staffRaw]);
   const activityRecords = (activityRaw ?? []) as ActivityRecord[];
-  const recentClients = (recentClientsRaw ?? []) as ClientRecord[];
+  const recentClients = useMemo(
+    () => ((recentClientsRaw ?? []) as ClientRecord[]).filter((client) => !parseLeadRecord(client.notes).isLead),
+    [recentClientsRaw]
+  );
+  const activationClients = useMemo(
+    () => ((activationClientsRaw ?? []) as ClientRecord[]).filter((client) => !parseLeadRecord(client.notes).isLead),
+    [activationClientsRaw]
+  );
   const locationRecords = useMemo(
     () => (locationsRaw ?? []) as Array<{ id: string; name?: string | null }>,
     [locationsRaw]
@@ -452,7 +461,7 @@ export default function SignedIn() {
         key: "client",
         label: "Add your first client",
         detail: "Start your CRM with the first real customer record.",
-        done: (activationClientsRaw?.length ?? 0) > 0,
+        done: activationClients.length > 0,
         href: "/clients/new",
         actionLabel: "Add client",
         icon: <Users className="h-4 w-4" />,
@@ -516,7 +525,7 @@ export default function SignedIn() {
     activationBusiness?.appointmentBufferMinutes,
     activationBusiness?.operatingHours,
     activationAppointmentsRaw?.length,
-    activationClientsRaw?.length,
+    activationClients.length,
     activationInvoicesRaw?.length,
     activationServicesRaw?.length,
     activationVehiclesRaw?.length,
@@ -1013,12 +1022,12 @@ export default function SignedIn() {
                       <p className="truncate text-base font-medium">
                         {appointment.client
                           ? `${appointment.client.firstName ?? ""} ${appointment.client.lastName ?? ""}`.trim()
-                          : appointment.title ?? "Appointment"}
+                          : appointment.title ?? "Internal block"}
                       </p>
                       <p className="truncate text-sm text-muted-foreground">
                         {appointment.vehicle
                           ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
-                          : "No vehicle on file"}
+                          : "No vehicle attached"}
                       </p>
                     </div>
                     <div
