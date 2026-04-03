@@ -20,6 +20,7 @@ import { formatFreshness, formatShortDate, isOlderThanDays, safeDate } from "../
 
 const FILTER_TABS = ["all", "overdue", "stale", "draft", "sent", "paid", "partial", "void"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
+type InvoiceRecord = Record<string, any>;
 
 function formatCurrency(amount: number | string | null | undefined): string {
   if (amount == null || amount === "") return "-";
@@ -79,6 +80,38 @@ function primaryInvoiceAmount(invoice: {
   }
 
   return outstanding > 0 ? outstanding : normalizedTotal;
+}
+
+function getInvoiceVehicleLabel(invoice: InvoiceRecord) {
+  return invoice.vehicle ? [invoice.vehicle.year, invoice.vehicle.make, invoice.vehicle.model].filter(Boolean).join(" ") : "-";
+}
+
+function getInvoiceClientName(invoice: InvoiceRecord) {
+  return invoice.client ? `${invoice.client.firstName} ${invoice.client.lastName}`.trim() : "-";
+}
+
+function getInvoiceDisplayState(invoice: InvoiceRecord) {
+  const vehicleLabel = getInvoiceVehicleLabel(invoice);
+  const clientName = getInvoiceClientName(invoice);
+  const outstanding = balanceAmount(invoice);
+  const paid = paidAmount(invoice);
+  const primaryAmount = primaryInvoiceAmount(invoice);
+  const hasPaymentHistory = paid > 0;
+  const lastSent = formatFreshness((invoice as any).lastSentAt, "Sent", formatShortDate);
+  const lastPaid = formatFreshness((invoice as any).lastPaidAt, "Paid", formatShortDate);
+  const isOverdue = isOverdueInvoice(invoice);
+
+  return {
+    vehicleLabel,
+    clientName,
+    outstanding,
+    paid,
+    primaryAmount,
+    hasPaymentHistory,
+    lastSent,
+    lastPaid,
+    isOverdue,
+  };
 }
 
 export default function InvoicesIndexPage() {
@@ -350,18 +383,8 @@ export default function InvoicesIndexPage() {
                     </div>
                   )
                   : displayedInvoices.map((invoice) => {
-                      const vehicleLabel = invoice.vehicle
-                        ? [invoice.vehicle.year, invoice.vehicle.make, invoice.vehicle.model].filter(Boolean).join(" ")
-                        : "-";
-                      const outstanding = balanceAmount(invoice);
-                      const paid = paidAmount(invoice);
-                      const primaryAmount = primaryInvoiceAmount(invoice);
-                      const hasPaymentHistory = paid > 0;
-                      const lastSent = formatFreshness((invoice as any).lastSentAt, "Sent", formatShortDate);
-                      const lastPaid = formatFreshness((invoice as any).lastPaidAt, "Paid", formatShortDate);
-                      const clientName = invoice.client
-                        ? `${invoice.client.firstName} ${invoice.client.lastName}`.trim()
-                        : "-";
+                      const { vehicleLabel, outstanding, paid, primaryAmount, hasPaymentHistory, lastSent, lastPaid, clientName, isOverdue } =
+                        getInvoiceDisplayState(invoice);
 
                       return (
                         <InvoiceMobileCard
@@ -370,7 +393,7 @@ export default function InvoicesIndexPage() {
                           subtitle={vehicleLabel !== "-" ? `${clientName} - ${vehicleLabel}` : clientName}
                           status={String(invoice.status ?? "")}
                           amount={formatCurrency(primaryAmount)}
-                          overdue={isOverdueInvoice(invoice)}
+                          overdue={isOverdue}
                           accent={
                             overdueInvoices.some((entry) => entry.id === invoice.id)
                               ? "danger"
@@ -488,15 +511,8 @@ export default function InvoicesIndexPage() {
                         </tr>
                       )
                       : displayedInvoices.map((invoice) => {
-                          const vehicleLabel = invoice.vehicle
-                            ? [invoice.vehicle.year, invoice.vehicle.make, invoice.vehicle.model].filter(Boolean).join(" ")
-                            : "-";
-                          const outstanding = balanceAmount(invoice);
-                          const paid = paidAmount(invoice);
-                          const primaryAmount = primaryInvoiceAmount(invoice);
-                          const hasPaymentHistory = paid > 0;
-                          const lastSent = formatFreshness((invoice as any).lastSentAt, "Sent", formatShortDate);
-                          const lastPaid = formatFreshness((invoice as any).lastPaidAt, "Paid", formatShortDate);
+                          const { vehicleLabel, outstanding, paid, primaryAmount, hasPaymentHistory, lastSent, lastPaid, isOverdue } =
+                            getInvoiceDisplayState(invoice);
 
                           return (
                             <tr
@@ -542,7 +558,7 @@ export default function InvoicesIndexPage() {
                               <td className="px-4 py-3 text-muted-foreground">
                                 <div className="flex items-center gap-2">
                                   <span>{formatDate(invoice.dueDate)}</span>
-                                  {isOverdueInvoice(invoice) ? (
+                                  {isOverdue ? (
                                     <span className="rounded bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
                                       Overdue
                                     </span>
