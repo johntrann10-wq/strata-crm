@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import type { FormEvent } from "react";
 import { formatDistanceToNow } from "date-fns";
@@ -129,6 +129,36 @@ function badgeVariantForStatus(status: LeadStatus): "default" | "secondary" | "o
   return "outline";
 }
 
+function MobileLeadSelect({
+  value,
+  onChange,
+  children,
+  className,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+  className?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <select
+      className={[
+        "h-11 w-full appearance-none rounded-xl border border-input/90 bg-background px-3 pr-10 text-sm font-medium shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      disabled={disabled}
+    >
+      {children}
+    </select>
+  );
+}
+
 export default function LeadsPage() {
   const navigate = useNavigate();
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
@@ -141,7 +171,17 @@ export default function LeadsPage() {
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "all" | "active">("active");
   const [sourceFilter, setSourceFilter] = useState<LeadSource | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isMobileLayout, setIsMobileLayout] = useState(false);
   const submitModeRef = useRef<SubmitMode>("lead");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsMobileLayout(media.matches);
+    sync();
+    media.addEventListener?.("change", sync);
+    return () => media.removeEventListener?.("change", sync);
+  }, []);
 
   const [{ data: business, fetching: businessFetching }] = useFindFirst(api.business, {
     select: { id: true, name: true },
@@ -477,17 +517,43 @@ export default function LeadsPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label>Lead Source</Label>
-                  <Select value={formData.leadSource} onValueChange={(value) => setFormData((prev) => ({ ...prev, leadSource: value as LeadSource }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{LEAD_SOURCE_OPTIONS.map((source) => <SelectItem key={source} value={source}>{formatLeadSource(source)}</SelectItem>)}</SelectContent>
-                  </Select>
+                  {isMobileLayout ? (
+                    <MobileLeadSelect
+                      value={formData.leadSource}
+                      onChange={(value) => setFormData((prev) => ({ ...prev, leadSource: value as LeadSource }))}
+                    >
+                      {LEAD_SOURCE_OPTIONS.map((source) => (
+                        <option key={source} value={source}>
+                          {formatLeadSource(source)}
+                        </option>
+                      ))}
+                    </MobileLeadSelect>
+                  ) : (
+                    <Select value={formData.leadSource} onValueChange={(value) => setFormData((prev) => ({ ...prev, leadSource: value as LeadSource }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{LEAD_SOURCE_OPTIONS.map((source) => <SelectItem key={source} value={source}>{formatLeadSource(source)}</SelectItem>)}</SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Lead Status</Label>
-                  <Select value={formData.leadStatus} onValueChange={(value) => setFormData((prev) => ({ ...prev, leadStatus: value as LeadStatus }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{LEAD_STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{formatLeadStatus(status)}</SelectItem>)}</SelectContent>
-                  </Select>
+                  {isMobileLayout ? (
+                    <MobileLeadSelect
+                      value={formData.leadStatus}
+                      onChange={(value) => setFormData((prev) => ({ ...prev, leadStatus: value as LeadStatus }))}
+                    >
+                      {LEAD_STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>
+                          {formatLeadStatus(status)}
+                        </option>
+                      ))}
+                    </MobileLeadSelect>
+                  ) : (
+                    <Select value={formData.leadStatus} onValueChange={(value) => setFormData((prev) => ({ ...prev, leadStatus: value as LeadStatus }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{LEAD_STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{formatLeadStatus(status)}</SelectItem>)}</SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="leadVehicle">Vehicle if known</Label>
@@ -610,21 +676,45 @@ export default function LeadsPage() {
                   <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search lead name, ask, contact, source, or vehicle" className="pl-9" />
                 </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as LeadStatus | "all" | "active")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active only</SelectItem>
-                      <SelectItem value="all">All statuses</SelectItem>
-                      {LEAD_STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{formatLeadStatus(status)}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={sourceFilter} onValueChange={(value) => setSourceFilter(value as LeadSource | "all")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All sources</SelectItem>
-                      {LEAD_SOURCE_OPTIONS.map((source) => <SelectItem key={source} value={source}>{formatLeadSource(source)}</SelectItem>)}
-                    </SelectContent>
-                    </Select>
+                    {isMobileLayout ? (
+                      <>
+                        <MobileLeadSelect value={statusFilter} onChange={(value) => setStatusFilter(value as LeadStatus | "all" | "active")}>
+                          <option value="active">Active only</option>
+                          <option value="all">All statuses</option>
+                          {LEAD_STATUS_OPTIONS.map((status) => (
+                            <option key={status} value={status}>
+                              {formatLeadStatus(status)}
+                            </option>
+                          ))}
+                        </MobileLeadSelect>
+                        <MobileLeadSelect value={sourceFilter} onChange={(value) => setSourceFilter(value as LeadSource | "all")}>
+                          <option value="all">All sources</option>
+                          {LEAD_SOURCE_OPTIONS.map((source) => (
+                            <option key={source} value={source}>
+                              {formatLeadSource(source)}
+                            </option>
+                          ))}
+                        </MobileLeadSelect>
+                      </>
+                    ) : (
+                      <>
+                        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as LeadStatus | "all" | "active")}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="active">Active only</SelectItem>
+                            <SelectItem value="all">All statuses</SelectItem>
+                            {LEAD_STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{formatLeadStatus(status)}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Select value={sourceFilter} onValueChange={(value) => setSourceFilter(value as LeadSource | "all")}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All sources</SelectItem>
+                            {LEAD_SOURCE_OPTIONS.map((source) => <SelectItem key={source} value={source}>{formatLeadSource(source)}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </>
+                    )}
                   </div>
                   {searchQuery || statusFilter !== "active" || sourceFilter !== "all" ? (
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 px-4 py-3 text-sm">
@@ -677,10 +767,24 @@ export default function LeadsPage() {
                           </div>
                         </div>
                         <div className="w-full sm:w-[180px]">
-                          <Select value={lead.status} onValueChange={(value) => void updateLeadStatus(client, value as LeadStatus)}>
-                            <SelectTrigger className="w-full" disabled={updatingLead}><SelectValue /></SelectTrigger>
-                            <SelectContent>{LEAD_STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{formatLeadStatus(status)}</SelectItem>)}</SelectContent>
-                          </Select>
+                          {isMobileLayout ? (
+                            <MobileLeadSelect
+                              value={lead.status}
+                              onChange={(value) => void updateLeadStatus(client, value as LeadStatus)}
+                              disabled={updatingLead}
+                            >
+                              {LEAD_STATUS_OPTIONS.map((status) => (
+                                <option key={status} value={status}>
+                                  {formatLeadStatus(status)}
+                                </option>
+                              ))}
+                            </MobileLeadSelect>
+                          ) : (
+                            <Select value={lead.status} onValueChange={(value) => void updateLeadStatus(client, value as LeadStatus)}>
+                              <SelectTrigger className="w-full" disabled={updatingLead}><SelectValue /></SelectTrigger>
+                              <SelectContent>{LEAD_STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{formatLeadStatus(status)}</SelectItem>)}</SelectContent>
+                            </Select>
+                          )}
                         </div>
                       </div>
 
