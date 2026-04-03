@@ -72,6 +72,13 @@ import {
   type RuntimeErrorEntry,
 } from "../lib/runtimeErrors";
 import { PageHeader } from "../components/shared/PageHeader";
+import {
+  businessSettingsFormFromSource,
+  DEFAULT_BUSINESS_SETTINGS_FORM,
+  normalizeAppointmentBuffer,
+  parseAppointmentBufferDraft,
+  type BusinessSettingsFormData,
+} from "../lib/businessSettingsForm";
 
 const BUSINESS_TYPES = [
   { value: "auto_detailing", label: "Auto Detailing" },
@@ -105,21 +112,6 @@ interface BillingStatus {
   status: string | null;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
-}
-
-interface FormData {
-  name: string;
-  type: string;
-  phone: string;
-  email: string;
-  address: string;
-  city: string;
-  state: string;
-  zip: string;
-  defaultTaxRate: number;
-  currency: string;
-  appointmentBufferMinutes: number;
-  timezone: string;
 }
 
 type LocationRecord = {
@@ -161,21 +153,6 @@ const STAFF_ROLES = [
   { value: "service_advisor", label: "Service Advisor" },
   { value: "technician", label: "Technician" },
 ];
-
-const DEFAULT_FORM: FormData = {
-  name: "",
-  type: "",
-  phone: "",
-  email: "",
-  address: "",
-  city: "",
-  state: "",
-  zip: "",
-  defaultTaxRate: 0,
-  currency: "USD",
-  appointmentBufferMinutes: 15,
-  timezone: "America/New_York",
-};
 
 function BillingTab({
   billingStatus,
@@ -300,8 +277,10 @@ function BillingTab({
 export default function SettingsPage() {
   const { user, businessId, membershipRole, permissions } = useOutletContext<AuthOutletContext>();
   const [activeTab, setActiveTab] = useState("profile");
-  const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
-  const [appointmentBufferInput, setAppointmentBufferInput] = useState(String(DEFAULT_FORM.appointmentBufferMinutes));
+  const [formData, setFormData] = useState<BusinessSettingsFormData>(DEFAULT_BUSINESS_SETTINGS_FORM);
+  const [appointmentBufferInput, setAppointmentBufferInput] = useState(
+    String(DEFAULT_BUSINESS_SETTINGS_FORM.appointmentBufferMinutes)
+  );
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -371,21 +350,9 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!business) return;
 
-    setFormData({
-      name: business.name ?? "",
-      type: business.type ?? "",
-      phone: business.phone ?? "",
-      email: business.email ?? "",
-      address: business.address ?? "",
-      city: business.city ?? "",
-      state: business.state ?? "",
-      zip: business.zip ?? "",
-      defaultTaxRate: business.defaultTaxRate ?? 0,
-      currency: business.currency ?? "USD",
-      appointmentBufferMinutes: business.appointmentBufferMinutes ?? 15,
-      timezone: business.timezone ?? "America/New_York",
-    });
-    setAppointmentBufferInput(String(business.appointmentBufferMinutes ?? 15));
+    const next = businessSettingsFormFromSource(business);
+    setFormData(next.formData);
+    setAppointmentBufferInput(next.appointmentBufferInput);
   }, [business]);
 
   useEffect(() => {
@@ -445,16 +412,14 @@ export default function SettingsPage() {
     };
   }, [canViewDiagnostics]);
 
-  const handleFieldChange = (field: keyof FormData, value: string | number) => {
+  const handleFieldChange = (field: keyof BusinessSettingsFormData, value: string | number) => {
     setFormData((current) => ({ ...current, [field]: value }));
   };
 
   const normalizeAppointmentBufferInput = (value: string) => {
-    const trimmed = value.trim();
-    const parsed = Number.parseInt(trimmed, 10);
-    const nextValue = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-    setAppointmentBufferInput(String(nextValue));
-    handleFieldChange("appointmentBufferMinutes", nextValue);
+    const next = normalizeAppointmentBuffer(value);
+    setAppointmentBufferInput(next.inputValue);
+    handleFieldChange("appointmentBufferMinutes", next.numericValue);
   };
 
   const openCreateLocation = () => {
@@ -884,9 +849,8 @@ export default function SettingsPage() {
                         value={appointmentBufferInput}
                         onChange={(e) => {
                           setAppointmentBufferInput(e.target.value);
-                          if (e.target.value.trim() === "") return;
-                          const parsed = Number.parseInt(e.target.value, 10);
-                          if (Number.isFinite(parsed) && parsed >= 0) {
+                          const parsed = parseAppointmentBufferDraft(e.target.value);
+                          if (parsed != null) {
                             handleFieldChange("appointmentBufferMinutes", parsed);
                           }
                         }}
