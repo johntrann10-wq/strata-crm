@@ -338,10 +338,10 @@ function BillingTab({
             <div className="rounded-md bg-primary/10 p-2">
               <Shield className="h-5 w-5 text-primary" />
             </div>
-            <CardTitle>Stripe Business Payouts</CardTitle>
+            <CardTitle>Stripe Business Payments</CardTitle>
           </div>
           <CardDescription>
-            Connect your business Stripe account through Strata so hosted invoice and deposit payments can route into your own Stripe account safely.
+            Connect your business Stripe account through Strata so hosted invoice and deposit collection can route into your own Stripe account safely.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -404,7 +404,7 @@ function BillingTab({
               ) : null}
 
               <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-                Customer invoice and deposit checkout stays disabled until the connected-account payment flow is enabled safely. This step only links the business payout account and verifies readiness.
+                Customer invoice and deposit checkout stays disabled until the connected-account collection flow is enabled safely. This step only links the business Stripe account and verifies readiness.
               </div>
 
               {!canManageStripeConnect ? (

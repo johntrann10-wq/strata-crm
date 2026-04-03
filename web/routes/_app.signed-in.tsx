@@ -961,7 +961,7 @@ export default function SignedIn() {
             value={formatCurrency(unpaidRevenue)}
             detail={
               unpaidInvoices.length > 0
-                ? `${unpaidInvoices.length} invoice${unpaidInvoices.length === 1 ? "" : "s"} awaiting payment`
+                ? `${unpaidInvoices.length} invoice${unpaidInvoices.length === 1 ? "" : "s"} awaiting collection`
                 : "Nothing outstanding right now"
             }
             icon={<FileText className="h-5 w-5" />}
@@ -2102,7 +2102,7 @@ function DailyOperationsCard({
           </Button>
           <Button asChild variant="outline" className="min-h-[46px] rounded-xl">
             <Link to={pendingApprovalsCount > 0 || staleFollowUps > 0 ? "/quotes?tab=followup" : "/invoices?tab=stale"}>
-              Open money queue
+              Open billing queue
             </Link>
           </Button>
         </div>

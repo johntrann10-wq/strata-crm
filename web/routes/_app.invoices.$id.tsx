@@ -1036,7 +1036,7 @@ export default function InvoiceDetailPage() {
               title={collectionSummary.title}
               detail={collectionSummary.detail}
               amount={formatCurrency(remainingBalance)}
-              primaryLabel="Record payment"
+              primaryLabel="Collect payment"
               tertiaryLabel={billingStatus?.stripeConnectReady && remainingBalance > 0 ? "Pay with Stripe" : undefined}
               secondaryLabel={status === "draft" ? "Send invoice first" : "Resend invoice"}
               onPrimary={handleOpenPaymentDialog}
