@@ -82,7 +82,7 @@ export default function ProfilePage() {
                 ? "Add a password if you want a fallback login option alongside Google."
                 : "Add a password so this account has a direct email login option."}
             </div>
-            <Button asChild variant="link" className="h-auto px-0 text-sm">
+            <Button asChild variant="outline" size="sm">
               <Link to="/forgot-password">Open forgot-password flow</Link>
             </Button>
           </CardContent>
