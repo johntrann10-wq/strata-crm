@@ -346,6 +346,7 @@ const SidebarNav = memo(function SidebarNav({
 function AppLayoutInner({
   user,
   business,
+  currentMembership,
   tenantBusinesses,
   currentLocationId,
   onLocationChange,
@@ -355,6 +356,7 @@ function AppLayoutInner({
 }: {
   user: Record<string, unknown>;
   business: Record<string, unknown> | null;
+  currentMembership: AuthOutletContext["tenantBusinesses"][number] | null;
   tenantBusinesses: AuthOutletContext["tenantBusinesses"];
   currentLocationId: string | null;
   onLocationChange: (locationId: string | null) => void;
@@ -363,9 +365,13 @@ function AppLayoutInner({
   rootOutletContext: RootOutletContext;
 }) {
   const location = useLocation();
-  const businessName = (business?.name as string) ?? null;
-  const businessId = (business?.id as string) ?? null;
-  const businessType = (business?.type as string) ?? null;
+  const resolvedBusiness =
+    business ??
+    currentMembership ??
+    null;
+  const businessName = (resolvedBusiness?.name as string) ?? null;
+  const businessId = (resolvedBusiness?.id as string) ?? null;
+  const businessType = (resolvedBusiness?.type as string) ?? null;
   const [mobileOpen, setMobileOpen] = useState(false);
   const { setOpen } = useCommandPalette();
   const enabledModules = useMemo(
@@ -373,8 +379,8 @@ function AppLayoutInner({
     [businessType]
   );
   const permissions = useMemo(
-    () => new Set((tenantBusinesses.find((tenantBusiness) => tenantBusiness.id === businessId)?.permissions ?? [])),
-    [tenantBusinesses, businessId]
+    () => new Set((resolvedBusiness?.permissions as string[] | undefined) ?? []),
+    [resolvedBusiness]
   );
   const [{ data: locations }] = useFindMany(api.location, {
     first: 100,
@@ -977,6 +983,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       <AppLayoutInner
         user={user as Record<string, unknown>}
         business={(business as Record<string, unknown>) ?? null}
+        currentMembership={currentMembership}
         tenantBusinesses={tenantBusinesses}
         currentLocationId={currentLocationId}
         onLocationChange={handleLocationChange}
