@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import {
   ArrowLeft,
   ArrowRight,
@@ -210,10 +211,10 @@ export default function OnboardingPage() {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.12),transparent_20%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_18%),linear-gradient(180deg,#0b0d10_0%,#0f1115_55%,#11141a_100%)] text-white">
       <div className="border-b border-[#1f1f1f]">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500 text-sm font-bold text-white shadow-[0_10px_24px_rgba(249,115,22,0.35)]">S</div>
-            <span className="text-lg font-bold tracking-tight">Strata</span>
-          </div>
+          <StrataLogoLockup
+            markClassName="h-8 w-8"
+            wordmarkClassName="text-lg font-bold tracking-tight text-white"
+          />
           <span className="hidden text-sm text-[#6b7280] sm:inline">Get operational in minutes</span>
         </div>
       </div>

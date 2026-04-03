@@ -12,6 +12,7 @@
 import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 import { NavDrawer } from "@/components/shared/NavDrawer";
+import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 
 interface NavItem {
   type: "item";
@@ -60,10 +61,10 @@ export const Navigation = () => (
     <MobileNav />
     <div className="flex-shrink-0">
       <Link to="/" className="flex items-center gap-2">
-        <div className="h-7 w-7 rounded-md bg-orange-500 flex items-center justify-center">
-          <WrenchIcon />
-        </div>
-        <span className="text-lg font-semibold tracking-tight">Strata</span>
+        <StrataLogoLockup
+          markClassName="h-7 w-7"
+          wordmarkClassName="text-lg font-semibold tracking-tight text-foreground"
+        />
       </Link>
     </div>
     <DesktopNav />
@@ -148,16 +149,6 @@ const DesktopNav = () => (
       )
     )}
   </nav>
-);
-
-// Simple wrench mark for the logo
-const WrenchIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white" aria-hidden="true">
-    <path
-      fill="currentColor"
-      d="M21 7.5a5.5 5.5 0 0 1-7.53 5.12l-4.7 4.7a2.5 2.5 0 1 1-3.54-3.54l4.7-4.7A5.5 5.5 0 1 1 21 7.5Zm-4.25-3a1.75 1.75 0 1 0 2.5 2.45 3.5 3.5 0 0 0-2.5-2.45Z"
-    />
-  </svg>
 );
 
 // --------------------------------------------------------------------------------------

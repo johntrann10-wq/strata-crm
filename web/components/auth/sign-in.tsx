@@ -1,10 +1,10 @@
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useActionForm } from "../../hooks/useApi";
-import { Wrench } from "lucide-react";
 import { GoogleMark } from "./GoogleMark";
 import { Link, useLocation, useNavigate } from "react-router";
 import { api, API_BASE } from "../../api";
+import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 
 function buildGoogleAuthHref(search: string): string {
   const params = new URLSearchParams(search);
@@ -44,8 +44,11 @@ export const SignInComponent = (props: {
     <div className="w-full max-w-sm">
       {/* Logo / Brand Header */}
       <div className="mx-auto mb-8 flex flex-col items-center gap-3">
-        <Wrench className="h-8 w-8 text-orange-500" />
-        <span className="text-[15px] font-semibold text-foreground tracking-tight">Strata</span>
+        <StrataLogoLockup
+          className="flex-col gap-3"
+          markClassName="h-10 w-10"
+          wordmarkClassName="text-[15px] font-semibold text-foreground tracking-tight"
+        />
       </div>
 
       {/* Heading */}

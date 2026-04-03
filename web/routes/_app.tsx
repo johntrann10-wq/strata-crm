@@ -39,6 +39,7 @@ import { CommandPalette } from "../components/shared/CommandPalette";
 import { getEnabledModules } from "../lib/modules";
 import { useFindMany, useFindOne, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
+import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import {
   clearAuthState,
   clearCurrentBusinessId,
@@ -212,13 +213,12 @@ const SidebarNav = memo(function SidebarNav({
     <div className="flex flex-col h-full bg-[hsl(220,20%,10%)]">
       <div className="border-b border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0))] px-5 py-4">
         <Link to="/signed-in" className="flex items-center gap-2.5" onClick={onItemClick}>
-          <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-white/8 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-            <Wrench className="h-4.5 w-4.5 shrink-0 text-orange-400" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[15px] font-semibold tracking-tight text-white">Strata</div>
-            <div className="text-[11px] uppercase tracking-[0.12em] text-white/38">Shop OS</div>
-          </div>
+          <StrataLogoLockup
+            markClassName="h-9 w-9"
+            wordmarkClassName="text-[15px] font-semibold tracking-tight text-white"
+            sublabel="Shop OS"
+            sublabelClassName="text-white/38"
+          />
         </Link>
         <div className="mt-4 grid gap-2">
           <Button
