@@ -26,11 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
   CommandEmpty,
@@ -65,6 +61,10 @@ import { toast } from "sonner";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { VehicleCatalogFields } from "../components/vehicles/VehicleCatalogFields";
 import {
+  buildQuarterHourOptions,
+  ResponsiveTimeSelect,
+} from "../components/appointments/SchedulingControls";
+import {
   emptyVehicleCatalogFormValue,
   formatVehicleLabel,
   type VehicleCatalogFormValue,
@@ -89,81 +89,6 @@ function SelectionIndicator({ checked }: { checked: boolean }) {
       {checked ? <Check className="size-3 text-secondary" /> : null}
     </span>
   );
-}
-
-function ResponsiveTimeSelect({
-  id,
-  value,
-  onChange,
-  options,
-  placeholder,
-  desktopClassName,
-  mobileClassName,
-  useNative,
-}: {
-  id?: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
-  placeholder: string;
-  desktopClassName?: string;
-  mobileClassName?: string;
-  useNative: boolean;
-}) {
-  if (useNative) {
-    return (
-      <div className="relative">
-        <select
-          id={id}
-          className={cn(
-            "h-11 w-full appearance-none rounded-xl border border-input/90 bg-background px-3 pr-10 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40",
-            mobileClassName
-          )}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          <option value="" disabled>
-            {placeholder}
-          </option>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <ChevronLeft className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-180 text-muted-foreground" />
-      </div>
-    );
-  }
-
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger id={id} className={desktopClassName}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent className="max-h-72">
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-function buildQuarterHourOptions() {
-  return Array.from({ length: 96 }, (_, index) => {
-    const hours = Math.floor(index / 4);
-    const minutes = (index % 4) * 15;
-    const value = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    return {
-      value,
-      label: format(date, "h:mm a"),
-    };
-  });
 }
 
 export default function NewAppointmentPage() {

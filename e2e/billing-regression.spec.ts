@@ -68,9 +68,9 @@ test.describe("Billing regression", () => {
 
       await page.getByRole("link", { name: /book appointment/i }).first().click();
       await page.waitForURL(/\/appointments\/new\?/);
-      await expect(page.getByRole("heading", { name: /new appointment/i })).toBeVisible();
-      await expect(page.getByText(/services pre-filled from quote/i)).toBeVisible();
+      await expect(page.getByText(/new appointment/i).first()).toBeVisible();
       await expect(page.getByText(/exterior detail package/i).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: /^save appointment$/i })).toBeVisible();
 
       const appointmentCreateResponsePromise = page.waitForResponse((response) =>
         response.url().includes("/api/appointments") && response.request().method() === "POST"

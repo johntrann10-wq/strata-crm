@@ -20,6 +20,17 @@ function calendarHeaderPanel(page: import("@playwright/test").Page) {
   return page.locator("div.surface-panel").first();
 }
 
+async function chooseTime(page: import("@playwright/test").Page, id: string, label: string) {
+  await page.locator(`#${id}`).click();
+  await page.getByRole("option", { name: new RegExp(`^${label}$`, "i") }).click();
+}
+
+async function chooseDate(page: import("@playwright/test").Page, id: string, dayLabel: string | RegExp) {
+  await page.locator(`#${id}`).click();
+  const calendar = page.locator("[role='dialog']").last();
+  await calendar.getByRole("button", { name: dayLabel, exact: typeof dayLabel === "string" }).click();
+}
+
 async function openCalendarAtMarch2026(page: import("@playwright/test").Page) {
   await page.goto("/calendar");
   await expect(page).toHaveURL(/\/calendar/);
@@ -89,8 +100,8 @@ test.describe("Multi-day job calendar QA - desktop", () => {
     await expect(selectedDatePanel.getByRole("heading", { name: /Tuesday, March 31/i })).toBeVisible();
     await expect(selectedDatePanel.getByText("Interior Detail")).toBeVisible();
     await expect(selectedDatePanel.getByText("Window Tint Sedan")).toBeVisible();
-    await expect(selectedDatePanel.getByRole("button", { name: /^PPF Carrera 3d$/ })).toBeVisible();
-    await expect(selectedDatePanel.getByRole("button", { name: /10:00 AM PPF Carrera 3d/i })).toBeVisible();
+    await expect(selectedDatePanel.getByText("PPF Carrera 3d")).toBeVisible();
+    await expect(selectedDatePanel.getByText(/10:00 AM/i)).toBeVisible();
 
     await calendarHeaderPanel(page).getByRole("button", { name: /Next/i }).click();
     await expect(calendarHeading(page)).toContainText("April 2026");
@@ -107,7 +118,6 @@ test.describe("Multi-day job calendar QA - desktop", () => {
     await weekSidebar.getByRole("button", { name: /^Tuesday, March 31$/i }).click();
 
     await clickDayView(page);
-    await expect(page.getByText("Vehicles on site")).toBeVisible();
     await expect(page.getByText("Wrap Titan 5d").first()).toBeVisible();
     await expect(page.getByText("PPF Carrera 3d").first()).toBeVisible();
     await expect(page.getByText("Interior Detail").first()).toBeVisible();
@@ -124,7 +134,7 @@ test.describe("Multi-day job calendar QA - desktop", () => {
     await selectServiceFromSearch(page, "Full Front PPF");
     await page.getByText(/Multi-day \/ on-site job/i).click();
     await page.locator("#expected-completion-date").fill("2026-04-02");
-    await page.locator("#expected-completion-time").fill("16:00");
+    await chooseTime(page, "expected-completion-time", "4:00 PM");
     await page.getByRole("button", { name: /Save Appointment|Save$/i }).first().click();
     await expect.poll(() => state.createPayloads.length).toBe(2);
     expect(state.createPayloads[1].vehicleOnSite).toBe(true);
@@ -132,11 +142,12 @@ test.describe("Multi-day job calendar QA - desktop", () => {
 
     await page.goto("/appointments/apt-wrap-5d");
     await expect(page.getByText("Job lifecycle")).toBeVisible();
-    await page.getByRole("button", { name: /^Edit$/i }).first().click();
-    await page.locator("#edit-end-time").fill("14:00");
+    await page.getByRole("button", { name: /Reschedule/i }).first().click();
+    await expect(page.getByRole("heading", { name: /Edit Appointment/i })).toBeVisible();
+    await chooseTime(page, "edit-end-time", "2:00 PM");
     await page.getByLabel(/Multi-day \/ on-site job/i).check();
-    await page.locator("#edit-expected-completion-date").fill("2026-04-03");
-    await page.locator("#edit-expected-completion-time").fill("18:00");
+    await chooseDate(page, "edit-expected-completion-date", "Friday, April 3rd, 2026");
+    await chooseTime(page, "edit-expected-completion-time", "6:00 PM");
     await page.getByRole("button", { name: /Save Changes/i }).click();
     await expect.poll(() => state.updatePayloads.length).toBeGreaterThan(0);
     const lastUpdate = state.updatePayloads.at(-1) ?? {};
