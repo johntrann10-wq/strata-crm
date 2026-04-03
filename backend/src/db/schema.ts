@@ -166,6 +166,20 @@ export const rolePermissionGrants = pgTable(
   (t) => [uniqueIndex("role_permission_grants_scope_role_permission_unique").on(t.businessId, t.role, t.permission)]
 );
 
+export const membershipPermissionGrants = pgTable(
+  "membership_permission_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id").notNull().references(() => businesses.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    permission: permissionEnum("permission").notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("membership_permission_grants_business_user_permission_unique").on(t.businessId, t.userId, t.permission)]
+);
+
 export const clients = pgTable("clients", {
   id: uuid("id").primaryKey().defaultRandom(),
   businessId: uuid("business_id").notNull().references(() => businesses.id),

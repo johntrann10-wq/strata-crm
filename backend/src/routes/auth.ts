@@ -2,14 +2,14 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "../db/index.js";
-import { businessMemberships, businesses, users } from "../db/schema.js";
+import { businessMemberships, businesses, membershipPermissionGrants, users } from "../db/schema.js";
 import { and, eq, inArray } from "drizzle-orm";
 import { BadRequestError, UnauthorizedError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { googleClient } from "../lib/googleAuth.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { randomUUID } from "crypto";
-import { getDefaultPermissionsForRole } from "../lib/permissions.js";
+import { getDefaultPermissionsForRole, resolvePermissionsForRole } from "../lib/permissions.js";
 import { createInMemoryRateLimiter } from "../middleware/security.js";
 import { createAccessToken, createPasswordResetToken, verifyAccessToken, verifyPasswordResetToken, verifyTeamInviteToken } from "../lib/jwt.js";
 import { sendTemplatedEmail } from "../lib/email.js";
@@ -230,6 +230,35 @@ async function activateInvitedMemberships(userId: string) {
   return invitedMemberships;
 }
 
+async function getMembershipPermissionMap(userId: string, businessIds: string[]) {
+  if (businessIds.length === 0) return new Map<string, Array<{ permission: (typeof membershipPermissionGrants.$inferSelect)["permission"]; enabled: boolean }>>();
+
+  const overrides = await db
+    .select({
+      businessId: membershipPermissionGrants.businessId,
+      permission: membershipPermissionGrants.permission,
+      enabled: membershipPermissionGrants.enabled,
+    })
+    .from(membershipPermissionGrants)
+    .where(and(eq(membershipPermissionGrants.userId, userId), inArray(membershipPermissionGrants.businessId, businessIds)))
+    .catch((error) => {
+      if (!isTenantSchemaDriftError(error)) throw error;
+      logger.warn("membership permission grants unavailable during auth context load", {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    });
+
+  const byBusiness = new Map<string, Array<{ permission: (typeof membershipPermissionGrants.$inferSelect)["permission"]; enabled: boolean }>>();
+  for (const override of overrides) {
+    const list = byBusiness.get(override.businessId) ?? [];
+    list.push({ permission: override.permission, enabled: override.enabled });
+    byBusiness.set(override.businessId, list);
+  }
+  return byBusiness;
+}
+
 function formatRoleLabel(role: string): string {
   return role.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
@@ -362,6 +391,10 @@ authRouter.get(
               .where(inArray(businesses.id, membershipBusinessIds));
 
         const membershipBusinessMap = new Map(membershipBusinesses.map((business) => [business.id, business]));
+        const permissionOverridesByBusiness = await getMembershipPermissionMap(
+          userId,
+          memberships.map((membership) => membership.businessId)
+        );
         for (const membership of memberships) {
           if (byBusiness.has(membership.businessId)) continue;
           const membershipBusiness = membershipBusinessMap.get(membership.businessId);
@@ -372,7 +405,7 @@ authRouter.get(
             role: membership.role,
             status: membership.status,
             isDefault: membership.isDefault,
-            permissions: Array.from(getDefaultPermissionsForRole(membership.role)),
+            permissions: Array.from(resolvePermissionsForRole(membership.role, permissionOverridesByBusiness.get(membership.businessId))),
           });
         }
       }

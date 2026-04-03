@@ -140,6 +140,8 @@ type StaffRecord = {
   membershipRole?: string | null;
   membershipStatus?: string | null;
   inviteDelivery?: "sent" | "not_configured" | "not_needed" | null;
+  customPermissions?: string[] | null;
+  effectivePermissions?: string[] | null;
   active?: boolean | null;
 };
 
@@ -168,6 +170,133 @@ const STAFF_ROLES = [
   { value: "service_advisor", label: "Service Advisor" },
   { value: "technician", label: "Technician" },
 ];
+
+const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
+  owner: [
+    "dashboard.view",
+    "customers.read",
+    "customers.write",
+    "vehicles.read",
+    "vehicles.write",
+    "services.read",
+    "services.write",
+    "quotes.read",
+    "quotes.write",
+    "appointments.read",
+    "appointments.write",
+    "jobs.read",
+    "jobs.write",
+    "invoices.read",
+    "invoices.write",
+    "payments.read",
+    "payments.write",
+    "team.read",
+    "team.write",
+    "settings.read",
+    "settings.write",
+  ],
+  admin: [
+    "dashboard.view",
+    "customers.read",
+    "customers.write",
+    "vehicles.read",
+    "vehicles.write",
+    "services.read",
+    "services.write",
+    "quotes.read",
+    "quotes.write",
+    "appointments.read",
+    "appointments.write",
+    "jobs.read",
+    "jobs.write",
+    "invoices.read",
+    "invoices.write",
+    "payments.read",
+    "payments.write",
+    "team.read",
+    "settings.read",
+    "settings.write",
+  ],
+  manager: [
+    "dashboard.view",
+    "customers.read",
+    "customers.write",
+    "vehicles.read",
+    "vehicles.write",
+    "services.read",
+    "services.write",
+    "quotes.read",
+    "quotes.write",
+    "appointments.read",
+    "appointments.write",
+    "jobs.read",
+    "jobs.write",
+    "invoices.read",
+    "invoices.write",
+    "payments.read",
+    "payments.write",
+    "team.read",
+    "team.write",
+    "settings.read",
+  ],
+  service_advisor: [
+    "dashboard.view",
+    "customers.read",
+    "customers.write",
+    "vehicles.read",
+    "vehicles.write",
+    "services.read",
+    "quotes.read",
+    "quotes.write",
+    "appointments.read",
+    "appointments.write",
+    "jobs.read",
+    "jobs.write",
+    "invoices.read",
+    "invoices.write",
+    "payments.read",
+    "payments.write",
+  ],
+  technician: [
+    "dashboard.view",
+    "customers.read",
+    "vehicles.read",
+    "services.read",
+    "appointments.read",
+    "jobs.read",
+    "jobs.write",
+    "quotes.read",
+    "invoices.read",
+  ],
+};
+
+const TEAM_PERMISSION_GROUPS = [
+  { label: "Dashboard", read: "dashboard.view" },
+  { label: "Customers", read: "customers.read", write: "customers.write" },
+  { label: "Vehicles", read: "vehicles.read", write: "vehicles.write" },
+  { label: "Services", read: "services.read", write: "services.write" },
+  { label: "Calendar & Appointments", read: "appointments.read", write: "appointments.write" },
+  { label: "Jobs", read: "jobs.read", write: "jobs.write" },
+  { label: "Quotes", read: "quotes.read", write: "quotes.write" },
+  { label: "Invoices", read: "invoices.read", write: "invoices.write" },
+  { label: "Payments", read: "payments.read", write: "payments.write" },
+  { label: "Team", read: "team.read", write: "team.write" },
+  { label: "Settings", read: "settings.read", write: "settings.write" },
+] as const;
+
+function getDefaultPermissionSelection(role: string): string[] {
+  return [...(ROLE_DEFAULT_PERMISSIONS[role] ?? ROLE_DEFAULT_PERMISSIONS.technician)];
+}
+
+function normalizePermissionSelection(selection: string[]): string[] {
+  const next = new Set(selection);
+  for (const group of TEAM_PERMISSION_GROUPS) {
+    if (group.write && next.has(group.write)) {
+      next.add(group.read);
+    }
+  }
+  return Array.from(next).sort();
+}
 
 function getStaffAccessState(teamMember: StaffRecord): TeamAccessState {
   const status =
@@ -204,6 +333,17 @@ function getStaffAccessState(teamMember: StaffRecord): TeamAccessState {
         badgeClassName: "bg-emerald-100 text-emerald-900",
       };
   }
+}
+
+function getStaffPermissionSummary(teamMember: StaffRecord): string {
+  const customCount = teamMember.customPermissions?.length ?? 0;
+  if (customCount > 0) {
+    return `Custom page access on ${customCount} permissions.`;
+  }
+
+  const role = teamMember.membershipRole ?? teamMember.role ?? "technician";
+  const defaults = getDefaultPermissionSelection(role).length;
+  return `Using ${role.replace(/_/g, " ")} defaults across ${defaults} permissions.`;
 }
 
 function BillingTab({
@@ -510,6 +650,7 @@ export default function SettingsPage() {
     email: "",
     role: "technician",
     active: true,
+    customPermissions: getDefaultPermissionSelection("technician"),
   });
   const [runtimeErrors, setRuntimeErrors] = useState<RuntimeErrorEntry[]>([]);
   const [reliabilityDiagnostics, setReliabilityDiagnostics] = useState<ReliabilityDiagnosticEntry[]>([]);
@@ -658,6 +799,7 @@ export default function SettingsPage() {
       email: "",
       role: "technician",
       active: true,
+      customPermissions: getDefaultPermissionSelection("technician"),
     });
     setTeamDialogOpen(true);
   };
@@ -670,6 +812,9 @@ export default function SettingsPage() {
       email: teamMember.email ?? "",
       role: teamMember.membershipRole ?? teamMember.role ?? "technician",
       active: teamMember.active ?? true,
+      customPermissions: normalizePermissionSelection(
+        teamMember.effectivePermissions ?? getDefaultPermissionSelection(teamMember.membershipRole ?? teamMember.role ?? "technician")
+      ),
     });
     setTeamDialogOpen(true);
   };
@@ -713,22 +858,24 @@ export default function SettingsPage() {
   const handleSaveStaff = async () => {
     if (!staffForm.firstName.trim() || !staffForm.lastName.trim()) return;
     const result = editingStaff
-      ? await updateStaff({
-          id: editingStaff.id,
-          firstName: staffForm.firstName.trim(),
-          lastName: staffForm.lastName.trim(),
-          email: staffForm.email.trim() || null,
-          role: staffForm.role,
-          active: staffForm.active,
-          status: staffForm.active ? "active" : "suspended",
-        })
-      : await saveStaff({
-          firstName: staffForm.firstName.trim(),
-          lastName: staffForm.lastName.trim(),
-          email: staffForm.email.trim() || undefined,
-          role: staffForm.role,
-          active: staffForm.active,
-        });
+        ? await updateStaff({
+            id: editingStaff.id,
+            firstName: staffForm.firstName.trim(),
+            lastName: staffForm.lastName.trim(),
+            email: staffForm.email.trim() || null,
+            role: staffForm.role,
+            active: staffForm.active,
+            status: staffForm.active ? "active" : "suspended",
+            customPermissions: normalizePermissionSelection(staffForm.customPermissions),
+          })
+        : await saveStaff({
+            firstName: staffForm.firstName.trim(),
+            lastName: staffForm.lastName.trim(),
+            email: staffForm.email.trim() || undefined,
+            role: staffForm.role,
+            active: staffForm.active,
+            customPermissions: normalizePermissionSelection(staffForm.customPermissions),
+          });
 
     if (result.error) {
       toast.error(result.error.message ?? "Could not save team member.");
@@ -816,6 +963,44 @@ export default function SettingsPage() {
     } catch {
       toast.error("Could not copy invite link.");
     }
+  };
+
+  const handleStaffRoleChange = (role: string) => {
+    setStaffForm((current) => ({
+      ...current,
+      role,
+      customPermissions: getDefaultPermissionSelection(role),
+    }));
+  };
+
+  const toggleStaffPermission = (permission: string, enabled: boolean) => {
+    setStaffForm((current) => {
+      const next = new Set(current.customPermissions);
+      if (enabled) {
+        next.add(permission);
+      } else {
+        next.delete(permission);
+        for (const group of TEAM_PERMISSION_GROUPS) {
+          if (group.write === permission || group.read === permission) {
+            next.delete(group.write);
+          }
+        }
+      }
+
+      for (const group of TEAM_PERMISSION_GROUPS) {
+        if (group.write && next.has(group.write)) {
+          next.add(group.read);
+        }
+        if (group.write === permission && !enabled) {
+          next.delete(group.write);
+        }
+      }
+
+      return {
+        ...current,
+        customPermissions: Array.from(next).sort(),
+      };
+    });
   };
 
   const handleSave = async () => {
@@ -1519,6 +1704,7 @@ export default function SettingsPage() {
                               {accessState.helperText ? (
                                 <p className="mt-1 text-xs text-muted-foreground">{accessState.helperText}</p>
                               ) : null}
+                              <p className="mt-1 text-xs text-muted-foreground">{getStaffPermissionSummary(teamMember)}</p>
                             </div>
                           </div>
                           <div className="flex items-center justify-between gap-2 sm:justify-end">
@@ -1712,7 +1898,7 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Role</Label>
-              <Select value={staffForm.role} onValueChange={(value) => setStaffForm((current) => ({ ...current, role: value }))}>
+              <Select value={staffForm.role} onValueChange={handleStaffRoleChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
@@ -1724,6 +1910,64 @@ export default function SettingsPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label>Page Access</Label>
+                <p className="text-xs text-muted-foreground">
+                  Start with the selected role defaults, then fine-tune what this person can open or manage.
+                </p>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="space-y-3">
+                  {TEAM_PERMISSION_GROUPS.map((group) => {
+                    const canRead = staffForm.customPermissions.includes(group.read);
+                    const canWrite = group.write ? staffForm.customPermissions.includes(group.write) : false;
+                    return (
+                      <div
+                        key={group.label}
+                        className="flex flex-col gap-3 rounded-lg border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{group.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {group.write ? "Choose whether they can view this area or make changes in it." : "Choose whether they can see this area."}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              id={`perm-${group.read}`}
+                              checked={canRead}
+                              onCheckedChange={(value) => toggleStaffPermission(group.read, value)}
+                            />
+                            <Label htmlFor={`perm-${group.read}`} className="cursor-pointer text-xs">
+                              Access
+                            </Label>
+                          </div>
+                          {group.write ? (
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                id={`perm-${group.write}`}
+                                checked={canWrite}
+                                onCheckedChange={(value) => toggleStaffPermission(group.write, value)}
+                              />
+                              <Label htmlFor={`perm-${group.write}`} className="cursor-pointer text-xs">
+                                Manage
+                              </Label>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {!staffForm.email.trim() ? (
+                <p className="text-xs text-muted-foreground">
+                  These toggles will take effect once this team member has a login email and signs in.
+                </p>
+              ) : null}
             </div>
             <div className="flex items-center gap-3">
               <Switch

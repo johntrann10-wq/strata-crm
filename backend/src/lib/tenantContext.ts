@@ -1,13 +1,15 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { businesses, businessMemberships } from "../db/schema.js";
-import type { MembershipRole } from "./permissions.js";
+import { businesses, businessMemberships, membershipPermissionGrants } from "../db/schema.js";
+import type { MembershipRole, PermissionKey } from "./permissions.js";
+import { resolvePermissionsForRole } from "./permissions.js";
 import { logger } from "./logger.js";
 import { warnOnce } from "./warnOnce.js";
 
 export interface TenantContext {
   businessId: string;
   role: MembershipRole;
+  permissions: PermissionKey[];
   source: "owner" | "membership";
 }
 
@@ -38,7 +40,12 @@ export async function resolveTenantContext(
       .where(and(eq(businesses.id, normalizedPreferredBusinessId), eq(businesses.ownerId, userId)))
       .limit(1);
     if (ownerScopedBusiness[0]) {
-      return { businessId: ownerScopedBusiness[0].id, role: "owner", source: "owner" };
+      return {
+        businessId: ownerScopedBusiness[0].id,
+        role: "owner",
+        permissions: Array.from(resolvePermissionsForRole("owner")),
+        source: "owner",
+      };
     }
 
     let membershipScopedBusiness:
@@ -65,9 +72,28 @@ export async function resolveTenantContext(
       });
     }
     if (membershipScopedBusiness[0]) {
+      const overrides = await db
+        .select({ permission: membershipPermissionGrants.permission, enabled: membershipPermissionGrants.enabled })
+        .from(membershipPermissionGrants)
+        .where(
+          and(
+            eq(membershipPermissionGrants.businessId, normalizedPreferredBusinessId),
+            eq(membershipPermissionGrants.userId, userId)
+          )
+        )
+        .catch((error) => {
+          if (!isTenantSchemaDriftError(error)) throw error;
+          warnOnce("tenant:preferred-membership-permissions-schema", "membership permission grant schema unavailable during tenant resolution", {
+            userId,
+            preferredBusinessId: normalizedPreferredBusinessId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return [];
+        });
       return {
         businessId: membershipScopedBusiness[0].businessId,
         role: membershipScopedBusiness[0].role,
+        permissions: Array.from(resolvePermissionsForRole(membershipScopedBusiness[0].role, overrides)),
         source: "membership",
       };
     }
@@ -79,7 +105,12 @@ export async function resolveTenantContext(
     .where(eq(businesses.ownerId, userId))
     .limit(1);
   if (ownerBusiness[0]) {
-    return { businessId: ownerBusiness[0].id, role: "owner", source: "owner" };
+    return {
+      businessId: ownerBusiness[0].id,
+      role: "owner",
+      permissions: Array.from(resolvePermissionsForRole("owner")),
+      source: "owner",
+    };
   }
 
   let membershipBusiness:
@@ -99,9 +130,27 @@ export async function resolveTenantContext(
     });
   }
   if (membershipBusiness[0]) {
+    const overrides = await db
+      .select({ permission: membershipPermissionGrants.permission, enabled: membershipPermissionGrants.enabled })
+      .from(membershipPermissionGrants)
+      .where(
+        and(
+          eq(membershipPermissionGrants.businessId, membershipBusiness[0].businessId),
+          eq(membershipPermissionGrants.userId, userId)
+        )
+      )
+      .catch((error) => {
+        if (!isTenantSchemaDriftError(error)) throw error;
+        warnOnce("tenant:membership-permissions-schema", "membership permission grant schema unavailable during tenant bootstrap", {
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return [];
+      });
     return {
       businessId: membershipBusiness[0].businessId,
       role: membershipBusiness[0].role,
+      permissions: Array.from(resolvePermissionsForRole(membershipBusiness[0].role, overrides)),
       source: "membership",
     };
   }

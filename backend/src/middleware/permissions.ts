@@ -8,7 +8,8 @@ export function requirePermission(permission: PermissionKey) {
     if (!req.membershipRole) {
       throw new ForbiddenError("No tenant role is associated with this request.");
     }
-    if (!roleHasPermission(req.membershipRole, permission)) {
+    const hasPermission = req.permissions ? req.permissions.includes(permission) : roleHasPermission(req.membershipRole, permission);
+    if (!hasPermission) {
       throw new ForbiddenError("You do not have permission to perform this action.");
     }
     next();

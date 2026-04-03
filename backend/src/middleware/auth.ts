@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { UnauthorizedError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { resolveTenantContext } from "../lib/tenantContext.js";
-import type { MembershipRole } from "../lib/permissions.js";
+import type { MembershipRole, PermissionKey } from "../lib/permissions.js";
 import { verifyAccessToken } from "../lib/jwt.js";
 export interface SessionUser {
   id: string;
@@ -16,6 +16,7 @@ declare global {
       userId?: string;
       businessId?: string;
       membershipRole?: MembershipRole;
+      permissions?: PermissionKey[];
       user?: SessionUser;
     }
   }
@@ -47,6 +48,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   if (tenantContext) {
     req.businessId = tenantContext.businessId;
     req.membershipRole = tenantContext.role;
+    req.permissions = tenantContext.permissions;
   }
   next();
 }
@@ -63,6 +65,7 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
   if (tenantContext) {
     req.businessId = tenantContext.businessId;
     req.membershipRole = tenantContext.role;
+    req.permissions = tenantContext.permissions;
   }
   next();
 }

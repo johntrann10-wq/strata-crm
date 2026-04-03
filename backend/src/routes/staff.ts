@@ -1,14 +1,14 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { randomUUID } from "crypto";
-import { and, desc, eq, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { businesses, businessMemberships, staff, users } from "../db/schema.js";
+import { businesses, businessMemberships, membershipPermissionGrants, staff, users } from "../db/schema.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { requirePermission } from "../middleware/permissions.js";
-import type { MembershipRole } from "../lib/permissions.js";
+import { ALL_PERMISSION_KEYS, getDefaultPermissionsForRole, normalizePermissionSelection, type MembershipRole, type PermissionKey } from "../lib/permissions.js";
 import { logger } from "../lib/logger.js";
 import { warnOnce } from "../lib/warnOnce.js";
 import { createTeamInviteToken } from "../lib/jwt.js";
@@ -192,6 +192,76 @@ function isStaffSchemaDriftError(error: unknown): boolean {
   return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
+const permissionSelectionSchema = z.array(z.enum(ALL_PERMISSION_KEYS)).optional().nullable();
+
+function normalizeCustomPermissions(value: PermissionKey[] | null | undefined, role: MembershipRole): PermissionKey[] | null {
+  if (!value || value.length === 0) return null;
+  const normalized = Array.from(normalizePermissionSelection(value));
+  const defaults = getDefaultPermissionsForRole(role);
+  if (normalized.length === defaults.size && normalized.every((permission) => defaults.has(permission))) {
+    return null;
+  }
+  return normalized.sort();
+}
+
+async function loadMembershipPermissionMap(tenantId: string, userIds: string[]) {
+  if (userIds.length === 0) return new Map<string, PermissionKey[]>();
+  const rows = await db
+    .select({
+      userId: membershipPermissionGrants.userId,
+      permission: membershipPermissionGrants.permission,
+      enabled: membershipPermissionGrants.enabled,
+    })
+    .from(membershipPermissionGrants)
+    .where(and(eq(membershipPermissionGrants.businessId, tenantId), inArray(membershipPermissionGrants.userId, userIds)))
+    .catch((error) => {
+      if (!isStaffSchemaDriftError(error)) throw error;
+      warnOnce("staff:list:membership-permissions", "staff list falling back without membership permission grants", {
+        businessId: tenantId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    });
+
+  const byUserId = new Map<string, PermissionKey[]>();
+  for (const row of rows) {
+    const current = byUserId.get(row.userId) ?? [];
+    if (row.enabled) current.push(row.permission);
+    byUserId.set(row.userId, current);
+  }
+  return byUserId;
+}
+
+async function replaceMembershipPermissionOverrides(
+  tenantId: string,
+  userId: string,
+  permissions: PermissionKey[] | null | undefined
+) {
+  try {
+    await db
+      .delete(membershipPermissionGrants)
+      .where(and(eq(membershipPermissionGrants.businessId, tenantId), eq(membershipPermissionGrants.userId, userId)));
+
+    if (!permissions || permissions.length === 0) return;
+
+    await db.insert(membershipPermissionGrants).values(
+      permissions.map((permission) => ({
+        businessId: tenantId,
+        userId,
+        permission,
+        enabled: true,
+      }))
+    );
+  } catch (error) {
+    if (!isStaffSchemaDriftError(error)) throw error;
+    warnOnce("staff:permission-overrides", "staff permission overrides skipped due to schema drift", {
+      businessId: tenantId,
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 const createStaffSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
@@ -199,6 +269,7 @@ const createStaffSchema = z.object({
   role: z.enum(["owner", "admin", "manager", "service_advisor", "technician"]).default("technician"),
   phone: z.string().optional().or(z.literal("")),
   active: z.boolean().optional(),
+  customPermissions: permissionSelectionSchema,
 });
 
 const updateStaffSchema = createStaffSchema.partial().extend({
@@ -234,14 +305,25 @@ staffRouter.get("/", requireAuth, requireTenant, requirePermission("team.read"),
   }
 
   const membershipByUserId = new Map(memberships.map((membership) => [membership.userId, membership]));
+  const customPermissionsByUserId = await loadMembershipPermissionMap(
+    tenantId,
+    list.map((row) => row.userId).filter((userId): userId is string => !!userId)
+  );
 
   res.json({
     records: list.map((row) => {
       const membership = row.userId ? membershipByUserId.get(row.userId) : null;
+      const customPermissions = row.userId ? customPermissionsByUserId.get(row.userId) ?? [] : [];
+      const role = (membership?.role ?? row.role ?? "technician") as MembershipRole;
+      const effectivePermissions = customPermissions.length > 0
+        ? Array.from(normalizePermissionSelection(customPermissions))
+        : Array.from(getDefaultPermissionsForRole(role));
       return {
         ...row,
-        membershipRole: membership?.role ?? row.role ?? "technician",
+        membershipRole: role,
         membershipStatus: resolveStaffAccessStatus(row, membership?.status),
+        customPermissions,
+        effectivePermissions,
       };
     }),
   });
@@ -313,6 +395,7 @@ staffRouter.post("/", requireAuth, requireTenant, requirePermission("team.write"
   const newUserId = user?.id ?? (email ? randomUUID() : null);
   const membershipStatus = user?.passwordHash ? "active" : "invited";
   const role = parsed.data.role;
+  const normalizedCustomPermissions = normalizeCustomPermissions(parsed.data.customPermissions ?? undefined, role);
 
   const [created] = await db.transaction(async (tx) => {
     if (!user && email && newUserId) {
@@ -384,11 +467,19 @@ staffRouter.post("/", requireAuth, requireTenant, requirePermission("team.write"
           )
       : { inviteDelivery: "not_needed" as const };
 
+  if (newUserId) {
+    await replaceMembershipPermissionOverrides(tenantId, newUserId, normalizedCustomPermissions);
+  }
+
+  const effectivePermissions = normalizedCustomPermissions ?? Array.from(getDefaultPermissionsForRole(role));
+
   res.status(201).json({
     ...created,
     membershipRole: role,
     membershipStatus: resolveStaffAccessStatus(created, membershipStatus),
     inviteDelivery: inviteResult.inviteDelivery,
+    customPermissions: normalizedCustomPermissions ?? [],
+    effectivePermissions,
   });
 });
 
@@ -450,6 +541,7 @@ staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.wr
   let targetUserId = existing.userId ?? null;
   let nextMembershipStatus = membership?.status ?? (existing.active === false ? "suspended" : "active");
   let inviteDelivery: "sent" | "not_configured" | "not_needed" = "not_needed";
+  let normalizedCustomPermissions: PermissionKey[] | null = null;
 
   const [updated] = await db.transaction(async (tx) => {
     let linkedUser:
@@ -554,6 +646,11 @@ staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.wr
       .where(eq(staff.id, existing.id))
       .returning();
 
+    normalizedCustomPermissions = normalizeCustomPermissions(
+      parsed.data.customPermissions ?? undefined,
+      (parsed.data.role ?? updatedStaff.role ?? "technician") as MembershipRole
+    );
+
     if (targetUserId) {
       try {
         await tx
@@ -606,6 +703,7 @@ staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.wr
 
   membership = null;
   if (targetUserId) {
+    await replaceMembershipPermissionOverrides(tenantId, targetUserId, normalizedCustomPermissions);
     try {
       const [membershipRow] = await db
         .select({
@@ -631,6 +729,10 @@ staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.wr
     membershipRole: membership?.role ?? updated.role ?? "technician",
     membershipStatus: resolveStaffAccessStatus(updated, membership?.status),
     inviteDelivery,
+    customPermissions: normalizedCustomPermissions ?? [],
+    effectivePermissions:
+      normalizedCustomPermissions ??
+      Array.from(getDefaultPermissionsForRole((membership?.role ?? updated.role ?? "technician") as MembershipRole)),
   });
 });
 
