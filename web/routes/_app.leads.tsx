@@ -72,6 +72,27 @@ type LeadEntry = {
   searchableText: string;
 };
 
+function createEmptyLeadForm(): LeadFormData {
+  return {
+    firstName: "",
+    lastName: "",
+    phone: "",
+    email: "",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+    marketingOptIn: true,
+    serviceInterest: "",
+    nextStep: "",
+    summary: "",
+    teamNotes: "",
+    vehicle: "",
+    leadStatus: "new",
+    leadSource: "website",
+  };
+}
+
 const ACTIONS: Array<{
   mode: SubmitMode;
   label: string;
@@ -195,24 +216,7 @@ export default function LeadsPage() {
     pause: !businessId,
   });
 
-  const [formData, setFormData] = useState<LeadFormData>({
-    firstName: "",
-    lastName: "",
-    phone: "",
-    email: "",
-    address: "",
-    city: "",
-    state: "",
-    zip: "",
-    marketingOptIn: true,
-    serviceInterest: "",
-    nextStep: "",
-    summary: "",
-    teamNotes: "",
-    vehicle: "",
-    leadStatus: "new",
-    leadSource: "website",
-  });
+  const [formData, setFormData] = useState<LeadFormData>(createEmptyLeadForm);
 
   const leadRecords = useMemo<LeadEntry[]>(() => {
     const recentClients = (recentClientsRaw as any[]) ?? [];
@@ -388,7 +392,10 @@ export default function LeadsPage() {
       return;
     }
 
-    navigate(`/clients?created=${encodeURIComponent(createdClientId)}&from=${encodeURIComponent("/leads")}`);
+    setFormData(createEmptyLeadForm());
+    setLocalErrors({});
+    setSubmitIntent("lead");
+    setShowAdvanced(false);
   };
 
   const updateLeadStatus = async (client: any, status: LeadStatus) => {

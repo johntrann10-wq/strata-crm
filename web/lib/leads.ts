@@ -78,14 +78,17 @@ export function parseLeadRecord(notes: string | null | undefined): LeadRecord {
     return DEFAULT_LEAD;
   }
 
+  const normalizedStatus = (LEAD_STATUS_OPTIONS.includes(status as LeadStatus) ? status : "new") as LeadStatus;
+  const normalizedSource = (LEAD_SOURCE_OPTIONS.includes(source as LeadSource) ? source : "other") as LeadSource;
+
   return {
-    status: (LEAD_STATUS_OPTIONS.includes(status as LeadStatus) ? status : "new") as LeadStatus,
-    source: (LEAD_SOURCE_OPTIONS.includes(source as LeadSource) ? source : "other") as LeadSource,
+    status: normalizedStatus,
+    source: normalizedSource,
     serviceInterest: read(PREFIXES.serviceInterest),
     nextStep: read(PREFIXES.nextStep),
     summary: read(PREFIXES.summary),
     vehicle: read(PREFIXES.vehicle),
-    isLead: true,
+    isLead: normalizedStatus !== "converted",
   };
 }
 
