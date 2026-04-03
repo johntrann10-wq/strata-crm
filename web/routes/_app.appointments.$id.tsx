@@ -977,6 +977,18 @@ export default function AppointmentDetail() {
         ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
         : "Business-wide block")
     : appointmentVehicleLabel;
+  const canQuickEditAppointment =
+    appointment.status !== "completed" &&
+    appointment.status !== "cancelled" &&
+    appointment.status !== "no-show";
+  const canQuickCancelAppointment =
+    appointment.status !== "cancelled" &&
+    appointment.status !== "completed" &&
+    appointment.status !== "no-show";
+  const canQuickCompleteAppointment =
+    appointment.status !== "completed" &&
+    appointment.status !== "cancelled" &&
+    appointment.status !== "no-show";
 
   const relatedRecords: RelatedRecord[] = [];
   if (appointment) {
@@ -1194,15 +1206,12 @@ export default function AppointmentDetail() {
         </div>
 
         <div className="hidden shrink-0 items-center gap-2 sm:flex sm:flex-wrap">
-          {/* Edit Appointment Button */}
-          {appointment.status !== "completed" &&
-            appointment.status !== "cancelled" &&
-            appointment.status !== "no-show" && (
-              <Button variant="outline" size="sm" onClick={handleOpenEditDialog}>
-                <Edit2 className="h-4 w-4 mr-2" />
-                Edit
-              </Button>
-            )}
+          {canQuickEditAppointment ? (
+            <Button size="sm" onClick={handleOpenEditDialog}>
+              <Clock className="h-4 w-4 mr-2" />
+              Reschedule
+            </Button>
+          ) : null}
 
           {/* Change Status Dropdown */}
           <DropdownMenu>
@@ -1241,7 +1250,7 @@ export default function AppointmentDetail() {
             </Button>
           ) : null}
 
-          {appointment.status !== "completed" && appointment.status !== "cancelled" && appointment.status !== "no-show" && (
+          {canQuickCompleteAppointment && (
             <Button
               variant="outline"
               size="sm"
@@ -1266,7 +1275,7 @@ export default function AppointmentDetail() {
             </Button>
           )}
 
-          {appointment.status !== "cancelled" && appointment.status !== "completed" && appointment.status !== "no-show" && (
+          {canQuickCancelAppointment && (
             <Button
               variant="outline"
               size="sm"
@@ -1343,38 +1352,82 @@ export default function AppointmentDetail() {
           </div>
 
         <div className="flex items-center gap-2 sm:hidden">
-          {appointment.status !== "completed" && appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
-            <Button
-              className="flex-1"
-              onClick={() => {
-                const hasServices = appointmentServices && appointmentServices.length > 0;
-                const hasTotalPrice = appointment.totalPrice != null && appointment.totalPrice > 0;
-                if (!hasServices && !hasTotalPrice) {
-                  setShowCompleteWarningDialog(true);
-                } else {
-                  void handleComplete();
-                }
-              }}
-              disabled={isActionLoading}
-            >
-              {completing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <CheckCircle className="h-4 w-4 mr-2" />
-              )}
-              Mark Complete
-            </Button>
-          ) : null}
+          <div className="grid w-full gap-2">
+            <div className="grid grid-cols-2 gap-2">
+              {canQuickEditAppointment ? (
+                <Button
+                  variant="outline"
+                  className="justify-center"
+                  onClick={handleOpenEditDialog}
+                  disabled={isActionLoading}
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  Reschedule
+                </Button>
+              ) : null}
 
-          <Dialog open={showMobileActions} onOpenChange={setShowMobileActions}>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="More appointment actions"
-              onClick={() => setShowMobileActions(true)}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
+              {canQuickCancelAppointment ? (
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "justify-center border-red-500 text-red-700 hover:bg-red-50 hover:text-red-700",
+                    !canQuickEditAppointment && "col-span-2"
+                  )}
+                  onClick={() => setShowCancelDialog(true)}
+                  disabled={isActionLoading}
+                >
+                  {cancelling ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <X className="h-4 w-4 mr-2" />
+                  )}
+                  Cancel
+                </Button>
+              ) : canQuickEditAppointment ? (
+                <Button
+                  variant="outline"
+                  className="justify-center"
+                  onClick={() => setShowMobileActions(true)}
+                >
+                  <MoreHorizontal className="h-4 w-4 mr-2" />
+                  More
+                </Button>
+              ) : null}
+            </div>
+
+            {canQuickCompleteAppointment ? (
+              <Button
+                className="w-full"
+                onClick={() => {
+                  const hasServices = appointmentServices && appointmentServices.length > 0;
+                  const hasTotalPrice = appointment.totalPrice != null && appointment.totalPrice > 0;
+                  if (!hasServices && !hasTotalPrice) {
+                    setShowCompleteWarningDialog(true);
+                  } else {
+                    void handleComplete();
+                  }
+                }}
+                disabled={isActionLoading}
+              >
+                {completing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                )}
+                Mark Complete
+              </Button>
+            ) : null}
+
+            <Dialog open={showMobileActions} onOpenChange={setShowMobileActions}>
+              <Button
+                variant="outline"
+                className="w-full justify-center"
+                aria-label="More appointment actions"
+                onClick={() => setShowMobileActions(true)}
+              >
+                <MoreHorizontal className="h-4 w-4 mr-2" />
+                More actions
+              </Button>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Appointment actions</DialogTitle>
@@ -1383,9 +1436,7 @@ export default function AppointmentDetail() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-2">
-                {appointment.status !== "completed" &&
-                appointment.status !== "cancelled" &&
-                appointment.status !== "no-show" ? (
+                {canQuickEditAppointment ? (
                   <Button
                     variant="outline"
                     className="justify-start"
@@ -1394,8 +1445,8 @@ export default function AppointmentDetail() {
                       handleOpenEditDialog();
                     }}
                   >
-                    <Edit2 className="mr-2 h-4 w-4" />
-                    Edit appointment
+                    <Clock className="mr-2 h-4 w-4" />
+                    Reschedule appointment
                   </Button>
                 ) : null}
                 {appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
@@ -1499,9 +1550,7 @@ export default function AppointmentDetail() {
                     Mark {status.replace("-", " ")}
                   </Button>
                 ))}
-                {appointment.status !== "cancelled" &&
-                appointment.status !== "completed" &&
-                appointment.status !== "no-show" ? (
+                {canQuickCancelAppointment ? (
                   <Button
                     variant="outline"
                     className="justify-start border-red-200 text-red-700 hover:bg-red-50 hover:text-red-700"
@@ -1517,6 +1566,7 @@ export default function AppointmentDetail() {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
       </div>
 
