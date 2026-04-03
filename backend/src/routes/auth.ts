@@ -355,6 +355,7 @@ authRouter.post(
     const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
     if (!user || !user.passwordHash) throw new UnauthorizedError("Invalid email or password.");
     if (!ok) throw new UnauthorizedError("Invalid email or password.");
+    await activateInvitedMemberships(user.id);
     const token = createAccessToken(user.id);
     logger.info("User signed in", { userId: user.id, email: user.email });
     res.json({
@@ -386,6 +387,9 @@ authRouter.post(
 
     if (existing) {
       if (existing.passwordHash) {
+        if (inviteToken) {
+          throw new BadRequestError("This email already has a Strata account. Sign in to accept your invite.");
+        }
         throw new BadRequestError("An account with this email already exists.");
       }
 

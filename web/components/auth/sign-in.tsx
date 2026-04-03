@@ -1,12 +1,13 @@
+import { useMemo } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
+import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { api, API_BASE } from "../../api";
 import { useActionForm } from "../../hooks/useApi";
 import { GoogleMark } from "./GoogleMark";
-import { Link, useLocation, useNavigate } from "react-router";
-import { api, API_BASE } from "../../api";
-import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 
-function buildGoogleAuthHref(search: string): string {
+function buildGoogleAuthHref(search: string) {
   const params = new URLSearchParams(search);
   if (!params.has("redirectPath")) {
     params.set("redirectPath", "/signed-in");
@@ -25,6 +26,15 @@ export const SignInComponent = (props: {
   const navigate = useNavigate();
   const fallbackAfterAuth = "/signed-in";
   const googleAuthHref = buildGoogleAuthHref(search);
+  const inviteState = useMemo(() => {
+    const params = new URLSearchParams(search);
+    return {
+      inviteToken: params.get("inviteToken") ?? "",
+      email: params.get("email") ?? "",
+      businessName: params.get("businessName") ?? "",
+    };
+  }, [search]);
+  const isInviteFlow = Boolean(inviteState.inviteToken);
 
   const {
     submit,
@@ -42,44 +52,48 @@ export const SignInComponent = (props: {
 
   return (
     <div className="w-full max-w-sm">
-      {/* Logo / Brand Header */}
       <div className="mx-auto mb-8 flex flex-col items-center gap-3">
         <StrataLogoLockup
           className="flex-col gap-3"
           markClassName="h-10 w-10"
-          wordmarkClassName="text-[15px] font-semibold text-foreground tracking-tight"
+          wordmarkClassName="text-[15px] font-semibold tracking-tight text-foreground"
         />
       </div>
 
-      {/* Heading */}
-      <div className="text-center mb-8">
+      <div className="mb-8 text-center">
         <h1 className="text-[22px] font-semibold tracking-tight text-foreground">Welcome back</h1>
-        <p className="text-[13px] text-muted-foreground mt-1.5">Sign in to your account</p>
+        <p className="mt-1.5 text-[13px] text-muted-foreground">
+          {isInviteFlow && inviteState.businessName
+            ? `Sign in to join ${inviteState.businessName} with your existing account.`
+            : "Sign in to your account"}
+        </p>
       </div>
 
-      {/* Form Card */}
-      <Card className="shadow-sm border border-border rounded-2xl p-8">
+      <Card className="rounded-2xl border border-border p-8 shadow-sm">
         <form onSubmit={submit}>
-          {/* Google Sign In */}
+          {isInviteFlow ? (
+            <div className="mb-5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-left text-[12px] text-orange-900">
+              Already have a Strata login? Sign in with the invited email below and your team access will be attached automatically.
+            </div>
+          ) : null}
+
           <a
             href={googleAuthHref}
-            className="w-full h-10 border border-border bg-background hover:bg-muted text-[13px] font-medium rounded-lg flex items-center justify-center gap-2.5 transition-colors"
+            className="flex h-10 w-full items-center justify-center gap-2.5 rounded-lg border border-border bg-background text-[13px] font-medium transition-colors hover:bg-muted"
           >
             <GoogleMark className="h-4 w-4 shrink-0" />
             Sign in with Google
           </a>
 
-          {/* OR Divider */}
-          <div className="flex items-center gap-3 my-6">
-            <span className="flex-1 h-px bg-border" />
-            <span className="text-[11px] text-muted-foreground uppercase tracking-[0.06em]">or</span>
-            <span className="flex-1 h-px bg-border" />
+          <div className="my-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-[11px] uppercase tracking-[0.06em] text-muted-foreground">or</span>
+            <span className="h-px flex-1 bg-border" />
           </div>
 
           <div className="flex flex-col gap-4">
-            {/* Email Field */}
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="email" className="text-[12px] font-medium text-foreground/80 mb-1.5 block">
+              <label htmlFor="email" className="mb-1.5 block text-[12px] font-medium text-foreground/80">
                 Email
               </label>
               <Input
@@ -88,14 +102,14 @@ export const SignInComponent = (props: {
                 placeholder="you@example.com"
                 autoComplete="off"
                 {...register("email")}
-                className={`h-9 text-[13px] rounded-lg${errors?.root?.message ? " border-destructive" : ""}`}
+                defaultValue={inviteState.email}
+                className={`h-9 rounded-lg text-[13px]${errors?.root?.message ? " border-destructive" : ""}`}
               />
             </div>
 
-            {/* Password Field */}
             <div className="flex flex-col gap-1.5">
               <div className="mb-1.5 flex items-center justify-between">
-                <label htmlFor="password" className="text-[12px] font-medium text-foreground/80 block">
+                <label htmlFor="password" className="block text-[12px] font-medium text-foreground/80">
                   Password
                 </label>
                 <Link to={`/forgot-password${search}`} className="text-[12px] font-medium text-orange-600 hover:underline">
@@ -105,35 +119,31 @@ export const SignInComponent = (props: {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="........"
                 autoComplete="off"
                 {...register("password")}
-                className={`h-9 text-[13px] rounded-lg${errors?.root?.message ? " border-destructive" : ""}`}
+                className={`h-9 rounded-lg text-[13px]${errors?.root?.message ? " border-destructive" : ""}`}
               />
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full h-9 bg-orange-500 hover:bg-orange-500/90 text-white text-[13px] font-medium rounded-lg shadow-none border-0 mt-1 transition-colors disabled:opacity-60 cursor-pointer"
+              className="mt-1 h-9 w-full cursor-pointer rounded-lg border-0 bg-orange-500 text-[13px] font-medium text-white shadow-none transition-colors hover:bg-orange-500/90 disabled:opacity-60"
             >
-              {isSubmitting ? "Signing in…" : "Sign in with email"}
+              {isSubmitting ? "Signing in..." : "Sign in with email"}
             </button>
 
-            {errors?.root?.message && (
-              <p className="text-sm text-destructive text-center">{errors.root.message}</p>
-            )}
+            {errors?.root?.message ? <p className="text-center text-sm text-destructive">{errors.root.message}</p> : null}
           </div>
         </form>
       </Card>
 
-      {/* Sign Up Link */}
-      <p className="text-center mt-6 text-[13px] text-muted-foreground">
+      <p className="mt-6 text-center text-[13px] text-muted-foreground">
         Don't have an account?{" "}
         <Link
           to={`/sign-up${search}`}
-          className="text-foreground font-medium hover:underline"
+          className="font-medium text-foreground hover:underline"
           onClick={
             props.overrideOnSignUp
               ? (e) => {
