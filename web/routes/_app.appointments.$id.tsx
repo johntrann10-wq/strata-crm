@@ -1185,8 +1185,8 @@ export default function AppointmentDetail() {
         </div>
       </section>
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <Button variant="ghost" size="sm" asChild>
             <Link to={returnTo}>
               <ArrowLeft className="h-4 w-4 mr-1" />
@@ -1195,7 +1195,7 @@ export default function AppointmentDetail() {
           </Button>
         </div>
 
-        <div className="hidden shrink-0 items-center gap-2 sm:flex sm:flex-wrap">
+        <div className="hidden w-full items-center gap-2 sm:flex sm:flex-wrap lg:w-auto lg:justify-end">
           {canQuickEditAppointment ? (
             <Button size="sm" onClick={handleOpenEditDialog}>
               <Clock className="h-4 w-4 mr-2" />
