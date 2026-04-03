@@ -37,11 +37,11 @@ export default function ProfilePage() {
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
         <Card className="border-white/65">
-          <CardHeader className="pb-3">
+          <CardHeader className="px-6 pb-3 pt-5">
             <CardTitle className="text-base">User</CardTitle>
             <CardDescription>Keep your identity and core account details current across the workspace.</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-5 pt-0 sm:flex-row sm:items-start sm:justify-between">
+          <CardContent className="flex flex-col gap-5 px-6 pb-5 pt-0 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex gap-4">
               <UserIcon user={user} className="h-16 w-16" />
               <div className="space-y-1">
@@ -68,11 +68,11 @@ export default function ProfilePage() {
         </Card>
 
         <Card className="border-white/65">
-          <CardHeader className="pb-3">
+          <CardHeader className="px-6 pb-3 pt-5">
             <CardTitle className="text-base">Security</CardTitle>
             <CardDescription>Keep your login method reliable before real team usage starts.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          <CardContent className="space-y-3 px-6 pb-5 pt-0 text-sm">
             <SecurityRow label="Email" value={user.email} />
             <SecurityRow label="Sign-in method" value={authMethod} />
             <SecurityRow
@@ -95,11 +95,11 @@ export default function ProfilePage() {
 
       <section className="grid gap-6 md:grid-cols-2">
         <Card className="border-white/65">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Account details</CardTitle>
+          <CardHeader className="px-6 pb-3 pt-5">
+          <CardTitle className="text-base">Account details</CardTitle>
             <CardDescription>These identity fields show across activity, assignments, and team records.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          <CardContent className="space-y-3 px-6 pb-5 pt-0 text-sm">
             <SecurityRow label="First name" value={user.firstName?.trim() || "Not set"} />
             <SecurityRow label="Last name" value={user.lastName?.trim() || "Not set"} />
             <SecurityRow label="Login email" value={user.email} />
@@ -107,11 +107,11 @@ export default function ProfilePage() {
         </Card>
 
         <Card className="border-white/65">
-          <CardHeader className="pb-3">
+          <CardHeader className="px-6 pb-3 pt-5">
             <CardTitle className="text-base">Credentials</CardTitle>
             <CardDescription>Use a password backup and keep your login flow clear before inviting more staff.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          <CardContent className="space-y-3 px-6 pb-5 pt-0 text-sm">
             <div className="rounded-xl border bg-card px-4 py-3">
               <p className="font-medium text-foreground">
                 {user.googleProfileId ? "Google account connected" : "Email login enabled"}
