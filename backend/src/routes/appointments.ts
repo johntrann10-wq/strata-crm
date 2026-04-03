@@ -20,9 +20,15 @@ import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
+const CALENDAR_BLOCK_PREFIX = "[[calendar-block:";
+
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
   return req.businessId;
+}
+
+function isCalendarBlockInternalNotes(value: string | null | undefined): boolean {
+  return String(value ?? "").trim().startsWith(CALENDAR_BLOCK_PREFIX);
 }
 
 function isLocationSchemaDriftError(error: unknown): boolean {
@@ -1009,6 +1015,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       expectedCompletionTime &&
       expectedCompletionTime.toDateString() !== startTime.toDateString()
     );
+  const isCalendarBlock = isCalendarBlockInternalNotes(parsed.data.internalNotes);
 
   assertAppointmentLifecycle({
     workStart: startTime,
@@ -1018,19 +1025,21 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
     pickupReady: pickupReadyTime,
   });
 
-  const overlap = await hasAppointmentOverlap({
-    businessId: bid,
-    startTime,
-    endTime,
-    assignedStaffId: parsed.data.assignedStaffId ?? null,
-    excludeAppointmentId: null,
-  });
-  if (overlap) {
-    throw new ConflictError(
-      parsed.data.assignedStaffId
-        ? "This staff member already has an appointment in this time slot."
-        : "Another appointment in this business overlaps with this time slot."
-    );
+  if (!isCalendarBlock) {
+    const overlap = await hasAppointmentOverlap({
+      businessId: bid,
+      startTime,
+      endTime,
+      assignedStaffId: parsed.data.assignedStaffId ?? null,
+      excludeAppointmentId: null,
+    });
+    if (overlap) {
+      throw new ConflictError(
+        parsed.data.assignedStaffId
+          ? "This staff member already has an appointment in this time slot."
+          : "Another appointment in this business overlaps with this time slot."
+      );
+    }
   }
 
   let totalPriceInit = "0";
@@ -1214,6 +1223,7 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
       assignedStaffId: appointments.assignedStaffId,
       clientId: appointments.clientId,
       vehicleId: appointments.vehicleId,
+      internalNotes: appointments.internalNotes,
     })
     .from(appointments)
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
@@ -1291,6 +1301,10 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
       expectedCompletionTime.toDateString() !== startTime.toDateString()
     );
   const assignedStaffId = parsed.data.assignedStaffId ?? existing.assignedStaffId;
+  const isCalendarBlock =
+    isCalendarBlockInternalNotes(parsed.data.internalNotes) ||
+    (parsed.data.internalNotes === undefined &&
+      isCalendarBlockInternalNotes((existing.internalNotes as string | null) ?? null));
 
   assertAppointmentLifecycle({
     workStart: startTime,
@@ -1300,7 +1314,7 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
     pickupReady: pickupReadyTime,
   });
 
-  if (parsed.data.startTime != null || parsed.data.endTime != null || parsed.data.assignedStaffId != null) {
+  if (!isCalendarBlock && (parsed.data.startTime != null || parsed.data.endTime != null || parsed.data.assignedStaffId != null)) {
     const overlap = await hasAppointmentOverlap({
       businessId: bid,
       startTime,
