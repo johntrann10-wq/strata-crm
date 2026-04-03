@@ -459,7 +459,19 @@ export const api = {
     completeOnboarding: (id: string) =>
       request<unknown>(`/businesses/${encodeURIComponent(id)}/completeOnboarding`, { method: "POST" }),
   },
-  staff: resource("staff"),
+  staff: (() => {
+    const r = resource("staff");
+    return {
+      ...r,
+      resendInvite: (params: Record<string, unknown>) => {
+        const id = params.id as string | undefined;
+        if (!id) throw new Error("Staff resend invite requires id");
+        return request<unknown>(`/staff/${encodeURIComponent(id)}/resend-invite`, {
+          method: "POST",
+        });
+      },
+    };
+  })(),
   location: resource("locations"),
   service: (() => {
     const r = resource("services");

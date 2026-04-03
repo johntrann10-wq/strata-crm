@@ -7,7 +7,7 @@ import { GoogleMark } from "./GoogleMark";
 import { Link, useLocation } from "react-router";
 import { api, API_BASE } from "../../api";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 
 function buildGoogleAuthHref(search: string): string {
   const params = new URLSearchParams(search);
@@ -26,6 +26,17 @@ export const SignUpComponent = (props: {
   const location = useLocation();
   const search = props.searchParamsOverride ?? location.search;
   const googleAuthHref = buildGoogleAuthHref(search);
+  const inviteState = useMemo(() => {
+    const params = new URLSearchParams(search);
+    return {
+      inviteToken: params.get("inviteToken") ?? "",
+      email: params.get("email") ?? "",
+      firstName: params.get("firstName") ?? "",
+      lastName: params.get("lastName") ?? "",
+      businessName: params.get("businessName") ?? "",
+    };
+  }, [search]);
+  const isInviteFlow = Boolean(inviteState.inviteToken);
 
   const {
     submit,
@@ -62,14 +73,22 @@ export const SignUpComponent = (props: {
       <div className="text-center mb-8">
         <h1 className="text-[22px] font-semibold tracking-tight text-foreground">Create your account</h1>
         <p className="text-[13px] text-muted-foreground mt-1.5">
-          Start your free Strata account or finish setup with an email your shop owner already added.
+          {isInviteFlow && inviteState.businessName
+            ? `Finish joining ${inviteState.businessName} and claim your team access.`
+            : "Start your free Strata account or finish setup with an email your shop owner already added."}
         </p>
       </div>
 
       {/* Form card */}
       <Card className="shadow-sm border border-border rounded-2xl p-8">
         <form onSubmit={handleSubmit}>
+          {inviteState.inviteToken ? <input type="hidden" name="inviteToken" value={inviteState.inviteToken} /> : null}
           <div className="flex flex-col gap-5">
+            {isInviteFlow ? (
+              <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-left text-[12px] text-orange-900">
+                Use the invited email below to claim your team access. Once you finish signup, your shop permissions will be attached automatically.
+              </div>
+            ) : null}
             {/* Google button */}
             <Button
               variant="outline"
@@ -99,6 +118,7 @@ export const SignUpComponent = (props: {
                   placeholder="Jane"
                   autoComplete="given-name"
                   {...register("firstName")}
+                  defaultValue={inviteState.firstName}
                   className="h-9 text-[13px] rounded-lg shadow-none"
                 />
               </div>
@@ -111,6 +131,7 @@ export const SignUpComponent = (props: {
                   placeholder="Doe"
                   autoComplete="family-name"
                   {...register("lastName")}
+                  defaultValue={inviteState.lastName}
                   className="h-9 text-[13px] rounded-lg shadow-none"
                 />
               </div>
@@ -127,6 +148,8 @@ export const SignUpComponent = (props: {
                 placeholder="you@example.com"
                 autoComplete="off"
                 {...register("email")}
+                defaultValue={inviteState.email}
+                readOnly={isInviteFlow}
                 className={`h-9 text-[13px] rounded-lg shadow-none${errors?.root?.message ? " border-destructive" : ""}`}
               />
               <p className="text-[12px] text-muted-foreground">

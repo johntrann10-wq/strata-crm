@@ -280,6 +280,43 @@ Use this secure link to choose a new password. This link expires in 1 hour:
 
 If you did not request this, you can ignore this email and your password will stay unchanged.`,
   },
+  team_invite: {
+    subject: "You're invited to join {{businessName}} on Strata",
+    bodyHtml: renderClientShell({
+      businessName: "{{businessName}}",
+      eyebrow: "Team access",
+      title: "Join your shop on Strata",
+      introHtml: `<p style="margin:0;">Hi {{userName}},</p><p style="margin:10px 0 0;">{{inviterName}} added you to <strong>{{businessName}}</strong> on Strata as a <strong>{{roleLabel}}</strong>.</p>`,
+      bodyHtml:
+        renderInfoCard(
+          "Finish setup",
+          "Use the secure link below to create or claim your Strata login. Once you finish, your team access will be ready automatically."
+        ) +
+        renderInfoCard(
+          "Already have a Strata account?",
+          "If you already use Strata, keep using <strong>{{inviteEmail}}</strong> so we can attach this shop to the right account."
+        ),
+      ctaLabel: "Accept team invite",
+      ctaUrl: "{{inviteUrl}}",
+      ctaHint: "Accept team invite: {{inviteUrl}}",
+      showCtaHint: true,
+      footerNote: "This invite link expires in 7 days. If it expires, ask your shop owner or admin to resend it.",
+    }),
+    bodyText: `{{businessName}}
+
+Join your shop on Strata
+
+Hi {{userName}},
+
+{{inviterName}} added you to {{businessName}} on Strata as a {{roleLabel}}.
+
+Use this secure link to create or claim your Strata login:
+{{inviteUrl}}
+
+If you already use Strata, keep using {{inviteEmail}} so we can attach this shop to the right account.
+
+This invite link expires in 7 days. If it expires, ask your shop owner or admin to resend it.`,
+  },
   appointment_confirmation: appointmentConfirmation,
   appointment_reminder: appointmentReminder,
   payment_receipt: paymentReceipt,

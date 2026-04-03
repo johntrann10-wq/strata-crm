@@ -11,8 +11,7 @@ import { wrapAsync } from "../lib/asyncHandler.js";
 import { randomUUID } from "crypto";
 import { getDefaultPermissionsForRole } from "../lib/permissions.js";
 import { createInMemoryRateLimiter } from "../middleware/security.js";
-import { createAccessToken, verifyAccessToken } from "../lib/jwt.js";
-import { createPasswordResetToken, verifyPasswordResetToken } from "../lib/jwt.js";
+import { createAccessToken, createPasswordResetToken, verifyAccessToken, verifyPasswordResetToken, verifyTeamInviteToken } from "../lib/jwt.js";
 import { sendTemplatedEmail } from "../lib/email.js";
 import { isEmailConfigured } from "../lib/env.js";
 
@@ -29,6 +28,7 @@ const signUpSchema = z.object({
   password: z.string().min(8).max(MAX_PASSWORD_LENGTH),
   firstName: z.string().trim().max(80).optional(),
   lastName: z.string().trim().max(80).optional(),
+  inviteToken: z.string().min(1).optional(),
 });
 const forgotPasswordSchema = z.object({
   email: z.string().email().max(MAX_EMAIL_LENGTH),
@@ -186,6 +186,25 @@ async function buildSafeAuthContext(userId: string) {
       error: error instanceof Error ? error.message : String(error),
     });
     return { businesses: [], currentBusinessId: null };
+  }
+}
+
+async function activateInvitedMemberships(userId: string) {
+  try {
+    await db
+      .update(businessMemberships)
+      .set({
+        status: "active",
+        joinedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(businessMemberships.userId, userId), eq(businessMemberships.status, "invited")));
+  } catch (error) {
+    if (!isTenantSchemaDriftError(error)) throw error;
+    logger.warn("business membership schema unavailable during invite activation", {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 /** GET /api/auth/me — current user from JWT. Returns 401 if not signed in. */
@@ -353,7 +372,7 @@ authRouter.post(
     const parsed = signUpSchema.safeParse(req.body);
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
     const email = normalizeEmail(parsed.data.email);
-    const { password, firstName, lastName } = parsed.data;
+    const { password, firstName, lastName, inviteToken } = parsed.data;
     const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     const passwordHash = await bcrypt.hash(password, 10);
     let user:
@@ -368,6 +387,33 @@ authRouter.post(
     if (existing) {
       if (existing.passwordHash) {
         throw new BadRequestError("An account with this email already exists.");
+      }
+
+      const verifiedInvite = inviteToken ? verifyTeamInviteToken(inviteToken) : null;
+      const needsInviteToken = await db
+        .select({ businessId: businessMemberships.businessId })
+        .from(businessMemberships)
+        .where(and(eq(businessMemberships.userId, existing.id), eq(businessMemberships.status, "invited")))
+        .limit(1)
+        .then((rows) => rows.length > 0)
+        .catch((error) => {
+          if (!isTenantSchemaDriftError(error)) throw error;
+          logger.warn("business membership schema unavailable during invite token validation", {
+            userId: existing.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return false;
+        });
+
+      if (needsInviteToken) {
+        if (
+          !verifiedInvite?.userId ||
+          !verifiedInvite?.email ||
+          verifiedInvite.userId !== existing.id ||
+          normalizeEmail(verifiedInvite.email) !== email
+        ) {
+          throw new BadRequestError("This invite link is missing, invalid, or expired. Ask your shop admin to resend it.");
+        }
       }
 
       const [claimedUser] = await db.transaction(async (tx) => {
@@ -569,6 +615,7 @@ authRouter.get(
       user = created;
       logger.info("User signed up via Google", { userId: user.id, email: user.email });
     } else {
+      await activateInvitedMemberships(user.id);
       logger.info("User signed in via Google", { userId: user.id, email: user.email });
     }
     const token = createAccessToken(user.id);

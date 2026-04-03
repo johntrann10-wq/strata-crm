@@ -4,6 +4,7 @@ const JWT_ISSUER = "strata-backend";
 const ACCESS_TOKEN_AUDIENCE = "strata-api";
 const PUBLIC_DOCUMENT_AUDIENCE = "strata-public-document";
 const PASSWORD_RESET_AUDIENCE = "strata-password-reset";
+const TEAM_INVITE_AUDIENCE = "strata-team-invite";
 
 function requireJwtSecret(): string {
   const secret = process.env.JWT_SECRET?.trim();
@@ -71,6 +72,28 @@ export function verifyPasswordResetToken(token: string): { userId?: string; emai
       audience: PASSWORD_RESET_AUDIENCE,
       issuer: JWT_ISSUER,
     }) as { userId?: string; email?: string };
+  } catch {
+    return null;
+  }
+}
+
+export function createTeamInviteToken(userId: string, email: string, businessId: string): string {
+  return jwt.sign({ userId, email, businessId }, requireJwtSecret(), {
+    algorithm: "HS256",
+    audience: TEAM_INVITE_AUDIENCE,
+    expiresIn: "7d",
+    issuer: JWT_ISSUER,
+    subject: userId,
+  });
+}
+
+export function verifyTeamInviteToken(token: string): { userId?: string; email?: string; businessId?: string } | null {
+  try {
+    return jwt.verify(token, requireJwtSecret(), {
+      algorithms: ["HS256"],
+      audience: TEAM_INVITE_AUDIENCE,
+      issuer: JWT_ISSUER,
+    }) as { userId?: string; email?: string; businessId?: string };
   } catch {
     return null;
   }

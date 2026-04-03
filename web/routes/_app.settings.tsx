@@ -139,6 +139,7 @@ type StaffRecord = {
   role?: string | null;
   membershipRole?: string | null;
   membershipStatus?: string | null;
+  inviteDelivery?: "sent" | "not_configured" | "not_needed" | null;
   active?: boolean | null;
 };
 
@@ -160,6 +161,10 @@ const STAFF_ROLES = [
   { value: "service_advisor", label: "Service Advisor" },
   { value: "technician", label: "Technician" },
 ];
+
+function getStaffStatus(teamMember: StaffRecord) {
+  return teamMember.membershipStatus ?? (teamMember.active === false ? "suspended" : "active");
+}
 
 function BillingTab({
   billingStatus,
@@ -503,6 +508,7 @@ export default function SettingsPage() {
   const [{ fetching: savingStaff }, saveStaff] = useAction(api.staff.create);
   const [{ fetching: updatingStaff }, updateStaff] = useAction(api.staff.update);
   const [{ fetching: deletingStaff }, deleteStaff] = useAction(api.staff.delete);
+  const [{ fetching: resendingStaffInvite }, resendStaffInvite] = useAction(api.staff.resendInvite);
   const [{ data: presetSummary }, getBusinessPreset] = useAction(api.getBusinessPreset);
   const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
   const preset = presetSummary as BusinessPresetActionResult | undefined;
@@ -665,9 +671,8 @@ export default function SettingsPage() {
 
   const handleSaveStaff = async () => {
     if (!staffForm.firstName.trim() || !staffForm.lastName.trim()) return;
-    try {
-      if (editingStaff) {
-        await updateStaff({
+    const result = editingStaff
+      ? await updateStaff({
           id: editingStaff.id,
           firstName: staffForm.firstName.trim(),
           lastName: staffForm.lastName.trim(),
@@ -675,33 +680,64 @@ export default function SettingsPage() {
           role: staffForm.role,
           active: staffForm.active,
           status: staffForm.active ? "active" : "suspended",
-        });
-      } else {
-        await saveStaff({
+        })
+      : await saveStaff({
           firstName: staffForm.firstName.trim(),
           lastName: staffForm.lastName.trim(),
           email: staffForm.email.trim() || undefined,
           role: staffForm.role,
           active: staffForm.active,
         });
-      }
-      setTeamDialogOpen(false);
-      refetchTeam();
-      toast.success(editingStaff ? "Team member updated" : "Team member added");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save team member.");
+
+    if (result.error) {
+      toast.error(result.error.message ?? "Could not save team member.");
+      return;
     }
+
+    setTeamDialogOpen(false);
+    setEditingStaff(null);
+    refetchTeam();
+
+    const savedRecord = result.data as StaffRecord | null;
+    if (!editingStaff && savedRecord?.membershipStatus === "invited") {
+      if (savedRecord.inviteDelivery === "sent") {
+        toast.success("Team member added and invite email sent");
+      } else if (savedRecord.inviteDelivery === "not_configured") {
+        toast.warning("Team member added, but invite email could not be sent because transactional email is not configured");
+      } else {
+        toast.success("Team member added");
+      }
+      return;
+    }
+
+    toast.success(editingStaff ? "Team member updated" : "Team member added");
   };
 
   const handleDeleteStaff = async () => {
     if (!deleteStaffId) return;
-    try {
-      await deleteStaff({ id: deleteStaffId });
-      setDeleteStaffId(null);
-      refetchTeam();
-      toast.success("Team member removed");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not remove team member.");
+    const result = await deleteStaff({ id: deleteStaffId });
+    if (result.error) {
+      toast.error(result.error.message ?? "Could not remove team member.");
+      return;
+    }
+    setDeleteStaffId(null);
+    refetchTeam();
+    toast.success("Team member removed");
+  };
+
+  const handleResendStaffInvite = async (teamMember: StaffRecord) => {
+    const result = await resendStaffInvite({ id: teamMember.id });
+    if (result.error) {
+      toast.error(result.error.message ?? "Could not resend team invite.");
+      return;
+    }
+    const inviteDelivery = (result.data as { inviteDelivery?: string } | null)?.inviteDelivery;
+    if (inviteDelivery === "sent") {
+      toast.success("Invite email resent");
+    } else if (inviteDelivery === "not_configured") {
+      toast.warning("Invite could not be emailed because transactional email is not configured");
+    } else {
+      toast.success("Invite processed");
     }
   };
 
@@ -1091,7 +1127,7 @@ export default function SettingsPage() {
                       </div>
                       <p className="mt-2 text-sm font-medium">{systemStatus.message}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        API base: {API_BASE || "same-origin /api"} {businessId ? "• Business context loaded" : "• No business context"}
+                        API base: {API_BASE || "same-origin /api"} {businessId ? "- Business context loaded" : "- No business context"}
                       </p>
                     </div>
                     <Button
@@ -1399,15 +1435,30 @@ export default function SettingsPage() {
                               {`${teamMember.firstName ?? ""} ${teamMember.lastName ?? ""}`.trim() || "Unnamed team member"}
                             </p>
                             <p className="break-words text-xs text-muted-foreground">
-                              {teamMember.email || "No login email"} · {(teamMember.membershipRole ?? teamMember.role ?? "technician").replace(/_/g, " ")}
+                              {teamMember.email || "No login email"} - {(teamMember.membershipRole ?? teamMember.role ?? "technician").replace(/_/g, " ")}
                             </p>
+                            {getStaffStatus(teamMember) === "invited" && teamMember.email ? (
+                              <p className="mt-1 text-xs text-muted-foreground">Awaiting account claim from {teamMember.email}</p>
+                            ) : null}
                           </div>
                         </div>
                         <div className="flex items-center justify-between gap-2 sm:justify-end">
                           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground capitalize">
-                            {teamMember.membershipStatus ?? (teamMember.active === false ? "suspended" : "active")}
+                            {getStaffStatus(teamMember)}
                           </span>
                           <div className="flex items-center gap-2">
+                            {getStaffStatus(teamMember) === "invited" && teamMember.email ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-9"
+                                onClick={() => handleResendStaffInvite(teamMember)}
+                                disabled={!canManageTeam || resendingStaffInvite}
+                              >
+                                {resendingStaffInvite ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                                Resend invite
+                              </Button>
+                            ) : null}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -1564,7 +1615,7 @@ export default function SettingsPage() {
                 placeholder="alex@shop.com"
               />
               <p className="text-xs text-muted-foreground">
-                Add an email if this person should sign in. They can finish setup by using Sign up with that same email.
+                Add an email if this person should sign in. Strata will create the login record and send an invite so they can claim access cleanly.
               </p>
             </div>
             <div className="space-y-1.5">
