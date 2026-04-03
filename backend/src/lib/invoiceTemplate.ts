@@ -48,6 +48,7 @@ export type InvoiceTemplateData = {
   client: InvoiceTemplateClient;
   lineItems: InvoiceTemplateLineItem[];
   payments: InvoiceTemplatePayment[];
+  publicPaymentUrl?: string | null;
 };
 
 function money(value: string | number | null | undefined): string {
@@ -79,6 +80,7 @@ export function renderInvoiceHtml(data: InvoiceTemplateData): string {
   const dueDate = escapeHtml(formatDate(data.dueDate, tz) || "-");
   const balance = Math.max(numberValue(data.total) - numberValue(data.totalPaid), 0);
   const notes = escapeHtml(data.notes ?? "");
+  const publicPaymentUrl = data.publicPaymentUrl?.trim() || "";
   const discountAmount = money(data.discountAmount);
   const taxAmount = money(data.taxAmount);
   const taxRate = escapeHtml(String(data.taxRate ?? 0));
@@ -116,6 +118,9 @@ export function renderInvoiceHtml(data: InvoiceTemplateData): string {
     .card { border:1px solid var(--line); border-radius:18px; padding:18px; background:#fff; } .soft { background:var(--panel); }
     .party { font-size:18px; font-weight:700; letter-spacing:-.02em; margin:0 0 6px; } .detail { color:var(--muted); font-size:14px; word-break:break-word; }
     .amount { border-radius:20px; padding:20px 22px; background:linear-gradient(180deg, rgba(249,115,22,.08), rgba(255,255,255,.96)); border:1px solid rgba(249,115,22,.18); } .amount .big { margin:8px 0 6px; font-size:36px; line-height:1; letter-spacing:-.04em; font-weight:800; }
+    .cta { margin-top:16px; display:inline-flex; align-items:center; justify-content:center; border-radius:999px; background:#f97316; color:#fff; padding:11px 18px; font-size:14px; font-weight:700; text-decoration:none; box-shadow:0 12px 24px rgba(249,115,22,.22); }
+    .cta:hover { background:#ea580c; }
+    .cta-note { margin-top:10px; color:#64748b; font-size:12px; }
     table { width:100%; border-collapse:collapse; } .lines { border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#fff; }
     .lines th { background:var(--panel); color:#64748b; font-size:11px; letter-spacing:.14em; text-transform:uppercase; text-align:left; padding:13px 16px; border-bottom:1px solid var(--line); }
     .lines td { padding:15px 16px; border-bottom:1px solid #edf2f7; font-size:14px; vertical-align:top; } .lines tr:last-child td { border-bottom:none; } .desc { font-weight:600; } .num { text-align:right; white-space:nowrap; }
@@ -166,6 +171,7 @@ export function renderInvoiceHtml(data: InvoiceTemplateData): string {
             <p class="section-title">Total Invoice</p>
             <div class="big">${money(data.total)}</div>
             <div class="detail">${balance > 0 ? `${money(balance)} remaining` : "Paid in full"}</div>
+            ${balance > 0 && publicPaymentUrl ? `<a class="cta" href="${escapeHtml(publicPaymentUrl)}">Pay ${money(balance)} with Stripe</a><div class="cta-note">Secure checkout powered by Stripe.</div>` : ""}
           </div>
         </section>
         <section class="notice">

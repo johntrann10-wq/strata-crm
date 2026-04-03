@@ -929,6 +929,26 @@ invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
   const lineItemsRows = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, row.id));
   const paymentsList = await listActiveInvoicePayments(row.id);
   const totalPaid = paymentsList.reduce((sum, p) => sum + Number(p.amount ?? 0), 0);
+  const remainingBalance = Math.max(Number(row.total ?? 0) - totalPaid, 0);
+  const [connectedBusiness] = await db
+    .select({ stripeConnectAccountId: businesses.stripeConnectAccountId })
+    .from(businesses)
+    .where(eq(businesses.id, access.businessId))
+    .limit(1);
+  let publicPaymentUrl: string | null = null;
+  if (
+    row.status !== "void" &&
+    row.status !== "paid" &&
+    remainingBalance > 0 &&
+    connectedBusiness?.stripeConnectAccountId
+  ) {
+    const account = await retrieveConnectAccount({ accountId: connectedBusiness.stripeConnectAccountId });
+    if (account?.ready) {
+      publicPaymentUrl = buildPublicDocumentUrl(
+        `/api/invoices/${row.id}/public-pay?token=${encodeURIComponent(token)}`
+      );
+    }
+  }
   const templateData: InvoiceTemplateData = {
     invoiceNumber: row.invoiceNumber,
     status: row.status,
@@ -960,6 +980,7 @@ invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
     },
     lineItems: lineItemsRows.map((li) => ({ description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, total: li.total })),
     payments: paymentsList.map((p) => ({ amount: p.amount, method: p.method, paidAt: p.paidAt })),
+    publicPaymentUrl,
   };
   const html = renderInvoiceHtml(templateData);
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -968,6 +989,76 @@ invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
   res.setHeader("Expires", "0");
   res.send(html);
 });
+
+invoicesRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Response) => {
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  const access = verifyPublicDocumentToken(token, { kind: "invoice", entityId: req.params.id });
+  if (!access) throw new ForbiddenError("Invoice access link is invalid or expired.");
+
+  const [invoice] = await db
+    .select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      status: invoices.status,
+      total: invoices.total,
+      clientId: invoices.clientId,
+    })
+    .from(invoices)
+    .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, access.businessId)))
+    .limit(1);
+  if (!invoice) throw new NotFoundError("Invoice not found.");
+  if (invoice.status === "void") throw new BadRequestError("Void invoices cannot accept Stripe payments.");
+  if (invoice.status === "paid") throw new BadRequestError("This invoice is already fully paid.");
+
+  const [business] = await db
+    .select({ stripeConnectAccountId: businesses.stripeConnectAccountId })
+    .from(businesses)
+    .where(eq(businesses.id, access.businessId))
+    .limit(1);
+  if (!business?.stripeConnectAccountId) {
+    throw new BadRequestError("This business has not connected Stripe yet.");
+  }
+
+  const account = await retrieveConnectAccount({ accountId: business.stripeConnectAccountId });
+  if (!account?.ready) {
+    throw new BadRequestError("This business is still finishing Stripe setup.");
+  }
+
+  const totalPaid = await getActiveInvoicePaymentTotal(invoice.id);
+  const total = Number(invoice.total ?? 0);
+  const remaining = Math.max(0, total - totalPaid);
+  if (remaining <= 0) throw new BadRequestError("This invoice has no remaining balance.");
+
+  const [client] = await db
+    .select({
+      firstName: clients.firstName,
+      lastName: clients.lastName,
+      email: clients.email,
+    })
+    .from(clients)
+    .where(and(eq(clients.id, invoice.clientId), eq(clients.businessId, access.businessId)))
+    .limit(1);
+
+  const clientName = [client?.firstName, client?.lastName].filter(Boolean).join(" ").trim() || null;
+  const returnTo = buildPublicDocumentUrl(
+    `/api/invoices/${encodeURIComponent(invoice.id)}/public-html?token=${encodeURIComponent(token)}`
+  );
+  const result = await createInvoicePaymentCheckoutSession({
+    businessId: access.businessId,
+    invoiceId: invoice.id,
+    invoiceNumber: invoice.invoiceNumber ?? null,
+    amountCents: Math.round(remaining * 100),
+    connectedAccountId: business.stripeConnectAccountId,
+    customerEmail: client?.email ?? null,
+    customerName: clientName,
+    successUrl: `${returnTo}&stripePayment=success`,
+    cancelUrl: `${returnTo}&stripePayment=cancelled`,
+  });
+  if (!result?.url) {
+    throw new BadRequestError("Could not create Stripe Checkout session.");
+  }
+  res.redirect(303, result.url);
+}));
 
 invoicesRouter.post(
   "/",
