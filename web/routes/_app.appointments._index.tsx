@@ -49,6 +49,13 @@ type AppointmentListRecord = {
   assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
 };
 
+type AppointmentListStats = {
+  scheduled: number;
+  confirmed: number;
+  inProgress: number;
+  myQueue: number;
+};
+
 const QUICK_TRANSITIONS: Record<string, string[]> = {
   scheduled: ["confirmed", "cancelled"],
   confirmed: ["in_progress", "cancelled"],
@@ -93,6 +100,73 @@ function matchesTab(status: string | null | undefined, tab: AppointmentStatusTab
   if (tab === "all") return true;
   if (tab === "cancelled") return status === "cancelled" || status === "no-show";
   return status === tab;
+}
+
+function buildAppointmentStats(records: AppointmentListRecord[], myStaffRecord: StaffRecord | null): AppointmentListStats {
+  const scheduled = records.filter((appointment) => appointment.status === "scheduled").length;
+  const confirmed = records.filter((appointment) => appointment.status === "confirmed").length;
+  const inProgress = records.filter((appointment) => appointment.status === "in_progress").length;
+  const myQueue = myStaffRecord
+    ? records.filter(
+        (appointment) =>
+          appointment.assignedStaff?.id === myStaffRecord.id &&
+          ["scheduled", "confirmed", "in_progress"].includes(appointment.status ?? "")
+      ).length
+    : 0;
+
+  return { scheduled, confirmed, inProgress, myQueue };
+}
+
+function getAppointmentClientName(appointment: AppointmentListRecord) {
+  return [appointment.client?.firstName, appointment.client?.lastName].filter(Boolean).join(" ").trim();
+}
+
+function getAppointmentVehicleLabel(appointment: AppointmentListRecord) {
+  return [appointment.vehicle?.year, appointment.vehicle?.make, appointment.vehicle?.model].filter(Boolean).join(" ").trim();
+}
+
+function getAppointmentTechName(appointment: AppointmentListRecord) {
+  const techName = [appointment.assignedStaff?.firstName, appointment.assignedStaff?.lastName].filter(Boolean).join(" ").trim();
+  return techName || "Unassigned";
+}
+
+function getAppointmentQuoteHref(appointment: AppointmentListRecord) {
+  if (!appointment.client?.id) return null;
+  return `/quotes/new?clientId=${appointment.client.id}${
+    appointment.vehicle?.id ? `&vehicleId=${appointment.vehicle.id}` : ""
+  }`;
+}
+
+function getAppointmentInvoiceHref(appointment: AppointmentListRecord) {
+  if (appointment.status !== "completed" || !appointment.client?.id) return null;
+  return `/invoices/new?clientId=${appointment.client.id}&appointmentId=${appointment.id}`;
+}
+
+function getAppointmentScheduleLabel(timestamp?: string | null, fallback = "") {
+  if (!timestamp) return fallback;
+  try {
+    return format(new Date(timestamp), "MMM d, yyyy h:mm a");
+  } catch {
+    return fallback;
+  }
+}
+
+function getAppointmentEndTimeLabel(timestamp?: string | null) {
+  if (!timestamp) return "No end time";
+  try {
+    return `Ends ${format(new Date(timestamp), "h:mm a")}`;
+  } catch {
+    return "No end time";
+  }
+}
+
+function getAppointmentTimeOnlyLabel(timestamp?: string | null) {
+  if (!timestamp) return "No end time";
+  try {
+    return format(new Date(timestamp), "h:mm a");
+  } catch {
+    return "No end time";
+  }
 }
 
 function MobileFilterSelect({
@@ -235,19 +309,7 @@ export default function AppointmentsPage() {
       }),
     [records, activeTab, myStaffRecord]
   );
-  const stats = useMemo(() => {
-    const scheduled = records.filter((appointment) => appointment.status === "scheduled").length;
-    const confirmed = records.filter((appointment) => appointment.status === "confirmed").length;
-    const inProgress = records.filter((appointment) => appointment.status === "in_progress").length;
-    const myQueue = myStaffRecord
-      ? records.filter(
-          (appointment) =>
-            appointment.assignedStaff?.id === myStaffRecord.id &&
-            ["scheduled", "confirmed", "in_progress"].includes(appointment.status ?? "")
-        ).length
-      : 0;
-    return { scheduled, confirmed, inProgress, myQueue };
-  }, [records, myStaffRecord]);
+  const stats = useMemo(() => buildAppointmentStats(records, myStaffRecord), [records, myStaffRecord]);
 
   return (
     <div className="page-content page-section max-w-6xl">
@@ -418,29 +480,12 @@ export default function AppointmentsPage() {
             <span className="text-right">Actions</span>
           </div>
           {filteredAppointments.map((appointment) => {
-            const clientName = `${appointment.client?.firstName ?? ""} ${appointment.client?.lastName ?? ""}`.trim();
-            const vehicleLabel = [appointment.vehicle?.year, appointment.vehicle?.make, appointment.vehicle?.model]
-              .filter(Boolean)
-              .join(" ");
-            const techName = appointment.assignedStaff
-              ? `${appointment.assignedStaff.firstName ?? ""} ${appointment.assignedStaff.lastName ?? ""}`.trim()
-              : "Unassigned";
-            const quoteHref = appointment.client?.id
-              ? `/quotes/new?clientId=${appointment.client.id}${
-                  appointment.vehicle?.id ? `&vehicleId=${appointment.vehicle.id}` : ""
-                }`
-              : null;
-            const invoiceHref =
-              appointment.status === "completed" && appointment.client?.id
-                ? `/invoices/new?clientId=${appointment.client.id}&appointmentId=${appointment.id}`
-                : null;
-
-            let formattedTime = "";
-            try {
-              formattedTime = appointment.startTime ? format(new Date(appointment.startTime), "MMM d, yyyy h:mm a") : "";
-            } catch {
-              formattedTime = "";
-            }
+            const clientName = getAppointmentClientName(appointment);
+            const vehicleLabel = getAppointmentVehicleLabel(appointment);
+            const techName = getAppointmentTechName(appointment);
+            const quoteHref = getAppointmentQuoteHref(appointment);
+            const invoiceHref = getAppointmentInvoiceHref(appointment);
+            const formattedTime = getAppointmentScheduleLabel(appointment.startTime, "");
 
             return (
               <div
@@ -470,7 +515,7 @@ export default function AppointmentsPage() {
                     >
                       <span className="block">{formattedTime || "Unscheduled"}</span>
                       <span className="mt-1 hidden text-xs text-muted-foreground lg:block">
-                        {appointment.endTime ? `Ends ${format(new Date(appointment.endTime), "h:mm a")}` : "No end time"}
+                        {getAppointmentEndTimeLabel(appointment.endTime)}
                       </span>
                     </Link>
                   </div>
@@ -486,7 +531,7 @@ export default function AppointmentsPage() {
                   >
                     <span className="block">{techName}</span>
                     <span className="mt-1 hidden text-xs text-muted-foreground lg:block">
-                      {appointment.endTime ? format(new Date(appointment.endTime), "h:mm a") : "No end time"}
+                      {getAppointmentTimeOnlyLabel(appointment.endTime)}
                     </span>
                   </Link>
                   <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:justify-end lg:gap-2">
