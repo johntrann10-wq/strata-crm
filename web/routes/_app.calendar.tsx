@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   type ApptRecord,
   ConflictBanner,
@@ -24,7 +25,7 @@ import {
   navigateDate,
 } from "../components/CalendarViews";
 import { dayEnd, dayStart, getCalendarDaySnapshot, getJobPhaseLabel, getJobSpanEnd, getJobSpanStart, getActiveCalendarAppointments, hasLaborOnDay } from "@/lib/calendarJobSpans";
-import { buildCalendarBlockInternalNotes, getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock, type CalendarBlockMode, type CalendarBlockPreset } from "@/lib/calendarBlocks";
+import { buildCalendarBlockInternalNotes, getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock, parseCalendarBlock, type CalendarBlockMode, type CalendarBlockPreset } from "@/lib/calendarBlocks";
 
 function toLocalDateString(date: Date): string {
   const year = date.getFullYear();
@@ -72,6 +73,85 @@ function eachDateInclusive(startValue: string, endValue: string): Date[] {
   return dates;
 }
 
+function buildQuarterHourOptions() {
+  return Array.from({ length: 96 }, (_, index) => {
+    const hours = Math.floor(index / 4);
+    const minutes = (index % 4) * 15;
+    const value = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return {
+      value,
+      label: date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }),
+    };
+  });
+}
+
+function ResponsiveTimeSelect({
+  id,
+  value,
+  onChange,
+  options,
+  placeholder,
+  desktopClassName,
+  mobileClassName,
+  useNative,
+}: {
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  placeholder: string;
+  desktopClassName?: string;
+  mobileClassName?: string;
+  useNative: boolean;
+}) {
+  if (useNative) {
+    return (
+      <div className="relative">
+        <select
+          id={id}
+          className={cn(
+            "h-11 w-full appearance-none rounded-xl border border-input/90 bg-background px-3 pr-10 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40",
+            mobileClassName
+          )}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <option value="" disabled>
+            {placeholder}
+          </option>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <ChevronLeft className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-180 text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger id={id} className={desktopClassName}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent className="max-h-72">
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function getCalendarBlockNote(internalNotes: string | null | undefined): string | null {
   const [, ...rest] = String(internalNotes ?? "").split(/\r?\n/);
   const note = rest.join("\n").trim();
@@ -96,6 +176,7 @@ export default function CalendarPage() {
   const [blockStaffId, setBlockStaffId] = useState("none");
   const [blockNotes, setBlockNotes] = useState("");
   const [selectedBlock, setSelectedBlock] = useState<ApptRecord | null>(null);
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const layoutInitializedRef = useRef(false);
 
   useEffect(() => {
@@ -198,6 +279,11 @@ export default function CalendarPage() {
 
   const [{ fetching: rescheduling }, runReschedule] = useAction(api.appointment.update);
   const [{ fetching: creatingBlock }, createAppointment] = useAction(api.appointment.create);
+  const [{ fetching: updatingBlock }, updateAppointment] = useAction(api.appointment.update);
+  const [{ fetching: unblockingBlock }, updateAppointmentStatus] = useAction(api.appointment.updateStatus);
+  const timeOptions = useMemo(() => buildQuarterHourOptions(), []);
+  const timeSelectTriggerClassName =
+    "h-11 rounded-xl border-input/90 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
 
   async function handleReschedule(appointmentId: string, newStart: Date, newEnd: Date | null) {
     const result = await runReschedule({ id: appointmentId, startTime: newStart, endTime: newEnd ?? undefined });
@@ -255,6 +341,7 @@ export default function CalendarPage() {
 
   function handleOpenBlockDialog() {
     const selectedDate = toLocalDateString(currentDate);
+    setEditingBlockId(null);
     setBlockMode("time");
     setBlockPreset("unavailable");
     setBlockStartDate(selectedDate);
@@ -264,6 +351,34 @@ export default function CalendarPage() {
     setBlockStaffId("none");
     setBlockNotes("");
     setShowBlockDialog(true);
+  }
+
+  function handleEditBlock(block: ApptRecord) {
+    const parsed = parseCalendarBlock(block.internalNotes);
+    const startDate = toLocalDateString(new Date(block.startTime));
+    const endDate = toLocalDateString(new Date(block.endTime));
+    setEditingBlockId(block.id);
+    setBlockMode(parsed?.mode ?? "time");
+    setBlockPreset(parsed?.preset ?? "unavailable");
+    setBlockStartDate(startDate);
+    setBlockEndDate(startDate === endDate ? startDate : endDate);
+    setBlockStartTime(block.startTime ? new Date(block.startTime).toTimeString().slice(0, 5) : "09:00");
+    setBlockEndTime(block.endTime ? new Date(block.endTime).toTimeString().slice(0, 5) : "10:00");
+    setBlockStaffId(block.assignedStaffId ?? "none");
+    setBlockNotes(getCalendarBlockNote(block.internalNotes) ?? "");
+    setSelectedBlock(null);
+    setShowBlockDialog(true);
+  }
+
+  async function handleUnblock(block: ApptRecord) {
+    const result = await updateAppointmentStatus({ id: block.id, status: "cancelled" } as any);
+    if (result.error) {
+      toast.error("Could not remove block: " + result.error.message);
+      return;
+    }
+    toast.success("Block removed");
+    setSelectedBlock(null);
+    void refetchAppointments();
   }
 
   async function handleCreateBlock(event: FormEvent<HTMLFormElement>) {
@@ -290,13 +405,45 @@ export default function CalendarPage() {
       }
     }
 
-    const dates = eachDateInclusive(blockStartDate, effectiveEndDate);
     const title = getCalendarBlockLabel({ title: null, internalNotes: buildCalendarBlockInternalNotes({ mode: blockMode, preset: blockPreset }) });
     const internalNotes = buildCalendarBlockInternalNotes(
       { mode: blockMode, preset: blockPreset },
       blockNotes
     );
     const assignedStaffId = blockStaffId === "none" ? undefined : blockStaffId;
+
+    if (editingBlockId) {
+      const startTime =
+        blockMode === "full-day"
+          ? combineDateAndTime(blockStartDate, "00:00")
+          : combineDateAndTime(blockStartDate, blockStartTime);
+      const endTime =
+        blockMode === "full-day"
+          ? combineDateAndTime(effectiveEndDate, "23:59")
+          : combineDateAndTime(blockStartDate, blockEndTime);
+
+      const result = await updateAppointment({
+        id: editingBlockId,
+        title,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        assignedStaffId,
+        internalNotes,
+      } as any);
+
+      if (result.error) {
+        toast.error("Could not update block: " + result.error.message);
+        return;
+      }
+
+      toast.success("Block updated");
+      setShowBlockDialog(false);
+      setEditingBlockId(null);
+      void refetchAppointments();
+      return;
+    }
+
+    const dates = eachDateInclusive(blockStartDate, effectiveEndDate);
 
     for (const date of dates) {
       const dayValue = toLocalDateString(date);
@@ -329,6 +476,7 @@ export default function CalendarPage() {
       `${dates.length} ${dates.length === 1 ? "calendar block" : "calendar blocks"} created`
     );
     setShowBlockDialog(false);
+    setEditingBlockId(null);
     void refetchAppointments();
   }
 
@@ -926,7 +1074,13 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <Dialog open={showBlockDialog} onOpenChange={setShowBlockDialog}>
+      <Dialog
+        open={showBlockDialog}
+        onOpenChange={(open) => {
+          setShowBlockDialog(open);
+          if (!open) setEditingBlockId(null);
+        }}
+      >
         <DialogContent className="max-w-[calc(100vw-1.5rem)] rounded-[1.75rem] p-0 sm:max-w-lg">
           <DialogHeader>
             <div className="rounded-t-[1.75rem] border-b border-border/60 bg-[radial-gradient(circle_at_top_left,rgba(148,163,184,0.14),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 py-5 sm:px-6">
@@ -935,7 +1089,7 @@ export default function CalendarPage() {
                 Unavailable time
               </div>
               <DialogTitle className="mt-3 text-left text-xl font-semibold tracking-[-0.03em] text-slate-950">
-                Block time
+                {editingBlockId ? "Edit block" : "Block time"}
               </DialogTitle>
             </div>
           </DialogHeader>
@@ -1028,11 +1182,27 @@ export default function CalendarPage() {
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="block-start-time">Start time</Label>
-                    <Input id="block-start-time" type="time" step={900} value={blockStartTime} onChange={(event) => setBlockStartTime(event.target.value)} className="h-11 rounded-xl" />
+                    <ResponsiveTimeSelect
+                      id="block-start-time"
+                      value={blockStartTime}
+                      onChange={setBlockStartTime}
+                      options={timeOptions}
+                      placeholder="Start time"
+                      useNative={isMobileLayout}
+                      desktopClassName={timeSelectTriggerClassName}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="block-end-time">End time</Label>
-                    <Input id="block-end-time" type="time" step={900} value={blockEndTime} onChange={(event) => setBlockEndTime(event.target.value)} className="h-11 rounded-xl" />
+                    <ResponsiveTimeSelect
+                      id="block-end-time"
+                      value={blockEndTime}
+                      onChange={setBlockEndTime}
+                      options={timeOptions}
+                      placeholder="End time"
+                      useNative={isMobileLayout}
+                      desktopClassName={timeSelectTriggerClassName}
+                    />
                   </div>
                 </div>
               ) : null}
@@ -1070,8 +1240,8 @@ export default function CalendarPage() {
               <Button type="button" variant="outline" onClick={() => setShowBlockDialog(false)} disabled={creatingBlock} className="h-11 rounded-xl">
                 Cancel
               </Button>
-              <Button type="submit" disabled={creatingBlock} className="h-11 rounded-xl">
-                {creatingBlock ? "Saving..." : "Save block"}
+              <Button type="submit" disabled={creatingBlock || updatingBlock} className="h-11 rounded-xl">
+                {creatingBlock || updatingBlock ? "Saving..." : editingBlockId ? "Save changes" : "Save block"}
               </Button>
             </DialogFooter>
           </form>
@@ -1137,6 +1307,12 @@ export default function CalendarPage() {
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setSelectedBlock(null)}>
                   Close
+                </Button>
+                <Button type="button" variant="outline" onClick={() => handleEditBlock(selectedBlock)}>
+                  Edit block
+                </Button>
+                <Button type="button" variant="destructive" onClick={() => void handleUnblock(selectedBlock)} disabled={unblockingBlock}>
+                  {unblockingBlock ? "Removing..." : "Unblock"}
                 </Button>
               </DialogFooter>
             </>
