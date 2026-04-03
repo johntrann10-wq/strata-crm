@@ -523,14 +523,14 @@ export default function VehicleDetailPage() {
           />
           <VehicleMetricCard
             icon={FileText}
-            label="Unpaid invoices"
+            label="Invoices to collect"
             value={formatCurrency(
               unpaidInvoices.reduce(
                 (sum, invoice) => sum + invoiceBalance(invoice as Record<string, unknown>),
                 0
               )
             )}
-            detail={`${unpaidInvoices.length} awaiting payment`}
+            detail={`${unpaidInvoices.length} awaiting collection`}
           />
           <VehicleMetricCard
             icon={CalendarPlus}

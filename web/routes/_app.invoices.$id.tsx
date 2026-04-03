@@ -891,7 +891,7 @@ export default function InvoiceDetailPage() {
               {formatCurrency(remainingBalance)}
             </p>
             <p className="text-sm text-muted-foreground">
-              {remainingBalance > 0 ? "Outstanding amount to collect" : "Fully collected"}
+              {remainingBalance > 0 ? "Balance still to collect" : "Fully collected"}
             </p>
           </CardContent>
         </Card>

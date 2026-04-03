@@ -701,7 +701,7 @@ export default function ClientDetailPage() {
         <div className="grid max-w-full gap-3 grid-cols-2 xl:grid-cols-4">
           <WorkflowMetricCard icon={ClipboardList} label="Active jobs" value={String(activeJobsCount)} detail={activeJobsCount > 0 ? "In progress" : "Clear"} />
           <WorkflowMetricCard icon={Receipt} label="Open quotes" value={`$${openQuoteValue.toFixed(2)}`} detail={`${quoteList.filter((quote) => ["draft", "sent"].includes(String((quote as any).status ?? ""))).length} open`} />
-          <WorkflowMetricCard icon={FileText} label="Unpaid invoices" value={formatCurrency(unpaidInvoiceValue)} detail={`${invoiceList.filter((invoice) => ["sent", "partial"].includes(String((invoice as any).status ?? ""))).length} open`} />
+          <WorkflowMetricCard icon={FileText} label="Invoices to collect" value={formatCurrency(unpaidInvoiceValue)} detail={`${invoiceList.filter((invoice) => ["sent", "partial"].includes(String((invoice as any).status ?? ""))).length} awaiting collection`} />
           <WorkflowMetricCard icon={Car} label="Vehicles" value={String(vehicleList.length)} detail={vehicleList.length > 0 ? "On file" : "None"} />
         </div>
 
