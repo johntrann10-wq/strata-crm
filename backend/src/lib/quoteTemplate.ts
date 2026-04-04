@@ -119,7 +119,6 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
         <div>
           <p class="eyebrow">Customer Estimate</p>
           <h1>${businessName}</h1>
-          <p class="sub">Proposed work and pricing in one clean estimate.</p>
           <div class="stack">
             ${data.business.email ? `<div>${escapeHtml(data.business.email)}</div>` : ""}
             ${data.business.phone ? `<div>${escapeHtml(data.business.phone)}</div>` : ""}
