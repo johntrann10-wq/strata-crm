@@ -113,6 +113,8 @@ export const businesses = pgTable("businesses", {
   timezone: text("timezone").default("America/New_York"),
   currency: text("currency").default("USD"),
   defaultTaxRate: decimal("default_tax_rate", { precision: 5, scale: 2 }).default("0"),
+  defaultAdminFee: decimal("default_admin_fee", { precision: 12, scale: 2 }).default("0"),
+  defaultAdminFeeEnabled: boolean("default_admin_fee_enabled").default(false),
   appointmentBufferMinutes: integer("appointment_buffer_minutes").default(15),
   nextInvoiceNumber: integer("next_invoice_number").default(1).notNull(),
   onboardingComplete: boolean("onboarding_complete").default(false),

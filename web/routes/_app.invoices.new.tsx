@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useSearchParams, useOutletContext } from "react-router";
 import type { FormEvent } from "react";
 import { useFindFirst, useFindMany, useFindOne, useAction } from "../hooks/useApi";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
@@ -60,6 +61,8 @@ type AppointmentServicePrefillRecord = {
   unitPrice?: number | string | null;
   service?: { name?: string | null; price?: number | string | null } | null;
 };
+
+const DEFAULT_ADMIN_FEE_LABEL = "Admin fee";
 
 function buildAppointmentInvoiceItems(
   appointmentServices: AppointmentServicePrefillRecord[],
@@ -147,7 +150,7 @@ export default function NewInvoicePage() {
 
   const [{ data: businessRecord }] = useFindFirst(api.business, {
     filter: businessId ? { id: { equals: businessId } } : { id: { equals: "" } },
-    select: { id: true, defaultTaxRate: true },
+    select: { id: true, defaultTaxRate: true, defaultAdminFee: true, defaultAdminFeeEnabled: true },
     pause: !businessId,
   });
 
@@ -248,12 +251,16 @@ export default function NewInvoicePage() {
   const [dueDate, setDueDate] = useState(() => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [notes, setNotes] = useState("");
   const [taxRate, setTaxRate] = useState<number>(0);
+  const [applyTax, setApplyTax] = useState(false);
+  const [applyAdminFee, setApplyAdminFee] = useState(false);
+  const [adminFeeAmount, setAdminFeeAmount] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { id: crypto.randomUUID(), description: "", qty: 1, unitPrice: 0 },
   ]);
   const [submitting, setSubmitting] = useState(false);
   const [submitMode, setSubmitMode] = useState<'draft' | 'sent'>('draft');
+  const hasSeededBusinessDefaults = useRef(false);
 
   // Pre-fill from linked quote
   useEffect(() => {
@@ -279,8 +286,10 @@ export default function NewInvoicePage() {
       }
     }
 
-    if (taxRate === 0 && (quoteData as any).taxRate != null && (quoteData as any).taxRate !== "") {
-      setTaxRate(Number((quoteData as any).taxRate));
+    if ((quoteData as any).taxRate != null && (quoteData as any).taxRate !== "") {
+      const nextTaxRate = Number((quoteData as any).taxRate);
+      setTaxRate(nextTaxRate);
+      setApplyTax(nextTaxRate > 0);
     }
 
     if (notes === "" && (quoteData as any).notes) {
@@ -338,17 +347,27 @@ export default function NewInvoicePage() {
     }
   }, [apptServices, appointmentRecord, lineItems]);
 
-  // Set default tax rate from business when loaded
+  // Set default invoice charges from business when loaded
   useEffect(() => {
-    if (businessRecord?.defaultTaxRate != null) {
-      setTaxRate(businessRecord.defaultTaxRate);
-    }
-  }, [businessRecord?.defaultTaxRate]);
+    if (!businessRecord || hasSeededBusinessDefaults.current || Boolean(quoteIdParam)) return;
+    const defaultTaxRate = Number(businessRecord.defaultTaxRate ?? 0);
+    const defaultAdminFee = Number((businessRecord as { defaultAdminFee?: number | string | null }).defaultAdminFee ?? 0);
+    setTaxRate(defaultTaxRate);
+    setApplyTax(defaultTaxRate > 0);
+    setAdminFeeAmount(defaultAdminFee);
+    setApplyAdminFee(
+      Boolean((businessRecord as { defaultAdminFeeEnabled?: boolean | null }).defaultAdminFeeEnabled) && defaultAdminFee > 0
+    );
+    hasSeededBusinessDefaults.current = true;
+  }, [businessRecord, quoteIdParam]);
 
   // Calculations
   const subtotal = lineItems.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
-  const taxAmount = (subtotal * taxRate) / 100;
-  const total = subtotal + taxAmount - (discountAmount || 0);
+  const effectiveAdminFee = applyAdminFee ? adminFeeAmount : 0;
+  const taxableSubtotal = subtotal + effectiveAdminFee;
+  const effectiveTaxRate = applyTax ? taxRate : 0;
+  const taxAmount = (taxableSubtotal * effectiveTaxRate) / 100;
+  const total = taxableSubtotal + taxAmount - (discountAmount || 0);
 
   const addLineItem = () => {
     setLineItems((prev) => [
@@ -442,9 +461,19 @@ export default function NewInvoicePage() {
           description: item.description,
           quantity: item.qty,
           unitPrice: item.unitPrice,
-        })),
+        })).concat(
+          effectiveAdminFee > 0
+            ? [
+                {
+                  description: DEFAULT_ADMIN_FEE_LABEL,
+                  quantity: 1,
+                  unitPrice: effectiveAdminFee,
+                },
+              ]
+            : []
+        ),
         discountAmount: discountAmount || 0,
-        taxRate,
+        taxRate: effectiveTaxRate,
         notes: notes.trim() || undefined,
         dueDate: dueDate ? new Date(dueDate + "T12:00:00").toISOString() : undefined,
       });
@@ -785,24 +814,62 @@ export default function NewInvoicePage() {
                   <span className="font-medium">${subtotal.toFixed(2)}</span>
                 </div>
 
-                {/* Tax Rate */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>Tax</span>
-                    <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={taxRate}
-                        onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
-                        className="w-16 h-7 text-sm px-2"
-                      />
-                      <span className="text-sm">%</span>
+                <div className="space-y-2 rounded-lg border border-border/70 bg-background/70 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">Apply tax</p>
+                      <p className="text-xs text-muted-foreground">Use the saved business rate or override it for this invoice.</p>
                     </div>
+                    <Switch checked={applyTax} onCheckedChange={setApplyTax} />
                   </div>
-                  <span className="text-sm font-medium">${taxAmount.toFixed(2)}</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>Tax</span>
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={taxRate}
+                          onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+                          className="w-16 h-7 text-sm px-2"
+                          disabled={!applyTax}
+                        />
+                        <span className="text-sm">%</span>
+                      </div>
+                    </div>
+                    <span className="text-sm font-medium">${taxAmount.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-lg border border-border/70 bg-background/70 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">Add admin fee</p>
+                      <p className="text-xs text-muted-foreground">Adds a separate admin fee line item before the invoice is saved.</p>
+                    </div>
+                    <Switch checked={applyAdminFee} onCheckedChange={setApplyAdminFee} />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>Admin fee</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm">$</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={adminFeeAmount === 0 ? "" : adminFeeAmount}
+                          onChange={(e) => setAdminFeeAmount(parseFloat(e.target.value) || 0)}
+                          className="w-20 h-7 text-sm px-2"
+                          disabled={!applyAdminFee}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-sm font-medium">${effectiveAdminFee.toFixed(2)}</span>
+                  </div>
                 </div>
 
                 {/* Discount */}

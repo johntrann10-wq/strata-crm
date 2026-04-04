@@ -821,7 +821,7 @@ export default function SettingsPage() {
     };
   }, [canViewDiagnostics]);
 
-  const handleFieldChange = (field: keyof BusinessSettingsFormData, value: string | number) => {
+  const handleFieldChange = (field: keyof BusinessSettingsFormData, value: string | number | boolean) => {
     setFormData((current) => ({ ...current, [field]: value }));
   };
 
@@ -1079,6 +1079,8 @@ export default function SettingsPage() {
         state: formData.state || null,
         zip: formData.zip || null,
         defaultTaxRate: formData.defaultTaxRate,
+        defaultAdminFee: formData.defaultAdminFee,
+        defaultAdminFeeEnabled: formData.defaultAdminFeeEnabled,
         currency: formData.currency || "USD",
         appointmentBufferMinutes: formData.appointmentBufferMinutes,
         timezone: formData.timezone || null,
@@ -1357,6 +1359,41 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="defaultAdminFee">Default Admin Fee</Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="defaultAdminFeeEnabled" className="text-xs text-muted-foreground">
+                          Auto-add by default
+                        </Label>
+                        <Switch
+                          id="defaultAdminFeeEnabled"
+                          checked={formData.defaultAdminFeeEnabled}
+                          onCheckedChange={(value) => handleFieldChange("defaultAdminFeeEnabled", value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex">
+                      <span className="inline-flex items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
+                        $
+                      </span>
+                      <Input
+                        id="defaultAdminFee"
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        className="rounded-l-none"
+                        value={formData.defaultAdminFee}
+                        onChange={(e) => handleFieldChange("defaultAdminFee", parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Prefills quotes and invoices with an adjustable admin fee that can still be turned off per document.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-1.5">
                     <Label htmlFor="appointmentBufferMinutes">Appointment Buffer</Label>
                     <div className="flex">
                       <Input
@@ -1380,9 +1417,6 @@ export default function SettingsPage() {
                       </span>
                     </div>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="timezone">Timezone</Label>
                     <Select value={formData.timezone} onValueChange={(value) => handleFieldChange("timezone", value)}>
@@ -1398,6 +1432,9 @@ export default function SettingsPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="currency">Currency</Label>
                     <Input

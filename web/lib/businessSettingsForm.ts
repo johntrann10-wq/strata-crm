@@ -8,6 +8,8 @@ export interface BusinessSettingsFormData {
   state: string;
   zip: string;
   defaultTaxRate: number;
+  defaultAdminFee: number;
+  defaultAdminFeeEnabled: boolean;
   currency: string;
   appointmentBufferMinutes: number;
   timezone: string;
@@ -23,6 +25,8 @@ export const DEFAULT_BUSINESS_SETTINGS_FORM: BusinessSettingsFormData = {
   state: "",
   zip: "",
   defaultTaxRate: 0,
+  defaultAdminFee: 0,
+  defaultAdminFeeEnabled: false,
   currency: "USD",
   appointmentBufferMinutes: 15,
   timezone: "America/New_York",
@@ -35,6 +39,9 @@ export function businessSettingsFormFromSource(source: BusinessSettingsSource) {
     ...DEFAULT_BUSINESS_SETTINGS_FORM,
     ...source,
     defaultTaxRate: source?.defaultTaxRate ?? DEFAULT_BUSINESS_SETTINGS_FORM.defaultTaxRate,
+    defaultAdminFee: source?.defaultAdminFee ?? DEFAULT_BUSINESS_SETTINGS_FORM.defaultAdminFee,
+    defaultAdminFeeEnabled:
+      source?.defaultAdminFeeEnabled ?? DEFAULT_BUSINESS_SETTINGS_FORM.defaultAdminFeeEnabled,
     appointmentBufferMinutes:
       source?.appointmentBufferMinutes ?? DEFAULT_BUSINESS_SETTINGS_FORM.appointmentBufferMinutes,
     currency: source?.currency ?? DEFAULT_BUSINESS_SETTINGS_FORM.currency,

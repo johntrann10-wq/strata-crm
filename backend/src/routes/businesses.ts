@@ -38,6 +38,8 @@ const createSchema = z.object({
   timezone: z.string().nullable().optional(),
   currency: z.string().length(3).nullable().optional(),
   defaultTaxRate: z.coerce.number().min(0).max(100).optional(),
+  defaultAdminFee: z.coerce.number().min(0).max(999999).optional(),
+  defaultAdminFeeEnabled: z.boolean().optional(),
   appointmentBufferMinutes: z.number().int().min(0).max(1440).optional(),
 });
 
@@ -72,6 +74,8 @@ function coerceBusinessRecord(
     timezone: record.timezone ?? "America/Los_Angeles",
     currency: record.currency ?? "USD",
     defaultTaxRate: record.defaultTaxRate ?? "0",
+    defaultAdminFee: record.defaultAdminFee ?? "0",
+    defaultAdminFeeEnabled: record.defaultAdminFeeEnabled ?? false,
     appointmentBufferMinutes: record.appointmentBufferMinutes ?? 15,
     nextInvoiceNumber: record.nextInvoiceNumber ?? 1,
     onboardingComplete: record.onboardingComplete ?? null,
@@ -248,6 +252,8 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       currency: parsed.data.currency ?? typeDefaults.currency,
       defaultTaxRate:
         parsed.data.defaultTaxRate != null ? String(parsed.data.defaultTaxRate) : String(typeDefaults.defaultTaxRate),
+      defaultAdminFee: String(parsed.data.defaultAdminFee ?? 0),
+      defaultAdminFeeEnabled: parsed.data.defaultAdminFeeEnabled ?? false,
       appointmentBufferMinutes:
         parsed.data.appointmentBufferMinutes ?? typeDefaults.appointmentBufferMinutes,
     })
@@ -312,6 +318,10 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   if (parsed.data.timezone !== undefined) updates.timezone = parsed.data.timezone ?? null;
   if (parsed.data.currency !== undefined) updates.currency = parsed.data.currency?.toUpperCase() ?? "USD";
   if (parsed.data.defaultTaxRate !== undefined) updates.defaultTaxRate = String(parsed.data.defaultTaxRate ?? 0);
+  if (parsed.data.defaultAdminFee !== undefined) updates.defaultAdminFee = String(parsed.data.defaultAdminFee ?? 0);
+  if (parsed.data.defaultAdminFeeEnabled !== undefined) {
+    updates.defaultAdminFeeEnabled = parsed.data.defaultAdminFeeEnabled ?? false;
+  }
   if (parsed.data.appointmentBufferMinutes !== undefined) {
     updates.appointmentBufferMinutes = parsed.data.appointmentBufferMinutes ?? 15;
   }

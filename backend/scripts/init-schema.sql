@@ -97,6 +97,8 @@ CREATE TABLE IF NOT EXISTS businesses (
   timezone text DEFAULT 'America/New_York',
   currency text DEFAULT 'USD',
   default_tax_rate decimal(5,2) DEFAULT 0,
+  default_admin_fee decimal(12,2) DEFAULT 0,
+  default_admin_fee_enabled boolean DEFAULT false,
   appointment_buffer_minutes integer DEFAULT 15,
   next_invoice_number integer NOT NULL DEFAULT 1,
   onboarding_complete boolean DEFAULT false,
@@ -118,6 +120,8 @@ CREATE TABLE IF NOT EXISTS businesses (
 
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_account_id text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_details_submitted boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS default_admin_fee decimal(12,2) DEFAULT 0;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS default_admin_fee_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_charges_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_payouts_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_onboarded_at timestamptz;

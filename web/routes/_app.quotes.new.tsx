@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, Link, useOutletContext, useSearchParams } from "react-router";
 import { useFindMany, useFindFirst, useAction } from "../hooks/useApi";
 import { api } from "../api";
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, Plus, Trash2, Loader2, Check, ChevronsUpDown, ChevronDown, ChevronUp, Package } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -59,6 +60,8 @@ type AddonLinkRecord = {
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
 
+const DEFAULT_ADMIN_FEE_LABEL = "Admin fee";
+
 export default function NewQuotePage() {
   const { businessId, businessType } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
@@ -78,6 +81,9 @@ export default function NewQuotePage() {
     () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   );
   const [taxRate, setTaxRate] = useState("0");
+  const [applyTax, setApplyTax] = useState(false);
+  const [applyAdminFee, setApplyAdminFee] = useState(false);
+  const [adminFeeAmount, setAdminFeeAmount] = useState("0");
   const [lineItems, setLineItems] = useState<LineItem[]>([
     {
       id: crypto.randomUUID(),
@@ -93,6 +99,7 @@ export default function NewQuotePage() {
   const [showMobileApprovalSettings, setShowMobileApprovalSettings] = useState(false);
   const [clientComboOpen, setClientComboOpen] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
+  const hasSeededBusinessDefaults = useRef(false);
 
   // Reset vehicle when client changes
   useEffect(() => {
@@ -101,15 +108,20 @@ export default function NewQuotePage() {
 
   const [{ data: business }] = useFindFirst(api.business, {
     filter: { id: { equals: businessId ?? "" } },
-    select: { id: true, defaultTaxRate: true },
+    select: { id: true, defaultTaxRate: true, defaultAdminFee: true, defaultAdminFeeEnabled: true },
     pause: !businessId,
   });
 
-  // Pre-fill tax rate from business default
+  // Pre-fill quote charges from business defaults
   useEffect(() => {
-    if (business?.defaultTaxRate != null && business.defaultTaxRate > 0) {
-      setTaxRate(String(business.defaultTaxRate));
-    }
+    if (!business || hasSeededBusinessDefaults.current) return;
+    const defaultTaxRate = Number(business.defaultTaxRate ?? 0);
+    const defaultAdminFee = Number(business.defaultAdminFee ?? 0);
+    setTaxRate(String(defaultTaxRate));
+    setApplyTax(defaultTaxRate > 0);
+    setAdminFeeAmount(String(defaultAdminFee));
+    setApplyAdminFee(Boolean(business.defaultAdminFeeEnabled) && defaultAdminFee > 0);
+    hasSeededBusinessDefaults.current = true;
   }, [business]);
 
   // Clients for this business
@@ -178,9 +190,12 @@ export default function NewQuotePage() {
     return sum + qty * price;
   }, 0);
 
-  const taxRateNum = parseFloat(taxRate) || 0;
-  const taxAmount = subtotal * (taxRateNum / 100);
-  const total = subtotal + taxAmount;
+  const adminFeeAmountNum = parseFloat(adminFeeAmount) || 0;
+  const effectiveAdminFee = applyAdminFee ? adminFeeAmountNum : 0;
+  const taxableSubtotal = subtotal + effectiveAdminFee;
+  const taxRateNum = applyTax ? parseFloat(taxRate) || 0 : 0;
+  const taxAmount = taxableSubtotal * (taxRateNum / 100);
+  const total = taxableSubtotal + taxAmount;
 
   // Line item helpers
   const addLineItem = useCallback(() => {
@@ -299,15 +314,26 @@ export default function NewQuotePage() {
         notes: notes.trim() || undefined,
         expiresAt: expiresAt || undefined,
         taxRate: taxRateNum,
-        subtotal,
+        subtotal: taxableSubtotal,
         taxAmount,
         total,
         status: "draft",
-        lineItems: validLineItems.map((item) => ({
-          description: item.description.trim(),
-          quantity: parseInt(item.quantity, 10) || 1,
-          unitPrice: parseFloat(item.unitPrice) || 0,
-        })),
+        lineItems: [
+          ...validLineItems.map((item) => ({
+            description: item.description.trim(),
+            quantity: parseInt(item.quantity, 10) || 1,
+            unitPrice: parseFloat(item.unitPrice) || 0,
+          })),
+          ...(effectiveAdminFee > 0
+            ? [
+                {
+                  description: DEFAULT_ADMIN_FEE_LABEL,
+                  quantity: 1,
+                  unitPrice: effectiveAdminFee,
+                },
+              ]
+            : []),
+        ],
       });
 
       if (result.error) {
@@ -798,16 +824,48 @@ export default function NewQuotePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="taxRate">Tax Rate (%)</Label>
-                <Input
-                  id="taxRate"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  placeholder="0"
-                  value={taxRate}
-                  onChange={(e) => setTaxRate(e.target.value)}
-                />
+                <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">Apply tax</p>
+                      <p className="text-xs text-muted-foreground">Use the business default rate, or override it for this quote.</p>
+                    </div>
+                    <Switch checked={applyTax} onCheckedChange={setApplyTax} />
+                  </div>
+                  <Input
+                    id="taxRate"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    placeholder="0"
+                    value={taxRate}
+                    onChange={(e) => setTaxRate(e.target.value)}
+                    disabled={!applyTax}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="adminFeeAmount">Admin Fee</Label>
+                <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">Add admin fee</p>
+                      <p className="text-xs text-muted-foreground">Prefill a separate admin fee line item for this quote.</p>
+                    </div>
+                    <Switch checked={applyAdminFee} onCheckedChange={setApplyAdminFee} />
+                  </div>
+                  <Input
+                    id="adminFeeAmount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={adminFeeAmount}
+                    onChange={(e) => setAdminFeeAmount(e.target.value)}
+                    disabled={!applyAdminFee}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -831,6 +889,12 @@ export default function NewQuotePage() {
                 <span className="text-muted-foreground">Subtotal</span>
                 <span>{formatCurrency(subtotal)}</span>
               </div>
+              {effectiveAdminFee > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Admin fee</span>
+                  <span>{formatCurrency(effectiveAdminFee)}</span>
+                </div>
+              )}
               {taxRateNum > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Tax ({taxRateNum}%)</span>
