@@ -182,6 +182,10 @@ export default function NewInvoicePage() {
       id: true,
       title: true,
       totalPrice: true,
+      taxRate: true,
+      applyTax: true,
+      adminFeeRate: true,
+      applyAdminFee: true,
       client: {
         id: true,
         firstName: true,
@@ -346,6 +350,20 @@ export default function NewInvoicePage() {
       }
     }
   }, [apptServices, appointmentRecord, lineItems]);
+
+  useEffect(() => {
+    if (!appointmentRecord || quoteIdParam) return;
+    const nextTaxRate = Number((appointmentRecord as { taxRate?: number | string | null }).taxRate ?? 0);
+    const nextApplyTax = Boolean((appointmentRecord as { applyTax?: boolean | null }).applyTax) && nextTaxRate > 0;
+    const nextAdminFeeRate = Number((appointmentRecord as { adminFeeRate?: number | string | null }).adminFeeRate ?? 0);
+    const nextApplyAdminFee =
+      Boolean((appointmentRecord as { applyAdminFee?: boolean | null }).applyAdminFee) && nextAdminFeeRate > 0;
+    setTaxRate(nextTaxRate);
+    setApplyTax(nextApplyTax);
+    setAdminFeeAmount(nextAdminFeeRate);
+    setApplyAdminFee(nextApplyAdminFee);
+    hasSeededBusinessDefaults.current = true;
+  }, [appointmentRecord, quoteIdParam]);
 
   // Set default invoice charges from business when loaded
   useEffect(() => {

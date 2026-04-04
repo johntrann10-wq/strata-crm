@@ -10,7 +10,7 @@ import { requireTenant } from "../middleware/tenant.js";
 import { logger } from "../lib/logger.js";
 import { countOverlappingAppointments, hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
 import { ConflictError } from "../lib/errors.js";
-import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
+import { calculateAppointmentFinanceTotals, recalculateAppointmentTotal } from "../lib/revenueTotals.js";
 import { createRequestActivityLog } from "../lib/activity.js";
 import { sendAppointmentConfirmation } from "../lib/email.js";
 import { isEmailConfigured } from "../lib/env.js";
@@ -291,13 +291,29 @@ async function locationExistsForBusiness(locationId: string, bid: string): Promi
 async function updateAppointmentTotalIfSupported(
   tx: any,
   appointmentId: string,
-  totalPrice: string
+  finance: {
+    subtotal: string;
+    taxRate: string;
+    taxAmount: string;
+    applyTax: boolean;
+    adminFeeRate: string;
+    adminFeeAmount: string;
+    applyAdminFee: boolean;
+    totalPrice: string;
+  }
 ) {
   const appointmentColumns = await getAppointmentColumns();
   if (!appointmentColumns.has("total_price")) return;
   const updates: Record<string, unknown> = {
-    totalPrice,
+    totalPrice: finance.totalPrice,
   };
+  if (appointmentColumns.has("subtotal")) updates.subtotal = finance.subtotal;
+  if (appointmentColumns.has("tax_rate")) updates.taxRate = finance.taxRate;
+  if (appointmentColumns.has("tax_amount")) updates.taxAmount = finance.taxAmount;
+  if (appointmentColumns.has("apply_tax")) updates.applyTax = finance.applyTax;
+  if (appointmentColumns.has("admin_fee_rate")) updates.adminFeeRate = finance.adminFeeRate;
+  if (appointmentColumns.has("admin_fee_amount")) updates.adminFeeAmount = finance.adminFeeAmount;
+  if (appointmentColumns.has("apply_admin_fee")) updates.applyAdminFee = finance.applyAdminFee;
   if (appointmentColumns.has("updated_at")) {
     updates.updatedAt = new Date();
   }
@@ -319,6 +335,14 @@ const createAppointmentReturning = {
   pickupReadyTime: appointments.pickupReadyTime,
   vehicleOnSite: appointments.vehicleOnSite,
   jobPhase: appointments.jobPhase,
+  subtotal: appointments.subtotal,
+  taxRate: appointments.taxRate,
+  taxAmount: appointments.taxAmount,
+  applyTax: appointments.applyTax,
+  adminFeeRate: appointments.adminFeeRate,
+  adminFeeAmount: appointments.adminFeeAmount,
+  applyAdminFee: appointments.applyAdminFee,
+  totalPrice: appointments.totalPrice,
 };
 
 type CreatedAppointmentRecord = {
@@ -333,6 +357,14 @@ type CreatedAppointmentRecord = {
   pickupReadyTime: Date | null;
   vehicleOnSite: boolean | null;
   jobPhase: string;
+  subtotal: string | null;
+  taxRate: string | null;
+  taxAmount: string | null;
+  applyTax: boolean | null;
+  adminFeeRate: string | null;
+  adminFeeAmount: string | null;
+  applyAdminFee: boolean | null;
+  totalPrice: string | null;
 };
 
 const appointmentStatusSchema = z.enum(["scheduled", "confirmed", "in_progress", "completed", "cancelled", "no-show"]);
@@ -358,6 +390,10 @@ const createSchema = z.object({
   assignedStaffId: z.string().uuid().optional(),
   locationId: z.string().uuid().optional(),
   depositAmount: z.coerce.number().min(0).optional(),
+  taxRate: z.coerce.number().min(0).max(100).optional(),
+  applyTax: z.boolean().optional(),
+  adminFeeRate: z.coerce.number().min(0).max(100).optional(),
+  applyAdminFee: z.boolean().optional(),
   notes: z.string().optional(),
   internalNotes: z.string().optional(),
   /** When set, links quote → appointment and marks quote accepted (client/vehicle must match quote). */
@@ -380,6 +416,10 @@ const updateSchema = z
     assignedStaffId: z.string().uuid().optional(),
     locationId: z.string().uuid().optional(),
     depositAmount: z.coerce.number().min(0).optional(),
+    taxRate: z.coerce.number().min(0).max(100).optional(),
+    applyTax: z.boolean().optional(),
+    adminFeeRate: z.coerce.number().min(0).max(100).optional(),
+    applyAdminFee: z.boolean().optional(),
     notes: z.string().optional(),
     internalNotes: z.string().optional(),
   })
@@ -833,6 +873,13 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
       vehicleOnSite: appointments.vehicleOnSite,
       jobPhase: appointments.jobPhase,
       status: appointments.status,
+      subtotal: appointments.subtotal,
+      taxRate: appointments.taxRate,
+      taxAmount: appointments.taxAmount,
+      applyTax: appointments.applyTax,
+      adminFeeRate: appointments.adminFeeRate,
+      adminFeeAmount: appointments.adminFeeAmount,
+      applyAdminFee: appointments.applyAdminFee,
       totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
       depositPaid: appointments.depositPaid,
@@ -876,6 +923,13 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
     vehicleOnSite: row.vehicleOnSite,
     jobPhase: row.jobPhase,
     status: row.status,
+    subtotal: row.subtotal,
+    taxRate: row.taxRate,
+    taxAmount: row.taxAmount,
+    applyTax: row.applyTax,
+    adminFeeRate: row.adminFeeRate,
+    adminFeeAmount: row.adminFeeAmount,
+    applyAdminFee: row.applyAdminFee,
     totalPrice: row.totalPrice,
     depositAmount: row.depositAmount,
     depositPaid: row.depositPaid,
@@ -939,6 +993,13 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
       vehicleOnSite: appointments.vehicleOnSite,
       jobPhase: appointments.jobPhase,
       status: appointments.status,
+      subtotal: appointments.subtotal,
+      taxRate: appointments.taxRate,
+      taxAmount: appointments.taxAmount,
+      applyTax: appointments.applyTax,
+      adminFeeRate: appointments.adminFeeRate,
+      adminFeeAmount: appointments.adminFeeAmount,
+      applyAdminFee: appointments.applyAdminFee,
       totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
       depositPaid: appointments.depositPaid,
@@ -974,6 +1035,13 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
     vehicleOnSite: row.vehicleOnSite,
     jobPhase: row.jobPhase,
     status: row.status,
+    subtotal: row.subtotal,
+    taxRate: row.taxRate,
+    taxAmount: row.taxAmount,
+    applyTax: row.applyTax,
+    adminFeeRate: row.adminFeeRate,
+    adminFeeAmount: row.adminFeeAmount,
+    applyAdminFee: row.applyAdminFee,
     totalPrice: row.totalPrice,
     depositAmount: row.depositAmount,
     depositPaid: row.depositPaid,
@@ -1027,6 +1095,16 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
+
+  const [businessFinanceDefaults] = await db
+    .select({
+      defaultTaxRate: businesses.defaultTaxRate,
+      defaultAdminFee: businesses.defaultAdminFee,
+      defaultAdminFeeEnabled: businesses.defaultAdminFeeEnabled,
+    })
+    .from(businesses)
+    .where(eq(businesses.id, bid))
+    .limit(1);
 
   let effectiveClientId = parsed.data.clientId ?? null;
   let effectiveVehicleId = parsed.data.vehicleId ?? null;
@@ -1161,6 +1239,22 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
     const [q] = await db.select({ total: quotes.total }).from(quotes).where(eq(quotes.id, parsed.data.quoteId)).limit(1);
     if (q?.total != null) totalPriceInit = String(q.total);
   }
+  const baseFinance = calculateAppointmentFinanceTotals({
+    subtotal: Number(totalPriceInit ?? 0),
+    taxRate:
+      parsed.data.taxRate ??
+      Number(businessFinanceDefaults?.defaultTaxRate ?? 0),
+    applyTax:
+      parsed.data.applyTax ??
+      Number(businessFinanceDefaults?.defaultTaxRate ?? 0) > 0,
+    adminFeeRate:
+      parsed.data.adminFeeRate ??
+      Number(businessFinanceDefaults?.defaultAdminFee ?? 0),
+    applyAdminFee:
+      parsed.data.applyAdminFee ??
+      (Boolean(businessFinanceDefaults?.defaultAdminFeeEnabled) &&
+        Number(businessFinanceDefaults?.defaultAdminFee ?? 0) > 0),
+  });
 
   const createdAt = new Date();
   const appointmentId = randomUUID();
@@ -1187,9 +1281,16 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
           assignedStaffId: parsed.data.assignedStaffId ?? null,
           locationId: parsed.data.locationId ?? null,
           depositAmount: parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0",
+          subtotal: String(baseFinance.subtotal),
+          taxRate: String(baseFinance.taxRate),
+          taxAmount: String(baseFinance.taxAmount),
+          applyTax: baseFinance.applyTax,
+          adminFeeRate: String(baseFinance.adminFeeRate),
+          adminFeeAmount: String(baseFinance.adminFeeAmount),
+          applyAdminFee: baseFinance.applyAdminFee,
           notes: parsed.data.notes?.trim() ? parsed.data.notes.trim() : null,
           internalNotes: parsed.data.internalNotes?.trim() ? parsed.data.internalNotes.trim() : null,
-          totalPrice: totalPriceInit,
+          totalPrice: String(baseFinance.totalPrice),
           createdAt,
           updatedAt: createdAt,
         })
@@ -1214,9 +1315,16 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       if (columns.has("assigned_staff_id")) fallbackValues.assignedStaffId = parsed.data.assignedStaffId ?? null;
       if (columns.has("location_id")) fallbackValues.locationId = parsed.data.locationId ?? null;
       if (columns.has("deposit_amount")) fallbackValues.depositAmount = parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0";
+      if (columns.has("subtotal")) fallbackValues.subtotal = String(baseFinance.subtotal);
+      if (columns.has("tax_rate")) fallbackValues.taxRate = String(baseFinance.taxRate);
+      if (columns.has("tax_amount")) fallbackValues.taxAmount = String(baseFinance.taxAmount);
+      if (columns.has("apply_tax")) fallbackValues.applyTax = baseFinance.applyTax;
+      if (columns.has("admin_fee_rate")) fallbackValues.adminFeeRate = String(baseFinance.adminFeeRate);
+      if (columns.has("admin_fee_amount")) fallbackValues.adminFeeAmount = String(baseFinance.adminFeeAmount);
+      if (columns.has("apply_admin_fee")) fallbackValues.applyAdminFee = baseFinance.applyAdminFee;
       if (columns.has("notes")) fallbackValues.notes = parsed.data.notes?.trim() ? parsed.data.notes.trim() : null;
       if (columns.has("internal_notes")) fallbackValues.internalNotes = parsed.data.internalNotes?.trim() ? parsed.data.internalNotes.trim() : null;
-      if (columns.has("total_price")) fallbackValues.totalPrice = totalPriceInit;
+      if (columns.has("total_price")) fallbackValues.totalPrice = String(baseFinance.totalPrice);
       if (columns.has("status")) fallbackValues.status = "scheduled";
       if (columns.has("created_at")) fallbackValues.createdAt = createdAt;
       if (columns.has("updated_at")) fallbackValues.updatedAt = createdAt;
@@ -1256,10 +1364,42 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
             businessId: bid,
             error,
           });
-          await updateAppointmentTotalIfSupported(tx, apt.id, selectedServicesTotal.toFixed(2));
+          const fallbackFinance = calculateAppointmentFinanceTotals({
+            subtotal: selectedServicesTotal,
+            taxRate: baseFinance.taxRate,
+            applyTax: baseFinance.applyTax,
+            adminFeeRate: baseFinance.adminFeeRate,
+            applyAdminFee: baseFinance.applyAdminFee,
+          });
+          await updateAppointmentTotalIfSupported(tx, apt.id, {
+            subtotal: fallbackFinance.subtotal.toFixed(2),
+            taxRate: fallbackFinance.taxRate.toFixed(2),
+            taxAmount: fallbackFinance.taxAmount.toFixed(2),
+            applyTax: fallbackFinance.applyTax,
+            adminFeeRate: fallbackFinance.adminFeeRate.toFixed(2),
+            adminFeeAmount: fallbackFinance.adminFeeAmount.toFixed(2),
+            applyAdminFee: fallbackFinance.applyAdminFee,
+            totalPrice: fallbackFinance.totalPrice.toFixed(2),
+          });
         }
       } else {
-        await updateAppointmentTotalIfSupported(tx, apt.id, selectedServicesTotal.toFixed(2));
+        const fallbackFinance = calculateAppointmentFinanceTotals({
+          subtotal: selectedServicesTotal,
+          taxRate: baseFinance.taxRate,
+          applyTax: baseFinance.applyTax,
+          adminFeeRate: baseFinance.adminFeeRate,
+          applyAdminFee: baseFinance.applyAdminFee,
+        });
+        await updateAppointmentTotalIfSupported(tx, apt.id, {
+          subtotal: fallbackFinance.subtotal.toFixed(2),
+          taxRate: fallbackFinance.taxRate.toFixed(2),
+          taxAmount: fallbackFinance.taxAmount.toFixed(2),
+          applyTax: fallbackFinance.applyTax,
+          adminFeeRate: fallbackFinance.adminFeeRate.toFixed(2),
+          adminFeeAmount: fallbackFinance.adminFeeAmount.toFixed(2),
+          applyAdminFee: fallbackFinance.applyAdminFee,
+          totalPrice: fallbackFinance.totalPrice.toFixed(2),
+        });
       }
     }
 
@@ -1337,6 +1477,14 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
       assignedStaffId: appointments.assignedStaffId,
       clientId: appointments.clientId,
       vehicleId: appointments.vehicleId,
+      subtotal: appointments.subtotal,
+      taxRate: appointments.taxRate,
+      taxAmount: appointments.taxAmount,
+      applyTax: appointments.applyTax,
+      adminFeeRate: appointments.adminFeeRate,
+      adminFeeAmount: appointments.adminFeeAmount,
+      applyAdminFee: appointments.applyAdminFee,
+      totalPrice: appointments.totalPrice,
       internalNotes: appointments.internalNotes,
     })
     .from(appointments)
@@ -1495,9 +1643,22 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
     updates.vehicleId = nextVehicleId;
   }
   if (parsed.data.depositAmount != null) updates.depositAmount = String(parsed.data.depositAmount);
+  if (parsed.data.taxRate !== undefined) updates.taxRate = String(parsed.data.taxRate ?? 0);
+  if (parsed.data.applyTax !== undefined) updates.applyTax = parsed.data.applyTax;
+  if (parsed.data.adminFeeRate !== undefined) updates.adminFeeRate = String(parsed.data.adminFeeRate ?? 0);
+  if (parsed.data.applyAdminFee !== undefined) updates.applyAdminFee = parsed.data.applyAdminFee;
   if (parsed.data.notes != null) updates.notes = parsed.data.notes.trim() || null;
   if (parsed.data.internalNotes != null) updates.internalNotes = parsed.data.internalNotes.trim() || null;
   const [updated] = await db.update(appointments).set(updates as Record<string, unknown>).where(eq(appointments.id, req.params.id)).returning();
+  if (
+    updated &&
+    (parsed.data.taxRate !== undefined ||
+      parsed.data.applyTax !== undefined ||
+      parsed.data.adminFeeRate !== undefined ||
+      parsed.data.applyAdminFee !== undefined)
+  ) {
+    await recalculateAppointmentTotal(db, updated.id);
+  }
   if (updated) {
     await createRequestActivityLog(req, {
       businessId: bid,

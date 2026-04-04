@@ -189,6 +189,13 @@ type AppointmentDetailRecord = {
   status?: string | null;
   isMobile?: boolean | null;
   mobileAddress?: string | null;
+  subtotal?: number | null;
+  taxRate?: number | null;
+  taxAmount?: number | null;
+  applyTax?: boolean | null;
+  adminFeeRate?: number | null;
+  adminFeeAmount?: number | null;
+  applyAdminFee?: boolean | null;
   totalPrice?: number | null;
   client?: {
     id: string;
@@ -508,6 +515,13 @@ export default function AppointmentDetail() {
         internalNotes: true,
         isMobile: true,
         mobileAddress: true,
+        subtotal: true,
+        taxRate: true,
+        taxAmount: true,
+        applyTax: true,
+        adminFeeRate: true,
+        adminFeeAmount: true,
+        applyAdminFee: true,
         totalPrice: true,
         depositAmount: true,
         depositPaid: true,
@@ -2155,6 +2169,13 @@ export default function AppointmentDetail() {
 
               {/* Financial Summary Card */}
               <FinancialSummaryCard 
+                subtotal={appointment.subtotal}
+                taxRate={appointment.taxRate}
+                taxAmount={appointment.taxAmount}
+                applyTax={appointment.applyTax}
+                adminFeeRate={appointment.adminFeeRate}
+                adminFeeAmount={appointment.adminFeeAmount}
+                applyAdminFee={appointment.applyAdminFee}
                 totalPrice={appointment.totalPrice}
                 depositAmount={appointment.depositAmount}
                 depositPaid={appointment.depositPaid}

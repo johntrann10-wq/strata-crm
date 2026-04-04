@@ -323,6 +323,13 @@ CREATE TABLE IF NOT EXISTS appointments (
   start_time timestamptz NOT NULL,
   end_time timestamptz,
   status appointment_status NOT NULL DEFAULT 'scheduled',
+  subtotal decimal(12,2) DEFAULT 0,
+  tax_rate decimal(5,2) DEFAULT 0,
+  tax_amount decimal(12,2) DEFAULT 0,
+  apply_tax boolean DEFAULT false,
+  admin_fee_rate decimal(5,2) DEFAULT 0,
+  admin_fee_amount decimal(12,2) DEFAULT 0,
+  apply_admin_fee boolean DEFAULT false,
   total_price decimal(12,2) DEFAULT 0,
   deposit_amount decimal(12,2) DEFAULT 0,
   deposit_paid boolean DEFAULT false,
@@ -339,6 +346,13 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS expected_completion_time times
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS pickup_ready_time timestamptz;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS vehicle_on_site boolean DEFAULT false;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS job_phase appointment_job_phase DEFAULT 'scheduled';
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS subtotal decimal(12,2) DEFAULT 0;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS tax_rate decimal(5,2) DEFAULT 0;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS tax_amount decimal(12,2) DEFAULT 0;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS apply_tax boolean DEFAULT false;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS admin_fee_rate decimal(5,2) DEFAULT 0;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS admin_fee_amount decimal(12,2) DEFAULT 0;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS apply_admin_fee boolean DEFAULT false;
 ALTER TABLE appointments ALTER COLUMN client_id DROP NOT NULL;
 ALTER TABLE appointments ALTER COLUMN vehicle_id DROP NOT NULL;
 

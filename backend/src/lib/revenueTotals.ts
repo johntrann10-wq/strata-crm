@@ -18,6 +18,36 @@ function money(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
 
+export function calculateAppointmentFinanceTotals(input: {
+  subtotal: number;
+  taxRate?: number;
+  applyTax?: boolean;
+  adminFeeRate?: number;
+  applyAdminFee?: boolean;
+}) {
+  const subtotal = Number.isFinite(input.subtotal) ? Math.max(input.subtotal, 0) : 0;
+  const taxRate = Number.isFinite(input.taxRate ?? 0) ? Math.max(Number(input.taxRate ?? 0), 0) : 0;
+  const adminFeeRate =
+    Number.isFinite(input.adminFeeRate ?? 0) ? Math.max(Number(input.adminFeeRate ?? 0), 0) : 0;
+  const applyTax = Boolean(input.applyTax) && taxRate > 0;
+  const applyAdminFee = Boolean(input.applyAdminFee) && adminFeeRate > 0;
+  const adminFeeAmount = applyAdminFee ? subtotal * (adminFeeRate / 100) : 0;
+  const taxableSubtotal = subtotal + adminFeeAmount;
+  const taxAmount = applyTax ? taxableSubtotal * (taxRate / 100) : 0;
+  const totalPrice = taxableSubtotal + taxAmount;
+
+  return {
+    subtotal,
+    taxRate,
+    applyTax,
+    adminFeeRate,
+    applyAdminFee,
+    adminFeeAmount,
+    taxAmount,
+    totalPrice,
+  };
+}
+
 function isSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
@@ -132,6 +162,43 @@ export async function recalculateInvoiceTotals(executor: DbLike, invoiceId: stri
 
 /** Sum appointment line amounts (quantity × unit price, defaulting unit price from catalog). */
 export async function recalculateAppointmentTotal(executor: DbLike, appointmentId: string): Promise<void> {
+  let appointment:
+    | {
+        id: string;
+        taxRate: string | null;
+        applyTax: boolean | null;
+        adminFeeRate: string | null;
+        applyAdminFee: boolean | null;
+      }
+    | undefined;
+  try {
+    [appointment] = await executor
+      .select({
+        id: appointments.id,
+        taxRate: appointments.taxRate,
+        applyTax: appointments.applyTax,
+        adminFeeRate: appointments.adminFeeRate,
+        applyAdminFee: appointments.applyAdminFee,
+      })
+      .from(appointments)
+      .where(eq(appointments.id, appointmentId))
+      .limit(1);
+  } catch (error) {
+    if (!isSchemaDriftError(error)) throw error;
+    [appointment] = await executor
+      .select({
+        id: appointments.id,
+        taxRate: sql<string>`'0'`,
+        applyTax: sql<boolean>`false`,
+        adminFeeRate: sql<string>`'0'`,
+        applyAdminFee: sql<boolean>`false`,
+      })
+      .from(appointments)
+      .where(eq(appointments.id, appointmentId))
+      .limit(1);
+  }
+  if (!appointment) return;
+
   const rows = await executor
     .select({
       qty: appointmentServices.quantity,
@@ -147,12 +214,33 @@ export async function recalculateAppointmentTotal(executor: DbLike, appointmentI
     const q = row.qty ?? 1;
     return sum + q * up;
   }, 0);
+  const finance = calculateAppointmentFinanceTotals({
+    subtotal: total,
+    taxRate: Number(appointment.taxRate ?? 0),
+    applyTax: appointment.applyTax ?? false,
+    adminFeeRate: Number(appointment.adminFeeRate ?? 0),
+    applyAdminFee: appointment.applyAdminFee ?? false,
+  });
 
-  await executor
-    .update(appointments)
-    .set({
-      totalPrice: money(total),
-      updatedAt: new Date(),
-    })
-    .where(eq(appointments.id, appointmentId));
+  try {
+    await executor
+      .update(appointments)
+      .set({
+        subtotal: money(finance.subtotal),
+        adminFeeAmount: money(finance.adminFeeAmount),
+        taxAmount: money(finance.taxAmount),
+        totalPrice: money(finance.totalPrice),
+        updatedAt: new Date(),
+      })
+      .where(eq(appointments.id, appointmentId));
+  } catch (error) {
+    if (!isSchemaDriftError(error)) throw error;
+    await executor
+      .update(appointments)
+      .set({
+        totalPrice: money(finance.totalPrice),
+        updatedAt: new Date(),
+      })
+      .where(eq(appointments.id, appointmentId));
+  }
 }

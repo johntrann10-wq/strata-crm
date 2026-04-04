@@ -232,6 +232,13 @@ export function InvoiceCard({ invoice, invoiceFetching, appointmentId: _appointm
 // ─── FinancialSummaryCard ────────────────────────────────────────────────────
 
 interface FinancialSummaryCardProps {
+  subtotal?: number | null;
+  taxRate?: number | null;
+  taxAmount?: number | null;
+  applyTax?: boolean | null;
+  adminFeeRate?: number | null;
+  adminFeeAmount?: number | null;
+  applyAdminFee?: boolean | null;
   totalPrice?: number | null;
   depositAmount?: number | null;
   depositPaid?: boolean | null;
@@ -244,6 +251,13 @@ interface FinancialSummaryCardProps {
 }
 
 export function FinancialSummaryCard({
+  subtotal,
+  taxRate,
+  taxAmount,
+  applyTax,
+  adminFeeRate,
+  adminFeeAmount,
+  applyAdminFee,
   totalPrice,
   depositAmount,
   depositPaid,
@@ -270,6 +284,28 @@ export function FinancialSummaryCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
+        {subtotal != null && subtotal > 0 ? (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Services subtotal</span>
+            <span className="font-medium">{formatCurrency(subtotal)}</span>
+          </div>
+        ) : null}
+        {applyAdminFee && adminFeeAmount != null && adminFeeAmount > 0 ? (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              Admin fee{adminFeeRate != null && adminFeeRate > 0 ? ` (${adminFeeRate}%)` : ""}
+            </span>
+            <span className="font-medium">{formatCurrency(adminFeeAmount)}</span>
+          </div>
+        ) : null}
+        {applyTax && taxAmount != null && taxAmount > 0 ? (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              Tax{taxRate != null && taxRate > 0 ? ` (${taxRate}%)` : ""}
+            </span>
+            <span className="font-medium">{formatCurrency(taxAmount)}</span>
+          </div>
+        ) : null}
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Total Price</span>
           <span className="font-medium">

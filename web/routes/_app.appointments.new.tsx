@@ -248,6 +248,10 @@ export default function NewAppointmentPage() {
   const [notes, setNotes] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
+  const [taxRate, setTaxRate] = useState("0");
+  const [applyTax, setApplyTax] = useState(false);
+  const [adminFeeRate, setAdminFeeRate] = useState("0");
+  const [applyAdminFee, setApplyAdminFee] = useState(false);
   const [clientSearchOpen, setClientSearchOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -262,6 +266,7 @@ export default function NewAppointmentPage() {
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(() => locationIdParam ?? currentLocationId);
   const [showQuotePrefilledBadge, setShowQuotePrefilledBadge] = useState(false);
   const hasPrefilledFromQuote = useRef(false);
+  const hasSeededBusinessFinanceDefaults = useRef(false);
   const [clientSearchQuery, setClientSearchQuery] = useState<string>("");
   const [debouncedClientQuery, setDebouncedClientQuery] = useState<string>("");
   const [serviceSearchQuery, setServiceSearchQuery] = useState("");
@@ -325,7 +330,7 @@ export default function NewAppointmentPage() {
   // Data fetching
   const [{ data: businessData }] = useFindFirst(api.business, {
     filter: { id: { equals: businessId ?? "" } },
-    select: { defaultTaxRate: true },
+    select: { defaultTaxRate: true, defaultAdminFee: true, defaultAdminFeeEnabled: true },
     pause: !businessId,
   });
 
@@ -457,6 +462,12 @@ export default function NewAppointmentPage() {
       { totalPrice: 0, totalDuration: 0 }
     );
   }, [selectedServiceIds, servicesData]);
+  const adminFeeRateNum = applyAdminFee ? parseFloat(adminFeeRate) || 0 : 0;
+  const effectiveAdminFee = totalPrice * (adminFeeRateNum / 100);
+  const taxableSubtotal = totalPrice + effectiveAdminFee;
+  const taxRateNum = applyTax ? parseFloat(taxRate) || 0 : 0;
+  const taxAmount = taxableSubtotal * (taxRateNum / 100);
+  const appointmentTotal = taxableSubtotal + taxAmount;
 
   const startDateTime = useMemo(() => {
     if (!selectedDate || !startTime) return null;
@@ -490,6 +501,20 @@ export default function NewAppointmentPage() {
       setSelectedClientId(prefilledClientData.id);
     }
   }, [prefilledClientData, selectedClientId]);
+
+  useEffect(() => {
+    if (!businessData || hasSeededBusinessFinanceDefaults.current) return;
+    const defaultTaxRate = Number((businessData as { defaultTaxRate?: number | string | null }).defaultTaxRate ?? 0);
+    const defaultAdminFee = Number((businessData as { defaultAdminFee?: number | string | null }).defaultAdminFee ?? 0);
+    const defaultAdminFeeEnabled = Boolean(
+      (businessData as { defaultAdminFeeEnabled?: boolean | null }).defaultAdminFeeEnabled
+    );
+    setTaxRate(String(defaultTaxRate));
+    setApplyTax(defaultTaxRate > 0);
+    setAdminFeeRate(String(defaultAdminFee));
+    setApplyAdminFee(defaultAdminFeeEnabled && defaultAdminFee > 0);
+    hasSeededBusinessFinanceDefaults.current = true;
+  }, [businessData]);
 
   // Auto-select sole vehicle when client has exactly one vehicle
   useEffect(() => {
@@ -726,6 +751,10 @@ export default function NewAppointmentPage() {
         assignedStaffId: selectedStaffId ?? undefined,
         locationId: selectedLocationId ?? undefined,
         depositAmount: depositAmount ? Number(depositAmount) : undefined,
+        taxRate: parseFloat(taxRate) || 0,
+        applyTax,
+        adminFeeRate: parseFloat(adminFeeRate) || 0,
+        applyAdminFee,
         notes: persistedNotes,
         internalNotes: internalNotes.trim() || undefined,
         ...(quoteIdParam ? { quoteId: quoteIdParam } : {}),
@@ -1709,6 +1738,60 @@ export default function NewAppointmentPage() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label htmlFor="appointmentTaxRate">Tax Rate</Label>
+                  <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">Apply tax</p>
+                        <p className="text-xs text-muted-foreground">Use your default rate or override it for this appointment.</p>
+                      </div>
+                      <Switch checked={applyTax} onCheckedChange={setApplyTax} />
+                    </div>
+                    <Input
+                      id="appointmentTaxRate"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      placeholder="0"
+                      value={taxRate}
+                      onChange={(e) => setTaxRate(e.target.value)}
+                      disabled={!applyTax}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="appointmentAdminFeeRate">Admin Fee</Label>
+                  <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">Add admin fee</p>
+                        <p className="text-xs text-muted-foreground">Apply an adjustable admin fee as a percentage of selected services.</p>
+                      </div>
+                      <Switch checked={applyAdminFee} onCheckedChange={setApplyAdminFee} />
+                    </div>
+                    <div className="flex">
+                      <Input
+                        id="appointmentAdminFeeRate"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        placeholder="0"
+                        value={adminFeeRate}
+                        onChange={(e) => setAdminFeeRate(e.target.value)}
+                        disabled={!applyAdminFee}
+                        className="rounded-r-none"
+                      />
+                      <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
+                        %
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="notes">Notes</Label>
                   <Textarea
                     id="notes"
@@ -1780,9 +1863,31 @@ export default function NewAppointmentPage() {
                       );
                     })}
                     <Separator className="my-2" />
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Services subtotal</span>
+                      <span>${totalPrice.toFixed(2)}</span>
+                    </div>
+                    {applyAdminFee && effectiveAdminFee > 0 ? (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Admin fee ({adminFeeRateNum}%)</span>
+                        <span>${effectiveAdminFee.toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                    {applyTax && taxAmount > 0 ? (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Tax ({taxRateNum}%)</span>
+                        <span>${taxAmount.toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                    {depositAmount && Number(depositAmount) > 0 ? (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Deposit to collect</span>
+                        <span>${Number(depositAmount).toFixed(2)}</span>
+                      </div>
+                    ) : null}
                     <div className="flex justify-between font-semibold">
                       <span>Total</span>
-                      <span>${totalPrice.toFixed(2)}</span>
+                      <span>${appointmentTotal.toFixed(2)}</span>
                     </div>
                   </>
                 )}
@@ -1817,7 +1922,7 @@ export default function NewAppointmentPage() {
             <div className="mx-auto flex max-w-3xl items-center gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Estimated total</p>
-                <p className="text-lg font-semibold">${totalPrice.toFixed(2)}</p>
+                <p className="text-lg font-semibold">${appointmentTotal.toFixed(2)}</p>
               </div>
               <Button type="submit" disabled={isLoading} className="shrink-0">
                 {isLoading ? (
