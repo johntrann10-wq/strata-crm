@@ -183,6 +183,14 @@ export default function CalendarPage() {
     first: 100,
     pause: !businessId,
   } as any);
+  const [{ data: businessSettings }] = useFindMany(api.business, {
+    filter: businessId
+      ? { id: { equals: businessId } }
+      : { id: { equals: "skip" } },
+    select: { id: true, calendarBlockCapacityPerSlot: true },
+    first: 1,
+    pause: !businessId,
+  } as any);
   const [{ data: staffRaw }] = useFindMany(api.staff, {
     filter: {
       businessId: { equals: businessId ?? "" },
@@ -207,7 +215,21 @@ export default function CalendarPage() {
 
   const isFirstLoad = fetching && appointmentsData === undefined;
 
-  const { staffConflictIds, businessConflictIds } = useMemo(() => detectConflicts(appointments), [appointments]);
+  const appointmentCapacityPerSlot = Math.max(
+    1,
+    Math.min(
+      12,
+      Number(
+        Array.isArray(businessSettings) && businessSettings.length > 0
+          ? (businessSettings[0] as { calendarBlockCapacityPerSlot?: number | null }).calendarBlockCapacityPerSlot ?? 1
+          : 1
+      ) || 1
+    )
+  );
+  const { staffConflictIds, businessConflictIds } = useMemo(
+    () => detectConflicts(appointments, appointmentCapacityPerSlot),
+    [appointments, appointmentCapacityPerSlot]
+  );
   const activeConflicts = conflictDismissed
     ? new Set<string>()
     : new Set([...staffConflictIds, ...businessConflictIds]);

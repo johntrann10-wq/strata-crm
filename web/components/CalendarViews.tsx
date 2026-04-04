@@ -243,12 +243,16 @@ export type ApptRecord = {
   assignedStaff: { firstName: string; lastName: string } | null;
 };
 
-export function detectConflicts(appointments: ApptRecord[]): {
+export function detectConflicts(
+  appointments: ApptRecord[],
+  appointmentCapacityPerSlot = 1
+): {
   staffConflictIds: Set<string>;
   businessConflictIds: Set<string>;
 } {
   const staffConflictIds = new Set<string>();
   const businessConflictIds = new Set<string>();
+  const capacity = Math.max(1, Math.floor(appointmentCapacityPerSlot || 1));
 
   const activeAppointments = appointments.filter(
     (apt) =>
@@ -267,37 +271,35 @@ export function detectConflicts(appointments: ApptRecord[]): {
 
   for (const group of groups.values()) {
     group.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-    let maxEndTime = 0;
-    let maxEndAppt: ApptRecord | null = null;
+    const active: Array<{ appointment: ApptRecord; endMs: number }> = [];
     for (const apt of group) {
       const startMs = new Date(apt.startTime).getTime();
       const endMs = apt.endTime ? new Date(apt.endTime).getTime() : startMs + 3600000;
-      if (maxEndAppt !== null && startMs < maxEndTime) {
+      for (let i = active.length - 1; i >= 0; i -= 1) {
+        if (active[i]!.endMs <= startMs) active.splice(i, 1);
+      }
+      if (active.length >= capacity) {
         staffConflictIds.add(apt.id);
-        staffConflictIds.add(maxEndAppt.id);
+        for (const entry of active) staffConflictIds.add(entry.appointment.id);
       }
-      if (endMs > maxEndTime) {
-        maxEndTime = endMs;
-        maxEndAppt = apt;
-      }
+      active.push({ appointment: apt, endMs });
     }
   }
 
   const unassigned = activeAppointments.filter((apt) => !apt.assignedStaffId);
   unassigned.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-  let maxEndTime = 0;
-  let maxEndAppt: ApptRecord | null = null;
+  const active: Array<{ appointment: ApptRecord; endMs: number }> = [];
   for (const apt of unassigned) {
     const startMs = new Date(apt.startTime).getTime();
     const endMs = apt.endTime ? new Date(apt.endTime).getTime() : startMs + 3600000;
-    if (maxEndAppt !== null && startMs < maxEndTime) {
+    for (let i = active.length - 1; i >= 0; i -= 1) {
+      if (active[i]!.endMs <= startMs) active.splice(i, 1);
+    }
+    if (active.length >= capacity) {
       businessConflictIds.add(apt.id);
-      businessConflictIds.add(maxEndAppt.id);
+      for (const entry of active) businessConflictIds.add(entry.appointment.id);
     }
-    if (endMs > maxEndTime) {
-      maxEndTime = endMs;
-      maxEndAppt = apt;
-    }
+    active.push({ appointment: apt, endMs });
   }
 
   return { staffConflictIds, businessConflictIds };
