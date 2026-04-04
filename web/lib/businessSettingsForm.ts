@@ -50,7 +50,32 @@ export function businessSettingsFormFromSource(source: BusinessSettingsSource) {
 
   return {
     formData: next,
+    defaultTaxRateInput: formatDecimalInput(next.defaultTaxRate),
+    defaultAdminFeeInput: formatDecimalInput(next.defaultAdminFee),
     appointmentBufferInput: String(next.appointmentBufferMinutes),
+  };
+}
+
+function formatDecimalInput(value: number | string | null | undefined) {
+  const numericValue = typeof value === "number" ? value : Number.parseFloat(String(value ?? 0));
+  if (!Number.isFinite(numericValue)) return "0";
+  return numericValue === 0 ? "0" : String(numericValue);
+}
+
+export function parseDecimalDraft(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number.parseFloat(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
+}
+
+export function normalizeDecimalInput(value: string) {
+  const parsed = parseDecimalDraft(value);
+  const numericValue = parsed ?? 0;
+  return {
+    inputValue: formatDecimalInput(numericValue),
+    numericValue,
   };
 }
 

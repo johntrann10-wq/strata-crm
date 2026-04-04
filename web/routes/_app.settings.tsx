@@ -75,7 +75,9 @@ import { PageHeader } from "../components/shared/PageHeader";
 import {
   businessSettingsFormFromSource,
   DEFAULT_BUSINESS_SETTINGS_FORM,
+  normalizeDecimalInput,
   normalizeAppointmentBuffer,
+  parseDecimalDraft,
   parseAppointmentBufferDraft,
   type BusinessSettingsFormData,
 } from "../lib/businessSettingsForm";
@@ -684,6 +686,8 @@ export default function SettingsPage() {
   const { user, businessId, membershipRole, permissions } = useOutletContext<AuthOutletContext>();
   const [activeTab, setActiveTab] = useState("profile");
   const [formData, setFormData] = useState<BusinessSettingsFormData>(DEFAULT_BUSINESS_SETTINGS_FORM);
+  const [defaultTaxRateInput, setDefaultTaxRateInput] = useState(String(DEFAULT_BUSINESS_SETTINGS_FORM.defaultTaxRate));
+  const [defaultAdminFeeInput, setDefaultAdminFeeInput] = useState(String(DEFAULT_BUSINESS_SETTINGS_FORM.defaultAdminFee));
   const [appointmentBufferInput, setAppointmentBufferInput] = useState(
     String(DEFAULT_BUSINESS_SETTINGS_FORM.appointmentBufferMinutes)
   );
@@ -761,6 +765,8 @@ export default function SettingsPage() {
 
     const next = businessSettingsFormFromSource(business);
     setFormData(next.formData);
+    setDefaultTaxRateInput(next.defaultTaxRateInput);
+    setDefaultAdminFeeInput(next.defaultAdminFeeInput);
     setAppointmentBufferInput(next.appointmentBufferInput);
   }, [business]);
 
@@ -829,6 +835,18 @@ export default function SettingsPage() {
     const next = normalizeAppointmentBuffer(value);
     setAppointmentBufferInput(next.inputValue);
     handleFieldChange("appointmentBufferMinutes", next.numericValue);
+  };
+
+  const normalizeDefaultTaxRateInput = (value: string) => {
+    const next = normalizeDecimalInput(value);
+    setDefaultTaxRateInput(next.inputValue);
+    handleFieldChange("defaultTaxRate", next.numericValue);
+  };
+
+  const normalizeDefaultAdminFeeInput = (value: string) => {
+    const next = normalizeDecimalInput(value);
+    setDefaultAdminFeeInput(next.inputValue);
+    handleFieldChange("defaultAdminFee", next.numericValue);
   };
 
   const openCreateLocation = () => {
@@ -1350,8 +1368,15 @@ export default function SettingsPage() {
                         max={100}
                         step={0.01}
                         className="rounded-r-none"
-                        value={formData.defaultTaxRate}
-                        onChange={(e) => handleFieldChange("defaultTaxRate", parseFloat(e.target.value) || 0)}
+                        value={defaultTaxRateInput}
+                        onChange={(e) => {
+                          setDefaultTaxRateInput(e.target.value);
+                          const parsed = parseDecimalDraft(e.target.value);
+                          if (parsed != null) {
+                            handleFieldChange("defaultTaxRate", parsed);
+                          }
+                        }}
+                        onBlur={(e) => normalizeDefaultTaxRateInput(e.target.value)}
                       />
                       <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
                         %
@@ -1382,8 +1407,15 @@ export default function SettingsPage() {
                         min={0}
                         step={0.01}
                         className="rounded-l-none"
-                        value={formData.defaultAdminFee}
-                        onChange={(e) => handleFieldChange("defaultAdminFee", parseFloat(e.target.value) || 0)}
+                        value={defaultAdminFeeInput}
+                        onChange={(e) => {
+                          setDefaultAdminFeeInput(e.target.value);
+                          const parsed = parseDecimalDraft(e.target.value);
+                          if (parsed != null) {
+                            handleFieldChange("defaultAdminFee", parsed);
+                          }
+                        }}
+                        onBlur={(e) => normalizeDefaultAdminFeeInput(e.target.value)}
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
