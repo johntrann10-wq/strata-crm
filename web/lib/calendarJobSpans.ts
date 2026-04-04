@@ -46,15 +46,31 @@ export function getJobSpanEnd(appointment: CalendarJobLike): Date {
   return getWorkEnd(appointment);
 }
 
+function getInclusiveRangeEnd(end: Date, start?: Date): Date {
+  const normalized = new Date(end);
+  const isExactMidnight =
+    normalized.getHours() === 0 &&
+    normalized.getMinutes() === 0 &&
+    normalized.getSeconds() === 0 &&
+    normalized.getMilliseconds() === 0;
+
+  if (isExactMidnight && (!start || normalized.getTime() > start.getTime())) {
+    normalized.setMilliseconds(normalized.getMilliseconds() - 1);
+  }
+
+  return normalized;
+}
+
 export function hasLaborOnDay(appointment: CalendarJobLike, date: Date): boolean {
   const start = getWorkStart(appointment).getTime();
-  const end = getWorkEnd(appointment).getTime();
+  const end = getInclusiveRangeEnd(getWorkEnd(appointment), getWorkStart(appointment)).getTime();
   return start <= dayEnd(date).getTime() && end >= dayStart(date).getTime();
 }
 
 export function hasPresenceOnDay(appointment: CalendarJobLike, date: Date): boolean {
-  const start = getJobSpanStart(appointment).getTime();
-  const end = getJobSpanEnd(appointment).getTime();
+  const spanStart = getJobSpanStart(appointment);
+  const start = spanStart.getTime();
+  const end = getInclusiveRangeEnd(getJobSpanEnd(appointment), spanStart).getTime();
   return start <= dayEnd(date).getTime() && end >= dayStart(date).getTime();
 }
 
