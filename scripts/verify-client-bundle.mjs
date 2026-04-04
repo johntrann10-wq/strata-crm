@@ -1,18 +1,25 @@
 /**
- * Post-build check: fail if known stale / forbidden API host strings appear in the client bundle.
+ * Post-build verification for the SPA client bundle.
+ * - Fail if forbidden API host strings appear in client assets
+ * - Patch the static SPA shell with stable SEO/social metadata
+ * - Copy stable preview/icon assets into build/client for crawlers
  */
 import fs from "node:fs";
 import path from "node:path";
 
-const root = path.join(process.cwd(), "build/client");
+const repoRoot = process.cwd();
+const root = path.join(repoRoot, "build/client");
+const staticIndexPath = path.join(root, "index.html");
+const siteUrl = "https://stratacrm.app";
+const fallbackTitle = "Strata CRM | Scheduling, CRM, Invoices, and Payments for Auto Service Shops";
+const fallbackDescription =
+  "Strata CRM helps automotive service businesses run scheduling, clients, vehicles, jobs, quotes, invoices, deposits, team access, and payments in one clear operating system.";
+const stableSocialImagePath = "/social-preview.png";
+const stableSocialImageUrl = `${siteUrl}${stableSocialImagePath}`;
 const configuredApiOrigin =
   process.env.VITE_API_URL?.trim() || process.env.NEXT_PUBLIC_API_URL?.trim() || "";
-const configuredApiHost = configuredApiOrigin
-  ? new URL(configuredApiOrigin).host.toLowerCase()
-  : "";
-const forbidden = [
-  { re: /strata\.gadget\.app/i, msg: "strata.gadget.app (legacy Gadget host)" },
-];
+const configuredApiHost = configuredApiOrigin ? new URL(configuredApiOrigin).host.toLowerCase() : "";
+const forbidden = [{ re: /strata\.gadget\.app/i, msg: "strata.gadget.app (legacy Gadget host)" }];
 
 if (configuredApiHost && configuredApiHost !== "localhost" && configuredApiHost !== "127.0.0.1") {
   forbidden.push({
@@ -24,24 +31,105 @@ if (configuredApiHost && configuredApiHost !== "localhost" && configuredApiHost 
 
 function walk(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const e of entries) {
-    const p = path.join(dir, e.name);
-    if (e.isDirectory()) walk(p);
-    else if (/\.(js|css|html)$/i.test(e.name)) {
-      const c = fs.readFileSync(p, "utf8");
-      for (const { re, msg, allow } of forbidden) {
-        if (re.test(c) && !(allow && allow.test(c))) {
-          console.error(`[verify-client-bundle] Forbidden pattern (${msg}) in ${p}`);
-          process.exit(1);
-        }
+  for (const entry of entries) {
+    const filePath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walk(filePath);
+      continue;
+    }
+
+    if (!/\.(js|css|html)$/i.test(entry.name)) continue;
+
+    const contents = fs.readFileSync(filePath, "utf8");
+    for (const { re, msg, allow } of forbidden) {
+      if (re.test(contents) && !(allow && allow.test(contents))) {
+        console.error(`[verify-client-bundle] Forbidden pattern (${msg}) in ${filePath}`);
+        process.exit(1);
       }
     }
   }
 }
 
+function ensureStaticAsset(sourceRelativePath, destinationFileName) {
+  const sourcePath = path.join(repoRoot, "web", sourceRelativePath);
+  const destinationPath = path.join(root, destinationFileName);
+  if (!fs.existsSync(sourcePath)) {
+    console.warn(`[verify-client-bundle] missing source asset: ${sourcePath}`);
+    return;
+  }
+  fs.copyFileSync(sourcePath, destinationPath);
+}
+
+function upsertTag(html, tagMarkup, matcher) {
+  if (matcher.test(html)) {
+    return html.replace(matcher, tagMarkup);
+  }
+
+  return html.replace("</head>", `    ${tagMarkup}\n</head>`);
+}
+
+function patchSpaIndexHead() {
+  if (!fs.existsSync(staticIndexPath)) {
+    console.warn("[verify-client-bundle] build/client/index.html missing - skip SPA head patch");
+    return;
+  }
+
+  let html = fs.readFileSync(staticIndexPath, "utf8");
+  if (!html.includes("<head>")) {
+    console.warn("[verify-client-bundle] index.html missing <head> - skip SPA head patch");
+    return;
+  }
+
+  html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${fallbackTitle}</title>`);
+
+  const headTags = [
+    [`<meta name="description" content="${fallbackDescription}"/>`, /<meta\s+name="description"[^>]*>/i],
+    [`<meta name="application-name" content="Strata CRM"/>`, /<meta\s+name="application-name"[^>]*>/i],
+    [`<meta name="theme-color" content="#f97316"/>`, /<meta\s+name="theme-color"[^>]*>/i],
+    [`<meta property="og:site_name" content="Strata CRM"/>`, /<meta\s+property="og:site_name"[^>]*>/i],
+    [`<meta property="og:type" content="website"/>`, /<meta\s+property="og:type"[^>]*>/i],
+    [`<meta property="og:url" content="${siteUrl}/"/>`, /<meta\s+property="og:url"[^>]*>/i],
+    [`<meta property="og:title" content="${fallbackTitle}"/>`, /<meta\s+property="og:title"[^>]*>/i],
+    [`<meta property="og:description" content="${fallbackDescription}"/>`, /<meta\s+property="og:description"[^>]*>/i],
+    [`<meta property="og:image" content="${stableSocialImageUrl}"/>`, /<meta\s+property="og:image"[^>]*>/i],
+    [`<meta property="og:image:secure_url" content="${stableSocialImageUrl}"/>`, /<meta\s+property="og:image:secure_url"[^>]*>/i],
+    [`<meta property="og:image:width" content="1200"/>`, /<meta\s+property="og:image:width"[^>]*>/i],
+    [`<meta property="og:image:height" content="630"/>`, /<meta\s+property="og:image:height"[^>]*>/i],
+    [
+      `<meta property="og:image:alt" content="Strata CRM preview showing scheduling, CRM, invoicing, and payments for automotive service shops."/>`,
+      /<meta\s+property="og:image:alt"[^>]*>/i,
+    ],
+    [`<meta name="twitter:card" content="summary_large_image"/>`, /<meta\s+name="twitter:card"[^>]*>/i],
+    [`<meta name="twitter:url" content="${siteUrl}/"/>`, /<meta\s+name="twitter:url"[^>]*>/i],
+    [`<meta name="twitter:title" content="${fallbackTitle}"/>`, /<meta\s+name="twitter:title"[^>]*>/i],
+    [`<meta name="twitter:description" content="${fallbackDescription}"/>`, /<meta\s+name="twitter:description"[^>]*>/i],
+    [`<meta name="twitter:image" content="${stableSocialImageUrl}"/>`, /<meta\s+name="twitter:image"[^>]*>/i],
+    [
+      `<meta name="twitter:image:alt" content="Strata CRM preview showing scheduling, CRM, invoicing, and payments for automotive service shops."/>`,
+      /<meta\s+name="twitter:image:alt"[^>]*>/i,
+    ],
+    [`<link rel="canonical" href="${siteUrl}/"/>`, /<link\s+rel="canonical"[^>]*>/i],
+    [`<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>`, /<link\s+rel="icon"[^>]*favicon\.svg[^>]*>/i],
+    [`<link rel="shortcut icon" href="/favicon.svg" type="image/svg+xml"/>`, /<link\s+rel="shortcut icon"[^>]*>/i],
+    [`<link rel="apple-touch-icon" href="/apple-touch-icon.png"/>`, /<link\s+rel="apple-touch-icon"[^>]*>/i],
+  ];
+
+  for (const [tagMarkup, matcher] of headTags) {
+    html = upsertTag(html, tagMarkup, matcher);
+  }
+
+  fs.writeFileSync(staticIndexPath, html);
+  console.log("[verify-client-bundle] Patched static SPA metadata in build/client/index.html");
+}
+
 if (!fs.existsSync(root)) {
-  console.warn("[verify-client-bundle] build/client missing — skip");
+  console.warn("[verify-client-bundle] build/client missing - skip");
   process.exit(0);
 }
+
 walk(root);
+ensureStaticAsset("social-preview.png", "social-preview.png");
+ensureStaticAsset("favicon.svg", "favicon.svg");
+ensureStaticAsset("apple-touch-icon.png", "apple-touch-icon.png");
+patchSpaIndexHead();
 console.log("[verify-client-bundle] OK (no forbidden API host strings)");
