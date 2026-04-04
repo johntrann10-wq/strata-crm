@@ -134,7 +134,15 @@ export default function PublicLayout() {
           <div className="mt-8 border-t border-gray-200 pt-4">
             <div className="flex flex-col gap-2 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between">
               <p>Copyright {new Date().getFullYear()} Strata. All rights reserved.</p>
-              <p>Support and onboarding: {supportEmail}</p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <Link to="/privacy" className="transition-colors hover:text-gray-700">
+                  Privacy Policy
+                </Link>
+                <Link to="/terms" className="transition-colors hover:text-gray-700">
+                  Terms &amp; Conditions
+                </Link>
+                <span>Support and onboarding: {supportEmail}</span>
+              </div>
             </div>
           </div>
         </div>
