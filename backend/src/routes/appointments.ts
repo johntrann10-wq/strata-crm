@@ -1715,6 +1715,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
       status: appointments.status,
       startTime: appointments.startTime,
       notes: appointments.notes,
+      totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
       depositPaid: appointments.depositPaid,
       clientFirstName: clients.firstName,
@@ -1765,12 +1766,9 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
     !appointment.depositPaid &&
     connectedBusiness?.stripeConnectAccountId
   ) {
-    const account = await retrieveConnectAccount({ accountId: connectedBusiness.stripeConnectAccountId });
-    if (account?.ready) {
-      publicPaymentUrl = buildPublicDocumentUrl(
-        `/api/appointments/${appointment.id}/public-pay?token=${encodeURIComponent(token)}`
-      );
-    }
+    publicPaymentUrl = buildPublicDocumentUrl(
+      `/api/appointments/${appointment.id}/public-pay?token=${encodeURIComponent(token)}`
+    );
   }
 
   const html = renderAppointmentHtml({
@@ -1809,6 +1807,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
     },
     serviceSummary:
       serviceRows.length > 0 ? serviceRows.map((service) => service.name).join(", ") : "Appointment confirmed",
+    totalPrice: appointment.totalPrice,
     depositAmount: appointment.depositAmount,
     depositPaid: appointment.depositPaid,
     publicPaymentUrl,
