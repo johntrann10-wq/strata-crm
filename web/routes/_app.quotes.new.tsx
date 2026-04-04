@@ -190,8 +190,8 @@ export default function NewQuotePage() {
     return sum + qty * price;
   }, 0);
 
-  const adminFeeAmountNum = parseFloat(adminFeeAmount) || 0;
-  const effectiveAdminFee = applyAdminFee ? adminFeeAmountNum : 0;
+  const adminFeeRateNum = applyAdminFee ? parseFloat(adminFeeAmount) || 0 : 0;
+  const effectiveAdminFee = subtotal * (adminFeeRateNum / 100);
   const taxableSubtotal = subtotal + effectiveAdminFee;
   const taxRateNum = applyTax ? parseFloat(taxRate) || 0 : 0;
   const taxAmount = taxableSubtotal * (taxRateNum / 100);
@@ -851,20 +851,27 @@ export default function NewQuotePage() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">Add admin fee</p>
-                      <p className="text-xs text-muted-foreground">Prefill a separate admin fee line item for this quote.</p>
+                      <p className="text-xs text-muted-foreground">Prefill a separate admin fee line item as a percentage of the quote subtotal.</p>
                     </div>
                     <Switch checked={applyAdminFee} onCheckedChange={setApplyAdminFee} />
                   </div>
-                  <Input
-                    id="adminFeeAmount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={adminFeeAmount}
-                    onChange={(e) => setAdminFeeAmount(e.target.value)}
-                    disabled={!applyAdminFee}
-                  />
+                  <div className="flex">
+                    <Input
+                      id="adminFeeAmount"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      placeholder="0"
+                      value={adminFeeAmount}
+                      onChange={(e) => setAdminFeeAmount(e.target.value)}
+                      disabled={!applyAdminFee}
+                      className="rounded-r-none"
+                    />
+                    <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
+                      %
+                    </span>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -891,7 +898,7 @@ export default function NewQuotePage() {
               </div>
               {effectiveAdminFee > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Admin fee</span>
+                  <span className="text-muted-foreground">Admin fee ({adminFeeRateNum}%)</span>
                   <span>{formatCurrency(effectiveAdminFee)}</span>
                 </div>
               )}

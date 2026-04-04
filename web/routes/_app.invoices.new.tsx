@@ -363,7 +363,7 @@ export default function NewInvoicePage() {
 
   // Calculations
   const subtotal = lineItems.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
-  const effectiveAdminFee = applyAdminFee ? adminFeeAmount : 0;
+  const effectiveAdminFee = applyAdminFee ? subtotal * (adminFeeAmount / 100) : 0;
   const taxableSubtotal = subtotal + effectiveAdminFee;
   const effectiveTaxRate = applyTax ? taxRate : 0;
   const taxAmount = (taxableSubtotal * effectiveTaxRate) / 100;
@@ -847,25 +847,28 @@ export default function NewInvoicePage() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">Add admin fee</p>
-                      <p className="text-xs text-muted-foreground">Adds a separate admin fee line item before the invoice is saved.</p>
+                      <p className="text-xs text-muted-foreground">Adds a separate admin fee line item as a percentage of the invoice subtotal.</p>
                     </div>
                     <Switch checked={applyAdminFee} onCheckedChange={setApplyAdminFee} />
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <span>Admin fee</span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-sm">$</span>
+                      <div className="flex items-center">
                         <Input
                           type="number"
                           min="0"
+                          max="100"
                           step="0.01"
-                          placeholder="0.00"
+                          placeholder="0"
                           value={adminFeeAmount === 0 ? "" : adminFeeAmount}
                           onChange={(e) => setAdminFeeAmount(parseFloat(e.target.value) || 0)}
-                          className="w-20 h-7 text-sm px-2"
+                          className="h-7 w-16 rounded-r-none px-2 text-sm"
                           disabled={!applyAdminFee}
                         />
+                        <span className="inline-flex h-7 items-center rounded-r-md border border-l-0 border-input bg-muted px-2 text-sm text-muted-foreground">
+                          %
+                        </span>
                       </div>
                     </div>
                     <span className="text-sm font-medium">${effectiveAdminFee.toFixed(2)}</span>

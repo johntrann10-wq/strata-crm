@@ -38,7 +38,7 @@ const createSchema = z.object({
   timezone: z.string().nullable().optional(),
   currency: z.string().length(3).nullable().optional(),
   defaultTaxRate: z.coerce.number().min(0).max(100).optional(),
-  defaultAdminFee: z.coerce.number().min(0).max(999999).optional(),
+  defaultAdminFee: z.coerce.number().min(0).max(100).optional(),
   defaultAdminFeeEnabled: z.boolean().optional(),
   appointmentBufferMinutes: z.number().int().min(0).max(1440).optional(),
 });

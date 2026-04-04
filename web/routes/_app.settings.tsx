@@ -1398,15 +1398,13 @@ export default function SettingsPage() {
                       </div>
                     </div>
                     <div className="flex">
-                      <span className="inline-flex items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
-                        $
-                      </span>
                       <Input
                         id="defaultAdminFee"
                         type="number"
                         min={0}
+                        max={100}
                         step={0.01}
-                        className="rounded-l-none"
+                        className="rounded-r-none"
                         value={defaultAdminFeeInput}
                         onChange={(e) => {
                           setDefaultAdminFeeInput(e.target.value);
@@ -1417,9 +1415,12 @@ export default function SettingsPage() {
                         }}
                         onBlur={(e) => normalizeDefaultAdminFeeInput(e.target.value)}
                       />
+                      <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
+                        %
+                      </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Prefills quotes and invoices with an adjustable admin fee that can still be turned off per document.
+                      Prefills quotes and invoices with an adjustable admin fee percentage that can still be turned off per document.
                     </p>
                   </div>
                 </div>
