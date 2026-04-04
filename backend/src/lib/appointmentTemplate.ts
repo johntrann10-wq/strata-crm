@@ -67,6 +67,11 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
   const hasTotal = Number.isFinite(totalPrice) && totalPrice > 0;
   const hasDeposit = Number.isFinite(depositAmount) && depositAmount > 0;
   const depositPaid = data.depositPaid === true;
+  const remainingBalance = hasTotal ? Math.max(totalPrice - (hasDeposit ? depositAmount : 0), 0) : 0;
+  const serviceItems = (data.serviceSummary ?? "Appointment details confirmed")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
   const paymentBanner =
     data.stripePaymentState === "success"
       ? `<div class="banner banner-success">Deposit received. Your payment has been recorded.</div>`
@@ -89,7 +94,8 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
     : depositStatus;
   const depositPanel = hasDeposit
     ? `<div class="meta-row"><span>Deposit required</span><span>${formatCurrency(depositAmount)}</span></div>
-       <div class="meta-row"><span>Status</span><span>${escapeHtml(depositStatus)}</span></div>`
+       <div class="meta-row"><span>Status</span><span>${escapeHtml(depositStatus)}</span></div>
+       ${hasTotal ? `<div class="meta-row"><span>Remaining balance</span><span>${formatCurrency(remainingBalance)}</span></div>` : ""}`
     : `<div class="meta-row"><span>Deposit</span><span>No deposit required</span></div>`;
 
   return `<!DOCTYPE html>
@@ -127,6 +133,16 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
       .muted { color: #475569; font-weight: 400; }
       .amount { border-radius: 16px; padding: 18px; background: #f8fafc; border: 1px solid #e2e8f0; }
       .amount .big { margin: 8px 0 6px; font-size: 34px; line-height: 1; letter-spacing: -0.04em; font-weight: 800; }
+      .pricing-grid { display: grid; gap: 10px; margin-top: 16px; }
+      .pricing-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: 14px; }
+      .pricing-row span:first-child { color: #64748b; }
+      .pricing-row span:last-child { font-weight: 700; color: #0f172a; text-align: right; }
+      .pricing-row.total { padding-top: 10px; border-top: 1px solid #e2e8f0; }
+      .pricing-row.remaining span:last-child { color: #c2410c; }
+      .service-list { margin-top: 14px; display: grid; gap: 10px; }
+      .service-item { border-radius: 14px; border: 1px solid #e2e8f0; background: #f8fafc; padding: 12px 14px; }
+      .service-item-title { font-size: 14px; font-weight: 700; color: #0f172a; }
+      .service-item-detail { margin-top: 4px; font-size: 13px; color: #64748b; line-height: 1.5; }
       .cta { display: inline-flex; align-items: center; justify-content: center; margin-top: 16px; padding: 12px 18px; border-radius: 999px; background: #ea580c; color: #fff; text-decoration: none; font-weight: 700; font-size: 14px; }
       .cta-note { margin-top: 10px; color: #64748b; font-size: 13px; line-height: 1.5; }
       .meta-grid { display: grid; gap: 10px; margin-top: 16px; }
@@ -152,7 +168,7 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
               <div class="brand">${businessName}</div>
               <div class="eyebrow" style="margin-top:12px;">Appointment confirmed</div>
               <h1>${escapeHtml(data.appointmentTitle?.trim() || "Appointment details")}</h1>
-              <p class="lede">This page confirms your appointment with ${businessName} and shows the deposit status before your visit.</p>
+              <p class="lede">This page confirms your appointment with ${businessName} and shows the service details, deposit amount, and remaining balance before your visit.</p>
             </div>
             <div class="status ${escapeHtml(status)}">${escapeHtml(label(data.status))}</div>
           </div>
@@ -161,14 +177,28 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
         <main class="body">
           <section class="hero">
             <section class="card">
-              <div class="label">Appointment</div>
+              <div class="label">Service details</div>
               <div class="value">${appointmentDateTime}</div>
-              <div class="value muted">${serviceSummary}</div>
+              <div class="service-list">
+                ${serviceItems
+                  .map(
+                    (service) => `<div class="service-item">
+                  <div class="service-item-title">${escapeHtml(service)}</div>
+                  <div class="service-item-detail">Scheduled for this appointment.</div>
+                </div>`
+                  )
+                  .join("")}
+              </div>
             </section>
             <section class="amount">
               <div class="label">${summaryTitle}</div>
               <div class="big">${summaryAmount}</div>
               <div class="muted">${escapeHtml(summaryDetail)}</div>
+              <div class="pricing-grid">
+                ${hasTotal ? `<div class="pricing-row total"><span>Appointment total</span><span>${formatCurrency(totalPrice)}</span></div>` : ""}
+                ${hasDeposit ? `<div class="pricing-row"><span>Deposit due today</span><span>${formatCurrency(depositAmount)}</span></div>` : ""}
+                ${hasTotal ? `<div class="pricing-row remaining"><span>Remaining balance due</span><span>${formatCurrency(remainingBalance)}</span></div>` : ""}
+              </div>
               ${hasDeposit && !depositPaid && publicPaymentUrl ? `<a class="cta" href="${escapeHtml(publicPaymentUrl)}">Pay ${formatCurrency(depositAmount)} with Stripe</a><div class="cta-note">Secure checkout powered by Stripe.</div>` : hasDeposit && !depositPaid ? `<div class="cta-note">Deposit payment will appear here as soon as online payments are available.</div>` : ""}
             </section>
           </section>
