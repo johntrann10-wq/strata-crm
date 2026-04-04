@@ -2,6 +2,7 @@ export type BusinessTypeDefaults = {
   defaultStaffCount: number;
   operatingHours: string;
   appointmentBufferMinutes: number;
+  calendarBlockCapacityPerSlot: number;
   defaultTaxRate: number;
   currency: string;
   timezone: string;
@@ -12,6 +13,7 @@ const DEFAULTS: Record<string, BusinessTypeDefaults> = {
     defaultStaffCount: 1,
     operatingHours: "Mon-Sat 08:00-18:00",
     appointmentBufferMinutes: 15,
+    calendarBlockCapacityPerSlot: 1,
     defaultTaxRate: 0,
     currency: "USD",
     timezone: "America/Los_Angeles",
@@ -20,6 +22,7 @@ const DEFAULTS: Record<string, BusinessTypeDefaults> = {
     defaultStaffCount: 1,
     operatingHours: "Mon-Sat 08:00-17:00",
     appointmentBufferMinutes: 20,
+    calendarBlockCapacityPerSlot: 1,
     defaultTaxRate: 0,
     currency: "USD",
     timezone: "America/Los_Angeles",
@@ -28,6 +31,7 @@ const DEFAULTS: Record<string, BusinessTypeDefaults> = {
     defaultStaffCount: 2,
     operatingHours: "Mon-Fri 09:00-18:00",
     appointmentBufferMinutes: 30,
+    calendarBlockCapacityPerSlot: 1,
     defaultTaxRate: 0,
     currency: "USD",
     timezone: "America/Los_Angeles",
@@ -36,6 +40,7 @@ const DEFAULTS: Record<string, BusinessTypeDefaults> = {
     defaultStaffCount: 2,
     operatingHours: "Mon-Sat 09:00-18:00",
     appointmentBufferMinutes: 20,
+    calendarBlockCapacityPerSlot: 1,
     defaultTaxRate: 0,
     currency: "USD",
     timezone: "America/Los_Angeles",
@@ -44,6 +49,7 @@ const DEFAULTS: Record<string, BusinessTypeDefaults> = {
     defaultStaffCount: 2,
     operatingHours: "Mon-Fri 09:00-18:00",
     appointmentBufferMinutes: 30,
+    calendarBlockCapacityPerSlot: 1,
     defaultTaxRate: 0,
     currency: "USD",
     timezone: "America/Los_Angeles",
@@ -52,6 +58,7 @@ const DEFAULTS: Record<string, BusinessTypeDefaults> = {
     defaultStaffCount: 2,
     operatingHours: "Mon-Fri 08:00-17:00",
     appointmentBufferMinutes: 15,
+    calendarBlockCapacityPerSlot: 1,
     defaultTaxRate: 0,
     currency: "USD",
     timezone: "America/Los_Angeles",
@@ -60,6 +67,7 @@ const DEFAULTS: Record<string, BusinessTypeDefaults> = {
     defaultStaffCount: 2,
     operatingHours: "Mon-Sat 08:00-17:00",
     appointmentBufferMinutes: 10,
+    calendarBlockCapacityPerSlot: 1,
     defaultTaxRate: 0,
     currency: "USD",
     timezone: "America/Los_Angeles",
@@ -68,6 +76,7 @@ const DEFAULTS: Record<string, BusinessTypeDefaults> = {
     defaultStaffCount: 2,
     operatingHours: "Mon-Fri 09:00-17:00",
     appointmentBufferMinutes: 20,
+    calendarBlockCapacityPerSlot: 1,
     defaultTaxRate: 0,
     currency: "USD",
     timezone: "America/Los_Angeles",

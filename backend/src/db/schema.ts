@@ -116,6 +116,7 @@ export const businesses = pgTable("businesses", {
   defaultAdminFee: decimal("default_admin_fee", { precision: 12, scale: 2 }).default("0"),
   defaultAdminFeeEnabled: boolean("default_admin_fee_enabled").default(false),
   appointmentBufferMinutes: integer("appointment_buffer_minutes").default(15),
+  calendarBlockCapacityPerSlot: integer("calendar_block_capacity_per_slot").default(1),
   nextInvoiceNumber: integer("next_invoice_number").default(1).notNull(),
   onboardingComplete: boolean("onboarding_complete").default(false),
   staffCount: integer("staff_count"),

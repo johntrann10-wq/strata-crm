@@ -41,6 +41,7 @@ const createSchema = z.object({
   defaultAdminFee: z.coerce.number().min(0).max(100).optional(),
   defaultAdminFeeEnabled: z.boolean().optional(),
   appointmentBufferMinutes: z.number().int().min(0).max(1440).optional(),
+  calendarBlockCapacityPerSlot: z.number().int().min(1).max(12).optional(),
 });
 
 const updateSchema = createSchema
@@ -77,6 +78,7 @@ function coerceBusinessRecord(
     defaultAdminFee: record.defaultAdminFee ?? "0",
     defaultAdminFeeEnabled: record.defaultAdminFeeEnabled ?? false,
     appointmentBufferMinutes: record.appointmentBufferMinutes ?? 15,
+    calendarBlockCapacityPerSlot: record.calendarBlockCapacityPerSlot ?? 1,
     nextInvoiceNumber: record.nextInvoiceNumber ?? 1,
     onboardingComplete: record.onboardingComplete ?? null,
     staffCount: record.staffCount ?? null,
@@ -256,6 +258,8 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       defaultAdminFeeEnabled: parsed.data.defaultAdminFeeEnabled ?? false,
       appointmentBufferMinutes:
         parsed.data.appointmentBufferMinutes ?? typeDefaults.appointmentBufferMinutes,
+      calendarBlockCapacityPerSlot:
+        parsed.data.calendarBlockCapacityPerSlot ?? typeDefaults.calendarBlockCapacityPerSlot,
     })
     .returning();
   if (!created) throw new BadRequestError("Failed to create business.");
@@ -324,6 +328,9 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.appointmentBufferMinutes !== undefined) {
     updates.appointmentBufferMinutes = parsed.data.appointmentBufferMinutes ?? 15;
+  }
+  if (parsed.data.calendarBlockCapacityPerSlot !== undefined) {
+    updates.calendarBlockCapacityPerSlot = parsed.data.calendarBlockCapacityPerSlot ?? 1;
   }
 
   let updated: BusinessRecord | undefined;

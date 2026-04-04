@@ -691,6 +691,9 @@ export default function SettingsPage() {
   const [appointmentBufferInput, setAppointmentBufferInput] = useState(
     String(DEFAULT_BUSINESS_SETTINGS_FORM.appointmentBufferMinutes)
   );
+  const [calendarBlockCapacityInput, setCalendarBlockCapacityInput] = useState(
+    String(DEFAULT_BUSINESS_SETTINGS_FORM.calendarBlockCapacityPerSlot)
+  );
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -768,6 +771,7 @@ export default function SettingsPage() {
     setDefaultTaxRateInput(next.defaultTaxRateInput);
     setDefaultAdminFeeInput(next.defaultAdminFeeInput);
     setAppointmentBufferInput(next.appointmentBufferInput);
+    setCalendarBlockCapacityInput(next.calendarBlockCapacityInput);
   }, [business]);
 
   useEffect(() => {
@@ -835,6 +839,13 @@ export default function SettingsPage() {
     const next = normalizeAppointmentBuffer(value);
     setAppointmentBufferInput(next.inputValue);
     handleFieldChange("appointmentBufferMinutes", next.numericValue);
+  };
+
+  const normalizeCalendarBlockCapacityInput = (value: string) => {
+    const parsed = Number.parseInt(value.trim(), 10);
+    const numericValue = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 12) : 1;
+    setCalendarBlockCapacityInput(String(numericValue));
+    handleFieldChange("calendarBlockCapacityPerSlot", numericValue);
   };
 
   const normalizeDefaultTaxRateInput = (value: string) => {
@@ -1101,6 +1112,7 @@ export default function SettingsPage() {
         defaultAdminFeeEnabled: formData.defaultAdminFeeEnabled,
         currency: formData.currency || "USD",
         appointmentBufferMinutes: formData.appointmentBufferMinutes,
+        calendarBlockCapacityPerSlot: formData.calendarBlockCapacityPerSlot,
         timezone: formData.timezone || null,
       });
       await getBusinessPreset();
@@ -1450,6 +1462,37 @@ export default function SettingsPage() {
                       </span>
                     </div>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="calendarBlockCapacityPerSlot">Blocks Per Time Slot</Label>
+                    <div className="flex">
+                      <Input
+                        id="calendarBlockCapacityPerSlot"
+                        type="number"
+                        min={1}
+                        max={12}
+                        step={1}
+                        className="rounded-r-none"
+                        value={calendarBlockCapacityInput}
+                        onChange={(e) => {
+                          setCalendarBlockCapacityInput(e.target.value);
+                          const parsed = Number.parseInt(e.target.value, 10);
+                          if (Number.isFinite(parsed) && parsed > 0) {
+                            handleFieldChange("calendarBlockCapacityPerSlot", Math.min(parsed, 12));
+                          }
+                        }}
+                        onBlur={(e) => normalizeCalendarBlockCapacityInput(e.target.value)}
+                      />
+                      <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
+                        max
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Controls how many overlapping internal calendar blocks can exist in the same time slot before Strata blocks another one.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="timezone">Timezone</Label>
                     <Select value={formData.timezone} onValueChange={(value) => handleFieldChange("timezone", value)}>

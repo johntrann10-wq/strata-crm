@@ -12,6 +12,7 @@ export interface BusinessSettingsFormData {
   defaultAdminFeeEnabled: boolean;
   currency: string;
   appointmentBufferMinutes: number;
+  calendarBlockCapacityPerSlot: number;
   timezone: string;
 }
 
@@ -29,6 +30,7 @@ export const DEFAULT_BUSINESS_SETTINGS_FORM: BusinessSettingsFormData = {
   defaultAdminFeeEnabled: false,
   currency: "USD",
   appointmentBufferMinutes: 15,
+  calendarBlockCapacityPerSlot: 1,
   timezone: "America/New_York",
 };
 
@@ -44,6 +46,8 @@ export function businessSettingsFormFromSource(source: BusinessSettingsSource) {
       source?.defaultAdminFeeEnabled ?? DEFAULT_BUSINESS_SETTINGS_FORM.defaultAdminFeeEnabled,
     appointmentBufferMinutes:
       source?.appointmentBufferMinutes ?? DEFAULT_BUSINESS_SETTINGS_FORM.appointmentBufferMinutes,
+    calendarBlockCapacityPerSlot:
+      source?.calendarBlockCapacityPerSlot ?? DEFAULT_BUSINESS_SETTINGS_FORM.calendarBlockCapacityPerSlot,
     currency: source?.currency ?? DEFAULT_BUSINESS_SETTINGS_FORM.currency,
     timezone: source?.timezone ?? DEFAULT_BUSINESS_SETTINGS_FORM.timezone,
   };
@@ -53,6 +57,7 @@ export function businessSettingsFormFromSource(source: BusinessSettingsSource) {
     defaultTaxRateInput: formatDecimalInput(next.defaultTaxRate),
     defaultAdminFeeInput: formatDecimalInput(next.defaultAdminFee),
     appointmentBufferInput: String(next.appointmentBufferMinutes),
+    calendarBlockCapacityInput: String(next.calendarBlockCapacityPerSlot),
   };
 }
 

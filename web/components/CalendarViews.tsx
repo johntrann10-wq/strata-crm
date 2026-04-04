@@ -251,7 +251,11 @@ export function detectConflicts(appointments: ApptRecord[]): {
   const businessConflictIds = new Set<string>();
 
   const activeAppointments = appointments.filter(
-    (apt) => apt.status !== "cancelled" && apt.status !== "no-show" && apt.status !== "completed"
+    (apt) =>
+      apt.status !== "cancelled" &&
+      apt.status !== "no-show" &&
+      apt.status !== "completed" &&
+      !isCalendarBlockAppointment(apt)
   );
 
   const groups = new Map<string, ApptRecord[]>();

@@ -31,6 +31,52 @@ function isCalendarBlockInternalNotes(value: string | null | undefined): boolean
   return String(value ?? "").trim().startsWith(CALENDAR_BLOCK_PREFIX);
 }
 
+async function getCalendarBlockCapacityPerSlot(bid: string): Promise<number> {
+  const [business] = await db
+    .select({ calendarBlockCapacityPerSlot: businesses.calendarBlockCapacityPerSlot })
+    .from(businesses)
+    .where(eq(businesses.id, bid))
+    .limit(1);
+  const capacity = Number(business?.calendarBlockCapacityPerSlot ?? 1);
+  if (!Number.isFinite(capacity) || capacity < 1) return 1;
+  return Math.min(capacity, 12);
+}
+
+async function countOverlappingCalendarBlocks(params: {
+  businessId: string;
+  startTime: Date;
+  endTime: Date | null;
+  assignedStaffId?: string | null;
+  excludeAppointmentId?: string | null;
+}): Promise<number> {
+  const end = params.endTime && params.endTime.getTime() > params.startTime.getTime()
+    ? params.endTime
+    : new Date(params.startTime.getTime() + 60 * 60 * 1000);
+
+  const result = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(appointments)
+    .where(
+      sql`${appointments.businessId} = ${params.businessId}
+        AND ${appointments.status} NOT IN ('cancelled', 'no-show')
+        AND ${appointments.internalNotes} LIKE ${`${CALENDAR_BLOCK_PREFIX}%`}
+        AND (${appointments.startTime} < ${end})
+        AND (COALESCE(${appointments.endTime}, ${appointments.startTime} + interval '1 hour') > ${params.startTime})
+        ${
+          params.excludeAppointmentId
+            ? sql`AND ${appointments.id} != ${params.excludeAppointmentId}`
+            : sql``
+        }
+        ${
+          params.assignedStaffId
+            ? sql`AND ${appointments.assignedStaffId} = ${params.assignedStaffId}`
+            : sql`AND ${appointments.assignedStaffId} IS NULL`
+        }`
+    );
+
+  return Number(result[0]?.count ?? 0);
+}
+
 function isLocationSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
@@ -1040,6 +1086,22 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
           : "Another appointment in this business overlaps with this time slot."
       );
     }
+  } else {
+    const blockCapacity = await getCalendarBlockCapacityPerSlot(bid);
+    const overlappingBlocks = await countOverlappingCalendarBlocks({
+      businessId: bid,
+      startTime,
+      endTime,
+      assignedStaffId: parsed.data.assignedStaffId ?? null,
+      excludeAppointmentId: null,
+    });
+    if (overlappingBlocks >= blockCapacity) {
+      throw new ConflictError(
+        parsed.data.assignedStaffId
+          ? `This staff member already has ${blockCapacity} block${blockCapacity === 1 ? "" : "s"} in this time slot.`
+          : `This time slot already has ${blockCapacity} block${blockCapacity === 1 ? "" : "s"} scheduled.`
+      );
+    }
   }
 
   let totalPriceInit = "0";
@@ -1327,6 +1389,22 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
         assignedStaffId
           ? "This staff member already has an appointment in this time slot."
           : "Another appointment in this business overlaps with this time slot."
+      );
+    }
+  } else if (isCalendarBlock && (parsed.data.startTime != null || parsed.data.endTime != null || parsed.data.assignedStaffId != null)) {
+    const blockCapacity = await getCalendarBlockCapacityPerSlot(bid);
+    const overlappingBlocks = await countOverlappingCalendarBlocks({
+      businessId: bid,
+      startTime,
+      endTime,
+      assignedStaffId,
+      excludeAppointmentId: req.params.id,
+    });
+    if (overlappingBlocks >= blockCapacity) {
+      throw new ConflictError(
+        assignedStaffId
+          ? `This staff member already has ${blockCapacity} block${blockCapacity === 1 ? "" : "s"} in this time slot.`
+          : `This time slot already has ${blockCapacity} block${blockCapacity === 1 ? "" : "s"} scheduled.`
       );
     }
   }
