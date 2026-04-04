@@ -429,7 +429,7 @@ const TIME_OPTIONS = buildQuarterHourOptions();
 
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, businessType, permissions, currentLocationId } = useOutletContext<AuthOutletContext>();
   const canEditCollaboration = permissions.has("appointments.write");
   const { setPageContext } = usePageContext();
@@ -627,6 +627,9 @@ export default function AppointmentDetail() {
   const [{ fetching: cancelling }, runCancel] = useAction(api.appointment.cancel);
   const [{ fetching: updatingNotes }, runUpdate] = useAction(api.appointment.update);
   const [{ fetching: recordingDeposit }, runRecordDepositPayment] = useAction(api.appointment.recordDepositPayment);
+  const [{ fetching: creatingStripeDepositSession }, runCreateStripeDepositSession] = useAction(
+    api.appointment.createStripeDepositSession
+  );
   const [{ fetching: reversingDeposit }, runReverseDepositPayment] = useAction(api.appointment.reverseDepositPayment);
   const [{ fetching: addingService }, runAddAppointmentService] = useAction(api.appointmentService.create);
   const [{ fetching: removingService }, runRemoveAppointmentService] = useAction(
@@ -641,6 +644,21 @@ export default function AppointmentDetail() {
       setInternalNotesValue(appointment.internalNotes ?? "");
     }
   }, [appointment]);
+
+  useEffect(() => {
+    const paymentStatus = searchParams.get("stripePayment");
+    if (!paymentStatus) return;
+    if (paymentStatus === "success") {
+      toast.success("Stripe deposit submitted. Appointment status will update as soon as Stripe confirms it.");
+      void refetchAppointment();
+      void refetchActivity();
+    } else if (paymentStatus === "cancelled") {
+      toast.message("Stripe checkout was cancelled.");
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("stripePayment");
+    setSearchParams(next, { replace: true });
+  }, [refetchActivity, refetchAppointment, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!appointment) return;
@@ -1156,6 +1174,21 @@ export default function AppointmentDetail() {
     }
   };
 
+  const handleStripeDepositCheckout = async () => {
+    if (!appointment?.id) return;
+    const result = await runCreateStripeDepositSession({ id: appointment.id });
+    if (!result.error) {
+      const url = (result.data as { url?: string } | undefined)?.url;
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+      toast.error("Stripe Checkout link was not returned.");
+      return;
+    }
+    toast.error("Failed to open Stripe Checkout: " + result.error.message);
+  };
+
   const handleContextualAction = (action?: string) => {
     if (!action) return;
     if (action === "confirm") {
@@ -1391,10 +1424,21 @@ export default function AppointmentDetail() {
             )}
 
             {appointment.depositAmount != null && appointment.depositAmount > 0 && !appointment.depositPaid && (
-              <Button variant="outline" size="sm" onClick={handleOpenDepositDialog}>
-                <DollarSign className="h-4 w-4 mr-2" />
-                Collect Deposit
-              </Button>
+              <>
+                <Button variant="outline" size="sm" onClick={handleOpenDepositDialog}>
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Collect Deposit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleStripeDepositCheckout()}
+                  disabled={creatingStripeDepositSession}
+                >
+                  {creatingStripeDepositSession ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <DollarSign className="h-4 w-4 mr-2" />}
+                  Pay with Stripe
+                </Button>
+              </>
             )}
           </div>
 
@@ -1558,17 +1602,31 @@ export default function AppointmentDetail() {
                   </Button>
                 ) : null}
                 {appointment.depositAmount != null && appointment.depositAmount > 0 && !appointment.depositPaid ? (
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={() => {
-                      setShowMobileActions(false);
-                      handleOpenDepositDialog();
-                    }}
-                  >
-                    <DollarSign className="mr-2 h-4 w-4" />
-                    Collect deposit
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      className="justify-start"
+                      onClick={() => {
+                        setShowMobileActions(false);
+                        handleOpenDepositDialog();
+                      }}
+                    >
+                      <DollarSign className="mr-2 h-4 w-4" />
+                      Collect deposit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="justify-start"
+                      disabled={creatingStripeDepositSession}
+                      onClick={() => {
+                        setShowMobileActions(false);
+                        void handleStripeDepositCheckout();
+                      }}
+                    >
+                      {creatingStripeDepositSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DollarSign className="mr-2 h-4 w-4" />}
+                      Pay with Stripe
+                    </Button>
+                  </>
                 ) : null}
                 {appointment.depositPaid ? (
                   <Button

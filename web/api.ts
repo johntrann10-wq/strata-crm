@@ -356,6 +356,11 @@ export const api = {
           method: "POST",
           body: JSON.stringify(params),
         }),
+      createStripeDepositSession: (params: Record<string, unknown>) =>
+        request<{ url: string }>("/appointments/" + (params?.id ?? "") + "/create-deposit-payment-session", {
+          method: "POST",
+          body: JSON.stringify(params),
+        }),
       reverseDepositPayment: (params: Record<string, unknown>) =>
         request<unknown>("/appointments/" + (params?.id ?? "") + "/reverseDepositPayment", {
           method: "POST",

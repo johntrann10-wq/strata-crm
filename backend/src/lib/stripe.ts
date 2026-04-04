@@ -207,3 +207,64 @@ export async function createInvoicePaymentCheckoutSession(params: {
   }, requestOptions);
   return { url: session.url! };
 }
+
+export async function createAppointmentDepositCheckoutSession(params: {
+  businessId: string;
+  appointmentId: string;
+  appointmentTitle?: string | null;
+  amountCents: number;
+  connectedAccountId?: string | null;
+  currency?: string | null;
+  customerEmail?: string | null;
+  customerName?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+}): Promise<{ url: string } | null> {
+  if (!stripe) return null;
+  const amountCents = Math.max(0, Math.round(params.amountCents));
+  if (amountCents <= 0) return null;
+  const currency = (params.currency ?? "usd").trim().toLowerCase() || "usd";
+  const requestOptions =
+    params.connectedAccountId && params.connectedAccountId.trim()
+      ? { stripeAccount: params.connectedAccountId.trim() }
+      : undefined;
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: "payment",
+      customer_email: params.customerEmail ?? undefined,
+      customer_creation: "always",
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+      line_items: [
+        {
+          price_data: {
+            currency,
+            unit_amount: amountCents,
+            product_data: {
+              name: params.appointmentTitle?.trim() || "Appointment deposit",
+              description: params.customerName ? `Deposit for ${params.customerName}` : "Appointment deposit",
+            },
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: params.successUrl,
+      cancel_url: params.cancelUrl,
+      metadata: {
+        purpose: "appointment_deposit",
+        businessId: params.businessId,
+        appointmentId: params.appointmentId,
+        appointmentTitle: params.appointmentTitle?.trim() || "",
+      },
+      payment_intent_data: {
+        metadata: {
+          purpose: "appointment_deposit",
+          businessId: params.businessId,
+          appointmentId: params.appointmentId,
+          appointmentTitle: params.appointmentTitle?.trim() || "",
+        },
+      },
+    },
+    requestOptions
+  );
+  return { url: session.url! };
+}

@@ -17,6 +17,9 @@ import { isEmailConfigured } from "../lib/env.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
 import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
+import { buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
+import { createAppointmentDepositCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
+import { renderAppointmentHtml } from "../lib/appointmentTemplate.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
@@ -516,6 +519,8 @@ async function buildAppointmentConfirmationPayload(
         locationName: string | null;
         locationAddress: string | null;
         locationTimezone: string | null;
+        depositAmount: string | null;
+        depositPaid: boolean | null;
       }
     | undefined;
   try {
@@ -536,6 +541,8 @@ async function buildAppointmentConfirmationPayload(
         locationName: locations.name,
         locationAddress: locations.address,
         locationTimezone: locations.timezone,
+        depositAmount: appointments.depositAmount,
+        depositPaid: appointments.depositPaid,
       })
       .from(appointments)
       .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
@@ -569,6 +576,8 @@ async function buildAppointmentConfirmationPayload(
           locationName: locations.name,
           locationAddress: locations.address,
           locationTimezone: sql<string | null>`null`,
+          depositAmount: appointments.depositAmount,
+          depositPaid: appointments.depositPaid,
         })
         .from(appointments)
         .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
@@ -601,6 +610,8 @@ async function buildAppointmentConfirmationPayload(
           locationName: sql<string | null>`null`,
           locationAddress: sql<string | null>`null`,
           locationTimezone: sql<string | null>`null`,
+          depositAmount: appointments.depositAmount,
+          depositPaid: appointments.depositPaid,
         })
         .from(appointments)
         .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
@@ -630,6 +641,17 @@ async function buildAppointmentConfirmationPayload(
     });
   }
 
+  const publicToken = createPublicDocumentToken({
+    kind: "appointment",
+    entityId: appointmentRow.id,
+    businessId: bid,
+  });
+  const publicAppointmentUrl = buildPublicDocumentUrl(
+    `/api/appointments/${appointmentRow.id}/public-html?token=${encodeURIComponent(publicToken)}`
+  );
+  const depositAmount = Number(appointmentRow.depositAmount ?? 0);
+  const hasDepositDue = Number.isFinite(depositAmount) && depositAmount > 0 && !appointmentRow.depositPaid;
+
   return {
     appointmentId: appointmentRow.id,
     recipient: overrides?.recipientEmail?.trim() || appointmentRow.clientEmail?.trim() || null,
@@ -658,7 +680,13 @@ async function buildAppointmentConfirmationPayload(
     })(),
     serviceSummary:
       serviceRows.length > 0 ? `Services: ${serviceRows.map((service) => service.name).join(", ")}` : null,
-    confirmationUrl: `${process.env.FRONTEND_URL?.trim() ?? ""}/appointments/${appointmentRow.id}`,
+    confirmationUrl: publicAppointmentUrl,
+    confirmationActionLabel: hasDepositDue ? "View appointment and pay deposit" : "View appointment",
+    paymentStatus: hasDepositDue
+      ? `A deposit of $${depositAmount.toFixed(2)} is still due for this appointment.`
+      : appointmentRow.depositPaid
+        ? "Deposit already collected."
+        : "No deposit is required for this appointment.",
     message: overrides?.message?.trim() || null,
   };
 }
@@ -716,6 +744,8 @@ async function sendAppointmentConfirmationForRecord(
       address: payload.address,
       serviceSummary: payload.serviceSummary,
       confirmationUrl: payload.confirmationUrl,
+      confirmationActionLabel: payload.confirmationActionLabel,
+      paymentStatus: payload.paymentStatus,
       message: payload.message,
     });
     return { deliveryStatus: "emailed", deliveryError: null, recipient: payload.recipient };
@@ -1554,6 +1584,71 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   res.json(updated ?? { ...existing, depositPaid: true });
 });
 
+appointmentsRouter.post("/:id/create-deposit-payment-session", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const [appointment] = await db
+    .select({
+      id: appointments.id,
+      title: appointments.title,
+      clientId: appointments.clientId,
+      depositAmount: appointments.depositAmount,
+      depositPaid: appointments.depositPaid,
+    })
+    .from(appointments)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .limit(1);
+  if (!appointment) throw new NotFoundError("Appointment not found.");
+
+  const depositAmount = Number(appointment.depositAmount ?? 0);
+  if (!Number.isFinite(depositAmount) || depositAmount <= 0) {
+    throw new BadRequestError("This appointment does not have a deposit to collect.");
+  }
+  if (appointment.depositPaid) {
+    throw new BadRequestError("This appointment deposit has already been collected.");
+  }
+
+  const [business] = await db
+    .select({ stripeConnectAccountId: businesses.stripeConnectAccountId })
+    .from(businesses)
+    .where(eq(businesses.id, bid))
+    .limit(1);
+  if (!business?.stripeConnectAccountId) {
+    throw new BadRequestError("Connect Stripe before collecting deposits.");
+  }
+  const account = await retrieveConnectAccount({ accountId: business.stripeConnectAccountId });
+  if (!account?.ready) {
+    throw new BadRequestError("This business is still finishing Stripe setup.");
+  }
+
+  const [client] = appointment.clientId
+    ? await db
+        .select({
+          firstName: clients.firstName,
+          lastName: clients.lastName,
+          email: clients.email,
+        })
+        .from(clients)
+        .where(and(eq(clients.id, appointment.clientId), eq(clients.businessId, bid)))
+        .limit(1)
+    : [];
+  const clientName = [client?.firstName, client?.lastName].filter(Boolean).join(" ").trim() || null;
+  const base = process.env.FRONTEND_URL!;
+  const returnTo = `${base}/appointments/${encodeURIComponent(appointment.id)}`;
+  const result = await createAppointmentDepositCheckoutSession({
+    businessId: bid,
+    appointmentId: appointment.id,
+    appointmentTitle: appointment.title ?? "Appointment deposit",
+    amountCents: Math.round(depositAmount * 100),
+    connectedAccountId: business.stripeConnectAccountId,
+    customerEmail: client?.email ?? null,
+    customerName: clientName,
+    successUrl: `${returnTo}?stripePayment=success`,
+    cancelUrl: `${returnTo}?stripePayment=cancelled`,
+  });
+  if (!result?.url) throw new BadRequestError("Could not create Stripe Checkout session.");
+  res.json(result);
+}));
+
 appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
@@ -1607,6 +1702,200 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
 
   res.json(updated ?? { ...existing, depositPaid: false });
 });
+
+appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: Response) => {
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  const access = verifyPublicDocumentToken(token, { kind: "appointment", entityId: req.params.id });
+  if (!access) throw new ForbiddenError("Appointment access link is invalid or expired.");
+
+  const [appointment] = await db
+    .select({
+      id: appointments.id,
+      title: appointments.title,
+      status: appointments.status,
+      startTime: appointments.startTime,
+      notes: appointments.notes,
+      depositAmount: appointments.depositAmount,
+      depositPaid: appointments.depositPaid,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      clientEmail: clients.email,
+      clientPhone: clients.phone,
+      vehicleYear: vehicles.year,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
+      businessName: businesses.name,
+      businessEmail: businesses.email,
+      businessPhone: businesses.phone,
+      businessAddress: businesses.address,
+      businessCity: businesses.city,
+      businessState: businesses.state,
+      businessZip: businesses.zip,
+      businessTimezone: businesses.timezone,
+      businessType: businesses.type,
+      locationTimezone: locations.timezone,
+    })
+    .from(appointments)
+    .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, access.businessId)))
+    .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, access.businessId)))
+    .leftJoin(businesses, eq(appointments.businessId, businesses.id))
+    .leftJoin(locations, and(eq(appointments.locationId, locations.id), eq(locations.businessId, access.businessId)))
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, access.businessId)))
+    .limit(1);
+  if (!appointment) throw new NotFoundError("Appointment not found.");
+
+  const [connectedBusiness] = await db
+    .select({ stripeConnectAccountId: businesses.stripeConnectAccountId })
+    .from(businesses)
+    .where(eq(businesses.id, access.businessId))
+    .limit(1);
+
+  const serviceRows = await db
+    .select({ name: services.name })
+    .from(appointmentServices)
+    .innerJoin(services, eq(appointmentServices.serviceId, services.id))
+    .where(eq(appointmentServices.appointmentId, appointment.id))
+    .orderBy(asc(services.name));
+
+  let publicPaymentUrl: string | null = null;
+  const depositAmount = Number(appointment.depositAmount ?? 0);
+  if (
+    Number.isFinite(depositAmount) &&
+    depositAmount > 0 &&
+    !appointment.depositPaid &&
+    connectedBusiness?.stripeConnectAccountId
+  ) {
+    const account = await retrieveConnectAccount({ accountId: connectedBusiness.stripeConnectAccountId });
+    if (account?.ready) {
+      publicPaymentUrl = buildPublicDocumentUrl(
+        `/api/appointments/${appointment.id}/public-pay?token=${encodeURIComponent(token)}`
+      );
+    }
+  }
+
+  const html = renderAppointmentHtml({
+    appointmentTitle: appointment.title ?? "Appointment details",
+    appointmentDateTime: formatAppointmentDateTime(
+      appointment.startTime,
+      appointment.locationTimezone ??
+        appointment.businessTimezone ??
+        getBusinessTypeDefaults(appointment.businessType).timezone
+    ),
+    status: appointment.status,
+    notes: appointment.notes,
+    business: {
+      name: appointment.businessName,
+      email: appointment.businessEmail,
+      phone: appointment.businessPhone,
+      address: [
+        appointment.businessAddress,
+        appointment.businessCity,
+        appointment.businessState,
+        appointment.businessZip,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    },
+    client: {
+      firstName: appointment.clientFirstName,
+      lastName: appointment.clientLastName,
+      email: appointment.clientEmail,
+      phone: appointment.clientPhone,
+    },
+    vehicle: {
+      year: appointment.vehicleYear,
+      make: appointment.vehicleMake,
+      model: appointment.vehicleModel,
+    },
+    serviceSummary:
+      serviceRows.length > 0 ? serviceRows.map((service) => service.name).join(", ") : "Appointment confirmed",
+    depositAmount: appointment.depositAmount,
+    depositPaid: appointment.depositPaid,
+    publicPaymentUrl,
+    stripePaymentState:
+      req.query.stripePayment === "success"
+        ? "success"
+        : req.query.stripePayment === "cancelled"
+          ? "cancelled"
+          : null,
+  });
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.send(html);
+}));
+
+appointmentsRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Response) => {
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  const access = verifyPublicDocumentToken(token, { kind: "appointment", entityId: req.params.id });
+  if (!access) throw new ForbiddenError("Appointment access link is invalid or expired.");
+
+  const [appointment] = await db
+    .select({
+      id: appointments.id,
+      title: appointments.title,
+      clientId: appointments.clientId,
+      depositAmount: appointments.depositAmount,
+      depositPaid: appointments.depositPaid,
+    })
+    .from(appointments)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, access.businessId)))
+    .limit(1);
+  if (!appointment) throw new NotFoundError("Appointment not found.");
+
+  const depositAmount = Number(appointment.depositAmount ?? 0);
+  if (!Number.isFinite(depositAmount) || depositAmount <= 0) {
+    throw new BadRequestError("This appointment does not have a deposit to collect.");
+  }
+  if (appointment.depositPaid) {
+    throw new BadRequestError("This appointment deposit has already been collected.");
+  }
+
+  const [business] = await db
+    .select({ stripeConnectAccountId: businesses.stripeConnectAccountId })
+    .from(businesses)
+    .where(eq(businesses.id, access.businessId))
+    .limit(1);
+  if (!business?.stripeConnectAccountId) {
+    throw new BadRequestError("This business has not connected Stripe yet.");
+  }
+  const account = await retrieveConnectAccount({ accountId: business.stripeConnectAccountId });
+  if (!account?.ready) {
+    throw new BadRequestError("This business is still finishing Stripe setup.");
+  }
+
+  const [client] = appointment.clientId
+    ? await db
+        .select({
+          firstName: clients.firstName,
+          lastName: clients.lastName,
+          email: clients.email,
+        })
+        .from(clients)
+        .where(and(eq(clients.id, appointment.clientId), eq(clients.businessId, access.businessId)))
+        .limit(1)
+    : [];
+  const clientName = [client?.firstName, client?.lastName].filter(Boolean).join(" ").trim() || null;
+  const returnTo = buildPublicDocumentUrl(
+    `/api/appointments/${encodeURIComponent(appointment.id)}/public-html?token=${encodeURIComponent(token)}`
+  );
+  const result = await createAppointmentDepositCheckoutSession({
+    businessId: access.businessId,
+    appointmentId: appointment.id,
+    appointmentTitle: appointment.title ?? "Appointment deposit",
+    amountCents: Math.round(depositAmount * 100),
+    connectedAccountId: business.stripeConnectAccountId,
+    customerEmail: client?.email ?? null,
+    customerName: clientName,
+    successUrl: `${returnTo}&stripePayment=success`,
+    cancelUrl: `${returnTo}&stripePayment=cancelled`,
+  });
+  if (!result?.url) {
+    throw new BadRequestError("Could not create Stripe Checkout session.");
+  }
+  res.redirect(303, result.url);
+}));
 
 appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const parsed = sendConfirmationSchema.safeParse(req.body ?? {});

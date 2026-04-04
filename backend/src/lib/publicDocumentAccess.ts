@@ -1,6 +1,6 @@
 import { createScopedPublicDocumentToken, verifyScopedPublicDocumentToken } from "./jwt.js";
 
-type PublicDocumentKind = "quote" | "invoice";
+type PublicDocumentKind = "quote" | "invoice" | "appointment";
 
 type PublicDocumentTokenPayload = {
   kind: PublicDocumentKind;

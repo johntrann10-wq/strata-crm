@@ -3,7 +3,7 @@
  */
 import { Router, Request, Response } from "express";
 import { db } from "../db/index.js";
-import { businesses, invoices, users } from "../db/schema.js";
+import { appointments, businesses, invoices, users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import Stripe from "stripe";
 import {
@@ -490,6 +490,103 @@ export async function handleStripeWebhook(
               sessionId: session.id,
               businessId,
               invoiceId,
+            });
+          }
+        }
+      } else if (purpose === "appointment_deposit") {
+        const businessId = session.metadata?.businessId;
+        const appointmentId = session.metadata?.appointmentId;
+        const sessionAmountTotal = session.amount_total;
+        if (!businessId || !appointmentId || sessionAmountTotal == null) {
+          logger.warn("Stripe appointment deposit completed without required metadata", {
+            sessionId: session.id,
+            businessId,
+            appointmentId,
+          });
+        } else {
+          const idempotencyKey = `stripe-appointment-deposit-${session.id}`;
+          const [business] = await db
+            .select({
+              stripeConnectAccountId: businesses.stripeConnectAccountId,
+            })
+            .from(businesses)
+            .where(eq(businesses.id, businessId))
+            .limit(1);
+          if (
+            event.account &&
+            business?.stripeConnectAccountId &&
+            event.account !== business.stripeConnectAccountId
+          ) {
+            logger.warn("Stripe appointment deposit completed for unexpected connected account", {
+              sessionId: session.id,
+              businessId,
+              appointmentId,
+              eventAccount: event.account,
+              expectedAccount: business.stripeConnectAccountId,
+            });
+            res.status(400).send("Connected account mismatch");
+            return;
+          }
+          try {
+            await withIdempotency(
+              idempotencyKey,
+              { businessId, operation: "appointment.deposit" },
+              async () =>
+                db.transaction(async (tx) => {
+                  const [appointment] = await tx
+                    .select({
+                      id: appointments.id,
+                      depositAmount: appointments.depositAmount,
+                      depositPaid: appointments.depositPaid,
+                    })
+                    .from(appointments)
+                    .where(eq(appointments.id, appointmentId))
+                    .limit(1);
+                  if (!appointment) {
+                    throw new Error("Appointment not found for Stripe deposit.");
+                  }
+                  if (appointment.depositPaid) {
+                    return appointment;
+                  }
+                  const updates: Record<string, unknown> = {
+                    depositPaid: true,
+                    updatedAt: new Date(),
+                  };
+                  const [updated] = await tx
+                    .update(appointments)
+                    .set(updates as Partial<typeof appointments.$inferInsert>)
+                    .where(eq(appointments.id, appointmentId))
+                    .returning({
+                      id: appointments.id,
+                      depositAmount: appointments.depositAmount,
+                    });
+                  return updated ?? appointment;
+                })
+            );
+            await createActivityLog({
+              businessId,
+              action: "appointment.deposit_paid",
+              entityType: "appointment",
+              entityId: appointmentId,
+              metadata: {
+                amount: sessionAmountTotal / 100,
+                source: "stripe_checkout",
+                stripeCheckoutSessionId: session.id,
+                stripePaymentIntentId:
+                  typeof session.payment_intent === "string"
+                    ? session.payment_intent
+                    : session.payment_intent?.id ?? null,
+              },
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!message.toLowerCase().includes("duplicate request")) {
+              throw error;
+            }
+            logger.info("Stripe appointment deposit webhook duplicate ignored", {
+              sessionId: session.id,
+              businessId,
+              appointmentId,
             });
           }
         }

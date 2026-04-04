@@ -90,10 +90,15 @@ export const appointmentConfirmation: BuiltinEmailTemplate = {
         { label: "Address", value: "{{address}}" },
         { label: "Service details", value: "{{serviceSummary}}" },
       ]) +
+      `<div style="margin-top:14px;">${renderInfoCard("Payment status", "{{paymentStatus}}")}</div>` +
       `<div style="margin-top:14px;">${renderInfoCard(
         "Need to change anything?",
         "If you need to reschedule or update anything before the appointment, contact us directly.<br>{{businessPhone}}<br>{{businessEmail}}<br>{{businessAddress}}"
       )}</div>`,
+    ctaLabel: "{{confirmationActionLabel}}",
+    ctaUrl: "{{confirmationUrl}}",
+    ctaHint: "{{confirmationUrl}}",
+    showCtaHint: false,
   }),
   bodyText: `{{businessName}}
 
@@ -106,6 +111,9 @@ Your appointment is confirmed for {{dateTime}}.
 Vehicle: {{vehicle}}
 Address: {{address}}
 Service details: {{serviceSummary}}
+Payment status: {{paymentStatus}}
+
+{{confirmationActionLabel}}: {{confirmationUrl}}
 
 If you need to reschedule or update anything before the appointment, contact us directly.
 {{businessPhone}}
