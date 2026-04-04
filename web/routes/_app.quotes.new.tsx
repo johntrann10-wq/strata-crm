@@ -97,6 +97,7 @@ export default function NewQuotePage() {
   const [showNotes, setShowNotes] = useState(false);
   const [showMobileClientVehicle, setShowMobileClientVehicle] = useState(false);
   const [showMobileApprovalSettings, setShowMobileApprovalSettings] = useState(false);
+  const [showMobileChargeControls, setShowMobileChargeControls] = useState(false);
   const [clientComboOpen, setClientComboOpen] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const hasSeededBusinessDefaults = useRef(false);
@@ -196,6 +197,63 @@ export default function NewQuotePage() {
   const taxRateNum = applyTax ? parseFloat(taxRate) || 0 : 0;
   const taxAmount = taxableSubtotal * (taxRateNum / 100);
   const total = taxableSubtotal + taxAmount;
+
+  const quoteChargeControls = (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="taxRate">Tax Rate (%)</Label>
+        <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Apply tax</p>
+              <p className="text-xs text-muted-foreground">Use the business default rate, or override it for this quote.</p>
+            </div>
+            <Switch checked={applyTax} onCheckedChange={setApplyTax} />
+          </div>
+          <Input
+            id="taxRate"
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            placeholder="0"
+            value={taxRate}
+            onChange={(e) => setTaxRate(e.target.value)}
+            disabled={!applyTax}
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="adminFeeAmount">Admin Fee</Label>
+        <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Add admin fee</p>
+              <p className="text-xs text-muted-foreground">Prefill a separate admin fee line item as a percentage of the quote subtotal.</p>
+            </div>
+            <Switch checked={applyAdminFee} onCheckedChange={setApplyAdminFee} />
+          </div>
+          <div className="flex">
+            <Input
+              id="adminFeeAmount"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              placeholder="0"
+              value={adminFeeAmount}
+              onChange={(e) => setAdminFeeAmount(e.target.value)}
+              disabled={!applyAdminFee}
+              className="rounded-r-none"
+            />
+            <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
+              %
+            </span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
 
   // Line item helpers
   const addLineItem = useCallback(() => {
@@ -822,58 +880,7 @@ export default function NewQuotePage() {
                   onChange={(e) => setExpiresAt(e.target.value)}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="taxRate">Tax Rate (%)</Label>
-                <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium">Apply tax</p>
-                      <p className="text-xs text-muted-foreground">Use the business default rate, or override it for this quote.</p>
-                    </div>
-                    <Switch checked={applyTax} onCheckedChange={setApplyTax} />
-                  </div>
-                  <Input
-                    id="taxRate"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    placeholder="0"
-                    value={taxRate}
-                    onChange={(e) => setTaxRate(e.target.value)}
-                    disabled={!applyTax}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="adminFeeAmount">Admin Fee</Label>
-                <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium">Add admin fee</p>
-                      <p className="text-xs text-muted-foreground">Prefill a separate admin fee line item as a percentage of the quote subtotal.</p>
-                    </div>
-                    <Switch checked={applyAdminFee} onCheckedChange={setApplyAdminFee} />
-                  </div>
-                  <div className="flex">
-                    <Input
-                      id="adminFeeAmount"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      placeholder="0"
-                      value={adminFeeAmount}
-                      onChange={(e) => setAdminFeeAmount(e.target.value)}
-                      disabled={!applyAdminFee}
-                      className="rounded-r-none"
-                    />
-                    <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
-                      %
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <div className="hidden space-y-4 lg:block">{quoteChargeControls}</div>
             </CardContent>
           </Card>
 
@@ -935,11 +942,26 @@ export default function NewQuotePage() {
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
-        <div className="mx-auto flex max-w-4xl items-center gap-3">
+        <div className="mx-auto max-w-4xl space-y-3">
+          {showMobileChargeControls ? (
+            <div className="space-y-4 rounded-2xl border border-border/70 bg-background p-3 shadow-sm">
+              {quoteChargeControls}
+            </div>
+          ) : null}
+          <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Quote total</p>
             <p className="text-lg font-semibold">{formatCurrency(total)}</p>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            onClick={() => setShowMobileChargeControls((value) => !value)}
+          >
+            Charges
+            {showMobileChargeControls ? <ChevronDown className="ml-2 h-4 w-4" /> : <ChevronUp className="ml-2 h-4 w-4" />}
+          </Button>
           <Button
             onClick={handleSubmit}
             disabled={saving || !selectedClientId || !hasValidLineItems}
@@ -955,6 +977,7 @@ export default function NewQuotePage() {
               "Create Quote"
             )}
           </Button>
+          </div>
         </div>
       </div>
     </div>
