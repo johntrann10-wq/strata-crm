@@ -651,6 +651,9 @@ export default function AppointmentDetail() {
   );
   const [{ fetching: completingService }, runCompleteService] = useAction(api.appointmentService.complete);
   const [{ fetching: reopeningService }, runReopenService] = useAction(api.appointmentService.reopen);
+  const [{ fetching: confirmingStripeDeposit }, runConfirmStripeDeposit] = useAction(
+    api.appointment.confirmStripeDepositSession
+  );
 
   useEffect(() => {
     if (appointment) {
@@ -662,17 +665,47 @@ export default function AppointmentDetail() {
   useEffect(() => {
     const paymentStatus = searchParams.get("stripePayment");
     if (!paymentStatus) return;
-    if (paymentStatus === "success") {
-      toast.success("Stripe deposit submitted. Appointment status will update as soon as Stripe confirms it.");
-      void refetchAppointment();
-      void refetchActivity();
-    } else if (paymentStatus === "cancelled") {
-      toast.message("Stripe checkout was cancelled.");
-    }
-    const next = new URLSearchParams(searchParams);
-    next.delete("stripePayment");
-    setSearchParams(next, { replace: true });
-  }, [refetchActivity, refetchAppointment, searchParams, setSearchParams]);
+    const sessionId = searchParams.get("session_id");
+    let cancelled = false;
+
+    const clearParams = () => {
+      const next = new URLSearchParams(searchParams);
+      next.delete("stripePayment");
+      next.delete("session_id");
+      setSearchParams(next, { replace: true });
+    };
+
+    const run = async () => {
+      if (paymentStatus === "success" && sessionId) {
+        try {
+          const result = await runConfirmStripeDeposit({ id, sessionId });
+          if (cancelled) return;
+          if (result?.confirmed || result?.depositPaid) {
+            toast.success("Stripe deposit received.");
+          } else {
+            toast.message("Stripe checkout completed. Deposit status is still syncing.");
+          }
+        } catch {
+          if (cancelled) return;
+          toast.message("Stripe checkout completed. Deposit status is still syncing.");
+        }
+        void refetchAppointment();
+        void refetchActivity();
+      } else if (paymentStatus === "success") {
+        toast.message("Stripe checkout completed. Deposit status is still syncing.");
+        void refetchAppointment();
+        void refetchActivity();
+      } else if (paymentStatus === "cancelled") {
+        toast.message("Stripe checkout was cancelled.");
+      }
+      if (!cancelled) clearParams();
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, refetchActivity, refetchAppointment, runConfirmStripeDeposit, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!appointment) return;

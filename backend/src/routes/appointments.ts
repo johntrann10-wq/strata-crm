@@ -18,7 +18,7 @@ import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
 import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
 import { buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
-import { createAppointmentDepositCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
+import { createAppointmentDepositCheckoutSession, retrieveCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
 import { renderAppointmentHtml } from "../lib/appointmentTemplate.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
@@ -29,6 +29,84 @@ function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
   return req.businessId;
 }
+
+async function confirmAppointmentDepositCheckout(params: {
+  appointmentId: string;
+  businessId: string;
+  sessionId: string;
+  connectedAccountId?: string | null;
+}): Promise<boolean> {
+  const sessionId = params.sessionId.trim();
+  if (!sessionId || !params.connectedAccountId?.trim()) return false;
+
+  const session = await retrieveCheckoutSession({
+    sessionId,
+    connectedAccountId: params.connectedAccountId,
+  });
+  if (!session) return false;
+
+  if (session.payment_status !== "paid") {
+    logger.info("Stripe appointment deposit return did not confirm a paid session", {
+      sessionId,
+      appointmentId: params.appointmentId,
+      businessId: params.businessId,
+      status: session.status,
+      paymentStatus: session.payment_status,
+    });
+    return false;
+  }
+
+  const purpose = session.metadata?.purpose;
+  const businessId = session.metadata?.businessId;
+  const appointmentId = session.metadata?.appointmentId;
+  if (
+    purpose !== "appointment_deposit" ||
+    businessId !== params.businessId ||
+    appointmentId !== params.appointmentId
+  ) {
+    logger.warn("Stripe appointment deposit return metadata mismatch", {
+      sessionId,
+      expectedBusinessId: params.businessId,
+      expectedAppointmentId: params.appointmentId,
+      purpose,
+      businessId,
+      appointmentId,
+    });
+    return false;
+  }
+
+  const [updated] = await db
+    .update(appointments)
+    .set({
+      depositPaid: true,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(appointments.id, params.appointmentId), eq(appointments.businessId, params.businessId)))
+    .returning({
+      id: appointments.id,
+      depositPaid: appointments.depositPaid,
+    });
+
+  if (!updated?.depositPaid) {
+    logger.warn("Stripe appointment deposit return could not persist deposit state", {
+      sessionId,
+      appointmentId: params.appointmentId,
+      businessId: params.businessId,
+    });
+    return false;
+  }
+
+  logger.info("Stripe appointment deposit confirmed from return session", {
+    sessionId,
+    appointmentId: params.appointmentId,
+    businessId: params.businessId,
+  });
+  return true;
+}
+
+const confirmStripeDepositSessionSchema = z.object({
+  sessionId: z.string().trim().min(1, "sessionId is required"),
+});
 
 function isCalendarBlockInternalNotes(value: string | null | undefined): boolean {
   return String(value ?? "").trim().startsWith(CALENDAR_BLOCK_PREFIX);
@@ -1803,11 +1881,47 @@ appointmentsRouter.post("/:id/create-deposit-payment-session", requireAuth, requ
     connectedAccountId: business.stripeConnectAccountId,
     customerEmail: client?.email ?? null,
     customerName: clientName,
-    successUrl: `${returnTo}?stripePayment=success`,
+    successUrl: `${returnTo}?stripePayment=success&session_id={CHECKOUT_SESSION_ID}`,
     cancelUrl: `${returnTo}?stripePayment=cancelled`,
   });
   if (!result?.url) throw new BadRequestError("Could not create Stripe Checkout session.");
   res.json(result);
+}));
+
+appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
+  const parsed = confirmStripeDepositSessionSchema.safeParse(req.body ?? {});
+  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+
+  const bid = businessId(req);
+  const [appointment] = await db
+    .select({
+      id: appointments.id,
+      depositPaid: appointments.depositPaid,
+    })
+    .from(appointments)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .limit(1);
+  if (!appointment) throw new NotFoundError("Appointment not found.");
+
+  if (appointment.depositPaid) {
+    res.json({ confirmed: true, depositPaid: true });
+    return;
+  }
+
+  const [business] = await db
+    .select({ stripeConnectAccountId: businesses.stripeConnectAccountId })
+    .from(businesses)
+    .where(eq(businesses.id, bid))
+    .limit(1);
+
+  const confirmed = await confirmAppointmentDepositCheckout({
+    appointmentId: appointment.id,
+    businessId: bid,
+    sessionId: parsed.data.sessionId,
+    connectedAccountId: business?.stripeConnectAccountId ?? null,
+  });
+
+  res.json({ confirmed, depositPaid: confirmed });
 }));
 
 appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant, async (req: Request, res: Response) => {
@@ -1895,6 +2009,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
       businessZip: businesses.zip,
       businessTimezone: businesses.timezone,
       businessType: businesses.type,
+      stripeConnectAccountId: businesses.stripeConnectAccountId,
       locationTimezone: locations.timezone,
     })
     .from(appointments)
@@ -1905,6 +2020,32 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, access.businessId)))
     .limit(1);
   if (!appointment) throw new NotFoundError("Appointment not found.");
+
+  let depositPaid = !!appointment.depositPaid;
+  const stripePaymentQuery = typeof req.query.stripePayment === "string" ? req.query.stripePayment : null;
+  const checkoutSessionId = typeof req.query.session_id === "string" ? req.query.session_id.trim() : "";
+  if (
+    stripePaymentQuery === "success" &&
+    !depositPaid &&
+    checkoutSessionId &&
+    appointment.stripeConnectAccountId
+  ) {
+    try {
+      depositPaid = await confirmAppointmentDepositCheckout({
+        appointmentId: appointment.id,
+        businessId: access.businessId,
+        sessionId: checkoutSessionId,
+        connectedAccountId: appointment.stripeConnectAccountId,
+      });
+    } catch (error) {
+      logger.error("Failed to confirm Stripe appointment deposit from public return", {
+        appointmentId: appointment.id,
+        businessId: access.businessId,
+        sessionId: checkoutSessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   const serviceRows = await db
     .select({ name: services.name })
@@ -1918,7 +2059,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
   if (
     Number.isFinite(depositAmount) &&
     depositAmount > 0 &&
-    !appointment.depositPaid
+    !depositPaid
   ) {
     publicPaymentUrl = buildPublicDocumentUrl(
       `/api/appointments/${appointment.id}/public-pay?token=${encodeURIComponent(token)}`
@@ -1963,12 +2104,12 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
       serviceRows.length > 0 ? serviceRows.map((service) => service.name).join(", ") : "Appointment confirmed",
     totalPrice: appointment.totalPrice,
     depositAmount: appointment.depositAmount,
-    depositPaid: appointment.depositPaid,
+    depositPaid,
     publicPaymentUrl,
     stripePaymentState:
-      req.query.stripePayment === "success"
+      stripePaymentQuery === "success" && depositPaid
         ? "success"
-        : req.query.stripePayment === "cancelled"
+        : stripePaymentQuery === "cancelled"
           ? "cancelled"
           : null,
   });
@@ -2041,7 +2182,7 @@ appointmentsRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Re
     connectedAccountId: business.stripeConnectAccountId,
     customerEmail: client?.email ?? null,
     customerName: clientName,
-    successUrl: `${returnTo}&stripePayment=success`,
+    successUrl: `${returnTo}&stripePayment=success&session_id={CHECKOUT_SESSION_ID}`,
     cancelUrl: `${returnTo}&stripePayment=cancelled`,
   });
   if (!result?.url) {

@@ -150,6 +150,20 @@ export async function retrieveConnectAccount(params: {
   return getStripeConnectAccountState(account);
 }
 
+export async function retrieveCheckoutSession(params: {
+  sessionId: string;
+  connectedAccountId?: string | null;
+}): Promise<Stripe.Checkout.Session | null> {
+  if (!stripe) return null;
+  const requestOptions =
+    params.connectedAccountId && params.connectedAccountId.trim()
+      ? { stripeAccount: params.connectedAccountId.trim() }
+      : undefined;
+  const sessionId = params.sessionId.trim();
+  if (!sessionId) return null;
+  return stripe.checkout.sessions.retrieve(sessionId, requestOptions);
+}
+
 export async function createInvoicePaymentCheckoutSession(params: {
   businessId: string;
   invoiceId: string;
