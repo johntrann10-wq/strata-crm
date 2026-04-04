@@ -137,7 +137,6 @@ export function renderInvoiceHtml(data: InvoiceTemplateData): string {
         <div>
           <p class="eyebrow">Client Invoice</p>
           <h1>${businessName}</h1>
-          <p class="sub">Completed work, charges, and payment status in one clean invoice.</p>
           <div class="stack">
             ${data.business.email ? `<div>${escapeHtml(data.business.email)}</div>` : ""}
             ${data.business.phone ? `<div>${escapeHtml(data.business.phone)}</div>` : ""}
