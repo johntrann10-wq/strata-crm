@@ -220,10 +220,10 @@ export function meta() {
 
 export default function FeaturesHubPage() {
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
+    <div className="min-h-screen max-w-full overflow-x-hidden bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(featuresSchema) }} />
 
-      <section className="relative overflow-hidden px-5 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-18 lg:px-8 lg:pb-24 lg:pt-24">
+      <section className="relative max-w-full overflow-x-hidden overflow-y-visible px-5 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-18 lg:px-8 lg:pb-24 lg:pt-24">
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-[30rem] opacity-90"
           style={{
@@ -232,7 +232,7 @@ export default function FeaturesHubPage() {
           }}
         />
 
-        <div className="relative z-10 mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,420px)] lg:items-start">
+        <div className="relative z-10 mx-auto grid max-w-6xl max-w-full gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,420px)] lg:items-start">
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/88 px-3.5 py-1.5 text-sm font-medium text-orange-700 shadow-sm">
               <Wrench className="h-4 w-4" />
@@ -304,7 +304,7 @@ export default function FeaturesHubPage() {
         </div>
       </section>
 
-      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+      <section className="max-w-full overflow-x-hidden px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Feature hub</p>
@@ -354,7 +354,7 @@ export default function FeaturesHubPage() {
         </div>
       </section>
 
-      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+      <section className="max-w-full overflow-x-hidden px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
         <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-3">
           <div className="rounded-[26px] border border-orange-100 bg-white/94 p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Feature pages</p>
@@ -397,7 +397,7 @@ export default function FeaturesHubPage() {
         </div>
       </section>
 
-      <section className="px-5 py-8 sm:px-6 sm:py-10 lg:px-8">
+      <section className="max-w-full overflow-x-hidden px-5 py-8 sm:px-6 sm:py-10 lg:px-8">
         <div className="mx-auto max-w-6xl rounded-[30px] border border-orange-100 bg-[linear-gradient(180deg,#fff7ef_0%,#ffffff_100%)] p-6 shadow-[0_12px_50px_rgba(15,23,42,0.05)] sm:p-8">
           <div className="max-w-3xl">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Quick answers</p>
@@ -416,7 +416,7 @@ export default function FeaturesHubPage() {
         </div>
       </section>
 
-      <section className="px-5 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <section className="max-w-full overflow-x-hidden px-5 py-16 sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto max-w-5xl rounded-[32px] bg-[linear-gradient(135deg,#f97316_0%,#ea580c_100%)] px-6 py-10 text-center text-white shadow-[0_20px_70px_rgba(249,115,22,0.18)] sm:px-10 sm:py-14">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-100">Start simple</p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">

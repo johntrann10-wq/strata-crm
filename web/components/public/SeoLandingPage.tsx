@@ -121,9 +121,9 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
+    <div className="min-h-screen max-w-full overflow-x-hidden bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }} />
-      <section className="relative overflow-hidden px-5 pb-14 pt-14 sm:px-6 sm:pb-18 lg:px-8 lg:pb-24 lg:pt-20">
+      <section className="relative max-w-full overflow-x-hidden overflow-y-visible px-5 pb-14 pt-14 sm:px-6 sm:pb-18 lg:px-8 lg:pb-24 lg:pt-20">
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] opacity-90"
           style={{
@@ -132,7 +132,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
           }}
         />
 
-        <div className="relative z-10 mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)] lg:items-start">
+        <div className="relative z-10 mx-auto grid max-w-6xl gap-8 max-w-full lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)] lg:items-start">
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/88 px-3.5 py-1.5 text-sm font-medium text-orange-700 shadow-sm">
               <Sparkles className="h-4 w-4" />
@@ -195,7 +195,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
         </div>
       </section>
 
-      <section className="px-5 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <section className="max-w-full overflow-x-hidden px-5 py-6 sm:px-6 sm:py-8 lg:px-8">
         <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <div className="rounded-[28px] border border-orange-100 bg-gray-950 px-5 py-5 text-white shadow-[0_18px_60px_rgba(15,23,42,0.12)] sm:px-6">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-300">Search intent match</p>
@@ -211,7 +211,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
         </div>
       </section>
 
-      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+      <section className="max-w-full overflow-x-hidden px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="rounded-[28px] border border-orange-100 bg-[linear-gradient(180deg,#fff7ef_0%,#ffffff_100%)] p-6 shadow-[0_12px_50px_rgba(15,23,42,0.05)] sm:p-8">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Quick answers</p>
@@ -227,7 +227,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
         </div>
       </section>
 
-      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+      <section className="max-w-full overflow-x-hidden px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">How the workflow improves</p>
@@ -254,7 +254,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
         </div>
       </section>
 
-      <section className="px-5 py-8 sm:px-6 sm:py-10 lg:px-8">
+      <section className="max-w-full overflow-x-hidden px-5 py-8 sm:px-6 sm:py-10 lg:px-8">
         <div className="mx-auto max-w-6xl rounded-[30px] border border-orange-100 bg-white/94 p-6 shadow-[0_12px_50px_rgba(15,23,42,0.05)] sm:p-8 lg:p-10">
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
             <div>
@@ -285,7 +285,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
         </div>
       </section>
 
-      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+      <section className="max-w-full overflow-x-hidden px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -317,7 +317,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
         </div>
       </section>
 
-      <section className="px-5 py-8 sm:px-6 sm:py-10 lg:px-8">
+      <section className="max-w-full overflow-x-hidden px-5 py-8 sm:px-6 sm:py-10 lg:px-8">
         <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-2">
           <div className="rounded-[26px] border border-orange-100 bg-white/94 p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Explore adjacent workflows</p>
@@ -361,7 +361,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
         </div>
       </section>
 
-      <section className="px-5 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <section className="max-w-full overflow-x-hidden px-5 py-16 sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto max-w-5xl rounded-[32px] bg-[linear-gradient(135deg,#f97316_0%,#ea580c_100%)] px-6 py-10 text-center text-white shadow-[0_20px_70px_rgba(249,115,22,0.18)] sm:px-10 sm:py-14">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-100">Start simple</p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">{page.ctaTitle}</h2>
