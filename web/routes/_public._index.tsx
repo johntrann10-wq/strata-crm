@@ -21,38 +21,38 @@ import { cn } from "@/lib/utils";
 
 const homeTitle = "Automotive Service Business Software | Strata CRM";
 const homeDescription =
-  "Strata CRM is modern software for automotive service businesses. Manage scheduling, clients, vehicles, jobs, quotes, invoices, and payments in one clear system.";
+  "Strata CRM is modern software for automotive service businesses. Manage scheduling, clients, vehicles, jobs, quotes, invoices, deposits, team access, and connected Stripe payments in one clear system.";
 
 const featureCards = [
   {
     icon: Calendar,
     title: "Schedule from a clear monthly view",
     description:
-      "Start from the month, click into a day, and book work fast without getting lost in a complicated calendar.",
+      "Start from the month, open the day, and book work fast without getting lost in a cluttered shop calendar.",
   },
   {
     icon: Users,
-    title: "Keep clients and vehicles connected",
+    title: "Keep clients, vehicles, and team access connected",
     description:
-      "Customer notes, vehicle history, quotes, appointments, jobs, and invoices stay tied together so staff always have context.",
+      "Customer records, vehicle history, appointments, jobs, and role-based team access stay tied together so staff only see what they need.",
   },
   {
     icon: FileText,
-    title: "Move from estimate to paid invoice",
+    title: "Send cleaner customer-facing documents",
     description:
-      "Create the quote, book the work, run the job, send the invoice, and collect payment from one system.",
+      "Quotes, invoices, and appointment confirmations now feel client-ready for email, printing, approvals, and payment follow-through.",
   },
   {
     icon: Wrench,
     title: "Run real shop operations",
     description:
-      "Track scheduling, job progress, technician handoff, and billing without stitching together generic CRM tools.",
+      "Track scheduling, job progress, technician handoff, deposits, and billing without stitching together generic CRM tools.",
   },
   {
     icon: CreditCard,
-    title: "Make billing easier to understand",
+    title: "Collect invoices and deposits through connected Stripe",
     description:
-      "Cleaner invoice workflows, clearer balance visibility, and a proper print view that feels client-ready.",
+      "Businesses connect their own Stripe account so customer invoice and deposit payments route to the right place with clearer status tracking.",
   },
   {
     icon: Layers,
@@ -65,7 +65,8 @@ const featureCards = [
 const trustPoints = [
   "Built for automotive service businesses, not generic agencies or sales teams",
   "Month-to-day scheduling flow designed for front-desk speed",
-  "Client, vehicle, quote, appointment, job, invoice, and payment history in one place",
+  "Client, vehicle, quote, appointment, deposit, invoice, and payment history in one place",
+  "Role-based team permissions so staff only see the pages they should",
 ];
 
 const switchReasons = [
@@ -82,7 +83,7 @@ const switchReasons = [
   {
     title: "Keep your team aligned when work gets busy",
     description:
-      "Service history, job status, approvals, invoices, and payments stay tied together so staff do not lose context between handoffs.",
+      "Service history, job status, approvals, invoices, payments, and page-level access stay tied together so staff do not lose context between handoffs.",
   },
 ];
 
@@ -105,12 +106,12 @@ const workflowSteps = [
   {
     step: "02",
     title: "Book the right day",
-    description: "Use the calendar and schedule board to place work quickly with the right service and vehicle context.",
+    description: "Use the calendar and schedule board to place work quickly with the right service, vehicle, and deposit context.",
   },
   {
     step: "03",
     title: "Run the job and get paid",
-    description: "Move from appointment to job to invoice with fewer dead ends and less admin drag.",
+    description: "Move from appointment to job to quote, invoice, deposit, and connected Stripe payment with fewer dead ends.",
   },
 ];
 
@@ -123,37 +124,37 @@ const productProof = [
     bullets: ["Monthly overview first", "Clean day drill-down", "Client + vehicle context attached"],
   },
   {
-    eyebrow: "CRM",
-    title: "Keep customer context where the team actually needs it.",
+    eyebrow: "Operations",
+    title: "Keep customer, vehicle, and job context where the team actually needs it.",
     description:
-      "Clients, vehicles, notes, quotes, appointments, jobs, invoices, and payments stay connected instead of living in separate tools.",
+      "Clients, vehicles, notes, quotes, appointments, jobs, deposits, invoices, and payments stay connected instead of living in separate tools.",
     bullets: ["Vehicle history tied to the customer", "Quick next actions from records", "Less back-and-forth between screens"],
   },
   {
     eyebrow: "Billing",
-    title: "Make approvals, invoicing, and collection less messy.",
+    title: "Make approvals, invoicing, deposits, and collection less messy.",
     description:
-      "Move from estimate to invoice with clearer states, better visibility, and a cleaner print-friendly document for customers.",
-    bullets: ["Quote to invoice handoff", "Cleaner payment visibility", "Proper printable invoice layout"],
+      "Move from estimate to invoice with clearer states, public-facing documents, connected Stripe payments, and cleaner deposit handling.",
+    bullets: ["Quote to invoice handoff", "Cleaner payment visibility", "Customer-ready documents and payment pages"],
   },
 ];
 
 const proofStats = [
   { value: "1 system", label: "for scheduling, CRM, jobs, and billing" },
-  { value: "0 guesswork", label: "about the next step in the workflow" },
+  { value: "Team-safe", label: "with role-based page permissions" },
   { value: "$29/mo", label: "with the first month free" },
 ];
 
 const riskReversal = [
   "Start with the first month free before committing long term",
   "Use one clear plan instead of decoding feature tiers",
-  "Set up clients, vehicles, services, and scheduling in one workspace",
+  "Set up clients, vehicles, services, scheduling, and billing defaults in one workspace",
 ];
 
 const buyerTriggers = [
   "Your scheduler, notes, and invoices all live in different tools",
   "Staff keep asking where the last quote, vehicle note, or payment update went",
-  "Booking work feels slower than it should because context is scattered",
+  "Booking work feels slower than it should because context, deposits, and follow-up are scattered",
 ];
 
 const objections = [
@@ -170,14 +171,14 @@ const objections = [
   {
     question: "Do I need multiple tools to handle scheduling, CRM, and billing?",
     answer:
-      "No. The point of Strata is to reduce tool sprawl by keeping customer records, scheduling, jobs, invoices, and payments in one operating system.",
+      "No. The point of Strata is to reduce tool sprawl by keeping customer records, scheduling, jobs, invoices, deposits, and payments in one operating system.",
   },
 ];
 
 const previewAppointments = [
-  { time: "8:00 AM", title: "Full interior + exterior detail", customer: "Alex R. | 2022 Tesla Model 3", status: "Confirmed" },
-  { time: "10:30 AM", title: "Front two windows tint", customer: "Monica S. | 2021 Honda Accord", status: "Scheduled" },
-  { time: "1:00 PM", title: "Brake pad and rotor replacement", customer: "Chris M. | 2018 F-150", status: "In progress" },
+  { time: "8:00 AM", title: "Full interior + exterior detail", customer: "Alex R. | 2022 Tesla Model 3 | Deposit paid", status: "Confirmed" },
+  { time: "10:30 AM", title: "Front two windows tint", customer: "Monica S. | 2021 Honda Accord | Waiting on approval", status: "Scheduled" },
+  { time: "1:00 PM", title: "Brake pad and rotor replacement", customer: "Chris M. | 2018 F-150 | Invoice balance due", status: "In progress" },
 ];
 
 const homeSchema = {
@@ -226,8 +227,9 @@ const homeSchema = {
       featureList: [
         "Appointment scheduling",
         "Client and vehicle CRM",
+        "Role-based team access",
         "Quotes and estimates",
-        "Invoices and payment tracking",
+        "Invoices, deposits, and payment tracking",
         "Job workflow visibility",
       ],
     },
@@ -343,14 +345,14 @@ export default function LandingPage() {
 
             <div className="space-y-4">
               <h1 className="max-w-4xl text-balance text-4xl font-extrabold tracking-tight text-gray-950 sm:text-5xl lg:text-6xl">
-                Automotive shop software that replaces admin sprawl with one clear daily operating flow.
+                Automotive shop software that keeps scheduling, team access, and billing moving in one clear daily flow.
               </h1>
               <p className="max-w-3xl text-lg leading-8 text-gray-600 sm:text-xl">
                 Strata CRM helps automotive service businesses manage appointments, clients, vehicles, jobs, quotes, invoices,
-                and payments without the clutter, guesswork, and broken flow of outdated shop software.
+                deposits, and connected Stripe payments without the clutter, guesswork, and broken flow of outdated shop software.
               </p>
               <p className="max-w-3xl text-base leading-7 text-gray-600">
-                If your shop is juggling a booking calendar, customer notes, vehicle history, quotes, and invoices across too many places,
+                If your shop is juggling a booking calendar, customer notes, vehicle history, team permissions, quotes, invoices, and deposits across too many places,
                 Strata is designed to bring that work back into one faster, easier system.
               </p>
             </div>
@@ -426,7 +428,7 @@ export default function LandingPage() {
                 {[
                   "Clear month-to-day scheduling",
                   "Client and vehicle history that stays connected",
-                  "Quote to invoice flow built for real shop work",
+                  "Connected Stripe invoice and deposit collection",
                 ].map((item) => (
                   <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                     <ShieldCheck className="h-4 w-4 shrink-0 text-orange-300" />
@@ -493,7 +495,7 @@ export default function LandingPage() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">See the flow clearly</p>
             <p className="mt-1 max-w-2xl text-base leading-7 text-gray-700">
-              Strata is modern shop management software for detailing, tint, wrap, PPF, tire, performance, and mechanic businesses that need one clearer operating flow.
+              Strata is modern shop management software for detailing, tint, wrap, PPF, tire, performance, and mechanic businesses that need one clearer operating flow from intake to payment.
             </p>
           </div>
           <Link
@@ -581,28 +583,28 @@ export default function LandingPage() {
           </div>
 
           <div className="rounded-[30px] border border-orange-100 bg-gray-950 p-5 text-white shadow-[0_16px_60px_rgba(15,23,42,0.12)] sm:p-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-300">What that means in practice</p>
-            <div className="mt-4 space-y-4">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-lg font-semibold">Less hunting</p>
-                <p className="mt-1 text-sm leading-6 text-white/72">
-                  Front-desk staff can see the day, the customer, the vehicle, and the job type without bouncing between views.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-lg font-semibold">Less clutter</p>
-                <p className="mt-1 text-sm leading-6 text-white/72">
-                  The product is designed to keep the next important action visible instead of burying it under admin noise.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-lg font-semibold">Less second-guessing</p>
-                <p className="mt-1 text-sm leading-6 text-white/72">
-                  Client, vehicle, schedule, and billing context stay connected so the workflow feels more obvious.
-                </p>
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-300">What that means in practice</p>
+              <div className="mt-4 space-y-4">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-lg font-semibold">Less hunting</p>
+                  <p className="mt-1 text-sm leading-6 text-white/72">
+                    Front-desk staff can see the day, the customer, the vehicle, and the job type without bouncing between views.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-lg font-semibold">Less payment confusion</p>
+                  <p className="mt-1 text-sm leading-6 text-white/72">
+                    Deposits, invoice balances, and customer-facing payment pages stay closer to the work instead of living in a separate system.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-lg font-semibold">Less second-guessing</p>
+                  <p className="mt-1 text-sm leading-6 text-white/72">
+                    Client, vehicle, schedule, billing, and page-level team access stay connected so the workflow feels more obvious.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
         </div>
       </section>
 
@@ -735,7 +737,7 @@ export default function LandingPage() {
               Why modern automotive service businesses switch to Strata.
             </h2>
             <p className="mt-4 text-lg leading-8 text-gray-600">
-              The product is designed around the moments that actually slow shops down: intake, scheduling, job handoff, approvals, invoicing, and getting paid.
+              The product is designed around the moments that actually slow shops down: intake, scheduling, team handoff, approvals, invoicing, deposits, and getting paid.
             </p>
           </div>
 
