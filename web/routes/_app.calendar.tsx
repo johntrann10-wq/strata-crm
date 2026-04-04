@@ -16,14 +16,12 @@ import {
   ConflictBanner,
   DayView,
   MonthView,
-  WeekView,
   detectConflicts,
   getHeaderTitle,
-  getWeekDays,
   getViewRange,
   navigateDate,
 } from "../components/CalendarViews";
-import { dayEnd, dayStart, getCalendarDaySnapshot, getJobPhaseLabel, getJobSpanEnd, getJobSpanStart, getActiveCalendarAppointments, hasLaborOnDay } from "@/lib/calendarJobSpans";
+import { dayEnd, dayStart, getCalendarDaySnapshot, getJobPhaseLabel, getJobSpanEnd, getJobSpanStart, getActiveCalendarAppointments } from "@/lib/calendarJobSpans";
 import { buildCalendarBlockInternalNotes, getCalendarBlockLabel, getCalendarBlockNote, isCalendarBlockAppointment, isFullDayCalendarBlock, parseCalendarBlock, type CalendarBlockMode } from "@/lib/calendarBlocks";
 import { buildQuarterHourOptions, ResponsiveTimeSelect } from "@/components/appointments/SchedulingControls";
 
@@ -88,12 +86,12 @@ export default function CalendarPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedView = searchParams.get("view");
   const initialView =
-    requestedView === "month" || requestedView === "week" || requestedView === "day"
+    requestedView === "month" || requestedView === "day"
       ? requestedView
       : null;
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [view, setView] = useState<"month" | "week" | "day">(initialView ?? "month");
+  const [view, setView] = useState<"month" | "day">(initialView ?? "month");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [conflictDismissed, setConflictDismissed] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
@@ -124,6 +122,11 @@ export default function CalendarPage() {
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
+    if (next.get("view") === "week") {
+      next.set("view", "month");
+      setSearchParams(next, { replace: true });
+      return;
+    }
     if (next.get("view") === view) return;
     next.set("view", view);
     setSearchParams(next, { replace: true });
@@ -424,29 +427,6 @@ export default function CalendarPage() {
   const selectedDayRevenue = selectedDayAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
   const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
   const selectedDayConflicts = selectedDayAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
-  const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
-  const selectedWeekAppointments = useMemo(
-    () =>
-      activeAppointments.filter((appointment) =>
-        weekDays.some((day) => hasLaborOnDay(appointment, day))
-      ),
-    [activeAppointments, weekDays]
-  );
-  const selectedWeekRevenue = selectedWeekAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
-  const selectedWeekUnassigned = selectedWeekAppointments.filter((appointment) => !appointment.assignedStaffId).length;
-  const selectedWeekConflicts = selectedWeekAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
-  const weekAgenda = useMemo(
-    () =>
-      weekDays
-        .map((day) => ({
-          day,
-          appointments: selectedWeekAppointments.filter(
-            (appointment) => hasLaborOnDay(appointment, day)
-          ),
-        }))
-        .filter((entry) => entry.appointments.length > 0),
-    [selectedWeekAppointments, weekDays]
-  );
   const selectedMonthAppointments = useMemo(
     () =>
       activeAppointments.filter((appointment) => {
@@ -502,7 +482,7 @@ export default function CalendarPage() {
     }
     return Array.from(counts.values()).sort((a, b) => b.count - a.count)[0] ?? null;
   }, [currentDate, selectedMonthAppointments]);
-  const availableViews = isMobileLayout ? (["day", "week", "month"] as const) : (["week", "day", "month"] as const);
+  const availableViews = isMobileLayout ? (["day", "month"] as const) : (["day", "month"] as const);
 
   return (
     <div className="page-content flex h-full flex-col">
@@ -561,7 +541,7 @@ export default function CalendarPage() {
                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
                         )}
                       >
-                        {calendarView === "month" ? "Month" : calendarView === "week" ? "Week" : "Day"}
+                        {calendarView === "month" ? "Month" : "Day"}
                       </button>
                     ))}
                   </div>
@@ -632,17 +612,6 @@ export default function CalendarPage() {
                 appointments={appointments}
                 onDayClick={handleDayClick}
                 onApptClick={handleApptClick}
-                conflictIds={activeConflicts}
-              />
-            ) : null}
-            {view === "week" ? (
-              <WeekView
-                currentDate={currentDate}
-                appointments={appointments}
-                onSlotClick={handleSlotClick}
-                onApptClick={handleApptClick}
-                onDayClick={handleDayClick}
-                onReschedule={handleReschedule}
                 conflictIds={activeConflicts}
               />
             ) : null}
@@ -814,102 +783,6 @@ export default function CalendarPage() {
                       )}
                     </div>
                   </div>
-                </div>
-              </>
-            ) : null}
-
-            {view === "week" ? (
-              <>
-                <div className="surface-panel rounded-[1.6rem] p-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Week summary</p>
-                    <h2 className="mt-1 text-lg font-semibold text-foreground">
-                      {weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} -{" "}
-                      {weekDays[6].toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </h2>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
-                      <p className="mt-2 text-2xl font-semibold text-foreground">{selectedWeekAppointments.length}</p>
-                    </div>
-                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Revenue</p>
-                      <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(selectedWeekRevenue)}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-                      {selectedWeekUnassigned} unassigned
-                    </span>
-                    <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-                      {selectedWeekConflicts} conflicts
-                    </span>
-                  </div>
-                </div>
-
-                <div className="surface-panel rounded-[1.5rem] p-4">
-                  <div className="space-y-1">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Week line-up</p>
-                    <h3 className="text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
-                  </div>
-                  {weekAgenda.length > 0 ? (
-                    <div className="mt-3 space-y-3">
-                      {weekAgenda.map((entry) => (
-                        <div key={entry.day.toISOString()} className="rounded-2xl border border-white/65 bg-white/72 px-3 py-3">
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setCurrentDate(entry.day)}
-                              className="text-left text-sm font-semibold text-foreground"
-                            >
-                              {formatPanelDate(entry.day)}
-                            </button>
-                            <span className="text-xs text-muted-foreground">{entry.appointments.length} booked</span>
-                          </div>
-                          <div className="space-y-2">
-                            {entry.appointments.slice(0, 4).map((appointment) => (
-                              <button
-                                key={appointment.id}
-                                type="button"
-                                onClick={() => handleApptClick(appointment)}
-                                className="flex w-full items-start gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-left transition-colors hover:bg-background"
-                              >
-                                <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                  {formatPanelTime(appointment.startTime)}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <p className="truncate text-sm font-semibold text-foreground">
-                                      {appointment.title ||
-                                        (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
-                                    </p>
-                                    <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                      {appointment.status.replace("_", " ")}
-                                    </span>
-                                  </div>
-                                  <p className="truncate text-xs text-muted-foreground">
-                                    {appointment.vehicle
-                                      ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
-                                      : appointment.assignedStaff
-                                        ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-                                        : "Unassigned"}
-                                  </p>
-                                </div>
-                              </button>
-                            ))}
-                            {entry.appointments.length > 4 ? (
-                              <p className="px-1 text-xs text-muted-foreground">+{entry.appointments.length - 4} more on this day</p>
-                            ) : null}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-6 text-center">
-                      <p className="text-sm font-medium text-foreground">No appointments this week</p>
-                    </div>
-                  )}
                 </div>
               </>
             ) : null}
