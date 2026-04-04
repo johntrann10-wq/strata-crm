@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Strata Social Preview</title>
+    <style>
+      :root {
+        --bg: #f7f4ef;
+        --panel: rgba(255, 255, 255, 0.94);
+        --ink: #111827;
+        --muted: #5b6473;
+        --orange: #f97316;
+        --orange-deep: #ea580c;
+        --line: rgba(249, 115, 22, 0.16);
+        --shadow: 0 26px 70px rgba(17, 24, 39, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 12% 16%, rgba(251, 146, 60, 0.18), transparent 26%),
+          radial-gradient(circle at 86% 78%, rgba(251, 146, 60, 0.16), transparent 24%),
+          linear-gradient(180deg, #fbf8f4 0%, #f5f1eb 100%);
+        font-family: Inter, "Segoe UI", Arial, sans-serif;
+        color: var(--ink);
+      }
+
+      .frame {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        padding: 54px;
+      }
+
+      .card {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: 34px;
+        background: var(--panel);
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        box-shadow: var(--shadow);
+        padding: 40px 42px;
+        overflow: hidden;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .brand-wording {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .brand-wording .name {
+        font-size: 29px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+
+      .brand-wording .tag {
+        color: var(--muted);
+        font-size: 14px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .chip {
+        padding: 11px 16px;
+        border-radius: 999px;
+        background: rgba(249, 115, 22, 0.08);
+        border: 1px solid rgba(249, 115, 22, 0.14);
+        color: var(--orange-deep);
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 42px 0 14px;
+        max-width: 700px;
+        font-size: 58px;
+        line-height: 1.02;
+        letter-spacing: -0.05em;
+      }
+
+      .subcopy {
+        max-width: 675px;
+        color: var(--muted);
+        font-size: 22px;
+        line-height: 1.4;
+      }
+
+      .metrics {
+        position: absolute;
+        left: 42px;
+        right: 330px;
+        bottom: 28px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .metric {
+        background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(249, 250, 251, 0.9));
+        border: 1px solid rgba(226, 232, 240, 0.95);
+        border-radius: 24px;
+        padding: 16px 18px 14px;
+      }
+
+      .metric .value {
+        font-size: 34px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.04em;
+      }
+
+      .metric .label {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.35;
+      }
+
+      .schedule {
+        position: absolute;
+        top: 92px;
+        right: 42px;
+        width: 246px;
+        border-radius: 30px;
+        background: #111827;
+        color: white;
+        padding: 24px 22px 22px;
+        box-shadow: 0 18px 38px rgba(17, 24, 39, 0.22);
+      }
+
+      .schedule .title {
+        color: #fdba74;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .slot {
+        margin-top: 14px;
+        border-radius: 18px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.07);
+      }
+
+      .slot.active {
+        background: linear-gradient(135deg, var(--orange) 0%, var(--orange-deep) 100%);
+      }
+
+      .slot .time {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.82;
+      }
+
+      .slot .service {
+        margin-top: 6px;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        white-space: nowrap;
+      }
+
+      .slot .detail {
+        margin-top: 4px;
+        font-size: 14px;
+        opacity: 0.78;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="card">
+        <div class="topbar">
+          <div class="brand">
+            <svg width="66" height="66" viewBox="0 0 64 64" aria-hidden="true">
+              <defs>
+                <linearGradient id="mark-fill" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#FB923C"></stop>
+                  <stop offset="1" stop-color="#EA580C"></stop>
+                </linearGradient>
+              </defs>
+              <rect x="6" y="6" width="52" height="52" rx="16" fill="#111827"></rect>
+              <rect x="10" y="10" width="44" height="44" rx="13" fill="url(#mark-fill)"></rect>
+              <path
+                d="M42.6 20.4H24.7c-2.7 0-4.8 1.9-4.8 4.4 0 2.1 1.2 3.4 3.6 4.1l12.5 3.5c1.1.3 1.7.8 1.7 1.6 0 1-.9 1.6-2.3 1.6H18.9v8h17.9c6.2 0 10-3.1 10-8.4 0-3.9-2.2-6.2-6.9-7.5l-11.2-3.1c-.9-.3-1.4-.7-1.4-1.3 0-.8.7-1.3 1.8-1.3h13.5v-7.6Z"
+                fill="white"
+              ></path>
+            </svg>
+            <div class="brand-wording">
+              <div class="name">Strata</div>
+              <div class="tag">Automotive CRM</div>
+            </div>
+          </div>
+          <div class="chip">Built for real shop operations</div>
+        </div>
+
+        <h1>Scheduling, CRM, invoices, and payments in one clear system.</h1>
+        <div class="subcopy">Run appointments, vehicles, quotes, deposits, team access, and Stripe payments without scattered tools.</div>
+
+        <div class="metrics">
+          <div class="metric">
+            <div class="value">Calendar</div>
+            <div class="label">Month-to-day scheduling built for front-desk speed.</div>
+          </div>
+          <div class="metric">
+            <div class="value">Clients</div>
+            <div class="label">Customer, vehicle, quote, invoice, and history together.</div>
+          </div>
+          <div class="metric">
+            <div class="value">Payments</div>
+            <div class="label">Deposits and invoices routed to the business’s own Stripe account.</div>
+          </div>
+        </div>
+
+        <div class="schedule">
+          <div class="title">Today</div>
+          <div class="slot active">
+            <div class="time">8:00 AM</div>
+            <div class="service">Full detail</div>
+            <div class="detail">Deposit paid</div>
+          </div>
+          <div class="slot">
+            <div class="time">10:30 AM</div>
+            <div class="service">Window tint</div>
+            <div class="detail">Awaiting approval</div>
+          </div>
+          <div class="slot">
+            <div class="time">1:00 PM</div>
+            <div class="service">Brake service</div>
+            <div class="detail">Invoice due</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
