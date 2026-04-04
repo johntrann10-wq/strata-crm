@@ -1745,12 +1745,6 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
     .limit(1);
   if (!appointment) throw new NotFoundError("Appointment not found.");
 
-  const [connectedBusiness] = await db
-    .select({ stripeConnectAccountId: businesses.stripeConnectAccountId })
-    .from(businesses)
-    .where(eq(businesses.id, access.businessId))
-    .limit(1);
-
   const serviceRows = await db
     .select({ name: services.name })
     .from(appointmentServices)
@@ -1763,8 +1757,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
   if (
     Number.isFinite(depositAmount) &&
     depositAmount > 0 &&
-    !appointment.depositPaid &&
-    connectedBusiness?.stripeConnectAccountId
+    !appointment.depositPaid
   ) {
     publicPaymentUrl = buildPublicDocumentUrl(
       `/api/appointments/${appointment.id}/public-pay?token=${encodeURIComponent(token)}`
