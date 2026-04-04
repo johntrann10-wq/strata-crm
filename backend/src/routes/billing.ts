@@ -662,3 +662,54 @@ export async function handleStripeWebhook(
   }
   res.sendStatus(200);
 }
+
+billingRouter.post(
+  "/connect/disconnect",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    const businessId = req.businessId;
+    if (!businessId) {
+      throw new BadRequestError("No business found.");
+    }
+    if (!canManageStripeConnect(req)) {
+      throw new ForbiddenError("Only owners and admins can disconnect Stripe for this business.");
+    }
+
+    const [business] = await db
+      .select({
+        stripeConnectAccountId: businesses.stripeConnectAccountId,
+      })
+      .from(businesses)
+      .where(eq(businesses.id, businessId))
+      .limit(1);
+    if (!business?.stripeConnectAccountId) {
+      throw new BadRequestError("No Stripe account is connected for this business.");
+    }
+
+    await db
+      .update(businesses)
+      .set({
+        stripeConnectAccountId: null,
+        stripeConnectDetailsSubmitted: false,
+        stripeConnectChargesEnabled: false,
+        stripeConnectPayoutsEnabled: false,
+        stripeConnectOnboardedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(businesses.id, businessId));
+
+    await createActivityLog({
+      businessId,
+      action: "billing.stripe_connect_disconnected",
+      entityType: "business",
+      entityId: businessId,
+      metadata: {
+        disconnectedAccountId: business.stripeConnectAccountId,
+        source: "settings",
+      },
+    });
+
+    res.json({ ok: true });
+  })
+);

@@ -365,6 +365,8 @@ function BillingTab({
   const [stripeConnectLoading, setStripeConnectLoading] = useState(false);
   const [stripeDashboardLoading, setStripeDashboardLoading] = useState(false);
   const [stripeRefreshLoading, setStripeRefreshLoading] = useState(false);
+  const [stripeDisconnectLoading, setStripeDisconnectLoading] = useState(false);
+  const [disconnectStripeOpen, setDisconnectStripeOpen] = useState(false);
 
   const refreshBillingStatus = useCallback(async () => {
     const result = await api.billing.getStatus();
@@ -489,6 +491,20 @@ function BillingTab({
       toast.error(error instanceof Error ? error.message : "Could not refresh Stripe status.");
     } finally {
       setStripeRefreshLoading(false);
+    }
+  };
+
+  const handleDisconnectStripe = async () => {
+    setStripeDisconnectLoading(true);
+    try {
+      await api.billing.disconnectConnectAccount();
+      await refreshBillingStatus();
+      setDisconnectStripeOpen(false);
+      toast.success("Stripe was disconnected from this business. You can reconnect the correct account now.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not disconnect Stripe.");
+    } finally {
+      setStripeDisconnectLoading(false);
     }
   };
 
@@ -672,12 +688,40 @@ function BillingTab({
                       Open Stripe dashboard
                     </Button>
                   ) : null}
+                  {billingStatus?.stripeConnectAccountId ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => setDisconnectStripeOpen(true)}
+                      disabled={stripeDisconnectLoading}
+                    >
+                      {stripeDisconnectLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Disconnect Stripe
+                    </Button>
+                  ) : null}
                 </div>
               )}
             </>
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={disconnectStripeOpen} onOpenChange={setDisconnectStripeOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disconnect Stripe?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the current connected Stripe account from this business in Strata so you can reconnect the correct one. It does not delete the Stripe account itself.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={stripeDisconnectLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDisconnectStripe} disabled={stripeDisconnectLoading}>
+              {stripeDisconnectLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Disconnect Stripe
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

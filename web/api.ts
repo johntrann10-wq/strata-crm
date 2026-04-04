@@ -680,5 +680,7 @@ export const api = {
       request<{ url: string }>("/billing/connect/onboarding-link", { method: "POST" }),
     createConnectDashboardLink: () =>
       request<{ url: string }>("/billing/connect/dashboard-link", { method: "POST" }),
+    disconnectConnectAccount: () =>
+      request<{ ok: true }>("/billing/connect/disconnect", { method: "POST" }),
   },
 } as const;
