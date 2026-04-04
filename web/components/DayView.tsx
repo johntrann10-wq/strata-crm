@@ -46,6 +46,85 @@ export function DayView({
   const dayAppts = daySnapshot.dayAppts;
   const agendaItems = daySnapshot.agendaItems;
   const onSiteOnlyJobs = daySnapshot.onSiteOnlyJobs;
+  const positionedAppointments = useMemo(() => {
+    type Positioned = {
+      appointment: ApptRecord;
+      leftCss: string;
+      widthCss: string;
+      zIndex: number;
+    };
+
+    const timedAppointments = dayAppts.filter((apt) => !isCalendarBlockAppointment(apt));
+    const calendarBlocks = dayAppts.filter((apt) => isCalendarBlockAppointment(apt));
+    const sorted = [...timedAppointments].sort((a, b) => {
+      const startDiff = new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+      if (startDiff !== 0) return startDiff;
+      const aEnd = a.endTime ? new Date(a.endTime).getTime() : new Date(a.startTime).getTime() + 3600000;
+      const bEnd = b.endTime ? new Date(b.endTime).getTime() : new Date(b.startTime).getTime() + 3600000;
+      return aEnd - bEnd;
+    });
+
+    const gutter = 6;
+    const horizontalInset = 6;
+    const positioned: Positioned[] = [];
+
+    let index = 0;
+    while (index < sorted.length) {
+      const cluster: ApptRecord[] = [];
+      let clusterEnd = 0;
+
+      while (index < sorted.length) {
+        const appointment = sorted[index];
+        const startMs = new Date(appointment.startTime).getTime();
+        const endMs = appointment.endTime
+          ? new Date(appointment.endTime).getTime()
+          : startMs + 3600000;
+
+        if (cluster.length === 0 || startMs < clusterEnd) {
+          cluster.push(appointment);
+          clusterEnd = Math.max(clusterEnd, endMs);
+          index += 1;
+          continue;
+        }
+        break;
+      }
+
+      const lanes: Array<Array<{ startMs: number; endMs: number }>> = [];
+      const laneAssignments = new Map<string, number>();
+      for (const appointment of cluster) {
+        const startMs = new Date(appointment.startTime).getTime();
+        const endMs = appointment.endTime
+          ? new Date(appointment.endTime).getTime()
+          : startMs + 3600000;
+
+        let laneIndex = lanes.findIndex((lane) => lane[lane.length - 1]!.endMs <= startMs);
+        if (laneIndex === -1) {
+          laneIndex = lanes.length;
+          lanes.push([]);
+        }
+        lanes[laneIndex]!.push({ startMs, endMs });
+        laneAssignments.set(appointment.id, laneIndex);
+      }
+
+      const maxColumns = Math.max(lanes.length, 1);
+      const widthCss = `calc((100% - ${horizontalInset * 2}px - ${(maxColumns - 1) * gutter}px) / ${maxColumns})`;
+
+      for (const appointment of cluster) {
+        const laneIndex = laneAssignments.get(appointment.id) ?? 0;
+        positioned.push({
+          appointment,
+          leftCss: `calc(${horizontalInset}px + (${laneIndex} * (${widthCss} + ${gutter}px)))`,
+          widthCss,
+          zIndex: 20 + laneIndex,
+        });
+      }
+    }
+
+    return {
+      timed: positioned,
+      blocks: calendarBlocks,
+    };
+  }, [dayAppts]);
 
   const today = useMemo(() => new Date(), []);
   const isToday = isSameDay(currentDate, today);
@@ -393,7 +472,7 @@ export function DayView({
               </div>
             ) : null}
 
-            {dayAppts.map((apt) => (
+            {positionedAppointments.blocks.map((apt) => (
               <AppointmentBlock
                 key={apt.id}
                 apt={apt}
@@ -402,6 +481,22 @@ export function DayView({
                   onApptClick(apt);
                 }}
                 isConflict={conflictIds?.has(apt.id)}
+                zIndex={10}
+              />
+            ))}
+
+            {positionedAppointments.timed.map(({ appointment, leftCss, widthCss, zIndex }) => (
+              <AppointmentBlock
+                key={appointment.id}
+                apt={appointment}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onApptClick(appointment);
+                }}
+                isConflict={conflictIds?.has(appointment.id)}
+                leftCss={leftCss}
+                widthCss={widthCss}
+                zIndex={zIndex}
               />
             ))}
           </div>

@@ -393,6 +393,9 @@ interface AppointmentBlockProps {
   draggable?: boolean;
   onDragStart?: (apt: ApptRecord, e: React.DragEvent) => void;
   isConflict?: boolean;
+  leftCss?: string;
+  widthCss?: string;
+  zIndex?: number;
 }
 
 export function AppointmentBlock({
@@ -401,6 +404,9 @@ export function AppointmentBlock({
   draggable: draggableProp,
   onDragStart,
   isConflict,
+  leftCss,
+  widthCss,
+  zIndex,
 }: AppointmentBlockProps) {
   const [hovered, setHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -417,6 +423,9 @@ export function AppointmentBlock({
   const style = getStatusStyle(apt.status);
   const isBlock = isCalendarBlockAppointment(apt);
   const dense = height < 74;
+  const constrainedWidth = Boolean(widthCss);
+  const narrow = constrainedWidth;
+  const ultraNarrow = false;
 
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
@@ -438,16 +447,25 @@ export function AppointmentBlock({
     <button
       type="button"
       className={cn(
-        "absolute left-1.5 right-1.5 overflow-hidden rounded-xl border bg-white/98 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all select-none",
+        "absolute overflow-hidden rounded-xl border bg-white/98 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all select-none",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
         isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
         isBlock ? "" : style.text,
         isBlock ? "" : style.border,
+        narrow && "px-2 py-1.5",
         hovered && !isDragging && "shadow-md -translate-y-px",
         isDragging ? "cursor-grabbing opacity-50" : "cursor-grab",
         isConflict && "ring-1 ring-rose-300"
       )}
-      style={{ top: `${top}px`, height: `${height}px`, position: "absolute" }}
+      style={{
+        top: `${top}px`,
+        height: `${height}px`,
+        position: "absolute",
+        left: leftCss ?? "6px",
+        width: widthCss ?? undefined,
+        right: widthCss ? undefined : "6px",
+        zIndex: zIndex ?? undefined,
+      }}
       title={isConflict ? "Scheduling conflict" : undefined}
       draggable={draggableProp ?? true}
       onClick={(event) => {
@@ -464,8 +482,8 @@ export function AppointmentBlock({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className={cn("truncate font-semibold", dense ? "text-[11px]" : "text-[12px]")}>{apptLabel(apt)}</p>
-              <p className={cn("truncate text-muted-foreground", dense ? "text-[10px]" : "text-[11px]")}>
+              <p className={cn("truncate font-semibold", dense || narrow ? "text-[10px]" : "text-[12px]")}>{apptLabel(apt)}</p>
+              <p className={cn("truncate text-muted-foreground", dense || narrow ? "text-[9px]" : "text-[11px]")}>
                 {formatTime(start)}
                 {apt.endTime ? ` - ${formatTime(end)}` : ""}
               </p>
@@ -474,14 +492,14 @@ export function AppointmentBlock({
               className={cn(
                 "shrink-0 rounded-full px-1.5 py-0.5 font-medium",
                 isBlock ? "bg-slate-200 text-slate-700" : style.pill,
-                dense ? "text-[9px]" : "text-[10px]"
+                dense || narrow ? "text-[8px]" : "text-[10px]"
               )}
             >
               {isBlock ? (isFullDayCalendarBlock(apt) ? "All day" : "Blocked") : formatDuration(apt.startTime, apt.endTime)}
             </span>
           </div>
 
-          {!dense && apt.vehicle ? (
+          {!dense && !narrow && apt.vehicle ? (
             <p className="mt-1 truncate text-[11px] text-muted-foreground">
               {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
             </p>
@@ -489,10 +507,10 @@ export function AppointmentBlock({
 
           {height > 92 ? (
             <div className="mt-1.5 flex items-center justify-between gap-2">
-              <p className="truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <p className={cn("truncate uppercase tracking-[0.12em] text-muted-foreground", narrow ? "text-[8px]" : "text-[10px]")}>
                 {apt.assignedStaff ? `${apt.assignedStaff.firstName} ${apt.assignedStaff.lastName}` : "Unassigned"}
               </p>
-              {apt.isMobile ? <span className="text-[10px] font-medium text-muted-foreground">Mobile</span> : null}
+              {apt.isMobile ? <span className={cn("font-medium text-muted-foreground", narrow ? "text-[8px]" : "text-[10px]")}>Mobile</span> : null}
             </div>
           ) : null}
         </div>

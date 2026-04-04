@@ -1463,7 +1463,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="calendarBlockCapacityPerSlot">Blocks Per Time Slot</Label>
+                    <Label htmlFor="calendarBlockCapacityPerSlot">Appointments Per Time Slot</Label>
                     <div className="flex">
                       <Input
                         id="calendarBlockCapacityPerSlot"
@@ -1487,7 +1487,7 @@ export default function SettingsPage() {
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Controls how many overlapping internal calendar blocks can exist in the same time slot before Strata blocks another one.
+                      Controls how many appointments can share the same time slot before Strata blocks another booking.
                     </p>
                   </div>
                 </div>

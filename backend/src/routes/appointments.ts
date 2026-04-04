@@ -8,7 +8,7 @@ import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { logger } from "../lib/logger.js";
-import { hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
+import { countOverlappingAppointments, hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
 import { ConflictError } from "../lib/errors.js";
 import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
 import { createRequestActivityLog } from "../lib/activity.js";
@@ -40,6 +40,10 @@ async function getCalendarBlockCapacityPerSlot(bid: string): Promise<number> {
   const capacity = Number(business?.calendarBlockCapacityPerSlot ?? 1);
   if (!Number.isFinite(capacity) || capacity < 1) return 1;
   return Math.min(capacity, 12);
+}
+
+async function getAppointmentCapacityPerSlot(bid: string): Promise<number> {
+  return getCalendarBlockCapacityPerSlot(bid);
 }
 
 async function countOverlappingCalendarBlocks(params: {
@@ -1072,19 +1076,37 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   });
 
   if (!isCalendarBlock) {
-    const overlap = await hasAppointmentOverlap({
-      businessId: bid,
-      startTime,
-      endTime,
-      assignedStaffId: parsed.data.assignedStaffId ?? null,
-      excludeAppointmentId: null,
-    });
-    if (overlap) {
-      throw new ConflictError(
-        parsed.data.assignedStaffId
-          ? "This staff member already has an appointment in this time slot."
-          : "Another appointment in this business overlaps with this time slot."
-      );
+    const appointmentCapacity = await getAppointmentCapacityPerSlot(bid);
+    if (appointmentCapacity <= 1) {
+      const overlap = await hasAppointmentOverlap({
+        businessId: bid,
+        startTime,
+        endTime,
+        assignedStaffId: parsed.data.assignedStaffId ?? null,
+        excludeAppointmentId: null,
+      });
+      if (overlap) {
+        throw new ConflictError(
+          parsed.data.assignedStaffId
+            ? "This staff member already has an appointment in this time slot."
+            : "Another appointment in this business overlaps with this time slot."
+        );
+      }
+    } else {
+      const overlappingAppointments = await countOverlappingAppointments({
+        businessId: bid,
+        startTime,
+        endTime,
+        assignedStaffId: parsed.data.assignedStaffId ?? null,
+        excludeAppointmentId: null,
+      });
+      if (overlappingAppointments >= appointmentCapacity) {
+        throw new ConflictError(
+          parsed.data.assignedStaffId
+            ? `This staff member already has ${appointmentCapacity} appointment${appointmentCapacity === 1 ? "" : "s"} in this time slot.`
+            : `This time slot already has ${appointmentCapacity} appointment${appointmentCapacity === 1 ? "" : "s"} scheduled.`
+        );
+      }
     }
   } else {
     const blockCapacity = await getCalendarBlockCapacityPerSlot(bid);
@@ -1377,19 +1399,37 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   });
 
   if (!isCalendarBlock && (parsed.data.startTime != null || parsed.data.endTime != null || parsed.data.assignedStaffId != null)) {
-    const overlap = await hasAppointmentOverlap({
-      businessId: bid,
-      startTime,
-      endTime,
-      assignedStaffId,
-      excludeAppointmentId: req.params.id,
-    });
-    if (overlap) {
-      throw new ConflictError(
-        assignedStaffId
-          ? "This staff member already has an appointment in this time slot."
-          : "Another appointment in this business overlaps with this time slot."
-      );
+    const appointmentCapacity = await getAppointmentCapacityPerSlot(bid);
+    if (appointmentCapacity <= 1) {
+      const overlap = await hasAppointmentOverlap({
+        businessId: bid,
+        startTime,
+        endTime,
+        assignedStaffId,
+        excludeAppointmentId: req.params.id,
+      });
+      if (overlap) {
+        throw new ConflictError(
+          assignedStaffId
+            ? "This staff member already has an appointment in this time slot."
+            : "Another appointment in this business overlaps with this time slot."
+        );
+      }
+    } else {
+      const overlappingAppointments = await countOverlappingAppointments({
+        businessId: bid,
+        startTime,
+        endTime,
+        assignedStaffId,
+        excludeAppointmentId: req.params.id,
+      });
+      if (overlappingAppointments >= appointmentCapacity) {
+        throw new ConflictError(
+          assignedStaffId
+            ? `This staff member already has ${appointmentCapacity} appointment${appointmentCapacity === 1 ? "" : "s"} in this time slot.`
+            : `This time slot already has ${appointmentCapacity} appointment${appointmentCapacity === 1 ? "" : "s"} scheduled.`
+        );
+      }
     }
   } else if (isCalendarBlock && (parsed.data.startTime != null || parsed.data.endTime != null || parsed.data.assignedStaffId != null)) {
     const blockCapacity = await getCalendarBlockCapacityPerSlot(bid);
