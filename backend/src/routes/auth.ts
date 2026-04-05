@@ -164,7 +164,12 @@ function isTenantSchemaDriftError(error: unknown): boolean {
 async function buildSafeAuthContext(userId: string) {
   try {
     const ownedBusinesses = await db
-      .select({ id: businesses.id, name: businesses.name, type: businesses.type })
+      .select({
+        id: businesses.id,
+        name: businesses.name,
+        type: businesses.type,
+        onboardingComplete: businesses.onboardingComplete,
+      })
       .from(businesses)
       .where(eq(businesses.ownerId, userId));
 
@@ -176,6 +181,7 @@ async function buildSafeAuthContext(userId: string) {
         role: "owner",
         status: "active",
         isDefault: index === 0,
+        onboardingComplete: ownedBusiness.onboardingComplete ?? null,
         permissions: Array.from(getDefaultPermissionsForRole("owner")),
       })),
       currentBusinessId: ownedBusinesses[0]?.id ?? null,
@@ -328,7 +334,12 @@ authRouter.get(
 
     try {
       const ownedBusinesses = await db
-        .select({ id: businesses.id, name: businesses.name, type: businesses.type })
+        .select({
+          id: businesses.id,
+          name: businesses.name,
+          type: businesses.type,
+          onboardingComplete: businesses.onboardingComplete,
+        })
         .from(businesses)
         .where(eq(businesses.ownerId, userId));
       let memberships: Array<{
@@ -365,6 +376,7 @@ authRouter.get(
           role: string;
           status: string;
           isDefault: boolean;
+          onboardingComplete: boolean | null;
           permissions: string[];
         }
       >();
@@ -377,6 +389,7 @@ authRouter.get(
           role: "owner",
           status: "active",
           isDefault: memberships.length === 0,
+          onboardingComplete: ownedBusiness.onboardingComplete ?? null,
           permissions: Array.from(getDefaultPermissionsForRole("owner")),
         });
       }
@@ -386,7 +399,12 @@ authRouter.get(
         const membershipBusinesses = membershipBusinessIds.length === 0
           ? []
           : await db
-              .select({ id: businesses.id, name: businesses.name, type: businesses.type })
+              .select({
+                id: businesses.id,
+                name: businesses.name,
+                type: businesses.type,
+                onboardingComplete: businesses.onboardingComplete,
+              })
               .from(businesses)
               .where(inArray(businesses.id, membershipBusinessIds));
 
@@ -405,6 +423,7 @@ authRouter.get(
             role: membership.role,
             status: membership.status,
             isDefault: membership.isDefault,
+            onboardingComplete: membershipBusiness?.onboardingComplete ?? null,
             permissions: Array.from(resolvePermissionsForRole(membership.role, permissionOverridesByBusiness.get(membership.businessId))),
           });
         }

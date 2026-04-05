@@ -81,6 +81,7 @@ export type AuthOutletContext = RootOutletContext & {
     role: string;
     status: string;
     isDefault: boolean;
+    onboardingComplete: boolean | null;
     permissions: string[];
   }>;
   enabledModules: Set<string>;
@@ -846,14 +847,23 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       const targetBusiness = tenantBusinesses.find((tenantBusiness) => tenantBusiness.id === businessId) ?? null;
       const targetModules = getEnabledModules(targetBusiness?.type ?? null) as Set<string>;
       const targetPermissions = new Set(targetBusiness?.permissions ?? []);
-      const destination = getPreferredAuthorizedAppPath(targetPermissions, targetModules);
+      const isSubscribed =
+        billingStatus?.status === "active" || billingStatus?.status === "trialing";
+      const destination =
+        !targetBusiness
+          ? "/onboarding"
+          : targetBusiness.onboardingComplete === false
+            ? "/onboarding"
+            : billingStatus?.billingEnforced && !isSubscribed
+              ? "/subscribe"
+              : getPreferredAuthorizedAppPath(targetPermissions, targetModules);
       setCurrentBusinessIdState(businessId);
       setCurrentBusinessId(businessId);
       setCurrentLocationIdState(null);
       clearCurrentLocationId();
       navigate(destination);
     },
-    [navigate, tenantBusinesses]
+    [billingStatus?.billingEnforced, billingStatus?.status, navigate, tenantBusinesses]
   );
 
   const handleLocationChange = useCallback((locationId: string | null) => {
@@ -865,11 +875,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const redirectTarget = useMemo(() => {
     if (!authCheckDone) return null;
     if (!effectiveUserId) return signInPath;
-    if (!canAccessAppPath(location.pathname, currentPermissions, currentEnabledModules)) {
-      return getPreferredAuthorizedAppPath(currentPermissions, currentEnabledModules);
-    }
     if (userFetching || businessFetching || businessError) return null;
-    if (allowWithoutBusiness) return null;
     const resolvedBusiness =
       business ??
       (currentMembership
@@ -877,7 +883,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
             id: currentMembership.id,
             name: currentMembership.name,
             type: currentMembership.type,
-            onboardingComplete: true,
+            onboardingComplete: currentMembership.onboardingComplete,
           }
         : null);
     if (!resolvedBusiness) return "/onboarding";
@@ -886,6 +892,10 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     if (billingCheckDone && !allowWithoutSubscription && billingStatus?.billingEnforced && !isSubscribed) {
       return "/subscribe";
     }
+    if (!canAccessAppPath(location.pathname, currentPermissions, currentEnabledModules)) {
+      return getPreferredAuthorizedAppPath(currentPermissions, currentEnabledModules);
+    }
+    if (allowWithoutBusiness) return null;
     return null;
   }, [
     authCheckDone,
