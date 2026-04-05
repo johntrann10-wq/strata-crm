@@ -197,7 +197,7 @@ export default function OnboardingPage() {
       } catch {
         toast.warning("Workspace created. Starter services may still be loading.");
       }
-      navigate("/signed-in", { replace: true });
+      window.location.replace("/subscribe");
     } catch (submitError) {
       setValidationError(submitError instanceof Error ? submitError.message : "Could not finish setup.");
     }
