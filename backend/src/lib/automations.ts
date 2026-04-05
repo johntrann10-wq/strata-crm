@@ -14,6 +14,7 @@ import {
 } from "./email.js";
 import { logger } from "./logger.js";
 import { buildVehicleDisplayName } from "./vehicleFormatting.js";
+import { enqueueTwilioTemplateSms } from "./twilio.js";
 
 const REMINDER_TYPES = new Set([
   "auto_detailing",
@@ -105,6 +106,7 @@ export async function runAppointmentReminders(options?: {
         clientFirstName: clients.firstName,
         clientLastName: clients.lastName,
         clientEmail: clients.email,
+        clientPhone: clients.phone,
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
@@ -154,6 +156,32 @@ export async function runAppointmentReminders(options?: {
             leadHours,
             sentTo: row.clientEmail,
           },
+        });
+        void enqueueTwilioTemplateSms({
+          businessId: business.id,
+          templateSlug: "appointment_reminder",
+          to: row.clientPhone,
+          vars: {
+            clientName:
+              `${row.clientFirstName ?? ""} ${row.clientLastName ?? ""}`.trim() || "Customer",
+            businessName: business.name,
+            dateTime: formatBusinessDateTime(row.startTime, timezone),
+            vehicle:
+              buildVehicleDisplayName({
+                year: row.vehicleYear,
+                make: row.vehicleMake,
+                model: row.vehicleModel,
+              }) ?? "-",
+            serviceSummary: row.title ?? "-",
+          },
+          entityType: "appointment",
+          entityId: row.id,
+        }).catch((error) => {
+          logger.warn("Appointment reminder SMS enqueue failed", {
+            businessId: business.id,
+            appointmentId: row.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
         sent += 1;
       } catch (error) {
@@ -222,6 +250,7 @@ export async function runLapsedClientDetection(options?: {
         firstName: clients.firstName,
         lastName: clients.lastName,
         email: clients.email,
+        phone: clients.phone,
         lastVisit: lastVisits.lastVisit,
       })
       .from(clients)
@@ -263,6 +292,26 @@ export async function runLapsedClientDetection(options?: {
             months,
             lastVisit: row.lastVisit?.toISOString() ?? null,
           },
+        });
+        void enqueueTwilioTemplateSms({
+          businessId: business.id,
+          templateSlug: "lapsed_client_reengagement",
+          to: row.phone,
+          vars: {
+            clientName: `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim() || "Customer",
+            businessName: business.name,
+            lastVisit: formatBusinessDate(row.lastVisit, timezone) ?? "-",
+            bookUrl: bookingRequestUrl,
+            serviceSummary: "-",
+          },
+          entityType: "client",
+          entityId: row.id,
+        }).catch((error) => {
+          logger.warn("Lapsed client SMS enqueue failed", {
+            businessId: business.id,
+            clientId: row.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
         detected += 1;
       } catch (error) {
@@ -319,6 +368,7 @@ export async function runReviewRequests(options?: {
         clientFirstName: clients.firstName,
         clientLastName: clients.lastName,
         clientEmail: clients.email,
+        clientPhone: clients.phone,
       })
       .from(appointments)
       .leftJoin(clients, eq(appointments.clientId, clients.id))
@@ -360,6 +410,26 @@ export async function runReviewRequests(options?: {
             delayHours,
             sentTo: row.clientEmail,
           },
+        });
+        void enqueueTwilioTemplateSms({
+          businessId: business.id,
+          templateSlug: "review_request",
+          to: row.clientPhone,
+          vars: {
+            clientName:
+              `${row.clientFirstName ?? ""} ${row.clientLastName ?? ""}`.trim() || "Customer",
+            businessName: business.name,
+            reviewUrl: reviewRequestUrl,
+            serviceSummary: row.title ?? "-",
+          },
+          entityType: "appointment",
+          entityId: row.id,
+        }).catch((error) => {
+          logger.warn("Review request SMS enqueue failed", {
+            businessId: business.id,
+            appointmentId: row.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
         sent += 1;
       } catch (error) {

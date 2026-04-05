@@ -20,6 +20,7 @@ import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
 import { buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 import { createAppointmentDepositCheckoutSession, retrieveCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
 import { renderAppointmentHtml } from "../lib/appointmentTemplate.js";
+import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
@@ -628,6 +629,7 @@ async function buildAppointmentConfirmationPayload(
         clientFirstName: string | null;
         clientLastName: string | null;
         clientEmail: string | null;
+        clientPhone: string | null;
       businessName: string | null;
       businessTimezone: string | null;
       businessType: string | null;
@@ -650,6 +652,7 @@ async function buildAppointmentConfirmationPayload(
         clientFirstName: clients.firstName,
         clientLastName: clients.lastName,
         clientEmail: clients.email,
+        clientPhone: clients.phone,
         businessName: businesses.name,
         businessTimezone: businesses.timezone,
         businessType: businesses.type,
@@ -685,6 +688,7 @@ async function buildAppointmentConfirmationPayload(
           clientFirstName: clients.firstName,
           clientLastName: clients.lastName,
           clientEmail: clients.email,
+          clientPhone: clients.phone,
           businessName: businesses.name,
           businessTimezone: sql<string | null>`null`,
           businessType: businesses.type,
@@ -719,6 +723,7 @@ async function buildAppointmentConfirmationPayload(
           clientFirstName: clients.firstName,
           clientLastName: clients.lastName,
           clientEmail: clients.email,
+          clientPhone: clients.phone,
           businessName: businesses.name,
           businessTimezone: sql<string | null>`null`,
           businessType: businesses.type,
@@ -773,6 +778,7 @@ async function buildAppointmentConfirmationPayload(
   return {
     appointmentId: appointmentRow.id,
     recipient: overrides?.recipientEmail?.trim() || appointmentRow.clientEmail?.trim() || null,
+    recipientPhone: appointmentRow.clientPhone?.trim() || null,
     clientName:
       overrides?.recipientName?.trim() ||
       `${appointmentRow.clientFirstName ?? ""} ${appointmentRow.clientLastName ?? ""}`.trim() ||
@@ -865,6 +871,31 @@ async function sendAppointmentConfirmationForRecord(
       confirmationActionLabel: payload.confirmationActionLabel,
       paymentStatus: payload.paymentStatus,
       message: payload.message,
+    });
+    void enqueueTwilioTemplateSms({
+      businessId: bid,
+      templateSlug: "appointment_confirmation",
+      to: payload.recipientPhone,
+      vars: {
+        clientName: payload.clientName,
+        businessName: payload.businessName,
+        dateTime: payload.dateTime,
+        vehicle: payload.vehicle ?? "-",
+        address: payload.address ?? "-",
+        serviceSummary: payload.serviceSummary ?? "-",
+        confirmationUrl: payload.confirmationUrl ?? "",
+        confirmationActionLabel: payload.confirmationActionLabel ?? "View appointment",
+        paymentStatus: payload.paymentStatus ?? "-",
+        message: payload.message ?? "",
+      },
+      entityType: "appointment",
+      entityId: appointmentId,
+    }).catch((error) => {
+      logger.warn("Appointment confirmation SMS enqueue failed", {
+        appointmentId,
+        businessId: bid,
+        error,
+      });
     });
     return { deliveryStatus: "emailed", deliveryError: null, recipient: payload.recipient };
   } catch (error) {

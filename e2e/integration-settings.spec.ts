@@ -4,6 +4,15 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
   let quickBooksConnected = true;
   let quickBooksLastError: string | null = null;
   let quickBooksLastSuccessfulAt = "2026-04-04T17:00:00.000Z";
+  let twilioConnected = false;
+  let twilioAccountSid = "";
+  let twilioMessagingServiceSid = "";
+  let twilioEnabledTemplateSlugs = [
+    "appointment_confirmation",
+    "appointment_reminder",
+    "review_request",
+    "lapsed_client_reengagement",
+  ];
 
   await context.addInitScript(() => {
     window.localStorage.setItem("authToken", "integration-test-token");
@@ -171,6 +180,39 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
                 },
               ]
             : []),
+          ...(twilioConnected
+            ? [
+                {
+                  id: "conn-2",
+                  provider: "twilio_sms",
+                  ownerType: "business",
+                  ownerKey: "business:biz-1",
+                  userId: null,
+                  status: "connected",
+                  displayName: "Twilio Messaging Service",
+                  externalAccountId: twilioAccountSid,
+                  externalAccountName: "Twilio Messaging Service",
+                  scopes: [],
+                  featureEnabled: true,
+                  lastSyncedAt: null,
+                  lastSuccessfulAt: "2026-04-04T18:30:00.000Z",
+                  lastError: null,
+                  actionRequired: null,
+                  connectedAt: "2026-04-04T18:00:00.000Z",
+                  disconnectedAt: null,
+                  configSummary: {
+                    hasEncryptedAccessToken: true,
+                    hasEncryptedRefreshToken: false,
+                    hasConfig: true,
+                    selectedCalendarId: null,
+                    webhookUrl: null,
+                    twilioMessagingServiceSid,
+                    twilioAccountSid,
+                    twilioEnabledTemplateSlugs,
+                  },
+                },
+              ]
+            : []),
         ],
       }),
     });
@@ -265,6 +307,38 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
       }),
     });
   });
+
+  await context.route("**/api/integrations/twilio/connect", async (route) => {
+    const payload = route.request().postDataJSON() as {
+      accountSid?: string;
+      messagingServiceSid?: string;
+      enabledTemplateSlugs?: string[];
+    };
+    twilioConnected = true;
+    twilioAccountSid = payload.accountSid ?? "account-sid-test";
+    twilioMessagingServiceSid = payload.messagingServiceSid ?? "messaging-service-test";
+    twilioEnabledTemplateSlugs = payload.enabledTemplateSlugs ?? twilioEnabledTemplateSlugs;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        record: { id: "conn-2", status: "connected" },
+      }),
+    });
+  });
+
+  await context.route("**/api/integrations/twilio/disconnect", async (route) => {
+    twilioConnected = false;
+    twilioAccountSid = "";
+    twilioMessagingServiceSid = "";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        record: { id: "conn-2", status: "disconnected" },
+      }),
+    });
+  });
 }
 
 test("shows integration infrastructure and failure visibility in settings", async ({ page, context }) => {
@@ -275,7 +349,7 @@ test("shows integration infrastructure and failure visibility in settings", asyn
 
   await expect(page.getByText(/integration infrastructure/i)).toBeVisible();
   await expect(page.getByText("QuickBooks Online", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Twilio SMS", { exact: true })).toBeVisible();
+  await expect(page.getByText("Twilio SMS", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Failure visibility", { exact: true })).toBeVisible();
   await expect(page.getByText(/quickbooks token refresh failed/i)).toBeVisible();
 
@@ -288,7 +362,17 @@ test("shows integration infrastructure and failure visibility in settings", asyn
   await page.getByRole("button", { name: /queue full resync/i }).click();
   await expect(page.getByText(/queued 7 quickbooks sync jobs/i)).toBeVisible();
 
-  await page.getByRole("button", { name: /^disconnect$/i }).click();
+  await page.getByRole("button", { name: /^disconnect$/i }).first().click();
   await expect(page.getByText(/quickbooks disconnected/i)).toBeVisible();
   await expect(page.getByText(/not connected/i).first()).toBeVisible();
+
+  await page.getByPlaceholder("AC...").fill("account-sid-test");
+  await page.getByPlaceholder("MG...").fill("messaging-service-test");
+  await page.getByPlaceholder(/auth token/i).fill("super-secret");
+  await page.getByRole("button", { name: /connect twilio sms/i }).click();
+  await expect(page.getByText(/twilio sms connected/i)).toBeVisible();
+  await expect(page.getByText(/stored service/i)).toContainText("messaging-service-test");
+
+  await page.getByRole("button", { name: /^disconnect$/i }).last().click();
+  await expect(page.getByText(/twilio sms disconnected/i)).toBeVisible();
 });

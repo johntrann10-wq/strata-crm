@@ -30,7 +30,7 @@ import { jobsRouter } from "./routes/jobs.js";
 import { actionsRouter } from "./routes/actions.js";
 import { activityLogsRouter } from "./routes/activity-logs.js";
 import { notificationLogsRouter } from "./routes/notification-logs.js";
-import { integrationsRouter } from "./routes/integrations.js";
+import { handleTwilioStatusCallbackRoute, integrationsRouter } from "./routes/integrations.js";
 import { billingRouter, handleStripeWebhook } from "./routes/billing.js";
 
 validateEnv();
@@ -49,6 +49,11 @@ app.post(
   "/api/billing/webhook",
   express.raw({ type: "application/json" }),
   (req, res, next) => handleStripeWebhook(req, res).catch(next)
+);
+app.post(
+  "/api/integrations/twilio/status/:connectionId",
+  express.urlencoded({ extended: false }),
+  (req, res, next) => handleTwilioStatusCallbackRoute(req, res).catch(next)
 );
 
 app.use(express.json({ limit: "1mb" }));

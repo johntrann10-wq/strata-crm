@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { payments, invoices } from "../db/schema.js";
+import { payments, invoices, clients, businesses } from "../db/schema.js";
 import { eq, and } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -15,6 +15,7 @@ import {
   isPaymentSchemaDriftError,
   recordInvoicePayment,
 } from "../lib/invoicePayments.js";
+import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 
 export const paymentsRouter = Router({ mergeParams: true });
 
@@ -155,6 +156,47 @@ paymentsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
       error,
     });
   });
+  void (async () => {
+    try {
+      const [context] = await db
+        .select({
+          invoiceNumber: invoices.invoiceNumber,
+          businessName: businesses.name,
+          clientFirstName: clients.firstName,
+          clientLastName: clients.lastName,
+          clientPhone: clients.phone,
+        })
+        .from(invoices)
+        .leftJoin(clients, eq(invoices.clientId, clients.id))
+        .leftJoin(businesses, eq(invoices.businessId, businesses.id))
+        .where(and(eq(invoices.id, data.invoiceId), eq(invoices.businessId, bid)))
+        .limit(1);
+      if (!context) return;
+      await enqueueTwilioTemplateSms({
+        businessId: bid,
+        userId: req.userId ?? null,
+        templateSlug: "payment_receipt",
+        to: context.clientPhone,
+        vars: {
+          clientName:
+            `${context.clientFirstName ?? ""} ${context.clientLastName ?? ""}`.trim() || "Customer",
+          businessName: context.businessName ?? "Your shop",
+          amount: `$${Number(payment.amount ?? 0).toFixed(2)}`,
+          invoiceNumber: context.invoiceNumber ?? "Invoice",
+          paidAt: new Date(payment.paidAt ?? new Date()).toLocaleString("en-US"),
+          method: payment.method,
+        },
+        entityType: "payment",
+        entityId: payment.id,
+      });
+    } catch (error) {
+      logger.warn("Payment receipt SMS enqueue failed", {
+        businessId: bid,
+        paymentId: payment.id,
+        error,
+      });
+    }
+  })();
   res.status(201).json(payment);
 });
 

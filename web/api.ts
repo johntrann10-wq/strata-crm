@@ -470,6 +470,8 @@ export const api = {
             selectedCalendarId: string | null;
             webhookUrl: string | null;
             twilioMessagingServiceSid: string | null;
+            twilioAccountSid: string | null;
+            twilioEnabledTemplateSlugs: string[];
           };
         }>;
       }>("/integrations"),
@@ -514,6 +516,21 @@ export const api = {
         invoices: number;
         payments: number;
       }>("/integrations/quickbooks/resync", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    connectTwilio: (params: {
+      accountSid: string;
+      authToken?: string;
+      messagingServiceSid: string;
+      enabledTemplateSlugs: string[];
+    }) =>
+      request<{ record: unknown }>("/integrations/twilio/connect", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    disconnectTwilio: () =>
+      request<{ record: unknown }>("/integrations/twilio/disconnect", {
         method: "POST",
         body: JSON.stringify({}),
       }),

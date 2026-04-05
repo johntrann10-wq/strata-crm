@@ -558,15 +558,24 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 CREATE TABLE IF NOT EXISTS notification_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   business_id uuid NOT NULL REFERENCES businesses(id),
+  integration_job_id uuid,
   channel text NOT NULL,
   recipient text NOT NULL,
   subject text,
   sent_at timestamptz NOT NULL DEFAULT now(),
+  provider_message_id text,
+  provider_status text,
+  provider_status_at timestamptz,
+  delivered_at timestamptz,
+  provider_error_code text,
   error text,
   metadata text,
   retry_count integer NOT NULL DEFAULT 0,
   last_retry_at timestamptz
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS notification_logs_provider_message_unique
+  ON notification_logs (channel, provider_message_id);
 
 CREATE TABLE IF NOT EXISTS email_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

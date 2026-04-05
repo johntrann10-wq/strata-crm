@@ -23,6 +23,7 @@ import {
 } from "../lib/businessPresets.js";
 import { businesses } from "../db/schema.js";
 import { runQuickBooksIntegrationJob } from "../lib/quickbooks.js";
+import { runTwilioIntegrationJob } from "../lib/twilio.js";
 
 export const actionsRouter = Router({ mergeParams: true });
 
@@ -479,6 +480,8 @@ actionsRouter.post("/runIntegrationJobs", async (req: Request, res: Response) =>
       try {
         if (job.provider === "quickbooks_online") {
           await runQuickBooksIntegrationJob(job);
+        } else if (job.provider === "twilio_sms") {
+          await runTwilioIntegrationJob(job);
         } else {
           throw new Error(`Integration worker not implemented for provider ${job.provider}.`);
         }

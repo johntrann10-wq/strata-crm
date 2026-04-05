@@ -489,15 +489,23 @@ export const activityLogs = pgTable("activity_logs", {
 export const notificationLogs = pgTable("notification_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
   businessId: uuid("business_id").notNull().references(() => businesses.id),
+  integrationJobId: uuid("integration_job_id"),
   channel: text("channel").notNull(),
   recipient: text("recipient").notNull(),
   subject: text("subject"),
   sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
+  providerMessageId: text("provider_message_id"),
+  providerStatus: text("provider_status"),
+  providerStatusAt: timestamp("provider_status_at", { withTimezone: true }),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  providerErrorCode: text("provider_error_code"),
   error: text("error"),
   metadata: text("metadata"),
   retryCount: integer("retry_count").default(0).notNull(),
   lastRetryAt: timestamp("last_retry_at", { withTimezone: true }),
-});
+}, (t) => [
+  uniqueIndex("notification_logs_provider_message_unique").on(t.channel, t.providerMessageId),
+]);
 
 export const emailTemplates = pgTable("email_templates", {
   id: uuid("id").primaryKey().defaultRandom(),

@@ -1,11 +1,12 @@
-import { Router, Request, Response } from "express";
+import express, { Router, Request, Response } from "express";
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "../db/index.js";
 import { integrationConnections } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { requirePermission } from "../middleware/permissions.js";
-import { ForbiddenError, NotFoundError } from "../lib/errors.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { INTEGRATION_REGISTRY } from "../lib/integrationRegistry.js";
 import { isIntegrationFeatureEnabled, listIntegrationFeatureFlags } from "../lib/integrationFeatureFlags.js";
 import { listIntegrationFailures, retryIntegrationJobForBusiness } from "../lib/integrationJobs.js";
@@ -21,8 +22,20 @@ import {
   isQuickBooksConfigured,
   type QuickBooksIntegrationState,
 } from "../lib/quickbooks.js";
+import {
+  connectTwilioBusiness,
+  disconnectTwilioBusiness,
+  handleTwilioStatusCallback,
+} from "../lib/twilio.js";
 
 export const integrationsRouter = Router({ mergeParams: true });
+
+const connectTwilioSchema = z.object({
+  accountSid: z.string().trim().min(1, "Twilio Account SID is required."),
+  authToken: z.string().trim().optional(),
+  messagingServiceSid: z.string().trim().min(1, "Twilio Messaging Service SID is required."),
+  enabledTemplateSlugs: z.array(z.string().trim()).optional(),
+});
 
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
@@ -33,6 +46,18 @@ function requireBusinessIntegrationAdmin(req: Request) {
   if (req.membershipRole !== "owner" && req.membershipRole !== "admin") {
     throw new ForbiddenError("Only owners and admins can manage business integrations.");
   }
+}
+
+export async function handleTwilioStatusCallbackRoute(req: Request, res: Response) {
+  const params = Object.fromEntries(
+    Object.entries((req.body ?? {}) as Record<string, unknown>).map(([key, value]) => [key, String(value ?? "")])
+  );
+  await handleTwilioStatusCallback({
+    connectionId: req.params.connectionId,
+    signature: req.header("x-twilio-signature"),
+    params,
+  });
+  res.type("text/plain").send("ok");
 }
 
 integrationsRouter.get("/", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
@@ -76,6 +101,10 @@ integrationsRouter.get("/", requireAuth, requireTenant, requirePermission("setti
         webhookUrl: typeof config?.webhookUrl === "string" ? config.webhookUrl : null,
         twilioMessagingServiceSid:
           typeof config?.messagingServiceSid === "string" ? config.messagingServiceSid : null,
+        twilioAccountSid: typeof config?.accountSid === "string" ? config.accountSid : null,
+        twilioEnabledTemplateSlugs: Array.isArray(config?.enabledTemplateSlugs)
+          ? (config?.enabledTemplateSlugs as string[])
+          : [],
       },
     };
   });
@@ -112,6 +141,56 @@ integrationsRouter.post(
     if (!retried) throw new NotFoundError("Integration job not found.");
     res.json({ record: retried });
   }
+);
+
+integrationsRouter.post(
+  "/twilio/connect",
+  requireAuth,
+  requireTenant,
+  requirePermission("settings.write"),
+  async (req: Request, res: Response) => {
+    requireBusinessIntegrationAdmin(req);
+    const bid = businessId(req);
+    if (!isIntegrationFeatureEnabled("twilio_sms")) {
+      throw new ForbiddenError("Twilio SMS is not enabled in this environment.");
+    }
+    if (!req.userId) throw new ForbiddenError("User context is required.");
+    const parsed = connectTwilioSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new BadRequestError(parsed.error.message);
+
+    const record = await connectTwilioBusiness({
+      businessId: bid,
+      userId: req.userId,
+      accountSid: parsed.data.accountSid,
+      authToken: parsed.data.authToken ?? null,
+      messagingServiceSid: parsed.data.messagingServiceSid,
+      enabledTemplateSlugs: parsed.data.enabledTemplateSlugs,
+    });
+
+    res.json({ record });
+  }
+);
+
+integrationsRouter.post(
+  "/twilio/disconnect",
+  requireAuth,
+  requireTenant,
+  requirePermission("settings.write"),
+  async (req: Request, res: Response) => {
+    requireBusinessIntegrationAdmin(req);
+    const bid = businessId(req);
+    const userId = req.userId;
+    if (!userId) throw new ForbiddenError("User context is required.");
+    const record = await disconnectTwilioBusiness(bid, userId);
+    if (!record) throw new NotFoundError("Twilio connection not found.");
+    res.json({ record });
+  }
+);
+
+integrationsRouter.post(
+  "/twilio/status/:connectionId",
+  express.urlencoded({ extended: false }),
+  handleTwilioStatusCallbackRoute
 );
 
 integrationsRouter.post(

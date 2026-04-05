@@ -149,6 +149,13 @@ async function sendMailWithTimeout(
 
 export type TemplateVars = Record<string, string | number | undefined>;
 
+export type ResolvedTemplateMessage = {
+  subject: string;
+  bodyHtml: string;
+  bodyText: string;
+  vars: TemplateVars;
+};
+
 async function getBusinessContactVars(businessId: string | null | undefined): Promise<TemplateVars> {
   if (!businessId) return {};
   const [business] = await db
@@ -181,6 +188,31 @@ function replaceVars(template: string, vars: TemplateVars, escapeForHtml: boolea
     out = out.replace(new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "g"), replacement);
   }
   return out;
+}
+
+export async function resolveTemplateMessage(options: {
+  templateSlug: string;
+  businessId?: string | null;
+  vars?: TemplateVars;
+  subject?: string;
+}): Promise<ResolvedTemplateMessage> {
+  const template = await getTemplate(options.templateSlug, options.businessId ?? null);
+  const contactVars = await getBusinessContactVars(options.businessId ?? null);
+  const vars = {
+    ...contactVars,
+    ...(options.vars ?? {}),
+  };
+  const subject = options.subject ?? (template ? replaceVars(template.subject, vars, false) : "Notification");
+  const bodyHtml = template ? replaceVars(template.bodyHtml, vars, true) : "<p>No template found.</p>";
+  const bodyText = template?.bodyText
+    ? replaceVars(template.bodyText, vars, false)
+    : htmlToPlainText(bodyHtml);
+  return {
+    subject,
+    bodyHtml,
+    bodyText,
+    vars,
+  };
 }
 
 export async function getTemplate(
@@ -218,17 +250,7 @@ export async function getTemplate(
 export async function sendTemplatedEmailInternal(
   options: { to: string; subject?: string; templateSlug: string; businessId?: string | null; vars?: TemplateVars }
 ): Promise<void> {
-  const template = await getTemplate(options.templateSlug, options.businessId ?? null);
-  const contactVars = await getBusinessContactVars(options.businessId ?? null);
-  const vars = {
-    ...contactVars,
-    ...(options.vars ?? {}),
-  };
-  const subject = options.subject ?? (template ? replaceVars(template.subject, vars, false) : "Notification");
-  const bodyHtml = template ? replaceVars(template.bodyHtml, vars, true) : "<p>No template found.</p>";
-  const bodyText = template?.bodyText
-    ? replaceVars(template.bodyText, vars, false)
-    : htmlToPlainText(bodyHtml);
+  const message = await resolveTemplateMessage(options);
   const recipient = options.to.trim();
   if (!recipient) {
     throw new Error("Recipient email address is required");
@@ -237,9 +259,9 @@ export async function sendTemplatedEmailInternal(
     from: getFromAddress(),
     replyTo: getReplyToAddress(),
     to: recipient,
-    subject,
-    html: bodyHtml,
-    text: bodyText,
+    subject: message.subject,
+    html: message.bodyHtml,
+    text: message.bodyText,
   };
   if (isResendConfigured()) {
     await sendViaResend(payload);
@@ -316,9 +338,7 @@ export async function sendTemplatedEmail(
     vars?: TemplateVars;
   }
 ): Promise<void> {
-  const template = await getTemplate(options.templateSlug, options.businessId ?? null);
-  const vars = options.vars ?? {};
-  const subject = options.subject ?? (template ? replaceVars(template.subject, vars, false) : "Notification");
+  const message = await resolveTemplateMessage(options);
 
   const logToDb = async (errorMessage: string | null) => {
     if (!options.businessId) return;
@@ -327,7 +347,7 @@ export async function sendTemplatedEmail(
         businessId: options.businessId,
         channel: "email",
         recipient: options.to,
-        subject,
+        subject: message.subject,
         error: errorMessage,
         metadata: JSON.stringify({ templateSlug: options.templateSlug, vars: options.vars ?? {} }),
       });

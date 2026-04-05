@@ -188,6 +188,15 @@ type IntegrationSettingsForm = {
   webhookEvents: string[];
 };
 
+type TwilioSmsSettingsForm = {
+  accountSid: string;
+  authToken: string;
+  messagingServiceSid: string;
+  enabledTemplateSlugs: Array<
+    "appointment_confirmation" | "appointment_reminder" | "payment_receipt" | "review_request" | "lapsed_client_reengagement"
+  >;
+};
+
 type AutomationActivitySummary = {
   sentLast30Days: number;
   lastSentAt: string | null;
@@ -229,6 +238,8 @@ type IntegrationConnectionStatus = {
     selectedCalendarId: string | null;
     webhookUrl: string | null;
     twilioMessagingServiceSid: string | null;
+    twilioAccountSid: string | null;
+    twilioEnabledTemplateSlugs: string[];
   };
 };
 
@@ -392,6 +403,18 @@ const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettingsForm = {
   ],
 };
 
+const DEFAULT_TWILIO_SMS_SETTINGS: TwilioSmsSettingsForm = {
+  accountSid: "",
+  authToken: "",
+  messagingServiceSid: "",
+  enabledTemplateSlugs: [
+    "appointment_confirmation",
+    "appointment_reminder",
+    "review_request",
+    "lapsed_client_reengagement",
+  ],
+};
+
 const WEBHOOK_EVENT_OPTIONS = [
   { value: "appointment.created", label: "Appointment created", helper: "Fire when a booking is added to the calendar." },
   { value: "appointment.updated", label: "Appointment updated", helper: "Fire when appointment details change." },
@@ -406,6 +429,18 @@ const WEBHOOK_EVENT_OPTIONS = [
   { value: "quote.sent", label: "Quote sent", helper: "Fire when a quote is emailed to a client." },
   { value: "quote.follow_up_recorded", label: "Quote follow-up sent", helper: "Fire when a quote follow-up email goes out." },
 ] as const;
+
+const TWILIO_TEMPLATE_OPTIONS: Array<{
+  value: TwilioSmsSettingsForm["enabledTemplateSlugs"][number];
+  label: string;
+  helper: string;
+}> = [
+  { value: "appointment_confirmation", label: "Appointment confirmations", helper: "Send confirmation texts after appointments are booked or resent." },
+  { value: "appointment_reminder", label: "Appointment reminders", helper: "Send reminder texts ahead of scheduled work." },
+  { value: "payment_receipt", label: "Payment receipts", helper: "Send SMS receipts when invoice payments are recorded." },
+  { value: "review_request", label: "Review requests", helper: "Send review-request texts after completed work when the automation runs." },
+  { value: "lapsed_client_reengagement", label: "Lapsed outreach", helper: "Send re-engagement texts when the lapsed-client automation runs." },
+];
 
 function getDefaultPermissionSelection(role: string): string[] {
   return [...(ROLE_DEFAULT_PERMISSIONS[role] ?? ROLE_DEFAULT_PERMISSIONS.technician)];
@@ -938,6 +973,7 @@ export default function SettingsPage() {
   const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettingsForm>(
     DEFAULT_INTEGRATION_SETTINGS
   );
+  const [twilioSettings, setTwilioSettings] = useState<TwilioSmsSettingsForm>(DEFAULT_TWILIO_SMS_SETTINGS);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -981,6 +1017,8 @@ export default function SettingsPage() {
   const [quickBooksConnecting, setQuickBooksConnecting] = useState(false);
   const [quickBooksDisconnecting, setQuickBooksDisconnecting] = useState(false);
   const [quickBooksResyncing, setQuickBooksResyncing] = useState(false);
+  const [twilioSaving, setTwilioSaving] = useState(false);
+  const [twilioDisconnecting, setTwilioDisconnecting] = useState(false);
 
   const [{ data: business, fetching: businessFetching }] = useFindOne(api.business, businessId ?? "", {
     pause: !businessId,
@@ -1034,6 +1072,10 @@ export default function SettingsPage() {
     integrationStatus?.connections.find((item) => item.provider === "quickbooks_online") ?? null;
   const quickBooksRegistry =
     integrationStatus?.registry.find((item) => item.provider === "quickbooks_online") ?? null;
+  const twilioConnection =
+    integrationStatus?.connections.find((item) => item.provider === "twilio_sms") ?? null;
+  const twilioRegistry =
+    integrationStatus?.registry.find((item) => item.provider === "twilio_sms") ?? null;
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -1096,6 +1138,22 @@ export default function SettingsPage() {
           : DEFAULT_INTEGRATION_SETTINGS.webhookEvents,
     });
   }, [business]);
+
+  useEffect(() => {
+    if (!twilioConnection) {
+      setTwilioSettings(DEFAULT_TWILIO_SMS_SETTINGS);
+      return;
+    }
+    setTwilioSettings({
+      accountSid: twilioConnection.configSummary.twilioAccountSid ?? "",
+      authToken: "",
+      messagingServiceSid: twilioConnection.configSummary.twilioMessagingServiceSid ?? "",
+      enabledTemplateSlugs:
+        twilioConnection.configSummary.twilioEnabledTemplateSlugs.length > 0
+          ? (twilioConnection.configSummary.twilioEnabledTemplateSlugs as TwilioSmsSettingsForm["enabledTemplateSlugs"])
+          : DEFAULT_TWILIO_SMS_SETTINGS.enabledTemplateSlugs,
+    });
+  }, [twilioConnection]);
 
   useEffect(() => {
     if (!businessId) return;
@@ -1349,6 +1407,57 @@ export default function SettingsPage() {
       toast.error(error instanceof Error ? error.message : "Could not queue a QuickBooks resync.");
     } finally {
       setQuickBooksResyncing(false);
+    }
+  };
+
+  const handleToggleTwilioTemplate = (
+    templateSlug: TwilioSmsSettingsForm["enabledTemplateSlugs"][number],
+    enabled: boolean
+  ) => {
+    setTwilioSettings((current) => {
+      const next = new Set(current.enabledTemplateSlugs);
+      if (enabled) {
+        next.add(templateSlug);
+      } else {
+        next.delete(templateSlug);
+      }
+      return {
+        ...current,
+        enabledTemplateSlugs: Array.from(next) as TwilioSmsSettingsForm["enabledTemplateSlugs"],
+      };
+    });
+  };
+
+  const handleSaveTwilio = async () => {
+    setTwilioSaving(true);
+    try {
+      await api.integration.connectTwilio({
+        accountSid: twilioSettings.accountSid.trim(),
+        authToken: twilioSettings.authToken.trim() || undefined,
+        messagingServiceSid: twilioSettings.messagingServiceSid.trim(),
+        enabledTemplateSlugs: twilioSettings.enabledTemplateSlugs,
+      });
+      await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
+      setTwilioSettings((current) => ({ ...current, authToken: "" }));
+      toast.success(twilioConnection ? "Twilio settings saved." : "Twilio SMS connected.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save Twilio SMS settings.");
+    } finally {
+      setTwilioSaving(false);
+    }
+  };
+
+  const handleDisconnectTwilio = async () => {
+    setTwilioDisconnecting(true);
+    try {
+      await api.integration.disconnectTwilio();
+      await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
+      setTwilioSettings(DEFAULT_TWILIO_SMS_SETTINGS);
+      toast.success("Twilio SMS disconnected.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not disconnect Twilio SMS.");
+    } finally {
+      setTwilioDisconnecting(false);
     }
   };
 
@@ -2595,6 +2704,135 @@ export default function SettingsPage() {
                         className="w-full sm:w-auto"
                       >
                         {quickBooksDisconnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Disconnect
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <BellRing className="h-4 w-4 text-primary" />
+                          <p className="text-sm font-medium">Twilio SMS</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Transactional SMS for confirmations, reminders, receipts, and automation follow-up with callback-backed delivery tracking.
+                        </p>
+                      </div>
+                      <Badge
+                        variant={
+                          !twilioRegistry?.featureFlagEnabled
+                            ? "outline"
+                            : twilioConnection
+                              ? getConnectionBadgeVariant(twilioConnection.status)
+                              : "secondary"
+                        }
+                      >
+                        {!twilioRegistry?.featureFlagEnabled
+                          ? "Flag off"
+                          : twilioConnection
+                            ? twilioConnection.status.replace(/_/g, " ")
+                            : "Not connected"}
+                      </Badge>
+                    </div>
+                    <div className="mt-4 grid gap-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label>Twilio Account SID</Label>
+                          <Input
+                            value={twilioSettings.accountSid}
+                            onChange={(e) => setTwilioSettings((current) => ({ ...current, accountSid: e.target.value }))}
+                            placeholder="AC..."
+                            disabled={!canManageBusinessIntegrations}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Messaging Service SID</Label>
+                          <Input
+                            value={twilioSettings.messagingServiceSid}
+                            onChange={(e) =>
+                              setTwilioSettings((current) => ({ ...current, messagingServiceSid: e.target.value }))
+                            }
+                            placeholder="MG..."
+                            disabled={!canManageBusinessIntegrations}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>{twilioConnection ? "Rotate Auth Token" : "Twilio Auth Token"}</Label>
+                        <Input
+                          type="password"
+                          value={twilioSettings.authToken}
+                          onChange={(e) => setTwilioSettings((current) => ({ ...current, authToken: e.target.value }))}
+                          placeholder={twilioConnection ? "Leave blank to keep the stored token" : "Your Twilio auth token"}
+                          disabled={!canManageBusinessIntegrations}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Stored encrypted in Strata. Status callbacks are validated against this token before delivery updates are accepted.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Enabled SMS templates</Label>
+                        <div className="grid gap-3">
+                          {TWILIO_TEMPLATE_OPTIONS.map((option) => {
+                            const checked = twilioSettings.enabledTemplateSlugs.includes(option.value);
+                            return (
+                              <div key={option.value} className="rounded-lg border bg-background p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="space-y-1">
+                                    <p className="text-sm font-medium">{option.label}</p>
+                                    <p className="text-xs text-muted-foreground">{option.helper}</p>
+                                  </div>
+                                  <Switch
+                                    checked={checked}
+                                    onCheckedChange={(value) => handleToggleTwilioTemplate(option.value, value)}
+                                    disabled={!canManageBusinessIntegrations}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="space-y-2 text-xs text-muted-foreground">
+                        <p>Control scope: Owners and admins only.</p>
+                        <p>
+                          Stored service:{" "}
+                          {twilioConnection?.configSummary.twilioMessagingServiceSid ? (
+                            <span className="font-mono">{twilioConnection.configSummary.twilioMessagingServiceSid}</span>
+                          ) : (
+                            "Not linked yet"
+                          )}
+                        </p>
+                        <p>
+                          Last successful send:{" "}
+                          {twilioConnection?.lastSuccessfulAt
+                            ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(
+                                new Date(twilioConnection.lastSuccessfulAt)
+                              )
+                            : "None yet"}
+                        </p>
+                        <p>Delivery callbacks land in notification logs and update SMS status without trusting false success states.</p>
+                        {twilioConnection?.lastError ? <p className="text-amber-700">{twilioConnection.lastError}</p> : null}
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      <Button
+                        onClick={handleSaveTwilio}
+                        disabled={!canManageBusinessIntegrations || !twilioRegistry?.featureFlagEnabled || twilioSaving}
+                        className="w-full sm:w-auto"
+                      >
+                        {twilioSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {twilioConnection?.status === "connected" ? "Save Twilio SMS" : "Connect Twilio SMS"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={handleDisconnectTwilio}
+                        disabled={!canManageBusinessIntegrations || !twilioConnection || twilioDisconnecting}
+                        className="w-full sm:w-auto"
+                      >
+                        {twilioDisconnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         Disconnect
                       </Button>
                     </div>
