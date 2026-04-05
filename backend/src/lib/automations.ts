@@ -182,6 +182,7 @@ export async function runLapsedClientDetection(options?: {
       timezone: businesses.timezone,
       enabled: businesses.automationLapsedClientsEnabled,
       months: businesses.automationLapsedClientMonths,
+      bookingRequestUrl: businesses.bookingRequestUrl,
     })
     .from(businesses)
     .where(where);
@@ -189,6 +190,13 @@ export async function runLapsedClientDetection(options?: {
   let detected = 0;
   for (const business of list) {
     if (!LAPSED_TYPES.has(business.type) || !business.enabled) continue;
+    const bookingRequestUrl = business.bookingRequestUrl?.trim();
+    if (!bookingRequestUrl) {
+      logger.warn("Lapsed client automation skipped because booking link is missing", {
+        businessId: business.id,
+      });
+      continue;
+    }
 
     const timezone = getBusinessTimezone(business);
     const months = Math.max(1, Math.min(Number(business.months ?? 6), 36));
@@ -242,7 +250,7 @@ export async function runLapsedClientDetection(options?: {
           clientName: `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim() || "Customer",
           businessName: business.name,
           lastVisit: formatBusinessDate(row.lastVisit, timezone),
-          bookUrl: null,
+          bookUrl: bookingRequestUrl,
           serviceSummary: null,
         });
         await createActivityLog({

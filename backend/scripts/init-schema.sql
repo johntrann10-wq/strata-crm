@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   review_request_url text,
   automation_lapsed_clients_enabled boolean DEFAULT false,
   automation_lapsed_client_months integer DEFAULT 6,
+  booking_request_url text,
   integration_webhook_enabled boolean DEFAULT false,
   integration_webhook_url text,
   integration_webhook_secret text,
@@ -142,6 +143,7 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_review_request_delay_
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS review_request_url text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_lapsed_clients_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_lapsed_client_months integer DEFAULT 6;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_url text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_url text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_secret text;

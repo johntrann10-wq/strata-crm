@@ -124,6 +124,7 @@ export const businesses = pgTable("businesses", {
   reviewRequestUrl: text("review_request_url"),
   automationLapsedClientsEnabled: boolean("automation_lapsed_clients_enabled").default(false),
   automationLapsedClientMonths: integer("automation_lapsed_client_months").default(6),
+  bookingRequestUrl: text("booking_request_url"),
   integrationWebhookEnabled: boolean("integration_webhook_enabled").default(false),
   integrationWebhookUrl: text("integration_webhook_url"),
   integrationWebhookSecret: text("integration_webhook_secret"),

@@ -49,6 +49,7 @@ const createSchema = z.object({
   reviewRequestUrl: z.string().url().nullable().optional(),
   automationLapsedClientsEnabled: z.boolean().optional(),
   automationLapsedClientMonths: z.number().int().min(1).max(36).optional(),
+  bookingRequestUrl: z.string().url().nullable().optional(),
   integrationWebhookEnabled: z.boolean().optional(),
   integrationWebhookUrl: z.string().url().nullable().optional(),
   integrationWebhookSecret: z.string().max(255).nullable().optional(),
@@ -97,6 +98,7 @@ function coerceBusinessRecord(
     reviewRequestUrl: record.reviewRequestUrl ?? null,
     automationLapsedClientsEnabled: record.automationLapsedClientsEnabled ?? false,
     automationLapsedClientMonths: record.automationLapsedClientMonths ?? 6,
+    bookingRequestUrl: record.bookingRequestUrl ?? null,
     integrationWebhookEnabled: record.integrationWebhookEnabled ?? false,
     integrationWebhookUrl: record.integrationWebhookUrl ?? null,
     integrationWebhookSecret: record.integrationWebhookSecret ?? null,
@@ -131,6 +133,7 @@ function serializeBusiness(record: BusinessRecord) {
     ...record,
     integrationWebhookEvents,
     reviewRequestUrl: record.reviewRequestUrl ?? null,
+    bookingRequestUrl: record.bookingRequestUrl ?? null,
     website: null,
     bio: null,
     instagram: null,
@@ -297,6 +300,7 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       reviewRequestUrl: parsed.data.reviewRequestUrl ?? null,
       automationLapsedClientsEnabled: parsed.data.automationLapsedClientsEnabled ?? false,
       automationLapsedClientMonths: parsed.data.automationLapsedClientMonths ?? 6,
+      bookingRequestUrl: parsed.data.bookingRequestUrl ?? null,
       integrationWebhookEnabled: parsed.data.integrationWebhookEnabled ?? false,
       integrationWebhookUrl: parsed.data.integrationWebhookUrl ?? null,
       integrationWebhookSecret: parsed.data.integrationWebhookSecret ?? null,
@@ -394,6 +398,9 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   if (parsed.data.automationLapsedClientMonths !== undefined) {
     updates.automationLapsedClientMonths = parsed.data.automationLapsedClientMonths ?? 6;
   }
+  if (parsed.data.bookingRequestUrl !== undefined) {
+    updates.bookingRequestUrl = parsed.data.bookingRequestUrl?.trim() || null;
+  }
   if (parsed.data.integrationWebhookEnabled !== undefined) {
     updates.integrationWebhookEnabled = parsed.data.integrationWebhookEnabled ?? false;
   }
@@ -414,6 +421,15 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
       : existing.reviewRequestUrl ?? null;
   if (nextReviewAutomationEnabled && !nextReviewRequestUrl) {
     throw new BadRequestError("Add a review link before enabling review request automations.");
+  }
+  const nextLapsedAutomationEnabled =
+    parsed.data.automationLapsedClientsEnabled ?? existing.automationLapsedClientsEnabled ?? false;
+  const nextBookingRequestUrl =
+    parsed.data.bookingRequestUrl !== undefined
+      ? parsed.data.bookingRequestUrl?.trim() || null
+      : existing.bookingRequestUrl ?? null;
+  if (nextLapsedAutomationEnabled && !nextBookingRequestUrl) {
+    throw new BadRequestError("Add a booking link before enabling lapsed client automations.");
   }
 
   let updated: BusinessRecord | undefined;

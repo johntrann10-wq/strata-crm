@@ -178,6 +178,7 @@ type AutomationSettingsForm = {
   reviewRequestUrl: string;
   lapsedClientsEnabled: boolean;
   lapsedClientMonths: number;
+  bookingRequestUrl: string;
 };
 
 type IntegrationSettingsForm = {
@@ -185,6 +186,11 @@ type IntegrationSettingsForm = {
   webhookUrl: string;
   webhookSecret: string;
   webhookEvents: string[];
+};
+
+type AutomationActivitySummary = {
+  sentLast30Days: number;
+  lastSentAt: string | null;
 };
 
 const STAFF_ROLES = [
@@ -316,6 +322,7 @@ const DEFAULT_AUTOMATION_SETTINGS: AutomationSettingsForm = {
   reviewRequestUrl: "",
   lapsedClientsEnabled: false,
   lapsedClientMonths: 6,
+  bookingRequestUrl: "",
 };
 
 const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettingsForm = {
@@ -436,6 +443,16 @@ function getStaffPermissionSummary(teamMember: StaffRecord): string {
   const role = teamMember.membershipRole ?? teamMember.role ?? "technician";
   const defaults = getDefaultPermissionSelection(role).length;
   return `Using ${role.replace(/_/g, " ")} defaults across ${defaults} permissions.`;
+}
+
+function formatAutomationLastSent(value: string | null) {
+  if (!value) return "No recent sends";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "No recent sends";
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
 }
 
 function BillingTab({
@@ -840,6 +857,11 @@ export default function SettingsPage() {
   const [lapsedClientMonthsInput, setLapsedClientMonthsInput] = useState(
     String(DEFAULT_AUTOMATION_SETTINGS.lapsedClientMonths)
   );
+  const [automationSummary, setAutomationSummary] = useState<{
+    appointmentReminders: AutomationActivitySummary;
+    reviewRequests: AutomationActivitySummary;
+    lapsedClients: AutomationActivitySummary;
+  } | null>(null);
   const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettingsForm>(
     DEFAULT_INTEGRATION_SETTINGS
   );
@@ -908,6 +930,7 @@ export default function SettingsPage() {
   const [{ fetching: copyingStaffInvite }, getStaffInviteLink] = useAction(api.staff.inviteLink);
   const [{ data: presetSummary }, getBusinessPreset] = useAction(api.getBusinessPreset);
   const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
+  const [{ fetching: automationSummaryFetching }, getAutomationSummary] = useAction(api.getAutomationSummary);
   const preset = presetSummary as BusinessPresetActionResult | undefined;
   const presetServiceCount = preset?.count ?? 0;
   const presetPreviewNames = preset?.names?.slice(0, 4) ?? [];
@@ -930,6 +953,7 @@ export default function SettingsPage() {
       reviewRequestUrl: business.reviewRequestUrl ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestUrl,
       lapsedClientsEnabled: business.automationLapsedClientsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.lapsedClientsEnabled,
       lapsedClientMonths: business.automationLapsedClientMonths ?? DEFAULT_AUTOMATION_SETTINGS.lapsedClientMonths,
+      bookingRequestUrl: business.bookingRequestUrl ?? DEFAULT_AUTOMATION_SETTINGS.bookingRequestUrl,
     };
     setAutomationSettings(nextAutomationSettings);
     setAppointmentReminderHoursInput(String(nextAutomationSettings.appointmentReminderHours));
@@ -950,6 +974,22 @@ export default function SettingsPage() {
     if (!businessId) return;
     void getBusinessPreset();
   }, [businessId, getBusinessPreset]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    let cancelled = false;
+    getAutomationSummary()
+      .then((result) => {
+        if (cancelled || result.error) return;
+        setAutomationSummary(result.data as typeof automationSummary);
+      })
+      .catch(() => {
+        if (!cancelled) setAutomationSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [businessId, getAutomationSummary]);
 
   useEffect(() => {
     if (!canViewDiagnostics) return;
@@ -1097,6 +1137,10 @@ export default function SettingsPage() {
       toast.error("Add a review link before enabling review request automations.");
       return;
     }
+    if (automationSettings.lapsedClientsEnabled && !automationSettings.bookingRequestUrl.trim()) {
+      toast.error("Add a booking link before enabling lapsed client automations.");
+      return;
+    }
     await update({
       id: business.id,
       automationAppointmentRemindersEnabled: automationSettings.appointmentRemindersEnabled,
@@ -1106,7 +1150,12 @@ export default function SettingsPage() {
       reviewRequestUrl: automationSettings.reviewRequestUrl.trim() || null,
       automationLapsedClientsEnabled: automationSettings.lapsedClientsEnabled,
       automationLapsedClientMonths: automationSettings.lapsedClientMonths,
+      bookingRequestUrl: automationSettings.bookingRequestUrl.trim() || null,
     });
+    const summaryResult = await getAutomationSummary();
+    if (!summaryResult.error) {
+      setAutomationSummary(summaryResult.data as typeof automationSummary);
+    }
     toast.success("Automation settings saved");
   };
 
@@ -2404,6 +2453,36 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border bg-background p-4">
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Reminders</p>
+                    <p className="mt-2 text-2xl font-semibold">
+                      {automationSummaryFetching && !automationSummary ? "..." : automationSummary?.appointmentReminders.sentLast30Days ?? 0}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Sent in the last 30 days. Last send: {formatAutomationLastSent(automationSummary?.appointmentReminders.lastSentAt ?? null)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border bg-background p-4">
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Reviews</p>
+                    <p className="mt-2 text-2xl font-semibold">
+                      {automationSummaryFetching && !automationSummary ? "..." : automationSummary?.reviewRequests.sentLast30Days ?? 0}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Sent in the last 30 days. Last send: {formatAutomationLastSent(automationSummary?.reviewRequests.lastSentAt ?? null)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border bg-background p-4">
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Lapsed outreach</p>
+                    <p className="mt-2 text-2xl font-semibold">
+                      {automationSummaryFetching && !automationSummary ? "..." : automationSummary?.lapsedClients.sentLast30Days ?? 0}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Sent in the last 30 days. Last send: {formatAutomationLastSent(automationSummary?.lapsedClients.lastSentAt ?? null)}
+                    </p>
+                  </div>
+                </div>
+
                 <div className="rounded-xl border bg-muted/20 p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1">
@@ -2539,9 +2618,21 @@ export default function SettingsPage() {
                         disabled={!canEditSettings}
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground sm:pb-2">
-                      Outreach only targets opted-in clients and respects recent automation activity so people are not spammed.
-                    </p>
+                    <div className="space-y-1.5">
+                      <Label>Booking link</Label>
+                      <Input
+                        type="url"
+                        placeholder="https://yourshop.com/book"
+                        value={automationSettings.bookingRequestUrl}
+                        onChange={(e) =>
+                          setAutomationSettings((current) => ({ ...current, bookingRequestUrl: e.target.value }))
+                        }
+                        disabled={!canEditSettings}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+                    Outreach only targets opted-in clients, respects recent automation activity, and now sends them straight to your booking link.
                   </div>
                 </div>
 

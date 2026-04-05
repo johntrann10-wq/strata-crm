@@ -5,7 +5,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { clients, vehicles, services, appointments, invoices, payments, expenses } from "../db/schema.js";
+import { clients, vehicles, services, appointments, invoices, payments, expenses, activityLogs } from "../db/schema.js";
 import { eq, and, gte, lte, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -225,6 +225,45 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
     expensesThisMonth,
     netThisMonth: revenueThisMonth - expensesThisMonth,
     expenseCountThisMonth: expenseCountRows[0]?.count ?? 0,
+  });
+});
+
+actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const recentCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({
+      action: sql<string>`${activityLogs.action}`.as("action"),
+      total: sql<number>`count(*)::int`.as("total"),
+      lastSentAt: sql<Date | null>`max(${activityLogs.createdAt})`.as("last_sent_at"),
+    })
+    .from(activityLogs)
+    .where(
+      and(
+        eq(activityLogs.businessId, bid),
+        gte(activityLogs.createdAt, recentCutoff),
+        sql`${activityLogs.action} in (
+          'automation.appointment_reminder.sent',
+          'automation.review_request.sent',
+          'automation.lapsed_client.sent'
+        )`
+      )
+    )
+    .groupBy(activityLogs.action);
+
+  const summaryMap = new Map(rows.map((row) => [row.action, row]));
+  const summarize = (action: string) => {
+    const row = summaryMap.get(action);
+    return {
+      sentLast30Days: row?.total ?? 0,
+      lastSentAt: row?.lastSentAt?.toISOString() ?? null,
+    };
+  };
+
+  res.json({
+    appointmentReminders: summarize("automation.appointment_reminder.sent"),
+    reviewRequests: summarize("automation.review_request.sent"),
+    lapsedClients: summarize("automation.lapsed_client.sent"),
   });
 });
 
