@@ -170,13 +170,12 @@ type SystemStatus = {
   checkedAt: number | null;
 };
 
-type AutomationKind = "appointment_reminders" | "lapsed_clients" | "review_requests";
-
 type AutomationSettingsForm = {
   appointmentRemindersEnabled: boolean;
   appointmentReminderHours: number;
   reviewRequestsEnabled: boolean;
   reviewRequestDelayHours: number;
+  reviewRequestUrl: string;
   lapsedClientsEnabled: boolean;
   lapsedClientMonths: number;
 };
@@ -186,13 +185,6 @@ type IntegrationSettingsForm = {
   webhookUrl: string;
   webhookSecret: string;
   webhookEvents: string[];
-};
-
-type RunAutomationsResult = {
-  ok: true;
-  appointmentRemindersSent: number;
-  lapsedClientsDetected: number;
-  reviewRequestsSent: number;
 };
 
 const STAFF_ROLES = [
@@ -321,6 +313,7 @@ const DEFAULT_AUTOMATION_SETTINGS: AutomationSettingsForm = {
   appointmentReminderHours: 24,
   reviewRequestsEnabled: false,
   reviewRequestDelayHours: 24,
+  reviewRequestUrl: "",
   lapsedClientsEnabled: false,
   lapsedClientMonths: 6,
 };
@@ -915,7 +908,6 @@ export default function SettingsPage() {
   const [{ fetching: copyingStaffInvite }, getStaffInviteLink] = useAction(api.staff.inviteLink);
   const [{ data: presetSummary }, getBusinessPreset] = useAction(api.getBusinessPreset);
   const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
-  const [{ fetching: runningAutomationsNow }, runAutomationsNow] = useAction(api.runAutomationsNow);
   const preset = presetSummary as BusinessPresetActionResult | undefined;
   const presetServiceCount = preset?.count ?? 0;
   const presetPreviewNames = preset?.names?.slice(0, 4) ?? [];
@@ -935,6 +927,7 @@ export default function SettingsPage() {
       appointmentReminderHours: business.automationAppointmentReminderHours ?? DEFAULT_AUTOMATION_SETTINGS.appointmentReminderHours,
       reviewRequestsEnabled: business.automationReviewRequestsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestsEnabled,
       reviewRequestDelayHours: business.automationReviewRequestDelayHours ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestDelayHours,
+      reviewRequestUrl: business.reviewRequestUrl ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestUrl,
       lapsedClientsEnabled: business.automationLapsedClientsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.lapsedClientsEnabled,
       lapsedClientMonths: business.automationLapsedClientMonths ?? DEFAULT_AUTOMATION_SETTINGS.lapsedClientMonths,
     };
@@ -1100,12 +1093,17 @@ export default function SettingsPage() {
 
   const handleSaveAutomationSettings = async () => {
     if (!business?.id) return;
+    if (automationSettings.reviewRequestsEnabled && !automationSettings.reviewRequestUrl.trim()) {
+      toast.error("Add a review link before enabling review request automations.");
+      return;
+    }
     await update({
       id: business.id,
       automationAppointmentRemindersEnabled: automationSettings.appointmentRemindersEnabled,
       automationAppointmentReminderHours: automationSettings.appointmentReminderHours,
       automationReviewRequestsEnabled: automationSettings.reviewRequestsEnabled,
       automationReviewRequestDelayHours: automationSettings.reviewRequestDelayHours,
+      reviewRequestUrl: automationSettings.reviewRequestUrl.trim() || null,
       automationLapsedClientsEnabled: automationSettings.lapsedClientsEnabled,
       automationLapsedClientMonths: automationSettings.lapsedClientMonths,
     });
@@ -1122,13 +1120,6 @@ export default function SettingsPage() {
       integrationWebhookEvents: integrationSettings.webhookEvents,
     });
     toast.success("Integration settings saved");
-  };
-
-  const handleRunAutomationsNow = async (kinds?: AutomationKind[]) => {
-    const result = (await runAutomationsNow({ kinds })) as RunAutomationsResult;
-    toast.success(
-      `Automations finished: ${result.appointmentRemindersSent} reminders, ${result.reviewRequestsSent} reviews, ${result.lapsedClientsDetected} lapsed outreach.`
-    );
   };
 
   const openCreateLocation = () => {
@@ -2450,15 +2441,9 @@ export default function SettingsPage() {
                         disabled={!canEditSettings}
                       />
                     </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleRunAutomationsNow(["appointment_reminders"])}
-                      disabled={runningAutomationsNow}
-                      className="w-full sm:w-auto"
-                    >
-                      {runningAutomationsNow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Run reminders now
-                    </Button>
+                    <p className="text-xs text-muted-foreground sm:pb-2">
+                      Reminders send automatically before scheduled or confirmed visits based on this timing.
+                    </p>
                   </div>
                 </div>
 
@@ -2485,7 +2470,7 @@ export default function SettingsPage() {
                       </Label>
                     </div>
                   </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-end">
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-end">
                     <div className="space-y-1.5">
                       <Label>Hours after completion</Label>
                       <Input
@@ -2499,15 +2484,21 @@ export default function SettingsPage() {
                         disabled={!canEditSettings}
                       />
                     </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleRunAutomationsNow(["review_requests"])}
-                      disabled={runningAutomationsNow}
-                      className="w-full sm:w-auto"
-                    >
-                      {runningAutomationsNow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Run review requests now
-                    </Button>
+                    <div className="space-y-1.5">
+                      <Label>Review link</Label>
+                      <Input
+                        type="url"
+                        placeholder="https://g.page/r/your-business/review"
+                        value={automationSettings.reviewRequestUrl}
+                        onChange={(e) =>
+                          setAutomationSettings((current) => ({ ...current, reviewRequestUrl: e.target.value }))
+                        }
+                        disabled={!canEditSettings}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    Review requests only send after completed appointments when this review link is saved. If the link is blank, Strata will skip them instead of faking success.
                   </div>
                 </div>
 
@@ -2548,41 +2539,24 @@ export default function SettingsPage() {
                         disabled={!canEditSettings}
                       />
                     </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleRunAutomationsNow(["lapsed_clients"])}
-                      disabled={runningAutomationsNow}
-                      className="w-full sm:w-auto"
-                    >
-                      {runningAutomationsNow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Run lapsed outreach now
-                    </Button>
+                    <p className="text-xs text-muted-foreground sm:pb-2">
+                      Outreach only targets opted-in clients and respects recent automation activity so people are not spammed.
+                    </p>
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-2 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-muted-foreground">
-                    Automation sends are logged through the same notification and activity system as the rest of Strata, so follow-up is still traceable.
+                    Automation sends are logged through the same notification and activity system as the rest of Strata, so follow-up stays traceable without manual trigger buttons.
                   </p>
-                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                    <Button
-                      variant="outline"
-                      onClick={() => handleRunAutomationsNow()}
-                      disabled={runningAutomationsNow}
-                      className="w-full sm:w-auto"
-                    >
-                      {runningAutomationsNow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Run enabled automations now
-                    </Button>
-                    <Button
-                      onClick={handleSaveAutomationSettings}
-                      disabled={!canEditSettings || saving}
-                      className="w-full sm:w-auto"
-                    >
-                      {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Save automations
-                    </Button>
-                  </div>
+                  <Button
+                    onClick={handleSaveAutomationSettings}
+                    disabled={!canEditSettings || saving}
+                    className="w-full sm:w-auto"
+                  >
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Save automations
+                  </Button>
                 </div>
               </CardContent>
             </Card>

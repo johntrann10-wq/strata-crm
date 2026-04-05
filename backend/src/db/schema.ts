@@ -121,6 +121,7 @@ export const businesses = pgTable("businesses", {
   automationAppointmentReminderHours: integer("automation_appointment_reminder_hours").default(24),
   automationReviewRequestsEnabled: boolean("automation_review_requests_enabled").default(false),
   automationReviewRequestDelayHours: integer("automation_review_request_delay_hours").default(24),
+  reviewRequestUrl: text("review_request_url"),
   automationLapsedClientsEnabled: boolean("automation_lapsed_clients_enabled").default(false),
   automationLapsedClientMonths: integer("automation_lapsed_client_months").default(6),
   integrationWebhookEnabled: boolean("integration_webhook_enabled").default(false),

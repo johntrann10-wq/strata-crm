@@ -283,6 +283,7 @@ export async function runReviewRequests(options?: {
       timezone: businesses.timezone,
       enabled: businesses.automationReviewRequestsEnabled,
       delayHours: businesses.automationReviewRequestDelayHours,
+      reviewRequestUrl: businesses.reviewRequestUrl,
     })
     .from(businesses)
     .where(where);
@@ -290,6 +291,13 @@ export async function runReviewRequests(options?: {
   let sent = 0;
   for (const business of list) {
     if (!REVIEW_REQUEST_TYPES.has(business.type) || !business.enabled) continue;
+    const reviewRequestUrl = business.reviewRequestUrl?.trim();
+    if (!reviewRequestUrl) {
+      logger.warn("Review request automation skipped because review link is missing", {
+        businessId: business.id,
+      });
+      continue;
+    }
 
     const delayHours = Math.max(1, Math.min(Number(business.delayHours ?? 24), 336));
     const cutoff = new Date(Date.now() - delayHours * 60 * 60 * 1000);
@@ -331,7 +339,7 @@ export async function runReviewRequests(options?: {
           clientName:
             `${row.clientFirstName ?? ""} ${row.clientLastName ?? ""}`.trim() || "Customer",
           businessName: business.name,
-          reviewUrl: null,
+          reviewUrl: reviewRequestUrl,
           serviceSummary: row.title ?? null,
         });
         await createActivityLog({

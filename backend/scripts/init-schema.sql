@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   automation_appointment_reminder_hours integer DEFAULT 24,
   automation_review_requests_enabled boolean DEFAULT false,
   automation_review_request_delay_hours integer DEFAULT 24,
+  review_request_url text,
   automation_lapsed_clients_enabled boolean DEFAULT false,
   automation_lapsed_client_months integer DEFAULT 6,
   integration_webhook_enabled boolean DEFAULT false,
@@ -138,6 +139,7 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_appointment_reminders
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_appointment_reminder_hours integer DEFAULT 24;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_review_requests_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_review_request_delay_hours integer DEFAULT 24;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS review_request_url text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_lapsed_clients_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_lapsed_client_months integer DEFAULT 6;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_enabled boolean DEFAULT false;

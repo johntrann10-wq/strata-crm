@@ -665,18 +665,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({}),
     }),
-  runAutomationsNow: (params?: {
-    kinds?: Array<"appointment_reminders" | "lapsed_clients" | "review_requests">;
-  }) =>
-    request<{
-      ok: true;
-      appointmentRemindersSent: number;
-      lapsedClientsDetected: number;
-      reviewRequestsSent: number;
-    }>("/actions/runAutomationsNow", {
-      method: "POST",
-      body: JSON.stringify(params ?? {}),
-    }),
   // Billing: $29/mo, first month free
   billing: {
     getStatus: () =>

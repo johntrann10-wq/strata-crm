@@ -46,6 +46,7 @@ const createSchema = z.object({
   automationAppointmentReminderHours: z.number().int().min(1).max(336).optional(),
   automationReviewRequestsEnabled: z.boolean().optional(),
   automationReviewRequestDelayHours: z.number().int().min(1).max(336).optional(),
+  reviewRequestUrl: z.string().url().nullable().optional(),
   automationLapsedClientsEnabled: z.boolean().optional(),
   automationLapsedClientMonths: z.number().int().min(1).max(36).optional(),
   integrationWebhookEnabled: z.boolean().optional(),
@@ -93,6 +94,7 @@ function coerceBusinessRecord(
     automationAppointmentReminderHours: record.automationAppointmentReminderHours ?? 24,
     automationReviewRequestsEnabled: record.automationReviewRequestsEnabled ?? false,
     automationReviewRequestDelayHours: record.automationReviewRequestDelayHours ?? 24,
+    reviewRequestUrl: record.reviewRequestUrl ?? null,
     automationLapsedClientsEnabled: record.automationLapsedClientsEnabled ?? false,
     automationLapsedClientMonths: record.automationLapsedClientMonths ?? 6,
     integrationWebhookEnabled: record.integrationWebhookEnabled ?? false,
@@ -128,6 +130,7 @@ function serializeBusiness(record: BusinessRecord) {
   return {
     ...record,
     integrationWebhookEvents,
+    reviewRequestUrl: record.reviewRequestUrl ?? null,
     website: null,
     bio: null,
     instagram: null,
@@ -291,6 +294,7 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       automationAppointmentReminderHours: parsed.data.automationAppointmentReminderHours ?? 24,
       automationReviewRequestsEnabled: parsed.data.automationReviewRequestsEnabled ?? false,
       automationReviewRequestDelayHours: parsed.data.automationReviewRequestDelayHours ?? 24,
+      reviewRequestUrl: parsed.data.reviewRequestUrl ?? null,
       automationLapsedClientsEnabled: parsed.data.automationLapsedClientsEnabled ?? false,
       automationLapsedClientMonths: parsed.data.automationLapsedClientMonths ?? 6,
       integrationWebhookEnabled: parsed.data.integrationWebhookEnabled ?? false,
@@ -381,6 +385,9 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   if (parsed.data.automationReviewRequestDelayHours !== undefined) {
     updates.automationReviewRequestDelayHours = parsed.data.automationReviewRequestDelayHours ?? 24;
   }
+  if (parsed.data.reviewRequestUrl !== undefined) {
+    updates.reviewRequestUrl = parsed.data.reviewRequestUrl?.trim() || null;
+  }
   if (parsed.data.automationLapsedClientsEnabled !== undefined) {
     updates.automationLapsedClientsEnabled = parsed.data.automationLapsedClientsEnabled ?? false;
   }
@@ -398,6 +405,15 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.integrationWebhookEvents !== undefined) {
     updates.integrationWebhookEvents = JSON.stringify(parsed.data.integrationWebhookEvents ?? []);
+  }
+  const nextReviewAutomationEnabled =
+    parsed.data.automationReviewRequestsEnabled ?? existing.automationReviewRequestsEnabled ?? false;
+  const nextReviewRequestUrl =
+    parsed.data.reviewRequestUrl !== undefined
+      ? parsed.data.reviewRequestUrl?.trim() || null
+      : existing.reviewRequestUrl ?? null;
+  if (nextReviewAutomationEnabled && !nextReviewRequestUrl) {
+    throw new BadRequestError("Add a review link before enabling review request automations.");
   }
 
   let updated: BusinessRecord | undefined;
