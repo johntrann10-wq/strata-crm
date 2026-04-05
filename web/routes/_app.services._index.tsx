@@ -282,7 +282,7 @@ function ServiceForm({
           placeholder="e.g. Full Detail Package"
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="svc-price">Price ($) *</Label>
           <Input
@@ -333,7 +333,7 @@ function ServiceForm({
           rows={3}
         />
       </div>
-      <div className="flex items-center gap-6">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-6">
         <div className="flex items-center gap-2">
           <Checkbox
             id="svc-taxable"
@@ -1040,7 +1040,8 @@ export default function ServicesPage() {
       </AlertDialog>
 
       <Dialog open={createServiceOpen} onOpenChange={setCreateServiceOpen}>
-        <DialogContent className="sm:max-w-[560px]">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]">
+          <div className="p-6">
           <DialogHeader>
             <DialogTitle>Add Service</DialogTitle>
             <DialogDescription>Create a service and place it in the right category right away.</DialogDescription>
@@ -1052,11 +1053,13 @@ export default function ServicesPage() {
               <Button type="submit" disabled={createServiceFetching}>{createServiceFetching ? "Creating..." : "Create Service"}</Button>
             </DialogFooter>
           </form>
+          </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(editService)} onOpenChange={(open) => !open && setEditService(null)}>
-        <DialogContent className="sm:max-w-[560px]">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]">
+          <div className="p-6">
           <DialogHeader>
             <DialogTitle>Edit Service</DialogTitle>
             <DialogDescription>Update service details, move it between categories, or manage add-ons.</DialogDescription>
@@ -1109,6 +1112,7 @@ export default function ServicesPage() {
               </div>
             </DialogFooter>
           </form>
+          </div>
         </DialogContent>
       </Dialog>
 

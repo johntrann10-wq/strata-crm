@@ -384,7 +384,8 @@ function FinancesContent() {
       </div>
 
       <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
-        <DialogContent className="sm:max-w-[560px]">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]">
+          <div className="p-6">
           <DialogHeader>
             <DialogTitle>{editingExpense ? "Edit Expense" : "Add Expense"}</DialogTitle>
             <DialogDescription>
@@ -428,6 +429,7 @@ function FinancesContent() {
               {editingExpense ? "Save changes" : "Add expense"}
             </Button>
           </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
