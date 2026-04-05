@@ -7,6 +7,7 @@ import { GoogleMark } from "./GoogleMark";
 import { Link, useLocation } from "react-router";
 import { api, API_BASE } from "../../api";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
+import { trackEvent } from "@/lib/analytics";
 import { useMemo, useState, type FormEvent } from "react";
 
 function buildGoogleAuthHref(search: string): string {
@@ -42,7 +43,13 @@ export const SignUpComponent = (props: {
     submit,
     register,
     formState: { errors, isSubmitting },
-  } = useActionForm(api.user.signUp, props.options);
+  } = useActionForm(api.user.signUp, {
+    ...props.options,
+    onSuccess: (...args) => {
+      trackEvent("signup_completed", { method: "email" });
+      props.options?.onSuccess?.(...args);
+    },
+  });
   const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -55,6 +62,7 @@ export const SignUpComponent = (props: {
       return;
     }
     setConfirmPasswordError(null);
+    trackEvent("signup_started", { method: "email", invite_flow: isInviteFlow });
     void submit(event);
   };
 
@@ -95,7 +103,7 @@ export const SignUpComponent = (props: {
               className="w-full h-9 text-[13px] font-medium rounded-lg shadow-none"
               asChild
             >
-              <a href={googleAuthHref}>
+              <a href={googleAuthHref} onClick={() => trackEvent("signup_started", { method: "google", invite_flow: isInviteFlow })}>
                 <GoogleMark className="mr-2 h-4 w-4 shrink-0" />
                 Sign up with Google
               </a>
@@ -211,14 +219,12 @@ export const SignUpComponent = (props: {
         <Link
           className="text-foreground font-medium hover:underline"
           to={`/sign-in${search}`}
-          onClick={
-            props.overrideOnSignIn
-              ? (e) => {
-                  e.preventDefault();
-                  props.overrideOnSignIn?.();
-                }
-              : undefined
-          }
+          onClick={(e) => {
+            trackEvent("signin_viewed", { source: "sign_up_screen" });
+            if (!props.overrideOnSignIn) return;
+            e.preventDefault();
+            props.overrideOnSignIn?.();
+          }}
         >
           Sign in
         </Link>

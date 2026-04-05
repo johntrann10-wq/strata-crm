@@ -1,6 +1,7 @@
 import { Link, Outlet, useOutletContext } from "react-router";
 import { Navigation } from "@/components/public/nav";
 import { buttonVariants } from "@/components/ui/button";
+import { trackEvent } from "@/lib/analytics";
 import { categorySeoPages, comparisonSeoPages, featureSeoPages } from "@/lib/seoPages";
 import { cn } from "@/lib/utils";
 import type { RootOutletContext } from "../root";
@@ -21,10 +22,14 @@ export default function PublicLayout() {
             <Navigation />
 
             <div className="flex items-center space-x-2">
-              <Link to="/sign-in" className={cn(buttonVariants({ size: "sm", variant: "outline" }))}>
+              <Link
+                to="/sign-in"
+                className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
+                onClick={() => trackEvent("marketing_login_clicked", { placement: "public_nav" })}
+              >
                 Login
               </Link>
-              <Link to="/sign-up" className={cn(buttonVariants({ size: "sm" }))}>
+              <Link to="/sign-up" className={cn(buttonVariants({ size: "sm" }))} onClick={() => trackEvent("landing_cta_clicked", { placement: "public_nav", target: "sign_up" })}>
                 Get started
               </Link>
             </div>
@@ -44,7 +49,11 @@ export default function PublicLayout() {
               <p className="max-w-xs text-sm leading-6 text-gray-600">
                 Modern automotive service business software for scheduling, clients, vehicles, jobs, quotes, invoices, and payments.
               </p>
-              <Link to="/pricing" className="text-sm font-medium text-orange-700 transition-colors hover:text-orange-800">
+              <Link
+                to="/pricing"
+                className="text-sm font-medium text-orange-700 transition-colors hover:text-orange-800"
+                onClick={() => trackEvent("pricing_viewed", { placement: "public_footer" })}
+              >
                 View Strata pricing
               </Link>
             </div>

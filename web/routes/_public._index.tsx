@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { trackEvent } from "@/lib/analytics";
 import { categorySeoPages, comparisonSeoPages, featureSeoPages, seoPageList } from "@/lib/seoPages";
 import { cn } from "@/lib/utils";
 
@@ -189,7 +190,7 @@ const homeSchema = {
       "@id": "https://stratacrm.app/#organization",
       name: "Strata CRM",
       url: "https://stratacrm.app",
-      logo: "https://stratacrm.app/social-preview.png",
+      logo: "https://stratacrm.app/social-preview.png?v=20260404a",
       sameAs: [],
     },
     {
@@ -259,7 +260,7 @@ const homeSchema = {
 };
 
 export function meta() {
-  const socialImageUrl = "https://stratacrm.app/social-preview.png";
+  const socialImageUrl = "https://stratacrm.app/social-preview.png?v=20260404a";
   return [
     { title: homeTitle },
     { name: "description", content: homeDescription },
@@ -314,12 +315,14 @@ export default function LandingPage() {
             <Link
               to="/sign-in"
               className={cn(buttonVariants({ variant: "ghost" }), "h-10 px-3 text-sm text-gray-700 hover:text-gray-950")}
+              onClick={() => trackEvent("marketing_login_clicked", { placement: "landing_header" })}
             >
               Sign in
             </Link>
             <Link
               to="/sign-up"
               className={cn(buttonVariants(), "h-10 rounded-xl bg-orange-500 px-4 text-sm text-white hover:bg-orange-600")}
+              onClick={() => trackEvent("landing_cta_clicked", { placement: "landing_header", target: "sign_up" })}
             >
               Start free
             </Link>
@@ -364,6 +367,7 @@ export default function LandingPage() {
                   buttonVariants({ size: "lg" }),
                   "min-h-[54px] rounded-2xl bg-orange-500 px-7 text-base font-semibold text-white shadow-lg shadow-orange-200/70 hover:bg-orange-600"
                 )}
+                onClick={() => trackEvent("landing_cta_clicked", { placement: "hero_primary", target: "sign_up" })}
               >
                 Start free
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -374,6 +378,7 @@ export default function LandingPage() {
                   buttonVariants({ size: "lg", variant: "outline" }),
                   "min-h-[54px] rounded-2xl border-gray-300 bg-white/85 px-7 text-base font-semibold text-gray-900 hover:bg-white"
                 )}
+                onClick={() => trackEvent("marketing_login_clicked", { placement: "hero_secondary" })}
               >
                 Sign in
               </Link>
@@ -383,6 +388,7 @@ export default function LandingPage() {
                   buttonVariants({ size: "lg", variant: "outline" }),
                   "min-h-[54px] rounded-2xl border-gray-300 bg-white/85 px-7 text-base font-semibold text-gray-900 hover:bg-white"
                 )}
+                onClick={() => trackEvent("pricing_viewed", { placement: "hero_tertiary" })}
               >
                 View pricing
               </Link>
@@ -651,6 +657,7 @@ export default function LandingPage() {
                   buttonVariants({ size: "lg" }),
                   "min-h-[54px] rounded-2xl bg-white text-base font-semibold text-gray-950 hover:bg-orange-50"
                 )}
+                onClick={() => trackEvent("landing_cta_clicked", { placement: "best_fit_card", target: "sign_up" })}
               >
                 Start free
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -661,6 +668,7 @@ export default function LandingPage() {
                   buttonVariants({ size: "lg", variant: "outline" }),
                   "min-h-[54px] rounded-2xl border-white/20 bg-transparent text-base font-semibold text-white hover:bg-white/10"
                 )}
+                onClick={() => trackEvent("pricing_viewed", { placement: "best_fit_card" })}
               >
                 See pricing and fit
               </Link>
@@ -928,6 +936,7 @@ export default function LandingPage() {
                 buttonVariants({ size: "lg" }),
                 "min-h-[54px] rounded-2xl bg-white px-8 text-base font-semibold text-orange-600 hover:bg-orange-50"
               )}
+              onClick={() => trackEvent("landing_cta_clicked", { placement: "pricing_footer", target: "sign_up" })}
             >
               Start free
               <ArrowRight className="ml-2 h-4 w-4" />
@@ -938,6 +947,7 @@ export default function LandingPage() {
                 buttonVariants({ size: "lg", variant: "outline" }),
                 "min-h-[54px] rounded-2xl border-white/35 bg-transparent px-8 text-base font-semibold text-white hover:bg-white/10"
               )}
+              onClick={() => trackEvent("marketing_login_clicked", { placement: "pricing_footer" })}
             >
               Sign in
             </Link>

@@ -6,6 +6,8 @@ interface ImportMetaEnv {
   readonly NEXT_PUBLIC_API_URL?: string;
   /** When "true", production bundle uses relative `/api` (requires same-origin edge proxy). */
   readonly VITE_ALLOW_RELATIVE_API?: string;
+  readonly VITE_GA_MEASUREMENT_ID?: string;
+  readonly VITE_CLARITY_PROJECT_ID?: string;
 }
 
 interface ImportMeta {

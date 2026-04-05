@@ -194,7 +194,7 @@ const featuresSchema = {
 };
 
 export function meta() {
-  const socialImageUrl = "https://stratacrm.app/social-preview.png";
+  const socialImageUrl = "https://stratacrm.app/social-preview.png?v=20260404a";
   return [
     { title: featuresTitle },
     { name: "description", content: featuresDescription },

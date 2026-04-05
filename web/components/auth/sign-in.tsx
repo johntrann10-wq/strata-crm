@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { trackEvent } from "@/lib/analytics";
 import { api, API_BASE } from "../../api";
 import { useActionForm } from "../../hooks/useApi";
 import { GoogleMark } from "./GoogleMark";
@@ -43,6 +44,7 @@ export const SignInComponent = (props: {
   } = useActionForm(api.user.signIn, {
     ...props.options,
     onSuccess: () => {
+      trackEvent("signin_completed", { method: "email" });
       props.options?.onSuccess?.();
       if (!props.options?.onSuccess) {
         navigate(fallbackAfterAuth, { replace: true });
@@ -70,7 +72,12 @@ export const SignInComponent = (props: {
       </div>
 
       <Card className="rounded-2xl border border-border p-8 shadow-sm">
-        <form onSubmit={submit}>
+        <form
+          onSubmit={(event) => {
+            trackEvent("signin_started", { method: "email" });
+            void submit(event);
+          }}
+        >
           {isInviteFlow ? (
             <div className="mb-5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-left text-[12px] text-orange-900">
               Already have a Strata login? Sign in with the invited email below and your team access will be attached automatically.
@@ -79,6 +86,7 @@ export const SignInComponent = (props: {
 
           <a
             href={googleAuthHref}
+            onClick={() => trackEvent("signin_started", { method: "google" })}
             className="flex h-10 w-full items-center justify-center gap-2.5 rounded-lg border border-border bg-background text-[13px] font-medium transition-colors hover:bg-muted"
           >
             <GoogleMark className="h-4 w-4 shrink-0" />
@@ -144,14 +152,12 @@ export const SignInComponent = (props: {
         <Link
           to={`/sign-up${search}`}
           className="font-medium text-foreground hover:underline"
-          onClick={
-            props.overrideOnSignUp
-              ? (e) => {
-                  e.preventDefault();
-                  props.overrideOnSignUp?.();
-                }
-              : undefined
-          }
+          onClick={(e) => {
+            trackEvent("signup_viewed", { source: "sign_in_screen" });
+            if (!props.overrideOnSignUp) return;
+            e.preventDefault();
+            props.overrideOnSignUp?.();
+          }}
         >
           Sign up
         </Link>

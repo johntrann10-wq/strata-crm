@@ -17,15 +17,19 @@ import socialPreviewHref from "./social-preview.png";
 import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
 import { setAuthToken } from "./lib/auth";
+import { analyticsEnabled, getClarityProjectId, getGaMeasurementId, trackPageView } from "./lib/analytics";
 import { recordRuntimeError } from "./lib/runtimeErrors";
 
 const isProduction = import.meta.env.PROD;
 const siteUrl = "https://stratacrm.app";
+const socialPreviewVersion = "20260404a";
 const defaultTitle = "Strata - fast CRM for auto service shops";
 const defaultDescription =
   "Strata helps automotive service businesses run scheduling, clients, vehicles, jobs, quotes, invoices, and payments in one clear operating system.";
-const socialImageUrl = `${siteUrl}${socialPreviewHref}`;
+const socialImageUrl = `${siteUrl}${socialPreviewHref}?v=${socialPreviewVersion}`;
 const googleSiteVerification = "8J8smTWAQcFyKEfHd6HqfOQ2K1G4afNezGJNNFN4RBM";
+const gaMeasurementId = getGaMeasurementId();
+const clarityProjectId = getClarityProjectId();
 const organizationSchema = {
   "@context": "https://schema.org",
   "@graph": [
@@ -160,6 +164,57 @@ function BrowserErrorReporter() {
   return null;
 }
 
+function AnalyticsRouteTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!analyticsEnabled()) return;
+    const query = location.search || "";
+    const hash = location.hash || "";
+    trackPageView(`${location.pathname}${query}${hash}`);
+  }, [location.pathname, location.search, location.hash]);
+
+  return null;
+}
+
+function AnalyticsScripts() {
+  if (!isProduction || !analyticsEnabled()) return null;
+
+  return (
+    <>
+      {gaMeasurementId ? (
+        <>
+          <script async src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`} />
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                window.gtag = gtag;
+                gtag('js', new Date());
+                gtag('config', '${gaMeasurementId}', { send_page_view: false });
+              `,
+            }}
+          />
+        </>
+      ) : null}
+      {clarityProjectId ? (
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(c,l,a,r,i,t,y){
+                c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+              })(window, document, "clarity", "script", "${clarityProjectId}");
+            `,
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
 export const links = () => [
   { rel: "icon", href: faviconHref, type: "image/svg+xml" },
   { rel: "shortcut icon", href: faviconHref, type: "image/svg+xml" },
@@ -250,11 +305,13 @@ export default function App({ loaderData }: Route.ComponentProps) {
         <link rel="canonical" href={canonicalUrl} />
         <meta name="robots" content={robotsContent} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }} />
+        <AnalyticsScripts />
         {!isProduction && <script type="module" src="/@vite/client" async />}
       </head>
       <body>
         <Suspense>
           <OAuthTokenFromQuery />
+          <AnalyticsRouteTracker />
           <BrowserErrorReporter />
           <Outlet context={{ gadgetConfig, csrfToken }} />
           <ClientToaster />

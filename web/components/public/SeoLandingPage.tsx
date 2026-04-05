@@ -12,7 +12,7 @@ type SeoLandingPageProps = {
 
 export function buildSeoMeta(page: SeoPageConfig) {
   const url = `https://stratacrm.app${page.path}`;
-  const socialImageUrl = "https://stratacrm.app/social-preview.png";
+  const socialImageUrl = "https://stratacrm.app/social-preview.png?v=20260404a";
   return [
     { title: page.seoTitle },
     { name: "description", content: page.seoDescription },
