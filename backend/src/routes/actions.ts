@@ -349,14 +349,18 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
       .from(activityLogs)
       .where(
         and(
-          eq(activityLogs.businessId, bid),
-          sql`${activityLogs.action} in (
-            'automation.appointment_reminder.sent',
-            'automation.review_request.sent',
-            'automation.lapsed_client.sent'
-          )`
-        )
+        eq(activityLogs.businessId, bid),
+        sql`${activityLogs.action} in (
+          'automation.appointment_reminder.sent',
+          'automation.appointment_reminder.skipped',
+          'automation.review_request.sent',
+          'automation.review_request.skipped',
+          'automation.lapsed_client.sent'
+          ,
+          'automation.lapsed_client.skipped'
+        )`
       )
+    )
       .orderBy(desc(activityLogs.createdAt))
       .limit(limit),
     db
@@ -395,13 +399,24 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
     const automationType =
       row.action === "automation.appointment_reminder.sent"
         ? "appointment_reminder"
-        : row.action === "automation.review_request.sent"
+        : row.action === "automation.appointment_reminder.skipped"
+          ? "appointment_reminder"
+          : row.action === "automation.review_request.sent"
           ? "review_request"
-          : "lapsed_client";
+          : row.action === "automation.review_request.skipped"
+            ? "review_request"
+            : "lapsed_client";
+
+    const skipReason =
+      typeof metadata.reason === "string"
+        ? metadata.reason
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (char) => char.toUpperCase())
+        : "Conditions were not met";
 
     return {
       id: row.id,
-      kind: "sent" as const,
+      kind: row.action.endsWith(".skipped") ? ("skipped" as const) : ("sent" as const),
       automationType,
       channel: "email" as const,
       recipient: typeof metadata.sentTo === "string" ? metadata.sentTo : null,
@@ -409,11 +424,17 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
       entityId: row.entityId ?? null,
       createdAt: row.createdAt.toISOString(),
       message:
-        automationType === "appointment_reminder"
-          ? "Appointment reminder sent."
-          : automationType === "review_request"
-            ? "Review request sent."
-            : "Lapsed client outreach sent.",
+        row.action.endsWith(".skipped")
+          ? automationType === "appointment_reminder"
+            ? `Appointment reminder skipped: ${skipReason}.`
+            : automationType === "review_request"
+              ? `Review request skipped: ${skipReason}.`
+              : `Lapsed client outreach skipped: ${skipReason}.`
+          : automationType === "appointment_reminder"
+            ? "Appointment reminder sent."
+            : automationType === "review_request"
+              ? "Review request sent."
+              : "Lapsed client outreach sent.",
     };
   });
 

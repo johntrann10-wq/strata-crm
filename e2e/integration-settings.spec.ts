@@ -198,6 +198,17 @@ async function mockAuthenticatedSettings(
             createdAt: "2026-04-04T18:40:00.000Z",
             message: "Twilio callback reported delivery failure.",
           },
+          {
+            id: "auto-feed-3",
+            kind: "skipped",
+            automationType: "lapsed_client",
+            channel: "email",
+            recipient: null,
+            entityType: "business",
+            entityId: "biz-1",
+            createdAt: "2026-04-04T17:20:00.000Z",
+            message: "Lapsed client outreach skipped: Outside Send Window.",
+          },
         ],
       }),
     });
@@ -736,5 +747,6 @@ test("shows recent automation activity across email and sms channels", async ({ 
   await expect(page.getByText(/appointment reminder sent\./i)).toBeVisible();
   await expect(page.getByText(/client@example\.com/i)).toBeVisible();
   await expect(page.getByText(/twilio callback reported delivery failure\./i)).toBeVisible();
+  await expect(page.getByText(/lapsed client outreach skipped: outside send window\./i)).toBeVisible();
   await expect(page.getByText(/^SMS$/i)).toBeVisible();
 });

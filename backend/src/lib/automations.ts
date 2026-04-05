@@ -94,6 +94,26 @@ async function hasAutomationActivity(action: string, entityType: string, entityI
   return !!existing;
 }
 
+async function recordAutomationSkip(input: {
+  businessId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  metadata: Record<string, unknown>;
+  dedupeSince?: Date;
+}) {
+  if (await hasAutomationActivity(input.action, input.entityType, input.entityId, input.dedupeSince)) {
+    return;
+  }
+  await createActivityLog({
+    businessId: input.businessId,
+    action: input.action,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    metadata: input.metadata,
+  });
+}
+
 export async function runAppointmentReminders(options?: {
   businessId?: string;
   force?: boolean;
@@ -118,14 +138,26 @@ export async function runAppointmentReminders(options?: {
     if (!REMINDER_TYPES.has(business.type) || !business.enabled) continue;
 
     const timezone = getBusinessTimezone(business);
+    const now = new Date();
     if (
       !options?.force &&
-      !isWithinAutomationWindow(new Date(), timezone, business.sendWindowStartHour, business.sendWindowEndHour)
+      !isWithinAutomationWindow(now, timezone, business.sendWindowStartHour, business.sendWindowEndHour)
     ) {
+      await recordAutomationSkip({
+        businessId: business.id,
+        action: "automation.appointment_reminder.skipped",
+        entityType: "business",
+        entityId: business.id,
+        metadata: {
+          reason: "outside_send_window",
+          sendWindowStartHour: business.sendWindowStartHour ?? 8,
+          sendWindowEndHour: business.sendWindowEndHour ?? 18,
+        },
+        dedupeSince: new Date(now.getTime() - 6 * 60 * 60 * 1000),
+      });
       continue;
     }
     const leadHours = Math.max(1, Math.min(Number(business.leadHours ?? 24), 336));
-    const now = new Date();
     const windowStart = options?.force
       ? now
       : new Date(now.getTime() + Math.max(leadHours - 1, 0) * 60 * 60 * 1000);
@@ -254,10 +286,19 @@ export async function runLapsedClientDetection(options?: {
   let detected = 0;
   for (const business of list) {
     if (!LAPSED_TYPES.has(business.type) || !business.enabled) continue;
+    const now = new Date();
     const bookingRequestUrl = business.bookingRequestUrl?.trim();
     if (!bookingRequestUrl) {
       logger.warn("Lapsed client automation skipped because booking link is missing", {
         businessId: business.id,
+      });
+      await recordAutomationSkip({
+        businessId: business.id,
+        action: "automation.lapsed_client.skipped",
+        entityType: "business",
+        entityId: business.id,
+        metadata: { reason: "missing_booking_link" },
+        dedupeSince: new Date(now.getTime() - 12 * 60 * 60 * 1000),
       });
       continue;
     }
@@ -265,8 +306,20 @@ export async function runLapsedClientDetection(options?: {
     const timezone = getBusinessTimezone(business);
     if (
       !options?.force &&
-      !isWithinAutomationWindow(new Date(), timezone, business.sendWindowStartHour, business.sendWindowEndHour)
+      !isWithinAutomationWindow(now, timezone, business.sendWindowStartHour, business.sendWindowEndHour)
     ) {
+      await recordAutomationSkip({
+        businessId: business.id,
+        action: "automation.lapsed_client.skipped",
+        entityType: "business",
+        entityId: business.id,
+        metadata: {
+          reason: "outside_send_window",
+          sendWindowStartHour: business.sendWindowStartHour ?? 8,
+          sendWindowEndHour: business.sendWindowEndHour ?? 18,
+        },
+        dedupeSince: new Date(now.getTime() - 6 * 60 * 60 * 1000),
+      });
       continue;
     }
     const months = Math.max(1, Math.min(Number(business.months ?? 6), 36));
@@ -392,10 +445,19 @@ export async function runReviewRequests(options?: {
   let sent = 0;
   for (const business of list) {
     if (!REVIEW_REQUEST_TYPES.has(business.type) || !business.enabled) continue;
+    const now = new Date();
     const reviewRequestUrl = business.reviewRequestUrl?.trim();
     if (!reviewRequestUrl) {
       logger.warn("Review request automation skipped because review link is missing", {
         businessId: business.id,
+      });
+      await recordAutomationSkip({
+        businessId: business.id,
+        action: "automation.review_request.skipped",
+        entityType: "business",
+        entityId: business.id,
+        metadata: { reason: "missing_review_link" },
+        dedupeSince: new Date(now.getTime() - 12 * 60 * 60 * 1000),
       });
       continue;
     }
@@ -404,8 +466,20 @@ export async function runReviewRequests(options?: {
     const timezone = getBusinessTimezone(business);
     if (
       !options?.force &&
-      !isWithinAutomationWindow(new Date(), timezone, business.sendWindowStartHour, business.sendWindowEndHour)
+      !isWithinAutomationWindow(now, timezone, business.sendWindowStartHour, business.sendWindowEndHour)
     ) {
+      await recordAutomationSkip({
+        businessId: business.id,
+        action: "automation.review_request.skipped",
+        entityType: "business",
+        entityId: business.id,
+        metadata: {
+          reason: "outside_send_window",
+          sendWindowStartHour: business.sendWindowStartHour ?? 8,
+          sendWindowEndHour: business.sendWindowEndHour ?? 18,
+        },
+        dedupeSince: new Date(now.getTime() - 6 * 60 * 60 * 1000),
+      });
       continue;
     }
     const cutoff = new Date(Date.now() - delayHours * 60 * 60 * 1000);

@@ -208,7 +208,7 @@ type AutomationActivitySummary = {
 
 type AutomationFeedRecord = {
   id: string;
-  kind: "sent" | "failed";
+  kind: "sent" | "failed" | "skipped";
   automationType: "appointment_reminder" | "review_request" | "lapsed_client";
   channel: "email" | "sms";
   recipient: string | null;
@@ -3811,8 +3811,16 @@ export default function SettingsPage() {
                         >
                           <div className="min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant={entry.kind === "failed" ? "destructive" : "outline"}>
-                                {entry.kind === "failed" ? "Failed" : "Sent"}
+                              <Badge
+                                variant={
+                                  entry.kind === "failed"
+                                    ? "destructive"
+                                    : entry.kind === "skipped"
+                                      ? "secondary"
+                                      : "outline"
+                                }
+                              >
+                                {entry.kind === "failed" ? "Failed" : entry.kind === "skipped" ? "Skipped" : "Sent"}
                               </Badge>
                               <Badge variant="secondary">{formatAutomationFeedLabel(entry.automationType)}</Badge>
                               <Badge variant="outline">{entry.channel.toUpperCase()}</Badge>

@@ -819,7 +819,7 @@ export const api = {
     request<{
       records: Array<{
         id: string;
-        kind: "sent" | "failed";
+        kind: "sent" | "failed" | "skipped";
         automationType: "appointment_reminder" | "review_request" | "lapsed_client";
         channel: "email" | "sms";
         recipient: string | null;
