@@ -137,6 +137,8 @@ CREATE TABLE IF NOT EXISTS businesses (
   automation_review_requests_enabled boolean DEFAULT false,
   automation_review_request_delay_hours integer DEFAULT 24,
   review_request_url text,
+  automation_abandoned_quotes_enabled boolean DEFAULT false,
+  automation_abandoned_quote_hours integer DEFAULT 48,
   automation_lapsed_clients_enabled boolean DEFAULT false,
   automation_lapsed_client_months integer DEFAULT 6,
   booking_request_url text,
@@ -181,6 +183,8 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_send_window_end_hour 
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_review_requests_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_review_request_delay_hours integer DEFAULT 24;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS review_request_url text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_abandoned_quotes_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_abandoned_quote_hours integer DEFAULT 48;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_lapsed_clients_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_lapsed_client_months integer DEFAULT 6;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_url text;

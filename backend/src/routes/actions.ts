@@ -527,6 +527,8 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
           'automation.uncontacted_lead.skipped',
           'automation.appointment_reminder.sent',
           'automation.appointment_reminder.skipped',
+          'automation.abandoned_quote.sent',
+          'automation.abandoned_quote.skipped',
           'automation.review_request.sent',
           'automation.review_request.skipped',
           'automation.lapsed_client.sent'
@@ -552,6 +554,7 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
         sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
           'lead_follow_up_alert',
           'appointment_reminder',
+          'quote_follow_up',
           'review_request',
           'lapsed_client_reengagement'
         )`
@@ -578,6 +581,7 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
   res.json({
     uncontactedLeads: summarize("automation.uncontacted_lead.sent", "lead_follow_up_alert"),
     appointmentReminders: summarize("automation.appointment_reminder.sent", "appointment_reminder"),
+    abandonedQuotes: summarize("automation.abandoned_quote.sent", "quote_follow_up"),
     reviewRequests: summarize("automation.review_request.sent", "review_request"),
     lapsedClients: summarize("automation.lapsed_client.sent", "lapsed_client_reengagement"),
   });
@@ -606,6 +610,8 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
           'automation.uncontacted_lead.skipped',
           'automation.appointment_reminder.sent',
           'automation.appointment_reminder.skipped',
+          'automation.abandoned_quote.sent',
+          'automation.abandoned_quote.skipped',
           'automation.review_request.sent',
           'automation.review_request.skipped',
           'automation.lapsed_client.sent'
@@ -633,6 +639,7 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
           sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
             'lead_follow_up_alert',
             'appointment_reminder',
+            'quote_follow_up',
             'review_request',
             'lapsed_client_reengagement'
           )`
@@ -655,6 +662,10 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
         ? "appointment_reminder"
         : row.action === "automation.appointment_reminder.skipped"
           ? "appointment_reminder"
+          : row.action === "automation.abandoned_quote.sent"
+            ? "abandoned_quote"
+            : row.action === "automation.abandoned_quote.skipped"
+              ? "abandoned_quote"
           : row.action === "automation.uncontacted_lead.sent"
             ? "uncontacted_lead"
             : row.action === "automation.uncontacted_lead.skipped"
@@ -685,6 +696,8 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
         row.action.endsWith(".skipped")
           ? automationType === "appointment_reminder"
             ? `Appointment reminder skipped: ${skipReason}.`
+            : automationType === "abandoned_quote"
+              ? `Abandoned quote follow-up skipped: ${skipReason}.`
             : automationType === "uncontacted_lead"
               ? `Uncontacted lead follow-up skipped: ${skipReason}.`
             : automationType === "review_request"
@@ -692,6 +705,8 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
               : `Lapsed client outreach skipped: ${skipReason}.`
           : automationType === "appointment_reminder"
             ? "Appointment reminder sent."
+            : automationType === "abandoned_quote"
+              ? "Abandoned quote follow-up sent."
             : automationType === "uncontacted_lead"
               ? "Uncontacted lead follow-up alert sent."
             : automationType === "review_request"
@@ -714,6 +729,8 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
         ? "uncontacted_lead"
         : templateSlug === "appointment_reminder"
         ? "appointment_reminder"
+        : templateSlug === "quote_follow_up"
+          ? "abandoned_quote"
         : templateSlug === "review_request"
           ? "review_request"
           : "lapsed_client";
@@ -748,12 +765,14 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
         totalSent: sql<number>`count(*) filter (where ${activityLogs.action} in (
           'automation.uncontacted_lead.sent',
           'automation.appointment_reminder.sent',
+          'automation.abandoned_quote.sent',
           'automation.review_request.sent',
           'automation.lapsed_client.sent'
         ))::int`.as("total_sent"),
         totalSkipped: sql<number>`count(*) filter (where ${activityLogs.action} in (
           'automation.uncontacted_lead.skipped',
           'automation.appointment_reminder.skipped',
+          'automation.abandoned_quote.skipped',
           'automation.review_request.skipped',
           'automation.lapsed_client.skipped'
         ))::int`.as("total_skipped"),
@@ -761,6 +780,7 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
         lastSkippedAt: sql<Date | null>`max(${activityLogs.createdAt}) filter (where ${activityLogs.action} in (
           'automation.uncontacted_lead.skipped',
           'automation.appointment_reminder.skipped',
+          'automation.abandoned_quote.skipped',
           'automation.review_request.skipped',
           'automation.lapsed_client.skipped'
         ))`.as("last_skipped_at"),
@@ -775,6 +795,8 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
           'automation.uncontacted_lead.skipped',
           'automation.appointment_reminder.sent',
           'automation.appointment_reminder.skipped',
+          'automation.abandoned_quote.sent',
+          'automation.abandoned_quote.skipped',
           'automation.review_request.sent',
             'automation.review_request.skipped',
             'automation.lapsed_client.sent'
@@ -797,6 +819,7 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
         sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
           'lead_follow_up_alert',
           'appointment_reminder',
+          'quote_follow_up',
           'review_request',
           'lapsed_client_reengagement'
           )`
@@ -983,9 +1006,10 @@ actionsRouter.post("/runAutomations", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const [uncontactedLeads, reminders, lapsed, reviews] = await Promise.all([
+    const [uncontactedLeads, reminders, abandonedQuotes, lapsed, reviews] = await Promise.all([
       automations.runUncontactedLeadReminders(),
       automations.runAppointmentReminders(),
+      automations.runAbandonedQuoteFollowUps(),
       automations.runLapsedClientDetection(),
       automations.runReviewRequests(),
     ]);
@@ -993,6 +1017,7 @@ actionsRouter.post("/runAutomations", async (req: Request, res: Response) => {
       ok: true,
       uncontactedLeadAlertsSent: uncontactedLeads.sent,
       remindersSent: reminders.sent,
+      abandonedQuoteFollowUpsSent: abandonedQuotes.sent,
       lapsedDetected: lapsed.detected,
       reviewRequestsSent: reviews.sent,
     });

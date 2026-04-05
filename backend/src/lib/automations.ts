@@ -3,17 +3,19 @@
  * These are safe-by-default and can be toggled per business from Settings.
  */
 
-import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { activityLogs, appointments, businesses, clients, users, vehicles } from "../db/schema.js";
+import { activityLogs, appointments, businesses, clients, quotes, users, vehicles } from "../db/schema.js";
 import { createActivityLog } from "./activity.js";
 import {
   sendAppointmentReminder,
   sendLeadFollowUpAlert,
   sendLapsedClientReengagement,
+  sendQuoteFollowUpEmail,
   sendReviewRequest,
 } from "./email.js";
 import { logger } from "./logger.js";
+import { buildPublicDocumentUrl, createPublicDocumentToken } from "./publicDocumentAccess.js";
 import { buildVehicleDisplayName } from "./vehicleFormatting.js";
 import { enqueueTwilioTemplateSms } from "./twilio.js";
 import { parseLeadRecord } from "./leads.js";
@@ -31,6 +33,7 @@ const REMINDER_TYPES = new Set([
 
 const LAPSED_TYPES = new Set(REMINDER_TYPES);
 const REVIEW_REQUEST_TYPES = new Set(REMINDER_TYPES);
+const QUOTE_FOLLOW_UP_TYPES = new Set(REMINDER_TYPES);
 
 const DEFAULT_TIMEZONE = "America/New_York";
 
@@ -563,6 +566,149 @@ export async function runReviewRequests(options?: {
         logger.warn("Review request automation failed", {
           businessId: business.id,
           appointmentId: row.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  return { sent };
+}
+
+export async function runAbandonedQuoteFollowUps(options?: {
+  businessId?: string;
+  force?: boolean;
+}): Promise<{ sent: number }> {
+  const where = options?.businessId ? eq(businesses.id, options.businessId) : sql`1=1`;
+  const list = await db
+    .select({
+      id: businesses.id,
+      name: businesses.name,
+      type: businesses.type,
+      timezone: businesses.timezone,
+      enabled: businesses.automationAbandonedQuotesEnabled,
+      delayHours: businesses.automationAbandonedQuoteHours,
+      sendWindowStartHour: businesses.automationSendWindowStartHour,
+      sendWindowEndHour: businesses.automationSendWindowEndHour,
+    })
+    .from(businesses)
+    .where(where);
+
+  let sent = 0;
+  for (const business of list) {
+    if (!QUOTE_FOLLOW_UP_TYPES.has(business.type) || !business.enabled) continue;
+
+    const now = new Date();
+    const timezone = getBusinessTimezone(business);
+    if (
+      !options?.force &&
+      !isWithinAutomationWindow(now, timezone, business.sendWindowStartHour, business.sendWindowEndHour)
+    ) {
+      await recordAutomationSkip({
+        businessId: business.id,
+        action: "automation.abandoned_quote.skipped",
+        entityType: "business",
+        entityId: business.id,
+        metadata: {
+          reason: "outside_send_window",
+          sendWindowStartHour: business.sendWindowStartHour ?? 8,
+          sendWindowEndHour: business.sendWindowEndHour ?? 18,
+        },
+        dedupeSince: new Date(now.getTime() - 6 * 60 * 60 * 1000),
+      });
+      continue;
+    }
+
+    const delayHours = Math.max(1, Math.min(Number(business.delayHours ?? 48), 336));
+    const cutoff = new Date(Date.now() - delayHours * 60 * 60 * 1000);
+
+    const rows = await db
+      .select({
+        id: quotes.id,
+        clientId: quotes.clientId,
+        sentAt: quotes.sentAt,
+        total: quotes.total,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+        clientEmail: clients.email,
+        vehicleYear: vehicles.year,
+        vehicleMake: vehicles.make,
+        vehicleModel: vehicles.model,
+      })
+      .from(quotes)
+      .leftJoin(clients, eq(quotes.clientId, clients.id))
+      .leftJoin(vehicles, eq(quotes.vehicleId, vehicles.id))
+      .where(
+        and(
+          eq(quotes.businessId, business.id),
+          eq(quotes.status, "sent"),
+          isNull(quotes.followUpSentAt),
+          lte(quotes.sentAt, cutoff),
+          sql`${clients.email} is not null`
+        )
+      )
+      .orderBy(asc(quotes.sentAt))
+      .limit(options?.force ? 100 : 50);
+
+    for (const row of rows) {
+      if (!row.clientEmail) {
+        await recordAutomationSkip({
+          businessId: business.id,
+          action: "automation.abandoned_quote.skipped",
+          entityType: "quote",
+          entityId: row.id,
+          metadata: { reason: "missing_email" },
+          dedupeSince: cutoff,
+        });
+        continue;
+      }
+      if (await hasAutomationActivity("automation.abandoned_quote.sent", "quote", row.id)) {
+        continue;
+      }
+
+      try {
+        const publicToken = createPublicDocumentToken({
+          kind: "quote",
+          entityId: row.id,
+          businessId: business.id,
+        });
+        await sendQuoteFollowUpEmail({
+          to: row.clientEmail,
+          businessId: business.id,
+          clientName: `${row.clientFirstName ?? ""} ${row.clientLastName ?? ""}`.trim() || "Customer",
+          businessName: business.name,
+          amount: Number(row.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+          vehicle: buildVehicleDisplayName({
+            year: row.vehicleYear,
+            make: row.vehicleMake,
+            model: row.vehicleModel,
+          }),
+          quoteUrl: buildPublicDocumentUrl(`/api/quotes/${row.id}/public-html?token=${encodeURIComponent(publicToken)}`),
+          message: null,
+        });
+        const followUpSentAt = new Date();
+        await db
+          .update(quotes)
+          .set({ followUpSentAt, updatedAt: followUpSentAt })
+          .where(and(eq(quotes.id, row.id), eq(quotes.businessId, business.id)));
+        await createActivityLog({
+          businessId: business.id,
+          action: "automation.abandoned_quote.sent",
+          entityType: "quote",
+          entityId: row.id,
+          metadata: {
+            clientId: row.clientId,
+            sentTo: row.clientEmail,
+            delayHours,
+            followUpSentAt: followUpSentAt.toISOString(),
+            sentAt: row.sentAt?.toISOString() ?? null,
+          },
+        });
+        sent += 1;
+      } catch (error) {
+        logger.warn("Abandoned quote automation failed", {
+          businessId: business.id,
+          quoteId: row.id,
           error: error instanceof Error ? error.message : String(error),
         });
       }

@@ -152,6 +152,8 @@ export const businesses = pgTable("businesses", {
   automationReviewRequestsEnabled: boolean("automation_review_requests_enabled").default(false),
   automationReviewRequestDelayHours: integer("automation_review_request_delay_hours").default(24),
   reviewRequestUrl: text("review_request_url"),
+  automationAbandonedQuotesEnabled: boolean("automation_abandoned_quotes_enabled").default(false),
+  automationAbandonedQuoteHours: integer("automation_abandoned_quote_hours").default(48),
   automationLapsedClientsEnabled: boolean("automation_lapsed_clients_enabled").default(false),
   automationLapsedClientMonths: integer("automation_lapsed_client_months").default(6),
   bookingRequestUrl: text("booking_request_url"),

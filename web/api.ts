@@ -864,6 +864,14 @@ export const api = {
         failedLast30Days: number;
         lastFailedAt: string | null;
       };
+      abandonedQuotes: {
+        sentLast30Days: number;
+        lastSentAt: string | null;
+        skippedLast30Days: number;
+        lastSkippedAt: string | null;
+        failedLast30Days: number;
+        lastFailedAt: string | null;
+      };
       reviewRequests: {
         sentLast30Days: number;
         lastSentAt: string | null;
@@ -886,7 +894,7 @@ export const api = {
       records: Array<{
         id: string;
         kind: "sent" | "failed" | "skipped";
-        automationType: "uncontacted_lead" | "appointment_reminder" | "review_request" | "lapsed_client";
+        automationType: "uncontacted_lead" | "appointment_reminder" | "abandoned_quote" | "review_request" | "lapsed_client";
         channel: "email" | "sms";
         recipient: string | null;
         entityType: string | null;

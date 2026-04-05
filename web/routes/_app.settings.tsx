@@ -182,6 +182,8 @@ type AutomationSettingsForm = {
   appointmentReminderHours: number;
   sendWindowStartHour: number;
   sendWindowEndHour: number;
+  abandonedQuotesEnabled: boolean;
+  abandonedQuoteHours: number;
   reviewRequestsEnabled: boolean;
   reviewRequestDelayHours: number;
   reviewRequestUrl: string;
@@ -224,7 +226,7 @@ type AutomationActivitySummary = {
 type AutomationFeedRecord = {
   id: string;
   kind: "sent" | "failed" | "skipped";
-  automationType: "uncontacted_lead" | "appointment_reminder" | "review_request" | "lapsed_client";
+  automationType: "uncontacted_lead" | "appointment_reminder" | "abandoned_quote" | "review_request" | "lapsed_client";
   channel: "email" | "sms";
   recipient: string | null;
   entityType: string | null;
@@ -458,6 +460,8 @@ const DEFAULT_AUTOMATION_SETTINGS: AutomationSettingsForm = {
   appointmentReminderHours: 24,
   sendWindowStartHour: 8,
   sendWindowEndHour: 18,
+  abandonedQuotesEnabled: false,
+  abandonedQuoteHours: 48,
   reviewRequestsEnabled: false,
   reviewRequestDelayHours: 24,
   reviewRequestUrl: "",
@@ -665,6 +669,8 @@ function formatAutomationFeedLabel(type: AutomationFeedRecord["automationType"])
       return "Uncontacted lead";
     case "appointment_reminder":
       return "Appointment reminder";
+    case "abandoned_quote":
+      return "Abandoned quote";
     case "review_request":
       return "Review request";
     default:
@@ -1098,12 +1104,16 @@ export default function SettingsPage() {
   const [reviewRequestDelayHoursInput, setReviewRequestDelayHoursInput] = useState(
     String(DEFAULT_AUTOMATION_SETTINGS.reviewRequestDelayHours)
   );
+  const [abandonedQuoteHoursInput, setAbandonedQuoteHoursInput] = useState(
+    String(DEFAULT_AUTOMATION_SETTINGS.abandonedQuoteHours)
+  );
   const [lapsedClientMonthsInput, setLapsedClientMonthsInput] = useState(
     String(DEFAULT_AUTOMATION_SETTINGS.lapsedClientMonths)
   );
   const [automationSummary, setAutomationSummary] = useState<{
     uncontactedLeads: AutomationActivitySummary;
     appointmentReminders: AutomationActivitySummary;
+    abandonedQuotes: AutomationActivitySummary;
     reviewRequests: AutomationActivitySummary;
     lapsedClients: AutomationActivitySummary;
   } | null>(null);
@@ -1385,6 +1395,10 @@ export default function SettingsPage() {
       appointmentReminderHours: business.automationAppointmentReminderHours ?? DEFAULT_AUTOMATION_SETTINGS.appointmentReminderHours,
       sendWindowStartHour: business.automationSendWindowStartHour ?? DEFAULT_AUTOMATION_SETTINGS.sendWindowStartHour,
       sendWindowEndHour: business.automationSendWindowEndHour ?? DEFAULT_AUTOMATION_SETTINGS.sendWindowEndHour,
+      abandonedQuotesEnabled:
+        business.automationAbandonedQuotesEnabled ?? DEFAULT_AUTOMATION_SETTINGS.abandonedQuotesEnabled,
+      abandonedQuoteHours:
+        business.automationAbandonedQuoteHours ?? DEFAULT_AUTOMATION_SETTINGS.abandonedQuoteHours,
       reviewRequestsEnabled: business.automationReviewRequestsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestsEnabled,
       reviewRequestDelayHours: business.automationReviewRequestDelayHours ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestDelayHours,
       reviewRequestUrl: business.reviewRequestUrl ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestUrl,
@@ -1395,6 +1409,7 @@ export default function SettingsPage() {
     setAutomationSettings(nextAutomationSettings);
     setUncontactedLeadHoursInput(String(nextAutomationSettings.uncontactedLeadHours));
     setAppointmentReminderHoursInput(String(nextAutomationSettings.appointmentReminderHours));
+    setAbandonedQuoteHoursInput(String(nextAutomationSettings.abandonedQuoteHours));
     setReviewRequestDelayHoursInput(String(nextAutomationSettings.reviewRequestDelayHours));
     setLapsedClientMonthsInput(String(nextAutomationSettings.lapsedClientMonths));
     setIntegrationSettings({
@@ -1610,7 +1625,12 @@ export default function SettingsPage() {
   };
 
   const handleAutomationNumberInput = (
-    field: "uncontactedLeadHours" | "appointmentReminderHours" | "reviewRequestDelayHours" | "lapsedClientMonths",
+    field:
+      | "uncontactedLeadHours"
+      | "appointmentReminderHours"
+      | "abandonedQuoteHours"
+      | "reviewRequestDelayHours"
+      | "lapsedClientMonths",
     value: string
   ) => {
     const trimmed = value.trim();
@@ -1620,7 +1640,12 @@ export default function SettingsPage() {
   };
 
   const normalizeAutomationNumberInput = (
-    field: "uncontactedLeadHours" | "appointmentReminderHours" | "reviewRequestDelayHours" | "lapsedClientMonths"
+    field:
+      | "uncontactedLeadHours"
+      | "appointmentReminderHours"
+      | "abandonedQuoteHours"
+      | "reviewRequestDelayHours"
+      | "lapsedClientMonths"
   ) => {
     setAutomationSettings((current) => {
       const rawValue = current[field];
@@ -1631,6 +1656,8 @@ export default function SettingsPage() {
         setUncontactedLeadHoursInput(String(nextValue));
       } else if (field === "appointmentReminderHours") {
         setAppointmentReminderHoursInput(String(nextValue));
+      } else if (field === "abandonedQuoteHours") {
+        setAbandonedQuoteHoursInput(String(nextValue));
       } else if (field === "reviewRequestDelayHours") {
         setReviewRequestDelayHoursInput(String(nextValue));
       } else {
@@ -1693,6 +1720,8 @@ export default function SettingsPage() {
       automationAppointmentReminderHours: automationSettings.appointmentReminderHours,
       automationSendWindowStartHour: automationSettings.sendWindowStartHour,
       automationSendWindowEndHour: automationSettings.sendWindowEndHour,
+      automationAbandonedQuotesEnabled: automationSettings.abandonedQuotesEnabled,
+      automationAbandonedQuoteHours: automationSettings.abandonedQuoteHours,
       automationReviewRequestsEnabled: automationSettings.reviewRequestsEnabled,
       automationReviewRequestDelayHours: automationSettings.reviewRequestDelayHours,
       reviewRequestUrl: automationSettings.reviewRequestUrl.trim() || null,
@@ -3930,6 +3959,23 @@ export default function SettingsPage() {
                     </p>
                   </div>
                   <div className="rounded-xl border bg-background p-4">
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Quote follow-up</p>
+                    <p className="mt-2 text-2xl font-semibold">
+                      {automationSummaryFetching && !automationSummary ? "..." : automationSummary?.abandonedQuotes.sentLast30Days ?? 0}
+                    </p>
+                    <p className={`mt-1 text-xs ${getAutomationHealthTone(automationSummary?.abandonedQuotes)}`}>
+                      Sent in the last 30 days. Last send: {formatAutomationLastSent(automationSummary?.abandonedQuotes.lastSentAt ?? null)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Skipped in the last 30 days: {automationSummary?.abandonedQuotes.skippedLast30Days ?? 0}
+                      {" • "}
+                      Last skip: {formatAutomationLastSent(automationSummary?.abandonedQuotes.lastSkippedAt ?? null)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Failed in the last 30 days: {automationSummary?.abandonedQuotes.failedLast30Days ?? 0}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border bg-background p-4">
                     <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Reviews</p>
                     <p className="mt-2 text-2xl font-semibold">
                       {automationSummaryFetching && !automationSummary ? "..." : automationSummary?.reviewRequests.sentLast30Days ?? 0}
@@ -3946,7 +3992,7 @@ export default function SettingsPage() {
                       Failed in the last 30 days: {automationSummary?.reviewRequests.failedLast30Days ?? 0}
                     </p>
                   </div>
-                  <div className="rounded-xl border bg-background p-4">
+                  <div className="rounded-xl border bg-background p-4 md:col-span-2 xl:col-span-1">
                     <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Lapsed outreach</p>
                     <p className="mt-2 text-2xl font-semibold">
                       {automationSummaryFetching && !automationSummary ? "..." : automationSummary?.lapsedClients.sentLast30Days ?? 0}
@@ -4044,6 +4090,7 @@ export default function SettingsPage() {
                             <SelectItem value="all">All automations</SelectItem>
                             <SelectItem value="uncontacted_lead">Uncontacted lead follow-up</SelectItem>
                             <SelectItem value="appointment_reminder">Appointment reminders</SelectItem>
+                            <SelectItem value="abandoned_quote">Abandoned quote follow-up</SelectItem>
                             <SelectItem value="review_request">Review requests</SelectItem>
                             <SelectItem value="lapsed_client">Lapsed outreach</SelectItem>
                           </SelectContent>
@@ -4374,6 +4421,49 @@ export default function SettingsPage() {
                     </div>
                     <p className="text-xs text-muted-foreground sm:pb-2">
                       Reminders send automatically before scheduled or confirmed visits based on this timing.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <p className="text-sm font-medium">Abandoned quote follow-up</p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Reconnect with clients who received a quote but have not responded yet so more sent estimates turn into booked work.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="automation-abandoned-quotes"
+                        checked={automationSettings.abandonedQuotesEnabled}
+                        onCheckedChange={(value) => handleAutomationToggle("abandonedQuotesEnabled", value)}
+                        disabled={!canEditSettings}
+                      />
+                      <Label htmlFor="automation-abandoned-quotes" className="cursor-pointer text-sm">
+                        Enable
+                      </Label>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-end">
+                    <div className="space-y-1.5">
+                      <Label>Hours after quote send</Label>
+                      <Input
+                        inputMode="numeric"
+                        value={abandonedQuoteHoursInput}
+                        onChange={(e) => {
+                          setAbandonedQuoteHoursInput(e.target.value);
+                          handleAutomationNumberInput("abandonedQuoteHours", e.target.value);
+                        }}
+                        onBlur={() => normalizeAutomationNumberInput("abandonedQuoteHours")}
+                        disabled={!canEditSettings}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground sm:pb-2">
+                      Only sent quotes with no existing follow-up are targeted, and Strata reuses the same secure public quote link as the manual follow-up flow.
                     </p>
                   </div>
                 </div>

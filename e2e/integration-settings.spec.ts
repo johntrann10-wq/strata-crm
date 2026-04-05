@@ -125,6 +125,8 @@ async function mockAuthenticatedSettings(
         automationAppointmentReminderHours: 24,
         automationSendWindowStartHour: 8,
         automationSendWindowEndHour: 18,
+        automationAbandonedQuotesEnabled: true,
+        automationAbandonedQuoteHours: 48,
         automationReviewRequestsEnabled: true,
         automationReviewRequestDelayHours: 24,
         reviewRequestUrl: "https://example.com/review",
@@ -198,6 +200,14 @@ async function mockAuthenticatedSettings(
           failedLast30Days: 0,
           lastFailedAt: null,
         },
+        abandonedQuotes: {
+          sentLast30Days: 1,
+          lastSentAt: "2026-04-04T18:05:00.000Z",
+          skippedLast30Days: 0,
+          lastSkippedAt: null,
+          failedLast30Days: 0,
+          lastFailedAt: null,
+        },
         reviewRequests: {
           sentLast30Days: 0,
           lastSentAt: null,
@@ -248,6 +258,17 @@ async function mockAuthenticatedSettings(
           },
           {
             id: "auto-feed-2",
+            kind: "sent",
+            automationType: "abandoned_quote",
+            channel: "email",
+            recipient: "lead@example.com",
+            entityType: "quote",
+            entityId: "quote-2",
+            createdAt: "2026-04-04T18:50:00.000Z",
+            message: "Abandoned quote follow-up sent.",
+          },
+          {
+            id: "auto-feed-3",
             kind: "failed",
             automationType: "review_request",
             channel: "sms",
@@ -258,7 +279,7 @@ async function mockAuthenticatedSettings(
             message: "Twilio callback reported delivery failure.",
           },
           {
-            id: "auto-feed-3",
+            id: "auto-feed-4",
             kind: "skipped",
             automationType: "lapsed_client",
             channel: "email",
@@ -279,7 +300,7 @@ async function mockAuthenticatedSettings(
       contentType: "application/json",
       body: JSON.stringify({
         automations: {
-          sentLast24Hours: 3,
+          sentLast24Hours: 4,
           skippedLast24Hours: 2,
           lastActivityAt: "2026-04-04T19:15:00.000Z",
           lastSkippedAt: "2026-04-04T17:20:00.000Z",
@@ -714,7 +735,7 @@ test("shows integration infrastructure and failure visibility in settings", asyn
   await expect(page.getByText(/^Vault$/i)).toBeVisible();
   await expect(page.getByText(/^Cron secret$/i)).toBeVisible();
   await expect(page.getByText(/quickbooks online: ready/i)).toBeVisible();
-  await expect(page.getByText(/3 sent/i)).toBeVisible();
+  await expect(page.getByText(/4 sent/i)).toBeVisible();
   await expect(page.getByText(/2 skipped \/ 24h/i)).toBeVisible();
   await expect(page.getByText(/2 pending/i)).toBeVisible();
   await expect(page.getByText("QuickBooks Online", { exact: true }).first()).toBeVisible();
@@ -805,12 +826,14 @@ test("shows recent automation activity across email and sms channels", async ({ 
   await expect(page.getByText("Recent automation activity", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /refresh activity/i })).toBeVisible();
   await expect(page.getByText(/skipped in the last 30 days: 4/i)).toBeVisible();
+  await expect(page.getByText("Quote follow-up", { exact: true })).toBeVisible();
   await expect(page.getByText(/automation send window/i)).toBeVisible();
   await expect(page.getByText(/^Start hour$/i)).toBeVisible();
   await expect(page.getByText(/^End hour$/i)).toBeVisible();
   await expect(page.getByRole("paragraph").filter({ hasText: /missed-call text back/i })).toBeVisible();
   await expect(page.getByText(/\/api\/integrations\/twilio\/voice\/<connectionId>/i)).toBeVisible();
   await expect(page.getByText(/appointment reminder sent\./i)).toBeVisible();
+  await expect(page.getByText(/abandoned quote follow-up sent\./i)).toBeVisible();
   await expect(page.getByText(/client@example\.com/i)).toBeVisible();
   await expect(page.getByText(/twilio callback reported delivery failure\./i)).toBeVisible();
   await expect(page.getByText(/lapsed client outreach skipped: outside send window\./i)).toBeVisible();
@@ -818,6 +841,7 @@ test("shows recent automation activity across email and sms channels", async ({ 
 
   await page.getByRole("button", { name: /issues only/i }).click();
   await expect(page.getByText(/appointment reminder sent\./i)).not.toBeVisible();
+  await expect(page.getByText(/abandoned quote follow-up sent\./i)).not.toBeVisible();
   await expect(page.getByText(/twilio callback reported delivery failure\./i)).toBeVisible();
   await expect(page.getByText(/lapsed client outreach skipped: outside send window\./i)).toBeVisible();
 
@@ -828,4 +852,11 @@ test("shows recent automation activity across email and sms channels", async ({ 
   await page.getByRole("option", { name: /^SMS$/i }).click();
   await expect(page.getByText(/twilio callback reported delivery failure\./i)).toBeVisible();
   await expect(page.getByText(/lapsed client outreach skipped: outside send window\./i)).not.toBeVisible();
+
+  await page.getByLabel(/channel/i).click();
+  await page.getByRole("option", { name: /all channels/i }).click();
+  await page.getByRole("button", { name: /all activity/i }).click();
+  await page.getByRole("combobox", { name: /^automation$/i }).click();
+  await page.getByRole("option", { name: /abandoned quote follow-up/i }).click();
+  await expect(page.getByText(/abandoned quote follow-up sent\./i)).toBeVisible();
 });

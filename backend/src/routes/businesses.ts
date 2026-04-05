@@ -63,6 +63,8 @@ const createSchema = z.object({
   automationReviewRequestsEnabled: z.boolean().optional(),
   automationReviewRequestDelayHours: z.number().int().min(1).max(336).optional(),
   reviewRequestUrl: z.string().url().nullable().optional(),
+  automationAbandonedQuotesEnabled: z.boolean().optional(),
+  automationAbandonedQuoteHours: z.number().int().min(1).max(336).optional(),
   automationLapsedClientsEnabled: z.boolean().optional(),
   automationLapsedClientMonths: z.number().int().min(1).max(36).optional(),
   bookingRequestUrl: z.string().url().nullable().optional(),
@@ -201,6 +203,8 @@ function coerceBusinessRecord(
     automationReviewRequestsEnabled: record.automationReviewRequestsEnabled ?? false,
     automationReviewRequestDelayHours: record.automationReviewRequestDelayHours ?? 24,
     reviewRequestUrl: record.reviewRequestUrl ?? null,
+    automationAbandonedQuotesEnabled: record.automationAbandonedQuotesEnabled ?? false,
+    automationAbandonedQuoteHours: record.automationAbandonedQuoteHours ?? 48,
     automationLapsedClientsEnabled: record.automationLapsedClientsEnabled ?? false,
     automationLapsedClientMonths: record.automationLapsedClientMonths ?? 6,
     bookingRequestUrl: record.bookingRequestUrl ?? null,
@@ -638,6 +642,8 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       automationReviewRequestsEnabled: parsed.data.automationReviewRequestsEnabled ?? false,
       automationReviewRequestDelayHours: parsed.data.automationReviewRequestDelayHours ?? 24,
       reviewRequestUrl: parsed.data.reviewRequestUrl ?? null,
+      automationAbandonedQuotesEnabled: parsed.data.automationAbandonedQuotesEnabled ?? false,
+      automationAbandonedQuoteHours: parsed.data.automationAbandonedQuoteHours ?? 48,
       automationLapsedClientsEnabled: parsed.data.automationLapsedClientsEnabled ?? false,
       automationLapsedClientMonths: parsed.data.automationLapsedClientMonths ?? 6,
       bookingRequestUrl: parsed.data.bookingRequestUrl ?? null,
@@ -773,6 +779,12 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.reviewRequestUrl !== undefined) {
     updates.reviewRequestUrl = parsed.data.reviewRequestUrl?.trim() || null;
+  }
+  if (parsed.data.automationAbandonedQuotesEnabled !== undefined) {
+    updates.automationAbandonedQuotesEnabled = parsed.data.automationAbandonedQuotesEnabled ?? false;
+  }
+  if (parsed.data.automationAbandonedQuoteHours !== undefined) {
+    updates.automationAbandonedQuoteHours = parsed.data.automationAbandonedQuoteHours ?? 48;
   }
   if (parsed.data.automationLapsedClientsEnabled !== undefined) {
     updates.automationLapsedClientsEnabled = parsed.data.automationLapsedClientsEnabled ?? false;
