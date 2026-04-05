@@ -1,6 +1,22 @@
 import { expect, test } from "@playwright/test";
 
-async function mockAuthenticatedSettings(context: import("@playwright/test").BrowserContext) {
+type InfrastructureOverride = {
+  vaultConfigured?: boolean;
+  cronSecretConfigured?: boolean;
+  providerConfiguration?: {
+    quickbooks_online?: boolean;
+    twilio_sms?: boolean;
+    google_calendar?: boolean;
+    outbound_webhooks?: boolean;
+  };
+};
+
+async function mockAuthenticatedSettings(
+  context: import("@playwright/test").BrowserContext,
+  options?: {
+    infrastructure?: InfrastructureOverride;
+  }
+) {
   let quickBooksConnected = true;
   let quickBooksLastError: string | null = null;
   let quickBooksLastSuccessfulAt = "2026-04-04T17:00:00.000Z";
@@ -20,6 +36,16 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
   let webhookUrl = "";
   let webhookSecret = "";
   let webhookEvents = ["invoice.sent", "payment.recorded"];
+  const infrastructure = {
+    vaultConfigured: options?.infrastructure?.vaultConfigured ?? true,
+    cronSecretConfigured: options?.infrastructure?.cronSecretConfigured ?? true,
+    providerConfiguration: {
+      quickbooks_online: options?.infrastructure?.providerConfiguration?.quickbooks_online ?? true,
+      twilio_sms: options?.infrastructure?.providerConfiguration?.twilio_sms ?? true,
+      google_calendar: options?.infrastructure?.providerConfiguration?.google_calendar ?? true,
+      outbound_webhooks: options?.infrastructure?.providerConfiguration?.outbound_webhooks ?? true,
+    },
+  };
 
   await context.addInitScript(() => {
     window.localStorage.setItem("authToken", "integration-test-token");
@@ -150,14 +176,9 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
       contentType: "application/json",
       body: JSON.stringify({
         infrastructure: {
-          vaultConfigured: true,
-          cronSecretConfigured: true,
-          providerConfiguration: {
-            quickbooks_online: true,
-            twilio_sms: true,
-            google_calendar: true,
-            outbound_webhooks: true,
-          },
+          vaultConfigured: infrastructure.vaultConfigured,
+          cronSecretConfigured: infrastructure.cronSecretConfigured,
+          providerConfiguration: infrastructure.providerConfiguration,
         },
         registry: [
           {
@@ -616,4 +637,32 @@ test("shows integration infrastructure and failure visibility in settings", asyn
 
   await page.getByRole("button", { name: /^replay$/i }).click();
   await expect(page.getByText(/queued a replay for that webhook event/i)).toBeVisible();
+});
+
+test("disables provider setup actions when backend integration config is incomplete", async ({ page, context }) => {
+  await mockAuthenticatedSettings(context, {
+    infrastructure: {
+      vaultConfigured: false,
+      providerConfiguration: {
+        quickbooks_online: false,
+        twilio_sms: false,
+        google_calendar: false,
+        outbound_webhooks: false,
+      },
+    },
+  });
+
+  await page.goto("/settings");
+  await page.getByRole("tab", { name: /integrations/i }).click();
+
+  await expect(page.getByText(/integration connections stay read-only until/i)).toBeVisible();
+  await expect(page.getByText(/quickbooks setup is unavailable/i)).toBeVisible();
+  await expect(page.getByText(/google calendar setup is unavailable/i)).toBeVisible();
+  await expect(page.getByText(/twilio sms setup is unavailable/i)).toBeVisible();
+  await expect(page.getByText(/signed webhook testing and replay need encrypted integration storage/i)).toBeVisible();
+
+  await expect(page.getByRole("button", { name: /connect quickbooks/i })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /connect google calendar/i })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /connect twilio sms/i })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /send test event/i })).toBeDisabled();
 });

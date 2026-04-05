@@ -72,6 +72,12 @@ function requireBusinessIntegrationAdmin(req: Request) {
   }
 }
 
+function requireIntegrationVault() {
+  if (!isIntegrationVaultConfigured()) {
+    throw new ForbiddenError("Encrypted integration storage is not configured on this server.");
+  }
+}
+
 export async function handleTwilioStatusCallbackRoute(req: Request, res: Response) {
   const params = Object.fromEntries(
     Object.entries((req.body ?? {}) as Record<string, unknown>).map(([key, value]) => [key, String(value ?? "")])
@@ -235,6 +241,7 @@ integrationsRouter.post(
     if (!isIntegrationFeatureEnabled("google_calendar")) {
       throw new ForbiddenError("Google Calendar is not enabled in this environment.");
     }
+    requireIntegrationVault();
     if (!isGoogleCalendarConfigured()) {
       throw new ForbiddenError("Google Calendar is not configured on this server.");
     }
@@ -340,6 +347,7 @@ integrationsRouter.post(
     const bid = businessId(req);
     const userId = req.userId;
     if (!userId) throw new ForbiddenError("User context is required.");
+    requireIntegrationVault();
     const job = await queueOutboundWebhookTest({
       businessId: bid,
       userId,
@@ -367,6 +375,7 @@ integrationsRouter.post(
     const bid = businessId(req);
     const userId = req.userId;
     if (!userId) throw new ForbiddenError("User context is required.");
+    requireIntegrationVault();
     const parsed = replayWebhookSchema.safeParse(req.body ?? {});
     if (!parsed.success) throw new BadRequestError(parsed.error.message);
     const job = await replayOutboundWebhookActivity({
@@ -398,6 +407,10 @@ integrationsRouter.post(
     const bid = businessId(req);
     if (!isIntegrationFeatureEnabled("twilio_sms")) {
       throw new ForbiddenError("Twilio SMS is not enabled in this environment.");
+    }
+    requireIntegrationVault();
+    if (!isTwilioConfigured()) {
+      throw new ForbiddenError("Twilio SMS is not configured on this server.");
     }
     if (!req.userId) throw new ForbiddenError("User context is required.");
     const parsed = connectTwilioSchema.safeParse(req.body ?? {});
@@ -449,6 +462,7 @@ integrationsRouter.post(
     if (!isIntegrationFeatureEnabled("quickbooks_online")) {
       throw new ForbiddenError("QuickBooks Online is not enabled in this environment.");
     }
+    requireIntegrationVault();
     if (!isQuickBooksConfigured()) {
       throw new ForbiddenError("QuickBooks Online is not configured on this server.");
     }

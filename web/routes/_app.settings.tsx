@@ -1128,6 +1128,12 @@ export default function SettingsPage() {
   const outboundWebhookRegistry =
     integrationStatus?.registry.find((item) => item.provider === "outbound_webhooks") ?? null;
   const outboundWebhookActivity = (outboundWebhookActivityData as OutboundWebhookActivityRecord[] | undefined) ?? [];
+  const providerConfiguration = integrationStatus?.infrastructure.providerConfiguration;
+  const vaultConfigured = integrationStatus?.infrastructure.vaultConfigured ?? false;
+  const quickBooksBackendConfigured = providerConfiguration?.quickbooks_online ?? false;
+  const googleCalendarBackendConfigured = providerConfiguration?.google_calendar ?? false;
+  const twilioBackendConfigured = providerConfiguration?.twilio_sms ?? false;
+  const outboundWebhooksBackendConfigured = providerConfiguration?.outbound_webhooks ?? false;
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -2916,11 +2922,21 @@ export default function SettingsPage() {
                       {quickBooksConnection?.lastError ? (
                         <p className="text-amber-700">{quickBooksConnection.lastError}</p>
                       ) : null}
+                      {!quickBooksBackendConfigured ? (
+                        <p className="text-amber-700">
+                          QuickBooks setup is unavailable until encrypted integration storage and server credentials are configured.
+                        </p>
+                      ) : null}
                     </div>
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <Button
                         onClick={handleStartQuickBooks}
-                        disabled={!canManageBusinessIntegrations || !quickBooksRegistry?.featureFlagEnabled || quickBooksConnecting}
+                        disabled={
+                          !canManageBusinessIntegrations ||
+                          !quickBooksRegistry?.featureFlagEnabled ||
+                          !quickBooksBackendConfigured ||
+                          quickBooksConnecting
+                        }
                         className="w-full sm:w-auto"
                       >
                         {quickBooksConnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -3029,12 +3045,22 @@ export default function SettingsPage() {
                         {googleCalendarConnection?.lastError ? (
                           <p className="text-amber-700">{googleCalendarConnection.lastError}</p>
                         ) : null}
+                        {!googleCalendarBackendConfigured ? (
+                          <p className="text-amber-700">
+                            Google Calendar setup is unavailable until encrypted integration storage and Google OAuth config are live.
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <Button
                         onClick={handleStartGoogleCalendar}
-                        disabled={!canEditSettings || !googleCalendarRegistry?.featureFlagEnabled || googleCalendarConnecting}
+                        disabled={
+                          !canEditSettings ||
+                          !googleCalendarRegistry?.featureFlagEnabled ||
+                          !googleCalendarBackendConfigured ||
+                          googleCalendarConnecting
+                        }
                         className="w-full sm:w-auto"
                       >
                         {googleCalendarConnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -3167,12 +3193,22 @@ export default function SettingsPage() {
                         </p>
                         <p>Delivery callbacks land in notification logs and update SMS status without trusting false success states.</p>
                         {twilioConnection?.lastError ? <p className="text-amber-700">{twilioConnection.lastError}</p> : null}
+                        {!twilioBackendConfigured ? (
+                          <p className="text-amber-700">
+                            Twilio SMS setup is unavailable until encrypted integration storage and callback/server config are live.
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <Button
                         onClick={handleSaveTwilio}
-                        disabled={!canManageBusinessIntegrations || !twilioRegistry?.featureFlagEnabled || twilioSaving}
+                        disabled={
+                          !canManageBusinessIntegrations ||
+                          !twilioRegistry?.featureFlagEnabled ||
+                          !twilioBackendConfigured ||
+                          twilioSaving
+                        }
                         className="w-full sm:w-auto"
                       >
                         {twilioSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -3235,6 +3271,12 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
+
+                {!vaultConfigured ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    Integration connections stay read-only until <span className="font-mono">INTEGRATION_VAULT_SECRET</span> is configured in production.
+                  </div>
+                ) : null}
 
                 <div className="rounded-xl border bg-background p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -3361,6 +3403,11 @@ export default function SettingsPage() {
                       </p>
                     </div>
                   </div>
+                  {!outboundWebhooksBackendConfigured ? (
+                    <p className="mt-3 text-xs text-amber-700">
+                      Signed webhook testing and replay need encrypted integration storage before jobs can be queued safely.
+                    </p>
+                  ) : null}
 
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     <div className="space-y-1.5">
@@ -3472,7 +3519,11 @@ export default function SettingsPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleReplayOutboundWebhook(event.id)}
-                                disabled={!canManageBusinessIntegrations || outboundWebhookReplayId === event.id}
+                                disabled={
+                                  !canManageBusinessIntegrations ||
+                                  !outboundWebhooksBackendConfigured ||
+                                  outboundWebhookReplayId === event.id
+                                }
                               >
                                 {outboundWebhookReplayId === event.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Replay
@@ -3492,7 +3543,12 @@ export default function SettingsPage() {
                         variant="outline"
                         className="mt-4 w-full"
                         onClick={handleSendOutboundWebhookTest}
-                        disabled={!canManageBusinessIntegrations || outboundWebhookTesting}
+                        disabled={
+                          !canManageBusinessIntegrations ||
+                          !outboundWebhookRegistry?.featureFlagEnabled ||
+                          !outboundWebhooksBackendConfigured ||
+                          outboundWebhookTesting
+                        }
                       >
                         {outboundWebhookTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         Send test event
