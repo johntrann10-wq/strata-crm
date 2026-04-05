@@ -765,6 +765,7 @@ test("shows recent automation activity across email and sms channels", async ({ 
   await page.goto("/settings?tab=automations");
 
   await expect(page.getByText("Recent automation activity", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /refresh activity/i })).toBeVisible();
   await expect(page.getByText(/skipped in the last 30 days: 4/i)).toBeVisible();
   await expect(page.getByText(/automation send window/i)).toBeVisible();
   await expect(page.getByText(/^Start hour$/i)).toBeVisible();
@@ -779,6 +780,9 @@ test("shows recent automation activity across email and sms channels", async ({ 
   await expect(page.getByText(/appointment reminder sent\./i)).not.toBeVisible();
   await expect(page.getByText(/twilio callback reported delivery failure\./i)).toBeVisible();
   await expect(page.getByText(/lapsed client outreach skipped: outside send window\./i)).toBeVisible();
+
+  await page.getByRole("button", { name: /refresh activity/i }).click();
+  await expect(page.getByText(/twilio callback reported delivery failure\./i)).toBeVisible();
 
   await page.getByLabel(/channel/i).click();
   await page.getByRole("option", { name: /^SMS$/i }).click();

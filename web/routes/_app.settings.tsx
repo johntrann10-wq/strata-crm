@@ -628,6 +628,13 @@ function formatAutomationFeedTimestamp(value: string) {
   }).format(parsed);
 }
 
+function formatAutomationRefreshTimestamp(value: number | null) {
+  if (!value) return "Not refreshed yet";
+  return new Intl.DateTimeFormat("en-US", {
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 function formatAutomationFeedLabel(type: AutomationFeedRecord["automationType"]) {
   switch (type) {
     case "appointment_reminder":
@@ -1129,6 +1136,8 @@ export default function SettingsPage() {
     useState<AutomationFeedAutomationFilter>("all");
   const [automationFeedChannelFilter, setAutomationFeedChannelFilter] =
     useState<AutomationFeedChannelFilter>("all");
+  const [automationInsightsRefreshing, setAutomationInsightsRefreshing] = useState(false);
+  const [automationInsightsRefreshedAt, setAutomationInsightsRefreshedAt] = useState<number | null>(null);
   const [twilioSaving, setTwilioSaving] = useState(false);
   const [twilioDisconnecting, setTwilioDisconnecting] = useState(false);
   const [outboundWebhookTesting, setOutboundWebhookTesting] = useState(false);
@@ -1239,6 +1248,35 @@ export default function SettingsPage() {
   });
   const automationFeedIssueCount = automationFeed.filter((entry) => entry.kind !== "sent").length;
   const automationFeedSmsCount = automationFeed.filter((entry) => entry.channel === "sms").length;
+
+  const refreshAutomationInsights = useCallback(
+    async (options?: { quiet?: boolean }) => {
+      if (!businessId) return;
+      const quiet = options?.quiet ?? false;
+      if (!quiet) setAutomationInsightsRefreshing(true);
+      try {
+        const [summaryResult, feedResult, workerHealthResult] = await Promise.all([
+          getAutomationSummary(),
+          getAutomationFeed({ limit: 12 }),
+          getWorkerHealth(),
+        ]);
+
+        if (!summaryResult.error) {
+          setAutomationSummary(summaryResult.data as typeof automationSummary);
+        }
+        if (!feedResult.error) {
+          setAutomationFeed((feedResult.data?.records as AutomationFeedRecord[] | undefined) ?? []);
+        }
+        if (!workerHealthResult.error) {
+          // useAction already updates workerHealthData; no local setter needed
+        }
+        setAutomationInsightsRefreshedAt(Date.now());
+      } finally {
+        if (!quiet) setAutomationInsightsRefreshing(false);
+      }
+    },
+    [businessId, getAutomationFeed, getAutomationSummary, getWorkerHealth]
+  );
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -1387,6 +1425,7 @@ export default function SettingsPage() {
       .then((result) => {
         if (cancelled || result.error) return;
         setAutomationSummary(result.data as typeof automationSummary);
+        setAutomationInsightsRefreshedAt(Date.now());
       })
       .catch(() => {
         if (!cancelled) setAutomationSummary(null);
@@ -1403,6 +1442,7 @@ export default function SettingsPage() {
       .then((result) => {
         if (cancelled || result.error) return;
         setAutomationFeed((result.data?.records as AutomationFeedRecord[] | undefined) ?? []);
+        setAutomationInsightsRefreshedAt(Date.now());
       })
       .catch(() => {
         if (!cancelled) setAutomationFeed([]);
@@ -1416,6 +1456,28 @@ export default function SettingsPage() {
     if (!businessId) return;
     void getWorkerHealth();
   }, [businessId, getWorkerHealth]);
+
+  useEffect(() => {
+    if (!businessId || activeTab !== "automations") return;
+    let cancelled = false;
+    const tick = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      try {
+        await refreshAutomationInsights({ quiet: true });
+      } catch {
+        if (!cancelled) {
+          // Leave the existing automation data in place if a background refresh fails.
+        }
+      }
+    };
+    const interval = window.setInterval(() => {
+      void tick();
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeTab, businessId, refreshAutomationInsights]);
 
   useEffect(() => {
     if (!canViewDiagnostics) return;
@@ -1584,14 +1646,7 @@ export default function SettingsPage() {
       automationLapsedClientMonths: automationSettings.lapsedClientMonths,
       bookingRequestUrl: automationSettings.bookingRequestUrl.trim() || null,
     });
-    const summaryResult = await getAutomationSummary();
-    if (!summaryResult.error) {
-      setAutomationSummary(summaryResult.data as typeof automationSummary);
-    }
-    const feedResult = await getAutomationFeed({ limit: 12 });
-    if (!feedResult.error) {
-      setAutomationFeed((feedResult.data?.records as AutomationFeedRecord[] | undefined) ?? []);
-    }
+    await refreshAutomationInsights();
     toast.success("Automation settings saved");
   };
 
@@ -3836,8 +3891,21 @@ export default function SettingsPage() {
                       <p className="mt-1 text-xs text-muted-foreground">
                         Recent sends and delivery failures across email and SMS so you can spot real automation behavior without digging through raw logs.
                       </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Last refreshed: {formatAutomationRefreshTimestamp(automationInsightsRefreshedAt)}
+                      </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void refreshAutomationInsights()}
+                        disabled={automationInsightsRefreshing}
+                      >
+                        {automationInsightsRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                        Refresh activity
+                      </Button>
                       <Badge variant="outline" className="self-start">
                         Last 12 events
                       </Badge>
