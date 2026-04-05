@@ -236,11 +236,20 @@ type IntegrationConnectionStatus = {
     hasEncryptedRefreshToken: boolean;
     hasConfig: boolean;
     selectedCalendarId: string | null;
+    selectedCalendarSummary: string | null;
     webhookUrl: string | null;
     twilioMessagingServiceSid: string | null;
     twilioAccountSid: string | null;
     twilioEnabledTemplateSlugs: string[];
   };
+};
+
+type GoogleCalendarOption = {
+  id: string;
+  summary: string;
+  primary?: boolean;
+  accessRole?: string | null;
+  timeZone?: string | null;
 };
 
 type IntegrationFailureRecord = {
@@ -1017,6 +1026,12 @@ export default function SettingsPage() {
   const [quickBooksConnecting, setQuickBooksConnecting] = useState(false);
   const [quickBooksDisconnecting, setQuickBooksDisconnecting] = useState(false);
   const [quickBooksResyncing, setQuickBooksResyncing] = useState(false);
+  const [googleCalendarConnecting, setGoogleCalendarConnecting] = useState(false);
+  const [googleCalendarDisconnecting, setGoogleCalendarDisconnecting] = useState(false);
+  const [googleCalendarSaving, setGoogleCalendarSaving] = useState(false);
+  const [googleCalendarResyncing, setGoogleCalendarResyncing] = useState(false);
+  const [googleCalendarCalendars, setGoogleCalendarCalendars] = useState<GoogleCalendarOption[]>([]);
+  const [googleCalendarCalendarsLoading, setGoogleCalendarCalendarsLoading] = useState(false);
   const [twilioSaving, setTwilioSaving] = useState(false);
   const [twilioDisconnecting, setTwilioDisconnecting] = useState(false);
 
@@ -1072,6 +1087,12 @@ export default function SettingsPage() {
     integrationStatus?.connections.find((item) => item.provider === "quickbooks_online") ?? null;
   const quickBooksRegistry =
     integrationStatus?.registry.find((item) => item.provider === "quickbooks_online") ?? null;
+  const googleCalendarConnection =
+    integrationStatus?.connections.find(
+      (item) => item.provider === "google_calendar" && item.userId === user.id
+    ) ?? null;
+  const googleCalendarRegistry =
+    integrationStatus?.registry.find((item) => item.provider === "google_calendar") ?? null;
   const twilioConnection =
     integrationStatus?.connections.find((item) => item.provider === "twilio_sms") ?? null;
   const twilioRegistry =
@@ -1102,6 +1123,27 @@ export default function SettingsPage() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("quickbooks");
     nextParams.delete("quickbooksMessage");
+    setSearchParams(nextParams, { replace: true });
+  }, [refetchIntegrationStatus, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const googleCalendarState = searchParams.get("googleCalendar");
+    if (!googleCalendarState) return;
+
+    void refetchIntegrationStatus();
+
+    const message = searchParams.get("googleCalendarMessage");
+    if (googleCalendarState === "connected") {
+      toast.success(message || "Google Calendar is connected.");
+    } else if (googleCalendarState === "disconnected") {
+      toast.success(message || "Google Calendar was disconnected.");
+    } else {
+      toast.error(message || "Google Calendar setup needs attention.");
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("googleCalendar");
+    nextParams.delete("googleCalendarMessage");
     setSearchParams(nextParams, { replace: true });
   }, [refetchIntegrationStatus, searchParams, setSearchParams]);
 
@@ -1154,6 +1196,35 @@ export default function SettingsPage() {
           : DEFAULT_TWILIO_SMS_SETTINGS.enabledTemplateSlugs,
     });
   }, [twilioConnection]);
+
+  useEffect(() => {
+    if (
+      !googleCalendarRegistry?.featureFlagEnabled ||
+      googleCalendarConnection?.status !== "connected"
+    ) {
+      setGoogleCalendarCalendars([]);
+      return;
+    }
+
+    let cancelled = false;
+    setGoogleCalendarCalendarsLoading(true);
+    api.integration
+      .listGoogleCalendars()
+      .then((result) => {
+        if (cancelled) return;
+        setGoogleCalendarCalendars(result.calendars ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setGoogleCalendarCalendars([]);
+      })
+      .finally(() => {
+        if (!cancelled) setGoogleCalendarCalendarsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [googleCalendarConnection?.id, googleCalendarConnection?.status, googleCalendarRegistry?.featureFlagEnabled]);
 
   useEffect(() => {
     if (!businessId) return;
@@ -1379,6 +1450,64 @@ export default function SettingsPage() {
       toast.error(error instanceof Error ? error.message : "Could not start QuickBooks setup.");
     } finally {
       setQuickBooksConnecting(false);
+    }
+  };
+
+  const handleStartGoogleCalendar = async () => {
+    setGoogleCalendarConnecting(true);
+    try {
+      const result = await api.integration.startGoogleCalendar();
+      if (!result.url) {
+        throw new Error("Google Calendar did not return an authorization URL.");
+      }
+      window.location.href = result.url;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not start Google Calendar setup.");
+    } finally {
+      setGoogleCalendarConnecting(false);
+    }
+  };
+
+  const handleSelectGoogleCalendar = async (calendarId: string) => {
+    if (!calendarId) return;
+    setGoogleCalendarSaving(true);
+    try {
+      await api.integration.selectGoogleCalendar({ calendarId });
+      await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
+      const refreshed = await api.integration.listGoogleCalendars();
+      setGoogleCalendarCalendars(refreshed.calendars ?? []);
+      toast.success("Google Calendar selection saved.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save the selected Google Calendar.");
+    } finally {
+      setGoogleCalendarSaving(false);
+    }
+  };
+
+  const handleDisconnectGoogleCalendar = async () => {
+    setGoogleCalendarDisconnecting(true);
+    try {
+      await api.integration.disconnectGoogleCalendar();
+      await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
+      setGoogleCalendarCalendars([]);
+      toast.success("Google Calendar disconnected.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not disconnect Google Calendar.");
+    } finally {
+      setGoogleCalendarDisconnecting(false);
+    }
+  };
+
+  const handleResyncGoogleCalendar = async () => {
+    setGoogleCalendarResyncing(true);
+    try {
+      const result = await api.integration.resyncGoogleCalendar();
+      await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
+      toast.success(`Queued ${result.queuedJobs} Google Calendar sync jobs across ${result.appointments} appointments.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not queue a Google Calendar resync.");
+    } finally {
+      setGoogleCalendarResyncing(false);
     }
   };
 
@@ -2704,6 +2833,120 @@ export default function SettingsPage() {
                         className="w-full sm:w-auto"
                       >
                         {quickBooksDisconnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Disconnect
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <ExternalLink className="h-4 w-4 text-primary" />
+                          <p className="text-sm font-medium">Google Calendar</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          One-way appointment sync into your selected Google Calendar. Strata stays the source of truth.
+                        </p>
+                      </div>
+                      <Badge
+                        variant={
+                          !googleCalendarRegistry?.featureFlagEnabled
+                            ? "outline"
+                            : googleCalendarConnection
+                              ? getConnectionBadgeVariant(googleCalendarConnection.status)
+                              : "secondary"
+                        }
+                      >
+                        {!googleCalendarRegistry?.featureFlagEnabled
+                          ? "Flag off"
+                          : googleCalendarConnection
+                            ? googleCalendarConnection.status.replace(/_/g, " ")
+                            : "Not connected"}
+                      </Badge>
+                    </div>
+                    <div className="mt-4 grid gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Connected calendar</Label>
+                        <Select
+                          value={googleCalendarConnection?.configSummary.selectedCalendarId ?? ""}
+                          onValueChange={handleSelectGoogleCalendar}
+                          disabled={
+                            !canEditSettings ||
+                            !googleCalendarConnection ||
+                            googleCalendarCalendarsLoading ||
+                            googleCalendarSaving ||
+                            googleCalendarCalendars.length === 0
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue
+                              placeholder={
+                                googleCalendarCalendarsLoading
+                                  ? "Loading calendars..."
+                                  : googleCalendarConnection
+                                    ? "Select a Google Calendar"
+                                    : "Connect Google Calendar first"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {googleCalendarCalendars.map((calendar) => (
+                              <SelectItem key={calendar.id} value={calendar.id}>
+                                {calendar.summary}
+                                {calendar.primary ? " (Primary)" : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Only writable calendars from your Google account are listed here.
+                        </p>
+                      </div>
+                      <div className="space-y-2 text-xs text-muted-foreground">
+                        <p>Control scope: Your user account only.</p>
+                        <p>
+                          Selected calendar:{" "}
+                          {googleCalendarConnection?.configSummary.selectedCalendarSummary ?? "Not selected"}
+                        </p>
+                        <p>
+                          Last successful sync:{" "}
+                          {googleCalendarConnection?.lastSuccessfulAt
+                            ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(
+                                new Date(googleCalendarConnection.lastSuccessfulAt)
+                              )
+                            : "None yet"}
+                        </p>
+                        {googleCalendarConnection?.lastError ? (
+                          <p className="text-amber-700">{googleCalendarConnection.lastError}</p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      <Button
+                        onClick={handleStartGoogleCalendar}
+                        disabled={!canEditSettings || !googleCalendarRegistry?.featureFlagEnabled || googleCalendarConnecting}
+                        className="w-full sm:w-auto"
+                      >
+                        {googleCalendarConnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {googleCalendarConnection?.status === "connected" ? "Reconnect Google Calendar" : "Connect Google Calendar"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={handleResyncGoogleCalendar}
+                        disabled={!canEditSettings || googleCalendarConnection?.status !== "connected" || googleCalendarResyncing}
+                        className="w-full sm:w-auto"
+                      >
+                        {googleCalendarResyncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Queue full resync
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={handleDisconnectGoogleCalendar}
+                        disabled={!canEditSettings || !googleCalendarConnection || googleCalendarDisconnecting}
+                        className="w-full sm:w-auto"
+                      >
+                        {googleCalendarDisconnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         Disconnect
                       </Button>
                     </div>

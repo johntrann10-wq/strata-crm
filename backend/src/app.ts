@@ -30,7 +30,11 @@ import { jobsRouter } from "./routes/jobs.js";
 import { actionsRouter } from "./routes/actions.js";
 import { activityLogsRouter } from "./routes/activity-logs.js";
 import { notificationLogsRouter } from "./routes/notification-logs.js";
-import { handleTwilioStatusCallbackRoute, integrationsRouter } from "./routes/integrations.js";
+import {
+  handleGoogleCalendarCallbackRoute,
+  handleTwilioStatusCallbackRoute,
+  integrationsRouter,
+} from "./routes/integrations.js";
 import { billingRouter, handleStripeWebhook } from "./routes/billing.js";
 
 validateEnv();
@@ -54,6 +58,9 @@ app.post(
   "/api/integrations/twilio/status/:connectionId",
   express.urlencoded({ extended: false }),
   (req, res, next) => handleTwilioStatusCallbackRoute(req, res).catch(next)
+);
+app.get("/api/integrations/google-calendar/callback", (req, res, next) =>
+  handleGoogleCalendarCallbackRoute(req, res).catch(next)
 );
 
 app.use(express.json({ limit: "1mb" }));

@@ -20,6 +20,7 @@ import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
 import { buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 import { createAppointmentDepositCheckoutSession, retrieveCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
 import { renderAppointmentHtml } from "../lib/appointmentTemplate.js";
+import { scheduleGoogleCalendarAppointmentSync } from "../lib/googleCalendar.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
@@ -1569,6 +1570,19 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   } catch (error) {
     logger.warn("Appointment confirmation activity log failed", { appointmentId: created.id, businessId: bid, error });
   }
+  try {
+    await scheduleGoogleCalendarAppointmentSync({
+      businessId: bid,
+      appointmentId: created.id,
+      createdByUserId: req.userId ?? null,
+    });
+  } catch (error) {
+    logger.warn("Google Calendar appointment sync enqueue failed after create", {
+      appointmentId: created.id,
+      businessId: bid,
+      error,
+    });
+  }
   res.status(201).json({ ...created, ...confirmationResult });
 }));
 
@@ -1779,6 +1793,19 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
         status: updated.status,
       },
     });
+    try {
+      await scheduleGoogleCalendarAppointmentSync({
+        businessId: bid,
+        appointmentId: updated.id,
+        createdByUserId: req.userId ?? null,
+      });
+    } catch (error) {
+      logger.warn("Google Calendar appointment sync enqueue failed after update", {
+        appointmentId: updated.id,
+        businessId: bid,
+        error,
+      });
+    }
   }
   res.json(updated);
 });
@@ -2333,8 +2360,36 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (
         error,
       });
     }
+    try {
+      await scheduleGoogleCalendarAppointmentSync({
+        businessId: bid,
+        appointmentId: updated.id,
+        createdByUserId: req.userId ?? null,
+      });
+    } catch (error) {
+      logger.warn("Google Calendar appointment sync enqueue failed after confirmed status", {
+        appointmentId: updated.id,
+        businessId: bid,
+        error,
+      });
+    }
     res.json({ ...updated, ...confirmationResult });
     return;
+  }
+
+  try {
+    await scheduleGoogleCalendarAppointmentSync({
+      businessId: bid,
+      appointmentId: updated.id,
+      createdByUserId: req.userId ?? null,
+    });
+  } catch (error) {
+    logger.warn("Google Calendar appointment sync enqueue failed after status update", {
+      appointmentId: updated.id,
+      businessId: bid,
+      status,
+      error,
+    });
   }
 
   res.json(updated);
@@ -2363,6 +2418,19 @@ appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, async (req:
         completedAt: updated.completedAt,
       },
     });
+    try {
+      await scheduleGoogleCalendarAppointmentSync({
+        businessId: bid,
+        appointmentId: updated.id,
+        createdByUserId: req.userId ?? null,
+      });
+    } catch (error) {
+      logger.warn("Google Calendar appointment sync enqueue failed after complete", {
+        appointmentId: updated.id,
+        businessId: bid,
+        error,
+      });
+    }
   }
   res.json(updated);
 });
@@ -2390,6 +2458,19 @@ appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, async (req: R
         cancelledAt: updated.cancelledAt,
       },
     });
+    try {
+      await scheduleGoogleCalendarAppointmentSync({
+        businessId: bid,
+        appointmentId: updated.id,
+        createdByUserId: req.userId ?? null,
+      });
+    } catch (error) {
+      logger.warn("Google Calendar appointment sync enqueue failed after cancel", {
+        appointmentId: updated.id,
+        businessId: bid,
+        error,
+      });
+    }
   }
   res.json(updated);
 });

@@ -23,6 +23,18 @@ import {
   type QuickBooksIntegrationState,
 } from "../lib/quickbooks.js";
 import {
+  buildGoogleCalendarAuthorizeUrl,
+  connectGoogleCalendarUser,
+  createGoogleCalendarIntegrationStateToken,
+  disconnectGoogleCalendarUser,
+  enqueueGoogleCalendarFullResync,
+  getGoogleCalendarFrontendReturnPath,
+  isGoogleCalendarConfigured,
+  listGoogleCalendarsForUser,
+  selectGoogleCalendarForUser,
+  type GoogleCalendarIntegrationState,
+} from "../lib/googleCalendar.js";
+import {
   connectTwilioBusiness,
   disconnectTwilioBusiness,
   handleTwilioStatusCallback,
@@ -58,6 +70,52 @@ export async function handleTwilioStatusCallbackRoute(req: Request, res: Respons
     params,
   });
   res.type("text/plain").send("ok");
+}
+
+export async function handleGoogleCalendarCallbackRoute(req: Request, res: Response) {
+  const frontendUrl = process.env.FRONTEND_URL?.trim() ?? "";
+  const baseRedirect = frontendUrl
+    ? `${frontendUrl}${getGoogleCalendarFrontendReturnPath("error")}`
+    : getGoogleCalendarFrontendReturnPath("error");
+  const appendMessage = (path: string, message: string) => {
+    const separator = path.includes("?") ? "&" : "?";
+    return `${path}${separator}googleCalendarMessage=${encodeURIComponent(message)}`;
+  };
+
+  const state = typeof req.query.state === "string" ? req.query.state : "";
+  const code = typeof req.query.code === "string" ? req.query.code : "";
+  const errorMessage =
+    typeof req.query.error_description === "string"
+      ? req.query.error_description
+      : typeof req.query.error === "string"
+        ? req.query.error
+        : "";
+
+  if (errorMessage) {
+    res.redirect(303, appendMessage(baseRedirect, errorMessage));
+    return;
+  }
+
+  const payload = verifyIntegrationStateToken<GoogleCalendarIntegrationState>(state);
+  if (!payload?.businessId || !payload?.userId || !code) {
+    res.redirect(303, appendMessage(baseRedirect, "Google Calendar authorization could not be verified."));
+    return;
+  }
+
+  try {
+    await connectGoogleCalendarUser({
+      businessId: payload.businessId,
+      userId: payload.userId,
+      code,
+    });
+    const successPath = frontendUrl
+      ? `${frontendUrl}${getGoogleCalendarFrontendReturnPath("connected")}`
+      : getGoogleCalendarFrontendReturnPath("connected");
+    res.redirect(303, successPath);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Google Calendar connection failed.";
+    res.redirect(303, appendMessage(baseRedirect, message));
+  }
 }
 
 integrationsRouter.get("/", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
@@ -98,6 +156,8 @@ integrationsRouter.get("/", requireAuth, requireTenant, requirePermission("setti
         hasEncryptedRefreshToken: !!row.encryptedRefreshToken,
         hasConfig: !!row.encryptedConfig,
         selectedCalendarId: typeof config?.selectedCalendarId === "string" ? config.selectedCalendarId : null,
+        selectedCalendarSummary:
+          typeof config?.selectedCalendarSummary === "string" ? config.selectedCalendarSummary : null,
         webhookUrl: typeof config?.webhookUrl === "string" ? config.webhookUrl : null,
         twilioMessagingServiceSid:
           typeof config?.messagingServiceSid === "string" ? config.messagingServiceSid : null,
@@ -127,6 +187,98 @@ integrationsRouter.get(
     const bid = businessId(req);
     const records = await listIntegrationFailures(bid);
     res.json({ records });
+  }
+);
+
+integrationsRouter.post(
+  "/google-calendar/start",
+  requireAuth,
+  requireTenant,
+  requirePermission("settings.write"),
+  async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    if (!isIntegrationFeatureEnabled("google_calendar")) {
+      throw new ForbiddenError("Google Calendar is not enabled in this environment.");
+    }
+    if (!isGoogleCalendarConfigured()) {
+      throw new ForbiddenError("Google Calendar is not configured on this server.");
+    }
+    if (!req.userId) {
+      throw new ForbiddenError("User context is required.");
+    }
+
+    const state = createGoogleCalendarIntegrationStateToken({
+      businessId: bid,
+      userId: req.userId,
+      returnPath: getGoogleCalendarFrontendReturnPath("connected"),
+    });
+
+    res.json({
+      url: buildGoogleCalendarAuthorizeUrl(state),
+    });
+  }
+);
+
+integrationsRouter.get("/google-calendar/callback", async (req: Request, res: Response) => {
+  await handleGoogleCalendarCallbackRoute(req, res);
+});
+
+integrationsRouter.get(
+  "/google-calendar/calendars",
+  requireAuth,
+  requireTenant,
+  requirePermission("settings.read"),
+  async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    if (!req.userId) throw new ForbiddenError("User context is required.");
+    const result = await listGoogleCalendarsForUser(bid, req.userId);
+    res.json({ calendars: result.calendars });
+  }
+);
+
+integrationsRouter.post(
+  "/google-calendar/select-calendar",
+  requireAuth,
+  requireTenant,
+  requirePermission("settings.write"),
+  async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    if (!req.userId) throw new ForbiddenError("User context is required.");
+    const calendarId = String(req.body?.calendarId ?? "").trim();
+    if (!calendarId) throw new BadRequestError("calendarId is required.");
+    const record = await selectGoogleCalendarForUser({
+      businessId: bid,
+      userId: req.userId,
+      calendarId,
+    });
+    res.json({ record });
+  }
+);
+
+integrationsRouter.post(
+  "/google-calendar/disconnect",
+  requireAuth,
+  requireTenant,
+  requirePermission("settings.write"),
+  async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    if (!req.userId) throw new ForbiddenError("User context is required.");
+    const record = await disconnectGoogleCalendarUser(bid, req.userId);
+    if (!record) throw new NotFoundError("Google Calendar connection not found.");
+    res.json({ record });
+  }
+);
+
+integrationsRouter.post(
+  "/google-calendar/resync",
+  requireAuth,
+  requireTenant,
+  requirePermission("settings.write"),
+  async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    if (!req.userId) throw new ForbiddenError("User context is required.");
+    const summary = await enqueueGoogleCalendarFullResync({ businessId: bid, userId: req.userId });
+    res.json(summary);
   }
 );
 

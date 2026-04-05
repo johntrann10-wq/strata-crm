@@ -13,6 +13,9 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
     "review_request",
     "lapsed_client_reengagement",
   ];
+  let googleCalendarConnected = false;
+  let googleSelectedCalendarId = "primary";
+  let googleSelectedCalendarSummary = "Owner Schedule";
 
   await context.addInitScript(() => {
     window.localStorage.setItem("authToken", "integration-test-token");
@@ -147,6 +150,14 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
             permissions: { read: "settings.read", write: "settings.write" },
             featureFlagEnabled: true,
           },
+          {
+            provider: "google_calendar",
+            label: "Google Calendar",
+            ownerType: "user",
+            description: "One-way appointment sync from Strata into a selected Google Calendar.",
+            permissions: { read: "settings.read", write: "settings.write" },
+            featureFlagEnabled: true,
+          },
         ],
         connections: [
           ...(quickBooksConnected
@@ -174,8 +185,46 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
                     hasEncryptedRefreshToken: true,
                     hasConfig: true,
                     selectedCalendarId: null,
+                    selectedCalendarSummary: null,
                     webhookUrl: null,
                     twilioMessagingServiceSid: null,
+                  },
+                },
+              ]
+            : []),
+          ...(googleCalendarConnected
+            ? [
+                {
+                  id: "conn-google-1",
+                  provider: "google_calendar",
+                  ownerType: "user",
+                  ownerKey: "user:user-1",
+                  userId: "user-1",
+                  status: "connected",
+                  displayName: "Google Calendar",
+                  externalAccountId: null,
+                  externalAccountName: null,
+                  scopes: [
+                    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+                    "https://www.googleapis.com/auth/calendar.events.owned",
+                  ],
+                  featureEnabled: true,
+                  lastSyncedAt: "2026-04-04T18:45:00.000Z",
+                  lastSuccessfulAt: "2026-04-04T18:45:00.000Z",
+                  lastError: null,
+                  actionRequired: null,
+                  connectedAt: "2026-04-04T18:15:00.000Z",
+                  disconnectedAt: null,
+                  configSummary: {
+                    hasEncryptedAccessToken: true,
+                    hasEncryptedRefreshToken: true,
+                    hasConfig: true,
+                    selectedCalendarId: googleSelectedCalendarId,
+                    selectedCalendarSummary: googleSelectedCalendarSummary,
+                    webhookUrl: null,
+                    twilioMessagingServiceSid: null,
+                    twilioAccountSid: null,
+                    twilioEnabledTemplateSlugs: [],
                   },
                 },
               ]
@@ -205,6 +254,7 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
                     hasEncryptedRefreshToken: false,
                     hasConfig: true,
                     selectedCalendarId: null,
+                    selectedCalendarSummary: null,
                     webhookUrl: null,
                     twilioMessagingServiceSid,
                     twilioAccountSid,
@@ -278,6 +328,65 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
       contentType: "application/json",
       body: JSON.stringify({
         url: "/settings?tab=integrations&quickbooks=connected",
+      }),
+    });
+  });
+
+  await context.route("**/api/integrations/google-calendar/start", async (route) => {
+    googleCalendarConnected = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        url: "/settings?tab=integrations&googleCalendar=connected",
+      }),
+    });
+  });
+
+  await context.route("**/api/integrations/google-calendar/calendars", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        calendars: [
+          { id: "primary", summary: "Owner Schedule", primary: true, accessRole: "owner", timeZone: "America/Los_Angeles" },
+          { id: "team", summary: "Team Calendar", primary: false, accessRole: "writer", timeZone: "America/Los_Angeles" },
+        ],
+      }),
+    });
+  });
+
+  await context.route("**/api/integrations/google-calendar/select-calendar", async (route) => {
+    const payload = route.request().postDataJSON() as { calendarId?: string };
+    googleSelectedCalendarId = payload.calendarId ?? "primary";
+    googleSelectedCalendarSummary = googleSelectedCalendarId === "team" ? "Team Calendar" : "Owner Schedule";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        record: { id: "conn-google-1", status: "connected" },
+      }),
+    });
+  });
+
+  await context.route("**/api/integrations/google-calendar/resync", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        queuedJobs: 4,
+        appointments: 4,
+      }),
+    });
+  });
+
+  await context.route("**/api/integrations/google-calendar/disconnect", async (route) => {
+    googleCalendarConnected = false;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        record: { id: "conn-google-1", status: "disconnected" },
       }),
     });
   });
@@ -359,12 +468,22 @@ test("shows integration infrastructure and failure visibility in settings", asyn
   await page.getByRole("button", { name: /reconnect quickbooks/i }).click();
   await expect(page.getByText(/quickbooks is connected/i).first()).toBeVisible();
 
-  await page.getByRole("button", { name: /queue full resync/i }).click();
+  await page.getByRole("button", { name: /queue full resync/i }).first().click();
   await expect(page.getByText(/queued 7 quickbooks sync jobs/i)).toBeVisible();
 
   await page.getByRole("button", { name: /^disconnect$/i }).first().click();
   await expect(page.getByText(/quickbooks disconnected/i)).toBeVisible();
   await expect(page.getByText(/not connected/i).first()).toBeVisible();
+
+  await page.getByRole("button", { name: /connect google calendar/i }).click();
+  await expect(page.getByText(/google calendar is connected/i).first()).toBeVisible();
+  await page.getByRole("combobox").nth(0).click();
+  await page.getByRole("option", { name: /team calendar/i }).click();
+  await expect(page.getByText(/google calendar selection saved/i).first()).toBeVisible();
+  await page.getByRole("button", { name: /queue full resync/i }).nth(1).click();
+  await expect(page.getByText(/queued 4 google calendar sync jobs/i).first()).toBeVisible();
+  await page.getByRole("button", { name: /^disconnect$/i }).nth(1).click();
+  await expect(page.getByText(/google calendar disconnected/i).first()).toBeVisible();
 
   await page.getByPlaceholder("AC...").fill("account-sid-test");
   await page.getByPlaceholder("MG...").fill("messaging-service-test");

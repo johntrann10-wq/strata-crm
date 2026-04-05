@@ -468,6 +468,7 @@ export const api = {
             hasEncryptedRefreshToken: boolean;
             hasConfig: boolean;
             selectedCalendarId: string | null;
+            selectedCalendarSummary: string | null;
             webhookUrl: string | null;
             twilioMessagingServiceSid: string | null;
             twilioAccountSid: string | null;
@@ -501,6 +502,39 @@ export const api = {
     },
     startQuickBooks: () =>
       request<{ url: string }>("/integrations/quickbooks/start", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    startGoogleCalendar: () =>
+      request<{ url: string }>("/integrations/google-calendar/start", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    listGoogleCalendars: () =>
+      request<{
+        calendars: Array<{
+          id: string;
+          summary: string;
+          primary?: boolean;
+          accessRole?: string | null;
+          timeZone?: string | null;
+        }>;
+      }>("/integrations/google-calendar/calendars"),
+    selectGoogleCalendar: (params: { calendarId: string }) =>
+      request<{ record: unknown }>("/integrations/google-calendar/select-calendar", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    disconnectGoogleCalendar: () =>
+      request<{ record: unknown }>("/integrations/google-calendar/disconnect", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    resyncGoogleCalendar: () =>
+      request<{
+        queuedJobs: number;
+        appointments: number;
+      }>("/integrations/google-calendar/resync", {
         method: "POST",
         body: JSON.stringify({}),
       }),
