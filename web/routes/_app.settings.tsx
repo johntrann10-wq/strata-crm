@@ -222,6 +222,7 @@ type AutomationFeedRecord = {
 
 type AutomationFeedFilter = "all" | "issues" | "sent";
 type AutomationFeedAutomationFilter = "all" | AutomationFeedRecord["automationType"];
+type AutomationFeedChannelFilter = "all" | AutomationFeedRecord["channel"];
 
 type WorkerHealthSummary = {
   automations: {
@@ -1126,6 +1127,8 @@ export default function SettingsPage() {
   const [automationFeedFilter, setAutomationFeedFilter] = useState<AutomationFeedFilter>("all");
   const [automationFeedAutomationFilter, setAutomationFeedAutomationFilter] =
     useState<AutomationFeedAutomationFilter>("all");
+  const [automationFeedChannelFilter, setAutomationFeedChannelFilter] =
+    useState<AutomationFeedChannelFilter>("all");
   const [twilioSaving, setTwilioSaving] = useState(false);
   const [twilioDisconnecting, setTwilioDisconnecting] = useState(false);
   const [outboundWebhookTesting, setOutboundWebhookTesting] = useState(false);
@@ -1229,8 +1232,13 @@ export default function SettingsPage() {
     if (automationFeedAutomationFilter !== "all" && entry.automationType !== automationFeedAutomationFilter) {
       return false;
     }
+    if (automationFeedChannelFilter !== "all" && entry.channel !== automationFeedChannelFilter) {
+      return false;
+    }
     return true;
   });
+  const automationFeedIssueCount = automationFeed.filter((entry) => entry.kind !== "sent").length;
+  const automationFeedSmsCount = automationFeed.filter((entry) => entry.channel === "sms").length;
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -3836,6 +3844,12 @@ export default function SettingsPage() {
                       <Badge variant="secondary" className="self-start">
                         Showing {filteredAutomationFeed.length}
                       </Badge>
+                      <Badge variant="secondary" className="self-start">
+                        {automationFeedIssueCount} issues
+                      </Badge>
+                      <Badge variant="secondary" className="self-start">
+                        {automationFeedSmsCount} SMS
+                      </Badge>
                     </div>
                   </div>
                   <div className="mt-4 flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
@@ -3865,24 +3879,44 @@ export default function SettingsPage() {
                         Sent only
                       </Button>
                     </div>
-                    <div className="grid gap-2 sm:max-w-xs">
-                      <Label htmlFor="automation-feed-filter">Automation</Label>
-                      <Select
-                        value={automationFeedAutomationFilter}
-                        onValueChange={(value) =>
-                          setAutomationFeedAutomationFilter(value as AutomationFeedAutomationFilter)
-                        }
-                      >
-                        <SelectTrigger id="automation-feed-filter">
-                          <SelectValue placeholder="All automations" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All automations</SelectItem>
-                          <SelectItem value="appointment_reminder">Appointment reminders</SelectItem>
-                          <SelectItem value="review_request">Review requests</SelectItem>
-                          <SelectItem value="lapsed_client">Lapsed outreach</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-2 sm:max-w-xs">
+                        <Label htmlFor="automation-feed-filter">Automation</Label>
+                        <Select
+                          value={automationFeedAutomationFilter}
+                          onValueChange={(value) =>
+                            setAutomationFeedAutomationFilter(value as AutomationFeedAutomationFilter)
+                          }
+                        >
+                          <SelectTrigger id="automation-feed-filter">
+                            <SelectValue placeholder="All automations" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All automations</SelectItem>
+                            <SelectItem value="appointment_reminder">Appointment reminders</SelectItem>
+                            <SelectItem value="review_request">Review requests</SelectItem>
+                            <SelectItem value="lapsed_client">Lapsed outreach</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2 sm:max-w-xs">
+                        <Label htmlFor="automation-feed-channel-filter">Channel</Label>
+                        <Select
+                          value={automationFeedChannelFilter}
+                          onValueChange={(value) =>
+                            setAutomationFeedChannelFilter(value as AutomationFeedChannelFilter)
+                          }
+                        >
+                          <SelectTrigger id="automation-feed-channel-filter">
+                            <SelectValue placeholder="All channels" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All channels</SelectItem>
+                            <SelectItem value="email">Email</SelectItem>
+                            <SelectItem value="sms">SMS</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </div>
                   <div className="mt-4 space-y-2">
