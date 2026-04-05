@@ -1,4 +1,4 @@
-export const LEAD_STATUS_OPTIONS = [
+const LEAD_STATUS_OPTIONS = [
   "new",
   "contacted",
   "quoted",
@@ -7,7 +7,7 @@ export const LEAD_STATUS_OPTIONS = [
   "lost",
 ] as const;
 
-export const LEAD_SOURCE_OPTIONS = [
+const LEAD_SOURCE_OPTIONS = [
   "website",
   "phone",
   "walk_in",
@@ -54,16 +54,24 @@ const PREFIXES = {
   firstContactedAt: "First contacted at:",
 } as const;
 
-export function formatLeadStatus(status: string | null | undefined): string {
-  return String(status ?? "")
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-export function formatLeadSource(source: string | null | undefined): string {
-  return formatLeadStatus(source);
+export function buildLeadNotes(input: {
+  status: LeadStatus;
+  source: LeadSource;
+  serviceInterest?: string;
+  nextStep?: string;
+  summary?: string;
+  vehicle?: string;
+  firstContactedAt?: string | null;
+}) {
+  return [
+    `${PREFIXES.status} ${input.status}`,
+    `${PREFIXES.source} ${input.source}`,
+    `${PREFIXES.serviceInterest} ${input.serviceInterest?.trim() ?? ""}`,
+    `${PREFIXES.nextStep} ${input.nextStep?.trim() ?? ""}`,
+    `${PREFIXES.summary} ${input.summary?.trim() ?? ""}`,
+    `${PREFIXES.vehicle} ${input.vehicle?.trim() ?? ""}`,
+    `${PREFIXES.firstContactedAt} ${input.firstContactedAt?.trim() ?? ""}`,
+  ].join("\n");
 }
 
 export function parseLeadRecord(notes: string | null | undefined): LeadRecord {
@@ -94,24 +102,4 @@ export function parseLeadRecord(notes: string | null | undefined): LeadRecord {
     firstContactedAt: read(PREFIXES.firstContactedAt) || null,
     isLead: normalizedStatus !== "converted",
   };
-}
-
-export function buildLeadNotes(input: {
-  status: LeadStatus;
-  source: LeadSource;
-  serviceInterest?: string;
-  nextStep?: string;
-  summary?: string;
-  vehicle?: string;
-  firstContactedAt?: string | null;
-}) {
-  return [
-    `${PREFIXES.status} ${input.status}`,
-    `${PREFIXES.source} ${input.source}`,
-    `${PREFIXES.serviceInterest} ${input.serviceInterest?.trim() ?? ""}`,
-    `${PREFIXES.nextStep} ${input.nextStep?.trim() ?? ""}`,
-    `${PREFIXES.summary} ${input.summary?.trim() ?? ""}`,
-    `${PREFIXES.vehicle} ${input.vehicle?.trim() ?? ""}`,
-    `${PREFIXES.firstContactedAt} ${input.firstContactedAt?.trim() ?? ""}`,
-  ].join("\n");
 }

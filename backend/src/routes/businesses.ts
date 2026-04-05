@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { businessMemberships, businesses } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { businessMemberships, businesses, clients, users } from "../db/schema.js";
+import { and, eq } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
@@ -12,6 +12,12 @@ import { roleHasPermission } from "../lib/permissions.js";
 import { warnOnce } from "../lib/warnOnce.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { syncOutboundWebhookConnectionForBusiness } from "../lib/integrations.js";
+import { createInMemoryRateLimiter } from "../middleware/security.js";
+import { createActivityLog } from "../lib/activity.js";
+import { buildLeadNotes } from "../lib/leads.js";
+import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
+import { isEmailConfigured, isStripeConfigured } from "../lib/env.js";
+import { sendLeadAutoResponse, sendLeadFollowUpAlert } from "../lib/email.js";
 
 export const businessesRouter = Router({ mergeParams: true });
 type BusinessRecord = typeof businesses.$inferSelect;
@@ -43,6 +49,13 @@ const createSchema = z.object({
   defaultAdminFeeEnabled: z.boolean().optional(),
   appointmentBufferMinutes: z.number().int().min(0).max(1440).optional(),
   calendarBlockCapacityPerSlot: z.number().int().min(1).max(12).optional(),
+  leadCaptureEnabled: z.boolean().optional(),
+  leadAutoResponseEnabled: z.boolean().optional(),
+  leadAutoResponseEmailEnabled: z.boolean().optional(),
+  leadAutoResponseSmsEnabled: z.boolean().optional(),
+  missedCallTextBackEnabled: z.boolean().optional(),
+  automationUncontactedLeadsEnabled: z.boolean().optional(),
+  automationUncontactedLeadHours: z.number().int().min(1).max(168).optional(),
   automationAppointmentRemindersEnabled: z.boolean().optional(),
   automationAppointmentReminderHours: z.number().int().min(1).max(336).optional(),
   automationSendWindowStartHour: z.number().int().min(0).max(23).optional(),
@@ -72,6 +85,86 @@ const updateSchema = createSchema
   })
   .strict();
 
+const publicLeadConfigParamsSchema = z.object({
+  id: z.string().uuid("Invalid business id."),
+});
+
+const publicLeadCaptureSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required.").max(80),
+  lastName: z.string().trim().min(1, "Last name is required.").max(80),
+  email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
+  phone: z.string().trim().max(40).optional().or(z.literal("")),
+  vehicle: z.string().trim().max(160).optional().or(z.literal("")),
+  serviceInterest: z.string().trim().max(160).optional().or(z.literal("")),
+  summary: z.string().trim().max(1200).optional().or(z.literal("")),
+  source: z.string().trim().max(120).optional().or(z.literal("")),
+  campaign: z.string().trim().max(120).optional().or(z.literal("")),
+  marketingOptIn: z.boolean().optional(),
+  website: z.string().max(0).optional(), // honeypot
+});
+
+const publicLeadConfigLimiter = createInMemoryRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: "Please try again shortly.",
+});
+
+const publicLeadSubmitLimiter = createInMemoryRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  key: ({ ip, path, body }) => {
+    const email =
+      body && typeof body === "object" && typeof (body as Record<string, unknown>).email === "string"
+        ? String((body as Record<string, unknown>).email).trim().toLowerCase()
+        : "";
+    return `${path}:${ip}:${email}`;
+  },
+  message: "Too many lead submissions. Please wait a few minutes and try again.",
+});
+
+function isAllowedSubscriptionStatus(status: string | null | undefined): boolean {
+  return status === "active" || status === "trialing";
+}
+
+async function loadPublicLeadBusiness(id: string) {
+  const [business] = await db
+    .select({
+      id: businesses.id,
+      ownerId: businesses.ownerId,
+      name: businesses.name,
+      type: businesses.type,
+      timezone: businesses.timezone,
+      email: businesses.email,
+      phone: businesses.phone,
+      leadCaptureEnabled: businesses.leadCaptureEnabled,
+      leadAutoResponseEnabled: businesses.leadAutoResponseEnabled,
+      leadAutoResponseEmailEnabled: businesses.leadAutoResponseEmailEnabled,
+      leadAutoResponseSmsEnabled: businesses.leadAutoResponseSmsEnabled,
+      missedCallTextBackEnabled: businesses.missedCallTextBackEnabled,
+      automationUncontactedLeadHours: businesses.automationUncontactedLeadHours,
+      subscriptionStatus: businesses.subscriptionStatus,
+      ownerEmail: users.email,
+      ownerFirstName: users.firstName,
+    })
+    .from(businesses)
+    .leftJoin(users, eq(users.id, businesses.ownerId))
+    .where(eq(businesses.id, id))
+    .limit(1);
+
+  if (!business) return null;
+  if (process.env.BILLING_ENFORCED === "true" && isStripeConfigured()) {
+    if (!isAllowedSubscriptionStatus(business.subscriptionStatus)) {
+      return null;
+    }
+  }
+  return business;
+}
+
+function cleanOptionalText(value: string | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
 function coerceBusinessRecord(
   record: Pick<BusinessRecord, "id" | "ownerId" | "name" | "type"> &
     Partial<BusinessRecord>
@@ -94,6 +187,13 @@ function coerceBusinessRecord(
     defaultAdminFeeEnabled: record.defaultAdminFeeEnabled ?? false,
     appointmentBufferMinutes: record.appointmentBufferMinutes ?? 15,
     calendarBlockCapacityPerSlot: record.calendarBlockCapacityPerSlot ?? 1,
+    leadCaptureEnabled: record.leadCaptureEnabled ?? false,
+    leadAutoResponseEnabled: record.leadAutoResponseEnabled ?? true,
+    leadAutoResponseEmailEnabled: record.leadAutoResponseEmailEnabled ?? true,
+    leadAutoResponseSmsEnabled: record.leadAutoResponseSmsEnabled ?? false,
+    missedCallTextBackEnabled: record.missedCallTextBackEnabled ?? false,
+    automationUncontactedLeadsEnabled: record.automationUncontactedLeadsEnabled ?? false,
+    automationUncontactedLeadHours: record.automationUncontactedLeadHours ?? 2,
     automationAppointmentRemindersEnabled: record.automationAppointmentRemindersEnabled ?? true,
     automationAppointmentReminderHours: record.automationAppointmentReminderHours ?? 24,
     automationSendWindowStartHour: record.automationSendWindowStartHour ?? 8,
@@ -238,6 +338,223 @@ async function loadBusinessByOwner(ownerId: string): Promise<BusinessRecord | nu
   }
 }
 
+businessesRouter.get(
+  "/:id/public-lead-config",
+  publicLeadConfigLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
+
+    const business = await loadPublicLeadBusiness(parsed.data.id);
+    if (!business || !business.leadCaptureEnabled) {
+      throw new NotFoundError("Lead capture is not available for this business.");
+    }
+
+    res.json({
+      businessId: business.id,
+      businessName: business.name,
+      businessType: business.type,
+      timezone: business.timezone ?? "America/Los_Angeles",
+      leadCaptureEnabled: business.leadCaptureEnabled ?? false,
+    });
+  })
+);
+
+businessesRouter.post(
+  "/:id/public-leads",
+  publicLeadSubmitLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsedParams = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError(parsedParams.error.issues[0]?.message ?? "Invalid business.");
+    const parsedBody = publicLeadCaptureSchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) throw new BadRequestError(parsedBody.error.issues[0]?.message ?? "Invalid lead submission.");
+    if (parsedBody.data.website && parsedBody.data.website.trim()) {
+      res.status(202).json({ ok: true, accepted: true });
+      return;
+    }
+
+    const business = await loadPublicLeadBusiness(parsedParams.data.id);
+    if (!business || !business.leadCaptureEnabled) {
+      throw new NotFoundError("Lead capture is not available for this business.");
+    }
+
+    const email = cleanOptionalText(parsedBody.data.email);
+    const phone = cleanOptionalText(parsedBody.data.phone);
+    if (!email && !phone) {
+      throw new BadRequestError("Add at least an email or phone number so the shop can follow up.");
+    }
+
+    const normalizedSource = (() => {
+      const source = (parsedBody.data.source ?? "").trim().toLowerCase();
+      if (!source) return "website";
+      if (["website", "phone", "walk_in", "referral", "instagram", "facebook", "google", "repeat_customer", "other"].includes(source)) {
+        return source;
+      }
+      if (source.includes("instagram")) return "instagram";
+      if (source.includes("facebook")) return "facebook";
+      if (source.includes("google")) return "google";
+      if (source.includes("referral")) return "referral";
+      if (source.includes("phone")) return "phone";
+      return "website";
+    })() as Parameters<typeof buildLeadNotes>[0]["source"];
+
+    const campaign = cleanOptionalText(parsedBody.data.campaign);
+    const serviceInterest = cleanOptionalText(parsedBody.data.serviceInterest);
+    const vehicle = cleanOptionalText(parsedBody.data.vehicle);
+    const summaryParts = [
+      cleanOptionalText(parsedBody.data.summary),
+      campaign ? `Campaign: ${campaign}` : null,
+      parsedBody.data.source?.trim() ? `Source detail: ${parsedBody.data.source.trim()}` : null,
+      "Submitted from the public lead form.",
+    ].filter(Boolean);
+    const nextStepHours = Math.max(1, Math.min(Number(business.automationUncontactedLeadHours ?? 2), 168));
+    const [created] = await db
+      .insert(clients)
+      .values({
+        businessId: business.id,
+        firstName: parsedBody.data.firstName.trim(),
+        lastName: parsedBody.data.lastName.trim(),
+        email,
+        phone,
+        notes: buildLeadNotes({
+          status: "new",
+          source: normalizedSource,
+          serviceInterest: serviceInterest ?? "",
+          nextStep: `Contact within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
+          summary: summaryParts.join("\n"),
+          vehicle: vehicle ?? "",
+        }),
+        internalNotes: [
+          "Public lead capture",
+          campaign ? `Campaign: ${campaign}` : null,
+          parsedBody.data.source?.trim() ? `Source detail: ${parsedBody.data.source.trim()}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        marketingOptIn: parsedBody.data.marketingOptIn ?? true,
+      })
+      .returning();
+
+    if (!created) throw new BadRequestError("Could not save this lead.");
+
+    await createActivityLog({
+      businessId: business.id,
+      action: "lead.public_captured",
+      entityType: "client",
+      entityId: created.id,
+      metadata: {
+        source: normalizedSource,
+        sourceDetail: parsedBody.data.source?.trim() || null,
+        campaign,
+        serviceInterest,
+        capturedVia: "public_form",
+      },
+    });
+
+    const clientName = `${created.firstName} ${created.lastName}`.trim();
+    const autoResponseTasks: Array<Promise<unknown>> = [];
+
+    if (business.leadAutoResponseEnabled) {
+      if (business.leadAutoResponseEmailEnabled && email && isEmailConfigured()) {
+        autoResponseTasks.push(
+          sendLeadAutoResponse({
+            to: email,
+            businessId: business.id,
+            clientName,
+            businessName: business.name,
+            serviceInterest,
+            responseWindow: `within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
+          })
+            .then(() =>
+              createActivityLog({
+                businessId: business.id,
+                action: "lead.auto_response.sent",
+                entityType: "client",
+                entityId: created.id,
+                metadata: { channel: "email", recipient: email },
+              })
+            )
+            .catch((error) => {
+              warnOnce(`lead:auto-response-email:${created.id}`, "lead auto-response email failed", {
+                businessId: business.id,
+                clientId: created.id,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            })
+        );
+      }
+
+      if (business.leadAutoResponseSmsEnabled && phone) {
+        autoResponseTasks.push(
+          enqueueTwilioTemplateSms({
+            businessId: business.id,
+            templateSlug: "lead_auto_response",
+            to: phone,
+            vars: {
+              clientName,
+              businessName: business.name,
+              serviceInterest: serviceInterest ?? "-",
+              responseWindow: `within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
+            },
+            entityType: "client",
+            entityId: created.id,
+          }).catch((error) => {
+            warnOnce(`lead:auto-response-sms:${created.id}`, "lead auto-response sms enqueue failed", {
+              businessId: business.id,
+              clientId: created.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          })
+        );
+      }
+    }
+
+    const followUpRecipient =
+      cleanOptionalText(business.email ?? undefined) ?? cleanOptionalText(business.ownerEmail ?? undefined);
+    if (followUpRecipient && isEmailConfigured()) {
+      autoResponseTasks.push(
+        sendLeadFollowUpAlert({
+          to: followUpRecipient,
+          businessId: business.id,
+          businessName: business.name,
+          ownerName: cleanOptionalText(business.ownerFirstName ?? undefined) ?? "Team",
+          clientName,
+          clientEmail: email,
+          clientPhone: phone,
+          vehicle,
+          serviceInterest,
+          summary: cleanOptionalText(parsedBody.data.summary),
+        })
+          .then(() =>
+            createActivityLog({
+              businessId: business.id,
+              action: "lead.follow_up_alert.sent",
+              entityType: "client",
+              entityId: created.id,
+              metadata: { channel: "email", recipient: followUpRecipient },
+            })
+          )
+          .catch((error) => {
+            warnOnce(`lead:follow-up-alert:${created.id}`, "lead follow-up alert failed", {
+              businessId: business.id,
+              clientId: created.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          })
+      );
+    }
+
+    await Promise.all(autoResponseTasks);
+
+    res.status(201).json({
+      ok: true,
+      accepted: true,
+      leadId: created.id,
+      autoResponseConfigured: !!business.leadAutoResponseEnabled,
+    });
+  })
+);
+
 businessesRouter.get("/", requireAuth, wrapAsync(async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   if (req.businessId) {
@@ -307,6 +624,13 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
         parsed.data.appointmentBufferMinutes ?? typeDefaults.appointmentBufferMinutes,
       calendarBlockCapacityPerSlot:
         parsed.data.calendarBlockCapacityPerSlot ?? typeDefaults.calendarBlockCapacityPerSlot,
+      leadCaptureEnabled: parsed.data.leadCaptureEnabled ?? false,
+      leadAutoResponseEnabled: parsed.data.leadAutoResponseEnabled ?? true,
+      leadAutoResponseEmailEnabled: parsed.data.leadAutoResponseEmailEnabled ?? true,
+      leadAutoResponseSmsEnabled: parsed.data.leadAutoResponseSmsEnabled ?? false,
+      missedCallTextBackEnabled: parsed.data.missedCallTextBackEnabled ?? false,
+      automationUncontactedLeadsEnabled: parsed.data.automationUncontactedLeadsEnabled ?? false,
+      automationUncontactedLeadHours: parsed.data.automationUncontactedLeadHours ?? 2,
       automationAppointmentRemindersEnabled: parsed.data.automationAppointmentRemindersEnabled ?? true,
       automationAppointmentReminderHours: parsed.data.automationAppointmentReminderHours ?? 24,
       automationSendWindowStartHour: parsed.data.automationSendWindowStartHour ?? 8,
@@ -407,6 +731,27 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.calendarBlockCapacityPerSlot !== undefined) {
     updates.calendarBlockCapacityPerSlot = parsed.data.calendarBlockCapacityPerSlot ?? 1;
+  }
+  if (parsed.data.leadCaptureEnabled !== undefined) {
+    updates.leadCaptureEnabled = parsed.data.leadCaptureEnabled ?? false;
+  }
+  if (parsed.data.leadAutoResponseEnabled !== undefined) {
+    updates.leadAutoResponseEnabled = parsed.data.leadAutoResponseEnabled ?? true;
+  }
+  if (parsed.data.leadAutoResponseEmailEnabled !== undefined) {
+    updates.leadAutoResponseEmailEnabled = parsed.data.leadAutoResponseEmailEnabled ?? true;
+  }
+  if (parsed.data.leadAutoResponseSmsEnabled !== undefined) {
+    updates.leadAutoResponseSmsEnabled = parsed.data.leadAutoResponseSmsEnabled ?? false;
+  }
+  if (parsed.data.missedCallTextBackEnabled !== undefined) {
+    updates.missedCallTextBackEnabled = parsed.data.missedCallTextBackEnabled ?? false;
+  }
+  if (parsed.data.automationUncontactedLeadsEnabled !== undefined) {
+    updates.automationUncontactedLeadsEnabled = parsed.data.automationUncontactedLeadsEnabled ?? false;
+  }
+  if (parsed.data.automationUncontactedLeadHours !== undefined) {
+    updates.automationUncontactedLeadHours = parsed.data.automationUncontactedLeadHours ?? 2;
   }
   if (parsed.data.automationAppointmentRemindersEnabled !== undefined) {
     updates.automationAppointmentRemindersEnabled = parsed.data.automationAppointmentRemindersEnabled ?? true;

@@ -24,6 +24,8 @@ async function mockAuthenticatedSettings(
   let twilioAccountSid = "";
   let twilioMessagingServiceSid = "";
   let twilioEnabledTemplateSlugs = [
+    "lead_auto_response",
+    "missed_call_text_back",
     "appointment_confirmation",
     "appointment_reminder",
     "review_request",
@@ -112,6 +114,23 @@ async function mockAuthenticatedSettings(
         name: "QA Detail Shop",
         type: "auto_detailing",
         onboardingComplete: true,
+        leadCaptureEnabled: true,
+        leadAutoResponseEnabled: true,
+        leadAutoResponseEmailEnabled: true,
+        leadAutoResponseSmsEnabled: false,
+        missedCallTextBackEnabled: true,
+        automationUncontactedLeadsEnabled: true,
+        automationUncontactedLeadHours: 2,
+        automationAppointmentRemindersEnabled: true,
+        automationAppointmentReminderHours: 24,
+        automationSendWindowStartHour: 8,
+        automationSendWindowEndHour: 18,
+        automationReviewRequestsEnabled: true,
+        automationReviewRequestDelayHours: 24,
+        reviewRequestUrl: "https://example.com/review",
+        automationLapsedClientsEnabled: true,
+        automationLapsedClientMonths: 6,
+        bookingRequestUrl: "https://example.com/book",
         integrationWebhookEnabled: webhookEnabled,
         integrationWebhookUrl: webhookUrl || null,
         integrationWebhookSecret: webhookSecret || null,
@@ -163,6 +182,14 @@ async function mockAuthenticatedSettings(
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
+        uncontactedLeads: {
+          sentLast30Days: 2,
+          lastSentAt: "2026-04-04T19:45:00.000Z",
+          skippedLast30Days: 1,
+          lastSkippedAt: "2026-04-04T16:00:00.000Z",
+          failedLast30Days: 0,
+          lastFailedAt: null,
+        },
         appointmentReminders: {
           sentLast30Days: 0,
           lastSentAt: null,
@@ -197,6 +224,17 @@ async function mockAuthenticatedSettings(
       contentType: "application/json",
       body: JSON.stringify({
         records: [
+          {
+            id: "auto-feed-0",
+            kind: "sent",
+            automationType: "uncontacted_lead",
+            channel: "email",
+            recipient: "owner@example.com",
+            entityType: "client",
+            entityId: "client-1",
+            createdAt: "2026-04-04T19:30:00.000Z",
+            message: "Uncontacted lead follow-up alert sent.",
+          },
           {
             id: "auto-feed-1",
             kind: "sent",
@@ -770,6 +808,8 @@ test("shows recent automation activity across email and sms channels", async ({ 
   await expect(page.getByText(/automation send window/i)).toBeVisible();
   await expect(page.getByText(/^Start hour$/i)).toBeVisible();
   await expect(page.getByText(/^End hour$/i)).toBeVisible();
+  await expect(page.getByRole("paragraph").filter({ hasText: /missed-call text back/i })).toBeVisible();
+  await expect(page.getByText(/\/api\/integrations\/twilio\/voice\/<connectionId>/i)).toBeVisible();
   await expect(page.getByText(/appointment reminder sent\./i)).toBeVisible();
   await expect(page.getByText(/client@example\.com/i)).toBeVisible();
   await expect(page.getByText(/twilio callback reported delivery failure\./i)).toBeVisible();

@@ -32,6 +32,7 @@ import { activityLogsRouter } from "./routes/activity-logs.js";
 import { notificationLogsRouter } from "./routes/notification-logs.js";
 import {
   handleGoogleCalendarCallbackRoute,
+  handleTwilioVoiceWebhookRoute,
   handleTwilioStatusCallbackRoute,
   integrationsRouter,
 } from "./routes/integrations.js";
@@ -58,6 +59,11 @@ app.post(
   "/api/integrations/twilio/status/:connectionId",
   express.urlencoded({ extended: false }),
   (req, res, next) => handleTwilioStatusCallbackRoute(req, res).catch(next)
+);
+app.post(
+  "/api/integrations/twilio/voice/:connectionId",
+  express.urlencoded({ extended: false }),
+  (req, res, next) => handleTwilioVoiceWebhookRoute(req, res).catch(next)
 );
 app.get("/api/integrations/google-calendar/callback", (req, res, next) =>
   handleGoogleCalendarCallbackRoute(req, res).catch(next)

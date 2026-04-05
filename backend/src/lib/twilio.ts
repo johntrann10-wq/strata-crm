@@ -1,7 +1,7 @@
 import crypto from "crypto";
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { integrationConnections, notificationLogs } from "../db/schema.js";
+import { businesses, clients, integrationConnections, notificationLogs } from "../db/schema.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "./errors.js";
 import type { TemplateVars } from "./email.js";
 import { resolveTemplateMessage } from "./email.js";
@@ -21,12 +21,16 @@ import {
 } from "./integrationJobs.js";
 import { createIntegrationAuditLog } from "./integrationAudit.js";
 import { logger } from "./logger.js";
+import { createActivityLog } from "./activity.js";
+import { buildLeadNotes, parseLeadRecord } from "./leads.js";
 
 const TWILIO_PROVIDER = "twilio_sms";
 const TWILIO_API_BASE = "https://api.twilio.com/2010-04-01";
 const TWILIO_MESSAGING_BASE = "https://messaging.twilio.com/v1";
 
 export const TWILIO_TEMPLATE_SLUGS = [
+  "lead_auto_response",
+  "missed_call_text_back",
   "appointment_confirmation",
   "appointment_reminder",
   "payment_receipt",
@@ -61,6 +65,8 @@ type TwilioMessageJobPayload = {
 };
 
 const DEFAULT_TWILIO_TEMPLATE_SELECTION: TwilioTemplateSlug[] = [
+  "lead_auto_response",
+  "missed_call_text_back",
   "appointment_confirmation",
   "appointment_reminder",
   "review_request",
@@ -68,6 +74,8 @@ const DEFAULT_TWILIO_TEMPLATE_SELECTION: TwilioTemplateSlug[] = [
 ];
 
 const DEFAULT_TWILIO_COOLDOWNS: Record<TwilioTemplateSlug, number> = {
+  lead_auto_response: 30,
+  missed_call_text_back: 30,
   appointment_confirmation: 15,
   appointment_reminder: 180,
   payment_receipt: 15,
@@ -195,7 +203,7 @@ async function fetchTwilioMessagingServiceWithCredentials(config: TwilioConnecti
     : ({ sid: config.messagingServiceSid } as { sid: string; friendly_name?: string; account_sid?: string });
 }
 
-function normalizePhoneToE164(value: string): string | null {
+export function normalizePhoneToE164(value: string): string | null {
   const raw = value.trim();
   if (!raw) return null;
   const digits = raw.replace(/[^\d+]/g, "");
@@ -204,6 +212,162 @@ function normalizePhoneToE164(value: string): string | null {
   if (numeric.length === 10) return `+1${numeric}`;
   if (numeric.length === 11 && numeric.startsWith("1")) return `+${numeric}`;
   return null;
+}
+
+export function shouldQueueMissedCallTextBack(params: Record<string, string>) {
+  const direction = String(params.Direction ?? params.CallDirection ?? "").toLowerCase();
+  if (!direction.includes("inbound")) return false;
+
+  const status = String(params.DialCallStatus ?? params.CallStatus ?? "").toLowerCase();
+  if (["busy", "no-answer", "failed", "canceled"].includes(status)) return true;
+
+  if (status === "completed") {
+    const duration = Number(params.CallDuration ?? params.Duration ?? "0");
+    return !Number.isFinite(duration) || duration <= 0;
+  }
+
+  return false;
+}
+
+function getFrontendBase() {
+  const value = process.env.FRONTEND_URL?.trim();
+  return value ? value.replace(/\/+$/, "") : null;
+}
+
+function buildMissedCallRequestUrl(business: {
+  id: string;
+  leadCaptureEnabled: boolean | null;
+  bookingRequestUrl: string | null;
+}) {
+  if (business.leadCaptureEnabled) {
+    const base = getFrontendBase();
+    if (base) return `${base}/lead/${business.id}?source=phone&campaign=missed_call`;
+  }
+  const bookingRequestUrl = business.bookingRequestUrl?.trim();
+  return bookingRequestUrl || null;
+}
+
+function buildMissedCallSummary(callSid: string, calledAt: Date) {
+  return `Missed inbound call on ${calledAt.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })} (call ${callSid}).`;
+}
+
+function appendInternalNote(existing: string | null | undefined, nextLine: string) {
+  const current = String(existing ?? "").trim();
+  return current ? `${current}\n${nextLine}` : nextLine;
+}
+
+async function findClientByNormalizedPhone(businessId: string, phoneE164: string) {
+  const digits = phoneE164.replace(/\D/g, "");
+  const [record] = await db
+    .select()
+    .from(clients)
+    .where(
+      and(
+        eq(clients.businessId, businessId),
+        isNull(clients.deletedAt),
+        sql`regexp_replace(coalesce(${clients.phone}, ''), '[^0-9]', '', 'g') = ${digits}`
+      )
+    )
+    .orderBy(desc(clients.updatedAt))
+    .limit(1);
+  return record ?? null;
+}
+
+function getCallerNameParts(callerName: string | undefined, phoneE164: string) {
+  const trimmed = callerName?.trim() ?? "";
+  if (!trimmed) {
+    const last4 = phoneE164.replace(/\D/g, "").slice(-4) || "call";
+    return { firstName: "Inbound", lastName: `Caller ${last4}` };
+  }
+  const [firstName, ...rest] = trimmed.split(/\s+/);
+  return {
+    firstName: firstName || "Inbound",
+    lastName: rest.join(" ") || "Caller",
+  };
+}
+
+async function upsertMissedCallLead(input: {
+  businessId: string;
+  phoneE164: string;
+  callerName: string | undefined;
+  nextStepHours: number;
+  callSid: string;
+  requestUrl: string | null;
+}) {
+  const existingClient = await findClientByNormalizedPhone(input.businessId, input.phoneE164);
+  const summary = buildMissedCallSummary(input.callSid, new Date());
+  const nextStep = `Return missed call within ${input.nextStepHours} hour${input.nextStepHours === 1 ? "" : "s"}`;
+
+  if (!existingClient) {
+    const caller = getCallerNameParts(input.callerName, input.phoneE164);
+    const [created] = await db
+      .insert(clients)
+      .values({
+        businessId: input.businessId,
+        firstName: caller.firstName,
+        lastName: caller.lastName,
+        phone: input.phoneE164,
+        notes: buildLeadNotes({
+          status: "new",
+          source: "phone",
+          serviceInterest: "",
+          nextStep,
+          summary,
+          vehicle: "",
+        }),
+        internalNotes: appendInternalNote(null, "Missed call text-back triggered."),
+        marketingOptIn: false,
+      })
+      .returning();
+    if (!created) throw new BadRequestError("Could not create a missed-call lead.");
+    return { client: created, created: true, leadCaptured: true };
+  }
+
+  const existingLead = parseLeadRecord(existingClient.notes);
+  const hasStructuredLead = !!(existingClient.notes?.includes("Lead status:") && existingClient.notes?.includes("Lead source:"));
+  let nextNotes = existingClient.notes;
+  let leadCaptured = false;
+
+  if (!hasStructuredLead && !String(existingClient.notes ?? "").trim()) {
+    nextNotes = buildLeadNotes({
+      status: "new",
+      source: "phone",
+      serviceInterest: "",
+      nextStep,
+      summary,
+      vehicle: "",
+    });
+    leadCaptured = true;
+  } else if (hasStructuredLead && existingLead.status !== "converted") {
+    nextNotes = buildLeadNotes({
+      status: existingLead.status === "lost" ? "new" : existingLead.status,
+      source: existingLead.source || "phone",
+      serviceInterest: existingLead.serviceInterest,
+      nextStep,
+      summary: [existingLead.summary, summary].filter(Boolean).join("\n"),
+      vehicle: existingLead.vehicle,
+      firstContactedAt: existingLead.firstContactedAt,
+    });
+    leadCaptured = true;
+  }
+
+  const [updated] = await db
+    .update(clients)
+    .set({
+      phone: existingClient.phone ?? input.phoneE164,
+      notes: nextNotes,
+      internalNotes: appendInternalNote(existingClient.internalNotes, "Missed call text-back triggered."),
+      updatedAt: new Date(),
+    })
+    .where(eq(clients.id, existingClient.id))
+    .returning();
+  if (!updated) throw new BadRequestError("Could not update the caller record.");
+  return { client: updated, created: false, leadCaptured };
 }
 
 function getTwilioMessageStatusTone(status: string | null | undefined) {
@@ -665,4 +829,136 @@ export async function handleTwilioStatusCallback(input: {
   }
 
   return { updated: true };
+}
+
+export async function handleTwilioVoiceWebhook(input: {
+  connectionId: string;
+  signature: string | undefined;
+  params: Record<string, string>;
+}) {
+  const [connection] = await db
+    .select()
+    .from(integrationConnections)
+    .where(eq(integrationConnections.id, input.connectionId))
+    .limit(1);
+  if (!connection) throw new NotFoundError("Twilio connection not found.");
+
+  const authToken = getTwilioAuthToken(connection);
+  const callbackUrl = `${getApiBase()}/api/integrations/twilio/voice/${encodeURIComponent(input.connectionId)}`;
+  if (
+    !validateTwilioWebhookSignature({
+      url: callbackUrl,
+      params: input.params,
+      signature: input.signature,
+      authToken,
+    })
+  ) {
+    throw new ForbiddenError("Twilio callback signature is invalid.");
+  }
+
+  if (!shouldQueueMissedCallTextBack(input.params)) {
+    return { skipped: true as const, reason: "not_missed_call" };
+  }
+
+  const [business] = await db
+    .select({
+      id: businesses.id,
+      name: businesses.name,
+      leadCaptureEnabled: businesses.leadCaptureEnabled,
+      missedCallTextBackEnabled: businesses.missedCallTextBackEnabled,
+      automationUncontactedLeadHours: businesses.automationUncontactedLeadHours,
+      bookingRequestUrl: businesses.bookingRequestUrl,
+    })
+    .from(businesses)
+    .where(eq(businesses.id, connection.businessId))
+    .limit(1);
+
+  if (!business) throw new NotFoundError("Business not found.");
+  if (!business.missedCallTextBackEnabled) {
+    await createActivityLog({
+      businessId: business.id,
+      action: "lead.missed_call.skipped",
+      entityType: "integration_connection",
+      entityId: connection.id,
+      metadata: { reason: "disabled", callSid: input.params.CallSid ?? null },
+    });
+    return { skipped: true as const, reason: "disabled" };
+  }
+
+  const fromPhone = normalizePhoneToE164(String(input.params.From ?? ""));
+  if (!fromPhone) {
+    await createActivityLog({
+      businessId: business.id,
+      action: "lead.missed_call.skipped",
+      entityType: "integration_connection",
+      entityId: connection.id,
+      metadata: { reason: "invalid_phone", callSid: input.params.CallSid ?? null },
+    });
+    return { skipped: true as const, reason: "invalid_phone" };
+  }
+
+  const requestUrl = buildMissedCallRequestUrl(business);
+  const nextStepHours = Math.max(1, Math.min(Number(business.automationUncontactedLeadHours ?? 2), 168));
+  const leadResult = await upsertMissedCallLead({
+    businessId: business.id,
+    phoneE164: fromPhone,
+    callerName: input.params.CallerName,
+    nextStepHours,
+    callSid: input.params.CallSid || "unknown-call",
+    requestUrl,
+  });
+
+  await createActivityLog({
+    businessId: business.id,
+    action: "lead.missed_call.captured",
+    entityType: "client",
+    entityId: leadResult.client.id,
+    metadata: {
+      callSid: input.params.CallSid ?? null,
+      phone: fromPhone,
+      created: leadResult.created,
+      leadCaptured: leadResult.leadCaptured,
+    },
+  });
+
+  const queued = await enqueueTwilioTemplateSms({
+    businessId: business.id,
+    templateSlug: "missed_call_text_back",
+    to: fromPhone,
+    vars: {
+      businessName: business.name,
+      responseWindow: `within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
+      requestUrl: requestUrl ?? `${getFrontendBase() ?? getApiBase()}`,
+    },
+    entityType: "phone_call",
+    entityId: input.params.CallSid || leadResult.client.id,
+  }).catch((error) => {
+    logger.warn("Missed call text-back enqueue failed", {
+      businessId: business.id,
+      connectionId: connection.id,
+      clientId: leadResult.client.id,
+      error,
+    });
+    return {
+      queued: false as const,
+      reason: "enqueue_failed" as const,
+      jobId: null,
+    };
+  });
+
+  await createActivityLog({
+    businessId: business.id,
+    action: queued.queued ? "lead.missed_call.text_back_queued" : "lead.missed_call.text_back_failed",
+    entityType: "client",
+    entityId: leadResult.client.id,
+    metadata: {
+      callSid: input.params.CallSid ?? null,
+      integrationJobId: queued.jobId ?? null,
+      queueReason: queued.reason,
+      to: fromPhone,
+      requestUrl,
+    },
+  });
+
+  return { skipped: false as const, clientId: leadResult.client.id, integrationJobId: queued.jobId ?? null };
 }

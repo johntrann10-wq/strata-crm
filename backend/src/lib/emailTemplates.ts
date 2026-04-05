@@ -236,6 +236,107 @@ It's been a while since your last visit ({{lastVisit}}). We're here whenever you
 Book now: {{bookUrl}}`,
 };
 
+/** Placeholders: clientName, businessName, serviceInterest, responseWindow */
+export const leadAutoResponse: BuiltinEmailTemplate = {
+  subject: "We received your request - {{businessName}}",
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Lead received",
+    title: "Thanks, we have your request",
+    introHtml:
+      `<p style="margin:0;">Hi {{clientName}},</p>` +
+      `<p style="margin:10px 0 0;">Thanks for reaching out to {{businessName}}.</p>` +
+      `<p style="margin:10px 0 0;">Our team has your request and plans to follow up <strong>{{responseWindow}}</strong>.</p>`,
+    bodyHtml:
+      renderInfoCard("What you asked about", "{{serviceInterest}}") +
+      renderInfoCard(
+        "What happens next",
+        "If we need anything before quoting or booking, we will reach out using the contact details you provided."
+      ),
+    footerNote: "You do not need to submit the form again unless something changed.",
+  }),
+  bodyText: `{{businessName}}
+
+We received your request
+
+Hi {{clientName}},
+
+Thanks for reaching out to {{businessName}}.
+
+Our team has your request and plans to follow up {{responseWindow}}.
+
+What you asked about: {{serviceInterest}}
+
+You do not need to submit the form again unless something changed.`,
+};
+
+/** Placeholders: businessName, responseWindow, requestUrl */
+export const missedCallTextBack: BuiltinEmailTemplate = {
+  subject: "We missed your call - {{businessName}}",
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Missed call",
+    title: "Sorry we missed you",
+    introHtml:
+      `<p style="margin:0;">Thanks for calling {{businessName}}.</p>` +
+      `<p style="margin:10px 0 0;">Our team plans to follow up <strong>{{responseWindow}}</strong>.</p>`,
+    bodyHtml:
+      renderInfoCard(
+        "Need to send details now?",
+        "Use the request link below to share your vehicle, service interest, or anything we should know before we reach back."
+      ),
+    ctaLabel: "Send request",
+    ctaUrl: "{{requestUrl}}",
+    ctaHint: `Request link: {{requestUrl}}`,
+    showCtaHint: false,
+    footerNote: "If you already left a voicemail, you do not need to call again.",
+  }),
+  bodyText: `Sorry we missed your call to {{businessName}}.
+
+Our team plans to follow up {{responseWindow}}.
+
+If you want to send details now, use this request link:
+{{requestUrl}}
+
+If you already left a voicemail, you do not need to call again.`,
+};
+
+/** Placeholders: ownerName, businessName, clientName, clientEmail, clientPhone, vehicle, serviceInterest, summary */
+export const leadFollowUpAlert: BuiltinEmailTemplate = {
+  subject: "New lead needs follow-up - {{businessName}}",
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Lead follow-up",
+    title: "New lead waiting on contact",
+    introHtml:
+      `<p style="margin:0;">Hi {{ownerName}},</p>` +
+      `<p style="margin:10px 0 0;">A new lead just came in and is ready for outreach.</p>`,
+    bodyHtml: renderDetailGrid([
+      { label: "Lead", value: "{{clientName}}" },
+      { label: "Email", value: "{{clientEmail}}" },
+      { label: "Phone", value: "{{clientPhone}}" },
+      { label: "Vehicle", value: "{{vehicle}}" },
+      { label: "Service interest", value: "{{serviceInterest}}" },
+      { label: "Notes", value: "{{summary}}" },
+    ]),
+    footerNote: "Open Strata and move this lead into contact, quote, or booking while the intent is fresh.",
+  }),
+  bodyText: `{{businessName}}
+
+New lead waiting on contact
+
+Hi {{ownerName}},
+
+A new lead just came in and is ready for outreach.
+
+Lead: {{clientName}}
+Email: {{clientEmail}}
+Phone: {{clientPhone}}
+Vehicle: {{vehicle}}
+Service interest: {{serviceInterest}}
+Notes: {{summary}}`,
+};
+
 /** Placeholders: businessName, weekStart, weekEnd, completedCount, revenueTotal, openInvoicesCount, overdueCount, staffUtilization */
 export const weeklySummary: BuiltinEmailTemplate = {
   subject: "Your week at a glance - {{businessName}}",
@@ -368,6 +469,9 @@ If this access looks wrong, contact your shop owner or admin before using the ac
   },
   appointment_confirmation: appointmentConfirmation,
   appointment_reminder: appointmentReminder,
+  lead_auto_response: leadAutoResponse,
+  missed_call_text_back: missedCallTextBack,
+  lead_follow_up_alert: leadFollowUpAlert,
   payment_receipt: paymentReceipt,
   review_request: reviewRequest,
   lapsed_client_reengagement: lapsedClientReengagement,

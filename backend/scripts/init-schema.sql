@@ -123,6 +123,13 @@ CREATE TABLE IF NOT EXISTS businesses (
   default_admin_fee_enabled boolean DEFAULT false,
   appointment_buffer_minutes integer DEFAULT 15,
   calendar_block_capacity_per_slot integer DEFAULT 1,
+  lead_capture_enabled boolean DEFAULT false,
+  lead_auto_response_enabled boolean DEFAULT true,
+  lead_auto_response_email_enabled boolean DEFAULT true,
+  lead_auto_response_sms_enabled boolean DEFAULT false,
+  missed_call_text_back_enabled boolean DEFAULT false,
+  automation_uncontacted_leads_enabled boolean DEFAULT false,
+  automation_uncontacted_lead_hours integer DEFAULT 2,
   automation_appointment_reminders_enabled boolean DEFAULT true,
   automation_appointment_reminder_hours integer DEFAULT 24,
   automation_send_window_start_hour integer DEFAULT 8,
@@ -160,6 +167,13 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_details_submitted
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS default_admin_fee decimal(12,2) DEFAULT 0;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS default_admin_fee_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS calendar_block_capacity_per_slot integer DEFAULT 1;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS lead_capture_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS lead_auto_response_enabled boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS lead_auto_response_email_enabled boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS lead_auto_response_sms_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS missed_call_text_back_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_uncontacted_leads_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_uncontacted_lead_hours integer DEFAULT 2;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_appointment_reminders_enabled boolean DEFAULT true;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_appointment_reminder_hours integer DEFAULT 24;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_send_window_start_hour integer DEFAULT 8;

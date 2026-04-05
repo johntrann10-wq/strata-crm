@@ -24,6 +24,7 @@ import { api, ApiError } from "../api";
 import { useAction } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { ActivityFeedCard, type ActivityRecord } from "../components/shared/ActivityFeedCard";
@@ -31,7 +32,7 @@ import { StatusBadge } from "../components/shared/StatusBadge";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { toast } from "sonner";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
-import { parseLeadRecord } from "../lib/leads";
+import { formatLeadSource, parseLeadRecord } from "../lib/leads";
 import { getPreferredAuthorizedAppPath } from "@/lib/permissionRouting";
 import {
   buildActivationChecklist,
@@ -113,12 +114,65 @@ type BusinessSetupRecord = {
   defaultTaxRate?: number | string | null;
 };
 
+type GrowthMetrics = {
+  periodDays: number | null;
+  totalLeads: number;
+  convertedLeadCount: number;
+  bookedLeadCount: number;
+  closeRate: number;
+  bookingRate: number;
+  averageFirstResponseHours: number | null;
+  totalPayingCustomers: number;
+  repeatCustomerCount: number;
+  repeatCustomerRate: number;
+  attributedRevenue: number;
+  unattributedRevenue: number;
+  returningRevenue: number;
+  newCustomerRevenue: number;
+  recentWeeks: Array<{
+    label: string;
+    leadCount: number;
+    convertedCount: number;
+    bookedCount: number;
+    closeRate: number;
+    bookingRate: number;
+    averageFirstResponseHours: number | null;
+  }>;
+  revenueBySource: Array<{
+    source: string;
+    leadCount: number;
+    convertedCount: number;
+    bookedCount: number;
+    closeRate: number;
+    bookingRate: number;
+    averageFirstResponseHours: number | null;
+    revenue: number;
+    shareOfRevenue: number;
+  }>;
+};
+
+const GROWTH_WINDOWS = [
+  { value: 30, label: "30D" },
+  { value: 90, label: "90D" },
+  { value: null, label: "All time" },
+] as const;
+
 const ACTIVE_JOB = new Set(["scheduled", "confirmed", "in_progress"]);
 
 function formatCurrency(amount: number | string | null | undefined): string {
   const n = Number(amount ?? 0);
   if (!Number.isFinite(n)) return "-";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+}
+
+function formatHoursSummary(hours: number | null | undefined): string {
+  if (hours == null || !Number.isFinite(hours)) return "--";
+  return hours < 1 ? "<1h" : `${Math.round(hours)}h`;
+}
+
+function formatGrowthWindowLabel(days: number | null | undefined): string {
+  if (days == null || !Number.isFinite(days)) return "All time";
+  return `Last ${Math.round(days)} days`;
 }
 
 function safeParseISO(iso: string | undefined | null): Date | null {
@@ -219,11 +273,15 @@ function SignedInDashboard({
   const { businessName, businessId, user, currentLocationId } = outletContext;
   const [filterNow, setFilterNow] = useState(() => new Date());
   const [refreshing, setRefreshing] = useState(false);
+  const [growthWindowDays, setGrowthWindowDays] = useState<number | null>(30);
   const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
   const [followingUpQuoteId, setFollowingUpQuoteId] = useState<string | null>(null);
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null);
   const [updatingJobId, setUpdatingJobId] = useState<string | null>(null);
   const [updatingAppointmentId, setUpdatingAppointmentId] = useState<string | null>(null);
+  const [growthMetrics, setGrowthMetrics] = useState<GrowthMetrics | null>(null);
+  const [growthMetricsLoading, setGrowthMetricsLoading] = useState(false);
+  const [growthMetricsError, setGrowthMetricsError] = useState<Error | null>(null);
 
   const { apptStartGte, apptStartLte } = useMemo(() => {
     const from = startOfDay(filterNow);
@@ -640,6 +698,28 @@ function SignedInDashboard({
     ]
   );
 
+  const loadGrowthMetrics = useCallback(async () => {
+    if (!businessId) {
+      setGrowthMetrics(null);
+      setGrowthMetricsError(null);
+      return;
+    }
+    setGrowthMetricsLoading(true);
+    try {
+      const result = await api.getGrowthMetrics(growthWindowDays == null ? {} : { periodDays: growthWindowDays });
+      setGrowthMetrics(result);
+      setGrowthMetricsError(null);
+    } catch (error) {
+      setGrowthMetricsError(error instanceof Error ? error : new Error("Could not load growth metrics."));
+    } finally {
+      setGrowthMetricsLoading(false);
+    }
+  }, [businessId, growthWindowDays]);
+
+  useEffect(() => {
+    void loadGrowthMetrics();
+  }, [loadGrowthMetrics]);
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     setFilterNow(new Date());
@@ -651,11 +731,12 @@ function SignedInDashboard({
         refetchJobs(),
         refetchStaff(),
         refetchActivity(),
+        loadGrowthMetrics(),
       ]);
     } finally {
       setRefreshing(false);
     }
-  }, [refetchActivity, refetchAppts, refetchInvoices, refetchJobs, refetchQuotes, refetchStaff]);
+  }, [loadGrowthMetrics, refetchActivity, refetchAppts, refetchInvoices, refetchJobs, refetchQuotes, refetchStaff]);
 
   const handleSendQuote = useCallback(
     async (event: React.SyntheticEvent, quoteId: string) => {
@@ -1005,6 +1086,206 @@ function SignedInDashboard({
             icon={<ShieldAlert className="h-5 w-5" />}
           />
         </div>
+
+        <DashboardSection
+          title="Growth Proof"
+          seeAllHref="/leads"
+          seeAllLabel="Open leads"
+          error={growthMetricsError}
+          isLoading={growthMetricsLoading}
+          isEmpty={!growthMetricsLoading && !growthMetricsError && !growthMetrics}
+          emptyMessage="Growth metrics will show up once leads and paid invoices exist."
+          emptyCta={{ href: "/leads", label: "Capture leads" }}
+          skeletonRows={4}
+        >
+          <div className="space-y-4">
+            <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+              <MetricCard
+                href="/leads"
+                label="Lead Close Rate"
+                value={`${growthMetrics?.closeRate ?? 0}%`}
+                detail={`${growthMetrics?.convertedLeadCount ?? 0} converted from ${growthMetrics?.totalLeads ?? 0} captured leads`}
+                icon={<CheckCircle2 className="h-5 w-5" />}
+              />
+              <MetricCard
+                href="/leads"
+                label="Avg First Response"
+                value={formatHoursSummary(growthMetrics?.averageFirstResponseHours)}
+                detail="Tracks how quickly the team answers fresh demand"
+                icon={<Clock3 className="h-5 w-5" />}
+              />
+              <MetricCard
+                href="/leads"
+                label="Lead Booking Rate"
+                value={`${growthMetrics?.bookingRate ?? 0}%`}
+                detail={`${growthMetrics?.bookedLeadCount ?? 0} leads reached booking or conversion`}
+                icon={<CalendarPlus className="h-5 w-5" />}
+              />
+              <MetricCard
+                href="/clients"
+                label="Repeat Customer Rate"
+                value={`${growthMetrics?.repeatCustomerRate ?? 0}%`}
+                detail={`${growthMetrics?.repeatCustomerCount ?? 0} of ${growthMetrics?.totalPayingCustomers ?? 0} paying customers have returned`}
+                icon={<Users className="h-5 w-5" />}
+              />
+              <MetricCard
+                href="/finances"
+                label="Attributed Revenue"
+                value={formatCurrency(growthMetrics?.attributedRevenue ?? 0)}
+                detail={
+                  (growthMetrics?.unattributedRevenue ?? 0) > 0
+                    ? `${formatCurrency(growthMetrics?.unattributedRevenue ?? 0)} still has no lead source`
+                    : "Paid revenue tied back to tracked lead sources"
+                }
+                icon={<DollarSign className="h-5 w-5" />}
+              />
+              <MetricCard
+                href="/finances"
+                label="Returning Revenue"
+                value={formatCurrency(growthMetrics?.returningRevenue ?? 0)}
+                detail={`New-customer revenue: ${formatCurrency(growthMetrics?.newCustomerRevenue ?? 0)}`}
+                icon={<DollarSign className="h-5 w-5" />}
+              />
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)]">
+              <div className="rounded-[1.4rem] border border-border/70 bg-card p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950">Revenue mix</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Split paid revenue between first-time and repeat customers for {formatGrowthWindowLabel(growthMetrics?.periodDays)}.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Badge variant="secondary">
+                      {growthMetrics?.totalPayingCustomers ?? 0} paying customer
+                      {(growthMetrics?.totalPayingCustomers ?? 0) === 1 ? "" : "s"}
+                    </Badge>
+                    <Badge variant="outline">{formatGrowthWindowLabel(growthMetrics?.periodDays)}</Badge>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Returning</p>
+                    <p className="mt-2 text-xl font-semibold text-foreground">
+                      {formatCurrency(growthMetrics?.returningRevenue ?? 0)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {growthMetrics?.repeatCustomerCount ?? 0} customer
+                      {(growthMetrics?.repeatCustomerCount ?? 0) === 1 ? "" : "s"} generated repeat revenue.
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">First-time</p>
+                    <p className="mt-2 text-xl font-semibold text-foreground">
+                      {formatCurrency(growthMetrics?.newCustomerRevenue ?? 0)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Revenue tied to customers with a single paid visit so far.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-3">
+                {(growthMetrics?.revenueBySource ?? []).slice(0, 3).map((sourceRow) => (
+                  <div key={sourceRow.source} className="rounded-[1.4rem] border border-border/70 bg-card p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-950">{formatLeadSource(sourceRow.source)}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {sourceRow.leadCount} lead{sourceRow.leadCount === 1 ? "" : "s"} tracked
+                        </p>
+                      </div>
+                      <Badge variant="secondary">{sourceRow.shareOfRevenue}% share</Badge>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                      <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Revenue</p>
+                        <p className="mt-2 font-semibold text-foreground">{formatCurrency(sourceRow.revenue)}</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">{sourceRow.shareOfRevenue}% of tracked</p>
+                      </div>
+                      <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Booked</p>
+                        <p className="mt-2 font-semibold text-foreground">{sourceRow.bookingRate}%</p>
+                      </div>
+                      <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Response</p>
+                        <p className="mt-2 font-semibold text-foreground">
+                          {formatHoursSummary(sourceRow.averageFirstResponseHours)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[1.4rem] border border-border/70 bg-card p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">4-week momentum</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Watch whether lead volume, booking rate, and response time are moving in the right direction.
+                  </p>
+                </div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Badge variant="outline">Last 4 weeks</Badge>
+                  <div className="inline-flex rounded-full border border-border/70 bg-background/80 p-1">
+                    {GROWTH_WINDOWS.map((window) => {
+                      const isActive = growthWindowDays === window.value;
+                      return (
+                        <button
+                          key={window.label}
+                          type="button"
+                          onClick={() => setGrowthWindowDays(window.value)}
+                          className={cn(
+                            "rounded-full px-3 py-1 text-xs font-medium transition",
+                            isActive
+                              ? "bg-slate-950 text-white shadow-sm"
+                              : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                          )}
+                        >
+                          {window.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {(growthMetrics?.recentWeeks ?? []).map((week) => (
+                  <div key={week.label} className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{week.label}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {week.leadCount} lead{week.leadCount === 1 ? "" : "s"} captured
+                        </p>
+                      </div>
+                      <Badge variant="secondary">{week.closeRate}% close</Badge>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                      <div className="rounded-lg border border-border/70 bg-card px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Booked</p>
+                        <p className="mt-2 font-semibold text-foreground">{week.bookingRate}%</p>
+                      </div>
+                      <div className="rounded-lg border border-border/70 bg-card px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Won</p>
+                        <p className="mt-2 font-semibold text-foreground">{week.convertedCount}</p>
+                      </div>
+                      <div className="rounded-lg border border-border/70 bg-card px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Response</p>
+                        <p className="mt-2 font-semibold text-foreground">{formatHoursSummary(week.averageFirstResponseHours)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </DashboardSection>
 
         <div className="grid min-w-0 max-w-full gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
           <DashboardSection

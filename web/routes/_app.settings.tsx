@@ -171,6 +171,13 @@ type SystemStatus = {
 };
 
 type AutomationSettingsForm = {
+  leadCaptureEnabled: boolean;
+  leadAutoResponseEnabled: boolean;
+  leadAutoResponseEmailEnabled: boolean;
+  leadAutoResponseSmsEnabled: boolean;
+  missedCallTextBackEnabled: boolean;
+  uncontactedLeadsEnabled: boolean;
+  uncontactedLeadHours: number;
   appointmentRemindersEnabled: boolean;
   appointmentReminderHours: number;
   sendWindowStartHour: number;
@@ -195,7 +202,13 @@ type TwilioSmsSettingsForm = {
   authToken: string;
   messagingServiceSid: string;
   enabledTemplateSlugs: Array<
-    "appointment_confirmation" | "appointment_reminder" | "payment_receipt" | "review_request" | "lapsed_client_reengagement"
+    | "lead_auto_response"
+    | "missed_call_text_back"
+    | "appointment_confirmation"
+    | "appointment_reminder"
+    | "payment_receipt"
+    | "review_request"
+    | "lapsed_client_reengagement"
   >;
 };
 
@@ -211,7 +224,7 @@ type AutomationActivitySummary = {
 type AutomationFeedRecord = {
   id: string;
   kind: "sent" | "failed" | "skipped";
-  automationType: "appointment_reminder" | "review_request" | "lapsed_client";
+  automationType: "uncontacted_lead" | "appointment_reminder" | "review_request" | "lapsed_client";
   channel: "email" | "sms";
   recipient: string | null;
   entityType: string | null;
@@ -434,6 +447,13 @@ const TEAM_PERMISSION_GROUPS = [
 ] as const;
 
 const DEFAULT_AUTOMATION_SETTINGS: AutomationSettingsForm = {
+  leadCaptureEnabled: false,
+  leadAutoResponseEnabled: true,
+  leadAutoResponseEmailEnabled: true,
+  leadAutoResponseSmsEnabled: false,
+  missedCallTextBackEnabled: false,
+  uncontactedLeadsEnabled: false,
+  uncontactedLeadHours: 2,
   appointmentRemindersEnabled: true,
   appointmentReminderHours: 24,
   sendWindowStartHour: 8,
@@ -465,6 +485,8 @@ const DEFAULT_TWILIO_SMS_SETTINGS: TwilioSmsSettingsForm = {
   authToken: "",
   messagingServiceSid: "",
   enabledTemplateSlugs: [
+    "lead_auto_response",
+    "missed_call_text_back",
     "appointment_confirmation",
     "appointment_reminder",
     "review_request",
@@ -492,6 +514,8 @@ const TWILIO_TEMPLATE_OPTIONS: Array<{
   label: string;
   helper: string;
 }> = [
+  { value: "lead_auto_response", label: "Lead auto-responses", helper: "Send an immediate acknowledgment text after a new web lead comes in." },
+  { value: "missed_call_text_back", label: "Missed-call text back", helper: "Text inbound callers automatically after a missed call when the voice callback is configured." },
   { value: "appointment_confirmation", label: "Appointment confirmations", helper: "Send confirmation texts after appointments are booked or resent." },
   { value: "appointment_reminder", label: "Appointment reminders", helper: "Send reminder texts ahead of scheduled work." },
   { value: "payment_receipt", label: "Payment receipts", helper: "Send SMS receipts when invoice payments are recorded." },
@@ -637,6 +661,8 @@ function formatAutomationRefreshTimestamp(value: number | null) {
 
 function formatAutomationFeedLabel(type: AutomationFeedRecord["automationType"]) {
   switch (type) {
+    case "uncontacted_lead":
+      return "Uncontacted lead";
     case "appointment_reminder":
       return "Appointment reminder";
     case "review_request":
@@ -1066,6 +1092,9 @@ export default function SettingsPage() {
   const [appointmentReminderHoursInput, setAppointmentReminderHoursInput] = useState(
     String(DEFAULT_AUTOMATION_SETTINGS.appointmentReminderHours)
   );
+  const [uncontactedLeadHoursInput, setUncontactedLeadHoursInput] = useState(
+    String(DEFAULT_AUTOMATION_SETTINGS.uncontactedLeadHours)
+  );
   const [reviewRequestDelayHoursInput, setReviewRequestDelayHoursInput] = useState(
     String(DEFAULT_AUTOMATION_SETTINGS.reviewRequestDelayHours)
   );
@@ -1073,6 +1102,7 @@ export default function SettingsPage() {
     String(DEFAULT_AUTOMATION_SETTINGS.lapsedClientMonths)
   );
   const [automationSummary, setAutomationSummary] = useState<{
+    uncontactedLeads: AutomationActivitySummary;
     appointmentReminders: AutomationActivitySummary;
     reviewRequests: AutomationActivitySummary;
     lapsedClients: AutomationActivitySummary;
@@ -1146,6 +1176,8 @@ export default function SettingsPage() {
   const [{ data: business, fetching: businessFetching }] = useFindOne(api.business, businessId ?? "", {
     pause: !businessId,
   });
+  const publicLeadCaptureUrl =
+    business?.id && typeof window !== "undefined" ? `${window.location.origin}/lead/${business.id}` : "";
 
   const [{ fetching: saving }, update] = useAction(api.business.update);
   const [{ data: locations, fetching: locationsFetching }, refetchLocations] = useFindMany(api.location, {
@@ -1337,6 +1369,18 @@ export default function SettingsPage() {
     setAppointmentBufferInput(next.appointmentBufferInput);
     setCalendarBlockCapacityInput(next.calendarBlockCapacityInput);
     const nextAutomationSettings: AutomationSettingsForm = {
+      leadCaptureEnabled: business.leadCaptureEnabled ?? DEFAULT_AUTOMATION_SETTINGS.leadCaptureEnabled,
+      leadAutoResponseEnabled: business.leadAutoResponseEnabled ?? DEFAULT_AUTOMATION_SETTINGS.leadAutoResponseEnabled,
+      leadAutoResponseEmailEnabled:
+        business.leadAutoResponseEmailEnabled ?? DEFAULT_AUTOMATION_SETTINGS.leadAutoResponseEmailEnabled,
+      leadAutoResponseSmsEnabled:
+        business.leadAutoResponseSmsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.leadAutoResponseSmsEnabled,
+      missedCallTextBackEnabled:
+        business.missedCallTextBackEnabled ?? DEFAULT_AUTOMATION_SETTINGS.missedCallTextBackEnabled,
+      uncontactedLeadsEnabled:
+        business.automationUncontactedLeadsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.uncontactedLeadsEnabled,
+      uncontactedLeadHours:
+        business.automationUncontactedLeadHours ?? DEFAULT_AUTOMATION_SETTINGS.uncontactedLeadHours,
       appointmentRemindersEnabled: business.automationAppointmentRemindersEnabled ?? DEFAULT_AUTOMATION_SETTINGS.appointmentRemindersEnabled,
       appointmentReminderHours: business.automationAppointmentReminderHours ?? DEFAULT_AUTOMATION_SETTINGS.appointmentReminderHours,
       sendWindowStartHour: business.automationSendWindowStartHour ?? DEFAULT_AUTOMATION_SETTINGS.sendWindowStartHour,
@@ -1349,6 +1393,7 @@ export default function SettingsPage() {
       bookingRequestUrl: business.bookingRequestUrl ?? DEFAULT_AUTOMATION_SETTINGS.bookingRequestUrl,
     };
     setAutomationSettings(nextAutomationSettings);
+    setUncontactedLeadHoursInput(String(nextAutomationSettings.uncontactedLeadHours));
     setAppointmentReminderHoursInput(String(nextAutomationSettings.appointmentReminderHours));
     setReviewRequestDelayHoursInput(String(nextAutomationSettings.reviewRequestDelayHours));
     setLapsedClientMonthsInput(String(nextAutomationSettings.lapsedClientMonths));
@@ -1565,7 +1610,7 @@ export default function SettingsPage() {
   };
 
   const handleAutomationNumberInput = (
-    field: "appointmentReminderHours" | "reviewRequestDelayHours" | "lapsedClientMonths",
+    field: "uncontactedLeadHours" | "appointmentReminderHours" | "reviewRequestDelayHours" | "lapsedClientMonths",
     value: string
   ) => {
     const trimmed = value.trim();
@@ -1575,14 +1620,16 @@ export default function SettingsPage() {
   };
 
   const normalizeAutomationNumberInput = (
-    field: "appointmentReminderHours" | "reviewRequestDelayHours" | "lapsedClientMonths"
+    field: "uncontactedLeadHours" | "appointmentReminderHours" | "reviewRequestDelayHours" | "lapsedClientMonths"
   ) => {
     setAutomationSettings((current) => {
       const rawValue = current[field];
-      const minimum = field === "lapsedClientMonths" ? 1 : 1;
-      const maximum = field === "lapsedClientMonths" ? 36 : 336;
+      const minimum = 1;
+      const maximum = field === "lapsedClientMonths" ? 36 : field === "uncontactedLeadHours" ? 168 : 336;
       const nextValue = Number.isFinite(rawValue) ? Math.min(Math.max(rawValue, minimum), maximum) : minimum;
-      if (field === "appointmentReminderHours") {
+      if (field === "uncontactedLeadHours") {
+        setUncontactedLeadHoursInput(String(nextValue));
+      } else if (field === "appointmentReminderHours") {
         setAppointmentReminderHoursInput(String(nextValue));
       } else if (field === "reviewRequestDelayHours") {
         setReviewRequestDelayHoursInput(String(nextValue));
@@ -1635,6 +1682,13 @@ export default function SettingsPage() {
     }
     await update({
       id: business.id,
+      leadCaptureEnabled: automationSettings.leadCaptureEnabled,
+      leadAutoResponseEnabled: automationSettings.leadAutoResponseEnabled,
+      leadAutoResponseEmailEnabled: automationSettings.leadAutoResponseEmailEnabled,
+      leadAutoResponseSmsEnabled: automationSettings.leadAutoResponseSmsEnabled,
+      missedCallTextBackEnabled: automationSettings.missedCallTextBackEnabled,
+      automationUncontactedLeadsEnabled: automationSettings.uncontactedLeadsEnabled,
+      automationUncontactedLeadHours: automationSettings.uncontactedLeadHours,
       automationAppointmentRemindersEnabled: automationSettings.appointmentRemindersEnabled,
       automationAppointmentReminderHours: automationSettings.appointmentReminderHours,
       automationSendWindowStartHour: automationSettings.sendWindowStartHour,
@@ -1665,6 +1719,16 @@ export default function SettingsPage() {
     });
     await refetchIntegrationStatus();
     toast.success("Integration settings saved");
+  };
+
+  const handleCopyPublicLeadCaptureLink = async () => {
+    if (!publicLeadCaptureUrl) return;
+    const copied = await copyTextWithFallback(publicLeadCaptureUrl);
+    if (copied) {
+      toast.success("Lead form link copied");
+      return;
+    }
+    toast.error("Could not copy lead form link.");
   };
 
   const handleSendOutboundWebhookTest = async () => {
@@ -3830,7 +3894,24 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-3">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-xl border bg-background p-4">
+                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Lead follow-up</p>
+                    <p className="mt-2 text-2xl font-semibold">
+                      {automationSummaryFetching && !automationSummary ? "..." : automationSummary?.uncontactedLeads.sentLast30Days ?? 0}
+                    </p>
+                    <p className={`mt-1 text-xs ${getAutomationHealthTone(automationSummary?.uncontactedLeads)}`}>
+                      Sent in the last 30 days. Last send: {formatAutomationLastSent(automationSummary?.uncontactedLeads.lastSentAt ?? null)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Skipped in the last 30 days: {automationSummary?.uncontactedLeads.skippedLast30Days ?? 0}
+                      {" • "}
+                      Last skip: {formatAutomationLastSent(automationSummary?.uncontactedLeads.lastSkippedAt ?? null)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Failed in the last 30 days: {automationSummary?.uncontactedLeads.failedLast30Days ?? 0}
+                    </p>
+                  </div>
                   <div className="rounded-xl border bg-background p-4">
                     <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Reminders</p>
                     <p className="mt-2 text-2xl font-semibold">
@@ -3961,6 +4042,7 @@ export default function SettingsPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">All automations</SelectItem>
+                            <SelectItem value="uncontacted_lead">Uncontacted lead follow-up</SelectItem>
                             <SelectItem value="appointment_reminder">Appointment reminders</SelectItem>
                             <SelectItem value="review_request">Review requests</SelectItem>
                             <SelectItem value="lapsed_client">Lapsed outreach</SelectItem>
@@ -4033,6 +4115,157 @@ export default function SettingsPage() {
                         </div>
                       ))
                     )}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <p className="text-sm font-medium">Lead capture and first response</p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Capture new website leads, acknowledge them right away, and keep a follow-up alert on the team if nobody makes contact.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="automation-lead-capture"
+                        checked={automationSettings.leadCaptureEnabled}
+                        onCheckedChange={(value) => handleAutomationToggle("leadCaptureEnabled", value)}
+                        disabled={!canEditSettings}
+                      />
+                      <Label htmlFor="automation-lead-capture" className="cursor-pointer text-sm">
+                        Enable
+                      </Label>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                    <div className="rounded-xl border bg-background p-4">
+                      <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Public form link</p>
+                      <p className="mt-2 break-all text-sm text-foreground/90">
+                        {publicLeadCaptureUrl || "Save business settings first to generate the public lead form link."}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleCopyPublicLeadCaptureLink()}
+                          disabled={!publicLeadCaptureUrl}
+                        >
+                          Copy lead form link
+                        </Button>
+                        {publicLeadCaptureUrl ? (
+                          <Button asChild type="button" size="sm" variant="ghost">
+                            <Link to={publicLeadCaptureUrl} target="_blank" rel="noreferrer">
+                              Open form
+                              <ExternalLink className="ml-2 h-4 w-4" />
+                            </Link>
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border bg-background p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">Instant auto-response</p>
+                            <p className="mt-1 text-xs text-muted-foreground">Send an acknowledgment as soon as a new web lead is captured.</p>
+                          </div>
+                          <Switch
+                            id="automation-lead-auto-response"
+                            checked={automationSettings.leadAutoResponseEnabled}
+                            onCheckedChange={(value) => handleAutomationToggle("leadAutoResponseEnabled", value)}
+                            disabled={!canEditSettings}
+                          />
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+                            <div>
+                              <p className="text-sm font-medium">Email acknowledgment</p>
+                              <p className="text-xs text-muted-foreground">Uses the business contact and template system already in Strata.</p>
+                            </div>
+                            <Switch
+                              id="automation-lead-auto-response-email"
+                              checked={automationSettings.leadAutoResponseEmailEnabled}
+                              onCheckedChange={(value) => handleAutomationToggle("leadAutoResponseEmailEnabled", value)}
+                              disabled={!canEditSettings || !automationSettings.leadAutoResponseEnabled}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+                            <div>
+                              <p className="text-sm font-medium">SMS acknowledgment</p>
+                              <p className="text-xs text-muted-foreground">Queues through Twilio only when that integration is connected.</p>
+                            </div>
+                            <Switch
+                              id="automation-lead-auto-response-sms"
+                              checked={automationSettings.leadAutoResponseSmsEnabled}
+                              onCheckedChange={(value) => handleAutomationToggle("leadAutoResponseSmsEnabled", value)}
+                              disabled={!canEditSettings || !automationSettings.leadAutoResponseEnabled}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border bg-background p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">Uncontacted lead reminder</p>
+                            <p className="mt-1 text-xs text-muted-foreground">Alert the shop if a fresh lead is still untouched after your response window.</p>
+                          </div>
+                          <Switch
+                            id="automation-uncontacted-leads"
+                            checked={automationSettings.uncontactedLeadsEnabled}
+                            onCheckedChange={(value) => handleAutomationToggle("uncontactedLeadsEnabled", value)}
+                            disabled={!canEditSettings}
+                          />
+                        </div>
+                        <div className="mt-4 space-y-1.5">
+                          <Label>Hours before reminder</Label>
+                          <Input
+                            inputMode="numeric"
+                            value={uncontactedLeadHoursInput}
+                            onChange={(e) => {
+                              setUncontactedLeadHoursInput(e.target.value);
+                              handleAutomationNumberInput("uncontactedLeadHours", e.target.value);
+                            }}
+                            onBlur={() => normalizeAutomationNumberInput("uncontactedLeadHours")}
+                            disabled={!canEditSettings || !automationSettings.uncontactedLeadsEnabled}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-xl border bg-background p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">Missed-call text back</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          After an inbound missed call, queue a reply text and drop the caller into the lead follow-up path.
+                        </p>
+                      </div>
+                      <Switch
+                        id="automation-missed-call-text-back"
+                        checked={automationSettings.missedCallTextBackEnabled}
+                        onCheckedChange={(value) => handleAutomationToggle("missedCallTextBackEnabled", value)}
+                        disabled={!canEditSettings}
+                      />
+                    </div>
+                    <div className="mt-3 rounded-lg border border-dashed border-border/70 px-3 py-3 text-xs text-muted-foreground">
+                      Point your Twilio number&apos;s voice status callback to{" "}
+                      <span className="font-mono text-foreground">
+                        {twilioConnection && typeof window !== "undefined"
+                          ? `${window.location.origin.replace(/\/+$/, "")}/api/integrations/twilio/voice/${twilioConnection.id}`
+                          : "/api/integrations/twilio/voice/<connectionId>"}
+                      </span>
+                      {" "}and enable the{" "}
+                      <span className="font-medium text-foreground">Missed-call text back</span>
+                      {" "}template in the Integrations tab.
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+                    Public leads save into your existing Leads flow as status <strong>New</strong>, send the first response if enabled, and then use the same automation diagnostics shown above.
                   </div>
                 </div>
 

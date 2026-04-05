@@ -37,6 +37,7 @@ import {
 import {
   connectTwilioBusiness,
   disconnectTwilioBusiness,
+  handleTwilioVoiceWebhook,
   handleTwilioStatusCallback,
   isTwilioConfigured,
 } from "../lib/twilio.js";
@@ -88,6 +89,18 @@ export async function handleTwilioStatusCallbackRoute(req: Request, res: Respons
     params,
   });
   res.type("text/plain").send("ok");
+}
+
+export async function handleTwilioVoiceWebhookRoute(req: Request, res: Response) {
+  const params = Object.fromEntries(
+    Object.entries((req.body ?? {}) as Record<string, unknown>).map(([key, value]) => [key, String(value ?? "")])
+  );
+  await handleTwilioVoiceWebhook({
+    connectionId: req.params.connectionId,
+    signature: req.header("x-twilio-signature"),
+    params,
+  });
+  res.type("text/xml").send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
 }
 
 export async function handleGoogleCalendarCallbackRoute(req: Request, res: Response) {
@@ -449,6 +462,12 @@ integrationsRouter.post(
   "/twilio/status/:connectionId",
   express.urlencoded({ extended: false }),
   handleTwilioStatusCallbackRoute
+);
+
+integrationsRouter.post(
+  "/twilio/voice/:connectionId",
+  express.urlencoded({ extended: false }),
+  handleTwilioVoiceWebhookRoute
 );
 
 integrationsRouter.post(

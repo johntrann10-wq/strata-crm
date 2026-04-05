@@ -809,8 +809,53 @@ export const api = {
       netThisMonth: number;
       expenseCountThisMonth: number;
     }>("/actions/getFinanceMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
+  getGrowthMetrics: (params?: Record<string, unknown>) =>
+    request<{
+      periodDays: number | null;
+      totalLeads: number;
+      convertedLeadCount: number;
+      bookedLeadCount: number;
+      closeRate: number;
+      bookingRate: number;
+      averageFirstResponseHours: number | null;
+      totalPayingCustomers: number;
+      repeatCustomerCount: number;
+      repeatCustomerRate: number;
+      attributedRevenue: number;
+      unattributedRevenue: number;
+      returningRevenue: number;
+      newCustomerRevenue: number;
+      recentWeeks: Array<{
+        label: string;
+        leadCount: number;
+        convertedCount: number;
+        bookedCount: number;
+        closeRate: number;
+        bookingRate: number;
+        averageFirstResponseHours: number | null;
+      }>;
+      revenueBySource: Array<{
+        source: string;
+        leadCount: number;
+        convertedCount: number;
+        bookedCount: number;
+        closeRate: number;
+        bookingRate: number;
+        averageFirstResponseHours: number | null;
+        revenue: number;
+        shareOfRevenue: number;
+      }>;
+    }>("/actions/getGrowthMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getAutomationSummary: (params?: Record<string, unknown>) =>
     request<{
+      uncontactedLeads: {
+        sentLast30Days: number;
+        lastSentAt: string | null;
+        skippedLast30Days: number;
+        lastSkippedAt: string | null;
+        failedLast30Days: number;
+        lastFailedAt: string | null;
+      };
       appointmentReminders: {
         sentLast30Days: number;
         lastSentAt: string | null;
@@ -841,7 +886,7 @@ export const api = {
       records: Array<{
         id: string;
         kind: "sent" | "failed" | "skipped";
-        automationType: "appointment_reminder" | "review_request" | "lapsed_client";
+        automationType: "uncontacted_lead" | "appointment_reminder" | "review_request" | "lapsed_client";
         channel: "email" | "sms";
         recipient: string | null;
         entityType: string | null;

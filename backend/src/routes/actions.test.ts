@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { getCronExecutionGate } from "./actions.js";
+import { calculateGrowthMetrics, getCronExecutionGate } from "./actions.js";
 
 describe("actions route logic", () => {
   const idParamSchema = z.object({ id: z.string().uuid() });
@@ -77,5 +77,143 @@ describe("actions route logic", () => {
     } else {
       process.env.CRON_SECRET = previous;
     }
+  });
+
+  it("calculates growth metrics from lead and paid invoice records", () => {
+    const metrics = calculateGrowthMetrics(
+      [
+        {
+          id: "client-1",
+          createdAt: new Date("2026-04-01T10:00:00.000Z"),
+          notes: [
+            "Lead status: converted",
+            "Lead source: instagram",
+            "Service interest: Coating",
+            "Next step: Booked",
+            "Lead summary: Wants ceramic",
+            "Lead vehicle: Model Y",
+            "First contacted at: 2026-04-01T11:00:00.000Z",
+          ].join("\n"),
+        },
+        {
+          id: "client-2",
+          createdAt: new Date("2026-04-02T10:00:00.000Z"),
+          notes: [
+            "Lead status: new",
+            "Lead source: google",
+            "Service interest: Tint",
+            "Next step: Follow up",
+            "Lead summary: Waiting on quote",
+            "Lead vehicle: Civic",
+            "First contacted at: ",
+          ].join("\n"),
+        },
+        {
+          id: "client-3",
+          createdAt: new Date("2026-04-03T09:00:00.000Z"),
+          notes: [
+            "Lead status: booked",
+            "Lead source: instagram",
+            "Service interest: Detail",
+            "Next step: Appointment set",
+            "Lead summary: Saturday opening",
+            "Lead vehicle: F-150",
+            "First contacted at: 2026-04-03T10:30:00.000Z",
+          ].join("\n"),
+        },
+      ],
+      [
+        { clientId: "client-1", total: 500, paidAt: new Date("2026-04-04T10:00:00.000Z") },
+        { clientId: "client-1", total: 250, paidAt: new Date("2026-04-05T10:00:00.000Z") },
+        { clientId: "client-3", total: 300, paidAt: new Date("2026-04-05T11:00:00.000Z") },
+      ],
+      { now: new Date("2026-04-05T12:00:00.000Z") }
+    );
+
+    expect(metrics.periodDays).toBeNull();
+    expect(metrics.totalLeads).toBe(3);
+    expect(metrics.convertedLeadCount).toBe(1);
+    expect(metrics.bookedLeadCount).toBe(2);
+    expect(metrics.closeRate).toBe(33);
+    expect(metrics.bookingRate).toBe(67);
+    expect(metrics.totalPayingCustomers).toBe(2);
+    expect(metrics.repeatCustomerCount).toBe(1);
+    expect(metrics.repeatCustomerRate).toBe(50);
+    expect(metrics.attributedRevenue).toBe(1050);
+    expect(metrics.unattributedRevenue).toBe(0);
+    expect(metrics.returningRevenue).toBe(750);
+    expect(metrics.newCustomerRevenue).toBe(300);
+    expect(metrics.averageFirstResponseHours).toBeCloseTo(1.25, 5);
+    expect(metrics.recentWeeks).toHaveLength(4);
+    const activeWeek = metrics.recentWeeks.find((week) => week.leadCount === 3);
+    expect(activeWeek).toMatchObject({
+      leadCount: 3,
+      convertedCount: 1,
+      bookedCount: 2,
+      closeRate: 33,
+      bookingRate: 67,
+    });
+    expect(activeWeek?.averageFirstResponseHours).toBeCloseTo(1.25, 5);
+    expect(metrics.revenueBySource[0]).toMatchObject({
+      source: "instagram",
+      leadCount: 2,
+      convertedCount: 1,
+      bookedCount: 2,
+      closeRate: 50,
+      bookingRate: 100,
+      revenue: 1050,
+      shareOfRevenue: 100,
+    });
+  });
+
+  it("scopes growth metrics to the requested period", () => {
+    const metrics = calculateGrowthMetrics(
+      [
+        {
+          id: "client-1",
+          createdAt: new Date("2026-03-01T10:00:00.000Z"),
+          notes: [
+            "Lead status: converted",
+            "Lead source: google",
+            "Service interest: Coating",
+            "Next step: Booked",
+            "Lead summary: Wants ceramic",
+            "Lead vehicle: Model Y",
+            "First contacted at: 2026-03-01T11:00:00.000Z",
+          ].join("\n"),
+        },
+        {
+          id: "client-2",
+          createdAt: new Date("2026-04-03T09:00:00.000Z"),
+          notes: [
+            "Lead status: booked",
+            "Lead source: instagram",
+            "Service interest: Detail",
+            "Next step: Appointment set",
+            "Lead summary: Saturday opening",
+            "Lead vehicle: F-150",
+            "First contacted at: 2026-04-03T10:30:00.000Z",
+          ].join("\n"),
+        },
+      ],
+      [
+        { clientId: "client-1", total: 500, paidAt: new Date("2026-03-05T10:00:00.000Z") },
+        { clientId: "client-2", total: 300, paidAt: new Date("2026-04-05T11:00:00.000Z") },
+      ],
+      { now: new Date("2026-04-05T12:00:00.000Z"), periodDays: 30 }
+    );
+
+    expect(metrics.periodDays).toBe(30);
+    expect(metrics.totalLeads).toBe(1);
+    expect(metrics.bookedLeadCount).toBe(1);
+    expect(metrics.convertedLeadCount).toBe(0);
+    expect(metrics.attributedRevenue).toBe(300);
+    expect(metrics.returningRevenue).toBe(0);
+    expect(metrics.newCustomerRevenue).toBe(300);
+    expect(metrics.revenueBySource[0]).toMatchObject({
+      source: "instagram",
+      revenue: 300,
+      shareOfRevenue: 100,
+    });
   });
 });

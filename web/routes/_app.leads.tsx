@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import type { FormEvent } from "react";
 import { formatDistanceToNow } from "date-fns";
+import { formatDistanceStrict } from "date-fns";
 import {
   ArrowLeft,
   CalendarPlus,
@@ -176,6 +177,20 @@ function filterLeadEntries(
 }
 
 function getLeadMetrics(leadRecords: LeadEntry[]) {
+  const responseTimesInHours = leadRecords
+    .map((entry) => {
+      if (!entry.lead.firstContactedAt) return null;
+      const firstContactedAt = new Date(entry.lead.firstContactedAt);
+      const createdAt = new Date(entry.client.createdAt);
+      if (Number.isNaN(firstContactedAt.getTime()) || Number.isNaN(createdAt.getTime())) return null;
+      return Math.max(0, (firstContactedAt.getTime() - createdAt.getTime()) / (1000 * 60 * 60));
+    })
+    .filter((value): value is number => value !== null);
+
+  const averageResponseHours = responseTimesInHours.length
+    ? responseTimesInHours.reduce((sum, hours) => sum + hours, 0) / responseTimesInHours.length
+    : null;
+
   return {
     activeLeadCount: leadRecords.filter((entry) => !["converted", "lost"].includes(entry.lead.status)).length,
     newLeadCount: leadRecords.filter((entry) => entry.lead.status === "new").length,
@@ -186,7 +201,99 @@ function getLeadMetrics(leadRecords: LeadEntry[]) {
     missingNextStepCount: leadRecords.filter(
       (entry) => ACTIVE_STATUSES.includes(entry.lead.status) && !entry.lead.nextStep?.trim(),
     ).length,
+    firstResponseTrackedCount: responseTimesInHours.length,
+    averageResponseHours,
   };
+}
+
+function formatLeadResponseTime(createdAt: string | Date, firstContactedAt: string | null) {
+  if (!firstContactedAt) return "Awaiting first response";
+  const created = new Date(createdAt);
+  const responded = new Date(firstContactedAt);
+  if (Number.isNaN(created.getTime()) || Number.isNaN(responded.getTime())) return "Response time unavailable";
+  return formatDistanceStrict(responded, created);
+}
+
+function getLeadResponseWindowHours(hours: number | null | undefined) {
+  return Math.max(1, Math.min(Number(hours ?? 24), 336));
+}
+
+function getLeadSlaState(
+  clientCreatedAt: string | Date,
+  lead: ReturnType<typeof parseLeadRecord>,
+  responseWindowHours: number,
+) {
+  if (lead.firstContactedAt || lead.status !== "new") {
+    return { overdue: false, dueSoon: false, remainingMs: null as number | null };
+  }
+
+  const createdAt = new Date(clientCreatedAt);
+  if (Number.isNaN(createdAt.getTime())) {
+    return { overdue: false, dueSoon: false, remainingMs: null as number | null };
+  }
+
+  const deadline = createdAt.getTime() + responseWindowHours * 60 * 60 * 1000;
+  const remainingMs = deadline - Date.now();
+  const dueSoonThresholdMs = Math.min(2 * 60 * 60 * 1000, responseWindowHours * 0.25 * 60 * 60 * 1000);
+
+  return {
+    overdue: remainingMs <= 0,
+    dueSoon: remainingMs > 0 && remainingMs <= dueSoonThresholdMs,
+    remainingMs,
+  };
+}
+
+function formatLeadSlaMessage(
+  clientCreatedAt: string | Date,
+  lead: ReturnType<typeof parseLeadRecord>,
+  responseWindowHours: number,
+) {
+  const sla = getLeadSlaState(clientCreatedAt, lead, responseWindowHours);
+  if (lead.firstContactedAt || lead.status !== "new") return null;
+  if (sla.remainingMs === null) return null;
+
+  const createdAt = new Date(clientCreatedAt);
+  const deadline = new Date(createdAt.getTime() + responseWindowHours * 60 * 60 * 1000);
+
+  if (sla.overdue) {
+    return `Overdue by ${formatDistanceStrict(new Date(), deadline)}`;
+  }
+
+  return `Follow up due in ${formatDistanceStrict(deadline, new Date())}`;
+}
+
+function getLeadSourcePerformance(leadRecords: LeadEntry[]) {
+  return LEAD_SOURCE_OPTIONS.map((source) => {
+    const sourceLeads = leadRecords.filter((entry) => entry.lead.source === source);
+    if (sourceLeads.length === 0) return null;
+
+    const responseTimes = sourceLeads
+      .map((entry) => {
+        if (!entry.lead.firstContactedAt) return null;
+        const responded = new Date(entry.lead.firstContactedAt);
+        const created = new Date(entry.client.createdAt);
+        if (Number.isNaN(responded.getTime()) || Number.isNaN(created.getTime())) return null;
+        return Math.max(0, (responded.getTime() - created.getTime()) / (1000 * 60 * 60));
+      })
+      .filter((value): value is number => value !== null);
+
+    const convertedCount = sourceLeads.filter((entry) => entry.lead.status === "converted").length;
+    const bookedCount = sourceLeads.filter((entry) => entry.lead.status === "booked").length;
+
+    return {
+      source,
+      totalCount: sourceLeads.length,
+      convertedCount,
+      bookedCount,
+      closeRate: sourceLeads.length ? Math.round((convertedCount / sourceLeads.length) * 100) : 0,
+      bookingRate: sourceLeads.length ? Math.round((bookedCount / sourceLeads.length) * 100) : 0,
+      averageResponseHours: responseTimes.length
+        ? responseTimes.reduce((sum, value) => sum + value, 0) / responseTimes.length
+        : null,
+    };
+  })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => b.totalCount - a.totalCount);
 }
 
 function MobileLeadSelect({
@@ -244,7 +351,7 @@ export default function LeadsPage() {
   }, []);
 
   const [{ data: business, fetching: businessFetching }] = useFindFirst(api.business, {
-    select: { id: true, name: true },
+    select: { id: true, name: true, automationUncontactedLeadHours: true },
     pause: !businessId,
   });
   const [{ fetching, error }, createClient] = useAction(api.client.create);
@@ -277,9 +384,22 @@ export default function LeadsPage() {
       });
   }, [recentClientsRaw]);
 
+  const responseWindowHours = useMemo(
+    () => getLeadResponseWindowHours((business as any)?.automationUncontactedLeadHours),
+    [business]
+  );
+
   const visibleLeads = useMemo(() => {
-    return filterLeadEntries(leadRecords, { searchQuery, statusFilter, sourceFilter });
-  }, [leadRecords, searchQuery, sourceFilter, statusFilter]);
+    return filterLeadEntries(leadRecords, { searchQuery, statusFilter, sourceFilter }).sort((a, b) => {
+      const aSla = getLeadSlaState(a.client.createdAt, a.lead, responseWindowHours);
+      const bSla = getLeadSlaState(b.client.createdAt, b.lead, responseWindowHours);
+
+      if (aSla.overdue !== bSla.overdue) return aSla.overdue ? -1 : 1;
+      if (aSla.dueSoon !== bSla.dueSoon) return aSla.dueSoon ? -1 : 1;
+
+      return new Date(b.client.createdAt).getTime() - new Date(a.client.createdAt).getTime();
+    });
+  }, [leadRecords, responseWindowHours, searchQuery, sourceFilter, statusFilter]);
 
   const {
     activeLeadCount,
@@ -289,7 +409,18 @@ export default function LeadsPage() {
     contactReadyLeadCount,
     knownVehicleLeadCount,
     missingNextStepCount,
+    firstResponseTrackedCount,
+    averageResponseHours,
   } = useMemo(() => getLeadMetrics(leadRecords), [leadRecords]);
+  const overdueLeadCount = useMemo(
+    () => leadRecords.filter((entry) => getLeadSlaState(entry.client.createdAt, entry.lead, responseWindowHours).overdue).length,
+    [leadRecords, responseWindowHours]
+  );
+  const dueSoonLeadCount = useMemo(
+    () => leadRecords.filter((entry) => getLeadSlaState(entry.client.createdAt, entry.lead, responseWindowHours).dueSoon).length,
+    [leadRecords, responseWindowHours]
+  );
+  const sourcePerformance = useMemo(() => getLeadSourcePerformance(leadRecords), [leadRecords]);
 
   const setSubmitIntent = (mode: SubmitMode) => {
     submitModeRef.current = mode;
@@ -316,6 +447,9 @@ export default function LeadsPage() {
       nextStep: formData.nextStep,
       summary: formData.summary,
       vehicle: formData.vehicle,
+      firstContactedAt: ["contacted", "quoted", "booked", "converted"].includes(formData.leadStatus)
+        ? new Date().toISOString()
+        : null,
     });
 
   const resolveCreatedClientId = async (
@@ -420,11 +554,14 @@ export default function LeadsPage() {
   const updateLeadStatus = async (client: any, status: LeadStatus) => {
     const lead = parseLeadRecord(client.notes);
     if (!lead.isLead) return false;
+    const shouldStampFirstContact =
+      !lead.firstContactedAt && ["contacted", "quoted", "booked", "converted"].includes(status);
     const result = await updateClient({
       id: client.id,
       notes: buildLeadNotes({
         ...lead,
         status,
+        firstContactedAt: shouldStampFirstContact ? new Date().toISOString() : lead.firstContactedAt,
       }),
     });
     if (result.error) {
@@ -443,6 +580,10 @@ export default function LeadsPage() {
     }
     if (!converted) return;
     navigate(`/clients/${entry.client.id}?from=${encodeURIComponent("/leads")}`);
+  };
+
+  const handleMarkContacted = async (entry: LeadEntry) => {
+    await updateLeadStatus(entry.client, "contacted");
   };
 
   const generalError =
@@ -505,6 +646,77 @@ export default function LeadsPage() {
               <p className="text-sm font-medium text-muted-foreground">Booked</p>
               <p className="mt-3 text-2xl font-semibold tracking-tight">{bookedLeadCount}</p>
             </div>
+          </section>
+
+          <section className="grid gap-3 sm:grid-cols-2">
+            <div className="surface-panel px-4 py-4 sm:px-5">
+              <p className="text-sm font-medium text-muted-foreground">Average first response</p>
+              <p className="mt-3 text-2xl font-semibold tracking-tight">
+                {averageResponseHours === null ? "Not enough data" : `${averageResponseHours < 1 ? "<1" : Math.round(averageResponseHours)}h`}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Based on {firstResponseTrackedCount} lead{firstResponseTrackedCount === 1 ? "" : "s"} with a recorded first contact.
+              </p>
+            </div>
+            <div className="surface-panel px-4 py-4 sm:px-5">
+              <p className="text-sm font-medium text-muted-foreground">Still awaiting first response</p>
+              <p className="mt-3 text-2xl font-semibold tracking-tight">
+                {leadRecords.filter((entry) => entry.lead.status === "new" && !entry.lead.firstContactedAt).length}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                New leads that have not been marked contacted, quoted, booked, or converted yet.
+              </p>
+            </div>
+          </section>
+
+          <section className="surface-panel p-5 sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Source performance</p>
+                <p className="mt-1 text-sm text-foreground">
+                  See which channels are bringing workable leads, which ones book, and where response speed slips.
+                </p>
+              </div>
+              <Badge variant="outline">{sourcePerformance.length} active source{sourcePerformance.length === 1 ? "" : "s"}</Badge>
+            </div>
+
+            {sourcePerformance.length > 0 ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {sourcePerformance.map((item) => (
+                  <div key={item.source} className="rounded-xl border border-border/70 bg-background/70 px-4 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{formatLeadSource(item.source)}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {item.totalCount} lead{item.totalCount === 1 ? "" : "s"} captured
+                        </p>
+                      </div>
+                      <Badge variant="secondary">{item.closeRate}% close rate</Badge>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                      <div className="rounded-lg border border-border/70 bg-card px-3 py-2">
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Booked</p>
+                        <p className="mt-2 text-lg font-semibold text-foreground">{item.bookingRate}%</p>
+                      </div>
+                      <div className="rounded-lg border border-border/70 bg-card px-3 py-2">
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Converted</p>
+                        <p className="mt-2 text-lg font-semibold text-foreground">{item.convertedCount}</p>
+                      </div>
+                      <div className="rounded-lg border border-border/70 bg-card px-3 py-2">
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Response</p>
+                        <p className="mt-2 text-lg font-semibold text-foreground">
+                          {item.averageResponseHours === null ? "--" : `${item.averageResponseHours < 1 ? "<1" : Math.round(item.averageResponseHours)}h`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-dashed border-border/70 px-4 py-5 text-sm text-muted-foreground">
+                Capture leads from at least one source to unlock source performance reporting.
+              </div>
+            )}
           </section>
 
           <section className="rounded-[1.4rem] border bg-card p-5 shadow-sm sm:p-6">
@@ -692,6 +904,16 @@ export default function LeadsPage() {
                     <p className="mt-2 text-lg font-semibold text-foreground">{missingNextStepCount}</p>
                     <p className="mt-1 text-xs text-muted-foreground">Active leads that still need a clear follow-up plan.</p>
                   </div>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.22em] text-amber-700">Due soon</p>
+                    <p className="mt-2 text-lg font-semibold text-amber-950">{dueSoonLeadCount}</p>
+                    <p className="mt-1 text-xs text-amber-800">New leads approaching the {responseWindowHours}-hour response target.</p>
+                  </div>
+                  <div className="rounded-xl border border-rose-200 bg-rose-50/80 px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.22em] text-rose-700">Overdue</p>
+                    <p className="mt-2 text-lg font-semibold text-rose-950">{overdueLeadCount}</p>
+                    <p className="mt-1 text-xs text-rose-800">New leads past the configured first-response window.</p>
+                  </div>
                 </div>
 
                 {inlineUpdateError ? <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">{inlineUpdateError}</div> : null}
@@ -777,6 +999,8 @@ export default function LeadsPage() {
               ) : visibleLeads.length > 0 ? (
                 visibleLeads.map((entry) => {
                   const { client, lead } = entry;
+                  const sla = getLeadSlaState(client.createdAt, lead, responseWindowHours);
+                  const slaMessage = formatLeadSlaMessage(client.createdAt, lead, responseWindowHours);
                   return (
                     <div key={client.id} className="rounded-xl border border-border/70 bg-background/80 px-4 py-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -785,6 +1009,8 @@ export default function LeadsPage() {
                             <p className="font-medium text-foreground">{client.firstName} {client.lastName}</p>
                             <Badge variant={badgeVariantForStatus(lead.status)}>{formatLeadStatus(lead.status)}</Badge>
                             <Badge variant="outline">{formatLeadSource(lead.source)}</Badge>
+                            {sla.overdue ? <Badge className="bg-rose-600 text-white hover:bg-rose-600">Overdue</Badge> : null}
+                            {!sla.overdue && sla.dueSoon ? <Badge className="bg-amber-500 text-white hover:bg-amber-500">Due soon</Badge> : null}
                           </div>
                           <div className="mt-2 grid gap-1 text-sm text-muted-foreground">
                             {client.phone ? <p>{client.phone}</p> : null}
@@ -822,12 +1048,15 @@ export default function LeadsPage() {
                             <span><span className="font-medium text-foreground">Vehicle:</span> {lead.vehicle}</span>
                           </p>
                         ) : null}
+                        <p><span className="font-medium text-foreground">Response time:</span> {formatLeadResponseTime(client.createdAt, lead.firstContactedAt)}</p>
+                        {slaMessage ? <p><span className="font-medium text-foreground">SLA:</span> {slaMessage}</p> : null}
                         <p><span className="font-medium text-foreground">Next step:</span> {lead.nextStep || "Not set"}</p>
                         {lead.summary ? <p><span className="font-medium text-foreground">Context:</span> {lead.summary}</p> : null}
                         {client.internalNotes ? <p><span className="font-medium text-foreground">Team notes:</span> {client.internalNotes}</p> : null}
                       </div>
 
                       <div className="mt-4 flex flex-wrap gap-2">
+                        {lead.status === "new" ? <Button size="sm" onClick={() => void handleMarkContacted(entry)} disabled={updatingLead}>Mark contacted</Button> : null}
                         <Button size="sm" variant="outline" asChild><Link to={`/clients/${client.id}?from=${encodeURIComponent("/leads")}`}>Open client</Link></Button>
                         <Button size="sm" variant="outline" asChild><Link to={`/appointments/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}`}>Book</Link></Button>
                         <Button size="sm" variant="outline" asChild><Link to={`/quotes/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}${buildQuoteRecipientQuery({

@@ -38,8 +38,219 @@ import { runQuickBooksIntegrationJob } from "../lib/quickbooks.js";
 import { runGoogleCalendarIntegrationJob } from "../lib/googleCalendar.js";
 import { runTwilioIntegrationJob } from "../lib/twilio.js";
 import { runOutboundWebhookIntegrationJob } from "../lib/integrations.js";
+import { parseLeadRecord } from "../lib/leads.js";
 
 export const actionsRouter = Router({ mergeParams: true });
+
+type GrowthLeadRecord = {
+  id: string;
+  createdAt: Date;
+  notes: string | null;
+};
+
+type GrowthInvoiceRecord = {
+  clientId: string | null;
+  total: number | string | null;
+  paidAt: Date | null;
+};
+
+export function calculateGrowthMetrics(
+  leads: GrowthLeadRecord[],
+  paidInvoices: GrowthInvoiceRecord[],
+  options: {
+    now?: Date;
+    periodDays?: number | null;
+  } = {}
+) {
+  const now = options.now ?? new Date();
+  const periodDays = typeof options.periodDays === "number" && Number.isFinite(options.periodDays)
+    ? Math.max(7, Math.min(Math.round(options.periodDays), 3650))
+    : null;
+  const cutoff = periodDays ? new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000) : null;
+
+  const allLeadRows = leads.map((lead) => ({
+    id: lead.id,
+    createdAt: lead.createdAt,
+    parsed: parseLeadRecord(lead.notes),
+  }));
+  const leadRows = cutoff ? allLeadRows.filter((row) => row.createdAt >= cutoff) : allLeadRows;
+  const totalLeads = leadRows.filter((row) => row.parsed.source).length;
+  const convertedLeadCount = leadRows.filter((row) => row.parsed.status === "converted").length;
+  const bookedLeadCount = leadRows.filter((row) => row.parsed.status === "booked" || row.parsed.status === "converted").length;
+
+  const responseHours = leadRows
+    .map((row) => {
+      if (!row.parsed.firstContactedAt) return null;
+      const contactedAt = new Date(row.parsed.firstContactedAt);
+      if (Number.isNaN(contactedAt.getTime()) || Number.isNaN(row.createdAt.getTime())) return null;
+      return Math.max(0, (contactedAt.getTime() - row.createdAt.getTime()) / (1000 * 60 * 60));
+    })
+    .filter((value): value is number => value !== null);
+
+  const paidInvoicesInWindow = cutoff
+    ? paidInvoices.filter((invoice) => invoice.paidAt && invoice.paidAt >= cutoff)
+    : paidInvoices;
+  const paidInvoicesWithClient = paidInvoicesInWindow.filter((invoice) => !!invoice.clientId);
+  const invoiceCountByClient = new Map<string, number>();
+  const revenueByClient = new Map<string, number>();
+  let repeatCustomerCount = 0;
+  for (const invoice of paidInvoicesWithClient) {
+    const clientId = invoice.clientId as string;
+    const nextCount = (invoiceCountByClient.get(clientId) ?? 0) + 1;
+    invoiceCountByClient.set(clientId, nextCount);
+    const total = Number(invoice.total ?? 0);
+    revenueByClient.set(
+      clientId,
+      (revenueByClient.get(clientId) ?? 0) + (Number.isFinite(total) ? total : 0)
+    );
+  }
+  for (const count of invoiceCountByClient.values()) {
+    if (count > 1) repeatCustomerCount += 1;
+  }
+  let returningRevenue = 0;
+  let newCustomerRevenue = 0;
+  for (const [clientId, totalRevenue] of revenueByClient.entries()) {
+    if ((invoiceCountByClient.get(clientId) ?? 0) > 1) {
+      returningRevenue += totalRevenue;
+    } else {
+      newCustomerRevenue += totalRevenue;
+    }
+  }
+
+  const leadById = new Map(allLeadRows.map((row) => [row.id, row]));
+  const sourceStats = new Map<
+    string,
+    {
+      leadCount: number;
+      convertedCount: number;
+      bookedCount: number;
+      responseHours: number[];
+      revenue: number;
+    }
+  >();
+
+  for (const row of leadRows) {
+    const source = row.parsed.source || "other";
+    const current = sourceStats.get(source) ?? {
+      leadCount: 0,
+      convertedCount: 0,
+      bookedCount: 0,
+      responseHours: [],
+      revenue: 0,
+    };
+    current.leadCount += 1;
+    if (row.parsed.status === "converted") current.convertedCount += 1;
+    if (row.parsed.status === "booked" || row.parsed.status === "converted") current.bookedCount += 1;
+    if (row.parsed.firstContactedAt) {
+      const contactedAt = new Date(row.parsed.firstContactedAt);
+      if (!Number.isNaN(contactedAt.getTime()) && !Number.isNaN(row.createdAt.getTime())) {
+        current.responseHours.push(Math.max(0, (contactedAt.getTime() - row.createdAt.getTime()) / (1000 * 60 * 60)));
+      }
+    }
+    sourceStats.set(source, current);
+  }
+
+  for (const invoice of paidInvoicesWithClient) {
+    const lead = leadById.get(invoice.clientId as string);
+    const source = lead?.parsed.source || "other";
+    const current = sourceStats.get(source) ?? {
+      leadCount: 0,
+      convertedCount: 0,
+      bookedCount: 0,
+      responseHours: [],
+      revenue: 0,
+    };
+    const total = Number(invoice.total ?? 0);
+    current.revenue += Number.isFinite(total) ? total : 0;
+    sourceStats.set(source, current);
+  }
+
+  const attributedRevenue = Array.from(sourceStats.values()).reduce((sum, entry) => sum + entry.revenue, 0);
+  const totalPaidRevenue = paidInvoicesWithClient.reduce((sum, invoice) => {
+    const total = Number(invoice.total ?? 0);
+    return sum + (Number.isFinite(total) ? total : 0);
+  }, 0);
+  const unattributedRevenue = Math.max(0, totalPaidRevenue - attributedRevenue);
+
+  const weekBuckets = Array.from({ length: 4 }, (_, index) => {
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+    end.setDate(end.getDate() - end.getDay() - (3 - index) * 7 + 6);
+    const start = new Date(end);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(end.getDate() - 6);
+    return {
+      key: start.toISOString(),
+      label: `${start.toLocaleString("en-US", { month: "short" })} ${start.getDate()}`,
+      start,
+      end,
+      leadCount: 0,
+      convertedCount: 0,
+      bookedCount: 0,
+      responseHours: [] as number[],
+    };
+  });
+
+  for (const row of leadRows) {
+    const bucket = weekBuckets.find((entry) => row.createdAt >= entry.start && row.createdAt <= entry.end);
+    if (!bucket) continue;
+    bucket.leadCount += 1;
+    if (row.parsed.status === "converted") bucket.convertedCount += 1;
+    if (row.parsed.status === "booked" || row.parsed.status === "converted") bucket.bookedCount += 1;
+    if (row.parsed.firstContactedAt) {
+      const contactedAt = new Date(row.parsed.firstContactedAt);
+      if (!Number.isNaN(contactedAt.getTime()) && !Number.isNaN(row.createdAt.getTime())) {
+        bucket.responseHours.push(Math.max(0, (contactedAt.getTime() - row.createdAt.getTime()) / (1000 * 60 * 60)));
+      }
+    }
+  }
+
+  return {
+    periodDays,
+    totalLeads,
+    convertedLeadCount,
+    bookedLeadCount,
+    closeRate: totalLeads > 0 ? Math.round((convertedLeadCount / totalLeads) * 100) : 0,
+    bookingRate: totalLeads > 0 ? Math.round((bookedLeadCount / totalLeads) * 100) : 0,
+    averageFirstResponseHours: responseHours.length
+      ? responseHours.reduce((sum, value) => sum + value, 0) / responseHours.length
+      : null,
+    totalPayingCustomers: invoiceCountByClient.size,
+    repeatCustomerCount,
+    repeatCustomerRate: invoiceCountByClient.size > 0 ? Math.round((repeatCustomerCount / invoiceCountByClient.size) * 100) : 0,
+    attributedRevenue,
+    unattributedRevenue,
+    returningRevenue,
+    newCustomerRevenue,
+    recentWeeks: weekBuckets.map((bucket) => ({
+      label: bucket.label,
+      leadCount: bucket.leadCount,
+      convertedCount: bucket.convertedCount,
+      bookedCount: bucket.bookedCount,
+      closeRate: bucket.leadCount > 0 ? Math.round((bucket.convertedCount / bucket.leadCount) * 100) : 0,
+      bookingRate: bucket.leadCount > 0 ? Math.round((bucket.bookedCount / bucket.leadCount) * 100) : 0,
+      averageFirstResponseHours: bucket.responseHours.length
+        ? bucket.responseHours.reduce((sum, value) => sum + value, 0) / bucket.responseHours.length
+        : null,
+    })),
+    revenueBySource: Array.from(sourceStats.entries())
+      .map(([source, stats]) => ({
+        source,
+        leadCount: stats.leadCount,
+        convertedCount: stats.convertedCount,
+        bookedCount: stats.bookedCount,
+        closeRate: stats.leadCount > 0 ? Math.round((stats.convertedCount / stats.leadCount) * 100) : 0,
+        bookingRate: stats.leadCount > 0 ? Math.round((stats.bookedCount / stats.leadCount) * 100) : 0,
+        averageFirstResponseHours: stats.responseHours.length
+          ? stats.responseHours.reduce((sum, value) => sum + value, 0) / stats.responseHours.length
+          : null,
+        revenue: stats.revenue,
+        shareOfRevenue: attributedRevenue > 0 ? Math.round((stats.revenue / attributedRevenue) * 100) : 0,
+      }))
+      .sort((left, right) => right.revenue - left.revenue || right.leadCount - left.leadCount)
+      .slice(0, 6),
+  };
+}
 
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
@@ -268,6 +479,35 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
   });
 });
 
+actionsRouter.post("/getGrowthMetrics", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const params = z
+    .object({
+      periodDays: z.coerce.number().int().min(7).max(3650).nullable().optional(),
+    })
+    .parse(req.body ?? {});
+  const [leadRows, paidInvoiceRows] = await Promise.all([
+    db
+      .select({
+        id: clients.id,
+        createdAt: clients.createdAt,
+        notes: clients.notes,
+      })
+      .from(clients)
+      .where(and(eq(clients.businessId, bid), isNull(clients.deletedAt))),
+    db
+      .select({
+        clientId: invoices.clientId,
+        total: invoices.total,
+        paidAt: sql<Date | null>`coalesce(${invoices.paidAt}, ${invoices.updatedAt})`.as("paid_at"),
+      })
+      .from(invoices)
+      .where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), sql`${invoices.clientId} is not null`)),
+  ]);
+
+  res.json(calculateGrowthMetrics(leadRows, paidInvoiceRows, { periodDays: params.periodDays ?? null }));
+});
+
 actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const recentCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -283,6 +523,8 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
         eq(activityLogs.businessId, bid),
         gte(activityLogs.createdAt, recentCutoff),
         sql`${activityLogs.action} in (
+          'automation.uncontacted_lead.sent',
+          'automation.uncontacted_lead.skipped',
           'automation.appointment_reminder.sent',
           'automation.appointment_reminder.skipped',
           'automation.review_request.sent',
@@ -308,6 +550,7 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
         gte(notificationLogs.sentAt, recentCutoff),
         sql`${notificationLogs.error} is not null`,
         sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
+          'lead_follow_up_alert',
           'appointment_reminder',
           'review_request',
           'lapsed_client_reengagement'
@@ -333,6 +576,7 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
   };
 
   res.json({
+    uncontactedLeads: summarize("automation.uncontacted_lead.sent", "lead_follow_up_alert"),
     appointmentReminders: summarize("automation.appointment_reminder.sent", "appointment_reminder"),
     reviewRequests: summarize("automation.review_request.sent", "review_request"),
     lapsedClients: summarize("automation.lapsed_client.sent", "lapsed_client_reengagement"),
@@ -358,6 +602,8 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
         and(
         eq(activityLogs.businessId, bid),
         sql`${activityLogs.action} in (
+          'automation.uncontacted_lead.sent',
+          'automation.uncontacted_lead.skipped',
           'automation.appointment_reminder.sent',
           'automation.appointment_reminder.skipped',
           'automation.review_request.sent',
@@ -385,6 +631,7 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
           eq(notificationLogs.businessId, bid),
           sql`${notificationLogs.error} is not null`,
           sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
+            'lead_follow_up_alert',
             'appointment_reminder',
             'review_request',
             'lapsed_client_reengagement'
@@ -408,6 +655,10 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
         ? "appointment_reminder"
         : row.action === "automation.appointment_reminder.skipped"
           ? "appointment_reminder"
+          : row.action === "automation.uncontacted_lead.sent"
+            ? "uncontacted_lead"
+            : row.action === "automation.uncontacted_lead.skipped"
+              ? "uncontacted_lead"
           : row.action === "automation.review_request.sent"
           ? "review_request"
           : row.action === "automation.review_request.skipped"
@@ -434,11 +685,15 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
         row.action.endsWith(".skipped")
           ? automationType === "appointment_reminder"
             ? `Appointment reminder skipped: ${skipReason}.`
+            : automationType === "uncontacted_lead"
+              ? `Uncontacted lead follow-up skipped: ${skipReason}.`
             : automationType === "review_request"
               ? `Review request skipped: ${skipReason}.`
               : `Lapsed client outreach skipped: ${skipReason}.`
           : automationType === "appointment_reminder"
             ? "Appointment reminder sent."
+            : automationType === "uncontacted_lead"
+              ? "Uncontacted lead follow-up alert sent."
             : automationType === "review_request"
               ? "Review request sent."
               : "Lapsed client outreach sent.",
@@ -455,7 +710,9 @@ actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePerm
 
     const templateSlug = typeof metadata.templateSlug === "string" ? metadata.templateSlug : "";
     const automationType =
-      templateSlug === "appointment_reminder"
+      templateSlug === "lead_follow_up_alert"
+        ? "uncontacted_lead"
+        : templateSlug === "appointment_reminder"
         ? "appointment_reminder"
         : templateSlug === "review_request"
           ? "review_request"
@@ -489,17 +746,20 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
     db
       .select({
         totalSent: sql<number>`count(*) filter (where ${activityLogs.action} in (
+          'automation.uncontacted_lead.sent',
           'automation.appointment_reminder.sent',
           'automation.review_request.sent',
           'automation.lapsed_client.sent'
         ))::int`.as("total_sent"),
         totalSkipped: sql<number>`count(*) filter (where ${activityLogs.action} in (
+          'automation.uncontacted_lead.skipped',
           'automation.appointment_reminder.skipped',
           'automation.review_request.skipped',
           'automation.lapsed_client.skipped'
         ))::int`.as("total_skipped"),
         lastActivityAt: sql<Date | null>`max(${activityLogs.createdAt})`.as("last_activity_at"),
         lastSkippedAt: sql<Date | null>`max(${activityLogs.createdAt}) filter (where ${activityLogs.action} in (
+          'automation.uncontacted_lead.skipped',
           'automation.appointment_reminder.skipped',
           'automation.review_request.skipped',
           'automation.lapsed_client.skipped'
@@ -510,10 +770,12 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
         and(
           eq(activityLogs.businessId, bid),
           gte(activityLogs.createdAt, recentCutoff),
-          sql`${activityLogs.action} in (
-            'automation.appointment_reminder.sent',
-            'automation.appointment_reminder.skipped',
-            'automation.review_request.sent',
+        sql`${activityLogs.action} in (
+          'automation.uncontacted_lead.sent',
+          'automation.uncontacted_lead.skipped',
+          'automation.appointment_reminder.sent',
+          'automation.appointment_reminder.skipped',
+          'automation.review_request.sent',
             'automation.review_request.skipped',
             'automation.lapsed_client.sent'
             ,
@@ -532,10 +794,11 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
           eq(notificationLogs.businessId, bid),
           gte(notificationLogs.sentAt, recentCutoff),
           sql`${notificationLogs.error} is not null`,
-          sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
-            'appointment_reminder',
-            'review_request',
-            'lapsed_client_reengagement'
+        sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
+          'lead_follow_up_alert',
+          'appointment_reminder',
+          'review_request',
+          'lapsed_client_reengagement'
           )`
         )
       ),
@@ -720,13 +983,15 @@ actionsRouter.post("/runAutomations", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const [reminders, lapsed, reviews] = await Promise.all([
+    const [uncontactedLeads, reminders, lapsed, reviews] = await Promise.all([
+      automations.runUncontactedLeadReminders(),
       automations.runAppointmentReminders(),
       automations.runLapsedClientDetection(),
       automations.runReviewRequests(),
     ]);
     res.json({
       ok: true,
+      uncontactedLeadAlertsSent: uncontactedLeads.sent,
       remindersSent: reminders.sent,
       lapsedDetected: lapsed.detected,
       reviewRequestsSent: reviews.sent,
