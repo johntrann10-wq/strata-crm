@@ -34,6 +34,29 @@ function businessId(req: Request): string {
   return req.businessId;
 }
 
+export function getCronExecutionGate(providedSecret: string | undefined) {
+  const configuredSecret = process.env.CRON_SECRET?.trim();
+  if (!configuredSecret) {
+    return {
+      ok: false as const,
+      statusCode: 503,
+      message: "CRON_SECRET is not configured.",
+    };
+  }
+
+  if (providedSecret !== configuredSecret) {
+    return {
+      ok: false as const,
+      statusCode: 401,
+      message: "Unauthorized",
+    };
+  }
+
+  return {
+    ok: true as const,
+  };
+}
+
 const idParamSchema = z.object({ id: z.string().uuid() });
 function isPaymentSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -433,11 +456,13 @@ actionsRouter.post("/applyBusinessPreset", requireAuth, requireTenant, async (re
   }
 });
 
-/** Cron endpoint: run business-type-aware automations (reminders, lapsed clients, review requests). Optional CRON_SECRET. */
+/** Cron endpoint: run business-type-aware automations (reminders, lapsed clients, review requests). */
 actionsRouter.post("/runAutomations", async (req: Request, res: Response) => {
-  const secret = process.env.CRON_SECRET;
-  if (secret != null && secret !== "" && req.headers["x-cron-secret"] !== secret) {
-    res.status(401).json({ message: "Unauthorized" });
+  const gate = getCronExecutionGate(
+    typeof req.headers["x-cron-secret"] === "string" ? req.headers["x-cron-secret"] : undefined
+  );
+  if (!gate.ok) {
+    res.status(gate.statusCode).json({ message: gate.message });
     return;
   }
   try {
@@ -459,9 +484,11 @@ actionsRouter.post("/runAutomations", async (req: Request, res: Response) => {
 });
 
 actionsRouter.post("/runIntegrationJobs", async (req: Request, res: Response) => {
-  const secret = process.env.CRON_SECRET;
-  if (secret != null && secret !== "" && req.headers["x-cron-secret"] !== secret) {
-    res.status(401).json({ message: "Unauthorized" });
+  const gate = getCronExecutionGate(
+    typeof req.headers["x-cron-secret"] === "string" ? req.headers["x-cron-secret"] : undefined
+  );
+  if (!gate.ok) {
+    res.status(gate.statusCode).json({ message: gate.message });
     return;
   }
 

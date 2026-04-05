@@ -104,7 +104,7 @@ function logOptionalServices(): void {
   }
   const cron = process.env.CRON_SECRET?.trim();
   if (!cron) {
-    logger.info("CRON_SECRET not set: POST /api/actions/runAutomations does not require x-cron-secret");
+    logger.warn("CRON_SECRET not set: cron worker endpoints stay disabled until x-cron-secret can be enforced");
   }
   const integrationFlags = listIntegrationFeatureFlags();
   logger.info("Integration feature flags", integrationFlags);
