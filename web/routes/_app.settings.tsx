@@ -173,6 +173,8 @@ type SystemStatus = {
 type AutomationSettingsForm = {
   appointmentRemindersEnabled: boolean;
   appointmentReminderHours: number;
+  sendWindowStartHour: number;
+  sendWindowEndHour: number;
   reviewRequestsEnabled: boolean;
   reviewRequestDelayHours: number;
   reviewRequestUrl: string;
@@ -426,6 +428,8 @@ const TEAM_PERMISSION_GROUPS = [
 const DEFAULT_AUTOMATION_SETTINGS: AutomationSettingsForm = {
   appointmentRemindersEnabled: true,
   appointmentReminderHours: 24,
+  sendWindowStartHour: 8,
+  sendWindowEndHour: 18,
   reviewRequestsEnabled: false,
   reviewRequestDelayHours: 24,
   reviewRequestUrl: "",
@@ -486,6 +490,18 @@ const TWILIO_TEMPLATE_OPTIONS: Array<{
   { value: "review_request", label: "Review requests", helper: "Send review-request texts after completed work when the automation runs." },
   { value: "lapsed_client_reengagement", label: "Lapsed outreach", helper: "Send re-engagement texts when the lapsed-client automation runs." },
 ];
+
+const AUTOMATION_WINDOW_HOURS = Array.from({ length: 24 }, (_, hour) => ({
+  value: hour,
+  label:
+    hour === 0
+      ? "12:00 AM"
+      : hour < 12
+        ? `${hour}:00 AM`
+        : hour === 12
+          ? "12:00 PM"
+          : `${hour - 12}:00 PM`,
+}));
 
 function getDefaultPermissionSelection(role: string): string[] {
   return [...(ROLE_DEFAULT_PERMISSIONS[role] ?? ROLE_DEFAULT_PERMISSIONS.technician)];
@@ -1258,6 +1274,8 @@ export default function SettingsPage() {
     const nextAutomationSettings: AutomationSettingsForm = {
       appointmentRemindersEnabled: business.automationAppointmentRemindersEnabled ?? DEFAULT_AUTOMATION_SETTINGS.appointmentRemindersEnabled,
       appointmentReminderHours: business.automationAppointmentReminderHours ?? DEFAULT_AUTOMATION_SETTINGS.appointmentReminderHours,
+      sendWindowStartHour: business.automationSendWindowStartHour ?? DEFAULT_AUTOMATION_SETTINGS.sendWindowStartHour,
+      sendWindowEndHour: business.automationSendWindowEndHour ?? DEFAULT_AUTOMATION_SETTINGS.sendWindowEndHour,
       reviewRequestsEnabled: business.automationReviewRequestsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestsEnabled,
       reviewRequestDelayHours: business.automationReviewRequestDelayHours ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestDelayHours,
       reviewRequestUrl: business.reviewRequestUrl ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestUrl,
@@ -1514,6 +1532,10 @@ export default function SettingsPage() {
 
   const handleSaveAutomationSettings = async () => {
     if (!business?.id) return;
+    if (automationSettings.sendWindowStartHour === automationSettings.sendWindowEndHour) {
+      toast.error("Automation send window start and end hours cannot be the same.");
+      return;
+    }
     if (automationSettings.reviewRequestsEnabled && !automationSettings.reviewRequestUrl.trim()) {
       toast.error("Add a review link before enabling review request automations.");
       return;
@@ -1526,6 +1548,8 @@ export default function SettingsPage() {
       id: business.id,
       automationAppointmentRemindersEnabled: automationSettings.appointmentRemindersEnabled,
       automationAppointmentReminderHours: automationSettings.appointmentReminderHours,
+      automationSendWindowStartHour: automationSettings.sendWindowStartHour,
+      automationSendWindowEndHour: automationSettings.sendWindowEndHour,
       automationReviewRequestsEnabled: automationSettings.reviewRequestsEnabled,
       automationReviewRequestDelayHours: automationSettings.reviewRequestDelayHours,
       reviewRequestUrl: automationSettings.reviewRequestUrl.trim() || null,
@@ -3804,6 +3828,68 @@ export default function SettingsPage() {
                         </div>
                       ))
                     )}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Automation send window</p>
+                    <p className="text-sm text-muted-foreground">
+                      Keep reminder, review, and re-engagement sends inside a sane local-time window for your shop.
+                    </p>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label>Start hour</Label>
+                      <Select
+                        value={String(automationSettings.sendWindowStartHour)}
+                        onValueChange={(value) =>
+                          setAutomationSettings((current) => ({
+                            ...current,
+                            sendWindowStartHour: Number(value),
+                          }))
+                        }
+                        disabled={!canEditSettings}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select start hour" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AUTOMATION_WINDOW_HOURS.map((option) => (
+                            <SelectItem key={`automation-start-${option.value}`} value={String(option.value)}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>End hour</Label>
+                      <Select
+                        value={String(automationSettings.sendWindowEndHour)}
+                        onValueChange={(value) =>
+                          setAutomationSettings((current) => ({
+                            ...current,
+                            sendWindowEndHour: Number(value),
+                          }))
+                        }
+                        disabled={!canEditSettings}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select end hour" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AUTOMATION_WINDOW_HOURS.map((option) => (
+                            <SelectItem key={`automation-end-${option.value}`} value={String(option.value)}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+                    The window uses your business timezone. If the end hour is earlier than the start hour, Strata treats it as an overnight window.
                   </div>
                 </div>
 

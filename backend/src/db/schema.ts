@@ -140,6 +140,8 @@ export const businesses = pgTable("businesses", {
   calendarBlockCapacityPerSlot: integer("calendar_block_capacity_per_slot").default(1),
   automationAppointmentRemindersEnabled: boolean("automation_appointment_reminders_enabled").default(true),
   automationAppointmentReminderHours: integer("automation_appointment_reminder_hours").default(24),
+  automationSendWindowStartHour: integer("automation_send_window_start_hour").default(8),
+  automationSendWindowEndHour: integer("automation_send_window_end_hour").default(18),
   automationReviewRequestsEnabled: boolean("automation_review_requests_enabled").default(false),
   automationReviewRequestDelayHours: integer("automation_review_request_delay_hours").default(24),
   reviewRequestUrl: text("review_request_url"),

@@ -45,6 +45,8 @@ const createSchema = z.object({
   calendarBlockCapacityPerSlot: z.number().int().min(1).max(12).optional(),
   automationAppointmentRemindersEnabled: z.boolean().optional(),
   automationAppointmentReminderHours: z.number().int().min(1).max(336).optional(),
+  automationSendWindowStartHour: z.number().int().min(0).max(23).optional(),
+  automationSendWindowEndHour: z.number().int().min(0).max(23).optional(),
   automationReviewRequestsEnabled: z.boolean().optional(),
   automationReviewRequestDelayHours: z.number().int().min(1).max(336).optional(),
   reviewRequestUrl: z.string().url().nullable().optional(),
@@ -94,6 +96,8 @@ function coerceBusinessRecord(
     calendarBlockCapacityPerSlot: record.calendarBlockCapacityPerSlot ?? 1,
     automationAppointmentRemindersEnabled: record.automationAppointmentRemindersEnabled ?? true,
     automationAppointmentReminderHours: record.automationAppointmentReminderHours ?? 24,
+    automationSendWindowStartHour: record.automationSendWindowStartHour ?? 8,
+    automationSendWindowEndHour: record.automationSendWindowEndHour ?? 18,
     automationReviewRequestsEnabled: record.automationReviewRequestsEnabled ?? false,
     automationReviewRequestDelayHours: record.automationReviewRequestDelayHours ?? 24,
     reviewRequestUrl: record.reviewRequestUrl ?? null,
@@ -266,6 +270,12 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  if (
+    (parsed.data.automationSendWindowStartHour ?? 8) ===
+    (parsed.data.automationSendWindowEndHour ?? 18)
+  ) {
+    throw new BadRequestError("Automation send window start and end hours cannot be the same.");
+  }
   if (parsed.data.integrationWebhookEnabled && !parsed.data.integrationWebhookUrl?.trim()) {
     throw new BadRequestError("Add a webhook endpoint URL before enabling signed webhooks.");
   }
@@ -299,6 +309,8 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
         parsed.data.calendarBlockCapacityPerSlot ?? typeDefaults.calendarBlockCapacityPerSlot,
       automationAppointmentRemindersEnabled: parsed.data.automationAppointmentRemindersEnabled ?? true,
       automationAppointmentReminderHours: parsed.data.automationAppointmentReminderHours ?? 24,
+      automationSendWindowStartHour: parsed.data.automationSendWindowStartHour ?? 8,
+      automationSendWindowEndHour: parsed.data.automationSendWindowEndHour ?? 18,
       automationReviewRequestsEnabled: parsed.data.automationReviewRequestsEnabled ?? false,
       automationReviewRequestDelayHours: parsed.data.automationReviewRequestDelayHours ?? 24,
       reviewRequestUrl: parsed.data.reviewRequestUrl ?? null,
@@ -402,6 +414,12 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   if (parsed.data.automationAppointmentReminderHours !== undefined) {
     updates.automationAppointmentReminderHours = parsed.data.automationAppointmentReminderHours ?? 24;
   }
+  if (parsed.data.automationSendWindowStartHour !== undefined) {
+    updates.automationSendWindowStartHour = parsed.data.automationSendWindowStartHour ?? 8;
+  }
+  if (parsed.data.automationSendWindowEndHour !== undefined) {
+    updates.automationSendWindowEndHour = parsed.data.automationSendWindowEndHour ?? 18;
+  }
   if (parsed.data.automationReviewRequestsEnabled !== undefined) {
     updates.automationReviewRequestsEnabled = parsed.data.automationReviewRequestsEnabled ?? false;
   }
@@ -434,6 +452,13 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   const nextReviewAutomationEnabled =
     parsed.data.automationReviewRequestsEnabled ?? existing.automationReviewRequestsEnabled ?? false;
+  const nextAutomationWindowStart =
+    parsed.data.automationSendWindowStartHour ?? existing.automationSendWindowStartHour ?? 8;
+  const nextAutomationWindowEnd =
+    parsed.data.automationSendWindowEndHour ?? existing.automationSendWindowEndHour ?? 18;
+  if (nextAutomationWindowStart === nextAutomationWindowEnd) {
+    throw new BadRequestError("Automation send window start and end hours cannot be the same.");
+  }
   const nextReviewRequestUrl =
     parsed.data.reviewRequestUrl !== undefined
       ? parsed.data.reviewRequestUrl?.trim() || null

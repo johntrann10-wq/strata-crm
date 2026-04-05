@@ -53,6 +53,32 @@ function formatBusinessDate(value: Date | null | undefined, timezone: string): s
   }).format(value);
 }
 
+function getBusinessHourInTimezone(value: Date, timezone: string): number {
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    hour12: false,
+    timeZone: timezone,
+  }).format(value);
+  const hour = Number.parseInt(formatted, 10);
+  return Number.isNaN(hour) ? 0 : hour;
+}
+
+export function isWithinAutomationWindow(
+  value: Date,
+  timezone: string,
+  startHourInput: number | null | undefined,
+  endHourInput: number | null | undefined
+): boolean {
+  const startHour = Math.max(0, Math.min(Number(startHourInput ?? 8), 23));
+  const endHour = Math.max(0, Math.min(Number(endHourInput ?? 18), 23));
+  if (startHour === endHour) return false;
+  const hour = getBusinessHourInTimezone(value, timezone);
+  if (startHour < endHour) {
+    return hour >= startHour && hour < endHour;
+  }
+  return hour >= startHour || hour < endHour;
+}
+
 async function hasAutomationActivity(action: string, entityType: string, entityId: string, since?: Date) {
   const conditions = [
     eq(activityLogs.action, action),
@@ -81,6 +107,8 @@ export async function runAppointmentReminders(options?: {
       timezone: businesses.timezone,
       enabled: businesses.automationAppointmentRemindersEnabled,
       leadHours: businesses.automationAppointmentReminderHours,
+      sendWindowStartHour: businesses.automationSendWindowStartHour,
+      sendWindowEndHour: businesses.automationSendWindowEndHour,
     })
     .from(businesses)
     .where(where);
@@ -90,6 +118,12 @@ export async function runAppointmentReminders(options?: {
     if (!REMINDER_TYPES.has(business.type) || !business.enabled) continue;
 
     const timezone = getBusinessTimezone(business);
+    if (
+      !options?.force &&
+      !isWithinAutomationWindow(new Date(), timezone, business.sendWindowStartHour, business.sendWindowEndHour)
+    ) {
+      continue;
+    }
     const leadHours = Math.max(1, Math.min(Number(business.leadHours ?? 24), 336));
     const now = new Date();
     const windowStart = options?.force
@@ -211,6 +245,8 @@ export async function runLapsedClientDetection(options?: {
       enabled: businesses.automationLapsedClientsEnabled,
       months: businesses.automationLapsedClientMonths,
       bookingRequestUrl: businesses.bookingRequestUrl,
+      sendWindowStartHour: businesses.automationSendWindowStartHour,
+      sendWindowEndHour: businesses.automationSendWindowEndHour,
     })
     .from(businesses)
     .where(where);
@@ -227,6 +263,12 @@ export async function runLapsedClientDetection(options?: {
     }
 
     const timezone = getBusinessTimezone(business);
+    if (
+      !options?.force &&
+      !isWithinAutomationWindow(new Date(), timezone, business.sendWindowStartHour, business.sendWindowEndHour)
+    ) {
+      continue;
+    }
     const months = Math.max(1, Math.min(Number(business.months ?? 6), 36));
     const cutoff = new Date();
     cutoff.setMonth(cutoff.getMonth() - months);
@@ -341,6 +383,8 @@ export async function runReviewRequests(options?: {
       enabled: businesses.automationReviewRequestsEnabled,
       delayHours: businesses.automationReviewRequestDelayHours,
       reviewRequestUrl: businesses.reviewRequestUrl,
+      sendWindowStartHour: businesses.automationSendWindowStartHour,
+      sendWindowEndHour: businesses.automationSendWindowEndHour,
     })
     .from(businesses)
     .where(where);
@@ -357,6 +401,13 @@ export async function runReviewRequests(options?: {
     }
 
     const delayHours = Math.max(1, Math.min(Number(business.delayHours ?? 24), 336));
+    const timezone = getBusinessTimezone(business);
+    if (
+      !options?.force &&
+      !isWithinAutomationWindow(new Date(), timezone, business.sendWindowStartHour, business.sendWindowEndHour)
+    ) {
+      continue;
+    }
     const cutoff = new Date(Date.now() - delayHours * 60 * 60 * 1000);
 
     const rows = await db

@@ -125,6 +125,8 @@ CREATE TABLE IF NOT EXISTS businesses (
   calendar_block_capacity_per_slot integer DEFAULT 1,
   automation_appointment_reminders_enabled boolean DEFAULT true,
   automation_appointment_reminder_hours integer DEFAULT 24,
+  automation_send_window_start_hour integer DEFAULT 8,
+  automation_send_window_end_hour integer DEFAULT 18,
   automation_review_requests_enabled boolean DEFAULT false,
   automation_review_request_delay_hours integer DEFAULT 24,
   review_request_url text,
@@ -160,6 +162,8 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS default_admin_fee_enabled boolea
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS calendar_block_capacity_per_slot integer DEFAULT 1;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_appointment_reminders_enabled boolean DEFAULT true;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_appointment_reminder_hours integer DEFAULT 24;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_send_window_start_hour integer DEFAULT 8;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_send_window_end_hour integer DEFAULT 18;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_review_requests_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_review_request_delay_hours integer DEFAULT 24;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS review_request_url text;

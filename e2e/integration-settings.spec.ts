@@ -730,6 +730,9 @@ test("shows recent automation activity across email and sms channels", async ({ 
   await page.goto("/settings?tab=automations");
 
   await expect(page.getByText("Recent automation activity", { exact: true })).toBeVisible();
+  await expect(page.getByText(/automation send window/i)).toBeVisible();
+  await expect(page.getByText(/^Start hour$/i)).toBeVisible();
+  await expect(page.getByText(/^End hour$/i)).toBeVisible();
   await expect(page.getByText(/appointment reminder sent\./i)).toBeVisible();
   await expect(page.getByText(/client@example\.com/i)).toBeVisible();
   await expect(page.getByText(/twilio callback reported delivery failure\./i)).toBeVisible();
