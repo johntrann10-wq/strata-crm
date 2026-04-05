@@ -512,6 +512,56 @@ export async function sendAppointmentReminder(options: {
   });
 }
 
+export async function sendLeadAutoResponse(options: {
+  to: string;
+  businessId?: string | null;
+  clientName: string;
+  businessName: string;
+  serviceInterest?: string | null;
+  responseWindow: string;
+}): Promise<void> {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "lead_auto_response",
+    businessId: options.businessId,
+    vars: {
+      clientName: options.clientName,
+      businessName: options.businessName,
+      serviceInterest: fallback(options.serviceInterest),
+      responseWindow: options.responseWindow,
+    },
+  });
+}
+
+export async function sendLeadFollowUpAlert(options: {
+  to: string;
+  businessId?: string | null;
+  ownerName: string;
+  businessName: string;
+  clientName: string;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  vehicle?: string | null;
+  serviceInterest?: string | null;
+  summary?: string | null;
+}): Promise<void> {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "lead_follow_up_alert",
+    businessId: options.businessId,
+    vars: {
+      ownerName: options.ownerName,
+      businessName: options.businessName,
+      clientName: options.clientName,
+      clientEmail: fallback(options.clientEmail),
+      clientPhone: fallback(options.clientPhone),
+      vehicle: fallback(options.vehicle),
+      serviceInterest: fallback(options.serviceInterest),
+      summary: fallback(options.summary),
+    },
+  });
+}
+
 /** Send payment receipt. Vars: clientName, businessName, amount, invoiceNumber, paidAt, method */
 export async function sendPaymentReceipt(options: {
   to: string;

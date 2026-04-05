@@ -5,16 +5,18 @@
 
 import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { activityLogs, appointments, businesses, clients, vehicles } from "../db/schema.js";
+import { activityLogs, appointments, businesses, clients, users, vehicles } from "../db/schema.js";
 import { createActivityLog } from "./activity.js";
 import {
   sendAppointmentReminder,
+  sendLeadFollowUpAlert,
   sendLapsedClientReengagement,
   sendReviewRequest,
 } from "./email.js";
 import { logger } from "./logger.js";
 import { buildVehicleDisplayName } from "./vehicleFormatting.js";
 import { enqueueTwilioTemplateSms } from "./twilio.js";
+import { parseLeadRecord } from "./leads.js";
 
 const REMINDER_TYPES = new Set([
   "auto_detailing",
@@ -561,6 +563,127 @@ export async function runReviewRequests(options?: {
         logger.warn("Review request automation failed", {
           businessId: business.id,
           appointmentId: row.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  return { sent };
+}
+
+export async function runUncontactedLeadReminders(options?: {
+  businessId?: string;
+  force?: boolean;
+}): Promise<{ sent: number }> {
+  const where = options?.businessId ? eq(businesses.id, options.businessId) : sql`1=1`;
+  const list = await db
+    .select({
+      id: businesses.id,
+      name: businesses.name,
+      timezone: businesses.timezone,
+      enabled: businesses.automationUncontactedLeadsEnabled,
+      reminderHours: businesses.automationUncontactedLeadHours,
+      sendWindowStartHour: businesses.automationSendWindowStartHour,
+      sendWindowEndHour: businesses.automationSendWindowEndHour,
+      ownerEmail: users.email,
+      ownerFirstName: users.firstName,
+      businessEmail: businesses.email,
+    })
+    .from(businesses)
+    .leftJoin(users, eq(users.id, businesses.ownerId))
+    .where(where);
+
+  let sent = 0;
+  for (const business of list) {
+    if (!business.enabled) continue;
+    const now = new Date();
+    const timezone = getBusinessTimezone(business);
+    if (
+      !options?.force &&
+      !isWithinAutomationWindow(now, timezone, business.sendWindowStartHour, business.sendWindowEndHour)
+    ) {
+      await recordAutomationSkip({
+        businessId: business.id,
+        action: "automation.uncontacted_lead.skipped",
+        entityType: "business",
+        entityId: business.id,
+        metadata: {
+          reason: "outside_send_window",
+          sendWindowStartHour: business.sendWindowStartHour ?? 8,
+          sendWindowEndHour: business.sendWindowEndHour ?? 18,
+        },
+        dedupeSince: new Date(now.getTime() - 6 * 60 * 60 * 1000),
+      });
+      continue;
+    }
+
+    const recipient = business.businessEmail?.trim() || business.ownerEmail?.trim() || "";
+    if (!recipient) {
+      await recordAutomationSkip({
+        businessId: business.id,
+        action: "automation.uncontacted_lead.skipped",
+        entityType: "business",
+        entityId: business.id,
+        metadata: { reason: "missing_follow_up_recipient" },
+        dedupeSince: new Date(now.getTime() - 12 * 60 * 60 * 1000),
+      });
+      continue;
+    }
+
+    const reminderHours = Math.max(1, Math.min(Number(business.reminderHours ?? 2), 168));
+    const cutoff = new Date(Date.now() - reminderHours * 60 * 60 * 1000);
+    const rows = await db
+      .select({
+        id: clients.id,
+        createdAt: clients.createdAt,
+        firstName: clients.firstName,
+        lastName: clients.lastName,
+        email: clients.email,
+        phone: clients.phone,
+        notes: clients.notes,
+      })
+      .from(clients)
+      .where(and(eq(clients.businessId, business.id), lte(clients.createdAt, cutoff)))
+      .orderBy(asc(clients.createdAt))
+      .limit(options?.force ? 100 : 25);
+
+    for (const row of rows) {
+      const lead = parseLeadRecord(row.notes);
+      if (!lead.isLead || lead.status !== "new") continue;
+      if (await hasAutomationActivity("automation.uncontacted_lead.sent", "client", row.id, cutoff)) {
+        continue;
+      }
+
+      try {
+        await sendLeadFollowUpAlert({
+          to: recipient,
+          businessId: business.id,
+          businessName: business.name,
+          ownerName: business.ownerFirstName?.trim() || "Team",
+          clientName: `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim() || "New lead",
+          clientEmail: row.email,
+          clientPhone: row.phone,
+          vehicle: lead.vehicle || null,
+          serviceInterest: lead.serviceInterest || null,
+          summary: lead.summary || null,
+        });
+        await createActivityLog({
+          businessId: business.id,
+          action: "automation.uncontacted_lead.sent",
+          entityType: "client",
+          entityId: row.id,
+          metadata: {
+            sentTo: recipient,
+            reminderHours,
+            leadCreatedAt: row.createdAt.toISOString(),
+          },
+        });
+        sent += 1;
+      } catch (error) {
+        logger.warn("Uncontacted lead reminder automation failed", {
+          businessId: business.id,
+          clientId: row.id,
           error: error instanceof Error ? error.message : String(error),
         });
       }
