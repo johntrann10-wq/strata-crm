@@ -437,6 +437,16 @@ export const api = {
   integration: {
     listStatus: () =>
       request<{
+        infrastructure: {
+          vaultConfigured: boolean;
+          cronSecretConfigured: boolean;
+          providerConfiguration: {
+            quickbooks_online: boolean;
+            twilio_sms: boolean;
+            google_calendar: boolean;
+            outbound_webhooks: boolean;
+          };
+        };
         registry: Array<{
           provider: "quickbooks_online" | "twilio_sms" | "google_calendar" | "outbound_webhooks";
           label: string;

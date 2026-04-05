@@ -1098,7 +1098,15 @@ export default function SettingsPage() {
   const presetPreviewNames = preset?.names?.slice(0, 4) ?? [];
   const presetHasRecommendations = presetServiceCount > 0;
   const integrationStatus = integrationStatusData as
-    | { registry: IntegrationRegistryStatus[]; connections: IntegrationConnectionStatus[] }
+    | {
+        infrastructure: {
+          vaultConfigured: boolean;
+          cronSecretConfigured: boolean;
+          providerConfiguration: Record<IntegrationRegistryStatus["provider"], boolean>;
+        };
+        registry: IntegrationRegistryStatus[];
+        connections: IntegrationConnectionStatus[];
+      }
     | undefined;
   const integrationFailures = (integrationFailureData as IntegrationFailureRecord[] | undefined) ?? [];
   const quickBooksConnection =
@@ -2776,14 +2784,57 @@ export default function SettingsPage() {
                     </Badge>
                   </div>
                   <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Vault</p>
+                      <p className="mt-2 text-sm font-medium">
+                        {integrationStatus?.infrastructure.vaultConfigured ? "Configured" : "Missing"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        `INTEGRATION_VAULT_SECRET` is required for encrypted provider credentials.
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cron secret</p>
+                      <p className="mt-2 text-sm font-medium">
+                        {integrationStatus?.infrastructure.cronSecretConfigured ? "Configured" : "Missing"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Production queue runners are safer when `CRON_SECRET` is enforced.
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-3 md:col-span-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Provider readiness</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(integrationStatus?.registry ?? []).map((entry) => {
+                          const backendConfigured =
+                            integrationStatus?.infrastructure.providerConfiguration?.[entry.provider] ?? false;
+                          return (
+                            <Badge
+                              key={`${entry.provider}-backend-ready`}
+                              variant="outline"
+                              className={backendConfigured ? "border-emerald-500/30 text-emerald-700" : "border-amber-500/30 text-amber-700"}
+                            >
+                              {entry.label}: {backendConfigured ? "ready" : "needs config"}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     {(integrationStatus?.registry ?? []).map((entry) => {
                       const connection = integrationStatus?.connections.find((item) => item.provider === entry.provider);
+                      const backendConfigured =
+                        integrationStatus?.infrastructure.providerConfiguration?.[entry.provider] ?? false;
                       return (
                         <div key={entry.provider} className="rounded-lg border bg-muted/20 p-3">
                           <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
                               <p className="text-sm font-medium">{entry.label}</p>
                               <p className="text-xs text-muted-foreground">{entry.description}</p>
+                              {!backendConfigured ? (
+                                <p className="text-[11px] text-amber-700">Server configuration is incomplete for this provider.</p>
+                              ) : null}
                             </div>
                             <Badge variant={connection ? getConnectionBadgeVariant(connection.status) : "outline"}>
                               {!entry.featureFlagEnabled

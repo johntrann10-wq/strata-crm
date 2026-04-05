@@ -142,3 +142,7 @@ export function validateEnv(): void {
   }
   logOptionalServices();
 }
+
+export function isCronSecretConfigured(): boolean {
+  return !!process.env.CRON_SECRET?.trim();
+}

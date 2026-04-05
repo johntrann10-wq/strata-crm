@@ -10,7 +10,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js
 import { INTEGRATION_REGISTRY } from "../lib/integrationRegistry.js";
 import { isIntegrationFeatureEnabled, listIntegrationFeatureFlags } from "../lib/integrationFeatureFlags.js";
 import { listIntegrationFailures, retryIntegrationJobForBusiness } from "../lib/integrationJobs.js";
-import { decryptIntegrationJson } from "../lib/integrationVault.js";
+import { decryptIntegrationJson, isIntegrationVaultConfigured } from "../lib/integrationVault.js";
 import { verifyIntegrationStateToken } from "../lib/jwt.js";
 import {
   buildQuickBooksAuthorizeUrl,
@@ -38,6 +38,7 @@ import {
   connectTwilioBusiness,
   disconnectTwilioBusiness,
   handleTwilioStatusCallback,
+  isTwilioConfigured,
 } from "../lib/twilio.js";
 import {
   ensureOutboundWebhookConnectionForBusiness,
@@ -46,6 +47,7 @@ import {
   replayOutboundWebhookActivity,
 } from "../lib/integrations.js";
 import { createIntegrationAuditLog } from "../lib/integrationAudit.js";
+import { isCronSecretConfigured } from "../lib/env.js";
 
 export const integrationsRouter = Router({ mergeParams: true });
 
@@ -181,6 +183,16 @@ integrationsRouter.get("/", requireAuth, requireTenant, requirePermission("setti
   });
 
   res.json({
+    infrastructure: {
+      vaultConfigured: isIntegrationVaultConfigured(),
+      cronSecretConfigured: isCronSecretConfigured(),
+      providerConfiguration: {
+        quickbooks_online: isQuickBooksConfigured(),
+        twilio_sms: isTwilioConfigured(),
+        google_calendar: isGoogleCalendarConfigured(),
+        outbound_webhooks: isIntegrationVaultConfigured(),
+      },
+    },
     registry: INTEGRATION_REGISTRY.map((entry) => ({
       ...entry,
       featureFlagEnabled: featureFlags[entry.provider],

@@ -85,6 +85,10 @@ function getApiBase(): string {
   return value.replace(/\/+$/, "");
 }
 
+export function isTwilioConfigured() {
+  return !!process.env.API_BASE?.trim();
+}
+
 function getTwilioCallbackUrl(connectionId: string) {
   return `${getApiBase()}/api/integrations/twilio/status/${encodeURIComponent(connectionId)}`;
 }

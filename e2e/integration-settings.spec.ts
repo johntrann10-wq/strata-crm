@@ -149,6 +149,16 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
+        infrastructure: {
+          vaultConfigured: true,
+          cronSecretConfigured: true,
+          providerConfiguration: {
+            quickbooks_online: true,
+            twilio_sms: true,
+            google_calendar: true,
+            outbound_webhooks: true,
+          },
+        },
         registry: [
           {
             provider: "quickbooks_online",
@@ -553,6 +563,9 @@ test("shows integration infrastructure and failure visibility in settings", asyn
   await page.getByRole("tab", { name: /integrations/i }).click();
 
   await expect(page.getByText(/integration infrastructure/i)).toBeVisible();
+  await expect(page.getByText(/^Vault$/i)).toBeVisible();
+  await expect(page.getByText(/^Cron secret$/i)).toBeVisible();
+  await expect(page.getByText(/quickbooks online: ready/i)).toBeVisible();
   await expect(page.getByText("QuickBooks Online", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Twilio SMS", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Failure visibility", { exact: true })).toBeVisible();
