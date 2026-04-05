@@ -101,6 +101,16 @@ CREATE TABLE IF NOT EXISTS businesses (
   default_admin_fee_enabled boolean DEFAULT false,
   appointment_buffer_minutes integer DEFAULT 15,
   calendar_block_capacity_per_slot integer DEFAULT 1,
+  automation_appointment_reminders_enabled boolean DEFAULT true,
+  automation_appointment_reminder_hours integer DEFAULT 24,
+  automation_review_requests_enabled boolean DEFAULT false,
+  automation_review_request_delay_hours integer DEFAULT 24,
+  automation_lapsed_clients_enabled boolean DEFAULT false,
+  automation_lapsed_client_months integer DEFAULT 6,
+  integration_webhook_enabled boolean DEFAULT false,
+  integration_webhook_url text,
+  integration_webhook_secret text,
+  integration_webhook_events text DEFAULT '[]',
   next_invoice_number integer NOT NULL DEFAULT 1,
   onboarding_complete boolean DEFAULT false,
   staff_count integer,
@@ -124,6 +134,16 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_details_submitted
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS default_admin_fee decimal(12,2) DEFAULT 0;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS default_admin_fee_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS calendar_block_capacity_per_slot integer DEFAULT 1;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_appointment_reminders_enabled boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_appointment_reminder_hours integer DEFAULT 24;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_review_requests_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_review_request_delay_hours integer DEFAULT 24;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_lapsed_clients_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_lapsed_client_months integer DEFAULT 6;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_url text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_secret text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_events text DEFAULT '[]';
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_charges_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_payouts_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_onboarded_at timestamptz;

@@ -42,6 +42,16 @@ const createSchema = z.object({
   defaultAdminFeeEnabled: z.boolean().optional(),
   appointmentBufferMinutes: z.number().int().min(0).max(1440).optional(),
   calendarBlockCapacityPerSlot: z.number().int().min(1).max(12).optional(),
+  automationAppointmentRemindersEnabled: z.boolean().optional(),
+  automationAppointmentReminderHours: z.number().int().min(1).max(336).optional(),
+  automationReviewRequestsEnabled: z.boolean().optional(),
+  automationReviewRequestDelayHours: z.number().int().min(1).max(336).optional(),
+  automationLapsedClientsEnabled: z.boolean().optional(),
+  automationLapsedClientMonths: z.number().int().min(1).max(36).optional(),
+  integrationWebhookEnabled: z.boolean().optional(),
+  integrationWebhookUrl: z.string().url().nullable().optional(),
+  integrationWebhookSecret: z.string().max(255).nullable().optional(),
+  integrationWebhookEvents: z.array(z.string().min(1).max(120)).max(24).optional(),
 });
 
 const updateSchema = createSchema
@@ -79,6 +89,16 @@ function coerceBusinessRecord(
     defaultAdminFeeEnabled: record.defaultAdminFeeEnabled ?? false,
     appointmentBufferMinutes: record.appointmentBufferMinutes ?? 15,
     calendarBlockCapacityPerSlot: record.calendarBlockCapacityPerSlot ?? 1,
+    automationAppointmentRemindersEnabled: record.automationAppointmentRemindersEnabled ?? true,
+    automationAppointmentReminderHours: record.automationAppointmentReminderHours ?? 24,
+    automationReviewRequestsEnabled: record.automationReviewRequestsEnabled ?? false,
+    automationReviewRequestDelayHours: record.automationReviewRequestDelayHours ?? 24,
+    automationLapsedClientsEnabled: record.automationLapsedClientsEnabled ?? false,
+    automationLapsedClientMonths: record.automationLapsedClientMonths ?? 6,
+    integrationWebhookEnabled: record.integrationWebhookEnabled ?? false,
+    integrationWebhookUrl: record.integrationWebhookUrl ?? null,
+    integrationWebhookSecret: record.integrationWebhookSecret ?? null,
+    integrationWebhookEvents: record.integrationWebhookEvents ?? "[]",
     nextInvoiceNumber: record.nextInvoiceNumber ?? 1,
     onboardingComplete: record.onboardingComplete ?? null,
     staffCount: record.staffCount ?? null,
@@ -99,8 +119,15 @@ function coerceBusinessRecord(
 }
 
 function serializeBusiness(record: BusinessRecord) {
+  let integrationWebhookEvents: string[] = [];
+  try {
+    integrationWebhookEvents = JSON.parse(record.integrationWebhookEvents ?? "[]") as string[];
+  } catch {
+    integrationWebhookEvents = [];
+  }
   return {
     ...record,
+    integrationWebhookEvents,
     website: null,
     bio: null,
     instagram: null,
@@ -260,6 +287,16 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
         parsed.data.appointmentBufferMinutes ?? typeDefaults.appointmentBufferMinutes,
       calendarBlockCapacityPerSlot:
         parsed.data.calendarBlockCapacityPerSlot ?? typeDefaults.calendarBlockCapacityPerSlot,
+      automationAppointmentRemindersEnabled: parsed.data.automationAppointmentRemindersEnabled ?? true,
+      automationAppointmentReminderHours: parsed.data.automationAppointmentReminderHours ?? 24,
+      automationReviewRequestsEnabled: parsed.data.automationReviewRequestsEnabled ?? false,
+      automationReviewRequestDelayHours: parsed.data.automationReviewRequestDelayHours ?? 24,
+      automationLapsedClientsEnabled: parsed.data.automationLapsedClientsEnabled ?? false,
+      automationLapsedClientMonths: parsed.data.automationLapsedClientMonths ?? 6,
+      integrationWebhookEnabled: parsed.data.integrationWebhookEnabled ?? false,
+      integrationWebhookUrl: parsed.data.integrationWebhookUrl ?? null,
+      integrationWebhookSecret: parsed.data.integrationWebhookSecret ?? null,
+      integrationWebhookEvents: JSON.stringify(parsed.data.integrationWebhookEvents ?? []),
     })
     .returning();
   if (!created) throw new BadRequestError("Failed to create business.");
@@ -331,6 +368,36 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.calendarBlockCapacityPerSlot !== undefined) {
     updates.calendarBlockCapacityPerSlot = parsed.data.calendarBlockCapacityPerSlot ?? 1;
+  }
+  if (parsed.data.automationAppointmentRemindersEnabled !== undefined) {
+    updates.automationAppointmentRemindersEnabled = parsed.data.automationAppointmentRemindersEnabled ?? true;
+  }
+  if (parsed.data.automationAppointmentReminderHours !== undefined) {
+    updates.automationAppointmentReminderHours = parsed.data.automationAppointmentReminderHours ?? 24;
+  }
+  if (parsed.data.automationReviewRequestsEnabled !== undefined) {
+    updates.automationReviewRequestsEnabled = parsed.data.automationReviewRequestsEnabled ?? false;
+  }
+  if (parsed.data.automationReviewRequestDelayHours !== undefined) {
+    updates.automationReviewRequestDelayHours = parsed.data.automationReviewRequestDelayHours ?? 24;
+  }
+  if (parsed.data.automationLapsedClientsEnabled !== undefined) {
+    updates.automationLapsedClientsEnabled = parsed.data.automationLapsedClientsEnabled ?? false;
+  }
+  if (parsed.data.automationLapsedClientMonths !== undefined) {
+    updates.automationLapsedClientMonths = parsed.data.automationLapsedClientMonths ?? 6;
+  }
+  if (parsed.data.integrationWebhookEnabled !== undefined) {
+    updates.integrationWebhookEnabled = parsed.data.integrationWebhookEnabled ?? false;
+  }
+  if (parsed.data.integrationWebhookUrl !== undefined) {
+    updates.integrationWebhookUrl = parsed.data.integrationWebhookUrl ?? null;
+  }
+  if (parsed.data.integrationWebhookSecret !== undefined) {
+    updates.integrationWebhookSecret = parsed.data.integrationWebhookSecret ?? null;
+  }
+  if (parsed.data.integrationWebhookEvents !== undefined) {
+    updates.integrationWebhookEvents = JSON.stringify(parsed.data.integrationWebhookEvents ?? []);
   }
 
   let updated: BusinessRecord | undefined;

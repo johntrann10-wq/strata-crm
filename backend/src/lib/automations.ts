@@ -1,14 +1,20 @@
 /**
- * Business-type-aware automations: reminders, lapsed client detection, review requests.
- * Only run for relevant business types; respect timezone and marketing opt-in.
+ * Business-owned automations: appointment reminders, lapsed client outreach, and review requests.
+ * These are safe-by-default and can be toggled per business from Settings.
  */
 
+import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { businesses, appointments, clients } from "../db/schema.js";
-import { eq, and, sql, gt, isNull } from "drizzle-orm";
+import { activityLogs, appointments, businesses, clients, vehicles } from "../db/schema.js";
+import { createActivityLog } from "./activity.js";
+import {
+  sendAppointmentReminder,
+  sendLapsedClientReengagement,
+  sendReviewRequest,
+} from "./email.js";
 import { logger } from "./logger.js";
+import { buildVehicleDisplayName } from "./vehicleFormatting.js";
 
-/** Business types that get appointment reminders (scheduled/confirmed appointments) */
 const REMINDER_TYPES = new Set([
   "auto_detailing",
   "mobile_detailing",
@@ -20,103 +26,335 @@ const REMINDER_TYPES = new Set([
   "muffler_shop",
 ]);
 
-/** Business types that get lapsed client detection and outreach */
-const LAPSED_TYPES = new Set([
-  "auto_detailing",
-  "mobile_detailing",
-  "wrap_ppf",
-  "window_tinting",
-  "performance",
-  "mechanic",
-  "tire_shop",
-  "muffler_shop",
-]);
+const LAPSED_TYPES = new Set(REMINDER_TYPES);
+const REVIEW_REQUEST_TYPES = new Set(REMINDER_TYPES);
 
-/** Business types that get post-visit review requests */
-const REVIEW_REQUEST_TYPES = new Set([
-  "auto_detailing",
-  "mobile_detailing",
-  "wrap_ppf",
-  "window_tinting",
-  "performance",
-  "mechanic",
-  "tire_shop",
-  "muffler_shop",
-]);
+const DEFAULT_TIMEZONE = "America/New_York";
 
 function getBusinessTimezone(business: { timezone?: string | null }): string {
-  return business.timezone ?? "America/New_York";
+  return business.timezone ?? DEFAULT_TIMEZONE;
 }
 
-/**
- * Run appointment reminders for businesses that have this feature.
- * Only for active appointment types (scheduled, confirmed); respects business timezone.
- * In production this would be called by a cron at e.g. 8am in each timezone.
- */
-export async function runAppointmentReminders(options?: { businessId?: string }): Promise<{ sent: number }> {
-  const where = options?.businessId
-    ? eq(businesses.id, options.businessId)
-    : sql`1=1`;
+function formatBusinessDateTime(value: Date | null | undefined, timezone: string): string {
+  if (!value) return "TBD";
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: timezone,
+  }).format(value);
+}
+
+function formatBusinessDate(value: Date | null | undefined, timezone: string): string | null {
+  if (!value) return null;
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeZone: timezone,
+  }).format(value);
+}
+
+async function hasAutomationActivity(action: string, entityType: string, entityId: string, since?: Date) {
+  const conditions = [
+    eq(activityLogs.action, action),
+    eq(activityLogs.entityType, entityType),
+    eq(activityLogs.entityId, entityId),
+  ];
+  if (since) conditions.push(gte(activityLogs.createdAt, since));
+  const [existing] = await db
+    .select({ id: activityLogs.id })
+    .from(activityLogs)
+    .where(and(...conditions))
+    .limit(1);
+  return !!existing;
+}
+
+export async function runAppointmentReminders(options?: {
+  businessId?: string;
+  force?: boolean;
+}): Promise<{ sent: number }> {
+  const where = options?.businessId ? eq(businesses.id, options.businessId) : sql`1=1`;
   const list = await db
-    .select({ id: businesses.id, type: businesses.type, timezone: businesses.timezone })
+    .select({
+      id: businesses.id,
+      name: businesses.name,
+      type: businesses.type,
+      timezone: businesses.timezone,
+      enabled: businesses.automationAppointmentRemindersEnabled,
+      leadHours: businesses.automationAppointmentReminderHours,
+    })
     .from(businesses)
     .where(where);
 
   let sent = 0;
-  for (const b of list) {
-    if (!REMINDER_TYPES.has(b.type)) continue;
-    const tz = getBusinessTimezone(b);
-    // TODO: filter appointments by status (scheduled, confirmed) and send time in tz
-    logger.info("Appointment reminders run (stub)", { businessId: b.id, timezone: tz });
-    sent += 0;
+  for (const business of list) {
+    if (!REMINDER_TYPES.has(business.type) || !business.enabled) continue;
+
+    const timezone = getBusinessTimezone(business);
+    const leadHours = Math.max(1, Math.min(Number(business.leadHours ?? 24), 336));
+    const now = new Date();
+    const windowStart = options?.force
+      ? now
+      : new Date(now.getTime() + Math.max(leadHours - 1, 0) * 60 * 60 * 1000);
+    const windowEnd = new Date(now.getTime() + leadHours * 60 * 60 * 1000);
+
+    const rows = await db
+      .select({
+        id: appointments.id,
+        clientId: appointments.clientId,
+        title: appointments.title,
+        startTime: appointments.startTime,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+        clientEmail: clients.email,
+        vehicleYear: vehicles.year,
+        vehicleMake: vehicles.make,
+        vehicleModel: vehicles.model,
+      })
+      .from(appointments)
+      .leftJoin(clients, eq(appointments.clientId, clients.id))
+      .leftJoin(vehicles, eq(appointments.vehicleId, vehicles.id))
+      .where(
+        and(
+          eq(appointments.businessId, business.id),
+          sql`${appointments.status} in ('scheduled', 'confirmed')`,
+          gte(appointments.startTime, windowStart),
+          lte(appointments.startTime, windowEnd),
+          sql`${clients.email} is not null`
+        )
+      )
+      .orderBy(asc(appointments.startTime));
+
+    for (const row of rows) {
+      if (!row.clientEmail) continue;
+      if (await hasAutomationActivity("automation.appointment_reminder.sent", "appointment", row.id)) {
+        continue;
+      }
+
+      try {
+        await sendAppointmentReminder({
+          to: row.clientEmail,
+          businessId: business.id,
+          clientName:
+            `${row.clientFirstName ?? ""} ${row.clientLastName ?? ""}`.trim() || "Customer",
+          businessName: business.name,
+          dateTime: formatBusinessDateTime(row.startTime, timezone),
+          vehicle: buildVehicleDisplayName({
+            year: row.vehicleYear,
+            make: row.vehicleMake,
+            model: row.vehicleModel,
+          }),
+          serviceSummary: row.title ?? null,
+        });
+        await createActivityLog({
+          businessId: business.id,
+          action: "automation.appointment_reminder.sent",
+          entityType: "appointment",
+          entityId: row.id,
+          metadata: {
+            clientId: row.clientId,
+            leadHours,
+            sentTo: row.clientEmail,
+          },
+        });
+        sent += 1;
+      } catch (error) {
+        logger.warn("Appointment reminder automation failed", {
+          businessId: business.id,
+          appointmentId: row.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
+
   return { sent };
 }
 
-/**
- * Run lapsed client detection for relevant business types.
- * Respects marketing opt-in when sending outreach (clients.marketingOptIn).
- */
-export async function runLapsedClientDetection(options?: { businessId?: string }): Promise<{ detected: number }> {
-  const where = options?.businessId
-    ? eq(businesses.id, options.businessId)
-    : sql`1=1`;
+export async function runLapsedClientDetection(options?: {
+  businessId?: string;
+  force?: boolean;
+}): Promise<{ detected: number }> {
+  const where = options?.businessId ? eq(businesses.id, options.businessId) : sql`1=1`;
   const list = await db
-    .select({ id: businesses.id, type: businesses.type, timezone: businesses.timezone })
+    .select({
+      id: businesses.id,
+      name: businesses.name,
+      type: businesses.type,
+      timezone: businesses.timezone,
+      enabled: businesses.automationLapsedClientsEnabled,
+      months: businesses.automationLapsedClientMonths,
+    })
     .from(businesses)
     .where(where);
 
   let detected = 0;
-  for (const b of list) {
-    if (!LAPSED_TYPES.has(b.type)) continue;
-    const tz = getBusinessTimezone(b);
-    // TODO: compute last visit per client, expected interval, flag lapsed; only include clients with marketingOptIn for outreach
-    logger.info("Lapsed client detection run (stub)", { businessId: b.id, timezone: tz });
-    detected += 0;
+  for (const business of list) {
+    if (!LAPSED_TYPES.has(business.type) || !business.enabled) continue;
+
+    const timezone = getBusinessTimezone(business);
+    const months = Math.max(1, Math.min(Number(business.months ?? 6), 36));
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - months);
+    const recentCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const lastVisits = db
+      .select({
+        clientId: appointments.clientId,
+        lastVisit: sql<Date | null>`max(coalesce(${appointments.completedAt}, ${appointments.startTime}))`.as(
+          "last_visit"
+        ),
+      })
+      .from(appointments)
+      .where(eq(appointments.businessId, business.id))
+      .groupBy(appointments.clientId)
+      .as("last_visits");
+
+    const rows = await db
+      .select({
+        id: clients.id,
+        firstName: clients.firstName,
+        lastName: clients.lastName,
+        email: clients.email,
+        lastVisit: lastVisits.lastVisit,
+      })
+      .from(clients)
+      .leftJoin(lastVisits, eq(lastVisits.clientId, clients.id))
+      .where(
+        and(
+          eq(clients.businessId, business.id),
+          eq(clients.marketingOptIn, true),
+          sql`${clients.email} is not null`,
+          or(sql`${lastVisits.lastVisit} is null`, lte(lastVisits.lastVisit, cutoff))
+        )
+      )
+      .orderBy(desc(lastVisits.lastVisit), asc(clients.lastName), asc(clients.firstName))
+      .limit(options?.force ? 100 : 50);
+
+    for (const row of rows) {
+      if (!row.email) continue;
+      if (await hasAutomationActivity("automation.lapsed_client.sent", "client", row.id, recentCutoff)) {
+        continue;
+      }
+
+      try {
+        await sendLapsedClientReengagement({
+          to: row.email,
+          businessId: business.id,
+          clientName: `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim() || "Customer",
+          businessName: business.name,
+          lastVisit: formatBusinessDate(row.lastVisit, timezone),
+          bookUrl: null,
+          serviceSummary: null,
+        });
+        await createActivityLog({
+          businessId: business.id,
+          action: "automation.lapsed_client.sent",
+          entityType: "client",
+          entityId: row.id,
+          metadata: {
+            sentTo: row.email,
+            months,
+            lastVisit: row.lastVisit?.toISOString() ?? null,
+          },
+        });
+        detected += 1;
+      } catch (error) {
+        logger.warn("Lapsed client automation failed", {
+          businessId: business.id,
+          clientId: row.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
+
   return { detected };
 }
 
-/**
- * Run post-visit review requests for completed appointments.
- * Only for business types that use reviews; respects timezone and marketing opt-in.
- */
-export async function runReviewRequests(options?: { businessId?: string }): Promise<{ sent: number }> {
-  const where = options?.businessId
-    ? eq(businesses.id, options.businessId)
-    : sql`1=1`;
+export async function runReviewRequests(options?: {
+  businessId?: string;
+  force?: boolean;
+}): Promise<{ sent: number }> {
+  const where = options?.businessId ? eq(businesses.id, options.businessId) : sql`1=1`;
   const list = await db
-    .select({ id: businesses.id, type: businesses.type, timezone: businesses.timezone })
+    .select({
+      id: businesses.id,
+      name: businesses.name,
+      type: businesses.type,
+      timezone: businesses.timezone,
+      enabled: businesses.automationReviewRequestsEnabled,
+      delayHours: businesses.automationReviewRequestDelayHours,
+    })
     .from(businesses)
     .where(where);
 
   let sent = 0;
-  for (const b of list) {
-    if (!REVIEW_REQUEST_TYPES.has(b.type)) continue;
-    const tz = getBusinessTimezone(b);
-    // TODO: find completed appointments without reviewRequestSent, and clients with marketingOptIn; send review request
-    logger.info("Review requests run (stub)", { businessId: b.id, timezone: tz });
-    sent += 0;
+  for (const business of list) {
+    if (!REVIEW_REQUEST_TYPES.has(business.type) || !business.enabled) continue;
+
+    const delayHours = Math.max(1, Math.min(Number(business.delayHours ?? 24), 336));
+    const cutoff = new Date(Date.now() - delayHours * 60 * 60 * 1000);
+
+    const rows = await db
+      .select({
+        id: appointments.id,
+        title: appointments.title,
+        completedAt: appointments.completedAt,
+        clientId: appointments.clientId,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+        clientEmail: clients.email,
+      })
+      .from(appointments)
+      .leftJoin(clients, eq(appointments.clientId, clients.id))
+      .where(
+        and(
+          eq(appointments.businessId, business.id),
+          eq(appointments.status, "completed"),
+          lte(appointments.completedAt, cutoff),
+          eq(clients.marketingOptIn, true),
+          sql`${clients.email} is not null`
+        )
+      )
+      .orderBy(desc(appointments.completedAt))
+      .limit(options?.force ? 100 : 50);
+
+    for (const row of rows) {
+      if (!row.clientEmail) continue;
+      if (await hasAutomationActivity("automation.review_request.sent", "appointment", row.id)) {
+        continue;
+      }
+
+      try {
+        await sendReviewRequest({
+          to: row.clientEmail,
+          businessId: business.id,
+          clientName:
+            `${row.clientFirstName ?? ""} ${row.clientLastName ?? ""}`.trim() || "Customer",
+          businessName: business.name,
+          reviewUrl: null,
+          serviceSummary: row.title ?? null,
+        });
+        await createActivityLog({
+          businessId: business.id,
+          action: "automation.review_request.sent",
+          entityType: "appointment",
+          entityId: row.id,
+          metadata: {
+            clientId: row.clientId,
+            delayHours,
+            sentTo: row.clientEmail,
+          },
+        });
+        sent += 1;
+      } catch (error) {
+        logger.warn("Review request automation failed", {
+          businessId: business.id,
+          appointmentId: row.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
+
   return { sent };
 }

@@ -9,6 +9,7 @@ import { clients, vehicles, services, appointments, invoices, payments } from ".
 import { eq, and, gte, lte, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { NotFoundError, ForbiddenError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { withIdempotency } from "../lib/idempotency.js";
@@ -29,6 +30,12 @@ function businessId(req: Request): string {
 }
 
 const idParamSchema = z.object({ id: z.string().uuid() });
+const runAutomationsNowSchema = z.object({
+  kinds: z
+    .array(z.enum(["appointment_reminders", "lapsed_clients", "review_requests"]))
+    .min(1)
+    .optional(),
+});
 
 function isPaymentSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -309,6 +316,31 @@ actionsRouter.post("/applyBusinessPreset", requireAuth, requireTenant, async (re
     }
     res.json({ ok: false, message: "Starter services could not be fully applied until production services schema is migrated." });
   }
+});
+
+actionsRouter.post("/runAutomationsNow", requireAuth, requireTenant, requirePermission("settings.write"), async (req: Request, res: Response) => {
+  const parsed = runAutomationsNowSchema.safeParse(req.body ?? {});
+  const bid = businessId(req);
+  const kinds = parsed.success
+    ? parsed.data.kinds ?? ["appointment_reminders", "lapsed_clients", "review_requests"]
+    : ["appointment_reminders", "lapsed_clients", "review_requests"];
+
+  const appointmentReminders = kinds.includes("appointment_reminders")
+    ? await automations.runAppointmentReminders({ businessId: bid, force: true })
+    : { sent: 0 };
+  const lapsedClients = kinds.includes("lapsed_clients")
+    ? await automations.runLapsedClientDetection({ businessId: bid, force: true })
+    : { detected: 0 };
+  const reviewRequests = kinds.includes("review_requests")
+    ? await automations.runReviewRequests({ businessId: bid, force: true })
+    : { sent: 0 };
+
+  res.json({
+    ok: true,
+    appointmentRemindersSent: appointmentReminders.sent,
+    lapsedClientsDetected: lapsedClients.detected,
+    reviewRequestsSent: reviewRequests.sent,
+  });
 });
 
 /** Cron endpoint: run business-type-aware automations (reminders, lapsed clients, review requests). Optional CRON_SECRET. */

@@ -25,6 +25,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
+  Activity,
+  BellRing,
+  Cable,
   CheckCircle2,
   CreditCard,
   ExternalLink,
@@ -36,7 +39,9 @@ import {
   PenLine,
   Plus,
   Settings,
+  Sparkles,
   Trash2,
+  Webhook,
 } from "lucide-react";
 import {
   Dialog,
@@ -165,6 +170,31 @@ type SystemStatus = {
   checkedAt: number | null;
 };
 
+type AutomationKind = "appointment_reminders" | "lapsed_clients" | "review_requests";
+
+type AutomationSettingsForm = {
+  appointmentRemindersEnabled: boolean;
+  appointmentReminderHours: number;
+  reviewRequestsEnabled: boolean;
+  reviewRequestDelayHours: number;
+  lapsedClientsEnabled: boolean;
+  lapsedClientMonths: number;
+};
+
+type IntegrationSettingsForm = {
+  webhookEnabled: boolean;
+  webhookUrl: string;
+  webhookSecret: string;
+  webhookEvents: string[];
+};
+
+type RunAutomationsResult = {
+  ok: true;
+  appointmentRemindersSent: number;
+  lapsedClientsDetected: number;
+  reviewRequestsSent: number;
+};
+
 const STAFF_ROLES = [
   { value: "owner", label: "Owner" },
   { value: "admin", label: "Admin" },
@@ -284,6 +314,44 @@ const TEAM_PERMISSION_GROUPS = [
   { label: "Payments", read: "payments.read", write: "payments.write" },
   { label: "Team", read: "team.read", write: "team.write" },
   { label: "Settings", read: "settings.read", write: "settings.write" },
+] as const;
+
+const DEFAULT_AUTOMATION_SETTINGS: AutomationSettingsForm = {
+  appointmentRemindersEnabled: true,
+  appointmentReminderHours: 24,
+  reviewRequestsEnabled: false,
+  reviewRequestDelayHours: 24,
+  lapsedClientsEnabled: false,
+  lapsedClientMonths: 6,
+};
+
+const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettingsForm = {
+  webhookEnabled: false,
+  webhookUrl: "",
+  webhookSecret: "",
+  webhookEvents: [
+    "appointment.created",
+    "appointment.status_changed",
+    "invoice.sent",
+    "invoice.payment_recorded",
+    "payment.recorded",
+    "quote.sent",
+  ],
+};
+
+const WEBHOOK_EVENT_OPTIONS = [
+  { value: "appointment.created", label: "Appointment created", helper: "Fire when a booking is added to the calendar." },
+  { value: "appointment.updated", label: "Appointment updated", helper: "Fire when appointment details change." },
+  { value: "appointment.status_changed", label: "Appointment status changed", helper: "Fire when work moves between scheduled, confirmed, completed, or cancelled." },
+  { value: "appointment.deposit_paid", label: "Appointment deposit paid", helper: "Fire when a deposit is collected." },
+  { value: "invoice.created", label: "Invoice created", helper: "Fire when a new invoice is generated." },
+  { value: "invoice.sent", label: "Invoice sent", helper: "Fire when an invoice is emailed to the client." },
+  { value: "invoice.payment_recorded", label: "Invoice paid in Stripe", helper: "Fire when Stripe confirms a connected-account payment." },
+  { value: "payment.recorded", label: "Manual payment recorded", helper: "Fire when staff records a payment inside Strata." },
+  { value: "payment.reversed", label: "Payment reversed", helper: "Fire when a recorded payment is reversed." },
+  { value: "quote.created", label: "Quote created", helper: "Fire when an estimate is created." },
+  { value: "quote.sent", label: "Quote sent", helper: "Fire when a quote is emailed to a client." },
+  { value: "quote.follow_up_recorded", label: "Quote follow-up sent", helper: "Fire when a quote follow-up email goes out." },
 ] as const;
 
 function getDefaultPermissionSelection(role: string): string[] {
@@ -767,6 +835,21 @@ export default function SettingsPage() {
   const [calendarBlockCapacityInput, setCalendarBlockCapacityInput] = useState(
     String(DEFAULT_BUSINESS_SETTINGS_FORM.calendarBlockCapacityPerSlot)
   );
+  const [automationSettings, setAutomationSettings] = useState<AutomationSettingsForm>(
+    DEFAULT_AUTOMATION_SETTINGS
+  );
+  const [appointmentReminderHoursInput, setAppointmentReminderHoursInput] = useState(
+    String(DEFAULT_AUTOMATION_SETTINGS.appointmentReminderHours)
+  );
+  const [reviewRequestDelayHoursInput, setReviewRequestDelayHoursInput] = useState(
+    String(DEFAULT_AUTOMATION_SETTINGS.reviewRequestDelayHours)
+  );
+  const [lapsedClientMonthsInput, setLapsedClientMonthsInput] = useState(
+    String(DEFAULT_AUTOMATION_SETTINGS.lapsedClientMonths)
+  );
+  const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettingsForm>(
+    DEFAULT_INTEGRATION_SETTINGS
+  );
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -832,6 +915,7 @@ export default function SettingsPage() {
   const [{ fetching: copyingStaffInvite }, getStaffInviteLink] = useAction(api.staff.inviteLink);
   const [{ data: presetSummary }, getBusinessPreset] = useAction(api.getBusinessPreset);
   const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
+  const [{ fetching: runningAutomationsNow }, runAutomationsNow] = useAction(api.runAutomationsNow);
   const preset = presetSummary as BusinessPresetActionResult | undefined;
   const presetServiceCount = preset?.count ?? 0;
   const presetPreviewNames = preset?.names?.slice(0, 4) ?? [];
@@ -846,6 +930,27 @@ export default function SettingsPage() {
     setDefaultAdminFeeInput(next.defaultAdminFeeInput);
     setAppointmentBufferInput(next.appointmentBufferInput);
     setCalendarBlockCapacityInput(next.calendarBlockCapacityInput);
+    const nextAutomationSettings: AutomationSettingsForm = {
+      appointmentRemindersEnabled: business.automationAppointmentRemindersEnabled ?? DEFAULT_AUTOMATION_SETTINGS.appointmentRemindersEnabled,
+      appointmentReminderHours: business.automationAppointmentReminderHours ?? DEFAULT_AUTOMATION_SETTINGS.appointmentReminderHours,
+      reviewRequestsEnabled: business.automationReviewRequestsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestsEnabled,
+      reviewRequestDelayHours: business.automationReviewRequestDelayHours ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestDelayHours,
+      lapsedClientsEnabled: business.automationLapsedClientsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.lapsedClientsEnabled,
+      lapsedClientMonths: business.automationLapsedClientMonths ?? DEFAULT_AUTOMATION_SETTINGS.lapsedClientMonths,
+    };
+    setAutomationSettings(nextAutomationSettings);
+    setAppointmentReminderHoursInput(String(nextAutomationSettings.appointmentReminderHours));
+    setReviewRequestDelayHoursInput(String(nextAutomationSettings.reviewRequestDelayHours));
+    setLapsedClientMonthsInput(String(nextAutomationSettings.lapsedClientMonths));
+    setIntegrationSettings({
+      webhookEnabled: business.integrationWebhookEnabled ?? DEFAULT_INTEGRATION_SETTINGS.webhookEnabled,
+      webhookUrl: business.integrationWebhookUrl ?? "",
+      webhookSecret: business.integrationWebhookSecret ?? "",
+      webhookEvents:
+        Array.isArray(business.integrationWebhookEvents) && business.integrationWebhookEvents.length > 0
+          ? business.integrationWebhookEvents
+          : DEFAULT_INTEGRATION_SETTINGS.webhookEvents,
+    });
   }, [business]);
 
   useEffect(() => {
@@ -932,6 +1037,98 @@ export default function SettingsPage() {
     const next = normalizeDecimalInput(value);
     setDefaultAdminFeeInput(next.inputValue);
     handleFieldChange("defaultAdminFee", next.numericValue);
+  };
+
+  const handleAutomationToggle = (field: keyof AutomationSettingsForm, value: boolean) => {
+    setAutomationSettings((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleAutomationNumberInput = (
+    field: "appointmentReminderHours" | "reviewRequestDelayHours" | "lapsedClientMonths",
+    value: string
+  ) => {
+    const trimmed = value.trim();
+    const parsed = Number.parseInt(trimmed, 10);
+    const nextValue = Number.isFinite(parsed) ? parsed : 0;
+    setAutomationSettings((current) => ({ ...current, [field]: nextValue }));
+  };
+
+  const normalizeAutomationNumberInput = (
+    field: "appointmentReminderHours" | "reviewRequestDelayHours" | "lapsedClientMonths"
+  ) => {
+    setAutomationSettings((current) => {
+      const rawValue = current[field];
+      const minimum = field === "lapsedClientMonths" ? 1 : 1;
+      const maximum = field === "lapsedClientMonths" ? 36 : 336;
+      const nextValue = Number.isFinite(rawValue) ? Math.min(Math.max(rawValue, minimum), maximum) : minimum;
+      if (field === "appointmentReminderHours") {
+        setAppointmentReminderHoursInput(String(nextValue));
+      } else if (field === "reviewRequestDelayHours") {
+        setReviewRequestDelayHoursInput(String(nextValue));
+      } else {
+        setLapsedClientMonthsInput(String(nextValue));
+      }
+      return { ...current, [field]: nextValue };
+    });
+  };
+
+  const toggleWebhookEvent = (eventName: string, enabled: boolean) => {
+    setIntegrationSettings((current) => {
+      const nextEvents = new Set(current.webhookEvents);
+      if (enabled) {
+        nextEvents.add(eventName);
+      } else {
+        nextEvents.delete(eventName);
+      }
+      return { ...current, webhookEvents: Array.from(nextEvents).sort() };
+    });
+  };
+
+  const generateWebhookSecret = () => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      setIntegrationSettings((current) => ({
+        ...current,
+        webhookSecret: `strata_${crypto.randomUUID().replace(/-/g, "")}`,
+      }));
+      return;
+    }
+    setIntegrationSettings((current) => ({
+      ...current,
+      webhookSecret: `strata_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`,
+    }));
+  };
+
+  const handleSaveAutomationSettings = async () => {
+    if (!business?.id) return;
+    await update({
+      id: business.id,
+      automationAppointmentRemindersEnabled: automationSettings.appointmentRemindersEnabled,
+      automationAppointmentReminderHours: automationSettings.appointmentReminderHours,
+      automationReviewRequestsEnabled: automationSettings.reviewRequestsEnabled,
+      automationReviewRequestDelayHours: automationSettings.reviewRequestDelayHours,
+      automationLapsedClientsEnabled: automationSettings.lapsedClientsEnabled,
+      automationLapsedClientMonths: automationSettings.lapsedClientMonths,
+    });
+    toast.success("Automation settings saved");
+  };
+
+  const handleSaveIntegrationSettings = async () => {
+    if (!business?.id) return;
+    await update({
+      id: business.id,
+      integrationWebhookEnabled: integrationSettings.webhookEnabled,
+      integrationWebhookUrl: integrationSettings.webhookUrl.trim() || null,
+      integrationWebhookSecret: integrationSettings.webhookSecret.trim() || null,
+      integrationWebhookEvents: integrationSettings.webhookEvents,
+    });
+    toast.success("Integration settings saved");
+  };
+
+  const handleRunAutomationsNow = async (kinds?: AutomationKind[]) => {
+    const result = (await runAutomationsNow({ kinds })) as RunAutomationsResult;
+    toast.success(
+      `Automations finished: ${result.appointmentRemindersSent} reminders, ${result.reviewRequestsSent} reviews, ${result.lapsedClientsDetected} lapsed outreach.`
+    );
   };
 
   const openCreateLocation = () => {
@@ -1291,7 +1488,7 @@ export default function SettingsPage() {
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="flex h-auto w-full gap-2 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-4 sm:overflow-visible">
+          <TabsList className="flex h-auto w-full gap-2 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-6 sm:overflow-visible">
             <TabsTrigger
               value="profile"
               className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
@@ -1315,6 +1512,18 @@ export default function SettingsPage() {
               className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
             >
               Team
+            </TabsTrigger>
+            <TabsTrigger
+              value="integrations"
+              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
+            >
+              Integrations
+            </TabsTrigger>
+            <TabsTrigger
+              value="automations"
+              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
+            >
+              Automations
             </TabsTrigger>
           </TabsList>
 
@@ -2020,6 +2229,361 @@ export default function SettingsPage() {
                     })}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="integrations" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="mb-1 flex items-center gap-3">
+                  <div className="rounded-md bg-primary/10 p-2">
+                    <Cable className="h-5 w-5 text-primary" />
+                  </div>
+                  <CardTitle>Connected Tools</CardTitle>
+                </div>
+                <CardDescription>
+                  Keep real connections and outbound hooks in one place so payments, analytics, and downstream systems stay easier to trust.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="h-4 w-4 text-primary" />
+                          <p className="text-sm font-medium">Stripe payments</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Connected-account payments, deposits, and billing status are managed from the billing tab.
+                        </p>
+                      </div>
+                      <Badge variant={billingStatus?.stripeConnectReady ? "default" : "secondary"}>
+                        {billingStatus?.stripeConnectReady ? "Connected" : billingStatus?.stripeConnectAccountId ? "Needs setup" : "Not connected"}
+                      </Badge>
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                      <Button variant="outline" className="w-full sm:w-auto" onClick={() => setActiveTab("billing")}>
+                        Open billing controls
+                      </Button>
+                      {billingStatus?.stripeConnectAccountId ? (
+                        <p className="self-center text-xs text-muted-foreground">
+                          Account <span className="font-mono">{billingStatus.stripeConnectAccountId}</span>
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Activity className="h-4 w-4 text-primary" />
+                          <p className="text-sm font-medium">Site analytics</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Landing-page analytics are env-driven and live at the platform level, not per business workspace.
+                        </p>
+                      </div>
+                      <Badge variant="outline">Platform</Badge>
+                    </div>
+                    <p className="mt-4 text-xs text-muted-foreground">
+                      Google Analytics and Microsoft Clarity are configured in deployment env vars so marketing traffic stays separate from shop data.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-background p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Webhook className="h-4 w-4 text-primary" />
+                        <p className="text-sm font-medium">Outbound webhooks</p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Push core Strata events into Zapier, Make, internal tools, or a custom API with signed JSON payloads.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="webhook-enabled"
+                        checked={integrationSettings.webhookEnabled}
+                        onCheckedChange={(value) => setIntegrationSettings((current) => ({ ...current, webhookEnabled: value }))}
+                        disabled={!canEditSettings}
+                      />
+                      <Label htmlFor="webhook-enabled" className="cursor-pointer text-sm">
+                        Enable
+                      </Label>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label>Webhook endpoint URL</Label>
+                      <Input
+                        type="url"
+                        placeholder="https://example.com/strata/webhooks"
+                        value={integrationSettings.webhookUrl}
+                        onChange={(e) => setIntegrationSettings((current) => ({ ...current, webhookUrl: e.target.value }))}
+                        disabled={!canEditSettings}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Strata sends JSON with headers <span className="font-mono">x-strata-event</span>, <span className="font-mono">x-strata-delivered-at</span>, and optional <span className="font-mono">x-strata-signature</span>.
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Signing secret</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={integrationSettings.webhookSecret}
+                          onChange={(e) => setIntegrationSettings((current) => ({ ...current, webhookSecret: e.target.value }))}
+                          placeholder="Optional HMAC secret"
+                          disabled={!canEditSettings}
+                        />
+                        <Button type="button" variant="outline" onClick={generateWebhookSecret} disabled={!canEditSettings}>
+                          Generate
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Use this to verify webhook authenticity on your receiving service.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    <div className="space-y-1">
+                      <Label>Subscribed events</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Pick only the events your downstream workflow needs so integrations stay readable and fast.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {WEBHOOK_EVENT_OPTIONS.map((eventOption) => {
+                        const checked = integrationSettings.webhookEvents.includes(eventOption.value);
+                        return (
+                          <div key={eventOption.value} className="rounded-lg border bg-muted/20 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium">{eventOption.label}</p>
+                                <p className="text-xs text-muted-foreground">{eventOption.helper}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  <span className="font-mono">{eventOption.value}</span>
+                                </p>
+                              </div>
+                              <Switch
+                                checked={checked}
+                                onCheckedChange={(value) => toggleWebhookEvent(eventOption.value, value)}
+                                disabled={!canEditSettings}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Webhooks are driven by real Strata activity events, so quote sends, invoice sends, payments, and appointment changes stay in sync automatically.
+                    </p>
+                    <Button
+                      onClick={handleSaveIntegrationSettings}
+                      disabled={!canEditSettings || saving}
+                      className="w-full sm:w-auto"
+                    >
+                      {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Save integrations
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="automations" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="mb-1 flex items-center gap-3">
+                  <div className="rounded-md bg-primary/10 p-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                  </div>
+                  <CardTitle>Automations</CardTitle>
+                </div>
+                <CardDescription>
+                  Let Strata handle the repeatable follow-through after booking, completion, and slow periods without hiding what will be sent.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <BellRing className="h-4 w-4 text-primary" />
+                        <p className="text-sm font-medium">Appointment reminders</p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Send confirmation reminders before scheduled or confirmed work so no-shows and confusion stay lower.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="automation-appointment-reminders"
+                        checked={automationSettings.appointmentRemindersEnabled}
+                        onCheckedChange={(value) => handleAutomationToggle("appointmentRemindersEnabled", value)}
+                        disabled={!canEditSettings}
+                      />
+                      <Label htmlFor="automation-appointment-reminders" className="cursor-pointer text-sm">
+                        Enable
+                      </Label>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-end">
+                    <div className="space-y-1.5">
+                      <Label>Hours before appointment</Label>
+                      <Input
+                        inputMode="numeric"
+                        value={appointmentReminderHoursInput}
+                        onChange={(e) => {
+                          setAppointmentReminderHoursInput(e.target.value);
+                          handleAutomationNumberInput("appointmentReminderHours", e.target.value);
+                        }}
+                        onBlur={() => normalizeAutomationNumberInput("appointmentReminderHours")}
+                        disabled={!canEditSettings}
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleRunAutomationsNow(["appointment_reminders"])}
+                      disabled={runningAutomationsNow}
+                      className="w-full sm:w-auto"
+                    >
+                      {runningAutomationsNow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Run reminders now
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <p className="text-sm font-medium">Review requests</p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Follow up after completed work with an email asking for a review once the visit is fully wrapped.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="automation-review-requests"
+                        checked={automationSettings.reviewRequestsEnabled}
+                        onCheckedChange={(value) => handleAutomationToggle("reviewRequestsEnabled", value)}
+                        disabled={!canEditSettings}
+                      />
+                      <Label htmlFor="automation-review-requests" className="cursor-pointer text-sm">
+                        Enable
+                      </Label>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-end">
+                    <div className="space-y-1.5">
+                      <Label>Hours after completion</Label>
+                      <Input
+                        inputMode="numeric"
+                        value={reviewRequestDelayHoursInput}
+                        onChange={(e) => {
+                          setReviewRequestDelayHoursInput(e.target.value);
+                          handleAutomationNumberInput("reviewRequestDelayHours", e.target.value);
+                        }}
+                        onBlur={() => normalizeAutomationNumberInput("reviewRequestDelayHours")}
+                        disabled={!canEditSettings}
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleRunAutomationsNow(["review_requests"])}
+                      disabled={runningAutomationsNow}
+                      className="w-full sm:w-auto"
+                    >
+                      {runningAutomationsNow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Run review requests now
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-primary" />
+                        <p className="text-sm font-medium">Lapsed client outreach</p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Re-engage opted-in clients who have not been back in a while so slow periods have some built-in follow-up.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="automation-lapsed-clients"
+                        checked={automationSettings.lapsedClientsEnabled}
+                        onCheckedChange={(value) => handleAutomationToggle("lapsedClientsEnabled", value)}
+                        disabled={!canEditSettings}
+                      />
+                      <Label htmlFor="automation-lapsed-clients" className="cursor-pointer text-sm">
+                        Enable
+                      </Label>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-end">
+                    <div className="space-y-1.5">
+                      <Label>Months since last visit</Label>
+                      <Input
+                        inputMode="numeric"
+                        value={lapsedClientMonthsInput}
+                        onChange={(e) => {
+                          setLapsedClientMonthsInput(e.target.value);
+                          handleAutomationNumberInput("lapsedClientMonths", e.target.value);
+                        }}
+                        onBlur={() => normalizeAutomationNumberInput("lapsedClientMonths")}
+                        disabled={!canEditSettings}
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleRunAutomationsNow(["lapsed_clients"])}
+                      disabled={runningAutomationsNow}
+                      className="w-full sm:w-auto"
+                    >
+                      {runningAutomationsNow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Run lapsed outreach now
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Automation sends are logged through the same notification and activity system as the rest of Strata, so follow-up is still traceable.
+                  </p>
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                    <Button
+                      variant="outline"
+                      onClick={() => handleRunAutomationsNow()}
+                      disabled={runningAutomationsNow}
+                      className="w-full sm:w-auto"
+                    >
+                      {runningAutomationsNow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Run enabled automations now
+                    </Button>
+                    <Button
+                      onClick={handleSaveAutomationSettings}
+                      disabled={!canEditSettings || saving}
+                      className="w-full sm:w-auto"
+                    >
+                      {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Save automations
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

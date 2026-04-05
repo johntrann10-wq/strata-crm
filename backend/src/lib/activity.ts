@@ -2,6 +2,7 @@ import type { Request } from "express";
 import { db } from "../db/index.js";
 import { activityLogs } from "../db/schema.js";
 import { logger } from "./logger.js";
+import { deliverBusinessWebhookEvent } from "./integrations.js";
 
 type ActivityInput = {
   businessId: string;
@@ -42,8 +43,17 @@ export async function createActivityLog(input: ActivityInput) {
       entityType: input.entityType ?? null,
       entityId: input.entityId ?? null,
       error: error instanceof Error ? error.message : String(error),
-    });
+      });
   }
+
+  void deliverBusinessWebhookEvent({
+    businessId: input.businessId,
+    event: input.action,
+    entityType: input.entityType ?? null,
+    entityId: input.entityId ?? null,
+    userId: input.userId ?? null,
+    metadata: input.metadata ?? null,
+  });
 }
 
 export async function createRequestActivityLog(
