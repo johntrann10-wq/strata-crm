@@ -811,9 +811,30 @@ export const api = {
     }>("/actions/getFinanceMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getAutomationSummary: (params?: Record<string, unknown>) =>
     request<{
-      appointmentReminders: { sentLast30Days: number; lastSentAt: string | null; failedLast30Days: number; lastFailedAt: string | null };
-      reviewRequests: { sentLast30Days: number; lastSentAt: string | null; failedLast30Days: number; lastFailedAt: string | null };
-      lapsedClients: { sentLast30Days: number; lastSentAt: string | null; failedLast30Days: number; lastFailedAt: string | null };
+      appointmentReminders: {
+        sentLast30Days: number;
+        lastSentAt: string | null;
+        skippedLast30Days: number;
+        lastSkippedAt: string | null;
+        failedLast30Days: number;
+        lastFailedAt: string | null;
+      };
+      reviewRequests: {
+        sentLast30Days: number;
+        lastSentAt: string | null;
+        skippedLast30Days: number;
+        lastSkippedAt: string | null;
+        failedLast30Days: number;
+        lastFailedAt: string | null;
+      };
+      lapsedClients: {
+        sentLast30Days: number;
+        lastSentAt: string | null;
+        skippedLast30Days: number;
+        lastSkippedAt: string | null;
+        failedLast30Days: number;
+        lastFailedAt: string | null;
+      };
     }>("/actions/getAutomationSummary", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getAutomationFeed: (params?: { limit?: number }) =>
     request<{
@@ -833,7 +854,9 @@ export const api = {
     request<{
       automations: {
         sentLast24Hours: number;
+        skippedLast24Hours: number;
         lastActivityAt: string | null;
+        lastSkippedAt: string | null;
         failedLast24Hours: number;
         lastFailureAt: string | null;
       };

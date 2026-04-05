@@ -163,9 +163,30 @@ async function mockAuthenticatedSettings(
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        appointmentReminders: { sentLast30Days: 0, lastSentAt: null, failedLast30Days: 0, lastFailedAt: null },
-        reviewRequests: { sentLast30Days: 0, lastSentAt: null, failedLast30Days: 0, lastFailedAt: null },
-        lapsedClients: { sentLast30Days: 0, lastSentAt: null, failedLast30Days: 0, lastFailedAt: null },
+        appointmentReminders: {
+          sentLast30Days: 0,
+          lastSentAt: null,
+          skippedLast30Days: 2,
+          lastSkippedAt: "2026-04-04T17:20:00.000Z",
+          failedLast30Days: 0,
+          lastFailedAt: null,
+        },
+        reviewRequests: {
+          sentLast30Days: 0,
+          lastSentAt: null,
+          skippedLast30Days: 1,
+          lastSkippedAt: "2026-04-04T15:10:00.000Z",
+          failedLast30Days: 0,
+          lastFailedAt: null,
+        },
+        lapsedClients: {
+          sentLast30Days: 0,
+          lastSentAt: null,
+          skippedLast30Days: 4,
+          lastSkippedAt: "2026-04-04T17:20:00.000Z",
+          failedLast30Days: 0,
+          lastFailedAt: null,
+        },
       }),
     });
   });
@@ -221,7 +242,9 @@ async function mockAuthenticatedSettings(
       body: JSON.stringify({
         automations: {
           sentLast24Hours: 3,
+          skippedLast24Hours: 2,
           lastActivityAt: "2026-04-04T19:15:00.000Z",
+          lastSkippedAt: "2026-04-04T17:20:00.000Z",
           failedLast24Hours: 1,
           lastFailureAt: "2026-04-04T18:40:00.000Z",
         },
@@ -653,7 +676,8 @@ test("shows integration infrastructure and failure visibility in settings", asyn
   await expect(page.getByText(/^Vault$/i)).toBeVisible();
   await expect(page.getByText(/^Cron secret$/i)).toBeVisible();
   await expect(page.getByText(/quickbooks online: ready/i)).toBeVisible();
-  await expect(page.getByText(/3 sent \/ 24h/i)).toBeVisible();
+  await expect(page.getByText(/3 sent/i)).toBeVisible();
+  await expect(page.getByText(/2 skipped \/ 24h/i)).toBeVisible();
   await expect(page.getByText(/2 pending/i)).toBeVisible();
   await expect(page.getByText("QuickBooks Online", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Twilio SMS", { exact: true }).first()).toBeVisible();
@@ -741,6 +765,7 @@ test("shows recent automation activity across email and sms channels", async ({ 
   await page.goto("/settings?tab=automations");
 
   await expect(page.getByText("Recent automation activity", { exact: true })).toBeVisible();
+  await expect(page.getByText(/skipped in the last 30 days: 4/i)).toBeVisible();
   await expect(page.getByText(/automation send window/i)).toBeVisible();
   await expect(page.getByText(/^Start hour$/i)).toBeVisible();
   await expect(page.getByText(/^End hour$/i)).toBeVisible();

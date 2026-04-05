@@ -202,6 +202,8 @@ type TwilioSmsSettingsForm = {
 type AutomationActivitySummary = {
   sentLast30Days: number;
   lastSentAt: string | null;
+  skippedLast30Days: number;
+  lastSkippedAt: string | null;
   failedLast30Days: number;
   lastFailedAt: string | null;
 };
@@ -221,7 +223,9 @@ type AutomationFeedRecord = {
 type WorkerHealthSummary = {
   automations: {
     sentLast24Hours: number;
+    skippedLast24Hours: number;
     lastActivityAt: string | null;
+    lastSkippedAt: string | null;
     failedLast24Hours: number;
     lastFailureAt: string | null;
   };
@@ -607,6 +611,7 @@ function formatAutomationLastSent(value: string | null) {
 function getAutomationHealthTone(summary: AutomationActivitySummary | null | undefined) {
   if (!summary) return "text-muted-foreground";
   if ((summary.failedLast30Days ?? 0) > 0) return "text-amber-700";
+  if ((summary.skippedLast30Days ?? 0) > 0) return "text-sky-700";
   return "text-muted-foreground";
 }
 
@@ -2942,10 +2947,15 @@ export default function SettingsPage() {
                     <div className="rounded-lg border bg-muted/20 p-3">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Automation activity</p>
                       <p className="mt-2 text-sm font-medium">
-                        {workerHealthFetching && !workerHealth ? "Refreshing..." : `${workerHealth?.automations.sentLast24Hours ?? 0} sent / 24h`}
+                        {workerHealthFetching && !workerHealth
+                          ? "Refreshing..."
+                          : `${workerHealth?.automations.sentLast24Hours ?? 0} sent • ${workerHealth?.automations.skippedLast24Hours ?? 0} skipped / 24h`}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         Last activity: {formatWorkerTimestamp(workerHealth?.automations.lastActivityAt ?? null, "No recent automation sends")}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Last skip: {formatWorkerTimestamp(workerHealth?.automations.lastSkippedAt ?? null, "No recent automation skips")}
                       </p>
                     </div>
                     <div className="rounded-lg border bg-muted/20 p-3">
@@ -3753,6 +3763,11 @@ export default function SettingsPage() {
                       Sent in the last 30 days. Last send: {formatAutomationLastSent(automationSummary?.appointmentReminders.lastSentAt ?? null)}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
+                      Skipped in the last 30 days: {automationSummary?.appointmentReminders.skippedLast30Days ?? 0}
+                      {" • "}
+                      Last skip: {formatAutomationLastSent(automationSummary?.appointmentReminders.lastSkippedAt ?? null)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
                       Failed in the last 30 days: {automationSummary?.appointmentReminders.failedLast30Days ?? 0}
                     </p>
                   </div>
@@ -3765,6 +3780,11 @@ export default function SettingsPage() {
                       Sent in the last 30 days. Last send: {formatAutomationLastSent(automationSummary?.reviewRequests.lastSentAt ?? null)}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
+                      Skipped in the last 30 days: {automationSummary?.reviewRequests.skippedLast30Days ?? 0}
+                      {" • "}
+                      Last skip: {formatAutomationLastSent(automationSummary?.reviewRequests.lastSkippedAt ?? null)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
                       Failed in the last 30 days: {automationSummary?.reviewRequests.failedLast30Days ?? 0}
                     </p>
                   </div>
@@ -3775,6 +3795,11 @@ export default function SettingsPage() {
                     </p>
                     <p className={`mt-1 text-xs ${getAutomationHealthTone(automationSummary?.lapsedClients)}`}>
                       Sent in the last 30 days. Last send: {formatAutomationLastSent(automationSummary?.lapsedClients.lastSentAt ?? null)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Skipped in the last 30 days: {automationSummary?.lapsedClients.skippedLast30Days ?? 0}
+                      {" • "}
+                      Last skip: {formatAutomationLastSent(automationSummary?.lapsedClients.lastSkippedAt ?? null)}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       Failed in the last 30 days: {automationSummary?.lapsedClients.failedLast30Days ?? 0}

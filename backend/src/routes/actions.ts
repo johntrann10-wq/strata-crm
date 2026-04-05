@@ -284,8 +284,12 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
         gte(activityLogs.createdAt, recentCutoff),
         sql`${activityLogs.action} in (
           'automation.appointment_reminder.sent',
+          'automation.appointment_reminder.skipped',
           'automation.review_request.sent',
+          'automation.review_request.skipped',
           'automation.lapsed_client.sent'
+          ,
+          'automation.lapsed_client.skipped'
         )`
       )
     )
@@ -316,10 +320,13 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
   const notificationMap = new Map(notificationRows.map((row) => [row.templateSlug, row]));
   const summarize = (action: string, templateSlug: string) => {
     const row = summaryMap.get(action);
+    const skippedRow = summaryMap.get(action.replace(".sent", ".skipped"));
     const notificationRow = notificationMap.get(templateSlug);
     return {
       sentLast30Days: row?.total ?? 0,
       lastSentAt: row?.lastSentAt?.toISOString() ?? null,
+      skippedLast30Days: skippedRow?.total ?? 0,
+      lastSkippedAt: skippedRow?.lastSentAt?.toISOString() ?? null,
       failedLast30Days: notificationRow?.failedLast30Days ?? 0,
       lastFailedAt: notificationRow?.lastFailedAt?.toISOString() ?? null,
     };
@@ -481,8 +488,22 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
   const [automationActivityRows, automationFailureRows, integrationQueueRows, integrationAttemptRows] = await Promise.all([
     db
       .select({
-        total: sql<number>`count(*)::int`.as("total"),
+        totalSent: sql<number>`count(*) filter (where ${activityLogs.action} in (
+          'automation.appointment_reminder.sent',
+          'automation.review_request.sent',
+          'automation.lapsed_client.sent'
+        ))::int`.as("total_sent"),
+        totalSkipped: sql<number>`count(*) filter (where ${activityLogs.action} in (
+          'automation.appointment_reminder.skipped',
+          'automation.review_request.skipped',
+          'automation.lapsed_client.skipped'
+        ))::int`.as("total_skipped"),
         lastActivityAt: sql<Date | null>`max(${activityLogs.createdAt})`.as("last_activity_at"),
+        lastSkippedAt: sql<Date | null>`max(${activityLogs.createdAt}) filter (where ${activityLogs.action} in (
+          'automation.appointment_reminder.skipped',
+          'automation.review_request.skipped',
+          'automation.lapsed_client.skipped'
+        ))`.as("last_skipped_at"),
       })
       .from(activityLogs)
       .where(
@@ -491,8 +512,12 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
           gte(activityLogs.createdAt, recentCutoff),
           sql`${activityLogs.action} in (
             'automation.appointment_reminder.sent',
+            'automation.appointment_reminder.skipped',
             'automation.review_request.sent',
+            'automation.review_request.skipped',
             'automation.lapsed_client.sent'
+            ,
+            'automation.lapsed_client.skipped'
           )`
         )
       ),
@@ -533,8 +558,10 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
 
   res.json({
     automations: {
-      sentLast24Hours: automationActivityRows[0]?.total ?? 0,
+      sentLast24Hours: automationActivityRows[0]?.totalSent ?? 0,
+      skippedLast24Hours: automationActivityRows[0]?.totalSkipped ?? 0,
       lastActivityAt: automationActivityRows[0]?.lastActivityAt?.toISOString() ?? null,
+      lastSkippedAt: automationActivityRows[0]?.lastSkippedAt?.toISOString() ?? null,
       failedLast24Hours: automationFailureRows[0]?.total ?? 0,
       lastFailureAt: automationFailureRows[0]?.lastFailureAt?.toISOString() ?? null,
     },
