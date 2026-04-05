@@ -815,6 +815,22 @@ export const api = {
       reviewRequests: { sentLast30Days: number; lastSentAt: string | null; failedLast30Days: number; lastFailedAt: string | null };
       lapsedClients: { sentLast30Days: number; lastSentAt: string | null; failedLast30Days: number; lastFailedAt: string | null };
     }>("/actions/getAutomationSummary", { method: "POST", body: JSON.stringify(params ?? {}) }),
+  getWorkerHealth: (params?: Record<string, unknown>) =>
+    request<{
+      automations: {
+        sentLast24Hours: number;
+        lastActivityAt: string | null;
+        failedLast24Hours: number;
+        lastFailureAt: string | null;
+      };
+      integrations: {
+        lastAttemptAt: string | null;
+        pendingJobs: number;
+        processingJobs: number;
+        failedJobs: number;
+        deadLetterJobs: number;
+      };
+    }>("/actions/getWorkerHealth", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getBusinessPreset: () =>
     request<{ group: string; count: number; names: string[] }>("/actions/getBusinessPreset", {
       method: "POST",

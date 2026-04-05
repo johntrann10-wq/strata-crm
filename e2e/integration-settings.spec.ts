@@ -170,6 +170,28 @@ async function mockAuthenticatedSettings(
     });
   });
 
+  await context.route("**/api/actions/getWorkerHealth", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        automations: {
+          sentLast24Hours: 3,
+          lastActivityAt: "2026-04-04T19:15:00.000Z",
+          failedLast24Hours: 1,
+          lastFailureAt: "2026-04-04T18:40:00.000Z",
+        },
+        integrations: {
+          lastAttemptAt: "2026-04-04T19:05:00.000Z",
+          pendingJobs: 2,
+          processingJobs: 1,
+          failedJobs: 1,
+          deadLetterJobs: 0,
+        },
+      }),
+    });
+  });
+
   await context.route("**/api/integrations", async (route) => {
     await route.fulfill({
       status: 200,
@@ -587,6 +609,8 @@ test("shows integration infrastructure and failure visibility in settings", asyn
   await expect(page.getByText(/^Vault$/i)).toBeVisible();
   await expect(page.getByText(/^Cron secret$/i)).toBeVisible();
   await expect(page.getByText(/quickbooks online: ready/i)).toBeVisible();
+  await expect(page.getByText(/3 sent \/ 24h/i)).toBeVisible();
+  await expect(page.getByText(/2 pending/i)).toBeVisible();
   await expect(page.getByText("QuickBooks Online", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Twilio SMS", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Failure visibility", { exact: true })).toBeVisible();

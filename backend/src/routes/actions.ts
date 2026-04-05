@@ -5,7 +5,19 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { clients, vehicles, services, appointments, invoices, payments, expenses, activityLogs, notificationLogs } from "../db/schema.js";
+import {
+  clients,
+  vehicles,
+  services,
+  appointments,
+  invoices,
+  payments,
+  expenses,
+  activityLogs,
+  notificationLogs,
+  integrationJobs,
+  integrationJobAttempts,
+} from "../db/schema.js";
 import { eq, and, gte, lte, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -318,6 +330,81 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
     appointmentReminders: summarize("automation.appointment_reminder.sent", "appointment_reminder"),
     reviewRequests: summarize("automation.review_request.sent", "review_request"),
     lapsedClients: summarize("automation.lapsed_client.sent", "lapsed_client_reengagement"),
+  });
+});
+
+actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const [automationActivityRows, automationFailureRows, integrationQueueRows, integrationAttemptRows] = await Promise.all([
+    db
+      .select({
+        total: sql<number>`count(*)::int`.as("total"),
+        lastActivityAt: sql<Date | null>`max(${activityLogs.createdAt})`.as("last_activity_at"),
+      })
+      .from(activityLogs)
+      .where(
+        and(
+          eq(activityLogs.businessId, bid),
+          gte(activityLogs.createdAt, recentCutoff),
+          sql`${activityLogs.action} in (
+            'automation.appointment_reminder.sent',
+            'automation.review_request.sent',
+            'automation.lapsed_client.sent'
+          )`
+        )
+      ),
+    db
+      .select({
+        total: sql<number>`count(*)::int`.as("total"),
+        lastFailureAt: sql<Date | null>`max(${notificationLogs.sentAt})`.as("last_failure_at"),
+      })
+      .from(notificationLogs)
+      .where(
+        and(
+          eq(notificationLogs.businessId, bid),
+          gte(notificationLogs.sentAt, recentCutoff),
+          sql`${notificationLogs.channel} = 'email'`,
+          sql`${notificationLogs.error} is not null`,
+          sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
+            'appointment_reminder',
+            'review_request',
+            'lapsed_client_reengagement'
+          )`
+        )
+      ),
+    db
+      .select({
+        pendingJobs: sql<number>`count(*) filter (where ${integrationJobs.status} = 'pending')::int`.as("pending_jobs"),
+        processingJobs: sql<number>`count(*) filter (where ${integrationJobs.status} = 'processing')::int`.as("processing_jobs"),
+        failedJobs: sql<number>`count(*) filter (where ${integrationJobs.status} = 'failed')::int`.as("failed_jobs"),
+        deadLetterJobs: sql<number>`count(*) filter (where ${integrationJobs.status} = 'dead_letter')::int`.as("dead_letter_jobs"),
+      })
+      .from(integrationJobs)
+      .where(eq(integrationJobs.businessId, bid)),
+    db
+      .select({
+        lastAttemptAt: sql<Date | null>`max(${integrationJobAttempts.finishedAt})`.as("last_attempt_at"),
+      })
+      .from(integrationJobAttempts)
+      .where(eq(integrationJobAttempts.businessId, bid)),
+  ]);
+
+  res.json({
+    automations: {
+      sentLast24Hours: automationActivityRows[0]?.total ?? 0,
+      lastActivityAt: automationActivityRows[0]?.lastActivityAt?.toISOString() ?? null,
+      failedLast24Hours: automationFailureRows[0]?.total ?? 0,
+      lastFailureAt: automationFailureRows[0]?.lastFailureAt?.toISOString() ?? null,
+    },
+    integrations: {
+      lastAttemptAt: integrationAttemptRows[0]?.lastAttemptAt?.toISOString() ?? null,
+      pendingJobs: integrationQueueRows[0]?.pendingJobs ?? 0,
+      processingJobs: integrationQueueRows[0]?.processingJobs ?? 0,
+      failedJobs: integrationQueueRows[0]?.failedJobs ?? 0,
+      deadLetterJobs: integrationQueueRows[0]?.deadLetterJobs ?? 0,
+    },
   });
 });
 

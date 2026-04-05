@@ -204,6 +204,22 @@ type AutomationActivitySummary = {
   lastFailedAt: string | null;
 };
 
+type WorkerHealthSummary = {
+  automations: {
+    sentLast24Hours: number;
+    lastActivityAt: string | null;
+    failedLast24Hours: number;
+    lastFailureAt: string | null;
+  };
+  integrations: {
+    lastAttemptAt: string | null;
+    pendingJobs: number;
+    processingJobs: number;
+    failedJobs: number;
+    deadLetterJobs: number;
+  };
+};
+
 type IntegrationRegistryStatus = {
   provider: "quickbooks_online" | "twilio_sms" | "google_calendar" | "outbound_webhooks";
   label: string;
@@ -564,6 +580,16 @@ function getAutomationHealthTone(summary: AutomationActivitySummary | null | und
   if (!summary) return "text-muted-foreground";
   if ((summary.failedLast30Days ?? 0) > 0) return "text-amber-700";
   return "text-muted-foreground";
+}
+
+function formatWorkerTimestamp(value: string | null, fallback: string) {
+  if (!value) return fallback;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return fallback;
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
 }
 
 function formatProviderLabel(provider: string) {
@@ -1072,6 +1098,7 @@ export default function SettingsPage() {
   const [{ data: presetSummary }, getBusinessPreset] = useAction(api.getBusinessPreset);
   const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
   const [{ fetching: automationSummaryFetching }, getAutomationSummary] = useAction(api.getAutomationSummary);
+  const [{ data: workerHealthData, fetching: workerHealthFetching }, getWorkerHealth] = useAction(api.getWorkerHealth);
   const [{ data: integrationStatusData, fetching: integrationStatusFetching }, refetchIntegrationStatus] = useFindFirst(
     {
       findFirst: () => api.integration.listStatus(),
@@ -1134,6 +1161,7 @@ export default function SettingsPage() {
   const googleCalendarBackendConfigured = providerConfiguration?.google_calendar ?? false;
   const twilioBackendConfigured = providerConfiguration?.twilio_sms ?? false;
   const outboundWebhooksBackendConfigured = providerConfiguration?.outbound_webhooks ?? false;
+  const workerHealth = workerHealthData as WorkerHealthSummary | undefined;
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -1288,6 +1316,11 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [businessId, getAutomationSummary]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    void getWorkerHealth();
+  }, [businessId, getWorkerHealth]);
 
   useEffect(() => {
     if (!canViewDiagnostics) return;
@@ -2825,6 +2858,48 @@ export default function SettingsPage() {
                           );
                         })}
                       </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Automation activity</p>
+                      <p className="mt-2 text-sm font-medium">
+                        {workerHealthFetching && !workerHealth ? "Refreshing..." : `${workerHealth?.automations.sentLast24Hours ?? 0} sent / 24h`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Last activity: {formatWorkerTimestamp(workerHealth?.automations.lastActivityAt ?? null, "No recent automation sends")}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Automation failures</p>
+                      <p className="mt-2 text-sm font-medium">
+                        {workerHealthFetching && !workerHealth ? "Refreshing..." : `${workerHealth?.automations.failedLast24Hours ?? 0} failed / 24h`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Last failure: {formatWorkerTimestamp(workerHealth?.automations.lastFailureAt ?? null, "No recent automation failures")}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Integration queue</p>
+                      <p className="mt-2 text-sm font-medium">
+                        {workerHealthFetching && !workerHealth
+                          ? "Refreshing..."
+                          : `${workerHealth?.integrations.pendingJobs ?? 0} pending • ${workerHealth?.integrations.processingJobs ?? 0} processing`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Last attempt: {formatWorkerTimestamp(workerHealth?.integrations.lastAttemptAt ?? null, "No recent integration attempts")}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Queue failures</p>
+                      <p className="mt-2 text-sm font-medium">
+                        {workerHealthFetching && !workerHealth
+                          ? "Refreshing..."
+                          : `${workerHealth?.integrations.failedJobs ?? 0} failed • ${workerHealth?.integrations.deadLetterJobs ?? 0} dead letter`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Use the failure panel below to retry or inspect stuck provider work.
+                      </p>
                     </div>
                   </div>
                   <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
