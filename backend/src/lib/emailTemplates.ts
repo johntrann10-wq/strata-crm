@@ -177,26 +177,35 @@ Thank you!`,
 
 /** Placeholders: clientName, businessName, reviewUrl, serviceSummary */
 export const reviewRequest: BuiltinEmailTemplate = {
-  subject: "How did we do? - {{businessName}}",
+  subject: "Would you mind leaving a quick review for {{businessName}}?",
   bodyHtml: renderClientShell({
     businessName: "{{businessName}}",
     eyebrow: "Feedback request",
-    title: "We'd love your feedback",
-    introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">Thank you for choosing us. Your opinion helps us improve.</p>`,
-    bodyHtml: renderInfoCard("Your visit", "{{serviceSummary}}"),
-    ctaLabel: "Leave a review",
+    title: "Thank you for trusting {{businessName}}",
+    introHtml:
+      `<p style="margin:0;">Hi {{clientName}},</p>` +
+      `<p style="margin:10px 0 0;">Thanks again for choosing {{businessName}}.</p>` +
+      `<p style="margin:10px 0 0;">If your recent visit went well, would you mind taking a minute to leave us a quick review? It helps other customers feel confident booking with us and helps our team keep improving.</p>`,
+    bodyHtml:
+      renderInfoCard("Recent service", "{{serviceSummary}}") +
+      `<p style="margin:16px 0 0;color:#475569;font-size:14px;line-height:1.6;">We really appreciate your time and support.</p>`,
+    ctaLabel: "Leave a quick review",
     ctaUrl: "{{reviewUrl}}",
     ctaHint: `Review link: {{reviewUrl}}`,
     showCtaHint: false,
+    footerNote: "Thank you for supporting a local business.",
   }),
   bodyText: `{{businessName}}
 
-We'd love your feedback
+Thank you for trusting {{businessName}}
 
 Hi {{clientName}},
 
-Thank you for choosing us. Your opinion helps us improve.
-{{serviceSummary}}
+Thanks again for choosing {{businessName}}.
+
+If your recent visit went well, would you mind taking a minute to leave us a quick review? It helps other customers feel confident booking with us and helps our team keep improving.
+
+Recent service: {{serviceSummary}}
 
 Leave a review: {{reviewUrl}}`,
 };
