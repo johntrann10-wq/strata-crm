@@ -35,8 +35,11 @@ test.describe("Multi-day job calendar QA - mobile", () => {
     await openCalendarAtMarch2026(page);
     await page.getByRole("button", { name: /^Month$/i }).click();
 
-    const monthGrid = page.locator(".h-\\[22\\.5rem\\]").first();
-    const selectedPanel = page.locator(".h-\\[19rem\\]").first();
+    const monthGrid = page.locator("div.surface-panel").first();
+    const selectedPanel = page
+      .locator("div.surface-panel")
+      .filter({ has: page.getByText("Selected date", { exact: true }) })
+      .first();
 
     await expect(monthGrid).toBeVisible();
     await expect(selectedPanel).toBeVisible();

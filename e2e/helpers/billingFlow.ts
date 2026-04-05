@@ -168,8 +168,15 @@ type BillingMockState = {
 const BUSINESS_ID = "biz-billing";
 const USER_ID = "owner-1";
 const QA_PERMISSIONS = [
+  "dashboard.view",
+  "customers.read",
+  "vehicles.read",
+  "appointments.read",
+  "quotes.read",
   "quotes.write",
+  "invoices.read",
   "invoices.write",
+  "payments.read",
   "payments.write",
 ];
 

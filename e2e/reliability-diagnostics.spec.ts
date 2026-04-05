@@ -207,8 +207,8 @@ test.describe("Reliability diagnostics", () => {
     await primary.goto("/profile");
     await secondary.goto("/profile");
 
-    await expect(primary.getByRole("heading", { level: 1, name: /^profile$/i })).toBeVisible();
-    await expect(secondary.getByRole("heading", { level: 1, name: /^profile$/i })).toBeVisible();
+    await expect(primary.getByRole("main").getByRole("heading", { level: 1, name: /^profile$/i }).first()).toBeVisible();
+    await expect(secondary.getByRole("main").getByRole("heading", { level: 1, name: /^profile$/i }).first()).toBeVisible();
 
     await primary.locator("header").getByRole("button", { name: /owner/i }).click();
     await primary.getByRole("menuitem", { name: /sign out/i }).click();

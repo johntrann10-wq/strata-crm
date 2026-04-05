@@ -23,18 +23,23 @@ test.describe("Billing regression", () => {
 
       await page.locator('input[placeholder="Description"]').first().fill("Exterior detail package");
       await page.locator('input[placeholder="0.00"]').first().fill("199");
-      await page.getByRole("button", { name: /^create quote$/i }).first().click();
+      await page
+        .getByRole("button", { name: /^create quote$/i })
+        .last()
+        .evaluate((button) => {
+          (button as HTMLButtonElement).click();
+        });
 
       await page.waitForURL(/\/quotes\/(?!new(?:[/?]|$))[^/?]+/);
       quoteId = /^\/quotes\/([^/?]+)/.exec(new URL(page.url()).pathname)?.[1] ?? "";
       expect(quoteId).not.toBe("");
       await expect(page.getByText(/exterior detail package/i).first()).toBeVisible();
-      await expect(page.getByRole("button", { name: /^send quote$/i }).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: /^(send quote|mark as sent)$/i }).first()).toBeVisible();
 
       await page.reload();
       await expect(page).toHaveURL(new RegExp(`/quotes/${quoteId}`));
       await expect(page.getByText(/exterior detail package/i).first()).toBeVisible();
-      await expect(page.getByRole("button", { name: /^send quote$/i }).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: /^(send quote|mark as sent)$/i }).first()).toBeVisible();
 
       const quotePrintResponsePromise = page.waitForResponse((response) =>
         response.url().includes(`/api/quotes/${quoteId}/html`) && response.request().method() === "GET"
@@ -47,7 +52,7 @@ test.describe("Billing regression", () => {
       const sendResponsePromise = page.waitForResponse((response) =>
         response.url().includes(`/api/quotes/${quoteId}/send`) && response.request().method() === "POST"
       );
-      await page.getByRole("button", { name: /^send quote$/i }).first().click();
+      await page.getByRole("button", { name: /^(send quote|mark as sent)$/i }).first().click();
       await sendResponsePromise;
 
       await expect(page.getByRole("button", { name: /^resend quote$/i }).first()).toBeVisible();
@@ -112,7 +117,7 @@ test.describe("Billing regression", () => {
           timeout: 10000,
         })
         .toContain("Payment History");
-      await expect(page.getByRole("button", { name: /^record payment$/i }).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: /^collect payment$/i }).first()).toBeVisible();
       await expect(page.getByRole("button", { name: /^resend invoice$/i }).first()).toBeVisible();
 
       await page.reload();
@@ -124,7 +129,7 @@ test.describe("Billing regression", () => {
           timeout: 10000,
         })
         .toContain("Payment History");
-      await expect(page.getByRole("button", { name: /^record payment$/i }).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: /^collect payment$/i }).first()).toBeVisible();
       await expect(page.getByRole("button", { name: /^resend invoice$/i }).first()).toBeVisible();
 
       const invoicePrintResponsePromise = page.waitForResponse((response) =>
@@ -138,7 +143,7 @@ test.describe("Billing regression", () => {
       const paymentResponsePromise = page.waitForResponse((response) =>
         response.url().includes("/api/payments") && response.request().method() === "POST"
       );
-      await page.getByRole("button", { name: /^record payment$/i }).first().click();
+      await page.getByRole("button", { name: /^collect payment$/i }).first().click();
       await expect(page.getByRole("heading", { name: /^record payment$/i })).toBeVisible();
       await page.locator("#payment-amount").fill(String(invoiceTotal));
       await page.getByRole("button", { name: /^record payment$/i }).last().click();

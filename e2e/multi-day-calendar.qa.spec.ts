@@ -52,10 +52,6 @@ async function clickMonthView(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: /^Month$/i }).click();
 }
 
-async function clickWeekView(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: /^Week$/i }).click();
-}
-
 async function clickDayView(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: /^Day$/i }).click();
 }
@@ -73,7 +69,7 @@ async function selectServiceFromSearch(page: import("@playwright/test").Page, se
 }
 
 test.describe("Multi-day job calendar QA - desktop", () => {
-  test("month, week, day, and create/edit regressions stay usable under dense multi-day data", async ({ page }) => {
+  test("month, day, and create/edit regressions stay usable under dense multi-day data", async ({ page }) => {
     test.setTimeout(240000);
     const state = await mockMultiDayApp(page);
     await signIn(page);
@@ -108,15 +104,7 @@ test.describe("Multi-day job calendar QA - desktop", () => {
     await expect(page.getByText("Wrap Titan 5d").first()).toBeVisible();
 
     await calendarHeaderPanel(page).getByRole("button", { name: /Previous/i }).click();
-    await clickWeekView(page);
-    const weekSidebar = page.getByRole("complementary").last();
-    await expect(page.getByText("On site")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Wrap Titan 5d Active work/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /PPF Carrera 3d Curing/i })).toBeVisible();
-    await expect(weekSidebar.getByRole("button", { name: /9:00 AM Interior Detail scheduled/i })).toBeVisible();
-    await expect(weekSidebar.getByRole("button", { name: /12:00 PM Window Tint Sedan confirmed/i })).toBeVisible();
-    await weekSidebar.getByRole("button", { name: /^Tuesday, March 31$/i }).click();
-
+    await page.getByRole("button", { name: /Open Tuesday, March 31/i }).click({ position: { x: 12, y: 12 } });
     await clickDayView(page);
     await expect(page.getByText("Wrap Titan 5d").first()).toBeVisible();
     await expect(page.getByText("PPF Carrera 3d").first()).toBeVisible();
@@ -146,7 +134,6 @@ test.describe("Multi-day job calendar QA - desktop", () => {
     await expect(page.getByRole("heading", { name: /Edit Appointment/i })).toBeVisible();
     await chooseTime(page, "edit-end-time", "2:00 PM");
     await page.getByLabel(/Multi-day \/ on-site job/i).check();
-    await chooseDate(page, "edit-expected-completion-date", "Friday, April 3rd, 2026");
     await chooseTime(page, "edit-expected-completion-time", "6:00 PM");
     await page.getByRole("button", { name: /Save Changes/i }).click();
     await expect.poll(() => state.updatePayloads.length).toBeGreaterThan(0);

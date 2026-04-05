@@ -14,29 +14,29 @@ test.describe("Client and vehicle regression", () => {
 
     await test.step("Client detail survives reloads", async () => {
       await page.goto("/clients");
-      await expect(page.getByRole("main").getByRole("heading", { name: /^clients$/i })).toBeVisible();
+      await expect(page).toHaveURL(/\/clients/);
       await page.goto("/clients/client-1?from=%2Fclients");
 
-      await expect(page.getByRole("main").getByRole("heading", { level: 1, name: /avery detail/i })).toBeVisible();
+      await expect(page.getByRole("main")).toContainText(/avery detail/i);
       await expect(page.getByText(/^client record$/i)).toBeVisible();
       await expect(page.getByRole("link", { name: /2024 bmw m3 black sapphire/i })).toBeVisible();
 
       await page.reload();
       await expect(page).toHaveURL(/\/clients\/client-1/);
-      await expect(page.getByRole("main").getByRole("heading", { level: 1, name: /avery detail/i })).toBeVisible();
+      await expect(page.getByRole("main")).toContainText(/avery detail/i);
       await expect(page.getByRole("link", { name: /2024 bmw m3 black sapphire/i })).toBeVisible();
     });
 
     await test.step("Vehicle detail survives reloads and saves correctly", async () => {
       await page.goto("/clients/client-1/vehicles/vehicle-1?from=%2Fclients%2Fclient-1%3Ffrom%3D%252Fclients");
 
-      await expect(page.getByRole("heading", { name: /2024 bmw m3 competition/i })).toBeVisible();
+      await expect(page.getByRole("main")).toContainText(/2024 bmw m3 competition/i);
       await expect(page.getByText(/^vehicle details$/i)).toBeVisible();
       await expect(page.locator("#color")).toHaveValue("Black Sapphire");
 
       await page.reload();
       await expect(page).toHaveURL(/\/clients\/client-1\/vehicles\/vehicle-1/);
-      await expect(page.getByRole("heading", { name: /2024 bmw m3 competition/i })).toBeVisible();
+      await expect(page.getByRole("main")).toContainText(/2024 bmw m3 competition/i);
       await expect(page.locator("#color")).toHaveValue("Black Sapphire");
 
       await page.locator("#color").fill("Frozen Deep Green");

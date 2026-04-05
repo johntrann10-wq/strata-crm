@@ -91,7 +91,19 @@ const BUSINESS_ID = "biz-client-vehicle";
 const USER_ID = "owner-1";
 const CLIENT_ID = "client-1";
 const VEHICLE_ID = "vehicle-1";
-const QA_PERMISSIONS = ["clients.write", "vehicles.write", "appointments.write", "quotes.write", "invoices.write"];
+const QA_PERMISSIONS = [
+  "dashboard.view",
+  "customers.read",
+  "clients.write",
+  "vehicles.read",
+  "vehicles.write",
+  "appointments.read",
+  "appointments.write",
+  "quotes.read",
+  "quotes.write",
+  "invoices.read",
+  "invoices.write",
+];
 
 function toJson(body: unknown) {
   return JSON.stringify(body);
