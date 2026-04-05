@@ -236,18 +236,24 @@ test("growth proof switches revenue-by-source windows", async ({ page }) => {
   await page.goto("/signed-in");
 
   await expect(page.getByText("Growth Proof", { exact: true })).toBeVisible();
+  await expect(page.getByText("Source scorecard", { exact: true })).toBeVisible();
   const attributedRevenueCard = page.getByRole("link", { name: /Attributed Revenue/i });
+  const growthSection = page.locator("section").filter({ has: page.getByText("Growth Proof", { exact: true }) }).first();
   await expect(attributedRevenueCard).toBeVisible();
-  await expect(page.getByText("Last 30 days", { exact: true })).toBeVisible();
+  await expect(growthSection.getByText("Last 30 days", { exact: true }).first()).toBeVisible();
   await expect(attributedRevenueCard).toContainText("$950.00");
   await expect(page.getByText("58% share")).toBeVisible();
+  await expect(page.getByText("Top revenue source", { exact: true })).toBeVisible();
+  await expect(page.getByText("Google", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Fast follow-up", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Needs tightening", { exact: true }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "90D" }).click();
-  await expect(page.getByText("Last 90 days", { exact: true })).toBeVisible();
+  await expect(growthSection.getByText("Last 90 days", { exact: true }).first()).toBeVisible();
   await expect(attributedRevenueCard).toContainText("$1,800.00");
   await expect(page.getByText("67% share")).toBeVisible();
 
   await page.getByRole("button", { name: "All time" }).click();
-  await expect(page.locator('span[data-slot="badge"]').filter({ hasText: "All time" })).toBeVisible();
+  await expect(growthSection.locator('span[data-slot="badge"]').filter({ hasText: "All time" }).first()).toBeVisible();
   await expect(attributedRevenueCard).toContainText("$2,600.00");
 });

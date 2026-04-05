@@ -175,6 +175,34 @@ function formatGrowthWindowLabel(days: number | null | undefined): string {
   return `Last ${Math.round(days)} days`;
 }
 
+function getSourceResponseTone(hours: number | null | undefined) {
+  if (hours == null || !Number.isFinite(hours)) {
+    return {
+      label: "No response data",
+      className: "border-border/70 bg-background/70 text-muted-foreground",
+    };
+  }
+
+  if (hours <= 2) {
+    return {
+      label: "Fast follow-up",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    };
+  }
+
+  if (hours <= 6) {
+    return {
+      label: "Needs tightening",
+      className: "border-amber-200 bg-amber-50 text-amber-800",
+    };
+  }
+
+  return {
+    label: "Slow response risk",
+    className: "border-rose-200 bg-rose-50 text-rose-800",
+  };
+}
+
 function safeParseISO(iso: string | undefined | null): Date | null {
   if (!iso) return null;
   const parsed = parseISO(iso);
@@ -289,6 +317,21 @@ function SignedInDashboard({
     return { apptStartGte: from.toISOString(), apptStartLte: to.toISOString() };
   }, [filterNow]);
   const upcomingAppointmentsStart = useMemo(() => endOfDay(filterNow).toISOString(), [filterNow]);
+  const sourceRevenueLeader = useMemo(() => growthMetrics?.revenueBySource?.[0] ?? null, [growthMetrics]);
+  const fastestResponseSource = useMemo(() => {
+    const rows = (growthMetrics?.revenueBySource ?? []).filter(
+      (row) => row.averageFirstResponseHours != null && Number.isFinite(row.averageFirstResponseHours)
+    );
+    if (rows.length === 0) return null;
+    return [...rows].sort((left, right) => (left.averageFirstResponseHours ?? Infinity) - (right.averageFirstResponseHours ?? Infinity))[0] ?? null;
+  }, [growthMetrics]);
+  const slowestResponseSource = useMemo(() => {
+    const rows = (growthMetrics?.revenueBySource ?? []).filter(
+      (row) => row.averageFirstResponseHours != null && Number.isFinite(row.averageFirstResponseHours)
+    );
+    if (rows.length === 0) return null;
+    return [...rows].sort((left, right) => (right.averageFirstResponseHours ?? 0) - (left.averageFirstResponseHours ?? 0))[0] ?? null;
+  }, [growthMetrics]);
 
   const [{ data: appointmentsRaw, fetching: fetchingAppts, error: apptsError }, refetchAppts] = useFindMany(
     api.appointment,
@@ -1188,19 +1231,21 @@ function SignedInDashboard({
                 </div>
               </div>
 
-              <div className="grid gap-3 lg:grid-cols-3">
+              <div className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
                 {(growthMetrics?.revenueBySource ?? []).slice(0, 3).map((sourceRow) => (
                   <div key={sourceRow.source} className="rounded-[1.4rem] border border-border/70 bg-card p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
                         <p className="text-sm font-semibold text-slate-950">{formatLeadSource(sourceRow.source)}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {sourceRow.leadCount} lead{sourceRow.leadCount === 1 ? "" : "s"} tracked
                         </p>
                       </div>
-                      <Badge variant="secondary">{sourceRow.shareOfRevenue}% share</Badge>
+                      <Badge variant="secondary" className="self-start">
+                        {sourceRow.shareOfRevenue}% share
+                      </Badge>
                     </div>
-                    <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                    <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                       <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Revenue</p>
                         <p className="mt-2 font-semibold text-foreground">{formatCurrency(sourceRow.revenue)}</p>
@@ -1266,22 +1311,124 @@ function SignedInDashboard({
                       </div>
                       <Badge variant="secondary">{week.closeRate}% close</Badge>
                     </div>
-                    <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                      <div className="rounded-lg border border-border/70 bg-card px-3 py-2">
+                    <div className="mt-4 grid grid-cols-[repeat(3,minmax(0,1fr))] gap-2 text-sm">
+                      <div className="min-w-0 rounded-lg border border-border/70 bg-card px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Booked</p>
                         <p className="mt-2 font-semibold text-foreground">{week.bookingRate}%</p>
                       </div>
-                      <div className="rounded-lg border border-border/70 bg-card px-3 py-2">
+                      <div className="min-w-0 rounded-lg border border-border/70 bg-card px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Won</p>
                         <p className="mt-2 font-semibold text-foreground">{week.convertedCount}</p>
                       </div>
-                      <div className="rounded-lg border border-border/70 bg-card px-3 py-2">
+                      <div className="min-w-0 rounded-lg border border-border/70 bg-card px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Response</p>
                         <p className="mt-2 font-semibold text-foreground">{formatHoursSummary(week.averageFirstResponseHours)}</p>
                       </div>
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            <div className="rounded-[1.4rem] border border-border/70 bg-card p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">Source scorecard</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    See which channels are producing revenue, which ones convert, and where response speed is still costing you.
+                  </p>
+                </div>
+                <Badge variant="outline">{formatGrowthWindowLabel(growthMetrics?.periodDays)}</Badge>
+              </div>
+
+              <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)]">
+                <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Top revenue source</p>
+                    <p className="mt-2 text-lg font-semibold text-foreground">
+                      {sourceRevenueLeader ? formatLeadSource(sourceRevenueLeader.source) : "--"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {sourceRevenueLeader
+                        ? `${formatCurrency(sourceRevenueLeader.revenue)} from ${sourceRevenueLeader.leadCount} tracked lead${sourceRevenueLeader.leadCount === 1 ? "" : "s"}`
+                        : "Revenue source data will appear once paid leads are tracked."}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Fastest response</p>
+                    <p className="mt-2 text-lg font-semibold text-foreground">
+                      {fastestResponseSource ? formatLeadSource(fastestResponseSource.source) : "--"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {fastestResponseSource
+                        ? `${formatHoursSummary(fastestResponseSource.averageFirstResponseHours)} average first reply`
+                        : "No first-response timing yet."}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Biggest response risk</p>
+                    <p className="mt-2 text-lg font-semibold text-foreground">
+                      {slowestResponseSource ? formatLeadSource(slowestResponseSource.source) : "--"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {slowestResponseSource
+                        ? `${formatHoursSummary(slowestResponseSource.averageFirstResponseHours)} average first reply`
+                        : "Response risk appears once source timing data exists."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/70">
+                  <div className="grid grid-cols-[minmax(0,1.2fr)_0.7fr_0.7fr_0.85fr_0.95fr] gap-3 border-b border-border/70 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    <span>Source</span>
+                    <span>Revenue</span>
+                    <span>Close</span>
+                    <span>Response</span>
+                    <span>Health</span>
+                  </div>
+                  <div className="divide-y divide-border/70">
+                    {(growthMetrics?.revenueBySource ?? []).map((sourceRow) => {
+                      const responseTone = getSourceResponseTone(sourceRow.averageFirstResponseHours);
+                      return (
+                        <div
+                          key={sourceRow.source}
+                          className="grid grid-cols-[minmax(0,1.2fr)_0.7fr_0.7fr_0.85fr_0.95fr] gap-3 px-4 py-3 text-sm"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-foreground">{formatLeadSource(sourceRow.source)}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {sourceRow.leadCount} lead{sourceRow.leadCount === 1 ? "" : "s"} · {sourceRow.bookedCount} booked
+                            </p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-foreground">{formatCurrency(sourceRow.revenue)}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{sourceRow.shareOfRevenue}% tracked share</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-foreground">{sourceRow.closeRate}%</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{sourceRow.convertedCount} won</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-foreground">
+                              {formatHoursSummary(sourceRow.averageFirstResponseHours)}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">{sourceRow.bookingRate}% booked</p>
+                          </div>
+                          <div className="min-w-0 self-start">
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium",
+                                responseTone.className
+                              )}
+                            >
+                              {responseTone.label}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

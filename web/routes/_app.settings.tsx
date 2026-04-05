@@ -4167,10 +4167,10 @@ export default function SettingsPage() {
                         ) : null}
                       </div>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-3 2xl:grid-cols-2">
                       <div className="rounded-xl border bg-background p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
                             <p className="text-sm font-medium">Instant auto-response</p>
                             <p className="mt-1 text-xs text-muted-foreground">Send an acknowledgment as soon as a new web lead is captured.</p>
                           </div>
@@ -4179,11 +4179,12 @@ export default function SettingsPage() {
                             checked={automationSettings.leadAutoResponseEnabled}
                             onCheckedChange={(value) => handleAutomationToggle("leadAutoResponseEnabled", value)}
                             disabled={!canEditSettings}
+                            className="shrink-0 self-start"
                           />
                         </div>
                         <div className="mt-4 space-y-3">
-                          <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
-                            <div>
+                          <div className="flex flex-col gap-3 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
                               <p className="text-sm font-medium">Email acknowledgment</p>
                               <p className="text-xs text-muted-foreground">Uses the business contact and template system already in Strata.</p>
                             </div>
@@ -4192,10 +4193,11 @@ export default function SettingsPage() {
                               checked={automationSettings.leadAutoResponseEmailEnabled}
                               onCheckedChange={(value) => handleAutomationToggle("leadAutoResponseEmailEnabled", value)}
                               disabled={!canEditSettings || !automationSettings.leadAutoResponseEnabled}
+                              className="shrink-0 self-start sm:self-center"
                             />
                           </div>
-                          <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
-                            <div>
+                          <div className="flex flex-col gap-3 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
                               <p className="text-sm font-medium">SMS acknowledgment</p>
                               <p className="text-xs text-muted-foreground">Queues through Twilio only when that integration is connected.</p>
                             </div>
@@ -4204,13 +4206,14 @@ export default function SettingsPage() {
                               checked={automationSettings.leadAutoResponseSmsEnabled}
                               onCheckedChange={(value) => handleAutomationToggle("leadAutoResponseSmsEnabled", value)}
                               disabled={!canEditSettings || !automationSettings.leadAutoResponseEnabled}
+                              className="shrink-0 self-start sm:self-center"
                             />
                           </div>
                         </div>
                       </div>
                       <div className="rounded-xl border bg-background p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
                             <p className="text-sm font-medium">Uncontacted lead reminder</p>
                             <p className="mt-1 text-xs text-muted-foreground">Alert the shop if a fresh lead is still untouched after your response window.</p>
                           </div>
@@ -4219,6 +4222,7 @@ export default function SettingsPage() {
                             checked={automationSettings.uncontactedLeadsEnabled}
                             onCheckedChange={(value) => handleAutomationToggle("uncontactedLeadsEnabled", value)}
                             disabled={!canEditSettings}
+                            className="shrink-0 self-start"
                           />
                         </div>
                         <div className="mt-4 space-y-1.5">
