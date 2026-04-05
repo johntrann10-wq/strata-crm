@@ -311,29 +311,58 @@ function getStaffAccessState(teamMember: StaffRecord): TeamAccessState {
         status,
         label: "Invite pending",
         helperText: teamMember.email ? `Awaiting account claim from ${teamMember.email}` : "Awaiting account claim",
-        badgeClassName: "bg-amber-100 text-amber-900",
+        badgeClassName: "border-amber-200 bg-amber-50 text-amber-800",
       };
     case "suspended":
       return {
         status,
         label: "Suspended",
         helperText: "Sign-in access is suspended for this team member.",
-        badgeClassName: "bg-rose-100 text-rose-900",
+        badgeClassName: "border-rose-200 bg-rose-50 text-rose-800",
       };
     case "roster_only":
       return {
         status,
         label: "Roster only",
         helperText: "No login access yet. Add an email when this person should sign in.",
-        badgeClassName: "bg-slate-200 text-slate-800",
+        badgeClassName: "border-slate-200 bg-slate-100 text-slate-700",
       };
     default:
       return {
         status: "active",
         label: "Active access",
         helperText: teamMember.email ? "Can sign in and access assigned shop tools." : "Active on the shop roster.",
-        badgeClassName: "bg-emerald-100 text-emerald-900",
+        badgeClassName: "border-emerald-200 bg-emerald-50 text-emerald-800",
       };
+  }
+}
+
+async function copyTextWithFallback(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Fall back to a temporary textarea below.
+  }
+
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.top = "0";
+    textarea.style.left = "0";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const copied = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return copied;
+  } catch {
+    return false;
   }
 }
 
@@ -1089,7 +1118,11 @@ export default function SettingsPage() {
     }
 
     try {
-      await navigator.clipboard.writeText(inviteUrl);
+      const copied = await copyTextWithFallback(inviteUrl);
+      if (!copied) {
+        toast.error("Could not copy invite link.");
+        return;
+      }
       toast.success("Invite link copied");
     } catch {
       toast.error("Could not copy invite link.");
@@ -1903,9 +1936,9 @@ export default function SettingsPage() {
                       return (
                         <div
                           key={teamMember.id}
-                          className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
+                          className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
                         >
-                          <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex min-w-0 items-start gap-3">
                             <div className="rounded-md bg-primary/10 p-1.5">
                               <Shield className="h-4 w-4 text-primary" />
                             </div>
@@ -1922,17 +1955,19 @@ export default function SettingsPage() {
                               <p className="mt-1 text-xs text-muted-foreground">{getStaffPermissionSummary(teamMember)}</p>
                             </div>
                           </div>
-                          <div className="flex items-center justify-between gap-2 sm:justify-end">
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${accessState.badgeClassName}`}>
-                              {accessState.label}
-                            </span>
-                              <div className="flex items-center gap-2">
+                          <div className="flex flex-col gap-2 sm:min-w-[260px] sm:items-end">
+                            <div className="flex items-center justify-start sm:justify-end">
+                              <Badge variant="outline" className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${accessState.badgeClassName}`}>
+                                {accessState.label}
+                              </Badge>
+                            </div>
+                              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                 {accessState.status === "invited" && teamMember.email ? (
                                   <>
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="h-9"
+                                      className="h-9 w-full sm:w-auto"
                                       onClick={() => handleCopyStaffInviteLink(teamMember)}
                                       disabled={!canManageTeam || copyingStaffInvite}
                                     >
@@ -1942,7 +1977,7 @@ export default function SettingsPage() {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="h-9"
+                                      className="h-9 w-full sm:w-auto"
                                       onClick={() => handleResendStaffInvite(teamMember)}
                                       disabled={!canManageTeam || resendingStaffInvite}
                                     >
@@ -1953,22 +1988,22 @@ export default function SettingsPage() {
                                 ) : null}
                                 <Button
                                   variant="ghost"
-                                size="icon"
-                                className="h-9 w-9"
-                                onClick={() => openEditTeamMember(teamMember)}
-                                disabled={!canManageTeam}
-                              >
-                                <PenLine className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                                onClick={() => setDeleteStaffId(teamMember.id)}
-                                disabled={!canManageTeam || (teamMember.membershipRole ?? teamMember.role) === "owner"}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
+                                  size="icon"
+                                  className="h-9 w-9 shrink-0"
+                                  onClick={() => openEditTeamMember(teamMember)}
+                                  disabled={!canManageTeam}
+                                >
+                                  <PenLine className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                                  onClick={() => setDeleteStaffId(teamMember.id)}
+                                  disabled={!canManageTeam || (teamMember.membershipRole ?? teamMember.role) === "owner"}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
                             </div>
                           </div>
                         </div>
@@ -2114,7 +2149,7 @@ export default function SettingsPage() {
             <div className="space-y-1.5">
               <Label>Role</Label>
               <Select value={staffForm.role} onValueChange={handleStaffRoleChange}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11 w-full text-sm">
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
