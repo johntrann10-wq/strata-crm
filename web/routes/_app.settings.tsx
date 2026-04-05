@@ -195,6 +195,57 @@ type AutomationActivitySummary = {
   lastFailedAt: string | null;
 };
 
+type IntegrationRegistryStatus = {
+  provider: "quickbooks_online" | "twilio_sms" | "google_calendar" | "outbound_webhooks";
+  label: string;
+  ownerType: "business" | "user";
+  description: string;
+  permissions: { read: "settings.read"; write: "settings.write" };
+  featureFlagEnabled: boolean;
+};
+
+type IntegrationConnectionStatus = {
+  id: string;
+  provider: IntegrationRegistryStatus["provider"];
+  ownerType: "business" | "user";
+  ownerKey: string;
+  userId: string | null;
+  status: "pending" | "connected" | "action_required" | "error" | "disconnected";
+  displayName: string | null;
+  externalAccountId: string | null;
+  externalAccountName: string | null;
+  scopes: string[];
+  featureEnabled: boolean;
+  lastSyncedAt: string | null;
+  lastSuccessfulAt: string | null;
+  lastError: string | null;
+  actionRequired: string | null;
+  connectedAt: string | null;
+  disconnectedAt: string | null;
+  configSummary: {
+    hasEncryptedAccessToken: boolean;
+    hasEncryptedRefreshToken: boolean;
+    hasConfig: boolean;
+    selectedCalendarId: string | null;
+    webhookUrl: string | null;
+    twilioMessagingServiceSid: string | null;
+  };
+};
+
+type IntegrationFailureRecord = {
+  id: string;
+  provider: string;
+  jobType: string;
+  status: string;
+  attemptCount: number;
+  maxAttempts: number;
+  lastError: string | null;
+  deadLetteredAt: string | null;
+  nextRunAt: string | null;
+  updatedAt: string;
+  displayName: string | null;
+};
+
 const STAFF_ROLES = [
   { value: "owner", label: "Owner" },
   { value: "admin", label: "Admin" },
@@ -461,6 +512,19 @@ function getAutomationHealthTone(summary: AutomationActivitySummary | null | und
   if (!summary) return "text-muted-foreground";
   if ((summary.failedLast30Days ?? 0) > 0) return "text-amber-700";
   return "text-muted-foreground";
+}
+
+function formatProviderLabel(provider: string) {
+  return provider.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getConnectionBadgeVariant(
+  status: IntegrationConnectionStatus["status"]
+): "default" | "secondary" | "destructive" | "outline" {
+  if (status === "connected") return "default";
+  if (status === "error") return "destructive";
+  if (status === "action_required") return "secondary";
+  return "outline";
 }
 
 function BillingTab({
@@ -939,10 +1003,27 @@ export default function SettingsPage() {
   const [{ data: presetSummary }, getBusinessPreset] = useAction(api.getBusinessPreset);
   const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
   const [{ fetching: automationSummaryFetching }, getAutomationSummary] = useAction(api.getAutomationSummary);
+  const [{ data: integrationStatusData, fetching: integrationStatusFetching }, refetchIntegrationStatus] = useFindFirst(
+    {
+      findFirst: () => api.integration.listStatus(),
+    },
+    { pause: !businessId }
+  );
+  const [{ data: integrationFailureData, fetching: integrationFailuresFetching }, refetchIntegrationFailures] = useFindMany(
+    {
+      findMany: () => api.integration.listFailures().then((result) => result.records ?? []),
+    },
+    { pause: !businessId }
+  );
+  const [{ fetching: retryingIntegrationJob }, retryIntegrationJob] = useAction(api.integration.retryJob);
   const preset = presetSummary as BusinessPresetActionResult | undefined;
   const presetServiceCount = preset?.count ?? 0;
   const presetPreviewNames = preset?.names?.slice(0, 4) ?? [];
   const presetHasRecommendations = presetServiceCount > 0;
+  const integrationStatus = integrationStatusData as
+    | { registry: IntegrationRegistryStatus[]; connections: IntegrationConnectionStatus[] }
+    | undefined;
+  const integrationFailures = (integrationFailureData as IntegrationFailureRecord[] | undefined) ?? [];
 
   useEffect(() => {
     if (!business) return;
@@ -1176,7 +1257,18 @@ export default function SettingsPage() {
       integrationWebhookSecret: integrationSettings.webhookSecret.trim() || null,
       integrationWebhookEvents: integrationSettings.webhookEvents,
     });
+    await refetchIntegrationStatus();
     toast.success("Integration settings saved");
+  };
+
+  const handleRetryIntegrationJob = async (id: string) => {
+    const result = await retryIntegrationJob({ id });
+    if (result.error) {
+      toast.error(result.error.message ?? "Could not retry integration job.");
+      return;
+    }
+    await Promise.all([refetchIntegrationFailures(), refetchIntegrationStatus()]);
+    toast.success("Integration job moved back into the retry queue.");
   };
 
   const openCreateLocation = () => {
@@ -2294,6 +2386,59 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="rounded-xl border bg-background p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Integration infrastructure</p>
+                      <p className="text-sm text-muted-foreground">
+                        Phase 0 foundation status for provider feature flags, encrypted connection state, and background failure visibility.
+                      </p>
+                    </div>
+                    <Badge variant="outline">
+                      {integrationStatusFetching ? "Refreshing..." : `${integrationStatus?.connections.length ?? 0} connections`}
+                    </Badge>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {(integrationStatus?.registry ?? []).map((entry) => {
+                      const connection = integrationStatus?.connections.find((item) => item.provider === entry.provider);
+                      return (
+                        <div key={entry.provider} className="rounded-lg border bg-muted/20 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium">{entry.label}</p>
+                              <p className="text-xs text-muted-foreground">{entry.description}</p>
+                            </div>
+                            <Badge variant={connection ? getConnectionBadgeVariant(connection.status) : "outline"}>
+                              {!entry.featureFlagEnabled
+                                ? "Flag off"
+                                : connection
+                                  ? connection.status.replace(/_/g, " ")
+                                  : "Not connected"}
+                            </Badge>
+                          </div>
+                          <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                            <p>Owner scope: {entry.ownerType === "user" ? "Per user" : "Per business"}</p>
+                            <p>
+                              Tokens encrypted:{" "}
+                              {connection?.configSummary.hasEncryptedAccessToken || connection?.configSummary.hasEncryptedRefreshToken
+                                ? "Yes"
+                                : "No"}
+                            </p>
+                            <p>
+                              Last success:{" "}
+                              {connection?.lastSuccessfulAt
+                                ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(
+                                    new Date(connection.lastSuccessfulAt)
+                                  )
+                                : "None yet"}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div className="rounded-xl border bg-muted/20 p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -2339,6 +2484,67 @@ export default function SettingsPage() {
                       Google Analytics and Microsoft Clarity are configured in deployment env vars so marketing traffic stays separate from shop data.
                     </p>
                   </div>
+                </div>
+
+                <div className="rounded-xl border bg-background p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Failure visibility</p>
+                      <p className="text-sm text-muted-foreground">
+                        Dead-letter and retry visibility for background integration work before provider-specific setup flows land.
+                      </p>
+                    </div>
+                    <Badge variant={integrationFailures.length > 0 ? "secondary" : "outline"}>
+                      {integrationFailuresFetching ? "Loading..." : `${integrationFailures.length} queued issues`}
+                    </Badge>
+                  </div>
+                  {integrationFailures.length === 0 ? (
+                    <div className="mt-4 rounded-lg border border-dashed bg-muted/10 px-4 py-6 text-sm text-muted-foreground">
+                      No failed or dead-lettered integration jobs are recorded for this business yet.
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-3">
+                      {integrationFailures.map((failure) => (
+                        <div
+                          key={failure.id}
+                          className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 lg:flex-row lg:items-start lg:justify-between"
+                        >
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-medium">{formatProviderLabel(failure.provider)}</p>
+                              <Badge variant={failure.status === "dead_letter" ? "destructive" : "secondary"}>
+                                {failure.status.replace(/_/g, " ")}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {failure.jobType} • attempts {failure.attemptCount}/{failure.maxAttempts}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {failure.lastError ?? "No error detail captured."}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+                            <p className="text-xs text-muted-foreground">
+                              Next retry:{" "}
+                              {failure.nextRunAt
+                                ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(
+                                    new Date(failure.nextRunAt)
+                                  )
+                                : "Not scheduled"}
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRetryIntegrationJob(failure.id)}
+                              disabled={!canEditSettings || retryingIntegrationJob}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-xl border bg-background p-4">

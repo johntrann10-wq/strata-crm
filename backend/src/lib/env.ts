@@ -1,4 +1,6 @@
 import { logger } from "./logger.js";
+import { listIntegrationFeatureFlags } from "./integrationFeatureFlags.js";
+import { isIntegrationVaultConfigured } from "./integrationVault.js";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -103,6 +105,11 @@ function logOptionalServices(): void {
   const cron = process.env.CRON_SECRET?.trim();
   if (!cron) {
     logger.info("CRON_SECRET not set: POST /api/actions/runAutomations does not require x-cron-secret");
+  }
+  const integrationFlags = listIntegrationFeatureFlags();
+  logger.info("Integration feature flags", integrationFlags);
+  if (Object.values(integrationFlags).some(Boolean) && !isIntegrationVaultConfigured()) {
+    logger.warn("Integration vault secret is missing; encrypted provider connections will remain unavailable");
   }
 }
 

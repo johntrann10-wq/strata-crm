@@ -40,6 +40,27 @@ const quoteStatusEnum = pgEnum("quote_status", ["draft", "sent", "accepted", "de
 const paymentMethodEnum = pgEnum("payment_method", [
   "cash", "card", "check", "venmo", "cashapp", "zelle", "other",
 ]);
+export const integrationProviderEnum = pgEnum("integration_provider", [
+  "quickbooks_online",
+  "twilio_sms",
+  "google_calendar",
+  "outbound_webhooks",
+]);
+export const integrationOwnerTypeEnum = pgEnum("integration_owner_type", ["business", "user"]);
+export const integrationConnectionStatusEnum = pgEnum("integration_connection_status", [
+  "pending",
+  "connected",
+  "action_required",
+  "error",
+  "disconnected",
+]);
+export const integrationJobStatusEnum = pgEnum("integration_job_status", [
+  "pending",
+  "processing",
+  "succeeded",
+  "failed",
+  "dead_letter",
+]);
 export const membershipRoleEnum = pgEnum("membership_role", [
   "owner",
   "admin",
@@ -499,4 +520,114 @@ export const idempotencyKeys = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [primaryKey({ columns: [t.idempotencyKey, t.businessId, t.operation] })]
+);
+
+export const integrationConnections = pgTable(
+  "integration_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    provider: integrationProviderEnum("provider").notNull(),
+    ownerType: integrationOwnerTypeEnum("owner_type").default("business").notNull(),
+    ownerKey: text("owner_key").notNull(),
+    status: integrationConnectionStatusEnum("status").default("pending").notNull(),
+    displayName: text("display_name"),
+    externalAccountId: text("external_account_id"),
+    externalAccountName: text("external_account_name"),
+    encryptedAccessToken: text("encrypted_access_token"),
+    encryptedRefreshToken: text("encrypted_refresh_token"),
+    tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
+    encryptedConfig: text("encrypted_config"),
+    scopes: text("scopes").default("[]").notNull(),
+    featureEnabled: boolean("feature_enabled").default(true).notNull(),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    lastSuccessfulAt: timestamp("last_successful_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    actionRequired: text("action_required"),
+    connectedAt: timestamp("connected_at", { withTimezone: true }),
+    disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("integration_connections_provider_owner_unique").on(t.businessId, t.provider, t.ownerKey)]
+);
+
+export const integrationSyncLinks = pgTable(
+  "integration_sync_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => integrationConnections.id, { onDelete: "cascade" }),
+    provider: integrationProviderEnum("provider").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    externalId: text("external_id").notNull(),
+    externalSecondaryId: text("external_secondary_id"),
+    fingerprint: text("fingerprint"),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("integration_sync_links_connection_entity_unique").on(t.connectionId, t.entityType, t.entityId),
+    uniqueIndex("integration_sync_links_connection_external_unique").on(t.connectionId, t.entityType, t.externalId),
+  ]
+);
+
+export const integrationJobs = pgTable(
+  "integration_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id").references(() => integrationConnections.id, { onDelete: "cascade" }),
+    provider: integrationProviderEnum("provider").notNull(),
+    jobType: text("job_type").notNull(),
+    payload: text("payload").default("{}").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    status: integrationJobStatusEnum("status").default("pending").notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    maxAttempts: integer("max_attempts").default(5).notNull(),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }).defaultNow().notNull(),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    lockedBy: text("locked_by"),
+    lastError: text("last_error"),
+    deadLetteredAt: timestamp("dead_lettered_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("integration_jobs_provider_type_idempotency_unique").on(t.businessId, t.provider, t.jobType, t.idempotencyKey)]
+);
+
+export const integrationJobAttempts = pgTable(
+  "integration_job_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => integrationJobs.id, { onDelete: "cascade" }),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    provider: integrationProviderEnum("provider").notNull(),
+    attemptNumber: integer("attempt_number").notNull(),
+    status: integrationJobStatusEnum("status").notNull(),
+    requestSnapshot: text("request_snapshot"),
+    responseSnapshot: text("response_snapshot"),
+    error: text("error"),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("integration_job_attempts_job_attempt_unique").on(t.jobId, t.attemptNumber)]
 );

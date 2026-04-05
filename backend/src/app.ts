@@ -30,6 +30,7 @@ import { jobsRouter } from "./routes/jobs.js";
 import { actionsRouter } from "./routes/actions.js";
 import { activityLogsRouter } from "./routes/activity-logs.js";
 import { notificationLogsRouter } from "./routes/notification-logs.js";
+import { integrationsRouter } from "./routes/integrations.js";
 import { billingRouter, handleStripeWebhook } from "./routes/billing.js";
 
 validateEnv();
@@ -78,6 +79,7 @@ app.use("/api/jobs", optionalAuth, requireSubscription, jobsRouter);
 app.use("/api/actions", optionalAuth, actionsRouter);
 app.use("/api/activity-logs", optionalAuth, requireSubscription, activityLogsRouter);
 app.use("/api/notification-logs", optionalAuth, requireSubscription, notificationLogsRouter);
+app.use("/api/integrations", optionalAuth, requireSubscription, integrationsRouter);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 

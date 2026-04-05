@@ -434,6 +434,70 @@ export const api = {
   expense: resource("expenses"),
   activityLog: resource("activity-logs"),
   notificationLog: resource("notification-logs"),
+  integration: {
+    listStatus: () =>
+      request<{
+        registry: Array<{
+          provider: "quickbooks_online" | "twilio_sms" | "google_calendar" | "outbound_webhooks";
+          label: string;
+          ownerType: "business" | "user";
+          description: string;
+          permissions: { read: "settings.read"; write: "settings.write" };
+          featureFlagEnabled: boolean;
+        }>;
+        connections: Array<{
+          id: string;
+          provider: "quickbooks_online" | "twilio_sms" | "google_calendar" | "outbound_webhooks";
+          ownerType: "business" | "user";
+          ownerKey: string;
+          userId: string | null;
+          status: "pending" | "connected" | "action_required" | "error" | "disconnected";
+          displayName: string | null;
+          externalAccountId: string | null;
+          externalAccountName: string | null;
+          scopes: string[];
+          featureEnabled: boolean;
+          lastSyncedAt: string | null;
+          lastSuccessfulAt: string | null;
+          lastError: string | null;
+          actionRequired: string | null;
+          connectedAt: string | null;
+          disconnectedAt: string | null;
+          configSummary: {
+            hasEncryptedAccessToken: boolean;
+            hasEncryptedRefreshToken: boolean;
+            hasConfig: boolean;
+            selectedCalendarId: string | null;
+            webhookUrl: string | null;
+            twilioMessagingServiceSid: string | null;
+          };
+        }>;
+      }>("/integrations"),
+    listFailures: () =>
+      request<{
+        records: Array<{
+          id: string;
+          provider: string;
+          jobType: string;
+          status: string;
+          attemptCount: number;
+          maxAttempts: number;
+          lastError: string | null;
+          deadLetteredAt: string | null;
+          nextRunAt: string | null;
+          updatedAt: string;
+          displayName: string | null;
+        }>;
+      }>("/integrations/failures"),
+    retryJob: (params: Record<string, unknown>) => {
+      const id = params.id as string | undefined;
+      if (!id) throw new Error("Integration retry requires id");
+      return request<{ record: unknown }>(`/integrations/jobs/${encodeURIComponent(id)}/retry`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+    },
+  },
   client: resource("clients"),
   vehicle: resource("vehicles"),
   vehicleCatalog: {
