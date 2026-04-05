@@ -431,6 +431,7 @@ export const api = {
         body: JSON.stringify(params),
       }),
   },
+  expense: resource("expenses"),
   activityLog: resource("activity-logs"),
   notificationLog: resource("notification-logs"),
   client: resource("clients"),
@@ -633,6 +634,16 @@ export const api = {
   // Global actions (POST /api/actions/:name)
   getInvoiceMetrics: (params?: Record<string, unknown>) =>
     request<unknown>("/actions/getInvoiceMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
+  getFinanceMetrics: (params?: Record<string, unknown>) =>
+    request<{
+      todayRevenue: number;
+      revenueThisMonth: number;
+      outstandingBalance: number;
+      expensesToday: number;
+      expensesThisMonth: number;
+      netThisMonth: number;
+      expenseCountThisMonth: number;
+    }>("/actions/getFinanceMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getBusinessPreset: () =>
     request<{ group: string; count: number; names: string[] }>("/actions/getBusinessPreset", {
       method: "POST",

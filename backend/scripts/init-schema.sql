@@ -471,6 +471,23 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_checkout_session_id text;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_payment_intent_id text;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_charge_id text;
 
+CREATE TABLE IF NOT EXISTS expenses (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  expense_date timestamptz NOT NULL,
+  vendor text NOT NULL,
+  category text NOT NULL,
+  description text NOT NULL,
+  amount decimal(12,2) NOT NULL,
+  notes text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS quotes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   business_id uuid NOT NULL REFERENCES businesses(id),

@@ -5,7 +5,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { clients, vehicles, services, appointments, invoices, payments } from "../db/schema.js";
+import { clients, vehicles, services, appointments, invoices, payments, expenses } from "../db/schema.js";
 import { eq, and, gte, lte, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -180,6 +180,58 @@ actionsRouter.post("/getInvoiceMetrics", requireAuth, requireTenant, async (req:
     revenueThisMonth,
     outstandingBalance,
     invoicesThisMonth,
+  });
+});
+
+actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePermission("payments.read"), async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  const [todayRevenueRows, revenueMonthRows, openTotals, expenseMonthRows, expenseTodayRows, expenseCountRows] = await Promise.all([
+    db
+      .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), gte(invoices.paidAt ?? invoices.updatedAt, startOfToday), lte(invoices.paidAt ?? invoices.updatedAt, endOfToday))),
+    db
+      .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), gte(invoices.paidAt ?? invoices.updatedAt, startOfMonth), lte(invoices.paidAt ?? invoices.updatedAt, endOfMonth))),
+    db
+      .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('draft', 'sent', 'partial')`)),
+    db
+      .select({ total: sql<string>`coalesce(sum(${expenses.amount}), 0)` })
+      .from(expenses)
+      .where(and(eq(expenses.businessId, bid), gte(expenses.expenseDate, startOfMonth), lte(expenses.expenseDate, endOfMonth))),
+    db
+      .select({ total: sql<string>`coalesce(sum(${expenses.amount}), 0)` })
+      .from(expenses)
+      .where(and(eq(expenses.businessId, bid), gte(expenses.expenseDate, startOfToday), lte(expenses.expenseDate, endOfToday))),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(expenses)
+      .where(and(eq(expenses.businessId, bid), gte(expenses.expenseDate, startOfMonth), lte(expenses.expenseDate, endOfMonth))),
+  ]);
+
+  const openPaid = await getOpenInvoicePaidTotal(bid);
+  const openTotal = Number(openTotals[0]?.total ?? 0);
+  const outstandingBalance = Math.max(0, openTotal - openPaid);
+  const revenueThisMonth = Number(revenueMonthRows[0]?.total ?? 0);
+  const expensesThisMonth = Number(expenseMonthRows[0]?.total ?? 0);
+
+  res.json({
+    todayRevenue: Number(todayRevenueRows[0]?.total ?? 0),
+    revenueThisMonth,
+    outstandingBalance,
+    expensesToday: Number(expenseTodayRows[0]?.total ?? 0),
+    expensesThisMonth,
+    netThisMonth: revenueThisMonth - expensesThisMonth,
+    expenseCountThisMonth: expenseCountRows[0]?.count ?? 0,
   });
 });
 

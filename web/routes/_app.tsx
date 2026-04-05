@@ -22,6 +22,7 @@ import {
   Users,
   ClipboardList,
   FileText,
+  Receipt,
   Wrench,
   Settings,
   Menu,
@@ -115,6 +116,7 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
     items: [
       { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes", permission: "quotes.read", description: "Turn estimates into approved work faster." },
       { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices", permission: "invoices.read", description: "Stay on top of collections, sends, and cash flow." },
+      { icon: Receipt, label: "Finances", href: "/finances", end: false, permission: "payments.read", description: "Track revenue, expenses, and the health of the money flow." },
     ],
   },
   {
