@@ -15,12 +15,14 @@ import { logger } from "../lib/logger.js";
 import { withIdempotency } from "../lib/idempotency.js";
 import * as automations from "../lib/automations.js";
 import { retryFailedEmailNotifications } from "../lib/email.js";
+import { claimDueIntegrationJobs } from "../lib/integrationJobs.js";
 import {
   applyBusinessPreset,
   getAppliedBusinessPresetSummary,
   getPresetSummaryForBusinessType,
 } from "../lib/businessPresets.js";
 import { businesses } from "../db/schema.js";
+import { runQuickBooksIntegrationJob } from "../lib/quickbooks.js";
 
 export const actionsRouter = Router({ mergeParams: true });
 
@@ -450,5 +452,50 @@ actionsRouter.post("/runAutomations", async (req: Request, res: Response) => {
   } catch (err) {
     logger.error(err instanceof Error ? err.message : "runAutomations failed", { error: err });
     res.status(500).json({ message: "Automations run failed" });
+  }
+});
+
+actionsRouter.post("/runIntegrationJobs", async (req: Request, res: Response) => {
+  const secret = process.env.CRON_SECRET;
+  if (secret != null && secret !== "" && req.headers["x-cron-secret"] !== secret) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+
+  const workerId = `actions:${process.pid}`;
+  const limit = Math.min(Math.max(Number(req.body?.limit ?? 20), 1), 100);
+
+  try {
+    const jobs = await claimDueIntegrationJobs(limit, workerId);
+    const summary = {
+      claimed: jobs.length,
+      succeeded: 0,
+      failed: 0,
+      providers: {} as Record<string, number>,
+    };
+
+    for (const job of jobs) {
+      summary.providers[job.provider] = (summary.providers[job.provider] ?? 0) + 1;
+      try {
+        if (job.provider === "quickbooks_online") {
+          await runQuickBooksIntegrationJob(job);
+        } else {
+          throw new Error(`Integration worker not implemented for provider ${job.provider}.`);
+        }
+        summary.succeeded += 1;
+      } catch (error) {
+        summary.failed += 1;
+        logger.warn("Integration worker job failed", {
+          provider: job.provider,
+          jobId: job.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    res.json({ ok: true, ...summary });
+  } catch (error) {
+    logger.error(error instanceof Error ? error.message : "runIntegrationJobs failed", { error });
+    res.status(500).json({ message: "Integration jobs run failed" });
   }
 });

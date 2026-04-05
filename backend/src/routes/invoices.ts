@@ -18,6 +18,7 @@ import { buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocument
 import { createInvoicePaymentCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
 import { createActivityLog } from "../lib/activity.js";
 import { getActiveInvoicePaymentTotal, isPaymentSchemaDriftError } from "../lib/invoicePayments.js";
+import { enqueueQuickBooksInvoiceSync } from "../lib/quickbooks.js";
 
 export const invoicesRouter = Router({ mergeParams: true });
 
@@ -1380,6 +1381,17 @@ invoicesRouter.post(
   } catch (error) {
     logger.warn("Invoice created but activity log write failed", { invoiceId: inv.id, businessId: bid, error });
   }
+  void enqueueQuickBooksInvoiceSync({
+    businessId: bid,
+    invoiceId: inv.id,
+    userId: req.userId ?? null,
+  }).catch((error) => {
+    logger.warn("QuickBooks invoice sync enqueue failed after invoice create", {
+      businessId: bid,
+      invoiceId: inv.id,
+      error,
+    });
+  });
   res.status(201).json(inv);
   })
 );

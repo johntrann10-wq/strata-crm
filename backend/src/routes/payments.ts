@@ -9,6 +9,7 @@ import { requireTenant } from "../middleware/tenant.js";
 import { withIdempotency } from "../lib/idempotency.js";
 import { logger } from "../lib/logger.js";
 import { createRequestActivityLog } from "../lib/activity.js";
+import { enqueueQuickBooksPaymentSync } from "../lib/quickbooks.js";
 import {
   getActiveInvoicePaymentTotal,
   isPaymentSchemaDriftError,
@@ -142,6 +143,17 @@ paymentsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
       amount: payment.amount,
       method: payment.method,
     },
+  });
+  void enqueueQuickBooksPaymentSync({
+    businessId: bid,
+    paymentId: payment.id,
+    userId: req.userId ?? null,
+  }).catch((error) => {
+    logger.warn("QuickBooks payment sync enqueue failed after payment record", {
+      businessId: bid,
+      paymentId: payment.id,
+      error,
+    });
   });
   res.status(201).json(payment);
 });

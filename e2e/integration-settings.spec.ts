@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
 async function mockAuthenticatedSettings(context: import("@playwright/test").BrowserContext) {
+  let quickBooksConnected = true;
+  let quickBooksLastError: string | null = null;
+  let quickBooksLastSuccessfulAt = "2026-04-04T17:00:00.000Z";
+
   await context.addInitScript(() => {
     window.localStorage.setItem("authToken", "integration-test-token");
     window.localStorage.setItem("currentBusinessId", "biz-1");
@@ -136,33 +140,37 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
           },
         ],
         connections: [
-          {
-            id: "conn-1",
-            provider: "quickbooks_online",
-            ownerType: "business",
-            ownerKey: "business:biz-1",
-            userId: null,
-            status: "connected",
-            displayName: "QBO Sandbox",
-            externalAccountId: "realm-1",
-            externalAccountName: "QA Detail Shop Books",
-            scopes: ["com.intuit.quickbooks.accounting"],
-            featureEnabled: true,
-            lastSyncedAt: "2026-04-04T17:00:00.000Z",
-            lastSuccessfulAt: "2026-04-04T17:00:00.000Z",
-            lastError: null,
-            actionRequired: null,
-            connectedAt: "2026-04-04T16:00:00.000Z",
-            disconnectedAt: null,
-            configSummary: {
-              hasEncryptedAccessToken: true,
-              hasEncryptedRefreshToken: true,
-              hasConfig: true,
-              selectedCalendarId: null,
-              webhookUrl: null,
-              twilioMessagingServiceSid: null,
-            },
-          },
+          ...(quickBooksConnected
+            ? [
+                {
+                  id: "conn-1",
+                  provider: "quickbooks_online",
+                  ownerType: "business",
+                  ownerKey: "business:biz-1",
+                  userId: null,
+                  status: "connected",
+                  displayName: "QBO Sandbox",
+                  externalAccountId: "realm-1",
+                  externalAccountName: "QA Detail Shop Books",
+                  scopes: ["com.intuit.quickbooks.accounting"],
+                  featureEnabled: true,
+                  lastSyncedAt: quickBooksLastSuccessfulAt,
+                  lastSuccessfulAt: quickBooksLastSuccessfulAt,
+                  lastError: quickBooksLastError,
+                  actionRequired: null,
+                  connectedAt: "2026-04-04T16:00:00.000Z",
+                  disconnectedAt: null,
+                  configSummary: {
+                    hasEncryptedAccessToken: true,
+                    hasEncryptedRefreshToken: true,
+                    hasConfig: true,
+                    selectedCalendarId: null,
+                    webhookUrl: null,
+                    twilioMessagingServiceSid: null,
+                  },
+                },
+              ]
+            : []),
         ],
       }),
     });
@@ -221,6 +229,42 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
       body: JSON.stringify({ record: { id: "job-1" } }),
     });
   });
+
+  await context.route("**/api/integrations/quickbooks/start", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        url: "/settings?tab=integrations&quickbooks=connected",
+      }),
+    });
+  });
+
+  await context.route("**/api/integrations/quickbooks/resync", async (route) => {
+    quickBooksLastSuccessfulAt = "2026-04-04T18:00:00.000Z";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        queuedJobs: 7,
+        clients: 3,
+        invoices: 2,
+        payments: 2,
+      }),
+    });
+  });
+
+  await context.route("**/api/integrations/quickbooks/disconnect", async (route) => {
+    quickBooksConnected = false;
+    quickBooksLastError = null;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        record: { id: "conn-1", status: "disconnected" },
+      }),
+    });
+  });
 }
 
 test("shows integration infrastructure and failure visibility in settings", async ({ page, context }) => {
@@ -237,4 +281,14 @@ test("shows integration infrastructure and failure visibility in settings", asyn
 
   await page.getByRole("button", { name: /^retry$/i }).click();
   await expect(page.getByText(/moved back into the retry queue/i)).toBeVisible();
+
+  await page.getByRole("button", { name: /reconnect quickbooks/i }).click();
+  await expect(page.getByText(/quickbooks is connected/i).first()).toBeVisible();
+
+  await page.getByRole("button", { name: /queue full resync/i }).click();
+  await expect(page.getByText(/queued 7 quickbooks sync jobs/i)).toBeVisible();
+
+  await page.getByRole("button", { name: /^disconnect$/i }).click();
+  await expect(page.getByText(/quickbooks disconnected/i)).toBeVisible();
+  await expect(page.getByText(/not connected/i).first()).toBeVisible();
 });

@@ -497,6 +497,26 @@ export const api = {
         body: JSON.stringify(params),
       });
     },
+    startQuickBooks: () =>
+      request<{ url: string }>("/integrations/quickbooks/start", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    disconnectQuickBooks: () =>
+      request<{ record: unknown }>("/integrations/quickbooks/disconnect", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    resyncQuickBooks: () =>
+      request<{
+        queuedJobs: number;
+        clients: number;
+        invoices: number;
+        payments: number;
+      }>("/integrations/quickbooks/resync", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
   },
   client: resource("clients"),
   vehicle: resource("vehicles"),

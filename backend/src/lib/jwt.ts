@@ -5,6 +5,7 @@ const ACCESS_TOKEN_AUDIENCE = "strata-api";
 const PUBLIC_DOCUMENT_AUDIENCE = "strata-public-document";
 const PASSWORD_RESET_AUDIENCE = "strata-password-reset";
 const TEAM_INVITE_AUDIENCE = "strata-team-invite";
+const INTEGRATION_STATE_AUDIENCE = "strata-integration-state";
 
 function requireJwtSecret(): string {
   const secret = process.env.JWT_SECRET?.trim();
@@ -94,6 +95,27 @@ export function verifyTeamInviteToken(token: string): { userId?: string; email?:
       audience: TEAM_INVITE_AUDIENCE,
       issuer: JWT_ISSUER,
     }) as { userId?: string; email?: string; businessId?: string };
+  } catch {
+    return null;
+  }
+}
+
+export function createIntegrationStateToken<T extends Record<string, unknown>>(payload: T): string {
+  return jwt.sign(payload, requireJwtSecret(), {
+    algorithm: "HS256",
+    audience: INTEGRATION_STATE_AUDIENCE,
+    expiresIn: "15m",
+    issuer: JWT_ISSUER,
+  });
+}
+
+export function verifyIntegrationStateToken<T>(token: string): T | null {
+  try {
+    return jwt.verify(token, requireJwtSecret(), {
+      algorithms: ["HS256"],
+      audience: INTEGRATION_STATE_AUDIENCE,
+      issuer: JWT_ISSUER,
+    }) as T;
   } catch {
     return null;
   }

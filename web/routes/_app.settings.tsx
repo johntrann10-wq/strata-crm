@@ -907,6 +907,7 @@ function BillingTab({
 
 export default function SettingsPage() {
   const { user, businessId, membershipRole, permissions } = useOutletContext<AuthOutletContext>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("profile");
   const [formData, setFormData] = useState<BusinessSettingsFormData>(DEFAULT_BUSINESS_SETTINGS_FORM);
   const [defaultTaxRateInput, setDefaultTaxRateInput] = useState(String(DEFAULT_BUSINESS_SETTINGS_FORM.defaultTaxRate));
@@ -974,7 +975,12 @@ export default function SettingsPage() {
     membershipRole === "admin" ||
     membershipRole === "manager";
   const canEditSettings = permissions.has("settings.write");
+  const canManageBusinessIntegrations =
+    canEditSettings && (membershipRole === "owner" || membershipRole === "admin");
   const canViewDiagnostics = membershipRole === "owner" || membershipRole === "admin" || permissions.has("settings.write");
+  const [quickBooksConnecting, setQuickBooksConnecting] = useState(false);
+  const [quickBooksDisconnecting, setQuickBooksDisconnecting] = useState(false);
+  const [quickBooksResyncing, setQuickBooksResyncing] = useState(false);
 
   const [{ data: business, fetching: businessFetching }] = useFindOne(api.business, businessId ?? "", {
     pause: !businessId,
@@ -1024,6 +1030,38 @@ export default function SettingsPage() {
     | { registry: IntegrationRegistryStatus[]; connections: IntegrationConnectionStatus[] }
     | undefined;
   const integrationFailures = (integrationFailureData as IntegrationFailureRecord[] | undefined) ?? [];
+  const quickBooksConnection =
+    integrationStatus?.connections.find((item) => item.provider === "quickbooks_online") ?? null;
+  const quickBooksRegistry =
+    integrationStatus?.registry.find((item) => item.provider === "quickbooks_online") ?? null;
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const quickBooksState = searchParams.get("quickbooks");
+    if (!quickBooksState) return;
+
+    void refetchIntegrationStatus();
+
+    const message = searchParams.get("quickbooksMessage");
+    if (quickBooksState === "connected") {
+      toast.success(message || "QuickBooks is connected.");
+    } else if (quickBooksState === "disconnected") {
+      toast.success(message || "QuickBooks was disconnected.");
+    } else {
+      toast.error(message || "QuickBooks setup needs attention.");
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("quickbooks");
+    nextParams.delete("quickbooksMessage");
+    setSearchParams(nextParams, { replace: true });
+  }, [refetchIntegrationStatus, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!business) return;
@@ -1269,6 +1307,49 @@ export default function SettingsPage() {
     }
     await Promise.all([refetchIntegrationFailures(), refetchIntegrationStatus()]);
     toast.success("Integration job moved back into the retry queue.");
+  };
+
+  const handleStartQuickBooks = async () => {
+    setQuickBooksConnecting(true);
+    try {
+      const result = await api.integration.startQuickBooks();
+      if (!result.url) {
+        throw new Error("QuickBooks did not return an authorization URL.");
+      }
+      window.location.href = result.url;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not start QuickBooks setup.");
+    } finally {
+      setQuickBooksConnecting(false);
+    }
+  };
+
+  const handleDisconnectQuickBooks = async () => {
+    setQuickBooksDisconnecting(true);
+    try {
+      await api.integration.disconnectQuickBooks();
+      await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
+      toast.success("QuickBooks disconnected.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not disconnect QuickBooks.");
+    } finally {
+      setQuickBooksDisconnecting(false);
+    }
+  };
+
+  const handleResyncQuickBooks = async () => {
+    setQuickBooksResyncing(true);
+    try {
+      const result = await api.integration.resyncQuickBooks();
+      await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
+      toast.success(
+        `Queued ${result.queuedJobs} QuickBooks sync jobs across ${result.clients} customers, ${result.invoices} invoices, and ${result.payments} payments.`
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not queue a QuickBooks resync.");
+    } finally {
+      setQuickBooksResyncing(false);
+    }
   };
 
   const openCreateLocation = () => {
@@ -2444,6 +2525,85 @@ export default function SettingsPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
+                          <RefreshCw className="h-4 w-4 text-primary" />
+                          <p className="text-sm font-medium">QuickBooks Online</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          One-way sync from Strata into QuickBooks Online for customers, invoices, and recorded payments.
+                        </p>
+                      </div>
+                      <Badge
+                        variant={
+                          !quickBooksRegistry?.featureFlagEnabled
+                            ? "outline"
+                            : quickBooksConnection
+                              ? getConnectionBadgeVariant(quickBooksConnection.status)
+                              : "secondary"
+                        }
+                      >
+                        {!quickBooksRegistry?.featureFlagEnabled
+                          ? "Flag off"
+                          : quickBooksConnection
+                            ? quickBooksConnection.status.replace(/_/g, " ")
+                            : "Not connected"}
+                      </Badge>
+                    </div>
+                    <div className="mt-4 space-y-2 text-xs text-muted-foreground">
+                      <p>Control scope: Owners and admins only.</p>
+                      <p>
+                        Company realm:{" "}
+                        {quickBooksConnection?.externalAccountId ? (
+                          <span className="font-mono">{quickBooksConnection.externalAccountId}</span>
+                        ) : (
+                          "Not linked yet"
+                        )}
+                      </p>
+                      <p>
+                        Last successful sync:{" "}
+                        {quickBooksConnection?.lastSuccessfulAt
+                          ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(
+                              new Date(quickBooksConnection.lastSuccessfulAt)
+                            )
+                          : "None yet"}
+                      </p>
+                      {quickBooksConnection?.lastError ? (
+                        <p className="text-amber-700">{quickBooksConnection.lastError}</p>
+                      ) : null}
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      <Button
+                        onClick={handleStartQuickBooks}
+                        disabled={!canManageBusinessIntegrations || !quickBooksRegistry?.featureFlagEnabled || quickBooksConnecting}
+                        className="w-full sm:w-auto"
+                      >
+                        {quickBooksConnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {quickBooksConnection?.status === "connected" ? "Reconnect QuickBooks" : "Connect QuickBooks"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={handleResyncQuickBooks}
+                        disabled={!canManageBusinessIntegrations || quickBooksConnection?.status !== "connected" || quickBooksResyncing}
+                        className="w-full sm:w-auto"
+                      >
+                        {quickBooksResyncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Queue full resync
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={handleDisconnectQuickBooks}
+                        disabled={!canManageBusinessIntegrations || !quickBooksConnection || quickBooksDisconnecting}
+                        className="w-full sm:w-auto"
+                      >
+                        {quickBooksDisconnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Disconnect
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
                           <CreditCard className="h-4 w-4 text-primary" />
                           <p className="text-sm font-medium">Stripe payments</p>
                         </div>
@@ -2491,7 +2651,7 @@ export default function SettingsPage() {
                     <div className="space-y-1">
                       <p className="text-sm font-medium">Failure visibility</p>
                       <p className="text-sm text-muted-foreground">
-                        Dead-letter and retry visibility for background integration work before provider-specific setup flows land.
+                        Dead-letter and retry visibility for background integration work, including queued QuickBooks sync retries.
                       </p>
                     </div>
                     <Badge variant={integrationFailures.length > 0 ? "secondary" : "outline"}>

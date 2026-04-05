@@ -8,6 +8,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { createRequestActivityLog } from "../lib/activity.js";
 import { logger } from "../lib/logger.js";
+import { enqueueQuickBooksCustomerSync } from "../lib/quickbooks.js";
 
 export const clientsRouter = Router({ mergeParams: true });
 
@@ -138,6 +139,17 @@ clientsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Re
       phone: created.phone,
     },
   });
+  void enqueueQuickBooksCustomerSync({
+    businessId: bid,
+    clientId: created.id,
+    userId: req.userId ?? null,
+  }).catch((error) => {
+    logger.warn("QuickBooks customer sync enqueue failed after client create", {
+      businessId: bid,
+      clientId: created.id,
+      error,
+    });
+  });
   res.status(201).json(created);
 });
 
@@ -165,6 +177,17 @@ clientsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res
       email: updated.email,
       phone: updated.phone,
     },
+  });
+  void enqueueQuickBooksCustomerSync({
+    businessId: bid,
+    clientId: updated.id,
+    userId: req.userId ?? null,
+  }).catch((error) => {
+    logger.warn("QuickBooks customer sync enqueue failed after client update", {
+      businessId: bid,
+      clientId: updated.id,
+      error,
+    });
   });
   res.json(updated);
 });
