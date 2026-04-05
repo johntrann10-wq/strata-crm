@@ -191,6 +191,8 @@ type IntegrationSettingsForm = {
 type AutomationActivitySummary = {
   sentLast30Days: number;
   lastSentAt: string | null;
+  failedLast30Days: number;
+  lastFailedAt: string | null;
 };
 
 const STAFF_ROLES = [
@@ -453,6 +455,12 @@ function formatAutomationLastSent(value: string | null) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(parsed);
+}
+
+function getAutomationHealthTone(summary: AutomationActivitySummary | null | undefined) {
+  if (!summary) return "text-muted-foreground";
+  if ((summary.failedLast30Days ?? 0) > 0) return "text-amber-700";
+  return "text-muted-foreground";
 }
 
 function BillingTab({
@@ -2459,8 +2467,11 @@ export default function SettingsPage() {
                     <p className="mt-2 text-2xl font-semibold">
                       {automationSummaryFetching && !automationSummary ? "..." : automationSummary?.appointmentReminders.sentLast30Days ?? 0}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className={`mt-1 text-xs ${getAutomationHealthTone(automationSummary?.appointmentReminders)}`}>
                       Sent in the last 30 days. Last send: {formatAutomationLastSent(automationSummary?.appointmentReminders.lastSentAt ?? null)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Failed in the last 30 days: {automationSummary?.appointmentReminders.failedLast30Days ?? 0}
                     </p>
                   </div>
                   <div className="rounded-xl border bg-background p-4">
@@ -2468,8 +2479,11 @@ export default function SettingsPage() {
                     <p className="mt-2 text-2xl font-semibold">
                       {automationSummaryFetching && !automationSummary ? "..." : automationSummary?.reviewRequests.sentLast30Days ?? 0}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className={`mt-1 text-xs ${getAutomationHealthTone(automationSummary?.reviewRequests)}`}>
                       Sent in the last 30 days. Last send: {formatAutomationLastSent(automationSummary?.reviewRequests.lastSentAt ?? null)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Failed in the last 30 days: {automationSummary?.reviewRequests.failedLast30Days ?? 0}
                     </p>
                   </div>
                   <div className="rounded-xl border bg-background p-4">
@@ -2477,8 +2491,11 @@ export default function SettingsPage() {
                     <p className="mt-2 text-2xl font-semibold">
                       {automationSummaryFetching && !automationSummary ? "..." : automationSummary?.lapsedClients.sentLast30Days ?? 0}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className={`mt-1 text-xs ${getAutomationHealthTone(automationSummary?.lapsedClients)}`}>
                       Sent in the last 30 days. Last send: {formatAutomationLastSent(automationSummary?.lapsedClients.lastSentAt ?? null)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Failed in the last 30 days: {automationSummary?.lapsedClients.failedLast30Days ?? 0}
                     </p>
                   </div>
                 </div>

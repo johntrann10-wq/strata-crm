@@ -5,7 +5,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { clients, vehicles, services, appointments, invoices, payments, expenses, activityLogs } from "../db/schema.js";
+import { clients, vehicles, services, appointments, invoices, payments, expenses, activityLogs, notificationLogs } from "../db/schema.js";
 import { eq, and, gte, lte, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -231,7 +231,7 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
 actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const recentCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const rows = await db
+  const activityRows = await db
     .select({
       action: sql<string>`${activityLogs.action}`.as("action"),
       total: sql<number>`count(*)::int`.as("total"),
@@ -251,19 +251,45 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
     )
     .groupBy(activityLogs.action);
 
-  const summaryMap = new Map(rows.map((row) => [row.action, row]));
-  const summarize = (action: string) => {
+  const notificationRows = await db
+    .select({
+      templateSlug: sql<string>`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '')`.as("template_slug"),
+      failedLast30Days: sql<number>`count(*)::int`.as("failed_last_30_days"),
+      lastFailedAt: sql<Date | null>`max(${notificationLogs.sentAt})`.as("last_failed_at"),
+    })
+    .from(notificationLogs)
+    .where(
+      and(
+        eq(notificationLogs.businessId, bid),
+        gte(notificationLogs.sentAt, recentCutoff),
+        sql`${notificationLogs.channel} = 'email'`,
+        sql`${notificationLogs.error} is not null`,
+        sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
+          'appointment_reminder',
+          'review_request',
+          'lapsed_client_reengagement'
+        )`
+      )
+    )
+    .groupBy(sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '')`);
+
+  const summaryMap = new Map(activityRows.map((row) => [row.action, row]));
+  const notificationMap = new Map(notificationRows.map((row) => [row.templateSlug, row]));
+  const summarize = (action: string, templateSlug: string) => {
     const row = summaryMap.get(action);
+    const notificationRow = notificationMap.get(templateSlug);
     return {
       sentLast30Days: row?.total ?? 0,
       lastSentAt: row?.lastSentAt?.toISOString() ?? null,
+      failedLast30Days: notificationRow?.failedLast30Days ?? 0,
+      lastFailedAt: notificationRow?.lastFailedAt?.toISOString() ?? null,
     };
   };
 
   res.json({
-    appointmentReminders: summarize("automation.appointment_reminder.sent"),
-    reviewRequests: summarize("automation.review_request.sent"),
-    lapsedClients: summarize("automation.lapsed_client.sent"),
+    appointmentReminders: summarize("automation.appointment_reminder.sent", "appointment_reminder"),
+    reviewRequests: summarize("automation.review_request.sent", "review_request"),
+    lapsedClients: summarize("automation.lapsed_client.sent", "lapsed_client_reengagement"),
   });
 });
 

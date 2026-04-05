@@ -646,9 +646,9 @@ export const api = {
     }>("/actions/getFinanceMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getAutomationSummary: (params?: Record<string, unknown>) =>
     request<{
-      appointmentReminders: { sentLast30Days: number; lastSentAt: string | null };
-      reviewRequests: { sentLast30Days: number; lastSentAt: string | null };
-      lapsedClients: { sentLast30Days: number; lastSentAt: string | null };
+      appointmentReminders: { sentLast30Days: number; lastSentAt: string | null; failedLast30Days: number; lastFailedAt: string | null };
+      reviewRequests: { sentLast30Days: number; lastSentAt: string | null; failedLast30Days: number; lastFailedAt: string | null };
+      lapsedClients: { sentLast30Days: number; lastSentAt: string | null; failedLast30Days: number; lastFailedAt: string | null };
     }>("/actions/getAutomationSummary", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getBusinessPreset: () =>
     request<{ group: string; count: number; names: string[] }>("/actions/getBusinessPreset", {
