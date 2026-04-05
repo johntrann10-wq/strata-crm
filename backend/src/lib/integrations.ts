@@ -10,6 +10,7 @@ import {
 } from "./integrationConnections.js";
 import { enqueueIntegrationJob, markIntegrationJobFailed, markIntegrationJobSucceeded, type IntegrationJobRecord } from "./integrationJobs.js";
 import { isIntegrationFeatureEnabled } from "./integrationFeatureFlags.js";
+import { isIntegrationVaultConfigured } from "./integrationVault.js";
 import { BadRequestError, NotFoundError } from "./errors.js";
 import { logger } from "./logger.js";
 
@@ -173,6 +174,12 @@ export async function syncOutboundWebhookConnectionForBusiness(input: {
   webhookSecret: string | null;
   webhookEvents: string[] | null | undefined;
 }) {
+  if (!isIntegrationVaultConfigured()) {
+    logger.warn("Skipping signed webhook connection sync because the integration vault is not configured", {
+      businessId: input.businessId,
+    });
+    return null;
+  }
   const config = buildWebhookConfig(input);
   const connected = !!input.webhookEnabled && !!config.webhookUrl;
   return upsertBusinessIntegrationConnection({
@@ -195,6 +202,9 @@ export async function syncOutboundWebhookConnectionForBusiness(input: {
 export async function ensureOutboundWebhookConnectionForBusiness(businessId: string) {
   const existing = await getBusinessIntegrationConnection(businessId, OUTBOUND_WEBHOOK_PROVIDER);
   if (existing) return existing;
+  if (!isIntegrationVaultConfigured()) {
+    return null;
+  }
 
   const [business] = await db
     .select({
