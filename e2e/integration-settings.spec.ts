@@ -16,6 +16,10 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
   let googleCalendarConnected = false;
   let googleSelectedCalendarId = "primary";
   let googleSelectedCalendarSummary = "Owner Schedule";
+  let webhookEnabled = false;
+  let webhookUrl = "";
+  let webhookSecret = "";
+  let webhookEvents = ["invoice.sent", "payment.recorded"];
 
   await context.addInitScript(() => {
     window.localStorage.setItem("authToken", "integration-test-token");
@@ -62,6 +66,18 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
   });
 
   await context.route("**/api/businesses/biz-1", async (route) => {
+    if (route.request().method() === "PATCH") {
+      const payload = route.request().postDataJSON() as {
+        integrationWebhookEnabled?: boolean;
+        integrationWebhookUrl?: string | null;
+        integrationWebhookSecret?: string | null;
+        integrationWebhookEvents?: string[];
+      };
+      webhookEnabled = payload.integrationWebhookEnabled ?? webhookEnabled;
+      webhookUrl = payload.integrationWebhookUrl ?? "";
+      webhookSecret = payload.integrationWebhookSecret ?? "";
+      webhookEvents = payload.integrationWebhookEvents ?? webhookEvents;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -70,10 +86,10 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
         name: "QA Detail Shop",
         type: "auto_detailing",
         onboardingComplete: true,
-        integrationWebhookEnabled: false,
-        integrationWebhookUrl: null,
-        integrationWebhookSecret: null,
-        integrationWebhookEvents: [],
+        integrationWebhookEnabled: webhookEnabled,
+        integrationWebhookUrl: webhookUrl || null,
+        integrationWebhookSecret: webhookSecret || null,
+        integrationWebhookEvents: webhookEvents,
       }),
     });
   });
@@ -155,6 +171,14 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
             label: "Google Calendar",
             ownerType: "user",
             description: "One-way appointment sync from Strata into a selected Google Calendar.",
+            permissions: { read: "settings.read", write: "settings.write" },
+            featureFlagEnabled: true,
+          },
+          {
+            provider: "outbound_webhooks",
+            label: "Signed webhooks",
+            ownerType: "business",
+            description: "Versioned outbound events for Zapier, Make, n8n, and custom endpoints.",
             permissions: { read: "settings.read", write: "settings.write" },
             featureFlagEnabled: true,
           },
@@ -263,6 +287,58 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
                 },
               ]
             : []),
+          ...(webhookEnabled && webhookUrl
+            ? [
+                {
+                  id: "conn-webhook-1",
+                  provider: "outbound_webhooks",
+                  ownerType: "business",
+                  ownerKey: "business:biz-1",
+                  userId: null,
+                  status: "connected",
+                  displayName: "Signed webhooks",
+                  externalAccountId: "hooks.example.com",
+                  externalAccountName: "hooks.example.com",
+                  scopes: [],
+                  featureEnabled: true,
+                  lastSyncedAt: "2026-04-04T18:45:00.000Z",
+                  lastSuccessfulAt: "2026-04-04T18:45:00.000Z",
+                  lastError: null,
+                  actionRequired: null,
+                  connectedAt: "2026-04-04T18:15:00.000Z",
+                  disconnectedAt: null,
+                  configSummary: {
+                    hasEncryptedAccessToken: false,
+                    hasEncryptedRefreshToken: false,
+                    hasConfig: true,
+                    selectedCalendarId: null,
+                    selectedCalendarSummary: null,
+                    webhookUrl,
+                    twilioMessagingServiceSid: null,
+                    twilioAccountSid: null,
+                    twilioEnabledTemplateSlugs: [],
+                  },
+                },
+              ]
+            : []),
+        ],
+      }),
+    });
+  });
+
+  await context.route("**/api/integrations/outbound-webhooks/recent-events", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        records: [
+          {
+            id: "activity-1",
+            action: "invoice.sent",
+            entityType: "invoice",
+            entityId: "invoice-1",
+            createdAt: "2026-04-04T18:10:00.000Z",
+          },
         ],
       }),
     });
@@ -448,6 +524,26 @@ async function mockAuthenticatedSettings(context: import("@playwright/test").Bro
       }),
     });
   });
+
+  await context.route("**/api/integrations/outbound-webhooks/test", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        record: { id: "job-webhook-test-1", status: "pending" },
+      }),
+    });
+  });
+
+  await context.route("**/api/integrations/outbound-webhooks/replay", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        record: { id: "job-webhook-replay-1", status: "pending" },
+      }),
+    });
+  });
 }
 
 test("shows integration infrastructure and failure visibility in settings", async ({ page, context }) => {
@@ -494,4 +590,17 @@ test("shows integration infrastructure and failure visibility in settings", asyn
 
   await page.getByRole("button", { name: /^disconnect$/i }).last().click();
   await expect(page.getByText(/twilio sms disconnected/i)).toBeVisible();
+
+  await page.locator("label[for='webhook-enabled']").click();
+  await page.getByPlaceholder("https://example.com/strata/webhooks").fill("https://hooks.example.com/strata");
+  await page.getByPlaceholder(/optional hmac secret/i).fill("super-secret-webhook");
+  await page.getByRole("button", { name: /save integrations/i }).click();
+  await expect(page.getByText(/integration settings saved/i)).toBeVisible();
+  await expect(page.getByText(/hooks\.example\.com/i).first()).toBeVisible();
+
+  await page.getByRole("button", { name: /send test event/i }).click();
+  await expect(page.getByText(/queued a signed webhook test event/i)).toBeVisible();
+
+  await page.getByRole("button", { name: /^replay$/i }).click();
+  await expect(page.getByText(/queued a replay for that webhook event/i)).toBeVisible();
 });

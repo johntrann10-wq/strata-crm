@@ -266,6 +266,14 @@ type IntegrationFailureRecord = {
   displayName: string | null;
 };
 
+type OutboundWebhookActivityRecord = {
+  id: string;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  createdAt: string;
+};
+
 const STAFF_ROLES = [
   { value: "owner", label: "Owner" },
   { value: "admin", label: "Admin" },
@@ -1034,6 +1042,8 @@ export default function SettingsPage() {
   const [googleCalendarCalendarsLoading, setGoogleCalendarCalendarsLoading] = useState(false);
   const [twilioSaving, setTwilioSaving] = useState(false);
   const [twilioDisconnecting, setTwilioDisconnecting] = useState(false);
+  const [outboundWebhookTesting, setOutboundWebhookTesting] = useState(false);
+  const [outboundWebhookReplayId, setOutboundWebhookReplayId] = useState<string | null>(null);
 
   const [{ data: business, fetching: businessFetching }] = useFindOne(api.business, businessId ?? "", {
     pause: !businessId,
@@ -1074,6 +1084,14 @@ export default function SettingsPage() {
     },
     { pause: !businessId }
   );
+  const [{ data: outboundWebhookActivityData, fetching: outboundWebhookActivityFetching }, refetchOutboundWebhookActivity] =
+    useFindMany(
+      {
+        findMany: () =>
+          api.integration.listRecentOutboundWebhookEvents().then((result) => result.records ?? []),
+      },
+      { pause: !businessId }
+    );
   const [{ fetching: retryingIntegrationJob }, retryIntegrationJob] = useAction(api.integration.retryJob);
   const preset = presetSummary as BusinessPresetActionResult | undefined;
   const presetServiceCount = preset?.count ?? 0;
@@ -1097,6 +1115,11 @@ export default function SettingsPage() {
     integrationStatus?.connections.find((item) => item.provider === "twilio_sms") ?? null;
   const twilioRegistry =
     integrationStatus?.registry.find((item) => item.provider === "twilio_sms") ?? null;
+  const outboundWebhookConnection =
+    integrationStatus?.connections.find((item) => item.provider === "outbound_webhooks") ?? null;
+  const outboundWebhookRegistry =
+    integrationStatus?.registry.find((item) => item.provider === "outbound_webhooks") ?? null;
+  const outboundWebhookActivity = (outboundWebhookActivityData as OutboundWebhookActivityRecord[] | undefined) ?? [];
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -1196,6 +1219,11 @@ export default function SettingsPage() {
           : DEFAULT_TWILIO_SMS_SETTINGS.enabledTemplateSlugs,
     });
   }, [twilioConnection]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    void refetchOutboundWebhookActivity();
+  }, [businessId, refetchOutboundWebhookActivity]);
 
   useEffect(() => {
     if (
@@ -1417,6 +1445,10 @@ export default function SettingsPage() {
 
   const handleSaveIntegrationSettings = async () => {
     if (!business?.id) return;
+    if (integrationSettings.webhookEnabled && !integrationSettings.webhookUrl.trim()) {
+      toast.error("Add a webhook endpoint URL before enabling signed webhooks.");
+      return;
+    }
     await update({
       id: business.id,
       integrationWebhookEnabled: integrationSettings.webhookEnabled,
@@ -1426,6 +1458,32 @@ export default function SettingsPage() {
     });
     await refetchIntegrationStatus();
     toast.success("Integration settings saved");
+  };
+
+  const handleSendOutboundWebhookTest = async () => {
+    setOutboundWebhookTesting(true);
+    try {
+      await api.integration.sendOutboundWebhookTest();
+      await Promise.all([refetchIntegrationFailures(), refetchIntegrationStatus(), refetchOutboundWebhookActivity()]);
+      toast.success("Queued a signed webhook test event.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not queue a signed webhook test.");
+    } finally {
+      setOutboundWebhookTesting(false);
+    }
+  };
+
+  const handleReplayOutboundWebhook = async (activityLogId: string) => {
+    setOutboundWebhookReplayId(activityLogId);
+    try {
+      await api.integration.replayOutboundWebhook({ activityLogId });
+      await Promise.all([refetchIntegrationFailures(), refetchIntegrationStatus(), refetchOutboundWebhookActivity()]);
+      toast.success("Queued a replay for that webhook event.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not replay that webhook event.");
+    } finally {
+      setOutboundWebhookReplayId((current) => (current === activityLogId ? null : current));
+    }
   };
 
   const handleRetryIntegrationJob = async (id: string) => {
@@ -3212,6 +3270,47 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Connection</p>
+                      <p className="mt-2 text-sm font-medium">
+                        {outboundWebhookConnection?.status === "connected"
+                          ? "Connected"
+                          : outboundWebhookConnection?.status === "error"
+                            ? "Needs attention"
+                            : "Not connected"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {outboundWebhookRegistry?.featureFlagEnabled
+                          ? "Queue-backed delivery with retries and replay."
+                          : "Feature flag disabled in this environment."}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Endpoint</p>
+                      <p className="mt-2 text-sm font-medium break-all">
+                        {outboundWebhookConnection?.configSummary.webhookUrl || integrationSettings.webhookUrl || "Not set"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Last success:{" "}
+                        {outboundWebhookConnection?.lastSuccessfulAt
+                          ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(
+                              new Date(outboundWebhookConnection.lastSuccessfulAt)
+                            )
+                          : "None yet"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Delivery health</p>
+                      <p className="mt-2 text-sm font-medium">
+                        {integrationFailures.filter((failure) => failure.provider === "outbound_webhooks").length} failed jobs
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {outboundWebhookConnection?.lastError || "No recent webhook delivery errors."}
+                      </p>
+                    </div>
+                  </div>
+
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label>Webhook endpoint URL</Label>
@@ -3274,6 +3373,82 @@ export default function SettingsPage() {
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
+                    <div className="rounded-lg border bg-muted/10 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <Label>Recent replayable events</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Replay a recent Strata activity event through the signed webhook queue without recreating the customer action.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void refetchOutboundWebhookActivity()}
+                          disabled={outboundWebhookActivityFetching}
+                        >
+                          {outboundWebhookActivityFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                          Refresh
+                        </Button>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {outboundWebhookActivity.length === 0 ? (
+                          <div className="rounded-lg border border-dashed bg-background p-3 text-sm text-muted-foreground">
+                            No recent activity events to replay yet.
+                          </div>
+                        ) : (
+                          outboundWebhookActivity.map((event) => (
+                            <div
+                              key={event.id}
+                              className="flex flex-col gap-3 rounded-lg border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium">{event.action}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {event.entityType ? `${event.entityType}${event.entityId ? ` • ${event.entityId}` : ""}` : "Business event"} •{" "}
+                                  {new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(
+                                    new Date(event.createdAt)
+                                  )}
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleReplayOutboundWebhook(event.id)}
+                                disabled={!canManageBusinessIntegrations || outboundWebhookReplayId === event.id}
+                              >
+                                {outboundWebhookReplayId === event.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Replay
+                              </Button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border bg-muted/10 p-4">
+                      <p className="text-sm font-medium">Live test</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Queue a signed test event to verify your endpoint, signature validation, and downstream automation path.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="mt-4 w-full"
+                        onClick={handleSendOutboundWebhookTest}
+                        disabled={!canManageBusinessIntegrations || outboundWebhookTesting}
+                      >
+                        {outboundWebhookTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Send test event
+                      </Button>
+                      <p className="mt-3 text-[11px] text-muted-foreground">
+                        Test and replay deliveries use the same retry, failure, and dead-letter path as live events.
+                      </p>
                     </div>
                   </div>
 

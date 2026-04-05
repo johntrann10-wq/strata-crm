@@ -476,6 +476,16 @@ export const api = {
           };
         }>;
       }>("/integrations"),
+    listRecentOutboundWebhookEvents: () =>
+      request<{
+        records: Array<{
+          id: string;
+          action: string;
+          entityType: string | null;
+          entityId: string | null;
+          createdAt: string;
+        }>;
+      }>("/integrations/outbound-webhooks/recent-events"),
     listFailures: () =>
       request<{
         records: Array<{
@@ -537,6 +547,16 @@ export const api = {
       }>("/integrations/google-calendar/resync", {
         method: "POST",
         body: JSON.stringify({}),
+      }),
+    sendOutboundWebhookTest: () =>
+      request<{ record: unknown }>("/integrations/outbound-webhooks/test", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    replayOutboundWebhook: (params: { activityLogId: string }) =>
+      request<{ record: unknown }>("/integrations/outbound-webhooks/replay", {
+        method: "POST",
+        body: JSON.stringify(params),
       }),
     disconnectQuickBooks: () =>
       request<{ record: unknown }>("/integrations/quickbooks/disconnect", {

@@ -11,6 +11,7 @@ import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
 import { roleHasPermission } from "../lib/permissions.js";
 import { warnOnce } from "../lib/warnOnce.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
+import { syncOutboundWebhookConnectionForBusiness } from "../lib/integrations.js";
 
 export const businessesRouter = Router({ mergeParams: true });
 type BusinessRecord = typeof businesses.$inferSelect;
@@ -265,6 +266,9 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  if (parsed.data.integrationWebhookEnabled && !parsed.data.integrationWebhookUrl?.trim()) {
+    throw new BadRequestError("Add a webhook endpoint URL before enabling signed webhooks.");
+  }
   const typeDefaults = getBusinessTypeDefaults(parsed.data.type);
   const businessId = randomUUID();
   const membershipId = randomUUID();
@@ -325,6 +329,21 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
     if (!isBusinessSchemaDriftError(error)) throw error;
     warnOnce("businesses:create:membership-schema", "business membership schema unavailable during business create", {
       userId: req.userId,
+      businessId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  try {
+    await syncOutboundWebhookConnectionForBusiness({
+      businessId,
+      webhookEnabled: created.integrationWebhookEnabled ?? false,
+      webhookUrl: created.integrationWebhookUrl ?? null,
+      webhookSecret: created.integrationWebhookSecret ?? null,
+      webhookEvents: JSON.parse(created.integrationWebhookEvents ?? "[]") as string[],
+    });
+  } catch (error) {
+    warnOnce("businesses:create:webhook-sync", "business create webhook sync skipped", {
       businessId,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -431,6 +450,14 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   if (nextLapsedAutomationEnabled && !nextBookingRequestUrl) {
     throw new BadRequestError("Add a booking link before enabling lapsed client automations.");
   }
+  const nextWebhookEnabled = parsed.data.integrationWebhookEnabled ?? existing.integrationWebhookEnabled ?? false;
+  const nextWebhookUrl =
+    parsed.data.integrationWebhookUrl !== undefined
+      ? parsed.data.integrationWebhookUrl?.trim() || null
+      : existing.integrationWebhookUrl ?? null;
+  if (nextWebhookEnabled && !nextWebhookUrl) {
+    throw new BadRequestError("Add a webhook endpoint URL before enabling signed webhooks.");
+  }
 
   let updated: BusinessRecord | undefined;
   try {
@@ -480,6 +507,21 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
     updated = legacyUpdated ? coerceBusinessRecord(legacyUpdated) : undefined;
   }
   if (!updated) throw new NotFoundError("Business not found.");
+
+  try {
+    await syncOutboundWebhookConnectionForBusiness({
+      businessId: updated.id,
+      webhookEnabled: updated.integrationWebhookEnabled ?? false,
+      webhookUrl: updated.integrationWebhookUrl ?? null,
+      webhookSecret: updated.integrationWebhookSecret ?? null,
+      webhookEvents: JSON.parse(updated.integrationWebhookEvents ?? "[]") as string[],
+    });
+  } catch (error) {
+    warnOnce("businesses:update:webhook-sync", "business update webhook sync skipped", {
+      businessId: updated.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
   res.json(serializeBusiness(updated));
 }));
 

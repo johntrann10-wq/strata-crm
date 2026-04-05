@@ -2,7 +2,7 @@ import type { Request } from "express";
 import { db } from "../db/index.js";
 import { activityLogs } from "../db/schema.js";
 import { logger } from "./logger.js";
-import { deliverBusinessWebhookEvent } from "./integrations.js";
+import { enqueueBusinessWebhookEvent } from "./integrations.js";
 
 type ActivityInput = {
   businessId: string;
@@ -26,15 +26,27 @@ function isActivitySchemaDriftError(error: unknown): boolean {
 }
 
 export async function createActivityLog(input: ActivityInput) {
+  let created:
+    | {
+        id: string;
+        createdAt: Date;
+      }
+    | null = null;
   try {
-    await db.insert(activityLogs).values({
-      businessId: input.businessId,
-      action: input.action,
-      entityType: input.entityType ?? null,
-      entityId: input.entityId ?? null,
-      userId: input.userId ?? null,
-      metadata: input.metadata ? JSON.stringify(input.metadata) : null,
-    });
+    [created] = await db
+      .insert(activityLogs)
+      .values({
+        businessId: input.businessId,
+        action: input.action,
+        entityType: input.entityType ?? null,
+        entityId: input.entityId ?? null,
+        userId: input.userId ?? null,
+        metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+      })
+      .returning({
+        id: activityLogs.id,
+        createdAt: activityLogs.createdAt,
+      });
   } catch (error) {
     if (!isActivitySchemaDriftError(error)) throw error;
     logger.warn("Activity log schema unavailable; skipping activity persistence", {
@@ -46,14 +58,26 @@ export async function createActivityLog(input: ActivityInput) {
       });
   }
 
-  void deliverBusinessWebhookEvent({
-    businessId: input.businessId,
-    event: input.action,
-    entityType: input.entityType ?? null,
-    entityId: input.entityId ?? null,
-    userId: input.userId ?? null,
-    metadata: input.metadata ?? null,
-  });
+  if (created) {
+    void enqueueBusinessWebhookEvent({
+      activityLogId: created.id,
+      businessId: input.businessId,
+      event: input.action,
+      occurredAt: created.createdAt,
+      entityType: input.entityType ?? null,
+      entityId: input.entityId ?? null,
+      userId: input.userId ?? null,
+      metadata: input.metadata ?? null,
+    }).catch((error) => {
+      logger.warn("Activity webhook enqueue failed", {
+        businessId: input.businessId,
+        action: input.action,
+        entityType: input.entityType ?? null,
+        entityId: input.entityId ?? null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
 }
 
 export async function createRequestActivityLog(

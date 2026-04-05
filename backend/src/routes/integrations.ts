@@ -39,6 +39,13 @@ import {
   disconnectTwilioBusiness,
   handleTwilioStatusCallback,
 } from "../lib/twilio.js";
+import {
+  ensureOutboundWebhookConnectionForBusiness,
+  listRecentReplayableWebhookEvents,
+  queueOutboundWebhookTest,
+  replayOutboundWebhookActivity,
+} from "../lib/integrations.js";
+import { createIntegrationAuditLog } from "../lib/integrationAudit.js";
 
 export const integrationsRouter = Router({ mergeParams: true });
 
@@ -47,6 +54,9 @@ const connectTwilioSchema = z.object({
   authToken: z.string().trim().optional(),
   messagingServiceSid: z.string().trim().min(1, "Twilio Messaging Service SID is required."),
   enabledTemplateSlugs: z.array(z.string().trim()).optional(),
+});
+const replayWebhookSchema = z.object({
+  activityLogId: z.string().uuid(),
 });
 
 function businessId(req: Request): string {
@@ -120,6 +130,7 @@ export async function handleGoogleCalendarCallbackRoute(req: Request, res: Respo
 
 integrationsRouter.get("/", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
+  await ensureOutboundWebhookConnectionForBusiness(bid);
   const featureFlags = listIntegrationFeatureFlags();
   const rows = await db
     .select()
@@ -177,6 +188,18 @@ integrationsRouter.get("/", requireAuth, requireTenant, requirePermission("setti
     connections,
   });
 });
+
+integrationsRouter.get(
+  "/outbound-webhooks/recent-events",
+  requireAuth,
+  requireTenant,
+  requirePermission("settings.read"),
+  async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    const records = await listRecentReplayableWebhookEvents(bid);
+    res.json({ records });
+  }
+);
 
 integrationsRouter.get(
   "/failures",
@@ -292,6 +315,64 @@ integrationsRouter.post(
     const retried = await retryIntegrationJobForBusiness(bid, req.params.id);
     if (!retried) throw new NotFoundError("Integration job not found.");
     res.json({ record: retried });
+  }
+);
+
+integrationsRouter.post(
+  "/outbound-webhooks/test",
+  requireAuth,
+  requireTenant,
+  requirePermission("settings.write"),
+  async (req: Request, res: Response) => {
+    requireBusinessIntegrationAdmin(req);
+    const bid = businessId(req);
+    const userId = req.userId;
+    if (!userId) throw new ForbiddenError("User context is required.");
+    const job = await queueOutboundWebhookTest({
+      businessId: bid,
+      userId,
+    });
+    await createIntegrationAuditLog({
+      businessId: bid,
+      provider: "outbound_webhooks",
+      action: "outbound_webhooks.test_queued",
+      userId,
+      metadata: {
+        integrationJobId: (job as { id?: string } | null)?.id ?? null,
+      },
+    });
+    res.json({ record: job });
+  }
+);
+
+integrationsRouter.post(
+  "/outbound-webhooks/replay",
+  requireAuth,
+  requireTenant,
+  requirePermission("settings.write"),
+  async (req: Request, res: Response) => {
+    requireBusinessIntegrationAdmin(req);
+    const bid = businessId(req);
+    const userId = req.userId;
+    if (!userId) throw new ForbiddenError("User context is required.");
+    const parsed = replayWebhookSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new BadRequestError(parsed.error.message);
+    const job = await replayOutboundWebhookActivity({
+      businessId: bid,
+      userId,
+      activityLogId: parsed.data.activityLogId,
+    });
+    await createIntegrationAuditLog({
+      businessId: bid,
+      provider: "outbound_webhooks",
+      action: "outbound_webhooks.replay_queued",
+      userId,
+      metadata: {
+        activityLogId: parsed.data.activityLogId,
+        integrationJobId: (job as { id?: string } | null)?.id ?? null,
+      },
+    });
+    res.json({ record: job });
   }
 );
 
