@@ -815,6 +815,20 @@ export const api = {
       reviewRequests: { sentLast30Days: number; lastSentAt: string | null; failedLast30Days: number; lastFailedAt: string | null };
       lapsedClients: { sentLast30Days: number; lastSentAt: string | null; failedLast30Days: number; lastFailedAt: string | null };
     }>("/actions/getAutomationSummary", { method: "POST", body: JSON.stringify(params ?? {}) }),
+  getAutomationFeed: (params?: { limit?: number }) =>
+    request<{
+      records: Array<{
+        id: string;
+        kind: "sent" | "failed";
+        automationType: "appointment_reminder" | "review_request" | "lapsed_client";
+        channel: "email" | "sms";
+        recipient: string | null;
+        entityType: string | null;
+        entityId: string | null;
+        createdAt: string;
+        message: string;
+      }>;
+    }>("/actions/getAutomationFeed", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getWorkerHealth: (params?: Record<string, unknown>) =>
     request<{
       automations: {

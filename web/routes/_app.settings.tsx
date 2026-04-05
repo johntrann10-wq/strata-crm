@@ -204,6 +204,18 @@ type AutomationActivitySummary = {
   lastFailedAt: string | null;
 };
 
+type AutomationFeedRecord = {
+  id: string;
+  kind: "sent" | "failed";
+  automationType: "appointment_reminder" | "review_request" | "lapsed_client";
+  channel: "email" | "sms";
+  recipient: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  createdAt: string;
+  message: string;
+};
+
 type WorkerHealthSummary = {
   automations: {
     sentLast24Hours: number;
@@ -580,6 +592,26 @@ function getAutomationHealthTone(summary: AutomationActivitySummary | null | und
   if (!summary) return "text-muted-foreground";
   if ((summary.failedLast30Days ?? 0) > 0) return "text-amber-700";
   return "text-muted-foreground";
+}
+
+function formatAutomationFeedTimestamp(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Unknown time";
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
+}
+
+function formatAutomationFeedLabel(type: AutomationFeedRecord["automationType"]) {
+  switch (type) {
+    case "appointment_reminder":
+      return "Appointment reminder";
+    case "review_request":
+      return "Review request";
+    default:
+      return "Lapsed outreach";
+  }
 }
 
 function formatWorkerTimestamp(value: string | null, fallback: string) {
@@ -1013,6 +1045,7 @@ export default function SettingsPage() {
     reviewRequests: AutomationActivitySummary;
     lapsedClients: AutomationActivitySummary;
   } | null>(null);
+  const [automationFeed, setAutomationFeed] = useState<AutomationFeedRecord[]>([]);
   const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettingsForm>(
     DEFAULT_INTEGRATION_SETTINGS
   );
@@ -1098,6 +1131,7 @@ export default function SettingsPage() {
   const [{ data: presetSummary }, getBusinessPreset] = useAction(api.getBusinessPreset);
   const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
   const [{ fetching: automationSummaryFetching }, getAutomationSummary] = useAction(api.getAutomationSummary);
+  const [{ fetching: automationFeedFetching }, getAutomationFeed] = useAction(api.getAutomationFeed);
   const [{ data: workerHealthData, fetching: workerHealthFetching }, getWorkerHealth] = useAction(api.getWorkerHealth);
   const [{ data: integrationStatusData, fetching: integrationStatusFetching }, refetchIntegrationStatus] = useFindFirst(
     {
@@ -1319,6 +1353,22 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!businessId) return;
+    let cancelled = false;
+    getAutomationFeed({ limit: 12 })
+      .then((result) => {
+        if (cancelled || result.error) return;
+        setAutomationFeed((result.data?.records as AutomationFeedRecord[] | undefined) ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setAutomationFeed([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [businessId, getAutomationFeed]);
+
+  useEffect(() => {
+    if (!businessId) return;
     void getWorkerHealth();
   }, [businessId, getWorkerHealth]);
 
@@ -1486,6 +1536,10 @@ export default function SettingsPage() {
     const summaryResult = await getAutomationSummary();
     if (!summaryResult.error) {
       setAutomationSummary(summaryResult.data as typeof automationSummary);
+    }
+    const feedResult = await getAutomationFeed({ limit: 12 });
+    if (!feedResult.error) {
+      setAutomationFeed((feedResult.data?.records as AutomationFeedRecord[] | undefined) ?? []);
     }
     toast.success("Automation settings saved");
   };
@@ -3701,6 +3755,55 @@ export default function SettingsPage() {
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       Failed in the last 30 days: {automationSummary?.lapsedClients.failedLast30Days ?? 0}
                     </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-background p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Recent automation activity</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Recent sends and delivery failures across email and SMS so you can spot real automation behavior without digging through raw logs.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="self-start">
+                      Last 12 events
+                    </Badge>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {automationFeedFetching && automationFeed.length === 0 ? (
+                      <div className="rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                        Loading recent automation activity...
+                      </div>
+                    ) : automationFeed.length === 0 ? (
+                      <div className="rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                        No recent automation sends or delivery failures yet.
+                      </div>
+                    ) : (
+                      automationFeed.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className="flex flex-col gap-2 rounded-lg border px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
+                        >
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={entry.kind === "failed" ? "destructive" : "outline"}>
+                                {entry.kind === "failed" ? "Failed" : "Sent"}
+                              </Badge>
+                              <Badge variant="secondary">{formatAutomationFeedLabel(entry.automationType)}</Badge>
+                              <Badge variant="outline">{entry.channel.toUpperCase()}</Badge>
+                            </div>
+                            <p className="text-sm font-medium">{entry.message}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {entry.recipient ? `Recipient: ${entry.recipient}` : "Recipient unavailable"}
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground sm:pl-4 sm:text-right">
+                            {formatAutomationFeedTimestamp(entry.createdAt)}
+                          </p>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
 

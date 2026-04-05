@@ -302,7 +302,6 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
       and(
         eq(notificationLogs.businessId, bid),
         gte(notificationLogs.sentAt, recentCutoff),
-        sql`${notificationLogs.channel} = 'email'`,
         sql`${notificationLogs.error} is not null`,
         sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
           'appointment_reminder',
@@ -331,6 +330,127 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
     reviewRequests: summarize("automation.review_request.sent", "review_request"),
     lapsedClients: summarize("automation.lapsed_client.sent", "lapsed_client_reengagement"),
   });
+});
+
+actionsRouter.post("/getAutomationFeed", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const limit = Math.min(Math.max(Number(req.body?.limit ?? 20), 1), 50);
+
+  const [activityRows, failureRows] = await Promise.all([
+    db
+      .select({
+        id: activityLogs.id,
+        action: activityLogs.action,
+        entityType: activityLogs.entityType,
+        entityId: activityLogs.entityId,
+        metadata: activityLogs.metadata,
+        createdAt: activityLogs.createdAt,
+      })
+      .from(activityLogs)
+      .where(
+        and(
+          eq(activityLogs.businessId, bid),
+          sql`${activityLogs.action} in (
+            'automation.appointment_reminder.sent',
+            'automation.review_request.sent',
+            'automation.lapsed_client.sent'
+          )`
+        )
+      )
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(limit),
+    db
+      .select({
+        id: notificationLogs.id,
+        channel: notificationLogs.channel,
+        recipient: notificationLogs.recipient,
+        error: notificationLogs.error,
+        metadata: notificationLogs.metadata,
+        sentAt: notificationLogs.sentAt,
+      })
+      .from(notificationLogs)
+      .where(
+        and(
+          eq(notificationLogs.businessId, bid),
+          sql`${notificationLogs.error} is not null`,
+          sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
+            'appointment_reminder',
+            'review_request',
+            'lapsed_client_reengagement'
+          )`
+        )
+      )
+      .orderBy(desc(notificationLogs.sentAt))
+      .limit(limit),
+  ]);
+
+  const sentFeed = activityRows.map((row) => {
+    let metadata: Record<string, unknown> = {};
+    try {
+      metadata = row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {};
+    } catch {
+      metadata = {};
+    }
+
+    const automationType =
+      row.action === "automation.appointment_reminder.sent"
+        ? "appointment_reminder"
+        : row.action === "automation.review_request.sent"
+          ? "review_request"
+          : "lapsed_client";
+
+    return {
+      id: row.id,
+      kind: "sent" as const,
+      automationType,
+      channel: "email" as const,
+      recipient: typeof metadata.sentTo === "string" ? metadata.sentTo : null,
+      entityType: row.entityType ?? null,
+      entityId: row.entityId ?? null,
+      createdAt: row.createdAt.toISOString(),
+      message:
+        automationType === "appointment_reminder"
+          ? "Appointment reminder sent."
+          : automationType === "review_request"
+            ? "Review request sent."
+            : "Lapsed client outreach sent.",
+    };
+  });
+
+  const failedFeed = failureRows.map((row) => {
+    let metadata: Record<string, unknown> = {};
+    try {
+      metadata = row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {};
+    } catch {
+      metadata = {};
+    }
+
+    const templateSlug = typeof metadata.templateSlug === "string" ? metadata.templateSlug : "";
+    const automationType =
+      templateSlug === "appointment_reminder"
+        ? "appointment_reminder"
+        : templateSlug === "review_request"
+          ? "review_request"
+          : "lapsed_client";
+
+    return {
+      id: row.id,
+      kind: "failed" as const,
+      automationType,
+      channel: row.channel === "sms" ? ("sms" as const) : ("email" as const),
+      recipient: row.recipient ?? null,
+      entityType: typeof metadata.entityType === "string" ? metadata.entityType : null,
+      entityId: typeof metadata.entityId === "string" ? metadata.entityId : null,
+      createdAt: row.sentAt.toISOString(),
+      message: row.error ?? "Automation delivery failed.",
+    };
+  });
+
+  const records = [...sentFeed, ...failedFeed]
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+    .slice(0, limit);
+
+  res.json({ records });
 });
 
 actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
@@ -365,7 +485,6 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
         and(
           eq(notificationLogs.businessId, bid),
           gte(notificationLogs.sentAt, recentCutoff),
-          sql`${notificationLogs.channel} = 'email'`,
           sql`${notificationLogs.error} is not null`,
           sql`coalesce(${notificationLogs.metadata}::json->>'templateSlug', '') in (
             'appointment_reminder',

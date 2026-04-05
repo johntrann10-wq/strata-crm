@@ -170,6 +170,39 @@ async function mockAuthenticatedSettings(
     });
   });
 
+  await context.route("**/api/actions/getAutomationFeed", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        records: [
+          {
+            id: "auto-feed-1",
+            kind: "sent",
+            automationType: "appointment_reminder",
+            channel: "email",
+            recipient: "client@example.com",
+            entityType: "appointment",
+            entityId: "appointment-1",
+            createdAt: "2026-04-04T19:15:00.000Z",
+            message: "Appointment reminder sent.",
+          },
+          {
+            id: "auto-feed-2",
+            kind: "failed",
+            automationType: "review_request",
+            channel: "sms",
+            recipient: "+15555550123",
+            entityType: "appointment",
+            entityId: "appointment-2",
+            createdAt: "2026-04-04T18:40:00.000Z",
+            message: "Twilio callback reported delivery failure.",
+          },
+        ],
+      }),
+    });
+  });
+
   await context.route("**/api/actions/getWorkerHealth", async (route) => {
     await route.fulfill({
       status: 200,
@@ -689,4 +722,16 @@ test("disables provider setup actions when backend integration config is incompl
   await expect(page.getByRole("button", { name: /connect google calendar/i })).toBeDisabled();
   await expect(page.getByRole("button", { name: /connect twilio sms/i })).toBeDisabled();
   await expect(page.getByRole("button", { name: /send test event/i })).toBeDisabled();
+});
+
+test("shows recent automation activity across email and sms channels", async ({ page, context }) => {
+  await mockAuthenticatedSettings(context);
+
+  await page.goto("/settings?tab=automations");
+
+  await expect(page.getByText("Recent automation activity", { exact: true })).toBeVisible();
+  await expect(page.getByText(/appointment reminder sent\./i)).toBeVisible();
+  await expect(page.getByText(/client@example\.com/i)).toBeVisible();
+  await expect(page.getByText(/twilio callback reported delivery failure\./i)).toBeVisible();
+  await expect(page.getByText(/^SMS$/i)).toBeVisible();
 });
