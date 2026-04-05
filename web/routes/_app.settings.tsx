@@ -775,6 +775,7 @@ export default function SettingsPage() {
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffRecord | null>(null);
   const [deleteStaffId, setDeleteStaffId] = useState<string | null>(null);
+  const [manualInviteLink, setManualInviteLink] = useState<{ email: string; url: string } | null>(null);
   const [locForm, setLocForm] = useState({
     name: "",
     address: "",
@@ -1120,12 +1121,20 @@ export default function SettingsPage() {
     try {
       const copied = await copyTextWithFallback(inviteUrl);
       if (!copied) {
-        toast.error("Could not copy invite link.");
+        setManualInviteLink({
+          email: teamMember.email ?? (result.data as { inviteEmail?: string } | null)?.inviteEmail ?? "Team member",
+          url: inviteUrl,
+        });
+        toast.message("Invite link ready to copy manually.");
         return;
       }
       toast.success("Invite link copied");
     } catch {
-      toast.error("Could not copy invite link.");
+      setManualInviteLink({
+        email: teamMember.email ?? (result.data as { inviteEmail?: string } | null)?.inviteEmail ?? "Team member",
+        url: inviteUrl,
+      });
+      toast.message("Invite link ready to copy manually.");
     }
   };
 
@@ -2240,6 +2249,43 @@ export default function SettingsPage() {
               className="w-full sm:w-auto"
             >
               {savingStaff || updatingStaff ? "Saving..." : editingStaff ? "Save Changes" : "Add Team Member"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!manualInviteLink} onOpenChange={(open) => !open && setManualInviteLink(null)}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Copy Invite Link</DialogTitle>
+            <DialogDescription>
+              Direct copy is unavailable in this browser context. The invite link for {manualInviteLink?.email ?? "this team member"} is ready below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Input readOnly value={manualInviteLink?.url ?? ""} onFocus={(event) => event.currentTarget.select()} />
+            <p className="text-xs text-muted-foreground">
+              Tap the field to select the full link, then copy it manually.
+            </p>
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button variant="outline" onClick={() => setManualInviteLink(null)} className="w-full sm:w-auto">
+              Close
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!manualInviteLink?.url) return;
+                const copied = await copyTextWithFallback(manualInviteLink.url);
+                if (copied) {
+                  toast.success("Invite link copied");
+                  setManualInviteLink(null);
+                } else {
+                  toast.error("Could not copy invite link.");
+                }
+              }}
+              className="w-full sm:w-auto"
+            >
+              Try copy again
             </Button>
           </DialogFooter>
         </DialogContent>
