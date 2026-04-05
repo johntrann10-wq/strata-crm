@@ -220,6 +220,9 @@ type AutomationFeedRecord = {
   message: string;
 };
 
+type AutomationFeedFilter = "all" | "issues" | "sent";
+type AutomationFeedAutomationFilter = "all" | AutomationFeedRecord["automationType"];
+
 type WorkerHealthSummary = {
   automations: {
     sentLast24Hours: number;
@@ -1120,6 +1123,9 @@ export default function SettingsPage() {
   const [googleCalendarResyncing, setGoogleCalendarResyncing] = useState(false);
   const [googleCalendarCalendars, setGoogleCalendarCalendars] = useState<GoogleCalendarOption[]>([]);
   const [googleCalendarCalendarsLoading, setGoogleCalendarCalendarsLoading] = useState(false);
+  const [automationFeedFilter, setAutomationFeedFilter] = useState<AutomationFeedFilter>("all");
+  const [automationFeedAutomationFilter, setAutomationFeedAutomationFilter] =
+    useState<AutomationFeedAutomationFilter>("all");
   const [twilioSaving, setTwilioSaving] = useState(false);
   const [twilioDisconnecting, setTwilioDisconnecting] = useState(false);
   const [outboundWebhookTesting, setOutboundWebhookTesting] = useState(false);
@@ -1217,6 +1223,14 @@ export default function SettingsPage() {
   const twilioBackendConfigured = providerConfiguration?.twilio_sms ?? false;
   const outboundWebhooksBackendConfigured = providerConfiguration?.outbound_webhooks ?? false;
   const workerHealth = workerHealthData as WorkerHealthSummary | undefined;
+  const filteredAutomationFeed = automationFeed.filter((entry) => {
+    if (automationFeedFilter === "issues" && entry.kind === "sent") return false;
+    if (automationFeedFilter === "sent" && entry.kind !== "sent") return false;
+    if (automationFeedAutomationFilter !== "all" && entry.automationType !== automationFeedAutomationFilter) {
+      return false;
+    }
+    return true;
+  });
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -3815,9 +3829,61 @@ export default function SettingsPage() {
                         Recent sends and delivery failures across email and SMS so you can spot real automation behavior without digging through raw logs.
                       </p>
                     </div>
-                    <Badge variant="outline" className="self-start">
-                      Last 12 events
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="self-start">
+                        Last 12 events
+                      </Badge>
+                      <Badge variant="secondary" className="self-start">
+                        Showing {filteredAutomationFeed.length}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={automationFeedFilter === "all" ? "default" : "outline"}
+                        onClick={() => setAutomationFeedFilter("all")}
+                      >
+                        All activity
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={automationFeedFilter === "issues" ? "default" : "outline"}
+                        onClick={() => setAutomationFeedFilter("issues")}
+                      >
+                        Issues only
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={automationFeedFilter === "sent" ? "default" : "outline"}
+                        onClick={() => setAutomationFeedFilter("sent")}
+                      >
+                        Sent only
+                      </Button>
+                    </div>
+                    <div className="grid gap-2 sm:max-w-xs">
+                      <Label htmlFor="automation-feed-filter">Automation</Label>
+                      <Select
+                        value={automationFeedAutomationFilter}
+                        onValueChange={(value) =>
+                          setAutomationFeedAutomationFilter(value as AutomationFeedAutomationFilter)
+                        }
+                      >
+                        <SelectTrigger id="automation-feed-filter">
+                          <SelectValue placeholder="All automations" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All automations</SelectItem>
+                          <SelectItem value="appointment_reminder">Appointment reminders</SelectItem>
+                          <SelectItem value="review_request">Review requests</SelectItem>
+                          <SelectItem value="lapsed_client">Lapsed outreach</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="mt-4 space-y-2">
                     {automationFeedFetching && automationFeed.length === 0 ? (
@@ -3828,8 +3894,12 @@ export default function SettingsPage() {
                       <div className="rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
                         No recent automation sends or delivery failures yet.
                       </div>
+                    ) : filteredAutomationFeed.length === 0 ? (
+                      <div className="rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                        No automation activity matches the current filters.
+                      </div>
                     ) : (
-                      automationFeed.map((entry) => (
+                      filteredAutomationFeed.map((entry) => (
                         <div
                           key={entry.id}
                           className="flex flex-col gap-2 rounded-lg border px-3 py-3 sm:flex-row sm:items-start sm:justify-between"

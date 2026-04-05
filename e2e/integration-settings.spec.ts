@@ -774,4 +774,9 @@ test("shows recent automation activity across email and sms channels", async ({ 
   await expect(page.getByText(/twilio callback reported delivery failure\./i)).toBeVisible();
   await expect(page.getByText(/lapsed client outreach skipped: outside send window\./i)).toBeVisible();
   await expect(page.getByText(/^SMS$/i)).toBeVisible();
+
+  await page.getByRole("button", { name: /issues only/i }).click();
+  await expect(page.getByText(/appointment reminder sent\./i)).not.toBeVisible();
+  await expect(page.getByText(/twilio callback reported delivery failure\./i)).toBeVisible();
+  await expect(page.getByText(/lapsed client outreach skipped: outside send window\./i)).toBeVisible();
 });
