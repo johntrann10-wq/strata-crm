@@ -12,6 +12,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { toast } from "sonner";
+import { VehicleCatalogFields } from "../components/vehicles/VehicleCatalogFields";
+import {
+  emptyVehicleCatalogFormValue,
+  type VehicleCatalogFormValue,
+} from "../lib/vehicles";
 
 interface FormData {
   firstName: string;
@@ -32,9 +37,9 @@ export default function NewClientPage() {
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/clients";
   const hasQueueReturn = searchParams.has("from");
-  const [submitMode, setSubmitMode] = useState<"client" | "vehicle" | "quote" | "appointment">(() => {
+  const [submitMode, setSubmitMode] = useState<"client" | "quote" | "appointment">(() => {
     const next = searchParams.get("next");
-    return next === "vehicle" || next === "quote" || next === "appointment" ? next : "client";
+    return next === "quote" || next === "appointment" ? next : "client";
   });
   const submitModeRef = useRef<typeof submitMode>(submitMode);
 
@@ -43,6 +48,7 @@ export default function NewClientPage() {
   });
 
   const [{ fetching, error }, createClient] = useAction(api.client.create);
+  const [{ fetching: vehicleCreating, error: vehicleCreateError }, createVehicle] = useAction(api.vehicle.create);
 
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
@@ -58,11 +64,31 @@ export default function NewClientPage() {
   });
 
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [vehicleForm, setVehicleForm] = useState<VehicleCatalogFormValue>({
+    ...emptyVehicleCatalogFormValue,
+    year: String(new Date().getFullYear()),
+  });
+  const [vehicleColor, setVehicleColor] = useState("");
+  const [vehicleLicensePlate, setVehicleLicensePlate] = useState("");
+  const [vehicleMileage, setVehicleMileage] = useState("");
+  const [vehicleNotes, setVehicleNotes] = useState("");
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
   const setSubmitIntent = (mode: typeof submitMode) => {
     submitModeRef.current = mode;
     setSubmitMode(mode);
   };
+  const shouldCreateVehicle =
+    vehicleForm.make.trim().length > 0 ||
+    vehicleForm.model.trim().length > 0 ||
+    vehicleForm.year.trim().length > 0 ||
+    vehicleColor.trim().length > 0 ||
+    vehicleLicensePlate.trim().length > 0 ||
+    vehicleMileage.trim().length > 0 ||
+    vehicleNotes.trim().length > 0 ||
+    vehicleForm.vin.trim().length > 0 ||
+    vehicleForm.trim.trim().length > 0 ||
+    vehicleForm.bodyStyle.trim().length > 0 ||
+    vehicleForm.engine.trim().length > 0;
 
   const getFieldError = (fieldName: string): string | undefined => {
     if (localErrors[fieldName]) return localErrors[fieldName];
@@ -109,6 +135,10 @@ export default function NewClientPage() {
     if (!formData.firstName.trim()) errors.firstName = "First name is required";
     if (!formData.lastName.trim()) errors.lastName = "Last name is required";
 
+    if (shouldCreateVehicle && (!vehicleForm.make.trim() || !vehicleForm.model.trim())) {
+      errors.vehicle = "Select or enter a make and model before saving the vehicle.";
+    }
+
     if (Object.keys(errors).length > 0) {
       setLocalErrors(errors);
       return;
@@ -148,24 +178,68 @@ export default function NewClientPage() {
       return;
     }
 
-    toast.success("Client saved");
-    if (mode === "vehicle") {
-      navigate(`/clients/${createdClientId}/vehicles/new?next=client&from=${encodeURIComponent(returnTo)}`);
-      return;
+    let createdVehicleId: string | null = null;
+    if (shouldCreateVehicle) {
+      const vehicleResult = await createVehicle({
+        clientId: createdClientId,
+        year: vehicleForm.year ? parseInt(vehicleForm.year, 10) : undefined,
+        make: vehicleForm.make,
+        model: vehicleForm.model,
+        trim: vehicleForm.trim || undefined,
+        bodyStyle: vehicleForm.bodyStyle || undefined,
+        engine: vehicleForm.engine || undefined,
+        vin: vehicleForm.vin || undefined,
+        displayName: vehicleForm.displayName || undefined,
+        source: vehicleForm.source || "manual",
+        sourceVehicleId: vehicleForm.sourceVehicleId || undefined,
+        color: vehicleColor || undefined,
+        licensePlate: vehicleLicensePlate || undefined,
+        mileage: vehicleMileage ? parseInt(vehicleMileage, 10) : undefined,
+        notes: vehicleNotes || undefined,
+      });
+
+      if (vehicleResult.error) {
+        setLocalErrors({
+          general: "Client saved, but the vehicle could not be created. Open the client record and try the vehicle again.",
+        });
+        navigate(`/clients/${createdClientId}?from=${encodeURIComponent(returnTo)}`);
+        return;
+      }
+
+      createdVehicleId = (vehicleResult.data as { id?: string } | null)?.id ?? null;
+      if (!createdVehicleId) {
+        setLocalErrors({
+          general: "Client saved, but the vehicle ID was not returned. Open the client record and confirm the vehicle was created.",
+        });
+        navigate(`/clients/${createdClientId}?from=${encodeURIComponent(returnTo)}`);
+        return;
+      }
     }
+
+    toast.success(shouldCreateVehicle ? "Client and vehicle saved" : "Client saved");
     if (mode === "quote") {
-      navigate(`/quotes/new?clientId=${createdClientId}&from=${encodeURIComponent(returnTo)}`);
+      navigate(
+        `/quotes/new?clientId=${createdClientId}${
+          createdVehicleId ? `&vehicleId=${encodeURIComponent(createdVehicleId)}` : ""
+        }&from=${encodeURIComponent(returnTo)}`
+      );
       return;
     }
     if (mode === "appointment") {
       navigate(
         `/appointments/new?clientId=${createdClientId}${
+          createdVehicleId ? `&vehicleId=${encodeURIComponent(createdVehicleId)}` : ""
+        }${
           currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
         }&from=${encodeURIComponent(returnTo)}`
       );
       return;
     }
-    navigate(`/clients?created=${encodeURIComponent(createdClientId)}&from=${encodeURIComponent(returnTo)}`);
+    navigate(
+      `/clients/${createdClientId}${
+        createdVehicleId ? `/vehicles/${encodeURIComponent(createdVehicleId)}` : ""
+      }?from=${encodeURIComponent(returnTo)}`
+    );
   };
 
   const generalError =
@@ -221,12 +295,17 @@ export default function NewClientPage() {
           {generalError}
         </div>
       )}
+      {vehicleCreateError ? (
+        <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {vehicleCreateError.message}
+        </div>
+      ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
           <p className="text-sm font-medium">Lead handoff</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Save the client and continue directly into vehicle intake, quote creation, or appointment booking.
+            Save the client with their vehicle in one pass, then continue directly into a quote or appointment if needed.
           </p>
         </div>
 
@@ -415,25 +494,76 @@ export default function NewClientPage() {
           </div>
         )}
 
+        <div className="space-y-4 rounded-xl border border-border/70 bg-background p-5">
+          <div>
+            <h2 className="text-base font-semibold">Vehicle</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add the client&apos;s vehicle now so the record is ready for quotes, appointments, and intake.
+            </p>
+          </div>
+          <VehicleCatalogFields value={vehicleForm} setValue={setVehicleForm} />
+          {getFieldError("vehicle") ? (
+            <p className="text-sm text-destructive">{getFieldError("vehicle")}</p>
+          ) : null}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="vehicleColor">Color</Label>
+              <Input
+                id="vehicleColor"
+                value={vehicleColor}
+                onChange={(e) => setVehicleColor(e.target.value)}
+                placeholder="Black Sapphire"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="vehicleLicensePlate">License Plate</Label>
+              <Input
+                id="vehicleLicensePlate"
+                value={vehicleLicensePlate}
+                onChange={(e) => setVehicleLicensePlate(e.target.value)}
+                placeholder="DETAIL1"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="vehicleMileage">Mileage</Label>
+              <Input
+                id="vehicleMileage"
+                type="number"
+                value={vehicleMileage}
+                onChange={(e) => setVehicleMileage(e.target.value)}
+                placeholder="35000"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="vehicleNotes">Vehicle Notes</Label>
+            <Textarea
+              id="vehicleNotes"
+              value={vehicleNotes}
+              onChange={(e) => setVehicleNotes(e.target.value)}
+              placeholder="Ceramic coated, wheel finish notes, damage callouts..."
+              rows={3}
+            />
+          </div>
+        </div>
+
         {/* Actions */}
         <div className="flex flex-col gap-3 pt-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="vehicle" onClick={() => setSubmitIntent("vehicle")}>
-              {fetching && submitMode === "vehicle" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Save and Add Vehicle
-            </Button>
-            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="quote" onClick={() => setSubmitIntent("quote")}>
-              {fetching && submitMode === "quote" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button type="submit" variant="outline" disabled={fetching || vehicleCreating} data-submit-mode="quote" onClick={() => setSubmitIntent("quote")}>
+              {fetching || vehicleCreating ? submitMode === "quote" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null : null}
               Save and Create Quote
             </Button>
-            <Button type="submit" variant="outline" disabled={fetching} data-submit-mode="appointment" onClick={() => setSubmitIntent("appointment")}>
-              {fetching && submitMode === "appointment" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button type="submit" variant="outline" disabled={fetching || vehicleCreating} data-submit-mode="appointment" onClick={() => setSubmitIntent("appointment")}>
+              {fetching || vehicleCreating ? submitMode === "appointment" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null : null}
               Save and Book Appointment
             </Button>
           </div>
           <div className="flex items-center gap-3">
-            <Button type="submit" disabled={fetching} data-submit-mode="client" onClick={() => setSubmitIntent("client")}>
-              {fetching && submitMode === "client" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button type="submit" disabled={fetching || vehicleCreating} data-submit-mode="client" onClick={() => setSubmitIntent("client")}>
+              {fetching || vehicleCreating ? submitMode === "client" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null : null}
               Save Client
             </Button>
           <Button type="button" variant="outline" asChild>
