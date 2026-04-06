@@ -414,24 +414,24 @@ export default function LandingPage() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
               <Link
-                to="/features"
+                to="/pricing"
                 className={cn(
                   buttonVariants({ size: "lg", variant: "outline" }),
                   "min-h-[54px] rounded-2xl border-gray-300 bg-white/85 px-7 text-base font-semibold text-gray-900 hover:bg-white"
                 )}
-                onClick={() => trackEvent("landing_cta_clicked", { placement: "hero_secondary", target: "features" })}
+                onClick={() => trackEvent("pricing_viewed", { placement: "hero_secondary" })}
               >
-                Explore features
+                View pricing
               </Link>
             </div>
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-medium text-gray-600">
               <Link
-                to="/pricing"
+                to="/features"
                 className="inline-flex items-center gap-1 text-orange-700 transition-colors hover:text-orange-800"
-                onClick={() => trackEvent("pricing_viewed", { placement: "hero_text_link" })}
+                onClick={() => trackEvent("landing_cta_clicked", { placement: "hero_text_link", target: "features" })}
               >
-                Founder pricing
+                Explore features
                 <ChevronRight className="h-4 w-4" />
               </Link>
               <Link
@@ -444,17 +444,9 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <div className="rounded-full border border-orange-200 bg-white/88 px-3.5 py-1.5 text-sm font-medium text-gray-700 shadow-sm">
-                First month free
-              </div>
-              <div className="rounded-full border border-orange-200 bg-white/88 px-3.5 py-1.5 text-sm font-medium text-gray-700 shadow-sm">
-                No contracts
-              </div>
-              <div className="rounded-full border border-orange-200 bg-orange-50 px-3.5 py-1.5 text-sm font-semibold text-orange-700 shadow-sm">
-                23 of 25 founder spots left
-              </div>
-            </div>
+            <p className="text-sm leading-6 text-gray-600">
+              First month free. No contracts. Founder pricing is available for the first 25 shops.
+            </p>
 
             <div className="grid gap-3 sm:grid-cols-3">
               {trustPoints.map((point) => (
@@ -498,7 +490,7 @@ export default function LandingPage() {
               </div>
               <div className="mt-4 flex">
                 <div className="inline-flex items-center rounded-full border border-orange-200/80 bg-orange-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-orange-700">
-                  Founder pricing: 23 of 25 spots left
+                  23 of 25 founder spots left
                 </div>
               </div>
             </div>
