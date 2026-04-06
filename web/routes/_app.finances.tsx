@@ -226,11 +226,11 @@ function FinancesContent() {
 
         <section className="overflow-hidden rounded-[28px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.10),transparent_24%),radial-gradient(circle_at_top_right,rgba(239,68,68,0.10),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <FinanceMetricCard label="Revenue this month" value={isLoading ? null : formatCurrency(metrics?.revenueThisMonth ?? 0)} detail="Closed money recorded from paid invoices this month." icon={<TrendingUp className="h-4 w-4" />} tone="success" />
-            <FinanceMetricCard label="Expenses this month" value={isLoading ? null : formatCurrency(metrics?.expensesThisMonth ?? 0)} detail="Operating spend logged against the current month." icon={<TrendingDown className="h-4 w-4" />} tone="danger" />
-            <FinanceMetricCard label="Net this month" value={isLoading ? null : formatCurrency(metrics?.netThisMonth ?? 0)} detail="Revenue minus tracked expenses for the same month." icon={<Wallet className="h-4 w-4" />} tone={(metrics?.netThisMonth ?? 0) >= 0 ? "default" : "danger"} />
-            <FinanceMetricCard label="Awaiting collection" value={isLoading ? null : formatCurrency(metrics?.outstandingBalance ?? 0)} detail="Open invoice balance still waiting to be collected." icon={<Landmark className="h-4 w-4" />} tone="warn" />
-            <FinanceMetricCard label="Expenses logged" value={isLoading ? null : String(metrics?.expenseCountThisMonth ?? 0)} detail="Tracked expense entries recorded this month." icon={<DollarSign className="h-4 w-4" />} tone="default" compact />
+            <FinanceMetricCard label="Revenue this month" value={isLoading ? null : formatCurrency(metrics?.revenueThisMonth ?? 0)} icon={<TrendingUp className="h-4 w-4" />} tone="success" />
+            <FinanceMetricCard label="Expenses this month" value={isLoading ? null : formatCurrency(metrics?.expensesThisMonth ?? 0)} icon={<TrendingDown className="h-4 w-4" />} tone="danger" />
+            <FinanceMetricCard label="Net this month" value={isLoading ? null : formatCurrency(metrics?.netThisMonth ?? 0)} icon={<Wallet className="h-4 w-4" />} tone={(metrics?.netThisMonth ?? 0) >= 0 ? "default" : "danger"} />
+            <FinanceMetricCard label="Awaiting collection" value={isLoading ? null : formatCurrency(metrics?.outstandingBalance ?? 0)} icon={<Landmark className="h-4 w-4" />} tone="warn" />
+            <FinanceMetricCard label="Expenses logged" value={isLoading ? null : String(metrics?.expenseCountThisMonth ?? 0)} icon={<DollarSign className="h-4 w-4" />} tone="default" compact />
           </div>
         </section>
 
@@ -473,7 +473,7 @@ function FinanceMetricCard({
 }: {
   label: string;
   value: string | null;
-  detail: string;
+  detail?: string;
   icon: ReactNode;
   tone: "default" | "success" | "warn" | "danger";
   compact?: boolean;
@@ -488,7 +488,7 @@ function FinanceMetricCard({
         <div className={cn("shrink-0", toneClass)}>{icon}</div>
       </div>
       {value == null ? <Skeleton className="mt-3 h-8 w-24" /> : <p className={cn("mt-2 font-semibold tracking-[-0.04em]", compact ? "text-[1.5rem]" : "text-[1.7rem]", toneClass)}>{value}</p>}
-      <p className="mt-1 min-h-[2.75rem] text-sm leading-5 text-slate-500">{detail}</p>
+      {detail ? <p className="mt-1 min-h-[2.75rem] text-sm leading-5 text-slate-500">{detail}</p> : null}
     </div>
   );
 }
