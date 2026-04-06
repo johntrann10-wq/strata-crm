@@ -403,6 +403,15 @@ export default function LandingPage() {
               </Link>
             </div>
 
+            <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
+              <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 font-medium text-orange-800 shadow-sm">
+                Developed in Irvine, CA
+              </span>
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-white/88 px-3 py-1.5 font-medium text-gray-700 shadow-sm">
+                Real automations, SMS, calendar sync, and connected payments
+              </span>
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-3">
               {trustPoints.map((point) => (
                 <div
