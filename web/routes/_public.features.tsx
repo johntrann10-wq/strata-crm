@@ -311,12 +311,9 @@ export default function FeaturesHubPage() {
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
               High-intent software features organized around the way shops actually work.
             </h2>
-            <p className="mt-4 text-lg leading-8 text-gray-600">
-              Instead of a generic feature grid, this hub groups Strata around the software capabilities buyers usually search for when they are actively evaluating a new automotive shop system.
-            </p>
           </div>
 
-          <div className="mt-10 grid gap-5 lg:grid-cols-2">
+          <div className="mt-8 grid gap-5 lg:grid-cols-2">
             {featureSections.map((section) => {
               const Icon = section.icon;
               return (
