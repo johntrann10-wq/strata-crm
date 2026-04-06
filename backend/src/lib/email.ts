@@ -712,6 +712,7 @@ export async function sendInvoiceEmail(options: {
   amount: string;
   invoiceNumber: string;
   invoiceUrl?: string | null;
+  invoicePayUrl?: string | null;
   portalUrl?: string | null;
   message?: string | null;
 }) {
@@ -725,6 +726,7 @@ export async function sendInvoiceEmail(options: {
       amount: options.amount,
       invoiceNumber: options.invoiceNumber,
       invoiceUrl: optionalValue(options.invoiceUrl),
+      invoicePayUrl: optionalValue(options.invoicePayUrl ?? options.invoiceUrl),
       portalUrl: optionalValue(options.portalUrl),
       message: optionalValue(options.message),
     },

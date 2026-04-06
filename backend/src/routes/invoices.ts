@@ -1430,6 +1430,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       clientLastName: clients.lastName,
       clientEmail: clients.email,
       businessName: businesses.name,
+      stripeConnectAccountId: businesses.stripeConnectAccountId,
     })
     .from(invoices)
     .leftJoin(clients, eq(invoices.clientId, clients.id))
@@ -1499,6 +1500,13 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       entityId: existing.id,
       businessId: bid,
     });
+    let invoicePayUrl: string | null = null;
+    if (existing.stripeConnectAccountId) {
+      const account = await retrieveConnectAccount({ accountId: existing.stripeConnectAccountId });
+      if (account?.ready) {
+        invoicePayUrl = buildPublicDocumentUrl(`/api/invoices/${existing.id}/public-pay?token=${encodeURIComponent(publicToken)}`);
+      }
+    }
     await sendInvoiceEmail({
       to: recipientEmail,
       businessId: bid,
@@ -1507,6 +1515,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
       invoiceNumber: existing.invoiceNumber ?? "Invoice",
       invoiceUrl: buildPublicDocumentUrl(`/api/invoices/${existing.id}/public-html?token=${encodeURIComponent(publicToken)}`),
+      invoicePayUrl,
       portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(publicToken)}`),
       message: parsed.data.message ?? null,
     });
