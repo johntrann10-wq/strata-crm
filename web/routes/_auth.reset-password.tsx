@@ -5,46 +5,63 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAction } from "@/hooks/useApi";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
 function extractResetToken(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (!trimmed.includes("://") && !trimmed.includes("?") && !trimmed.includes("#")) {
-    return trimmed;
+  const normalized = value
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
+  if (!normalized) return "";
+
+  const jwtMatch = normalized.match(/[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+/);
+  if (jwtMatch?.[0]) return jwtMatch[0];
+
+  const compact = normalized.replace(/\s+/g, "");
+  const match = compact.match(/[?#&](?:token|resetToken|reset_token)=([^&#]+)/i);
+  if (match?.[1]) return decodeURIComponent(match[1]);
+
+  if (!compact.includes("://") && !compact.includes("?") && !compact.includes("#")) {
+    return compact;
   }
-  const match = trimmed.match(/[?#&](?:token|resetToken|reset_token)=([^&#]+)/i);
-  return match ? decodeURIComponent(match[1] ?? "") : "";
+
+  try {
+    const url = new URL(compact);
+    return (
+      url.searchParams.get("token") ??
+      url.searchParams.get("resetToken") ??
+      url.searchParams.get("reset_token") ??
+      ""
+    );
+  } catch {
+    return "";
+  }
 }
 
 export default function ResetPasswordRoute() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [pastedLink, setPastedLink] = useState("");
-  const token = useMemo(() => {
+  const [token, setToken] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return extractResetToken(window.location.href);
+  });
+  const resolvedToken = useMemo(() => {
     const directToken =
       searchParams.get("token") ??
       searchParams.get("resetToken") ??
       searchParams.get("reset_token");
-    if (directToken) return directToken;
-    if (typeof window === "undefined") return "";
-    const rawHrefToken = extractResetToken(window.location.href);
-    if (rawHrefToken) return rawHrefToken;
-    const hash = window.location.hash.startsWith("#")
-      ? window.location.hash.slice(1)
-      : window.location.hash;
-    if (!hash) return "";
-    const hashParams = new URLSearchParams(hash);
-    return (
-      hashParams.get("token") ??
-      hashParams.get("resetToken") ??
-      hashParams.get("reset_token") ??
-      ""
-    );
-  }, [searchParams]);
-  const fallbackToken = useMemo(() => extractResetToken(pastedLink), [pastedLink]);
-  const resolvedToken = token || fallbackToken;
+    return directToken || token;
+  }, [searchParams, token]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const nextToken =
+      extractResetToken(window.location.href) ||
+      extractResetToken(window.location.search) ||
+      extractResetToken(window.location.hash);
+    if (nextToken && nextToken !== token) {
+      setToken(nextToken);
+    }
+  }, [searchParams, token]);
   const [{ fetching }, resetPassword] = useAction(api.user.resetPassword);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -103,25 +120,6 @@ export default function ResetPasswordRoute() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
-            {!resolvedToken ? (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="resetLink" className="text-[13px] font-medium text-foreground">
-                  Paste reset link
-                </Label>
-                <Input
-                  id="resetLink"
-                  type="text"
-                  placeholder="Paste the full reset link from your email"
-                  autoComplete="off"
-                  value={pastedLink}
-                  onChange={(event) => setPastedLink(event.target.value)}
-                  className={`h-9 rounded-lg text-[13px] shadow-none${error ? " border-destructive" : ""}`}
-                />
-                <p className="text-[12px] text-muted-foreground">
-                  If the email button opened a broken page, paste the full reset link here and continue.
-                </p>
-              </div>
-            ) : null}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="password" className="text-[13px] font-medium text-foreground">
                 New password
@@ -150,7 +148,7 @@ export default function ResetPasswordRoute() {
             </div>
             {error ? <p className="text-center text-[12px] text-destructive">{error}</p> : null}
             <Button type="submit" disabled={fetching} className="h-9 w-full rounded-lg bg-orange-500 text-[13px] font-medium text-white hover:bg-orange-500/90">
-              {fetching ? "Resetting password…" : "Reset password"}
+              {fetching ? "Resetting password..." : "Reset password"}
             </Button>
           </form>
         )}
@@ -162,3 +160,4 @@ export default function ResetPasswordRoute() {
     </div>
   );
 }
+
