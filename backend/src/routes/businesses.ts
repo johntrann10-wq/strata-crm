@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { businessMemberships, businesses, clients, users } from "../db/schema.js";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
@@ -134,29 +134,43 @@ function isAllowedSubscriptionStatus(status: string | null | undefined): boolean
 }
 
 async function loadPublicLeadBusiness(id: string) {
-  const [business] = await db
-    .select({
-      id: businesses.id,
-      ownerId: businesses.ownerId,
-      name: businesses.name,
-      type: businesses.type,
-      timezone: businesses.timezone,
-      email: businesses.email,
-      phone: businesses.phone,
-      leadCaptureEnabled: businesses.leadCaptureEnabled,
-      leadAutoResponseEnabled: businesses.leadAutoResponseEnabled,
-      leadAutoResponseEmailEnabled: businesses.leadAutoResponseEmailEnabled,
-      leadAutoResponseSmsEnabled: businesses.leadAutoResponseSmsEnabled,
-      missedCallTextBackEnabled: businesses.missedCallTextBackEnabled,
-      automationUncontactedLeadHours: businesses.automationUncontactedLeadHours,
-      subscriptionStatus: businesses.subscriptionStatus,
-      ownerEmail: users.email,
-      ownerFirstName: users.firstName,
-    })
-    .from(businesses)
-    .leftJoin(users, eq(users.id, businesses.ownerId))
-    .where(eq(businesses.id, id))
-    .limit(1);
+  const selectBusiness = () =>
+    db
+      .select({
+        id: businesses.id,
+        ownerId: businesses.ownerId,
+        name: businesses.name,
+        type: businesses.type,
+        timezone: businesses.timezone,
+        email: businesses.email,
+        phone: businesses.phone,
+        leadCaptureEnabled: businesses.leadCaptureEnabled,
+        leadAutoResponseEnabled: businesses.leadAutoResponseEnabled,
+        leadAutoResponseEmailEnabled: businesses.leadAutoResponseEmailEnabled,
+        leadAutoResponseSmsEnabled: businesses.leadAutoResponseSmsEnabled,
+        missedCallTextBackEnabled: businesses.missedCallTextBackEnabled,
+        automationUncontactedLeadHours: businesses.automationUncontactedLeadHours,
+        subscriptionStatus: businesses.subscriptionStatus,
+        ownerEmail: users.email,
+        ownerFirstName: users.firstName,
+      })
+      .from(businesses)
+      .leftJoin(users, eq(users.id, businesses.ownerId))
+      .where(eq(businesses.id, id))
+      .limit(1);
+
+  let business;
+  try {
+    [business] = await selectBusiness();
+  } catch (error) {
+    if (!isBusinessSchemaDriftError(error)) throw error;
+    warnOnce("businesses:public-lead:schema", "repairing missing business automation columns", {
+      businessId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await ensureBusinessAutomationColumns();
+    [business] = await selectBusiness();
+  }
 
   if (!business) return null;
   if (process.env.BILLING_ENFORCED === "true" && isStripeConfigured()) {
@@ -287,12 +301,49 @@ function isBusinessSchemaDriftError(error: unknown): boolean {
   return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
+let ensureBusinessAutomationColumnsPromise: Promise<void> | null = null;
+
+async function ensureBusinessAutomationColumns(): Promise<void> {
+  if (!ensureBusinessAutomationColumnsPromise) {
+    ensureBusinessAutomationColumnsPromise = (async () => {
+      await db.execute(sql`
+        ALTER TABLE businesses
+          ADD COLUMN IF NOT EXISTS lead_capture_enabled boolean DEFAULT false,
+          ADD COLUMN IF NOT EXISTS lead_auto_response_enabled boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS lead_auto_response_email_enabled boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS lead_auto_response_sms_enabled boolean DEFAULT false,
+          ADD COLUMN IF NOT EXISTS missed_call_text_back_enabled boolean DEFAULT false,
+          ADD COLUMN IF NOT EXISTS automation_uncontacted_leads_enabled boolean DEFAULT false,
+          ADD COLUMN IF NOT EXISTS automation_uncontacted_lead_hours integer DEFAULT 2,
+          ADD COLUMN IF NOT EXISTS automation_abandoned_quotes_enabled boolean DEFAULT false,
+          ADD COLUMN IF NOT EXISTS automation_abandoned_quote_hours integer DEFAULT 48,
+          ADD COLUMN IF NOT EXISTS notification_appointment_confirmation_email_enabled boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS notification_appointment_reminder_email_enabled boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS notification_abandoned_quote_email_enabled boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS notification_review_request_email_enabled boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS notification_lapsed_client_email_enabled boolean DEFAULT true
+      `);
+    })().catch((error) => {
+      ensureBusinessAutomationColumnsPromise = null;
+      throw error;
+    });
+  }
+  await ensureBusinessAutomationColumnsPromise;
+}
+
 async function loadBusinessById(id: string): Promise<BusinessRecord | null> {
   try {
     const [business] = await db.select().from(businesses).where(eq(businesses.id, id)).limit(1);
     return business ?? null;
   } catch (error) {
     if (!isBusinessSchemaDriftError(error)) throw error;
+    try {
+      await ensureBusinessAutomationColumns();
+      const [business] = await db.select().from(businesses).where(eq(businesses.id, id)).limit(1);
+      return business ?? null;
+    } catch (repairError) {
+      if (!isBusinessSchemaDriftError(repairError)) throw repairError;
+    }
     warnOnce("businesses:get:schema", "business read falling back without full schema", {
       businessId: id,
       error: error instanceof Error ? error.message : String(error),
@@ -326,6 +377,13 @@ async function loadBusinessByOwner(ownerId: string): Promise<BusinessRecord | nu
     return business ?? null;
   } catch (error) {
     if (!isBusinessSchemaDriftError(error)) throw error;
+    try {
+      await ensureBusinessAutomationColumns();
+      const [business] = await db.select().from(businesses).where(eq(businesses.ownerId, ownerId)).limit(1);
+      return business ?? null;
+    } catch (repairError) {
+      if (!isBusinessSchemaDriftError(repairError)) throw repairError;
+    }
     warnOnce("businesses:list:schema", "business list falling back without full schema", {
       ownerId,
       error: error instanceof Error ? error.message : String(error),
@@ -888,43 +946,60 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
       .returning();
   } catch (error) {
     if (!isBusinessSchemaDriftError(error)) throw error;
-    warnOnce("businesses:update:schema", "business update falling back without full schema", {
-      businessId: req.params.id,
-      userId: req.userId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    const legacyUpdates: Record<string, unknown> = {};
-    if (parsed.data.name !== undefined) legacyUpdates.name = parsed.data.name;
-    if (parsed.data.type !== undefined) legacyUpdates.type = parsed.data.type;
-    if (parsed.data.email !== undefined) legacyUpdates.email = parsed.data.email ?? null;
-    if (parsed.data.phone !== undefined) legacyUpdates.phone = parsed.data.phone ?? null;
-    if (parsed.data.address !== undefined) legacyUpdates.address = parsed.data.address ?? null;
-    if (parsed.data.city !== undefined) legacyUpdates.city = parsed.data.city ?? null;
-    if (parsed.data.state !== undefined) legacyUpdates.state = parsed.data.state ?? null;
-    if (parsed.data.zip !== undefined) legacyUpdates.zip = parsed.data.zip ?? null;
-    if (parsed.data.staffCount !== undefined) legacyUpdates.staffCount = parsed.data.staffCount ?? null;
-    if (parsed.data.operatingHours !== undefined) legacyUpdates.operatingHours = parsed.data.operatingHours ?? null;
-
-    const [legacyUpdated] = await db
-      .update(businesses)
-      .set(legacyUpdates)
-      .where(eq(businesses.id, req.params.id))
-      .returning({
-        id: businesses.id,
-        ownerId: businesses.ownerId,
-        name: businesses.name,
-        type: businesses.type,
-        email: businesses.email,
-        phone: businesses.phone,
-        address: businesses.address,
-        city: businesses.city,
-        state: businesses.state,
-        zip: businesses.zip,
-        staffCount: businesses.staffCount,
-        operatingHours: businesses.operatingHours,
-        createdAt: businesses.createdAt,
+    try {
+      await ensureBusinessAutomationColumns();
+      [updated] = await db
+        .update(businesses)
+        .set(updates)
+        .where(eq(businesses.id, req.params.id))
+        .returning();
+    } catch (repairError) {
+      if (!isBusinessSchemaDriftError(repairError)) throw repairError;
+    }
+    if (!updated) {
+      warnOnce("businesses:update:schema", "business update falling back without full schema", {
+        businessId: req.params.id,
+        userId: req.userId,
+        error: error instanceof Error ? error.message : String(error),
       });
-    updated = legacyUpdated ? coerceBusinessRecord(legacyUpdated) : undefined;
+      const legacyUpdates: Record<string, unknown> = {};
+      if (parsed.data.name !== undefined) legacyUpdates.name = parsed.data.name;
+      if (parsed.data.type !== undefined) legacyUpdates.type = parsed.data.type;
+      if (parsed.data.email !== undefined) legacyUpdates.email = parsed.data.email ?? null;
+      if (parsed.data.phone !== undefined) legacyUpdates.phone = parsed.data.phone ?? null;
+      if (parsed.data.address !== undefined) legacyUpdates.address = parsed.data.address ?? null;
+      if (parsed.data.city !== undefined) legacyUpdates.city = parsed.data.city ?? null;
+      if (parsed.data.state !== undefined) legacyUpdates.state = parsed.data.state ?? null;
+      if (parsed.data.zip !== undefined) legacyUpdates.zip = parsed.data.zip ?? null;
+      if (parsed.data.staffCount !== undefined) legacyUpdates.staffCount = parsed.data.staffCount ?? null;
+      if (parsed.data.operatingHours !== undefined) legacyUpdates.operatingHours = parsed.data.operatingHours ?? null;
+
+      const [legacyUpdated] = await db
+        .update(businesses)
+        .set(legacyUpdates)
+        .where(eq(businesses.id, req.params.id))
+        .returning({
+          id: businesses.id,
+          ownerId: businesses.ownerId,
+          name: businesses.name,
+          type: businesses.type,
+          email: businesses.email,
+          phone: businesses.phone,
+          address: businesses.address,
+          city: businesses.city,
+          state: businesses.state,
+          zip: businesses.zip,
+          staffCount: businesses.staffCount,
+          operatingHours: businesses.operatingHours,
+          createdAt: businesses.createdAt,
+        });
+      updated = legacyUpdated ? coerceBusinessRecord(legacyUpdated) : undefined;
+    } else {
+      warnOnce("businesses:update:schema-repaired", "business update retried after repairing missing automation columns", {
+        businessId: req.params.id,
+        userId: req.userId,
+      });
+    }
   }
   if (!updated) throw new NotFoundError("Business not found.");
 
