@@ -2542,9 +2542,11 @@ function DailyOperationsCard({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             {isOperational ? "Operations overview" : "Core system setup"}
           </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-            {isOperational ? "Use this as the shop command surface" : "Finish the records that make the system dependable"}
-          </h2>
+          {!isOperational ? (
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+              Finish the records that make the system dependable
+            </h2>
+          ) : null}
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
           <Button asChild className="min-h-[46px] rounded-xl bg-slate-950 text-white hover:bg-slate-800">
