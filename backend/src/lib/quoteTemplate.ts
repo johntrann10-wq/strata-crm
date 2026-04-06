@@ -217,8 +217,8 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
           ${publicRevisionRequestUrl ? `<section id="request-revision" style="margin-top:18px;">
             <form method="post" action="${escapeHtml(publicRevisionRequestUrl)}" class="field-grid">
               <label class="field-label">
-                Requested changes
-                <textarea class="field-textarea" name="message" placeholder="Tell the shop what you want adjusted before approval."></textarea>
+                Requested changes (optional)
+                <textarea class="field-textarea" name="message" placeholder="Tell the shop what you want adjusted before approval, or leave this blank and just send the request."></textarea>
               </label>
               <button class="sub-cta" type="submit" style="justify-self:start; margin-top:0;">Request estimate changes</button>
             </form>

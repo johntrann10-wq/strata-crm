@@ -626,8 +626,8 @@ quotesRouter.post("/:id/public-request-revision", express.urlencoded({ extended:
 
   const parsed = publicRevisionRequestSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
-  const message = parsed.data.message?.trim() ?? "";
-  if (!message) throw new BadRequestError("Share what you want adjusted before the shop can revise this estimate.");
+  const message =
+    parsed.data.message?.trim() || "Customer requested changes to this estimate before approval.";
 
   const [existing] = await db
     .select({
