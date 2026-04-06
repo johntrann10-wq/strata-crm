@@ -10,7 +10,7 @@ import type { RootOutletContext } from "../root";
 // let the app layout handle auth once the app loads.
 export default function PublicLayout() {
   const context = useOutletContext<RootOutletContext>();
-  const supportEmail = "support@stratacrm.com";
+  const supportEmail = "support@stratacrm.app";
   const supportHours = "Mon-Fri 9am-5pm PST";
   const extendedSupportHours = "Mon-Sun 8am-8pm PST";
 

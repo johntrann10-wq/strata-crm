@@ -85,7 +85,7 @@ export default function PrivacyPolicyPage() {
         {
           title: "Contact us",
           body:
-            "For privacy questions or requests, contact Strata CRM at support@stratacrm.com.",
+            "For privacy questions or requests, contact Strata CRM at support@stratacrm.app.",
         },
       ]}
     />

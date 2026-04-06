@@ -91,7 +91,7 @@ export default function TermsPage() {
         {
           title: "Contact us",
           body:
-            "Questions about these Terms can be sent to support@stratacrm.com.",
+            "Questions about these Terms can be sent to support@stratacrm.app.",
         },
       ]}
     />
