@@ -148,15 +148,13 @@ export function useFindOne(
     };
   }, []);
 
-  // Ensure we don't keep stale data when switching between "signed in" and "signed out".
+  // Ensure we don't keep stale data when switching between records.
   useEffect(() => {
-    if (id == null || id === "") {
-      requestIdRef.current += 1;
-      setData(undefined);
-      setError(null);
-      setFetching(false);
-    }
-  }, [id]);
+    requestIdRef.current += 1;
+    setData(undefined);
+    setError(null);
+    setFetching(Boolean(id) && !opts?.pause);
+  }, [id, opts?.pause]);
 
   const optsKey = useMemo(
     () => `${stableKey(opts?.select)}|${opts?.pause ? "1" : "0"}|${opts?.live ? "1" : "0"}`,
