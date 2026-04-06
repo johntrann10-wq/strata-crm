@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import { API_BASE } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -52,7 +52,7 @@ function buildApiUrl(path: string): string {
 export function meta() {
   return [
     { title: "Request service | Strata" },
-    { name: "description", content: "Send your service request and let the shop follow up quickly." },
+    { name: "description", content: "Share a few details so the shop can reach out with the right next step." },
   ];
 }
 
@@ -68,7 +68,7 @@ export default function PublicLeadCapturePage() {
 
   useEffect(() => {
     if (!businessId) {
-      setError("This lead form link is invalid.");
+      setError("This request form link is invalid.");
       setLoading(false);
       return;
     }
@@ -80,7 +80,7 @@ export default function PublicLeadCapturePage() {
       .then(async (response) => {
         if (!response.ok) {
           const payload = (await response.json().catch(() => ({}))) as { message?: string };
-          throw new Error(payload.message || "This lead form is unavailable right now.");
+          throw new Error(payload.message || "This request form is unavailable right now.");
         }
         return response.json() as Promise<LeadConfig>;
       })
@@ -88,7 +88,9 @@ export default function PublicLeadCapturePage() {
         if (!cancelled) setConfig(payload);
       })
       .catch((fetchError) => {
-        if (!cancelled) setError(fetchError instanceof Error ? fetchError.message : "This lead form is unavailable right now.");
+        if (!cancelled) {
+          setError(fetchError instanceof Error ? fetchError.message : "This request form is unavailable right now.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -100,17 +102,10 @@ export default function PublicLeadCapturePage() {
   }, [businessId]);
 
   const source = useMemo(
-    () =>
-      searchParams.get("source") ||
-      searchParams.get("utm_source") ||
-      searchParams.get("ref") ||
-      "website",
+    () => searchParams.get("source") || searchParams.get("utm_source") || searchParams.get("ref") || "website",
     [searchParams]
   );
-  const campaign = useMemo(
-    () => searchParams.get("campaign") || searchParams.get("utm_campaign") || "",
-    [searchParams]
-  );
+  const campaign = useMemo(() => searchParams.get("campaign") || searchParams.get("utm_campaign") || "", [searchParams]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -149,22 +144,24 @@ export default function PublicLeadCapturePage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <Card className="border-slate-200/80 bg-white/90 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
             <CardHeader className="space-y-4">
-              <Badge variant="secondary" className="w-fit">New service request</Badge>
+              <Badge variant="secondary" className="w-fit">
+                Service request
+              </Badge>
               <div className="space-y-2">
                 <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
-                  {loading ? "Loading request form..." : `Reach ${config?.businessName ?? "the shop"} fast`}
+                  {loading ? "Loading request form..." : `Contact ${config?.businessName ?? "the shop"}`}
                 </h1>
                 <p className="max-w-xl text-sm leading-6 text-slate-600">
-                  Share the basics and the shop can follow up with the right next step instead of starting from scratch.
+                  Share a few details about your vehicle or service needs and the shop can follow up with the right next step.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-start gap-3">
                   <ShieldCheck className="mt-0.5 h-5 w-5 text-emerald-600" />
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-slate-900">Built for quick follow-through</p>
+                    <p className="text-sm font-medium text-slate-900">Quick and secure</p>
                     <p className="text-sm text-slate-600">
-                      Your request lands directly in the shop&apos;s lead queue so they can call, quote, or book without retyping your information.
+                      Your request goes straight to the shop so they can call, quote, or book without asking you to repeat everything.
                     </p>
                   </div>
                 </div>
@@ -172,17 +169,19 @@ export default function PublicLeadCapturePage() {
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-slate-600">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="font-medium text-slate-900">What to include</p>
-                <p className="mt-1">The best requests usually include your contact method, vehicle if known, and what you are trying to get done.</p>
+                <p className="font-medium text-slate-900">What helps most</p>
+                <p className="mt-1">
+                  A phone number or email, your vehicle if you know it, and a quick note about the work you want done.
+                </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="font-medium text-slate-900">Source tracking</p>
+                <p className="font-medium text-slate-900">Request reference</p>
                 <p className="mt-1">
-                  This form keeps the shop&apos;s source attribution intact for reporting and follow-up.
+                  This helps the shop keep track of where your request came from so they can follow up properly.
                 </p>
                 <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
                   {source}
-                  {campaign ? ` • ${campaign}` : ""}
+                  {campaign ? ` | ${campaign}` : ""}
                 </p>
               </div>
             </CardContent>
@@ -191,15 +190,13 @@ export default function PublicLeadCapturePage() {
           <Card className="border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.1)]">
             <CardHeader>
               <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Tell the shop what you need</h2>
-              <p className="text-sm text-slate-600">
-                This should only take a minute.
-              </p>
+              <p className="text-sm text-slate-600">This only takes about a minute.</p>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="flex items-center gap-3 rounded-xl border border-dashed px-4 py-6 text-sm text-slate-600">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading lead form...
+                  Loading request form...
                 </div>
               ) : error && !submitted ? (
                 <div className="space-y-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-900">
@@ -215,7 +212,7 @@ export default function PublicLeadCapturePage() {
                     <div>
                       <p className="text-base font-semibold text-emerald-950">Request received</p>
                       <p className="mt-1 text-sm text-emerald-900">
-                        {config?.businessName ?? "The shop"} now has your information and can follow up from their lead queue.
+                        {config?.businessName ?? "The shop"} has your information and can follow up with you soon.
                       </p>
                     </div>
                   </div>
@@ -225,40 +222,87 @@ export default function PublicLeadCapturePage() {
                 </div>
               ) : (
                 <form className="space-y-4" onSubmit={handleSubmit}>
-                  <input type="text" name="website" value={form.website} onChange={(e) => setForm((current) => ({ ...current, website: e.target.value }))} className="hidden" tabIndex={-1} autoComplete="off" />
+                  <input
+                    type="text"
+                    name="website"
+                    value={form.website}
+                    onChange={(e) => setForm((current) => ({ ...current, website: e.target.value }))}
+                    className="hidden"
+                    tabIndex={-1}
+                    autoComplete="off"
+                  />
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="lead-first-name">First name</Label>
-                      <Input id="lead-first-name" value={form.firstName} onChange={(e) => setForm((current) => ({ ...current, firstName: e.target.value }))} required />
+                      <Input
+                        id="lead-first-name"
+                        value={form.firstName}
+                        onChange={(e) => setForm((current) => ({ ...current, firstName: e.target.value }))}
+                        required
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="lead-last-name">Last name</Label>
-                      <Input id="lead-last-name" value={form.lastName} onChange={(e) => setForm((current) => ({ ...current, lastName: e.target.value }))} required />
+                      <Input
+                        id="lead-last-name"
+                        value={form.lastName}
+                        onChange={(e) => setForm((current) => ({ ...current, lastName: e.target.value }))}
+                        required
+                      />
                     </div>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="lead-email">Email</Label>
-                      <Input id="lead-email" type="email" value={form.email} onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))} />
+                      <Input
+                        id="lead-email"
+                        type="email"
+                        value={form.email}
+                        onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}
+                        placeholder="you@example.com"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="lead-phone">Phone</Label>
-                      <Input id="lead-phone" type="tel" value={form.phone} onChange={(e) => setForm((current) => ({ ...current, phone: e.target.value }))} />
+                      <Input
+                        id="lead-phone"
+                        type="tel"
+                        value={form.phone}
+                        onChange={(e) => setForm((current) => ({ ...current, phone: e.target.value }))}
+                        placeholder="Best number to reach you"
+                      />
                     </div>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="lead-vehicle">Vehicle if known</Label>
-                      <Input id="lead-vehicle" value={form.vehicle} onChange={(e) => setForm((current) => ({ ...current, vehicle: e.target.value }))} placeholder="2022 Model Y, F-150, 911..." />
+                      <Input
+                        id="lead-vehicle"
+                        value={form.vehicle}
+                        onChange={(e) => setForm((current) => ({ ...current, vehicle: e.target.value }))}
+                        placeholder="2022 Model Y, F-150, 911..."
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="lead-service">Service interest</Label>
-                      <Input id="lead-service" value={form.serviceInterest} onChange={(e) => setForm((current) => ({ ...current, serviceInterest: e.target.value }))} placeholder="Tint, coating, maintenance, quote..." />
+                      <Input
+                        id="lead-service"
+                        value={form.serviceInterest}
+                        onChange={(e) => setForm((current) => ({ ...current, serviceInterest: e.target.value }))}
+                        placeholder="Tint, coating, maintenance, quote..."
+                      />
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="lead-summary">What are you trying to get done?</Label>
-                    <Textarea id="lead-summary" value={form.summary} onChange={(e) => setForm((current) => ({ ...current, summary: e.target.value }))} rows={5} className="resize-none" placeholder="Share timing, concerns, package questions, or anything the shop should know before contacting you." />
+                    <Label htmlFor="lead-summary">How can the shop help?</Label>
+                    <Textarea
+                      id="lead-summary"
+                      value={form.summary}
+                      onChange={(e) => setForm((current) => ({ ...current, summary: e.target.value }))}
+                      rows={5}
+                      className="resize-none"
+                      placeholder="Share timing, questions, concerns, or anything the shop should know before reaching out."
+                    />
                   </div>
                   <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <Checkbox
@@ -269,17 +313,17 @@ export default function PublicLeadCapturePage() {
                     />
                     <div className="space-y-1">
                       <Label htmlFor="lead-marketing-opt-in" className="cursor-pointer">
-                        I&apos;m okay receiving follow-up from this shop
+                        It&apos;s okay for this shop to follow up with me
                       </Label>
                       <p className="text-xs text-slate-600">
-                        This helps the shop send booking and service follow-up when it makes sense.
+                        This allows the shop to follow up about your request and related service updates.
                       </p>
                     </div>
                   </div>
                   {error ? <p className="text-sm text-rose-700">{error}</p> : null}
                   <Button type="submit" className="w-full sm:w-auto" disabled={submitting}>
                     {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Send request
+                    Submit request
                   </Button>
                 </form>
               )}
