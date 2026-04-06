@@ -1732,35 +1732,55 @@ export default function SettingsPage() {
       toast.error("Add a booking link before enabling lapsed client automations.");
       return;
     }
-    await update({
-      id: business.id,
-      leadCaptureEnabled: automationSettings.leadCaptureEnabled,
-      leadAutoResponseEnabled: automationSettings.leadAutoResponseEnabled,
-      leadAutoResponseEmailEnabled: automationSettings.leadAutoResponseEmailEnabled,
-      leadAutoResponseSmsEnabled: automationSettings.leadAutoResponseSmsEnabled,
-      notificationAppointmentConfirmationEmailEnabled: automationSettings.appointmentConfirmationEmailEnabled,
-      missedCallTextBackEnabled: automationSettings.missedCallTextBackEnabled,
-      automationUncontactedLeadsEnabled: automationSettings.uncontactedLeadsEnabled,
-      automationUncontactedLeadHours: automationSettings.uncontactedLeadHours,
-      automationAppointmentRemindersEnabled: automationSettings.appointmentRemindersEnabled,
-      notificationAppointmentReminderEmailEnabled: automationSettings.appointmentReminderEmailEnabled,
-      automationAppointmentReminderHours: automationSettings.appointmentReminderHours,
-      automationSendWindowStartHour: automationSettings.sendWindowStartHour,
-      automationSendWindowEndHour: automationSettings.sendWindowEndHour,
-      automationAbandonedQuotesEnabled: automationSettings.abandonedQuotesEnabled,
-      notificationAbandonedQuoteEmailEnabled: automationSettings.abandonedQuoteEmailEnabled,
-      automationAbandonedQuoteHours: automationSettings.abandonedQuoteHours,
-      automationReviewRequestsEnabled: automationSettings.reviewRequestsEnabled,
-      notificationReviewRequestEmailEnabled: automationSettings.reviewRequestEmailEnabled,
-      automationReviewRequestDelayHours: automationSettings.reviewRequestDelayHours,
-      reviewRequestUrl: automationSettings.reviewRequestUrl.trim() || null,
-      automationLapsedClientsEnabled: automationSettings.lapsedClientsEnabled,
-      notificationLapsedClientEmailEnabled: automationSettings.lapsedClientEmailEnabled,
-      automationLapsedClientMonths: automationSettings.lapsedClientMonths,
-      bookingRequestUrl: automationSettings.bookingRequestUrl.trim() || null,
-    });
-    await refreshAutomationInsights();
-    toast.success("Automation settings saved");
+    try {
+      const updatedBusiness = await update({
+        id: business.id,
+        leadCaptureEnabled: automationSettings.leadCaptureEnabled,
+        leadAutoResponseEnabled: automationSettings.leadAutoResponseEnabled,
+        leadAutoResponseEmailEnabled: automationSettings.leadAutoResponseEmailEnabled,
+        leadAutoResponseSmsEnabled: automationSettings.leadAutoResponseSmsEnabled,
+        notificationAppointmentConfirmationEmailEnabled: automationSettings.appointmentConfirmationEmailEnabled,
+        missedCallTextBackEnabled: automationSettings.missedCallTextBackEnabled,
+        automationUncontactedLeadsEnabled: automationSettings.uncontactedLeadsEnabled,
+        automationUncontactedLeadHours: automationSettings.uncontactedLeadHours,
+        automationAppointmentRemindersEnabled: automationSettings.appointmentRemindersEnabled,
+        notificationAppointmentReminderEmailEnabled: automationSettings.appointmentReminderEmailEnabled,
+        automationAppointmentReminderHours: automationSettings.appointmentReminderHours,
+        automationSendWindowStartHour: automationSettings.sendWindowStartHour,
+        automationSendWindowEndHour: automationSettings.sendWindowEndHour,
+        automationAbandonedQuotesEnabled: automationSettings.abandonedQuotesEnabled,
+        notificationAbandonedQuoteEmailEnabled: automationSettings.abandonedQuoteEmailEnabled,
+        automationAbandonedQuoteHours: automationSettings.abandonedQuoteHours,
+        automationReviewRequestsEnabled: automationSettings.reviewRequestsEnabled,
+        notificationReviewRequestEmailEnabled: automationSettings.reviewRequestEmailEnabled,
+        automationReviewRequestDelayHours: automationSettings.reviewRequestDelayHours,
+        reviewRequestUrl: automationSettings.reviewRequestUrl.trim() || null,
+        automationLapsedClientsEnabled: automationSettings.lapsedClientsEnabled,
+        notificationLapsedClientEmailEnabled: automationSettings.lapsedClientEmailEnabled,
+        automationLapsedClientMonths: automationSettings.lapsedClientMonths,
+        bookingRequestUrl: automationSettings.bookingRequestUrl.trim() || null,
+      });
+      const persistedLeadCaptureEnabled =
+        typeof (updatedBusiness as { leadCaptureEnabled?: unknown } | null)?.leadCaptureEnabled === "boolean"
+          ? Boolean((updatedBusiness as { leadCaptureEnabled?: boolean }).leadCaptureEnabled)
+          : null;
+      if (
+        persistedLeadCaptureEnabled !== null &&
+        persistedLeadCaptureEnabled !== automationSettings.leadCaptureEnabled
+      ) {
+        throw new Error(
+          "Lead capture did not persist. The backend deploy or database migration is likely still behind this settings screen."
+        );
+      }
+      await refreshAutomationInsights();
+      toast.success("Automation settings saved");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Automation settings could not be saved."
+      );
+    }
   };
 
   const handleSaveIntegrationSettings = async () => {
