@@ -716,6 +716,8 @@ export async function sendInvoiceEmail(options: {
   portalUrl?: string | null;
   message?: string | null;
 }) {
+  const primaryUrl = options.invoicePayUrl ?? options.invoiceUrl;
+  const hasDirectPayLink = !!options.invoicePayUrl;
   await sendTemplatedEmail({
     to: options.to,
     templateSlug: "invoice_sent",
@@ -726,7 +728,12 @@ export async function sendInvoiceEmail(options: {
       amount: options.amount,
       invoiceNumber: options.invoiceNumber,
       invoiceUrl: optionalValue(options.invoiceUrl),
-      invoicePayUrl: optionalValue(options.invoicePayUrl ?? options.invoiceUrl),
+      invoicePayUrl: optionalValue(options.invoicePayUrl),
+      invoicePrimaryUrl: optionalValue(primaryUrl),
+      invoicePrimaryLabel: hasDirectPayLink ? "Pay invoice" : "View invoice",
+      invoiceDetailsCopy: hasDirectPayLink
+        ? "Use the payment link to pay the invoice now, or open the invoice to review the completed work, payment status, and your service record."
+        : "Open the invoice to review the completed work, payment status, and your service record.",
       portalUrl: optionalValue(options.portalUrl),
       message: optionalValue(options.message),
     },

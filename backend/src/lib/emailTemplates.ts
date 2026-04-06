@@ -672,13 +672,13 @@ If you are ready to move forward, contact us directly and we will help with the 
       title: "Your invoice is ready",
       introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">Invoice <strong>{{invoiceNumber}}</strong> is ready for <strong>{{amount}}</strong>.</p>`,
       bodyHtml:
-        renderInfoCard("Details", "Use the payment link to pay the invoice now, or open the invoice to review the completed work, payment status, and your service record.") +
+        renderInfoCard("Details", "{{invoiceDetailsCopy}}") +
         renderInfoCard("Message from the shop", "{{message}}") +
         renderInfoCard("Invoice page", "{{invoiceUrl}}") +
         renderInfoCard("Customer hub", "View all active estimates, invoices, appointments, and vehicles from one place:<br>{{portalUrl}}"),
-      ctaLabel: "Pay invoice",
-      ctaUrl: "{{invoicePayUrl}}",
-      ctaHint: `Payment link: {{invoicePayUrl}}`,
+      ctaLabel: "{{invoicePrimaryLabel}}",
+      ctaUrl: "{{invoicePrimaryUrl}}",
+      ctaHint: `Primary link: {{invoicePrimaryUrl}}`,
       showCtaHint: false,
       footerNote: "If you have any questions, contact us directly.<br>{{businessPhone}}<br>{{businessEmail}}<br>{{businessAddress}}",
     }),
@@ -690,10 +690,10 @@ Hi {{clientName}},
 
 Invoice {{invoiceNumber}} is ready for {{amount}}.
 
-Details: Use the payment link to pay the invoice now, or open the invoice to review the completed work, payment status, and your service record.
+Details: {{invoiceDetailsCopy}}
 {{message}}
 
-Pay invoice: {{invoicePayUrl}}
+{{invoicePrimaryLabel}}: {{invoicePrimaryUrl}}
 
 Invoice page: {{invoiceUrl}}
 
