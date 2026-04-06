@@ -585,7 +585,7 @@ export default function NewAppointmentPage() {
   const mobileTimeSelectClassName =
     mobileControlClassName;
   const dateInputClassName =
-    "h-10 px-3.5 py-2 text-sm font-normal [font-variant-numeric:tabular-nums]";
+    "h-10 w-full min-w-0 rounded-xl border-input/90 bg-background/85 px-3.5 py-2 text-sm font-normal [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
   const readOnlyTimeClassName =
     "flex h-10 w-full items-center rounded-xl border border-input/90 bg-muted/40 pl-10 pr-3 text-sm font-medium text-muted-foreground [font-variant-numeric:tabular-nums]";
   const mobileFormSelectClassName =

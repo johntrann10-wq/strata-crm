@@ -384,7 +384,10 @@ function FinancesContent() {
       </div>
 
       <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
-        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]">
+        <DialogContent
+          className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
           <div className="p-6">
           <DialogHeader>
             <DialogTitle>{editingExpense ? "Edit Expense" : "Add Expense"}</DialogTitle>
@@ -396,7 +399,13 @@ function FinancesContent() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="expense-date">Date</Label>
-                <Input id="expense-date" type="date" value={expenseForm.expenseDate} onChange={(event) => setExpenseForm((current) => ({ ...current, expenseDate: event.target.value }))} />
+                <Input
+                  id="expense-date"
+                  type="date"
+                  value={expenseForm.expenseDate}
+                  onChange={(event) => setExpenseForm((current) => ({ ...current, expenseDate: event.target.value }))}
+                  className="h-10 w-full min-w-0 rounded-xl border-input/90 bg-background/85 px-3.5 py-2 text-sm font-normal [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="expense-amount">Amount</Label>
