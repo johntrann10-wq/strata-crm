@@ -603,7 +603,10 @@ export function useActionForm(
       const form = e?.currentTarget;
       if (form instanceof HTMLFormElement) {
         const fd = new FormData(form);
-        payload = Object.fromEntries(fd.entries()) as Record<string, unknown>;
+        payload = {
+          ...values,
+          ...Object.fromEntries(fd.entries()),
+        } as Record<string, unknown>;
         if (send?.length) {
           payload = Object.fromEntries(send.map((k) => [k, payload[k]]));
         }
