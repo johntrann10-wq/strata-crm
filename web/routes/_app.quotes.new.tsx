@@ -442,31 +442,6 @@ export default function NewQuotePage() {
               <CardTitle className="text-base font-semibold">Quoted services</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">{creationPreset.title}</p>
-                  <p className="text-sm text-muted-foreground">{creationPreset.summary}</p>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setNotes(creationPreset.quoteNotes)}>
-                      Apply quote notes
-                    </Button>
-                    {creationPreset.suggestedDepositPercent ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const nextNotes = `${creationPreset.quoteNotes}\nDeposit target: ${creationPreset.suggestedDepositPercent}%`;
-                          setNotes(nextNotes);
-                        }}
-                      >
-                        Add deposit guidance
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-
               {lineItems.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No line items yet. Add one below.
@@ -878,6 +853,7 @@ export default function NewQuotePage() {
                   type="date"
                   value={expiresAt}
                   onChange={(e) => setExpiresAt(e.target.value)}
+                  className="border-input/90 min-w-0 appearance-none bg-background/85 pr-10 [font-variant-numeric:tabular-nums] [color-scheme:light] [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0"
                 />
               </div>
               <div className="hidden space-y-4 lg:block">{quoteChargeControls}</div>

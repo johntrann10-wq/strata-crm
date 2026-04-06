@@ -704,6 +704,7 @@ export default function NewInvoicePage() {
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
+                className="border-input/90 min-w-0 appearance-none bg-background/85 pr-10 [font-variant-numeric:tabular-nums] [color-scheme:light] [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0"
               />
             </div>
           </CardContent>
