@@ -260,42 +260,6 @@ const featureCategories = [
 
 const calendarPreviewDays = ["Mon 24", "Tue 25", "Wed 26", "Thu 27", "Fri 28"];
 
-const calendarPreviewColumns = [
-  {
-    day: "Mon 24",
-    highlights: [
-      { time: "8:00", title: "Detail + ceramic", tone: "amber" },
-      { time: "12:30", title: "Tint consult", tone: "slate" },
-    ],
-  },
-  {
-    day: "Tue 25",
-    highlights: [
-      { time: "9:00", title: "PPF front clip", tone: "orange" },
-      { time: "1:00", title: "Brake service", tone: "slate" },
-      { time: "4:30", title: "Pickup ready", tone: "emerald" },
-    ],
-  },
-  {
-    day: "Wed 26",
-    highlights: [
-      { time: "10:00", title: "Invoice follow-up", tone: "slate" },
-      { time: "2:00", title: "Interior reset", tone: "amber" },
-    ],
-  },
-  {
-    day: "Thu 27",
-    highlights: [
-      { time: "8:30", title: "Mobile detail", tone: "orange" },
-      { time: "11:30", title: "Deposit due", tone: "slate" },
-    ],
-  },
-  {
-    day: "Fri 28",
-    highlights: [{ time: "9:30", title: "Wrap delivery", tone: "emerald" }],
-  },
-];
-
 const homeSchema = {
   "@context": "https://schema.org",
   "@graph": [
@@ -422,7 +386,7 @@ export default function LandingPage() {
           }}
         />
 
-        <div className="relative z-10 mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,420px)] lg:items-start">
+        <div className="relative z-10 mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,360px)] lg:items-start">
           <div className="space-y-7">
             <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/88 px-3.5 py-1.5 text-sm font-medium text-orange-700 shadow-sm">
               <Sparkles className="h-4 w-4" />
@@ -501,124 +465,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="relative rounded-[30px] border border-orange-200/80 bg-[linear-gradient(180deg,#fffdfb_0%,#fff7f2_100%)] p-4 shadow-[0_24px_80px_rgba(249,115,22,0.14)] sm:p-5">
-            <div className="absolute -right-3 -top-3 hidden rounded-2xl border border-orange-200 bg-white/95 px-3 py-2 shadow-lg sm:block">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-orange-700">Built for the real day</p>
-              <p className="mt-1 text-sm font-medium text-gray-950">Calendar, CRM, billing, portal</p>
-            </div>
-
-            <div className="overflow-hidden rounded-[26px] border border-gray-900/80 bg-gray-950 shadow-[0_24px_60px_rgba(15,23,42,0.28)]">
-              <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                </div>
-                <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-white/72">
-                  Strata calendar
-                </div>
-              </div>
-
-              <div className="grid gap-0 lg:grid-cols-[92px_minmax(0,1fr)]">
-                <div className="hidden border-r border-white/10 bg-[linear-gradient(180deg,#101826_0%,#0b1220_100%)] p-3 lg:block">
-                  <div className="rounded-2xl border border-orange-400/25 bg-orange-500/10 px-3 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-200">Today</p>
-                    <p className="mt-2 text-2xl font-bold text-white">25</p>
-                    <p className="text-xs text-white/60">Tuesday</p>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {["Schedule", "Clients", "Quotes", "Invoices", "Portal"].map((item) => (
-                      <div key={item} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/70">
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="bg-[linear-gradient(180deg,#fff8f3_0%,#ffffff_100%)] p-3 sm:p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-700">Week view</p>
-                      <p className="mt-1 text-lg font-semibold tracking-tight text-gray-950">A calmer operating screen for the front desk</p>
-                    </div>
-                    <div className="rounded-2xl border border-orange-200 bg-white px-3 py-2 text-xs font-medium text-orange-700 shadow-sm">
-                      3 active deposits
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-5 gap-2">
-                    {calendarPreviewColumns.map((column) => (
-                      <div key={column.day} className="rounded-2xl border border-orange-100 bg-white/92 p-2 shadow-sm">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">{column.day}</p>
-                        <div className="mt-2 space-y-2">
-                          {column.highlights.map((event) => (
-                            <div
-                              key={`${column.day}-${event.time}-${event.title}`}
-                              className={cn(
-                                "rounded-xl border px-2.5 py-2 text-left",
-                                event.tone === "orange" && "border-orange-200 bg-orange-50",
-                                event.tone === "amber" && "border-amber-200 bg-amber-50",
-                                event.tone === "emerald" && "border-emerald-200 bg-emerald-50",
-                                event.tone === "slate" && "border-slate-200 bg-slate-50"
-                              )}
-                            >
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">{event.time}</p>
-                              <p className="mt-1 text-[11px] font-medium leading-4 text-gray-900">{event.title}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-                    <div className="rounded-2xl border border-orange-100 bg-white p-4 shadow-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-700">Current job</p>
-                          <p className="mt-1 text-base font-semibold text-gray-950">PPF front clip | 2024 Porsche Macan</p>
-                        </div>
-                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                          Pickup ready 4:30 PM
-                        </span>
-                      </div>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Client</p>
-                          <p className="mt-1 text-sm font-medium text-gray-950">Monica S.</p>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Deposit</p>
-                          <p className="mt-1 text-sm font-medium text-gray-950">$150 paid</p>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Next action</p>
-                          <p className="mt-1 text-sm font-medium text-gray-950">Send invoice</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[28px] border border-orange-100 bg-gray-950 p-4 text-white shadow-[0_16px_50px_rgba(15,23,42,0.18)]">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-300">Live in the same system</p>
-                      <div className="mt-3 space-y-2.5">
-                        {[
-                          "Customer hub link sent",
-                          "Review request automation enabled",
-                          "Twilio confirmations ready",
-                          "Stripe connected for invoice collection",
-                        ].map((item) => (
-                          <div key={item} className="flex items-start gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/84">
-                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-300" />
-                            <span>{item}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <div className="mt-4 rounded-3xl border border-orange-100 bg-white/92 p-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
@@ -640,7 +486,6 @@ export default function LandingPage() {
                 </Link>
               </div>
             </div>
-          </div>
         </div>
       </section>
 
