@@ -26,7 +26,8 @@ export default function ProfilePage() {
     : user.hasPassword
       ? "Email and password"
       : "Password not added";
-  const canChangePassword = Boolean(user.hasPassword);
+  const canChangePassword = Boolean(user.hasPassword && !user.googleProfileId);
+  const canSetPasswordFromGoogle = Boolean(user.googleProfileId);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
@@ -77,16 +78,17 @@ export default function ProfilePage() {
             <SecurityRow label="Sign-in method" value={authMethod} />
             <SecurityRow
               label="Password access"
-              value={canChangePassword ? "Enabled" : "Not added yet"}
+              value={user.hasPassword ? "Enabled" : "Not added yet"}
             />
             <div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
-              {canChangePassword
-                ? user.googleProfileId
-                  ? "This Google-connected account already has a password. If you don't know it, use reset password instead of change password."
-                  : "If you ever forget your password, use the forgot-password flow from sign-in to reset it securely."
-                : user.googleProfileId
-                ? "Add a password if you want a fallback login option alongside Google."
-                : "Add a password so this account has a direct email login option."}
+              {user.googleProfileId
+                ? user.hasPassword
+                  ? "This Google-connected account can replace its password directly from Profile whenever you want a new fallback login."
+                  : "Add a password if you want a fallback login option alongside Google."
+                : canChangePassword
+                ? "If you ever forget your password, use the forgot-password flow from sign-in to reset it securely."
+                : 
+                  "Add a password so this account has a direct email login option."}
             </div>
             <Button asChild variant="outline" size="sm">
               <Link to={`/forgot-password?email=${encodeURIComponent(user.email)}`}>Open forgot-password flow</Link>
@@ -120,7 +122,7 @@ export default function ProfilePage() {
               </p>
               <p className="mt-1 text-muted-foreground">
                 {user.googleProfileId
-                  ? canChangePassword
+                  ? user.hasPassword
                     ? "Google is currently your primary login path, and this account also has a password fallback."
                     : "Google is currently your primary login path."
                   : "You can sign in directly with your email and password."}
@@ -130,7 +132,11 @@ export default function ProfilePage() {
               <Button variant="outline" onClick={() => setIsEditing(true)}>
                 Update profile
               </Button>
-              {canChangePassword ? (
+              {canSetPasswordFromGoogle ? (
+                <Button onClick={() => setIsSettingPassword(true)}>
+                  {user.hasPassword ? "Reset password" : "Add password"}
+                </Button>
+              ) : canChangePassword ? (
                 <>
                   <Button onClick={() => setIsChangingPassword(true)}>Change password</Button>
                   <Button asChild variant="outline">
@@ -304,6 +310,7 @@ const ChangePasswordModal = (props: { open: boolean; onClose: () => void }) => {
 };
 
 const SetPasswordModal = (props: { open: boolean; onClose: () => void }) => {
+  const { user } = useOutletContext<AuthOutletContext>();
   const [{ fetching }, setPassword] = useAction(api.user.setPassword);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -339,8 +346,14 @@ const SetPasswordModal = (props: { open: boolean; onClose: () => void }) => {
     <Dialog open={props.open} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add password</DialogTitle>
-          <DialogDescription>Add a password so this account can sign in without relying only on Google.</DialogDescription>
+          <DialogTitle>{user.hasPassword ? "Reset password" : "Add password"}</DialogTitle>
+          <DialogDescription>
+            {user.googleProfileId
+              ? user.hasPassword
+                ? "Choose a new password for this Google-connected account. Your Google sign-in will still work."
+                : "Add a password so this account can sign in without relying only on Google."
+              : "Add a password so this account can sign in directly with email and password."}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid items-center gap-3">

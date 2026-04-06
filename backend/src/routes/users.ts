@@ -56,7 +56,7 @@ usersRouter.post("/set-password", requireAuth, async (req: Request, res: Respons
     const userId = req.userId!;
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) throw new NotFoundError("User not found.");
-    if (user.passwordHash) {
+    if (user.passwordHash && !user.googleProfileId) {
       throw new BadRequestError("This account already has a password. Use change password instead.");
     }
     const passwordHash = await bcrypt.hash(newPassword, 10);
