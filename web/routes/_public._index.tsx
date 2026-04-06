@@ -68,7 +68,6 @@ const trustPoints = [
   "Built for automotive service businesses, not generic agencies or sales teams",
   "Month-to-day scheduling flow designed for front-desk speed",
   "Client, vehicle, quote, appointment, deposit, invoice, and payment history in one place",
-  "Role-based team permissions so staff only see the pages they should",
 ];
 
 const switchReasons = [
@@ -248,7 +247,7 @@ const featureCategories = [
     icon: Layers,
     eyebrow: "Connected tools",
     title: "Payments, SMS, calendar, and integrations",
-    description: "Use Strata as the daily operating layer while still connecting the shop’s payment, messaging, calendar, and outbound systems.",
+    description: "Use Strata as the daily operating layer while still connecting the shop's payment, messaging, calendar, and outbound systems.",
     items: [
       "Connected Stripe payments",
       "Twilio SMS workflows",
@@ -395,15 +394,10 @@ export default function LandingPage() {
 
             <div className="space-y-4">
               <h1 className="max-w-4xl text-balance text-4xl font-extrabold tracking-tight text-gray-950 sm:text-5xl lg:text-6xl">
-                Automotive shop software that keeps scheduling, team access, and billing moving in one clear daily flow.
+                Automotive shop software for scheduling, customer records, and billing in one clear daily flow.
               </h1>
               <p className="max-w-3xl text-lg leading-8 text-gray-600 sm:text-xl">
-                Strata CRM helps automotive service businesses manage appointments, clients, vehicles, jobs, quotes, invoices,
-                deposits, and connected Stripe payments without the clutter, guesswork, and broken flow of outdated shop software.
-              </p>
-              <p className="max-w-3xl text-base leading-7 text-gray-600">
-                If your shop is juggling a booking calendar, customer notes, vehicle history, team permissions, quotes, invoices, and deposits across too many places,
-                Strata is designed to bring that work back into one faster, easier system.
+                Strata helps automotive service businesses manage appointments, clients, vehicles, jobs, quotes, invoices, deposits, and connected Stripe payments without the clutter of outdated shop software.
               </p>
             </div>
 
@@ -420,34 +414,46 @@ export default function LandingPage() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
               <Link
-                to="/sign-in"
-                className={cn(
-                  buttonVariants({ size: "lg", variant: "outline" }),
-                  "min-h-[54px] rounded-2xl border-gray-300 bg-white/85 px-7 text-base font-semibold text-gray-900 hover:bg-white"
-                )}
-                onClick={() => trackEvent("marketing_login_clicked", { placement: "hero_secondary" })}
-              >
-                Sign in
-              </Link>
-              <Link
-                to="/pricing"
-                className={cn(
-                  buttonVariants({ size: "lg", variant: "outline" }),
-                  "min-h-[54px] rounded-2xl border-gray-300 bg-white/85 px-7 text-base font-semibold text-gray-900 hover:bg-white"
-                )}
-                onClick={() => trackEvent("pricing_viewed", { placement: "hero_tertiary" })}
-              >
-                View pricing
-              </Link>
-              <Link
                 to="/features"
                 className={cn(
                   buttonVariants({ size: "lg", variant: "outline" }),
                   "min-h-[54px] rounded-2xl border-gray-300 bg-white/85 px-7 text-base font-semibold text-gray-900 hover:bg-white"
                 )}
+                onClick={() => trackEvent("landing_cta_clicked", { placement: "hero_secondary", target: "features" })}
               >
                 Explore features
               </Link>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-medium text-gray-600">
+              <Link
+                to="/pricing"
+                className="inline-flex items-center gap-1 text-orange-700 transition-colors hover:text-orange-800"
+                onClick={() => trackEvent("pricing_viewed", { placement: "hero_text_link" })}
+              >
+                Founder pricing
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+              <Link
+                to="/sign-in"
+                className="inline-flex items-center gap-1 transition-colors hover:text-gray-900"
+                onClick={() => trackEvent("marketing_login_clicked", { placement: "hero_text_link" })}
+              >
+                Sign in
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <div className="rounded-full border border-orange-200 bg-white/88 px-3.5 py-1.5 text-sm font-medium text-gray-700 shadow-sm">
+                First month free
+              </div>
+              <div className="rounded-full border border-orange-200 bg-white/88 px-3.5 py-1.5 text-sm font-medium text-gray-700 shadow-sm">
+                No contracts
+              </div>
+              <div className="rounded-full border border-orange-200 bg-orange-50 px-3.5 py-1.5 text-sm font-semibold text-orange-700 shadow-sm">
+                23 of 25 founder spots left
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
@@ -714,7 +720,7 @@ export default function LandingPage() {
               Strongest for owners who already know generic tools are slowing the shop down.
             </h2>
             <p className="mt-4 text-sm leading-7 text-white/72">
-              Strata is a stronger fit when your team is past the point of “just use a calendar and figure the rest out,” but you still want software that stays clean and fast to use.
+              Strata is a stronger fit when your team is past "just use a calendar and figure the rest out," but still wants software that stays clean and fast to use.
             </p>
             <div className="mt-6 flex flex-col gap-3">
               <Link
@@ -748,7 +754,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Product highlights</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-              Better than outdated shop software that feels heavier than the work itself.
+              Built to feel lighter than the legacy software shops are trying to replace.
             </h2>
             <p className="mt-4 text-lg leading-8 text-gray-600">
               The goal is not more screens. It is faster scheduling, easier intake, stronger customer and vehicle history, better job handoff, and cleaner billing.
