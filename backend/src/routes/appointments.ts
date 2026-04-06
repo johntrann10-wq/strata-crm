@@ -588,7 +588,7 @@ function intersectsRange(params: {
   return true;
 }
 
-type AppointmentDeliveryStatus = "emailed" | "missing_email" | "smtp_disabled" | "email_failed";
+type AppointmentDeliveryStatus = "emailed" | "disabled" | "missing_email" | "smtp_disabled" | "email_failed";
 
 function extractMobileServiceAddress(notes: string | null | undefined): string | null {
   const text = notes?.trim();
@@ -642,12 +642,13 @@ async function buildAppointmentConfirmationPayload(
         clientLastName: string | null;
         clientEmail: string | null;
         clientPhone: string | null;
-      businessName: string | null;
-      businessTimezone: string | null;
-      businessType: string | null;
-      vehicleYear: number | null;
-      vehicleMake: string | null;
-      vehicleModel: string | null;
+        businessName: string | null;
+        businessTimezone: string | null;
+        businessType: string | null;
+        notificationAppointmentConfirmationEmailEnabled: boolean | null;
+        vehicleYear: number | null;
+        vehicleMake: string | null;
+        vehicleModel: string | null;
         locationName: string | null;
         locationAddress: string | null;
         locationTimezone: string | null;
@@ -668,6 +669,8 @@ async function buildAppointmentConfirmationPayload(
         businessName: businesses.name,
         businessTimezone: businesses.timezone,
         businessType: businesses.type,
+        notificationAppointmentConfirmationEmailEnabled:
+          businesses.notificationAppointmentConfirmationEmailEnabled,
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
@@ -704,6 +707,7 @@ async function buildAppointmentConfirmationPayload(
           businessName: businesses.name,
           businessTimezone: sql<string | null>`null`,
           businessType: businesses.type,
+          notificationAppointmentConfirmationEmailEnabled: sql<boolean | null>`true`,
           vehicleYear: vehicles.year,
           vehicleMake: vehicles.make,
           vehicleModel: vehicles.model,
@@ -739,6 +743,7 @@ async function buildAppointmentConfirmationPayload(
           businessName: businesses.name,
           businessTimezone: sql<string | null>`null`,
           businessType: businesses.type,
+          notificationAppointmentConfirmationEmailEnabled: sql<boolean | null>`true`,
           vehicleYear: vehicles.year,
           vehicleMake: vehicles.make,
           vehicleModel: vehicles.model,
@@ -825,6 +830,10 @@ async function buildAppointmentConfirmationPayload(
         ? "Deposit already collected."
         : "No deposit is required for this appointment.",
     message: overrides?.message?.trim() || null,
+    business: {
+      notificationAppointmentConfirmationEmailEnabled:
+        appointmentRow.notificationAppointmentConfirmationEmailEnabled ?? true,
+    },
   };
 }
 
@@ -861,6 +870,38 @@ async function sendAppointmentConfirmationForRecord(
   if (!payload.recipient) {
     logger.warn("Appointment confirmation skipped: client email missing", { appointmentId, businessId: bid });
     return { deliveryStatus: "missing_email", deliveryError: "Client does not have an email address.", recipient: null };
+  }
+  if (!payload.business.notificationAppointmentConfirmationEmailEnabled) {
+    void enqueueTwilioTemplateSms({
+      businessId: bid,
+      templateSlug: "appointment_confirmation",
+      to: payload.recipientPhone,
+      vars: {
+        clientName: payload.clientName,
+        businessName: payload.businessName,
+        dateTime: payload.dateTime,
+        vehicle: payload.vehicle ?? "-",
+        address: payload.address ?? "-",
+        serviceSummary: payload.serviceSummary ?? "-",
+        confirmationUrl: payload.confirmationUrl ?? "",
+        confirmationActionLabel: payload.confirmationActionLabel ?? "View appointment",
+        paymentStatus: payload.paymentStatus ?? "-",
+        message: payload.message ?? "",
+      },
+      entityType: "appointment",
+      entityId: appointmentId,
+    }).catch((error) => {
+      logger.warn("Appointment confirmation SMS enqueue failed", {
+        appointmentId,
+        businessId: bid,
+        error,
+      });
+    });
+    return {
+      deliveryStatus: "disabled",
+      deliveryError: "Appointment confirmation emails are disabled in Settings.",
+      recipient: payload.recipient,
+    };
   }
   if (!isEmailConfigured()) {
     logger.error("Appointment confirmation blocked: SMTP is not configured", { appointmentId, businessId: bid });
@@ -1571,6 +1612,8 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       action:
         confirmationResult.deliveryStatus === "emailed"
           ? "appointment.confirmation_sent"
+          : confirmationResult.deliveryStatus === "disabled"
+            ? "appointment.confirmation_skipped"
           : "appointment.confirmation_failed",
       entityType: "appointment",
       entityId: created.id,
@@ -2406,6 +2449,8 @@ appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, wra
       action:
         confirmationResult.deliveryStatus === "emailed"
           ? "appointment.confirmation_sent"
+          : confirmationResult.deliveryStatus === "disabled"
+            ? "appointment.confirmation_skipped"
           : "appointment.confirmation_failed",
       entityType: "appointment",
       entityId: existing.id,
@@ -2430,12 +2475,16 @@ appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, wra
       ? 200
       : confirmationResult.deliveryStatus === "missing_email"
         ? 400
+        : confirmationResult.deliveryStatus === "disabled"
+          ? 200
         : confirmationResult.deliveryStatus === "smtp_disabled"
           ? 503
           : 502;
 
   res.status(statusCode).json({
-    ok: confirmationResult.deliveryStatus === "emailed",
+    ok:
+      confirmationResult.deliveryStatus === "emailed" ||
+      confirmationResult.deliveryStatus === "disabled",
     ...confirmationResult,
   });
 }));
@@ -2479,6 +2528,8 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (
         action:
           confirmationResult.deliveryStatus === "emailed"
             ? "appointment.confirmation_sent"
+            : confirmationResult.deliveryStatus === "disabled"
+              ? "appointment.confirmation_skipped"
             : "appointment.confirmation_failed",
         entityType: "appointment",
         entityId: updated.id,

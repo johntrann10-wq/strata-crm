@@ -131,6 +131,7 @@ export async function runAppointmentReminders(options?: {
       type: businesses.type,
       timezone: businesses.timezone,
       enabled: businesses.automationAppointmentRemindersEnabled,
+      emailEnabled: businesses.notificationAppointmentReminderEmailEnabled,
       leadHours: businesses.automationAppointmentReminderHours,
       sendWindowStartHour: businesses.automationSendWindowStartHour,
       sendWindowEndHour: businesses.automationSendWindowEndHour,
@@ -190,44 +191,36 @@ export async function runAppointmentReminders(options?: {
           eq(appointments.businessId, business.id),
           sql`${appointments.status} in ('scheduled', 'confirmed')`,
           gte(appointments.startTime, windowStart),
-          lte(appointments.startTime, windowEnd),
-          sql`${clients.email} is not null`
+          lte(appointments.startTime, windowEnd)
         )
       )
       .orderBy(asc(appointments.startTime));
 
     for (const row of rows) {
-      if (!row.clientEmail) continue;
+      const channelsSent: string[] = [];
+      if (!row.clientEmail && !row.clientPhone) continue;
       if (await hasAutomationActivity("automation.appointment_reminder.sent", "appointment", row.id)) {
         continue;
       }
 
       try {
-        await sendAppointmentReminder({
-          to: row.clientEmail,
-          businessId: business.id,
-          clientName:
-            `${row.clientFirstName ?? ""} ${row.clientLastName ?? ""}`.trim() || "Customer",
-          businessName: business.name,
-          dateTime: formatBusinessDateTime(row.startTime, timezone),
-          vehicle: buildVehicleDisplayName({
-            year: row.vehicleYear,
-            make: row.vehicleMake,
-            model: row.vehicleModel,
-          }),
-          serviceSummary: row.title ?? null,
-        });
-        await createActivityLog({
-          businessId: business.id,
-          action: "automation.appointment_reminder.sent",
-          entityType: "appointment",
-          entityId: row.id,
-          metadata: {
-            clientId: row.clientId,
-            leadHours,
-            sentTo: row.clientEmail,
-          },
-        });
+        if (business.emailEnabled && row.clientEmail) {
+          await sendAppointmentReminder({
+            to: row.clientEmail,
+            businessId: business.id,
+            clientName:
+              `${row.clientFirstName ?? ""} ${row.clientLastName ?? ""}`.trim() || "Customer",
+            businessName: business.name,
+            dateTime: formatBusinessDateTime(row.startTime, timezone),
+            vehicle: buildVehicleDisplayName({
+              year: row.vehicleYear,
+              make: row.vehicleMake,
+              model: row.vehicleModel,
+            }),
+            serviceSummary: row.title ?? null,
+          });
+          channelsSent.push("email");
+        }
         void enqueueTwilioTemplateSms({
           businessId: business.id,
           templateSlug: "appointment_reminder",
@@ -253,6 +246,30 @@ export async function runAppointmentReminders(options?: {
             appointmentId: row.id,
             error: error instanceof Error ? error.message : String(error),
           });
+        });
+        if (row.clientPhone) channelsSent.push("sms");
+        if (channelsSent.length === 0) {
+          await recordAutomationSkip({
+            businessId: business.id,
+            action: "automation.appointment_reminder.skipped",
+            entityType: "appointment",
+            entityId: row.id,
+            metadata: { reason: "all_channels_disabled_or_missing" },
+          });
+          continue;
+        }
+        await createActivityLog({
+          businessId: business.id,
+          action: "automation.appointment_reminder.sent",
+          entityType: "appointment",
+          entityId: row.id,
+          metadata: {
+            clientId: row.clientId,
+            leadHours,
+            sentTo: row.clientEmail,
+            phone: row.clientPhone,
+            channels: channelsSent,
+          },
         });
         sent += 1;
       } catch (error) {
@@ -280,6 +297,7 @@ export async function runLapsedClientDetection(options?: {
       type: businesses.type,
       timezone: businesses.timezone,
       enabled: businesses.automationLapsedClientsEnabled,
+      emailEnabled: businesses.notificationLapsedClientEmailEnabled,
       months: businesses.automationLapsedClientMonths,
       bookingRequestUrl: businesses.bookingRequestUrl,
       sendWindowStartHour: businesses.automationSendWindowStartHour,
@@ -359,7 +377,6 @@ export async function runLapsedClientDetection(options?: {
         and(
           eq(clients.businessId, business.id),
           eq(clients.marketingOptIn, true),
-          sql`${clients.email} is not null`,
           or(sql`${lastVisits.lastVisit} is null`, lte(lastVisits.lastVisit, cutoff))
         )
       )
@@ -367,32 +384,25 @@ export async function runLapsedClientDetection(options?: {
       .limit(options?.force ? 100 : 50);
 
     for (const row of rows) {
-      if (!row.email) continue;
+      const channelsSent: string[] = [];
+      if (!row.email && !row.phone) continue;
       if (await hasAutomationActivity("automation.lapsed_client.sent", "client", row.id, recentCutoff)) {
         continue;
       }
 
       try {
-        await sendLapsedClientReengagement({
-          to: row.email,
-          businessId: business.id,
-          clientName: `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim() || "Customer",
-          businessName: business.name,
-          lastVisit: formatBusinessDate(row.lastVisit, timezone),
-          bookUrl: bookingRequestUrl,
-          serviceSummary: null,
-        });
-        await createActivityLog({
-          businessId: business.id,
-          action: "automation.lapsed_client.sent",
-          entityType: "client",
-          entityId: row.id,
-          metadata: {
-            sentTo: row.email,
-            months,
-            lastVisit: row.lastVisit?.toISOString() ?? null,
-          },
-        });
+        if (business.emailEnabled && row.email) {
+          await sendLapsedClientReengagement({
+            to: row.email,
+            businessId: business.id,
+            clientName: `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim() || "Customer",
+            businessName: business.name,
+            lastVisit: formatBusinessDate(row.lastVisit, timezone),
+            bookUrl: bookingRequestUrl,
+            serviceSummary: null,
+          });
+          channelsSent.push("email");
+        }
         void enqueueTwilioTemplateSms({
           businessId: business.id,
           templateSlug: "lapsed_client_reengagement",
@@ -412,6 +422,31 @@ export async function runLapsedClientDetection(options?: {
             clientId: row.id,
             error: error instanceof Error ? error.message : String(error),
           });
+        });
+        if (row.phone) channelsSent.push("sms");
+        if (channelsSent.length === 0) {
+          await recordAutomationSkip({
+            businessId: business.id,
+            action: "automation.lapsed_client.skipped",
+            entityType: "client",
+            entityId: row.id,
+            metadata: { reason: "all_channels_disabled_or_missing" },
+            dedupeSince: recentCutoff,
+          });
+          continue;
+        }
+        await createActivityLog({
+          businessId: business.id,
+          action: "automation.lapsed_client.sent",
+          entityType: "client",
+          entityId: row.id,
+          metadata: {
+            sentTo: row.email,
+            phone: row.phone,
+            channels: channelsSent,
+            months,
+            lastVisit: row.lastVisit?.toISOString() ?? null,
+          },
         });
         detected += 1;
       } catch (error) {
@@ -439,6 +474,7 @@ export async function runReviewRequests(options?: {
       type: businesses.type,
       timezone: businesses.timezone,
       enabled: businesses.automationReviewRequestsEnabled,
+      emailEnabled: businesses.notificationReviewRequestEmailEnabled,
       delayHours: businesses.automationReviewRequestDelayHours,
       reviewRequestUrl: businesses.reviewRequestUrl,
       sendWindowStartHour: businesses.automationSendWindowStartHour,
@@ -507,40 +543,32 @@ export async function runReviewRequests(options?: {
           eq(appointments.businessId, business.id),
           eq(appointments.status, "completed"),
           lte(appointments.completedAt, cutoff),
-          eq(clients.marketingOptIn, true),
-          sql`${clients.email} is not null`
+          eq(clients.marketingOptIn, true)
         )
       )
       .orderBy(desc(appointments.completedAt))
       .limit(options?.force ? 100 : 50);
 
     for (const row of rows) {
-      if (!row.clientEmail) continue;
+      const channelsSent: string[] = [];
+      if (!row.clientEmail && !row.clientPhone) continue;
       if (await hasAutomationActivity("automation.review_request.sent", "appointment", row.id)) {
         continue;
       }
 
       try {
-        await sendReviewRequest({
-          to: row.clientEmail,
-          businessId: business.id,
-          clientName:
-            `${row.clientFirstName ?? ""} ${row.clientLastName ?? ""}`.trim() || "Customer",
-          businessName: business.name,
-          reviewUrl: reviewRequestUrl,
-          serviceSummary: row.title ?? null,
-        });
-        await createActivityLog({
-          businessId: business.id,
-          action: "automation.review_request.sent",
-          entityType: "appointment",
-          entityId: row.id,
-          metadata: {
-            clientId: row.clientId,
-            delayHours,
-            sentTo: row.clientEmail,
-          },
-        });
+        if (business.emailEnabled && row.clientEmail) {
+          await sendReviewRequest({
+            to: row.clientEmail,
+            businessId: business.id,
+            clientName:
+              `${row.clientFirstName ?? ""} ${row.clientLastName ?? ""}`.trim() || "Customer",
+            businessName: business.name,
+            reviewUrl: reviewRequestUrl,
+            serviceSummary: row.title ?? null,
+          });
+          channelsSent.push("email");
+        }
         void enqueueTwilioTemplateSms({
           businessId: business.id,
           templateSlug: "review_request",
@@ -560,6 +588,30 @@ export async function runReviewRequests(options?: {
             appointmentId: row.id,
             error: error instanceof Error ? error.message : String(error),
           });
+        });
+        if (row.clientPhone) channelsSent.push("sms");
+        if (channelsSent.length === 0) {
+          await recordAutomationSkip({
+            businessId: business.id,
+            action: "automation.review_request.skipped",
+            entityType: "appointment",
+            entityId: row.id,
+            metadata: { reason: "all_channels_disabled_or_missing" },
+          });
+          continue;
+        }
+        await createActivityLog({
+          businessId: business.id,
+          action: "automation.review_request.sent",
+          entityType: "appointment",
+          entityId: row.id,
+          metadata: {
+            clientId: row.clientId,
+            delayHours,
+            sentTo: row.clientEmail,
+            phone: row.clientPhone,
+            channels: channelsSent,
+          },
         });
         sent += 1;
       } catch (error) {
@@ -587,6 +639,7 @@ export async function runAbandonedQuoteFollowUps(options?: {
       type: businesses.type,
       timezone: businesses.timezone,
       enabled: businesses.automationAbandonedQuotesEnabled,
+      emailEnabled: businesses.notificationAbandonedQuoteEmailEnabled,
       delayHours: businesses.automationAbandonedQuoteHours,
       sendWindowStartHour: businesses.automationSendWindowStartHour,
       sendWindowEndHour: businesses.automationSendWindowEndHour,
@@ -651,6 +704,17 @@ export async function runAbandonedQuoteFollowUps(options?: {
       .limit(options?.force ? 100 : 50);
 
     for (const row of rows) {
+      if (!business.emailEnabled) {
+        await recordAutomationSkip({
+          businessId: business.id,
+          action: "automation.abandoned_quote.skipped",
+          entityType: "quote",
+          entityId: row.id,
+          metadata: { reason: "email_disabled" },
+          dedupeSince: cutoff,
+        });
+        continue;
+      }
       if (!row.clientEmail) {
         await recordAutomationSkip({
           businessId: business.id,

@@ -175,19 +175,24 @@ type AutomationSettingsForm = {
   leadAutoResponseEnabled: boolean;
   leadAutoResponseEmailEnabled: boolean;
   leadAutoResponseSmsEnabled: boolean;
+  appointmentConfirmationEmailEnabled: boolean;
   missedCallTextBackEnabled: boolean;
   uncontactedLeadsEnabled: boolean;
   uncontactedLeadHours: number;
   appointmentRemindersEnabled: boolean;
+  appointmentReminderEmailEnabled: boolean;
   appointmentReminderHours: number;
   sendWindowStartHour: number;
   sendWindowEndHour: number;
   abandonedQuotesEnabled: boolean;
+  abandonedQuoteEmailEnabled: boolean;
   abandonedQuoteHours: number;
   reviewRequestsEnabled: boolean;
+  reviewRequestEmailEnabled: boolean;
   reviewRequestDelayHours: number;
   reviewRequestUrl: string;
   lapsedClientsEnabled: boolean;
+  lapsedClientEmailEnabled: boolean;
   lapsedClientMonths: number;
   bookingRequestUrl: string;
 };
@@ -453,19 +458,24 @@ const DEFAULT_AUTOMATION_SETTINGS: AutomationSettingsForm = {
   leadAutoResponseEnabled: true,
   leadAutoResponseEmailEnabled: true,
   leadAutoResponseSmsEnabled: false,
+  appointmentConfirmationEmailEnabled: true,
   missedCallTextBackEnabled: false,
   uncontactedLeadsEnabled: false,
   uncontactedLeadHours: 2,
   appointmentRemindersEnabled: true,
+  appointmentReminderEmailEnabled: true,
   appointmentReminderHours: 24,
   sendWindowStartHour: 8,
   sendWindowEndHour: 18,
   abandonedQuotesEnabled: false,
+  abandonedQuoteEmailEnabled: true,
   abandonedQuoteHours: 48,
   reviewRequestsEnabled: false,
+  reviewRequestEmailEnabled: true,
   reviewRequestDelayHours: 24,
   reviewRequestUrl: "",
   lapsedClientsEnabled: false,
+  lapsedClientEmailEnabled: true,
   lapsedClientMonths: 6,
   bookingRequestUrl: "",
 };
@@ -1385,6 +1395,9 @@ export default function SettingsPage() {
         business.leadAutoResponseEmailEnabled ?? DEFAULT_AUTOMATION_SETTINGS.leadAutoResponseEmailEnabled,
       leadAutoResponseSmsEnabled:
         business.leadAutoResponseSmsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.leadAutoResponseSmsEnabled,
+      appointmentConfirmationEmailEnabled:
+        business.notificationAppointmentConfirmationEmailEnabled ??
+        DEFAULT_AUTOMATION_SETTINGS.appointmentConfirmationEmailEnabled,
       missedCallTextBackEnabled:
         business.missedCallTextBackEnabled ?? DEFAULT_AUTOMATION_SETTINGS.missedCallTextBackEnabled,
       uncontactedLeadsEnabled:
@@ -1392,17 +1405,29 @@ export default function SettingsPage() {
       uncontactedLeadHours:
         business.automationUncontactedLeadHours ?? DEFAULT_AUTOMATION_SETTINGS.uncontactedLeadHours,
       appointmentRemindersEnabled: business.automationAppointmentRemindersEnabled ?? DEFAULT_AUTOMATION_SETTINGS.appointmentRemindersEnabled,
+      appointmentReminderEmailEnabled:
+        business.notificationAppointmentReminderEmailEnabled ??
+        DEFAULT_AUTOMATION_SETTINGS.appointmentReminderEmailEnabled,
       appointmentReminderHours: business.automationAppointmentReminderHours ?? DEFAULT_AUTOMATION_SETTINGS.appointmentReminderHours,
       sendWindowStartHour: business.automationSendWindowStartHour ?? DEFAULT_AUTOMATION_SETTINGS.sendWindowStartHour,
       sendWindowEndHour: business.automationSendWindowEndHour ?? DEFAULT_AUTOMATION_SETTINGS.sendWindowEndHour,
       abandonedQuotesEnabled:
         business.automationAbandonedQuotesEnabled ?? DEFAULT_AUTOMATION_SETTINGS.abandonedQuotesEnabled,
+      abandonedQuoteEmailEnabled:
+        business.notificationAbandonedQuoteEmailEnabled ??
+        DEFAULT_AUTOMATION_SETTINGS.abandonedQuoteEmailEnabled,
       abandonedQuoteHours:
         business.automationAbandonedQuoteHours ?? DEFAULT_AUTOMATION_SETTINGS.abandonedQuoteHours,
       reviewRequestsEnabled: business.automationReviewRequestsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestsEnabled,
+      reviewRequestEmailEnabled:
+        business.notificationReviewRequestEmailEnabled ??
+        DEFAULT_AUTOMATION_SETTINGS.reviewRequestEmailEnabled,
       reviewRequestDelayHours: business.automationReviewRequestDelayHours ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestDelayHours,
       reviewRequestUrl: business.reviewRequestUrl ?? DEFAULT_AUTOMATION_SETTINGS.reviewRequestUrl,
       lapsedClientsEnabled: business.automationLapsedClientsEnabled ?? DEFAULT_AUTOMATION_SETTINGS.lapsedClientsEnabled,
+      lapsedClientEmailEnabled:
+        business.notificationLapsedClientEmailEnabled ??
+        DEFAULT_AUTOMATION_SETTINGS.lapsedClientEmailEnabled,
       lapsedClientMonths: business.automationLapsedClientMonths ?? DEFAULT_AUTOMATION_SETTINGS.lapsedClientMonths,
       bookingRequestUrl: business.bookingRequestUrl ?? DEFAULT_AUTOMATION_SETTINGS.bookingRequestUrl,
     };
@@ -1713,19 +1738,24 @@ export default function SettingsPage() {
       leadAutoResponseEnabled: automationSettings.leadAutoResponseEnabled,
       leadAutoResponseEmailEnabled: automationSettings.leadAutoResponseEmailEnabled,
       leadAutoResponseSmsEnabled: automationSettings.leadAutoResponseSmsEnabled,
+      notificationAppointmentConfirmationEmailEnabled: automationSettings.appointmentConfirmationEmailEnabled,
       missedCallTextBackEnabled: automationSettings.missedCallTextBackEnabled,
       automationUncontactedLeadsEnabled: automationSettings.uncontactedLeadsEnabled,
       automationUncontactedLeadHours: automationSettings.uncontactedLeadHours,
       automationAppointmentRemindersEnabled: automationSettings.appointmentRemindersEnabled,
+      notificationAppointmentReminderEmailEnabled: automationSettings.appointmentReminderEmailEnabled,
       automationAppointmentReminderHours: automationSettings.appointmentReminderHours,
       automationSendWindowStartHour: automationSettings.sendWindowStartHour,
       automationSendWindowEndHour: automationSettings.sendWindowEndHour,
       automationAbandonedQuotesEnabled: automationSettings.abandonedQuotesEnabled,
+      notificationAbandonedQuoteEmailEnabled: automationSettings.abandonedQuoteEmailEnabled,
       automationAbandonedQuoteHours: automationSettings.abandonedQuoteHours,
       automationReviewRequestsEnabled: automationSettings.reviewRequestsEnabled,
+      notificationReviewRequestEmailEnabled: automationSettings.reviewRequestEmailEnabled,
       automationReviewRequestDelayHours: automationSettings.reviewRequestDelayHours,
       reviewRequestUrl: automationSettings.reviewRequestUrl.trim() || null,
       automationLapsedClientsEnabled: automationSettings.lapsedClientsEnabled,
+      notificationLapsedClientEmailEnabled: automationSettings.lapsedClientEmailEnabled,
       automationLapsedClientMonths: automationSettings.lapsedClientMonths,
       bookingRequestUrl: automationSettings.bookingRequestUrl.trim() || null,
     });
@@ -4321,6 +4351,34 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <BellRing className="h-4 w-4 text-primary" />
+                        <p className="text-sm font-medium">Appointment confirmations</p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Control the automatic confirmation email that goes out during booking and status-confirm flows without disabling manual resend actions.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="automation-appointment-confirmation-email"
+                        checked={automationSettings.appointmentConfirmationEmailEnabled}
+                        onCheckedChange={(value) => handleAutomationToggle("appointmentConfirmationEmailEnabled", value)}
+                        disabled={!canEditSettings}
+                      />
+                      <Label htmlFor="automation-appointment-confirmation-email" className="cursor-pointer text-sm">
+                        Email on
+                      </Label>
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                    This only affects the automatic email. If Twilio is enabled, SMS confirmations can still queue through the Integrations template controls below.
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-muted/20 p-4">
                   <div className="space-y-1">
                     <p className="text-sm font-medium">Automation send window</p>
                     <p className="text-sm text-muted-foreground">
@@ -4423,6 +4481,17 @@ export default function SettingsPage() {
                       Reminders send automatically before scheduled or confirmed visits based on this timing.
                     </p>
                   </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Switch
+                      id="automation-appointment-reminder-email"
+                      checked={automationSettings.appointmentReminderEmailEnabled}
+                      onCheckedChange={(value) => handleAutomationToggle("appointmentReminderEmailEnabled", value)}
+                      disabled={!canEditSettings || !automationSettings.appointmentRemindersEnabled}
+                    />
+                    <Label htmlFor="automation-appointment-reminder-email" className="cursor-pointer text-sm">
+                      Send reminder emails
+                    </Label>
+                  </div>
                 </div>
 
                 <div className="rounded-xl border bg-muted/20 p-4">
@@ -4465,6 +4534,17 @@ export default function SettingsPage() {
                     <p className="text-xs text-muted-foreground sm:pb-2">
                       Only sent quotes with no existing follow-up are targeted, and Strata reuses the same secure public quote link as the manual follow-up flow.
                     </p>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Switch
+                      id="automation-abandoned-quote-email"
+                      checked={automationSettings.abandonedQuoteEmailEnabled}
+                      onCheckedChange={(value) => handleAutomationToggle("abandonedQuoteEmailEnabled", value)}
+                      disabled={!canEditSettings || !automationSettings.abandonedQuotesEnabled}
+                    />
+                    <Label htmlFor="automation-abandoned-quote-email" className="cursor-pointer text-sm">
+                      Send follow-up emails
+                    </Label>
                   </div>
                 </div>
 
@@ -4521,6 +4601,17 @@ export default function SettingsPage() {
                   <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                     Review requests only send after completed appointments when this review link is saved. If the link is blank, Strata will skip them instead of faking success.
                   </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Switch
+                      id="automation-review-request-email"
+                      checked={automationSettings.reviewRequestEmailEnabled}
+                      onCheckedChange={(value) => handleAutomationToggle("reviewRequestEmailEnabled", value)}
+                      disabled={!canEditSettings || !automationSettings.reviewRequestsEnabled}
+                    />
+                    <Label htmlFor="automation-review-request-email" className="cursor-pointer text-sm">
+                      Send review request emails
+                    </Label>
+                  </div>
                 </div>
 
                 <div className="rounded-xl border bg-muted/20 p-4">
@@ -4576,11 +4667,22 @@ export default function SettingsPage() {
                   <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
                     Outreach only targets opted-in clients, respects recent automation activity, and now sends them straight to your booking link.
                   </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Switch
+                      id="automation-lapsed-client-email"
+                      checked={automationSettings.lapsedClientEmailEnabled}
+                      onCheckedChange={(value) => handleAutomationToggle("lapsedClientEmailEnabled", value)}
+                      disabled={!canEditSettings || !automationSettings.lapsedClientsEnabled}
+                    />
+                    <Label htmlFor="automation-lapsed-client-email" className="cursor-pointer text-sm">
+                      Send outreach emails
+                    </Label>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-2 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-muted-foreground">
-                    Automation sends are logged through the same notification and activity system as the rest of Strata, so follow-up stays traceable without manual trigger buttons.
+                    Automation sends are logged through the same notification and activity system as the rest of Strata, and these email toggles only affect the automatic sends above, not manual quote, invoice, or reminder actions.
                   </p>
                   <Button
                     onClick={handleSaveAutomationSettings}

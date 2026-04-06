@@ -53,6 +53,11 @@ const createSchema = z.object({
   leadAutoResponseEnabled: z.boolean().optional(),
   leadAutoResponseEmailEnabled: z.boolean().optional(),
   leadAutoResponseSmsEnabled: z.boolean().optional(),
+  notificationAppointmentConfirmationEmailEnabled: z.boolean().optional(),
+  notificationAppointmentReminderEmailEnabled: z.boolean().optional(),
+  notificationAbandonedQuoteEmailEnabled: z.boolean().optional(),
+  notificationReviewRequestEmailEnabled: z.boolean().optional(),
+  notificationLapsedClientEmailEnabled: z.boolean().optional(),
   missedCallTextBackEnabled: z.boolean().optional(),
   automationUncontactedLeadsEnabled: z.boolean().optional(),
   automationUncontactedLeadHours: z.number().int().min(1).max(168).optional(),
@@ -193,6 +198,12 @@ function coerceBusinessRecord(
     leadAutoResponseEnabled: record.leadAutoResponseEnabled ?? true,
     leadAutoResponseEmailEnabled: record.leadAutoResponseEmailEnabled ?? true,
     leadAutoResponseSmsEnabled: record.leadAutoResponseSmsEnabled ?? false,
+    notificationAppointmentConfirmationEmailEnabled:
+      record.notificationAppointmentConfirmationEmailEnabled ?? true,
+    notificationAppointmentReminderEmailEnabled: record.notificationAppointmentReminderEmailEnabled ?? true,
+    notificationAbandonedQuoteEmailEnabled: record.notificationAbandonedQuoteEmailEnabled ?? true,
+    notificationReviewRequestEmailEnabled: record.notificationReviewRequestEmailEnabled ?? true,
+    notificationLapsedClientEmailEnabled: record.notificationLapsedClientEmailEnabled ?? true,
     missedCallTextBackEnabled: record.missedCallTextBackEnabled ?? false,
     automationUncontactedLeadsEnabled: record.automationUncontactedLeadsEnabled ?? false,
     automationUncontactedLeadHours: record.automationUncontactedLeadHours ?? 2,
@@ -632,6 +643,13 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       leadAutoResponseEnabled: parsed.data.leadAutoResponseEnabled ?? true,
       leadAutoResponseEmailEnabled: parsed.data.leadAutoResponseEmailEnabled ?? true,
       leadAutoResponseSmsEnabled: parsed.data.leadAutoResponseSmsEnabled ?? false,
+      notificationAppointmentConfirmationEmailEnabled:
+        parsed.data.notificationAppointmentConfirmationEmailEnabled ?? true,
+      notificationAppointmentReminderEmailEnabled:
+        parsed.data.notificationAppointmentReminderEmailEnabled ?? true,
+      notificationAbandonedQuoteEmailEnabled: parsed.data.notificationAbandonedQuoteEmailEnabled ?? true,
+      notificationReviewRequestEmailEnabled: parsed.data.notificationReviewRequestEmailEnabled ?? true,
+      notificationLapsedClientEmailEnabled: parsed.data.notificationLapsedClientEmailEnabled ?? true,
       missedCallTextBackEnabled: parsed.data.missedCallTextBackEnabled ?? false,
       automationUncontactedLeadsEnabled: parsed.data.automationUncontactedLeadsEnabled ?? false,
       automationUncontactedLeadHours: parsed.data.automationUncontactedLeadHours ?? 2,
@@ -749,6 +767,26 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.leadAutoResponseSmsEnabled !== undefined) {
     updates.leadAutoResponseSmsEnabled = parsed.data.leadAutoResponseSmsEnabled ?? false;
+  }
+  if (parsed.data.notificationAppointmentConfirmationEmailEnabled !== undefined) {
+    updates.notificationAppointmentConfirmationEmailEnabled =
+      parsed.data.notificationAppointmentConfirmationEmailEnabled ?? true;
+  }
+  if (parsed.data.notificationAppointmentReminderEmailEnabled !== undefined) {
+    updates.notificationAppointmentReminderEmailEnabled =
+      parsed.data.notificationAppointmentReminderEmailEnabled ?? true;
+  }
+  if (parsed.data.notificationAbandonedQuoteEmailEnabled !== undefined) {
+    updates.notificationAbandonedQuoteEmailEnabled =
+      parsed.data.notificationAbandonedQuoteEmailEnabled ?? true;
+  }
+  if (parsed.data.notificationReviewRequestEmailEnabled !== undefined) {
+    updates.notificationReviewRequestEmailEnabled =
+      parsed.data.notificationReviewRequestEmailEnabled ?? true;
+  }
+  if (parsed.data.notificationLapsedClientEmailEnabled !== undefined) {
+    updates.notificationLapsedClientEmailEnabled =
+      parsed.data.notificationLapsedClientEmailEnabled ?? true;
   }
   if (parsed.data.missedCallTextBackEnabled !== undefined) {
     updates.missedCallTextBackEnabled = parsed.data.missedCallTextBackEnabled ?? false;
