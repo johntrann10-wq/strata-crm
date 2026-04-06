@@ -51,7 +51,6 @@ function shouldUseSameOriginApi(): boolean {
  * - If both unset: empty string → relative `/api/...` (dev: Vite proxy; prod: same-origin + edge proxy when VITE_ALLOW_RELATIVE_API=true at build)
  */
 function resolveApiBase(): string {
-  if (import.meta.env.PROD && shouldUseSameOriginApi()) return "";
   // Use `import.meta.env.VITE_*` directly here — assigning `import.meta.env` to a variable
   // breaks Vite's static replacement and can minify to `{}`, ignoring build-time API URLs.
   const raw =
@@ -59,6 +58,9 @@ function resolveApiBase(): string {
     import.meta.env.NEXT_PUBLIC_API_URL?.trim() ||
     "";
   if (raw) return raw.replace(/\/+$/, "");
+
+  // Use same-origin /api on Vercel/Netlify only when no explicit API origin was baked into the client.
+  if (import.meta.env.PROD && shouldUseSameOriginApi()) return "";
 
   // Development: always same-origin; Vite proxies /api (see vite.config.mts).
   if (import.meta.env.DEV) return "";
