@@ -6,11 +6,12 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/api";
 import { useAction } from "@/hooks/useApi";
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 export default function ForgotPasswordRoute() {
+  const [searchParams] = useSearchParams();
   const [{ fetching }, sendReset] = useAction(api.user.forgotPassword);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
@@ -53,7 +54,7 @@ export default function ForgotPasswordRoute() {
             <p className="text-sm text-foreground">If an account exists for <span className="font-medium">{email.trim()}</span>, a password reset link has been sent.</p>
             <p className="text-[12px] text-muted-foreground">Check your inbox and spam folder, then use the secure link to choose a new password.</p>
             <Button asChild className="h-9 w-full rounded-lg bg-orange-500 text-[13px] font-medium text-white hover:bg-orange-500/90">
-              <Link to="/sign-in">Back to sign in</Link>
+              <Link to={`/sign-in?email=${encodeURIComponent(email.trim())}`}>Back to sign in</Link>
             </Button>
           </div>
         ) : (
@@ -81,7 +82,7 @@ export default function ForgotPasswordRoute() {
       </Card>
 
       <p className="mt-6 text-center text-[13px] text-muted-foreground">
-        Remembered it? <Link to="/sign-in" className="font-medium text-foreground hover:underline">Back to sign in</Link>
+        Remembered it? <Link to={`/sign-in${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`} className="font-medium text-foreground hover:underline">Back to sign in</Link>
       </p>
     </div>
   );

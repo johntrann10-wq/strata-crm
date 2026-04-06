@@ -81,13 +81,15 @@ export default function ProfilePage() {
             />
             <div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
               {canChangePassword
-                ? "If you ever forget your password, use the forgot-password flow from sign-in to reset it securely."
+                ? user.googleProfileId
+                  ? "This Google-connected account already has a password. If you don't know it, use reset password instead of change password."
+                  : "If you ever forget your password, use the forgot-password flow from sign-in to reset it securely."
                 : user.googleProfileId
                 ? "Add a password if you want a fallback login option alongside Google."
                 : "Add a password so this account has a direct email login option."}
             </div>
             <Button asChild variant="outline" size="sm">
-              <Link to="/forgot-password">Open forgot-password flow</Link>
+              <Link to={`/forgot-password?email=${encodeURIComponent(user.email)}`}>Open forgot-password flow</Link>
             </Button>
           </CardContent>
         </Card>
@@ -118,7 +120,9 @@ export default function ProfilePage() {
               </p>
               <p className="mt-1 text-muted-foreground">
                 {user.googleProfileId
-                  ? "Google is currently your primary login path."
+                  ? canChangePassword
+                    ? "Google is currently your primary login path, and this account also has a password fallback."
+                    : "Google is currently your primary login path."
                   : "You can sign in directly with your email and password."}
               </p>
             </div>
@@ -127,7 +131,12 @@ export default function ProfilePage() {
                 Update profile
               </Button>
               {canChangePassword ? (
-                <Button onClick={() => setIsChangingPassword(true)}>Change password</Button>
+                <>
+                  <Button onClick={() => setIsChangingPassword(true)}>Change password</Button>
+                  <Button asChild variant="outline">
+                    <Link to={`/forgot-password?email=${encodeURIComponent(user.email)}`}>Reset password</Link>
+                  </Button>
+                </>
               ) : (
                 <Button onClick={() => setIsSettingPassword(true)}>Add password</Button>
               )}
@@ -262,7 +271,9 @@ const ChangePasswordModal = (props: { open: boolean; onClose: () => void }) => {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Change password</DialogTitle>
-          <DialogDescription>Enter your current password and choose a new one for future sign-ins.</DialogDescription>
+          <DialogDescription>
+            Enter your current password and choose a new one for future sign-ins. If you do not know your current password, use reset password instead.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid items-center gap-3">
