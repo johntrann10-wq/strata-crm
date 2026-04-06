@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import express, { Router, Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { db } from "../db/index.js";
@@ -11,13 +11,13 @@ import { logger } from "../lib/logger.js";
 import { countOverlappingAppointments, hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
 import { ConflictError } from "../lib/errors.js";
 import { calculateAppointmentFinanceTotals, recalculateAppointmentTotal } from "../lib/revenueTotals.js";
-import { createRequestActivityLog } from "../lib/activity.js";
-import { sendAppointmentConfirmation } from "../lib/email.js";
+import { createActivityLog, createRequestActivityLog } from "../lib/activity.js";
+import { sendAppointmentChangeRequestAlert, sendAppointmentConfirmation } from "../lib/email.js";
 import { isEmailConfigured } from "../lib/env.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
 import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
-import { buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
+import { buildPublicAppUrl, buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 import { createAppointmentDepositCheckoutSession, retrieveCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
 import { renderAppointmentHtml } from "../lib/appointmentTemplate.js";
 import { scheduleGoogleCalendarAppointmentSync } from "../lib/googleCalendar.js";
@@ -516,6 +516,17 @@ const sendConfirmationSchema = z.object({
   ),
 });
 
+const publicChangeRequestSchema = z.object({
+  preferredTiming: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().max(200).optional()
+  ),
+  message: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().max(1000).optional()
+  ),
+});
+
 const depositPaymentMethodSchema = z.enum([
   "cash",
   "card",
@@ -806,6 +817,7 @@ async function buildAppointmentConfirmationPayload(
     serviceSummary:
       serviceRows.length > 0 ? `Services: ${serviceRows.map((service) => service.name).join(", ")}` : null,
     confirmationUrl: publicAppointmentUrl,
+    portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(publicToken)}`),
     confirmationActionLabel: hasDepositDue ? "View appointment and pay deposit" : "View appointment",
     paymentStatus: hasDepositDue
       ? `A deposit of $${depositAmount.toFixed(2)} is still due for this appointment.`
@@ -869,6 +881,7 @@ async function sendAppointmentConfirmationForRecord(
       address: payload.address,
       serviceSummary: payload.serviceSummary,
       confirmationUrl: payload.confirmationUrl,
+      portalUrl: payload.portalUrl,
       confirmationActionLabel: payload.confirmationActionLabel,
       paymentStatus: payload.paymentStatus,
       message: payload.message,
@@ -2036,6 +2049,119 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
   res.json(updated ?? { ...existing, depositPaid: false });
 });
 
+appointmentsRouter.post("/:id/public-request-change", express.urlencoded({ extended: false }), wrapAsync(async (req: Request, res: Response) => {
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  const access = verifyPublicDocumentToken(token, { kind: "appointment", entityId: req.params.id });
+  if (!access) throw new ForbiddenError("Appointment access link is invalid or expired.");
+
+  const parsed = publicChangeRequestSchema.safeParse(req.body ?? {});
+  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+
+  const preferredTiming = parsed.data.preferredTiming?.trim() ?? null;
+  const message = parsed.data.message?.trim() ?? null;
+  if (!preferredTiming && !message) {
+    throw new BadRequestError("Share a preferred time or a quick note so the shop knows what to change.");
+  }
+
+  const [appointment] = await db
+    .select({
+      id: appointments.id,
+      title: appointments.title,
+      startTime: appointments.startTime,
+      status: appointments.status,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      clientEmail: clients.email,
+      clientPhone: clients.phone,
+      vehicleYear: vehicles.year,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
+      businessName: businesses.name,
+      businessEmail: businesses.email,
+      businessPhone: businesses.phone,
+      businessTimezone: businesses.timezone,
+      locationTimezone: locations.timezone,
+      businessType: businesses.type,
+    })
+    .from(appointments)
+    .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, access.businessId)))
+    .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, access.businessId)))
+    .leftJoin(businesses, eq(appointments.businessId, businesses.id))
+    .leftJoin(locations, and(eq(appointments.locationId, locations.id), eq(locations.businessId, access.businessId)))
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, access.businessId)))
+    .limit(1);
+  if (!appointment) throw new NotFoundError("Appointment not found.");
+
+  const appointmentDateTime = formatAppointmentDateTime(
+    appointment.startTime,
+    appointment.locationTimezone ??
+      appointment.businessTimezone ??
+      getBusinessTypeDefaults(appointment.businessType).timezone
+  );
+  const clientName =
+    [appointment.clientFirstName, appointment.clientLastName].filter(Boolean).join(" ").trim() || "Customer";
+  const vehicleLabel =
+    buildVehicleDisplayName({
+      year: appointment.vehicleYear,
+      make: appointment.vehicleMake,
+      model: appointment.vehicleModel,
+    }) || "Vehicle details on file";
+
+  try {
+    await createActivityLog({
+      businessId: access.businessId,
+      action: "appointment.public_change_requested",
+      entityType: "appointment",
+      entityId: appointment.id,
+      metadata: {
+        source: "public_appointment",
+        preferredTiming,
+        message,
+        clientName,
+        clientEmail: appointment.clientEmail ?? null,
+        clientPhone: appointment.clientPhone ?? null,
+      },
+    });
+  } catch (error) {
+    logger.warn("Public appointment change request recorded but activity log write failed", {
+      appointmentId: appointment.id,
+      businessId: access.businessId,
+      error,
+    });
+  }
+
+  let changeRequestState: "sent" | "recorded" = "recorded";
+  if (isEmailConfigured() && appointment.businessEmail?.trim()) {
+    try {
+      await sendAppointmentChangeRequestAlert({
+        to: appointment.businessEmail.trim(),
+        businessId: access.businessId,
+        businessName: appointment.businessName ?? "Your business",
+        clientName,
+        dateTime: appointmentDateTime,
+        vehicle: vehicleLabel,
+        preferredTiming,
+        message,
+        clientEmail: appointment.clientEmail ?? null,
+        clientPhone: appointment.clientPhone ?? null,
+        appointmentUrl: buildPublicAppUrl(`/appointments/${encodeURIComponent(appointment.id)}`),
+      });
+      changeRequestState = "sent";
+    } catch (error) {
+      logger.warn("Public appointment change request email failed", {
+        appointmentId: appointment.id,
+        businessId: access.businessId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const redirectUrl = buildPublicDocumentUrl(
+    `/api/appointments/${encodeURIComponent(appointment.id)}/public-html?token=${encodeURIComponent(token)}&changeRequest=${encodeURIComponent(changeRequestState)}`
+  );
+  res.redirect(303, redirectUrl);
+}));
+
 appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: Response) => {
   const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
   const access = verifyPublicDocumentToken(token, { kind: "appointment", entityId: req.params.id });
@@ -2164,6 +2290,15 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
     depositAmount: appointment.depositAmount,
     depositPaid,
     publicPaymentUrl,
+    portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(token)}`),
+    publicRequestChangeUrl: buildPublicDocumentUrl(
+      `/api/appointments/${appointment.id}/public-request-change?token=${encodeURIComponent(token)}`
+    ),
+    changeRequestState:
+      typeof req.query.changeRequest === "string" &&
+      ["sent", "recorded"].includes(req.query.changeRequest)
+        ? (req.query.changeRequest as "sent" | "recorded")
+        : null,
     stripePaymentState:
       stripePaymentQuery === "success" && depositPaid
         ? "success"

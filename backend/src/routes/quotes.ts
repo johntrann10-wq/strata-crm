@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { Router, Request, Response } from "express";
+import express, { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { quotes, clients, vehicles, quoteLineItems, appointments, staff, locations, businesses } from "../db/schema.js";
@@ -9,14 +9,14 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
 import { recalculateQuoteTotals } from "../lib/revenueTotals.js";
-import { createRequestActivityLog } from "../lib/activity.js";
+import { createActivityLog, createRequestActivityLog } from "../lib/activity.js";
 import { isEmailConfigured } from "../lib/env.js";
-import { sendQuoteEmail, sendQuoteFollowUpEmail } from "../lib/email.js";
+import { sendQuoteEmail, sendQuoteFollowUpEmail, sendQuoteRevisionRequestAlert } from "../lib/email.js";
 import { logger } from "../lib/logger.js";
 import { renderQuoteHtml, type QuoteTemplateData } from "../lib/quoteTemplate.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
-import { buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
+import { buildPublicAppUrl, buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 
 export const quotesRouter = Router({ mergeParams: true });
 
@@ -173,6 +173,13 @@ const sendQuoteSchema = z.object({
   recipientName: z.preprocess(
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z.string().trim().max(120).optional()
+  ),
+});
+
+const publicRevisionRequestSchema = z.object({
+  message: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().max(1000).optional()
   ),
 });
 
@@ -591,6 +598,18 @@ quotesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
       unitPrice: item.unitPrice,
       total: item.total,
     })),
+    portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(token)}`),
+    publicRespondUrl: buildPublicDocumentUrl(`/api/quotes/${row.id}/public-respond?token=${encodeURIComponent(token)}`),
+    publicRevisionRequestUrl: buildPublicDocumentUrl(`/api/quotes/${row.id}/public-request-revision?token=${encodeURIComponent(token)}`),
+    responseState:
+      typeof req.query.quoteResponse === "string" &&
+      ["accepted", "declined", "already_accepted", "already_declined"].includes(req.query.quoteResponse)
+        ? (req.query.quoteResponse as "accepted" | "declined" | "already_accepted" | "already_declined")
+        : null,
+    revisionRequestState:
+      typeof req.query.revisionRequest === "string" && ["sent", "recorded"].includes(req.query.revisionRequest)
+        ? (req.query.revisionRequest as "sent" | "recorded")
+        : null,
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -599,6 +618,170 @@ quotesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
   res.setHeader("Expires", "0");
   res.send(html);
 });
+
+quotesRouter.post("/:id/public-request-revision", express.urlencoded({ extended: false }), wrapAsync(async (req: Request, res: Response) => {
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  const access = verifyPublicDocumentToken(token, { kind: "quote", entityId: req.params.id });
+  if (!access) throw new ForbiddenError("Quote access link is invalid or expired.");
+
+  const parsed = publicRevisionRequestSchema.safeParse(req.body ?? {});
+  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  const message = parsed.data.message?.trim() ?? "";
+  if (!message) throw new BadRequestError("Share what you want adjusted before the shop can revise this estimate.");
+
+  const [existing] = await db
+    .select({
+      id: quotes.id,
+      status: quotes.status,
+      total: quotes.total,
+      businessId: quotes.businessId,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      clientEmail: clients.email,
+      clientPhone: clients.phone,
+      businessName: businesses.name,
+      businessEmail: businesses.email,
+      vehicleYear: vehicles.year,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
+    })
+    .from(quotes)
+    .leftJoin(clients, eq(quotes.clientId, clients.id))
+    .leftJoin(vehicles, eq(quotes.vehicleId, vehicles.id))
+    .leftJoin(businesses, eq(quotes.businessId, businesses.id))
+    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, access.businessId)))
+    .limit(1);
+  if (!existing) throw new NotFoundError("Quote not found.");
+  if (existing.status === "accepted") {
+    throw new BadRequestError("This estimate is already approved. Contact the shop directly for post-approval changes.");
+  }
+  if (existing.status === "declined" || existing.status === "expired") {
+    throw new BadRequestError("This estimate is no longer available for revision requests.");
+  }
+
+  const clientName =
+    `${existing.clientFirstName ?? ""} ${existing.clientLastName ?? ""}`.trim() || "Customer";
+  const vehicleLabel = buildVehicleDisplayName({
+    year: existing.vehicleYear,
+    make: existing.vehicleMake,
+    model: existing.vehicleModel,
+  }) || "Vehicle details on file";
+
+  try {
+    await createActivityLog({
+      businessId: access.businessId,
+      action: "quote.public_revision_requested",
+      entityType: "quote",
+      entityId: existing.id,
+      metadata: {
+        source: "public_quote",
+        message,
+        clientName,
+        clientEmail: existing.clientEmail ?? null,
+        clientPhone: existing.clientPhone ?? null,
+      },
+    });
+  } catch (error) {
+    logger.warn("Public quote revision request recorded but activity log write failed", {
+      quoteId: existing.id,
+      businessId: access.businessId,
+      error,
+    });
+  }
+
+  let revisionRequestState: "sent" | "recorded" = "recorded";
+  if (isEmailConfigured() && existing.businessEmail?.trim()) {
+    try {
+      await sendQuoteRevisionRequestAlert({
+        to: existing.businessEmail.trim(),
+        businessId: access.businessId,
+        businessName: existing.businessName ?? "Your shop",
+        clientName,
+        vehicle: vehicleLabel,
+        amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+        requestDetails: message,
+        clientEmail: existing.clientEmail ?? null,
+        clientPhone: existing.clientPhone ?? null,
+        quoteUrl: buildPublicAppUrl(`/quotes/${encodeURIComponent(existing.id)}`),
+      });
+      revisionRequestState = "sent";
+    } catch (error) {
+      logger.warn("Public quote revision request email failed", {
+        quoteId: existing.id,
+        businessId: access.businessId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const redirectUrl = buildPublicDocumentUrl(
+    `/api/quotes/${encodeURIComponent(existing.id)}/public-html?token=${encodeURIComponent(token)}&revisionRequest=${encodeURIComponent(revisionRequestState)}`
+  );
+  res.redirect(303, redirectUrl);
+}));
+
+quotesRouter.post("/:id/public-respond", express.urlencoded({ extended: false }), wrapAsync(async (req: Request, res: Response) => {
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  const access = verifyPublicDocumentToken(token, { kind: "quote", entityId: req.params.id });
+  if (!access) throw new ForbiddenError("Quote access link is invalid or expired.");
+
+  const response = typeof req.body?.response === "string" ? req.body.response.trim() : "";
+  if (response !== "accepted" && response !== "declined") {
+    throw new BadRequestError("Choose whether to accept or decline this estimate.");
+  }
+
+  const [existing] = await db
+    .select({
+      id: quotes.id,
+      status: quotes.status,
+      businessId: quotes.businessId,
+    })
+    .from(quotes)
+    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, access.businessId)))
+    .limit(1);
+  if (!existing) throw new NotFoundError("Quote not found.");
+
+  let responseState: "accepted" | "declined" | "already_accepted" | "already_declined" = response;
+  if (existing.status === "accepted") {
+    responseState = "already_accepted";
+  } else if (existing.status === "declined") {
+    responseState = "already_declined";
+  } else if (existing.status === "expired") {
+    throw new BadRequestError("This estimate has already expired.");
+  } else {
+    await db
+      .update(quotes)
+      .set({
+        status: response,
+        updatedAt: new Date(),
+      })
+      .where(eq(quotes.id, existing.id));
+
+    try {
+      await createActivityLog({
+        businessId: access.businessId,
+        action: response === "accepted" ? "quote.public_accepted" : "quote.public_declined",
+        entityType: "quote",
+        entityId: existing.id,
+        metadata: {
+          source: "public_quote",
+        },
+      });
+    } catch (error) {
+      logger.warn("Public quote response recorded but activity log write failed", {
+        quoteId: existing.id,
+        businessId: access.businessId,
+        response,
+        error,
+      });
+    }
+  }
+
+  const redirectUrl = buildPublicDocumentUrl(
+    `/api/quotes/${encodeURIComponent(existing.id)}/public-html?token=${encodeURIComponent(token)}&quoteResponse=${encodeURIComponent(responseState)}`
+  );
+  res.redirect(303, redirectUrl);
+}));
 
 const createQuoteSchema = z.object({
   clientId: z.string().uuid().optional(),
@@ -932,6 +1115,7 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
         model: existing.vehicleModel,
       }),
       quoteUrl: buildPublicDocumentUrl(`/api/quotes/${existing.id}/public-html?token=${encodeURIComponent(publicToken)}`),
+      portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(publicToken)}`),
       message: parsed.data.message ?? null,
     });
   } catch (error) {
@@ -1080,6 +1264,7 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
         model: existing.vehicleModel,
       }),
       quoteUrl: buildPublicDocumentUrl(`/api/quotes/${existing.id}/public-html?token=${encodeURIComponent(publicToken)}`),
+      portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(publicToken)}`),
       message: parsed.data.message ?? null,
     });
   } catch (error) {

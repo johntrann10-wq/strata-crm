@@ -39,6 +39,11 @@ export type QuoteTemplateData = {
     unitPrice?: string | number | null;
     total?: string | number | null;
   }>;
+  portalUrl?: string | null;
+  publicRespondUrl?: string | null;
+  publicRevisionRequestUrl?: string | null;
+  responseState?: "accepted" | "declined" | "already_accepted" | "already_declined" | null;
+  revisionRequestState?: "sent" | "recorded" | null;
 };
 
 function money(value: string | number | null | undefined): string {
@@ -72,8 +77,28 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
   const vehicleMeta = escapeHtml([data.vehicle?.color, data.vehicle?.licensePlate].filter(Boolean).join(" - "));
   const lineItemCount = data.lineItems?.length ?? 0;
   const notes = escapeHtml(data.notes ?? "");
+  const portalUrl = data.portalUrl?.trim() || "";
+  const publicRespondUrl = data.publicRespondUrl?.trim() || "";
+  const publicRevisionRequestUrl = data.publicRevisionRequestUrl?.trim() || "";
   const taxRate = escapeHtml(String(data.taxRate ?? 0));
   const taxAmount = money(data.taxAmount);
+  const responseBanner =
+    data.responseState === "accepted"
+      ? `<div class="banner banner-success">Estimate approved. The shop can now move forward with scheduling or next steps.</div>`
+      : data.responseState === "declined"
+        ? `<div class="banner banner-muted">Estimate declined. If you want revisions later, reach back out and the shop can update it.</div>`
+        : data.responseState === "already_accepted"
+          ? `<div class="banner banner-success">This estimate was already approved earlier.</div>`
+          : data.responseState === "already_declined"
+            ? `<div class="banner banner-muted">This estimate was already declined earlier.</div>`
+            : "";
+  const revisionRequestBanner =
+    data.revisionRequestState === "sent"
+      ? `<div class="banner banner-success">Your revision request was sent to the shop. They can review it and follow up with an updated estimate.</div>`
+      : data.revisionRequestState === "recorded"
+        ? `<div class="banner banner-muted">Your revision request was recorded. The shop can review it from the estimate activity even if email alerts are unavailable right now.</div>`
+        : "";
+  const canRespond = publicRespondUrl && (status === "sent" || status === "draft");
   const rows = (data.lineItems ?? [])
     .map((line) => `<tr><td class="desc">${escapeHtml(line.description ?? "")}</td><td class="num" data-label="Qty">${escapeHtml(String(line.quantity ?? ""))}</td><td class="num" data-label="Unit">${money(line.unitPrice)}</td><td class="num" data-label="Amount">${money(line.total)}</td></tr>`)
     .join("");
@@ -93,6 +118,9 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
     .eyebrow { color:var(--accent); }
     h1 { margin:0; font-size:30px; line-height:1.05; letter-spacing:-.03em; }
     .sub { margin:10px 0 0; color:var(--muted); font-size:14px; max-width:42ch; } .stack { display:grid; gap:4px; margin-top:16px; color:var(--muted); font-size:13px; }
+    .banner { margin-top:16px; padding:14px 16px; border-radius:14px; font-size:14px; line-height:1.5; }
+    .banner-success { background:#ecfdf3; border:1px solid #a7f3d0; color:#166534; }
+    .banner-muted { background:#f8fafc; border:1px solid #e2e8f0; color:#475569; }
     .meta { border:1px solid var(--line); border-radius:14px; padding:16px; background:var(--panel); }
     .meta .number { font-size:24px; font-weight:700; letter-spacing:-.03em; margin:8px 0 10px; }
     .pill { display:inline-flex; border-radius:999px; padding:6px 10px; font-size:12px; font-weight:700; background:#e5e7eb; color:#374151; }
@@ -103,6 +131,13 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
     .card { border:1px solid var(--line); border-radius:14px; padding:16px; background:#fff; } .soft { background:var(--panel); }
     .party { font-size:18px; font-weight:700; letter-spacing:-.02em; margin:0 0 6px; } .detail { color:var(--muted); font-size:14px; word-break:break-word; }
     .amount { border-radius:14px; padding:18px; background:var(--panel); border:1px solid var(--line); } .amount .big { margin:8px 0 6px; font-size:34px; line-height:1; letter-spacing:-.04em; font-weight:800; }
+    .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
+    .cta { display:inline-flex; align-items:center; justify-content:center; border:none; border-radius:999px; background:#f97316; color:#fff; padding:11px 18px; font-size:14px; font-weight:700; cursor:pointer; }
+    .cta.secondary { background:#fff; color:#0f172a; border:1px solid #cbd5e1; }
+    .sub-cta { display:inline-flex; align-items:center; justify-content:center; margin-top:14px; border-radius:999px; border:1px solid #cbd5e1; color:var(--ink); background:#fff; padding:11px 18px; font-size:14px; font-weight:700; text-decoration:none; }
+    .field-grid { display:grid; gap:12px; margin-top:16px; }
+    .field-label { display:grid; gap:6px; font-size:13px; font-weight:600; color:#0f172a; }
+    .field-textarea { width:100%; min-height:116px; resize:vertical; border-radius:14px; border:1px solid #cbd5e1; background:#fff; color:#0f172a; font:inherit; padding:12px 14px; }
     table { width:100%; border-collapse:collapse; } .lines { border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#fff; }
     .lines th { background:var(--panel); color:#64748b; font-size:11px; letter-spacing:.14em; text-transform:uppercase; text-align:left; padding:13px 16px; border-bottom:1px solid var(--line); }
     .lines td { padding:15px 16px; border-bottom:1px solid #edf2f7; font-size:14px; vertical-align:top; } .lines tr:last-child td { border-bottom:none; } .desc { font-weight:600; } .num { text-align:right; white-space:nowrap; }
@@ -119,6 +154,8 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
         <div>
           <p class="eyebrow">Customer Estimate</p>
           <h1>${businessName}</h1>
+          ${responseBanner}
+          ${revisionRequestBanner}
           <div class="stack">
             ${data.business.email ? `<div>${escapeHtml(data.business.email)}</div>` : ""}
             ${data.business.phone ? `<div>${escapeHtml(data.business.phone)}</div>` : ""}
@@ -175,7 +212,18 @@ export function renderQuoteHtml(data: QuoteTemplateData): string {
         </section>
         <section class="card soft">
           <p class="section-title">Questions?</p>
-          <div class="detail">Review the scope, pricing, and vehicle details above. If you want any revisions before approval, contact ${businessName} and we can update the estimate.</div>
+          <div class="detail">Review the scope, pricing, and vehicle details above. If you want any revisions before approval, send the shop a quick request here.</div>
+          ${canRespond ? `<form class="actions" method="post" action="${escapeHtml(publicRespondUrl)}"><button class="cta" type="submit" name="response" value="accepted">Approve estimate</button><button class="cta secondary" type="submit" name="response" value="declined">Decline estimate</button></form>` : ""}
+          ${publicRevisionRequestUrl ? `<section id="request-revision" style="margin-top:18px;">
+            <form method="post" action="${escapeHtml(publicRevisionRequestUrl)}" class="field-grid">
+              <label class="field-label">
+                Requested changes
+                <textarea class="field-textarea" name="message" placeholder="Tell the shop what you want adjusted before approval."></textarea>
+              </label>
+              <button class="sub-cta" type="submit" style="justify-self:start; margin-top:0;">Request estimate changes</button>
+            </form>
+          </section>` : ""}
+          ${portalUrl ? `<a class="sub-cta" href="${escapeHtml(portalUrl)}">Open customer hub</a>` : ""}
         </section>
       </section>
       <div class="footer">Prepared by ${businessName}. Pricing, parts, and scope remain subject to final approval before work begins.</div>

@@ -465,6 +465,7 @@ export async function sendAppointmentConfirmation(options: {
   address?: string | null;
   serviceSummary?: string | null;
   confirmationUrl?: string | null;
+  portalUrl?: string | null;
   confirmationActionLabel?: string | null;
   paymentStatus?: string | null;
   message?: string | null;
@@ -481,6 +482,7 @@ export async function sendAppointmentConfirmation(options: {
       address: fallback(options.address),
       serviceSummary: fallback(options.serviceSummary),
       confirmationUrl: optionalValue(options.confirmationUrl),
+      portalUrl: optionalValue(options.portalUrl),
       confirmationActionLabel: fallback(options.confirmationActionLabel),
       paymentStatus: fallback(options.paymentStatus),
       message: optionalValue(options.message),
@@ -508,6 +510,37 @@ export async function sendAppointmentReminder(options: {
       dateTime: options.dateTime,
       vehicle: fallback(options.vehicle),
       serviceSummary: fallback(options.serviceSummary),
+    },
+  });
+}
+
+export async function sendAppointmentChangeRequestAlert(options: {
+  to: string;
+  businessId?: string | null;
+  businessName: string;
+  clientName: string;
+  dateTime: string;
+  vehicle?: string | null;
+  preferredTiming?: string | null;
+  message?: string | null;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  appointmentUrl?: string | null;
+}): Promise<void> {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "appointment_change_request_alert",
+    businessId: options.businessId,
+    vars: {
+      businessName: options.businessName,
+      clientName: options.clientName,
+      dateTime: options.dateTime,
+      vehicle: fallback(options.vehicle),
+      preferredTiming: fallback(options.preferredTiming),
+      message: fallback(options.message),
+      clientEmail: fallback(options.clientEmail),
+      clientPhone: fallback(options.clientPhone),
+      appointmentUrl: fallback(options.appointmentUrl),
     },
   });
 }
@@ -596,6 +629,7 @@ export async function sendQuoteEmail(options: {
   amount: string;
   vehicle?: string | null;
   quoteUrl?: string | null;
+  portalUrl?: string | null;
   message?: string | null;
 }) {
   await sendTemplatedEmail({
@@ -608,6 +642,7 @@ export async function sendQuoteEmail(options: {
       amount: options.amount,
       vehicle: fallback(options.vehicle),
       quoteUrl: optionalValue(options.quoteUrl),
+      portalUrl: optionalValue(options.portalUrl),
       message: optionalValue(options.message),
     },
   });
@@ -621,6 +656,7 @@ export async function sendQuoteFollowUpEmail(options: {
   amount: string;
   vehicle?: string | null;
   quoteUrl?: string | null;
+  portalUrl?: string | null;
   message?: string | null;
 }) {
   await sendTemplatedEmail({
@@ -633,7 +669,37 @@ export async function sendQuoteFollowUpEmail(options: {
       amount: options.amount,
       vehicle: fallback(options.vehicle),
       quoteUrl: optionalValue(options.quoteUrl),
+      portalUrl: optionalValue(options.portalUrl),
       message: optionalValue(options.message),
+    },
+  });
+}
+
+export async function sendQuoteRevisionRequestAlert(options: {
+  to: string;
+  businessId?: string | null;
+  businessName: string;
+  clientName: string;
+  vehicle?: string | null;
+  amount: string;
+  requestDetails: string;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  quoteUrl?: string | null;
+}) {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "quote_revision_request_alert",
+    businessId: options.businessId,
+    vars: {
+      businessName: options.businessName,
+      clientName: options.clientName,
+      vehicle: fallback(options.vehicle),
+      amount: options.amount,
+      requestDetails: options.requestDetails,
+      clientEmail: fallback(options.clientEmail),
+      clientPhone: fallback(options.clientPhone),
+      quoteUrl: fallback(options.quoteUrl),
     },
   });
 }
@@ -646,6 +712,7 @@ export async function sendInvoiceEmail(options: {
   amount: string;
   invoiceNumber: string;
   invoiceUrl?: string | null;
+  portalUrl?: string | null;
   message?: string | null;
 }) {
   await sendTemplatedEmail({
@@ -658,6 +725,7 @@ export async function sendInvoiceEmail(options: {
       amount: options.amount,
       invoiceNumber: options.invoiceNumber,
       invoiceUrl: optionalValue(options.invoiceUrl),
+      portalUrl: optionalValue(options.portalUrl),
       message: optionalValue(options.message),
     },
   });

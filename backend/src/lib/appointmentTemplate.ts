@@ -25,6 +25,9 @@ type AppointmentTemplateData = {
   depositAmount?: string | number | null;
   depositPaid?: boolean | null;
   publicPaymentUrl?: string | null;
+  publicRequestChangeUrl?: string | null;
+  portalUrl?: string | null;
+  changeRequestState?: "sent" | "recorded" | null;
   stripePaymentState?: "success" | "cancelled" | null;
 };
 
@@ -62,6 +65,8 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
   const notes = escapeHtml(data.notes ?? "");
   const appointmentDateTime = escapeHtml(data.appointmentDateTime ?? "Scheduled appointment");
   const publicPaymentUrl = data.publicPaymentUrl?.trim() || "";
+  const publicRequestChangeUrl = data.publicRequestChangeUrl?.trim() || "";
+  const portalUrl = data.portalUrl?.trim() || "";
   const totalPrice = Number.parseFloat(String(data.totalPrice ?? 0));
   const depositAmount = Number.parseFloat(String(data.depositAmount ?? 0));
   const hasTotal = Number.isFinite(totalPrice) && totalPrice > 0;
@@ -77,6 +82,12 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
       ? `<div class="banner banner-success">Deposit received. Your payment has been recorded.</div>`
       : data.stripePaymentState === "cancelled"
         ? `<div class="banner banner-muted">Stripe checkout was cancelled. You can return and pay whenever you're ready.</div>`
+        : "";
+  const changeRequestBanner =
+    data.changeRequestState === "sent"
+      ? `<div class="banner banner-success">Your change request was sent to the shop. They can follow up using the contact details already on file.</div>`
+      : data.changeRequestState === "recorded"
+        ? `<div class="banner banner-muted">Your change request was recorded. The shop can review it from the appointment activity feed even if email alerts are unavailable right now.</div>`
         : "";
   const depositStatus = hasDeposit
     ? depositPaid
@@ -144,7 +155,12 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
       .service-item-title { font-size: 14px; font-weight: 700; color: #0f172a; }
       .service-item-detail { margin-top: 4px; font-size: 13px; color: #64748b; line-height: 1.5; }
       .cta { display: inline-flex; align-items: center; justify-content: center; margin-top: 16px; padding: 12px 18px; border-radius: 999px; background: #ea580c; color: #fff; text-decoration: none; font-weight: 700; font-size: 14px; }
+      .sub-cta { display: inline-flex; align-items: center; justify-content: center; margin-top: 12px; padding: 12px 18px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; text-decoration: none; font-weight: 700; font-size: 14px; }
       .cta-note { margin-top: 10px; color: #64748b; font-size: 13px; line-height: 1.5; }
+      .field-grid { display: grid; gap: 12px; margin-top: 16px; }
+      .field-label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: #0f172a; }
+      .field-input, .field-textarea { width: 100%; border-radius: 14px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; font: inherit; padding: 12px 14px; }
+      .field-textarea { min-height: 112px; resize: vertical; }
       .meta-grid { display: grid; gap: 10px; margin-top: 16px; }
       .meta-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
       .meta-row span:first-child { color: #64748b; }
@@ -173,6 +189,7 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
             <div class="status ${escapeHtml(status)}">${escapeHtml(label(data.status))}</div>
           </div>
           ${paymentBanner}
+          ${changeRequestBanner}
         </header>
         <main class="body">
           <section class="hero">
@@ -218,6 +235,22 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
             </section>
           </section>
           ${notes ? `<section class="card" style="margin-top:16px;"><div class="label">Notes</div><div class="value muted notes">${notes}</div></section>` : ""}
+          ${publicRequestChangeUrl ? `<section id="request-change" class="card soft">
+            <div class="label">Need to reschedule?</div>
+            <div class="value muted">Send a quick change request here and the shop can follow up with the best next time.</div>
+            <form method="post" action="${escapeHtml(publicRequestChangeUrl)}" class="field-grid">
+              <label class="field-label">
+                Preferred timing
+                <input class="field-input" type="text" name="preferredTiming" placeholder="Example: next Tuesday afternoon" />
+              </label>
+              <label class="field-label">
+                What needs to change?
+                <textarea class="field-textarea" name="message" placeholder="Tell the shop what you need adjusted."></textarea>
+              </label>
+              <button class="sub-cta" type="submit" style="justify-self:start; margin-top:0;">Request a change</button>
+            </form>
+          </section>` : ""}
+          ${portalUrl ? `<section class="card soft"><div class="label">Customer hub</div><div class="value muted">Open your full customer hub to review active estimates, unpaid invoices, upcoming appointments, and vehicle info in one place.</div><a class="sub-cta" href="${escapeHtml(portalUrl)}">Open customer hub</a></section>` : ""}
         </main>
         <div class="footer">
           Need to reschedule or update anything? Contact ${businessName}${data.business.phone ? ` at ${escapeHtml(data.business.phone)}` : ""}${data.business.email ? ` or ${escapeHtml(data.business.email)}` : ""}.

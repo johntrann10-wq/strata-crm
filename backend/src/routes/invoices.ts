@@ -14,7 +14,7 @@ import { isEmailConfigured } from "../lib/env.js";
 import { sendInvoiceEmail } from "../lib/email.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
-import { buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
+import { buildPublicAppUrl, buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 import { createInvoicePaymentCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
 import { createActivityLog } from "../lib/activity.js";
 import { getActiveInvoicePaymentTotal, isPaymentSchemaDriftError } from "../lib/invoicePayments.js";
@@ -982,6 +982,7 @@ invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
     lineItems: lineItemsRows.map((li) => ({ description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, total: li.total })),
     payments: paymentsList.map((p) => ({ amount: p.amount, method: p.method, paidAt: p.paidAt })),
     publicPaymentUrl,
+    portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(token)}`),
   };
   const html = renderInvoiceHtml(templateData);
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -1506,6 +1507,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
       invoiceNumber: existing.invoiceNumber ?? "Invoice",
       invoiceUrl: buildPublicDocumentUrl(`/api/invoices/${existing.id}/public-html?token=${encodeURIComponent(publicToken)}`),
+      portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(publicToken)}`),
       message: parsed.data.message ?? null,
     });
   } catch (error) {

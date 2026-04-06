@@ -4,7 +4,7 @@
  * Fallbacks: use "-" or "N/A" when data is missing.
  */
 
-/** Placeholders: clientName, businessName, dateTime, vehicle, address, serviceSummary, confirmationUrl (use - or leave blank if missing) */
+/** Placeholders: clientName, businessName, dateTime, vehicle, address, serviceSummary, confirmationUrl, portalUrl (use - or leave blank if missing) */
 type BuiltinEmailTemplate = {
   subject: string;
   bodyHtml: string;
@@ -91,6 +91,7 @@ export const appointmentConfirmation: BuiltinEmailTemplate = {
         { label: "Service details", value: "{{serviceSummary}}" },
       ]) +
       `<div style="margin-top:14px;">${renderInfoCard("Payment status", "{{paymentStatus}}")}</div>` +
+      `<div style="margin-top:14px;">${renderInfoCard("Customer hub", "View all active estimates, invoices, appointments, and vehicles from one place:<br>{{portalUrl}}")}</div>` +
       `<div style="margin-top:14px;">${renderInfoCard(
         "Need to change anything?",
         "If you need to reschedule or update anything before the appointment, contact us directly.<br>{{businessPhone}}<br>{{businessEmail}}<br>{{businessAddress}}"
@@ -112,6 +113,8 @@ Vehicle: {{vehicle}}
 Address: {{address}}
 Service details: {{serviceSummary}}
 Payment status: {{paymentStatus}}
+
+Customer hub: {{portalUrl}}
 
 {{confirmationActionLabel}}: {{confirmationUrl}}
 
@@ -147,6 +150,46 @@ Vehicle: {{vehicle}}
 Service details: {{serviceSummary}}
 
 See you soon!`,
+};
+
+/** Placeholders: businessName, clientName, dateTime, vehicle, preferredTiming, message, clientEmail, clientPhone, appointmentUrl */
+export const appointmentChangeRequestAlert: BuiltinEmailTemplate = {
+  subject: "Appointment change request - {{businessName}}",
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Schedule change request",
+    title: "A customer requested an appointment change",
+    introHtml:
+      `<p style="margin:0;">{{clientName}} asked to change an upcoming appointment scheduled for <strong>{{dateTime}}</strong>.</p>` +
+      `<p style="margin:10px 0 0;">Review the request details below and follow up with the customer to confirm the next step.</p>`,
+    bodyHtml: renderDetailGrid([
+      { label: "Customer", value: "{{clientName}}" },
+      { label: "Vehicle", value: "{{vehicle}}" },
+      { label: "Preferred timing", value: "{{preferredTiming}}" },
+      { label: "Request details", value: "{{message}}" },
+      { label: "Customer email", value: "{{clientEmail}}" },
+      { label: "Customer phone", value: "{{clientPhone}}" },
+    ]),
+    ctaLabel: "Open appointment",
+    ctaUrl: "{{appointmentUrl}}",
+    ctaHint: `Appointment: {{appointmentUrl}}`,
+    showCtaHint: false,
+    footerNote: "This request came from the public appointment page.",
+  }),
+  bodyText: `{{businessName}}
+
+Appointment change request
+
+{{clientName}} asked to change an upcoming appointment scheduled for {{dateTime}}.
+
+Customer: {{clientName}}
+Vehicle: {{vehicle}}
+Preferred timing: {{preferredTiming}}
+Request details: {{message}}
+Customer email: {{clientEmail}}
+Customer phone: {{clientPhone}}
+
+Open appointment: {{appointmentUrl}}`,
 };
 
 /** Placeholders: clientName, businessName, amount, invoiceNumber, paidAt, method */
@@ -234,6 +277,46 @@ It's been a while since your last visit ({{lastVisit}}). We're here whenever you
 {{serviceSummary}}
 
 Book now: {{bookUrl}}`,
+};
+
+/** Placeholders: businessName, clientName, vehicle, amount, requestDetails, clientEmail, clientPhone, quoteUrl */
+export const quoteRevisionRequestAlert: BuiltinEmailTemplate = {
+  subject: "Estimate revision request - {{businessName}}",
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Estimate revision request",
+    title: "A customer requested estimate changes",
+    introHtml:
+      `<p style="margin:0;">{{clientName}} asked for revisions on an estimate for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>` +
+      `<p style="margin:10px 0 0;">Review the request details below and update the estimate if the scope or pricing needs to change.</p>`,
+    bodyHtml: renderDetailGrid([
+      { label: "Customer", value: "{{clientName}}" },
+      { label: "Vehicle", value: "{{vehicle}}" },
+      { label: "Estimate total", value: "{{amount}}" },
+      { label: "Requested changes", value: "{{requestDetails}}" },
+      { label: "Customer email", value: "{{clientEmail}}" },
+      { label: "Customer phone", value: "{{clientPhone}}" },
+    ]),
+    ctaLabel: "Open estimate",
+    ctaUrl: "{{quoteUrl}}",
+    ctaHint: `Estimate: {{quoteUrl}}`,
+    showCtaHint: false,
+    footerNote: "This request came from the public estimate page.",
+  }),
+  bodyText: `{{businessName}}
+
+Estimate revision request
+
+{{clientName}} asked for revisions on an estimate for {{vehicle}} totaling {{amount}}.
+
+Customer: {{clientName}}
+Vehicle: {{vehicle}}
+Estimate total: {{amount}}
+Requested changes: {{requestDetails}}
+Customer email: {{clientEmail}}
+Customer phone: {{clientPhone}}
+
+Open estimate: {{quoteUrl}}`,
 };
 
 /** Placeholders: clientName, businessName, serviceInterest, responseWindow */
@@ -468,6 +551,7 @@ Sign in here:
 If this access looks wrong, contact your shop owner or admin before using the account.`,
   },
   appointment_confirmation: appointmentConfirmation,
+  appointment_change_request_alert: appointmentChangeRequestAlert,
   appointment_reminder: appointmentReminder,
   lead_auto_response: leadAutoResponse,
   missed_call_text_back: missedCallTextBack,
@@ -476,6 +560,7 @@ If this access looks wrong, contact your shop owner or admin before using the ac
   review_request: reviewRequest,
   lapsed_client_reengagement: lapsedClientReengagement,
   weekly_summary: weeklySummary,
+  quote_revision_request_alert: quoteRevisionRequestAlert,
   quote_sent: {
     subject: "Quote for {{vehicle}} from {{businessName}}",
     bodyHtml: renderClientShell({
@@ -485,7 +570,8 @@ If this access looks wrong, contact your shop owner or admin before using the ac
       introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">We prepared a quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>`,
       bodyHtml:
         renderInfoCard("Next step", "Review the quote details and contact us if you would like any changes before scheduling.") +
-        renderInfoCard("Message from the shop", "{{message}}"),
+        renderInfoCard("Message from the shop", "{{message}}") +
+        renderInfoCard("Customer hub", "View all active estimates, invoices, appointments, and vehicles from one place:<br>{{portalUrl}}"),
       ctaLabel: "View quote",
       ctaUrl: "{{quoteUrl}}",
       ctaHint: `Quote link: {{quoteUrl}}`,
@@ -505,6 +591,8 @@ Next step: Review the quote details and contact us if you would like any changes
 
 View quote: {{quoteUrl}}
 
+Customer hub: {{portalUrl}}
+
 If you have any questions, contact us directly.
 {{businessPhone}}
 {{businessEmail}}
@@ -517,7 +605,9 @@ If you have any questions, contact us directly.
       eyebrow: "Follow-up",
       title: "Checking in on your quote",
       introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">We wanted to follow up on your quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>`,
-      bodyHtml: renderInfoCard("Message from the shop", "{{message}}"),
+      bodyHtml:
+        renderInfoCard("Message from the shop", "{{message}}") +
+        renderInfoCard("Customer hub", "View all active estimates, invoices, appointments, and vehicles from one place:<br>{{portalUrl}}"),
       ctaLabel: "Review quote",
       ctaUrl: "{{quoteUrl}}",
       ctaHint: `Quote link: {{quoteUrl}}`,
@@ -535,6 +625,8 @@ We wanted to follow up on your quote for {{vehicle}} totaling {{amount}}.
 
 Review quote: {{quoteUrl}}
 
+Customer hub: {{portalUrl}}
+
 If you are ready to move forward, contact us directly and we will help with the next step.
 {{businessPhone}}
 {{businessEmail}}
@@ -549,7 +641,8 @@ If you are ready to move forward, contact us directly and we will help with the 
       introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">Invoice <strong>{{invoiceNumber}}</strong> is ready for <strong>{{amount}}</strong>.</p>`,
       bodyHtml:
         renderInfoCard("Details", "Open the invoice to review the completed work, payment status, and your service record.") +
-        renderInfoCard("Message from the shop", "{{message}}"),
+        renderInfoCard("Message from the shop", "{{message}}") +
+        renderInfoCard("Customer hub", "View all active estimates, invoices, appointments, and vehicles from one place:<br>{{portalUrl}}"),
       ctaLabel: "View invoice",
       ctaUrl: "{{invoiceUrl}}",
       ctaHint: `Invoice link: {{invoiceUrl}}`,
@@ -568,6 +661,8 @@ Details: Open the invoice to review the completed work, payment status, and your
 {{message}}
 
 View invoice: {{invoiceUrl}}
+
+Customer hub: {{portalUrl}}
 
 If you have any questions, contact us directly.
 {{businessPhone}}

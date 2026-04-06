@@ -37,6 +37,7 @@ import {
   integrationsRouter,
 } from "./routes/integrations.js";
 import { billingRouter, handleStripeWebhook } from "./routes/billing.js";
+import { portalRouter } from "./routes/portal.js";
 
 validateEnv();
 
@@ -74,6 +75,7 @@ app.use(requestId);
 app.use(requestLogging);
 
 app.use("/api/auth", noStore, authRouter);
+app.use("/api/portal", portalRouter);
 app.use("/api/users", optionalAuth, usersRouter);
 app.use("/api/billing", billingRouter);
 app.use("/api/businesses", optionalAuth, businessesRouter);

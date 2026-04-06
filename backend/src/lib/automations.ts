@@ -15,7 +15,7 @@ import {
   sendReviewRequest,
 } from "./email.js";
 import { logger } from "./logger.js";
-import { buildPublicDocumentUrl, createPublicDocumentToken } from "./publicDocumentAccess.js";
+import { buildPublicAppUrl, buildPublicDocumentUrl, createPublicDocumentToken } from "./publicDocumentAccess.js";
 import { buildVehicleDisplayName } from "./vehicleFormatting.js";
 import { enqueueTwilioTemplateSms } from "./twilio.js";
 import { parseLeadRecord } from "./leads.js";
@@ -684,6 +684,7 @@ export async function runAbandonedQuoteFollowUps(options?: {
             model: row.vehicleModel,
           }),
           quoteUrl: buildPublicDocumentUrl(`/api/quotes/${row.id}/public-html?token=${encodeURIComponent(publicToken)}`),
+          portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(publicToken)}`),
           message: null,
         });
         const followUpSentAt = new Date();
