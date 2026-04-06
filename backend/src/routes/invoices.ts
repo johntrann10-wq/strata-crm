@@ -931,16 +931,10 @@ invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
   const paymentsList = await listActiveInvoicePayments(row.id);
   const totalPaid = paymentsList.reduce((sum, p) => sum + Number(p.amount ?? 0), 0);
   const remainingBalance = Math.max(Number(row.total ?? 0) - totalPaid, 0);
-  const [connectedBusiness] = await db
-    .select({ stripeConnectAccountId: businesses.stripeConnectAccountId })
-    .from(businesses)
-    .where(eq(businesses.id, access.businessId))
-    .limit(1);
   const publicPaymentUrl =
     row.status !== "void" &&
     row.status !== "paid" &&
-    remainingBalance > 0 &&
-    connectedBusiness?.stripeConnectAccountId
+    remainingBalance > 0
       ? buildPublicDocumentUrl(`/api/invoices/${row.id}/public-pay?token=${encodeURIComponent(token)}`)
       : null;
   const templateData: InvoiceTemplateData = {
@@ -1493,7 +1487,8 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       entityId: existing.id,
       businessId: bid,
     });
-    const invoicePayUrl = existing.stripeConnectAccountId
+    const invoicePayUrl =
+      Number(existing.total ?? 0) > 0
       ? buildPublicDocumentUrl(`/api/invoices/${existing.id}/public-pay?token=${encodeURIComponent(publicToken)}`)
       : null;
     await sendInvoiceEmail({
