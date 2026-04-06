@@ -90,6 +90,52 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+type GoogleAuthUserSnapshot = {
+  googleProfileId?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  emailVerified?: boolean | null;
+};
+
+type GoogleAuthProfile = {
+  googleProfileId: string;
+  firstName: string | null;
+  lastName: string | null;
+};
+
+export function resolveGoogleAccountUpdates(existingUser: GoogleAuthUserSnapshot, profile: GoogleAuthProfile) {
+  if (existingUser.googleProfileId && existingUser.googleProfileId !== profile.googleProfileId) {
+    throw new UnauthorizedError("This email is already linked to a different Google account.");
+  }
+
+  const updates: {
+    googleProfileId?: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    emailVerified?: boolean;
+    updatedAt?: Date;
+  } = {};
+
+  if (!existingUser.googleProfileId) {
+    updates.googleProfileId = profile.googleProfileId;
+  }
+  if (!existingUser.firstName && profile.firstName) {
+    updates.firstName = profile.firstName;
+  }
+  if (!existingUser.lastName && profile.lastName) {
+    updates.lastName = profile.lastName;
+  }
+  if (!existingUser.emailVerified) {
+    updates.emailVerified = true;
+  }
+
+  if (Object.keys(updates).length === 0) return null;
+  return {
+    ...updates,
+    updatedAt: new Date(),
+  };
+}
+
 function serializeAuthUser(user: {
   id: string;
   email: string;
@@ -725,7 +771,11 @@ authRouter.get(
     if (!payload?.email) {
       throw new BadRequestError("Google account did not return an email.");
     }
+    if (!payload.sub) {
+      throw new BadRequestError("Google account did not return a profile identifier.");
+    }
     const email = normalizeEmail(payload.email);
+    const googleProfileId = payload.sub;
     const firstName = payload.given_name ?? null;
     const lastName = payload.family_name ?? null;
     // Find or create user
@@ -737,14 +787,29 @@ authRouter.get(
         .values({
           id: randomUUID(),
           email,
+          googleProfileId,
           firstName,
           lastName,
+          emailVerified: true,
         })
         .returning();
       if (!created) throw new BadRequestError("Failed to create account from Google profile.");
       user = created;
       logger.info("User signed up via Google", { userId: user.id, email: user.email });
     } else {
+      const accountUpdates = resolveGoogleAccountUpdates(user, {
+        googleProfileId,
+        firstName,
+        lastName,
+      });
+      if (accountUpdates) {
+        const [updatedUser] = await db
+          .update(users)
+          .set(accountUpdates)
+          .where(eq(users.id, user.id))
+          .returning();
+        if (updatedUser) user = updatedUser;
+      }
       const activatedMemberships = await activateInvitedMemberships(user.id);
       await sendActivatedMembershipEmails(req, { email: user.email, firstName: user.firstName }, activatedMemberships);
       logger.info("User signed in via Google", { userId: user.id, email: user.email });

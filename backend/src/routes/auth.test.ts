@@ -21,4 +21,65 @@ describe("auth route helper logic", () => {
     expect(resolveGoogleStateRedirect("{not-json")).toBe("/signed-in");
     expect(resolveGoogleStateRedirect(JSON.stringify({ redirectPath: "/signed-in" }))).toBe("/signed-in");
   });
+
+  it("backfills Google linkage and verification for existing email accounts", async () => {
+    const { resolveGoogleAccountUpdates } = await import("./auth.js");
+    const updates = resolveGoogleAccountUpdates(
+      {
+        googleProfileId: null,
+        firstName: null,
+        lastName: "Existing",
+        emailVerified: false,
+      },
+      {
+        googleProfileId: "google-sub-123",
+        firstName: "Jamie",
+        lastName: "Fresh",
+      }
+    );
+    expect(updates).toMatchObject({
+      googleProfileId: "google-sub-123",
+      firstName: "Jamie",
+      emailVerified: true,
+    });
+    expect(updates?.lastName).toBeUndefined();
+    expect(updates?.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("returns no Google account updates when the account is already linked", async () => {
+    const { resolveGoogleAccountUpdates } = await import("./auth.js");
+    const updates = resolveGoogleAccountUpdates(
+      {
+        googleProfileId: "google-sub-123",
+        firstName: "Jamie",
+        lastName: "Existing",
+        emailVerified: true,
+      },
+      {
+        googleProfileId: "google-sub-123",
+        firstName: "Jamie",
+        lastName: "Fresh",
+      }
+    );
+    expect(updates).toBeNull();
+  });
+
+  it("rejects a Google sign-in when the email is linked to a different Google profile", async () => {
+    const { resolveGoogleAccountUpdates } = await import("./auth.js");
+    expect(() =>
+      resolveGoogleAccountUpdates(
+        {
+          googleProfileId: "google-sub-123",
+          firstName: "Jamie",
+          lastName: "Existing",
+          emailVerified: true,
+        },
+        {
+          googleProfileId: "google-sub-999",
+          firstName: "Jamie",
+          lastName: "Existing",
+        }
+      )
+    ).toThrowError("This email is already linked to a different Google account.");
+  });
 });
