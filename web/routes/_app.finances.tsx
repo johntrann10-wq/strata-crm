@@ -404,7 +404,7 @@ function FinancesContent() {
                   type="date"
                   value={expenseForm.expenseDate}
                   onChange={(event) => setExpenseForm((current) => ({ ...current, expenseDate: event.target.value }))}
-                  className="h-10 w-full min-w-0 rounded-xl border-input/90 bg-background/85 px-3.5 py-2 text-sm font-normal [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+                  className="border-input/90 h-10 w-full min-w-0 appearance-none rounded-xl border bg-background/85 px-3.5 py-2 pr-10 text-sm font-normal shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40 [font-variant-numeric:tabular-nums] [color-scheme:light] [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0"
                 />
               </div>
               <div className="space-y-1.5">
