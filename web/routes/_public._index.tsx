@@ -387,9 +387,14 @@ export default function LandingPage() {
 
         <div className="relative z-10 mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,360px)] lg:items-start">
           <div className="space-y-7">
-            <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/88 px-3.5 py-1.5 text-sm font-medium text-orange-700 shadow-sm">
-              <Sparkles className="h-4 w-4" />
-              Strata CRM for automotive service businesses
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/88 px-3.5 py-1.5 text-sm font-medium text-orange-700 shadow-sm">
+                <Sparkles className="h-4 w-4" />
+                Strata CRM for automotive service businesses
+              </div>
+              <div className="inline-flex items-center rounded-full border border-orange-200/80 bg-orange-50 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-orange-700 shadow-sm">
+                23 of 25 founder spots left
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -487,11 +492,6 @@ export default function LandingPage() {
                 >
                   View pricing
                 </Link>
-              </div>
-              <div className="mt-4 flex">
-                <div className="inline-flex items-center rounded-full border border-orange-200/80 bg-orange-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-orange-700">
-                  23 of 25 founder spots left
-                </div>
               </div>
             </div>
         </div>
