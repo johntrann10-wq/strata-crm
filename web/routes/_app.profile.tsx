@@ -241,6 +241,10 @@ const ChangePasswordModal = (props: { open: boolean; onClose: () => void }) => {
       setError("New password must be at least 8 characters.");
       return;
     }
+    if (currentPassword === newPassword) {
+      setError("New password must be different from your current password.");
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setError("New password and confirmation do not match.");
       return;
