@@ -8,9 +8,20 @@ import { useAction } from "@/hooks/useApi";
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
+function extractResetToken(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (!trimmed.includes("://") && !trimmed.includes("?") && !trimmed.includes("#")) {
+    return trimmed;
+  }
+  const match = trimmed.match(/[?#&](?:token|resetToken|reset_token)=([^&#]+)/i);
+  return match ? decodeURIComponent(match[1] ?? "") : "";
+}
+
 export default function ResetPasswordRoute() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [pastedLink, setPastedLink] = useState("");
   const token = useMemo(() => {
     const directToken =
       searchParams.get("token") ??
@@ -18,6 +29,8 @@ export default function ResetPasswordRoute() {
       searchParams.get("reset_token");
     if (directToken) return directToken;
     if (typeof window === "undefined") return "";
+    const rawHrefToken = extractResetToken(window.location.href);
+    if (rawHrefToken) return rawHrefToken;
     const hash = window.location.hash.startsWith("#")
       ? window.location.hash.slice(1)
       : window.location.hash;
@@ -30,6 +43,8 @@ export default function ResetPasswordRoute() {
       ""
     );
   }, [searchParams]);
+  const fallbackToken = useMemo(() => extractResetToken(pastedLink), [pastedLink]);
+  const resolvedToken = token || fallbackToken;
   const [{ fetching }, resetPassword] = useAction(api.user.resetPassword);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -39,7 +54,7 @@ export default function ResetPasswordRoute() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
-    if (!token) {
+    if (!resolvedToken) {
       setError("This password reset link is missing or invalid.");
       return;
     }
@@ -51,7 +66,7 @@ export default function ResetPasswordRoute() {
       setError("Passwords do not match.");
       return;
     }
-    const result = await resetPassword({ token, password });
+    const result = await resetPassword({ token: resolvedToken, password });
     if (result.error) {
       setError(result.error.message ?? "Could not reset password.");
       return;
@@ -88,6 +103,25 @@ export default function ResetPasswordRoute() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
+            {!resolvedToken ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="resetLink" className="text-[13px] font-medium text-foreground">
+                  Paste reset link
+                </Label>
+                <Input
+                  id="resetLink"
+                  type="text"
+                  placeholder="Paste the full reset link from your email"
+                  autoComplete="off"
+                  value={pastedLink}
+                  onChange={(event) => setPastedLink(event.target.value)}
+                  className={`h-9 rounded-lg text-[13px] shadow-none${error ? " border-destructive" : ""}`}
+                />
+                <p className="text-[12px] text-muted-foreground">
+                  If the email button opened a broken page, paste the full reset link here and continue.
+                </p>
+              </div>
+            ) : null}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="password" className="text-[13px] font-medium text-foreground">
                 New password
