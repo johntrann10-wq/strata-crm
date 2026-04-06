@@ -936,20 +936,13 @@ invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
     .from(businesses)
     .where(eq(businesses.id, access.businessId))
     .limit(1);
-  let publicPaymentUrl: string | null = null;
-  if (
+  const publicPaymentUrl =
     row.status !== "void" &&
     row.status !== "paid" &&
     remainingBalance > 0 &&
     connectedBusiness?.stripeConnectAccountId
-  ) {
-    const account = await retrieveConnectAccount({ accountId: connectedBusiness.stripeConnectAccountId });
-    if (account?.ready) {
-      publicPaymentUrl = buildPublicDocumentUrl(
-        `/api/invoices/${row.id}/public-pay?token=${encodeURIComponent(token)}`
-      );
-    }
-  }
+      ? buildPublicDocumentUrl(`/api/invoices/${row.id}/public-pay?token=${encodeURIComponent(token)}`)
+      : null;
   const templateData: InvoiceTemplateData = {
     invoiceNumber: row.invoiceNumber,
     status: row.status,
@@ -1500,13 +1493,9 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       entityId: existing.id,
       businessId: bid,
     });
-    let invoicePayUrl: string | null = null;
-    if (existing.stripeConnectAccountId) {
-      const account = await retrieveConnectAccount({ accountId: existing.stripeConnectAccountId });
-      if (account?.ready) {
-        invoicePayUrl = buildPublicDocumentUrl(`/api/invoices/${existing.id}/public-pay?token=${encodeURIComponent(publicToken)}`);
-      }
-    }
+    const invoicePayUrl = existing.stripeConnectAccountId
+      ? buildPublicDocumentUrl(`/api/invoices/${existing.id}/public-pay?token=${encodeURIComponent(publicToken)}`)
+      : null;
     await sendInvoiceEmail({
       to: recipientEmail,
       businessId: bid,

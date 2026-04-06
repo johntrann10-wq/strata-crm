@@ -161,6 +161,7 @@ portalRouter.get(
     if (!business) throw new NotFoundError("Business not found.");
 
     let stripeReady = false;
+    const stripeConnected = !!business.stripeConnectAccountId;
     if (business.stripeConnectAccountId) {
       const account = await retrieveConnectAccount({ accountId: business.stripeConnectAccountId });
       stripeReady = !!account?.ready;
@@ -341,7 +342,7 @@ portalRouter.get(
             businessId: access.businessId,
           }),
           payUrl:
-            stripeReady && invoice.balance > 0
+            stripeConnected && invoice.balance > 0
               ? buildPublicDocumentUrl(
                   `/api/invoices/${invoice.id}/public-pay?token=${encodeURIComponent(
                     createPublicDocumentToken({
