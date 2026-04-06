@@ -68,6 +68,7 @@ type BillingStatus = {
 
 export type AuthOutletContext = RootOutletContext & {
   user: any;
+  refreshUser: () => Promise<void>;
   businessName: string | null;
   businessId: string | null;
   businessType: string | null;
@@ -446,6 +447,9 @@ function AppLayoutInner({
       ({
         ...rootOutletContext,
         user,
+        refreshUser: async () => {
+          await refetchUser();
+        },
         businessName,
         businessId,
         businessType,

@@ -11,7 +11,7 @@ import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
 
 export default function ProfilePage() {
-  const { user } = useOutletContext<AuthOutletContext>();
+  const { user, refreshUser } = useOutletContext<AuthOutletContext>();
   const revalidator = useRevalidator();
   const [isEditing, setIsEditing] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -140,6 +140,7 @@ export default function ProfilePage() {
         open={isEditing}
         onClose={() => {
           setIsEditing(false);
+          void refreshUser();
           revalidator.revalidate();
         }}
       />
@@ -147,6 +148,7 @@ export default function ProfilePage() {
         open={isChangingPassword}
         onClose={() => {
           setIsChangingPassword(false);
+          void refreshUser();
           revalidator.revalidate();
         }}
       />
@@ -154,6 +156,7 @@ export default function ProfilePage() {
         open={isSettingPassword}
         onClose={() => {
           setIsSettingPassword(false);
+          void refreshUser();
           revalidator.revalidate();
         }}
       />

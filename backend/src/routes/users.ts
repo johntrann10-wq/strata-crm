@@ -63,12 +63,24 @@ usersRouter.get("/:id", requireAuth, async (req: Request, res: Response) => {
   const id = req.params.id;
   if (req.userId !== id) throw new NotFoundError("User not found.");
   const [user] = await db
-    .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName })
+    .select({
+      id: users.id,
+      email: users.email,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      googleProfileId: users.googleProfileId,
+      hasPassword: users.passwordHash,
+    })
     .from(users)
     .where(eq(users.id, id))
     .limit(1);
   if (!user) throw new NotFoundError("User not found.");
-  res.json({ ...user, googleImageUrl: null, profilePicture: null });
+  res.json({
+    ...user,
+    hasPassword: Boolean(user.hasPassword),
+    googleImageUrl: null,
+    profilePicture: null,
+  });
 });
 
 const updateSchema = z.object({ firstName: z.string().optional(), lastName: z.string().optional() });
@@ -84,7 +96,19 @@ usersRouter.patch("/:id/update", requireAuth, async (req: Request, res: Response
       updatedAt: new Date(),
     })
     .where(eq(users.id, req.userId!))
-    .returning({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName });
+    .returning({
+      id: users.id,
+      email: users.email,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      googleProfileId: users.googleProfileId,
+      hasPassword: users.passwordHash,
+    });
   if (!updated) throw new NotFoundError("User not found.");
-  res.json({ ...updated, googleImageUrl: null, profilePicture: null });
+  res.json({
+    ...updated,
+    hasPassword: Boolean(updated.hasPassword),
+    googleImageUrl: null,
+    profilePicture: null,
+  });
 });

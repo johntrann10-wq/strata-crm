@@ -527,6 +527,11 @@ export function useAction(actionFn: ActionFn) {
         if (mountedRef.current && actionId === actionIdRef.current) {
           setError(err);
         }
+        let message = err.message;
+        if (message === "Failed to fetch" || message.includes("NetworkError") || message.includes("Load failed")) {
+          message =
+            "Cannot reach the API. Locally: run the backend and ensure Vite proxies /api to it. Production: set STRATA_API_ORIGIN on Vercel/Netlify (same-origin /api proxy) or VITE_API_URL / NEXT_PUBLIC_API_URL at build time; see DEPLOY.md.";
+        }
         let detail = "Action failed";
         if (params) {
           try {
@@ -537,16 +542,16 @@ export function useAction(actionFn: ActionFn) {
         }
         recordRuntimeError({
           source: "window.unhandledrejection",
-          message: err.message,
+          message,
           detail,
         });
         recordReliabilityDiagnostic({
           source: "action.error",
           severity: "error",
-          message: err.message,
+          message,
           detail,
         });
-        return { data: null, error: { message: err.message } };
+        return { data: null, error: { message } };
       } finally {
         if (mountedRef.current && actionId === actionIdRef.current) {
           setFetching(false);
