@@ -180,7 +180,7 @@ const EditProfileModal = (props: { open: boolean; onClose: () => void }) => {
   } = useActionForm(api.user.update, {
     defaultValues: user,
     onSuccess: props.onClose,
-    send: ["firstName", "lastName"],
+    send: ["id", "firstName", "lastName"],
   });
 
   return (
