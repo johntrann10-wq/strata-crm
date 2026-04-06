@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "../components/shared/PageHeader";
+import { CommunicationCard } from "../components/shared/CommunicationCard";
 import { RelatedRecordsPanel } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { AppointmentHistoryCard, ClientEditForm, type FormState, VehiclesCard } from "../components/ClientDetailCards";
@@ -380,8 +381,13 @@ export default function ClientDetailPage() {
     first: 10,
     pause: !id,
   } as any);
+  const [{ data: activityLogs }, refetchActivity] = useFindMany(
+    api.activityLog,
+    { entityType: "client", entityId: id, first: 10, pause: !id } as any
+  );
   const [{ fetching: saving, error: saveError }, runUpdate] = useAction(api.client.update);
   const [{ fetching: deleting }, runDelete] = useAction(api.client.delete);
+  const [{ fetching: sendingPortal }, runSendPortal] = useAction(api.client.sendPortal);
 
   useEffect(() => {
     if (client) setForm(toForm(client));
@@ -443,6 +449,27 @@ export default function ClientDetailPage() {
       navigate("/clients");
     }
     setDeleteOpen(false);
+  };
+
+  const handleSendPortal = async (payload?: {
+    message?: string;
+    recipientEmail?: string;
+    recipientName?: string;
+  }) => {
+    if (!id) return;
+    const result = await runSendPortal({ id, ...payload });
+    if (!result?.error) {
+      const deliveryStatus = (result.data as any)?.deliveryStatus;
+      if (deliveryStatus === "emailed") {
+        toast.success("Customer hub emailed");
+      } else {
+        toast.warning("Customer hub was recorded, but email was not delivered");
+      }
+      void refetchActivity();
+    } else {
+      toast.error(result.error.message ?? "Could not send customer hub");
+    }
+    return result;
   };
 
   if (fetching) {
@@ -829,6 +856,17 @@ export default function ClientDetailPage() {
             <VehiclesCard id={id} vehicles={vehicleList} />
 
             <TimelineCard title="Client timeline" items={clientTimeline} empty="No client history recorded yet." />
+
+            <CommunicationCard
+              title="Customer hub"
+              recipientName={clientDisplayName}
+              recipient={client.email}
+              primaryLabel="Send customer hub"
+              activities={((activityLogs ?? []) as any[]).filter((record) => record.type?.startsWith("client.portal_"))}
+              sending={sendingPortal}
+              canSend={permissions.has("customers.write")}
+              onPrimarySend={handleSendPortal}
+            />
 
             <Card className="max-w-full overflow-hidden border-white/65">
               <CardHeader className="pb-4">

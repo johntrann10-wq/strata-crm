@@ -406,6 +406,14 @@ export const api = {
         body: JSON.stringify(params),
       }),
   },
+  client: {
+    ...resource("clients"),
+    sendPortal: (params: Record<string, unknown>) =>
+      request<unknown>("/clients/" + (params?.id ?? "") + "/sendPortal", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  },
   job: resource("jobs"),
   invoice: {
     ...resource("invoices"),
@@ -602,7 +610,6 @@ export const api = {
         body: JSON.stringify({}),
       }),
   },
-  client: resource("clients"),
   vehicle: resource("vehicles"),
   vehicleCatalog: {
     listYears: () =>

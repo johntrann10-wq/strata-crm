@@ -1,13 +1,16 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { clients, vehicles } from "../db/schema.js";
-import { eq, and, desc, asc, isNull, or, ilike, sql } from "drizzle-orm";
+import { appointments, businesses, clients, invoices, quotes, vehicles } from "../db/schema.js";
+import { eq, and, desc, asc, isNull, or, ilike, sql, inArray } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { createRequestActivityLog } from "../lib/activity.js";
 import { logger } from "../lib/logger.js";
+import { isEmailConfigured } from "../lib/env.js";
+import { sendCustomerPortalEmail } from "../lib/email.js";
+import { buildPublicAppUrl, createPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 import { enqueueQuickBooksCustomerSync } from "../lib/quickbooks.js";
 
 export const clientsRouter = Router({ mergeParams: true });
@@ -49,6 +52,18 @@ const updateSchema = z
   })
   .strict();
 
+const sendPortalSchema = z.object({
+  message: z.string().max(2000).optional(),
+  recipientEmail: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().email().optional()
+  ),
+  recipientName: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().max(120).optional()
+  ),
+});
+
 /** Empty strings clear optional text fields on PATCH. */
 function normalizeClientPatchBody(body: unknown): unknown {
   if (body == null || typeof body !== "object") return body;
@@ -57,6 +72,64 @@ function normalizeClientPatchBody(body: unknown): unknown {
     if (o[k] === "") o[k] = null;
   }
   return o;
+}
+
+async function resolveClientPortalToken(clientId: string, businessId: string) {
+  const [quote] = await db
+    .select({
+      id: quotes.id,
+      updatedAt: quotes.updatedAt,
+      createdAt: quotes.createdAt,
+    })
+    .from(quotes)
+    .where(
+      and(
+        eq(quotes.clientId, clientId),
+        eq(quotes.businessId, businessId),
+        inArray(quotes.status, ["draft", "sent", "accepted"])
+      )
+    )
+    .orderBy(desc(quotes.updatedAt), desc(quotes.createdAt))
+    .limit(1);
+  if (quote?.id) {
+    return createPublicDocumentToken({ kind: "quote", entityId: quote.id, businessId });
+  }
+
+  const [invoice] = await db
+    .select({
+      id: invoices.id,
+      updatedAt: invoices.updatedAt,
+      createdAt: invoices.createdAt,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.clientId, clientId),
+        eq(invoices.businessId, businessId),
+        inArray(invoices.status, ["draft", "sent", "partial", "paid"])
+      )
+    )
+    .orderBy(desc(invoices.updatedAt), desc(invoices.createdAt))
+    .limit(1);
+  if (invoice?.id) {
+    return createPublicDocumentToken({ kind: "invoice", entityId: invoice.id, businessId });
+  }
+
+  const [appointment] = await db
+    .select({
+      id: appointments.id,
+      updatedAt: appointments.updatedAt,
+      startTime: appointments.startTime,
+    })
+    .from(appointments)
+    .where(and(eq(appointments.clientId, clientId), eq(appointments.businessId, businessId)))
+    .orderBy(desc(appointments.updatedAt), desc(appointments.startTime))
+    .limit(1);
+  if (appointment?.id) {
+    return createPublicDocumentToken({ kind: "appointment", entityId: appointment.id, businessId });
+  }
+
+  return null;
 }
 
 clientsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
@@ -190,6 +263,143 @@ clientsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res
     });
   });
   res.json(updated);
+});
+
+clientsRouter.post("/:id/sendPortal", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const parsed = sendPortalSchema.safeParse(req.body ?? {});
+  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+
+  const [existing] = await db
+    .select({
+      id: clients.id,
+      firstName: clients.firstName,
+      lastName: clients.lastName,
+      email: clients.email,
+      businessName: businesses.name,
+    })
+    .from(clients)
+    .leftJoin(businesses, eq(clients.businessId, businesses.id))
+    .where(and(eq(clients.id, req.params.id), eq(clients.businessId, bid)))
+    .limit(1);
+  if (!existing) throw new NotFoundError("Client not found.");
+
+  const recipientEmail = parsed.data.recipientEmail?.trim() || existing.email?.trim() || null;
+  const recipientName =
+    parsed.data.recipientName?.trim() ||
+    `${existing.firstName ?? ""} ${existing.lastName ?? ""}`.trim() ||
+    "Customer";
+
+  if (!recipientEmail) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "client.portal_send_failed",
+      entityType: "client",
+      entityId: existing.id,
+      metadata: {
+        recipient: null,
+        recipientName,
+        message: parsed.data.message ?? null,
+        deliveryStatus: "missing_email",
+        deliveryError: "Client does not have an email address.",
+      },
+    });
+    res.status(400).json({
+      message: "Client does not have an email address.",
+      code: "EMAIL_MISSING_RECIPIENT",
+      deliveryStatus: "missing_email",
+      deliveryError: "Client does not have an email address.",
+    });
+    return;
+  }
+
+  if (!isEmailConfigured()) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "client.portal_send_failed",
+      entityType: "client",
+      entityId: existing.id,
+      metadata: {
+        recipient: recipientEmail,
+        recipientName,
+        message: parsed.data.message ?? null,
+        deliveryStatus: "smtp_disabled",
+        deliveryError: "Transactional email is not configured.",
+      },
+    });
+    res.status(503).json({
+      ok: false,
+      message: "Transactional email is not configured. Set RESEND_* or SMTP_* environment variables.",
+      code: "EMAIL_NOT_CONFIGURED",
+      deliveryStatus: "smtp_disabled",
+      deliveryError: "Transactional email is not configured.",
+    });
+    return;
+  }
+
+  const portalToken = await resolveClientPortalToken(existing.id, bid);
+  if (!portalToken) {
+    res.status(400).json({
+      ok: false,
+      message: "Send a quote, invoice, or appointment to this client first so Strata can create a secure customer hub link.",
+      code: "PORTAL_LINK_UNAVAILABLE",
+      deliveryStatus: "missing_source_document",
+      deliveryError: "No customer-facing records are available for this client yet.",
+    });
+    return;
+  }
+
+  let deliveryError: string | null = null;
+  try {
+    await sendCustomerPortalEmail({
+      to: recipientEmail,
+      businessId: bid,
+      clientName: recipientName,
+      businessName: existing.businessName ?? "Your shop",
+      portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(portalToken)}`),
+      message: parsed.data.message ?? null,
+    });
+  } catch (error) {
+    deliveryError = error instanceof Error ? error.message : String(error);
+    logger.error("Customer hub email send failed", { clientId: existing.id, businessId: bid, error: deliveryError });
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "client.portal_send_failed",
+      entityType: "client",
+      entityId: existing.id,
+      metadata: {
+        recipient: recipientEmail,
+        recipientName,
+        message: parsed.data.message ?? null,
+        deliveryStatus: "email_failed",
+        deliveryError,
+      },
+    });
+    res.status(502).json({
+      ok: false,
+      message: `Customer hub email failed to send: ${deliveryError}`,
+      code: "EMAIL_SEND_FAILED",
+      deliveryStatus: "email_failed",
+      deliveryError,
+    });
+    return;
+  }
+
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "client.portal_sent",
+    entityType: "client",
+    entityId: existing.id,
+    metadata: {
+      recipient: recipientEmail,
+      recipientName,
+      message: parsed.data.message ?? null,
+      deliveryStatus: "emailed",
+      deliveryError: null,
+    },
+  });
+
+  res.json({ ok: true, deliveryStatus: "emailed", deliveryError: null, recipient: recipientEmail, recipientName });
 });
 
 /** Soft-delete client and cascade to vehicles (set deletedAt on all client vehicles). */

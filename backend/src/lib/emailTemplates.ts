@@ -561,6 +561,38 @@ If this access looks wrong, contact your shop owner or admin before using the ac
   lapsed_client_reengagement: lapsedClientReengagement,
   weekly_summary: weeklySummary,
   quote_revision_request_alert: quoteRevisionRequestAlert,
+  customer_portal_link: {
+    subject: "Your customer hub from {{businessName}}",
+    bodyHtml: renderClientShell({
+      businessName: "{{businessName}}",
+      eyebrow: "Customer hub",
+      title: "Your customer hub is ready",
+      introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">Use your customer hub to review active estimates, unpaid invoices, upcoming appointments, and vehicles in one place.</p>`,
+      bodyHtml:
+        renderInfoCard("Open your hub", "This secure link keeps all of your active records together so you can review what is open right now.") +
+        renderInfoCard("Message from the shop", "{{message}}"),
+      ctaLabel: "Open customer hub",
+      ctaUrl: "{{portalUrl}}",
+      ctaHint: `Customer hub: {{portalUrl}}`,
+      showCtaHint: false,
+      footerNote: "If you have any questions, contact us directly.<br>{{businessPhone}}<br>{{businessEmail}}<br>{{businessAddress}}",
+    }),
+    bodyText: `{{businessName}}
+
+Your customer hub is ready
+
+Hi {{clientName}},
+
+Use your customer hub to review active estimates, unpaid invoices, upcoming appointments, and vehicles in one place.
+{{message}}
+
+Open customer hub: {{portalUrl}}
+
+If you have any questions, contact us directly.
+{{businessPhone}}
+{{businessEmail}}
+{{businessAddress}}`,
+  },
   quote_sent: {
     subject: "Quote for {{vehicle}} from {{businessName}}",
     bodyHtml: renderClientShell({

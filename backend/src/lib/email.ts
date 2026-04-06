@@ -733,6 +733,27 @@ export async function sendInvoiceEmail(options: {
   });
 }
 
+export async function sendCustomerPortalEmail(options: {
+  to: string;
+  businessId?: string | null;
+  clientName: string;
+  businessName: string;
+  portalUrl: string;
+  message?: string | null;
+}) {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "customer_portal_link",
+    businessId: options.businessId,
+    vars: {
+      clientName: options.clientName,
+      businessName: options.businessName,
+      portalUrl: options.portalUrl,
+      message: optionalValue(options.message),
+    },
+  });
+}
+
 /** Send review request. Vars: clientName, businessName, reviewUrl?, serviceSummary? */
 export async function sendReviewRequest(options: {
   to: string;
