@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
+import { API_BASE } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -44,6 +45,10 @@ function emptyForm(): LeadFormState {
   };
 }
 
+function buildApiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
+
 export function meta() {
   return [
     { title: "Request service | Strata" },
@@ -71,7 +76,7 @@ export default function PublicLeadCapturePage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`/api/businesses/${encodeURIComponent(businessId)}/public-lead-config`)
+    fetch(buildApiUrl(`/api/businesses/${encodeURIComponent(businessId)}/public-lead-config`))
       .then(async (response) => {
         if (!response.ok) {
           const payload = (await response.json().catch(() => ({}))) as { message?: string };
@@ -114,7 +119,7 @@ export default function PublicLeadCapturePage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/businesses/${encodeURIComponent(businessId)}/public-leads`, {
+      const response = await fetch(buildApiUrl(`/api/businesses/${encodeURIComponent(businessId)}/public-leads`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -200,7 +205,7 @@ export default function PublicLeadCapturePage() {
                 <div className="space-y-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-900">
                   <p>{error}</p>
                   <Button asChild variant="outline">
-                    <Link to="/">Back to Strata</Link>
+                    <a href="/">Back to Strata</a>
                   </Button>
                 </div>
               ) : submitted ? (
