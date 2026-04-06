@@ -491,6 +491,11 @@ export default function LandingPage() {
                 </Link>
               </div>
             </div>
+            <div className="mt-3 flex">
+              <div className="inline-flex items-center rounded-full border border-orange-200/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-orange-700 shadow-sm backdrop-blur">
+                Founder pricing: 23 of 25 spots left
+              </div>
+            </div>
         </div>
       </section>
 
