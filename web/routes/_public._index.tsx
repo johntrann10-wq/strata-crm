@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link, useLocation } from "react-router";
 import {
   ArrowRight,
+  BellRing,
   Calendar,
   CheckCircle2,
   ChevronRight,
@@ -180,6 +181,119 @@ const previewAppointments = [
   { time: "8:00 AM", title: "Full interior + exterior detail", customer: "Alex R. | 2022 Tesla Model 3 | Deposit paid", status: "Confirmed" },
   { time: "10:30 AM", title: "Front two windows tint", customer: "Monica S. | 2021 Honda Accord | Waiting on approval", status: "Scheduled" },
   { time: "1:00 PM", title: "Brake pad and rotor replacement", customer: "Chris M. | 2018 F-150 | Invoice balance due", status: "In progress" },
+];
+
+const featureCategories = [
+  {
+    icon: Calendar,
+    eyebrow: "Scheduling",
+    title: "Front-desk scheduling and job flow",
+    description: "Book work fast from a clear calendar and keep the appointment tied to the actual job, vehicle, deposit, and next action.",
+    items: [
+      "Month-to-day calendar flow",
+      "Appointment confirmations and reminders",
+      "Multi-day job timing and pickup-ready tracking",
+      "Manual booking and schedule control",
+    ],
+  },
+  {
+    icon: Users,
+    eyebrow: "CRM",
+    title: "Clients, vehicles, and team access",
+    description: "Keep customer history, vehicle context, and page-level team permissions inside the same operating system instead of spread across tools.",
+    items: [
+      "Client and vehicle records that stay connected",
+      "Role-based team permissions",
+      "Customer, vehicle, quote, invoice, and payment history in one place",
+      "Mobile-friendly admin workflows",
+    ],
+  },
+  {
+    icon: CreditCard,
+    eyebrow: "Billing",
+    title: "Quotes, invoices, deposits, and payments",
+    description: "Move cleanly from estimate to invoice with customer-facing pages, connected Stripe collection, and clearer approval and balance tracking.",
+    items: [
+      "Quotes and invoices",
+      "Deposit collection and invoice payments",
+      "Public customer-facing documents",
+      "Cleaner billing visibility for the team",
+    ],
+  },
+  {
+    icon: FileText,
+    eyebrow: "Self-service",
+    title: "Customer hub and document actions",
+    description: "Customers can review the work, pay, approve estimates, request changes, and request appointment updates from a single secure flow.",
+    items: [
+      "Customer hub from quote, invoice, and appointment links",
+      "Approve or decline estimates",
+      "Request estimate revisions",
+      "Request appointment changes and pay deposits",
+    ],
+  },
+  {
+    icon: BellRing,
+    eyebrow: "Follow-up",
+    title: "Automations, notifications, and outreach",
+    description: "Automate the repetitive follow-up while keeping the sends traceable and controllable from Settings.",
+    items: [
+      "Lead auto-response and uncontacted lead alerts",
+      "Appointment reminders",
+      "Abandoned quote follow-up",
+      "Review requests and lapsed-client outreach",
+    ],
+  },
+  {
+    icon: Layers,
+    eyebrow: "Connected tools",
+    title: "Payments, SMS, calendar, and integrations",
+    description: "Use Strata as the daily operating layer while still connecting the shop’s payment, messaging, calendar, and outbound systems.",
+    items: [
+      "Connected Stripe payments",
+      "Twilio SMS workflows",
+      "Google Calendar sync foundation",
+      "Signed outbound webhooks and integration jobs",
+    ],
+  },
+];
+
+const calendarPreviewDays = ["Mon 24", "Tue 25", "Wed 26", "Thu 27", "Fri 28"];
+
+const calendarPreviewColumns = [
+  {
+    day: "Mon 24",
+    highlights: [
+      { time: "8:00", title: "Detail + ceramic", tone: "amber" },
+      { time: "12:30", title: "Tint consult", tone: "slate" },
+    ],
+  },
+  {
+    day: "Tue 25",
+    highlights: [
+      { time: "9:00", title: "PPF front clip", tone: "orange" },
+      { time: "1:00", title: "Brake service", tone: "slate" },
+      { time: "4:30", title: "Pickup ready", tone: "emerald" },
+    ],
+  },
+  {
+    day: "Wed 26",
+    highlights: [
+      { time: "10:00", title: "Invoice follow-up", tone: "slate" },
+      { time: "2:00", title: "Interior reset", tone: "amber" },
+    ],
+  },
+  {
+    day: "Thu 27",
+    highlights: [
+      { time: "8:30", title: "Mobile detail", tone: "orange" },
+      { time: "11:30", title: "Deposit due", tone: "slate" },
+    ],
+  },
+  {
+    day: "Fri 28",
+    highlights: [{ time: "9:30", title: "Wrap delivery", tone: "emerald" }],
+  },
 ];
 
 const homeSchema = {
@@ -387,48 +501,144 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="rounded-[28px] border border-orange-200/80 bg-white/95 p-5 shadow-[0_20px_70px_rgba(249,115,22,0.12)] sm:p-6">
-            <div className="rounded-3xl bg-gray-950 p-5 text-white sm:p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-300">Why shops switch</p>
-                  <h2 className="mt-2 text-2xl font-semibold tracking-tight">Less admin drag</h2>
+          <div className="relative rounded-[30px] border border-orange-200/80 bg-[linear-gradient(180deg,#fffdfb_0%,#fff7f2_100%)] p-4 shadow-[0_24px_80px_rgba(249,115,22,0.14)] sm:p-5">
+            <div className="absolute -right-3 -top-3 hidden rounded-2xl border border-orange-200 bg-white/95 px-3 py-2 shadow-lg sm:block">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-orange-700">Built for the real day</p>
+              <p className="mt-1 text-sm font-medium text-gray-950">Calendar, CRM, billing, portal</p>
+            </div>
+
+            <div className="overflow-hidden rounded-[26px] border border-gray-900/80 bg-gray-950 shadow-[0_24px_60px_rgba(15,23,42,0.28)]">
+              <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
                 </div>
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-orange-300">
-                  <Gauge className="h-5 w-5" />
+                <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-white/72">
+                  Strata calendar
                 </div>
               </div>
 
-              <div className="mt-6 space-y-3">
-                {[
-                  "Clear month-to-day scheduling",
-                  "Client and vehicle history that stays connected",
-                  "Connected Stripe invoice and deposit collection",
-                ].map((item) => (
-                  <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <ShieldCheck className="h-4 w-4 shrink-0 text-orange-300" />
-                    <span className="text-sm text-white/88">{item}</span>
+              <div className="grid gap-0 lg:grid-cols-[92px_minmax(0,1fr)]">
+                <div className="hidden border-r border-white/10 bg-[linear-gradient(180deg,#101826_0%,#0b1220_100%)] p-3 lg:block">
+                  <div className="rounded-2xl border border-orange-400/25 bg-orange-500/10 px-3 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-200">Today</p>
+                    <p className="mt-2 text-2xl font-bold text-white">25</p>
+                    <p className="text-xs text-white/60">Tuesday</p>
                   </div>
-                ))}
+                  <div className="mt-3 space-y-2">
+                    {["Schedule", "Clients", "Quotes", "Invoices", "Portal"].map((item) => (
+                      <div key={item} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/70">
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-[linear-gradient(180deg,#fff8f3_0%,#ffffff_100%)] p-3 sm:p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-700">Week view</p>
+                      <p className="mt-1 text-lg font-semibold tracking-tight text-gray-950">A calmer operating screen for the front desk</p>
+                    </div>
+                    <div className="rounded-2xl border border-orange-200 bg-white px-3 py-2 text-xs font-medium text-orange-700 shadow-sm">
+                      3 active deposits
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-5 gap-2">
+                    {calendarPreviewColumns.map((column) => (
+                      <div key={column.day} className="rounded-2xl border border-orange-100 bg-white/92 p-2 shadow-sm">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">{column.day}</p>
+                        <div className="mt-2 space-y-2">
+                          {column.highlights.map((event) => (
+                            <div
+                              key={`${column.day}-${event.time}-${event.title}`}
+                              className={cn(
+                                "rounded-xl border px-2.5 py-2 text-left",
+                                event.tone === "orange" && "border-orange-200 bg-orange-50",
+                                event.tone === "amber" && "border-amber-200 bg-amber-50",
+                                event.tone === "emerald" && "border-emerald-200 bg-emerald-50",
+                                event.tone === "slate" && "border-slate-200 bg-slate-50"
+                              )}
+                            >
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">{event.time}</p>
+                              <p className="mt-1 text-[11px] font-medium leading-4 text-gray-900">{event.title}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+                    <div className="rounded-2xl border border-orange-100 bg-white p-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-700">Current job</p>
+                          <p className="mt-1 text-base font-semibold text-gray-950">PPF front clip | 2024 Porsche Macan</p>
+                        </div>
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                          Pickup ready 4:30 PM
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Client</p>
+                          <p className="mt-1 text-sm font-medium text-gray-950">Monica S.</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Deposit</p>
+                          <p className="mt-1 text-sm font-medium text-gray-950">$150 paid</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Next action</p>
+                          <p className="mt-1 text-sm font-medium text-gray-950">Send invoice</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[28px] border border-orange-100 bg-gray-950 p-4 text-white shadow-[0_16px_50px_rgba(15,23,42,0.18)]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-300">Live in the same system</p>
+                      <div className="mt-3 space-y-2.5">
+                        {[
+                          "Customer hub link sent",
+                          "Review request automation enabled",
+                          "Twilio confirmations ready",
+                          "Stripe connected for invoice collection",
+                        ].map((item) => (
+                          <div key={item} className="flex items-start gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/84">
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-300" />
+                            <span>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="mt-5 rounded-3xl border border-orange-100 bg-orange-50/80 p-5">
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Simple pricing</p>
-              <div className="mt-4 flex items-end gap-2">
-                <span className="text-5xl font-extrabold tracking-tight text-gray-950">$29</span>
-                <span className="pb-1 text-base text-gray-600">per month</span>
+            <div className="mt-4 rounded-3xl border border-orange-100 bg-white/92 p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Simple pricing</p>
+                  <div className="mt-3 flex items-end gap-2">
+                    <span className="text-5xl font-extrabold tracking-tight text-gray-950">$29</span>
+                    <span className="pb-1 text-base text-gray-600">per month</span>
+                  </div>
+                  <p className="mt-2 max-w-sm text-sm leading-6 text-gray-600">First month free. One plan for the actual core workflows instead of hiding them behind feature tiers.</p>
+                </div>
+                <Link
+                  to="/pricing"
+                  className={cn(
+                    buttonVariants({ size: "lg" }),
+                    "min-h-[52px] rounded-2xl bg-gray-950 px-6 text-white hover:bg-gray-800"
+                  )}
+                >
+                  View pricing
+                </Link>
               </div>
-              <p className="mt-2 text-sm leading-6 text-gray-600">First month free. No confusing feature tiers just to unlock core workflows.</p>
-              <Link
-                to="/pricing"
-                className={cn(
-                  buttonVariants({ size: "lg" }),
-                  "mt-6 w-full min-h-[52px] rounded-2xl bg-gray-950 text-white hover:bg-gray-800"
-                )}
-              >
-                View pricing
-              </Link>
             </div>
           </div>
         </div>
@@ -483,6 +693,44 @@ export default function LandingPage() {
             View pricing
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
+        </div>
+      </section>
+
+      <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Feature categories</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
+              Everything Strata includes, grouped the way a buyer actually thinks about the product.
+            </h2>
+            <p className="mt-4 text-lg leading-8 text-gray-600">
+              Instead of one long feature dump, this breaks the platform into the operating categories that matter when a shop is comparing systems.
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
+            {featureCategories.map(({ icon: Icon, eyebrow, title, description, items }) => (
+              <div
+                key={title}
+                className="rounded-[28px] border border-orange-100 bg-[linear-gradient(180deg,#ffffff_0%,#fff8f3_100%)] p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-orange-600">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <p className="mt-4 text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">{eyebrow}</p>
+                <h3 className="mt-2 text-xl font-semibold tracking-tight text-gray-950">{title}</h3>
+                <p className="mt-3 text-sm leading-6 text-gray-600">{description}</p>
+                <div className="mt-5 space-y-2.5">
+                  {items.map((item) => (
+                    <div key={item} className="flex items-start gap-2.5 rounded-2xl border border-orange-100/80 bg-white/90 px-3.5 py-3">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-500" />
+                      <p className="text-sm leading-6 text-gray-700">{item}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
