@@ -64,10 +64,8 @@ export default function NewClientPage() {
   });
 
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [vehicleForm, setVehicleForm] = useState<VehicleCatalogFormValue>({
-    ...emptyVehicleCatalogFormValue,
-    year: String(new Date().getFullYear()),
-  });
+  const [showVehicle, setShowVehicle] = useState(false);
+  const [vehicleForm, setVehicleForm] = useState<VehicleCatalogFormValue>(emptyVehicleCatalogFormValue);
   const [vehicleColor, setVehicleColor] = useState("");
   const [vehicleLicensePlate, setVehicleLicensePlate] = useState("");
   const [vehicleMileage, setVehicleMileage] = useState("");
@@ -80,15 +78,17 @@ export default function NewClientPage() {
   const shouldCreateVehicle =
     vehicleForm.make.trim().length > 0 ||
     vehicleForm.model.trim().length > 0 ||
-    vehicleForm.year.trim().length > 0 ||
+    vehicleForm.displayName.trim().length > 0 ||
     vehicleColor.trim().length > 0 ||
     vehicleLicensePlate.trim().length > 0 ||
     vehicleMileage.trim().length > 0 ||
     vehicleNotes.trim().length > 0 ||
+    vehicleForm.year.trim().length > 0 ||
     vehicleForm.vin.trim().length > 0 ||
     vehicleForm.trim.trim().length > 0 ||
     vehicleForm.bodyStyle.trim().length > 0 ||
-    vehicleForm.engine.trim().length > 0;
+    vehicleForm.engine.trim().length > 0 ||
+    vehicleForm.sourceVehicleId.trim().length > 0;
 
   const getFieldError = (fieldName: string): string | undefined => {
     if (localErrors[fieldName]) return localErrors[fieldName];
@@ -494,60 +494,80 @@ export default function NewClientPage() {
           </div>
         )}
 
-        <div className="space-y-4 rounded-xl border border-border/70 bg-background p-5">
-          <div>
-            <h2 className="text-base font-semibold">Vehicle</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Add the client&apos;s vehicle now so the record is ready for quotes, appointments, and intake.
-            </p>
-          </div>
-          <VehicleCatalogFields value={vehicleForm} setValue={setVehicleForm} />
-          {getFieldError("vehicle") ? (
-            <p className="text-sm text-destructive">{getFieldError("vehicle")}</p>
-          ) : null}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="vehicleColor">Color</Label>
-              <Input
-                id="vehicleColor"
-                value={vehicleColor}
-                onChange={(e) => setVehicleColor(e.target.value)}
-                placeholder="Black Sapphire"
-              />
+        <button
+          type="button"
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          onClick={() => setShowVehicle((prev) => !prev)}
+        >
+          {showVehicle ? (
+            <>
+              <ChevronUp className="h-4 w-4" />
+              - Hide Vehicle
+            </>
+          ) : (
+            <>
+              <ChevronDown className="h-4 w-4" />
+              + Vehicle
+            </>
+          )}
+        </button>
+
+        {showVehicle && (
+          <div className="space-y-4 rounded-xl border border-border/70 bg-background p-5">
+            <div>
+              <h2 className="text-base font-semibold">Vehicle</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Add the client&apos;s vehicle now so the record is ready for quotes, appointments, and intake.
+              </p>
+            </div>
+            <VehicleCatalogFields value={vehicleForm} setValue={setVehicleForm} />
+            {getFieldError("vehicle") ? (
+              <p className="text-sm text-destructive">{getFieldError("vehicle")}</p>
+            ) : null}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="vehicleColor">Color</Label>
+                <Input
+                  id="vehicleColor"
+                  value={vehicleColor}
+                  onChange={(e) => setVehicleColor(e.target.value)}
+                  placeholder="Black Sapphire"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vehicleLicensePlate">License Plate</Label>
+                <Input
+                  id="vehicleLicensePlate"
+                  value={vehicleLicensePlate}
+                  onChange={(e) => setVehicleLicensePlate(e.target.value)}
+                  placeholder="DETAIL1"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="vehicleMileage">Mileage</Label>
+                <Input
+                  id="vehicleMileage"
+                  type="number"
+                  value={vehicleMileage}
+                  onChange={(e) => setVehicleMileage(e.target.value)}
+                  placeholder="35000"
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="vehicleLicensePlate">License Plate</Label>
-              <Input
-                id="vehicleLicensePlate"
-                value={vehicleLicensePlate}
-                onChange={(e) => setVehicleLicensePlate(e.target.value)}
-                placeholder="DETAIL1"
+              <Label htmlFor="vehicleNotes">Vehicle Notes</Label>
+              <Textarea
+                id="vehicleNotes"
+                value={vehicleNotes}
+                onChange={(e) => setVehicleNotes(e.target.value)}
+                placeholder="Ceramic coated, wheel finish notes, damage callouts..."
+                rows={3}
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="vehicleMileage">Mileage</Label>
-              <Input
-                id="vehicleMileage"
-                type="number"
-                value={vehicleMileage}
-                onChange={(e) => setVehicleMileage(e.target.value)}
-                placeholder="35000"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="vehicleNotes">Vehicle Notes</Label>
-            <Textarea
-              id="vehicleNotes"
-              value={vehicleNotes}
-              onChange={(e) => setVehicleNotes(e.target.value)}
-              placeholder="Ceramic coated, wheel finish notes, damage callouts..."
-              rows={3}
-            />
-          </div>
-        </div>
+        )}
 
         {/* Actions */}
         <div className="flex flex-col gap-3 pt-2">
