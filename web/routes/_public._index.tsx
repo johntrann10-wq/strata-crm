@@ -299,37 +299,6 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeSchema) }} />
-      <header className="sticky top-0 z-20 border-b border-orange-100/80 bg-white/88 backdrop-blur supports-[backdrop-filter]:bg-white/72">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3 sm:px-6 lg:px-8">
-          <Link to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-gray-950">
-            <Wrench className="h-4 w-4 text-orange-500" />
-            Strata CRM
-          </Link>
-          <nav className="hidden items-center gap-5 text-sm text-gray-600 md:flex">
-            <a href="#product" className="transition-colors hover:text-gray-950">Product</a>
-            <Link to="/features" className="transition-colors hover:text-gray-950">Features</Link>
-            <a href="#industries" className="transition-colors hover:text-gray-950">Who it's for</a>
-            <Link to="/pricing" className="transition-colors hover:text-gray-950">Pricing</Link>
-          </nav>
-          <div className="flex items-center gap-2">
-            <Link
-              to="/sign-in"
-              className={cn(buttonVariants({ variant: "ghost" }), "h-10 px-3 text-sm text-gray-700 hover:text-gray-950")}
-              onClick={() => trackEvent("marketing_login_clicked", { placement: "landing_header" })}
-            >
-              Sign in
-            </Link>
-            <Link
-              to="/sign-up"
-              className={cn(buttonVariants(), "h-10 rounded-xl bg-orange-500 px-4 text-sm text-white hover:bg-orange-600")}
-              onClick={() => trackEvent("landing_cta_clicked", { placement: "landing_header", target: "sign_up" })}
-            >
-              Start free
-            </Link>
-          </div>
-        </div>
-      </header>
-
       <section id="product" className="relative overflow-hidden px-5 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-18 lg:px-8 lg:pb-24 lg:pt-24">
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] opacity-90"
@@ -401,12 +370,6 @@ export default function LandingPage() {
               >
                 Explore features
               </Link>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
-              <span className="font-medium text-gray-700">Developed in Irvine, CA</span>
-              <span className="hidden text-gray-300 sm:inline">•</span>
-              <span>Automations, SMS, calendar sync, and connected payments</span>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
