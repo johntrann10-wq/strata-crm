@@ -319,7 +319,7 @@ export default function ClientDetailPage() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const authContext = useOutletContext<AuthOutletContext>();
-  const { currentLocationId } = authContext;
+  const { currentLocationId, permissions } = authContext;
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/clients";
   const currentRecordPath = `${location.pathname}${location.search}`;
   const appointmentHref = `/appointments/new?clientId=${id}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}&from=${encodeURIComponent(currentRecordPath)}`;
