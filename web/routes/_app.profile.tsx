@@ -28,6 +28,7 @@ export default function ProfilePage() {
       : "Password not added";
   const canChangePassword = Boolean(user.hasPassword && !user.googleProfileId);
   const canSetPasswordFromGoogle = Boolean(user.googleProfileId);
+  const setPasswordLabel = user.hasPassword ? "Reset password" : "Add password";
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
@@ -55,7 +56,11 @@ export default function ProfilePage() {
               <Button variant="outline" onClick={() => setIsEditing(true)}>
                 Edit profile
               </Button>
-              {canChangePassword ? (
+              {canSetPasswordFromGoogle ? (
+                <Button variant="ghost" onClick={() => setIsSettingPassword(true)}>
+                  {setPasswordLabel}
+                </Button>
+              ) : canChangePassword ? (
                 <Button variant="ghost" onClick={() => setIsChangingPassword(true)}>
                   Change password
                 </Button>
@@ -134,7 +139,7 @@ export default function ProfilePage() {
               </Button>
               {canSetPasswordFromGoogle ? (
                 <Button onClick={() => setIsSettingPassword(true)}>
-                  {user.hasPassword ? "Reset password" : "Add password"}
+                  {setPasswordLabel}
                 </Button>
               ) : canChangePassword ? (
                 <>
