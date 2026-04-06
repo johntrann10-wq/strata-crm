@@ -349,6 +349,7 @@ const SidebarNav = memo(function SidebarNav({
 
 function AppLayoutInner({
   user,
+  refreshUser,
   business,
   currentMembership,
   tenantBusinesses,
@@ -359,6 +360,7 @@ function AppLayoutInner({
   rootOutletContext,
 }: {
   user: Record<string, unknown>;
+  refreshUser: () => Promise<void>;
   business: Record<string, unknown> | null;
   currentMembership: AuthOutletContext["tenantBusinesses"][number] | null;
   tenantBusinesses: AuthOutletContext["tenantBusinesses"];
@@ -447,9 +449,7 @@ function AppLayoutInner({
       ({
         ...rootOutletContext,
         user,
-        refreshUser: async () => {
-          await refetchUser();
-        },
+        refreshUser,
         businessName,
         businessId,
         businessType,
@@ -463,6 +463,7 @@ function AppLayoutInner({
     [
       rootOutletContext,
       user,
+      refreshUser,
       businessName,
       businessId,
       businessType,
@@ -1002,6 +1003,9 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     <CommandPaletteProvider>
       <AppLayoutInner
         user={user as Record<string, unknown>}
+        refreshUser={async () => {
+          await refetchUser();
+        }}
         business={(business as Record<string, unknown>) ?? null}
         currentMembership={currentMembership}
         tenantBusinesses={tenantBusinesses}
