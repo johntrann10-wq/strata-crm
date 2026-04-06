@@ -673,9 +673,7 @@ If you are ready to move forward, contact us directly and we will help with the 
       introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">Invoice <strong>{{invoiceNumber}}</strong> is ready for <strong>{{amount}}</strong>.</p>`,
       bodyHtml:
         renderInfoCard("Details", "{{invoiceDetailsCopy}}") +
-        renderInfoCard("Message from the shop", "{{message}}") +
-        renderInfoCard("Invoice page", "{{invoiceUrl}}") +
-        renderInfoCard("Customer hub", "View all active estimates, invoices, appointments, and vehicles from one place:<br>{{portalUrl}}"),
+        renderInfoCard("Message from the shop", "{{message}}"),
       ctaLabel: "{{invoicePrimaryLabel}}",
       ctaUrl: "{{invoicePrimaryUrl}}",
       ctaHint: `Primary link: {{invoicePrimaryUrl}}`,
@@ -694,10 +692,6 @@ Details: {{invoiceDetailsCopy}}
 {{message}}
 
 {{invoicePrimaryLabel}}: {{invoicePrimaryUrl}}
-
-Invoice page: {{invoiceUrl}}
-
-Customer hub: {{portalUrl}}
 
 If you have any questions, contact us directly.
 {{businessPhone}}
