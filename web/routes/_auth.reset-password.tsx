@@ -5,13 +5,31 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAction } from "@/hooks/useApi";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
 export default function ResetPasswordRoute() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const token = searchParams.get("token") ?? "";
+  const token = useMemo(() => {
+    const directToken =
+      searchParams.get("token") ??
+      searchParams.get("resetToken") ??
+      searchParams.get("reset_token");
+    if (directToken) return directToken;
+    if (typeof window === "undefined") return "";
+    const hash = window.location.hash.startsWith("#")
+      ? window.location.hash.slice(1)
+      : window.location.hash;
+    if (!hash) return "";
+    const hashParams = new URLSearchParams(hash);
+    return (
+      hashParams.get("token") ??
+      hashParams.get("resetToken") ??
+      hashParams.get("reset_token") ??
+      ""
+    );
+  }, [searchParams]);
   const [{ fetching }, resetPassword] = useAction(api.user.resetPassword);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
