@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, useOutletContext } from "react-router";
 import { format, parseISO, isSameDay, startOfDay, endOfDay } from "date-fns";
 import {
@@ -2069,17 +2069,30 @@ function DashboardSection({
 }) {
   const [isCompactMobile, setIsCompactMobile] = useState(false);
   const [collapsed, setCollapsed] = useState(mobileCollapsed);
+  const wasCompactMobileRef = useRef(false);
 
   useEffect(() => {
     const sync = () => {
-      const mobile = window.innerWidth < 768;
-      setIsCompactMobile(mobile);
-      setCollapsed(mobile ? mobileCollapsed : false);
+      setIsCompactMobile(window.innerWidth < 768);
     };
     sync();
     window.addEventListener("resize", sync);
     return () => window.removeEventListener("resize", sync);
-  }, [mobileCollapsed]);
+  }, []);
+
+  useEffect(() => {
+    const wasCompactMobile = wasCompactMobileRef.current;
+
+    if (isCompactMobile) {
+      if (!wasCompactMobile) {
+        setCollapsed(mobileCollapsed);
+      }
+    } else {
+      setCollapsed(false);
+    }
+
+    wasCompactMobileRef.current = isCompactMobile;
+  }, [isCompactMobile, mobileCollapsed]);
 
   return (
     <section className="min-w-0 max-w-full space-y-3">
@@ -2106,15 +2119,10 @@ function DashboardSection({
         </Link>
       </div>
       {collapsed ? (
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          className="w-full rounded-2xl border border-dashed border-border/80 bg-muted/10 px-4 py-3 text-left transition-colors hover:bg-muted/20"
-        >
+        <div className="w-full rounded-2xl border border-dashed border-border/80 bg-muted/10 px-4 py-3">
           <span className="block text-sm font-medium text-foreground">{title}</span>
-          <span className="mt-1 block text-sm text-muted-foreground">Tap to open this section.</span>
-        </button>
-        
+          <span className="mt-1 block text-sm text-muted-foreground">Use the Show button above to reopen this section.</span>
+        </div>
       ) : null}
       {!collapsed && error ? (
         <div className="flex gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-4 text-sm text-destructive">
