@@ -49,6 +49,9 @@ export default function PublicLayout() {
               <p className="max-w-xs text-sm leading-6 text-gray-600">
                 Modern automotive service business software for scheduling, clients, vehicles, jobs, quotes, invoices, and payments.
               </p>
+              <p className="max-w-xs text-sm leading-6 text-gray-600">
+                Includes reminders, follow-up automations, connected payments, SMS, and calendar sync.
+              </p>
               <Link
                 to="/pricing"
                 className="text-sm font-medium text-orange-700 transition-colors hover:text-orange-800"
@@ -142,7 +145,12 @@ export default function PublicLayout() {
 
           <div className="mt-8 border-t border-gray-200 pt-4">
             <div className="flex flex-col gap-2 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between">
-              <p>Copyright {new Date().getFullYear()} Strata. All rights reserved.</p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <p>Copyright {new Date().getFullYear()} Strata. All rights reserved.</p>
+                <span className="inline-flex w-fit items-center rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-xs font-medium tracking-[0.08em] text-orange-800">
+                  Developed in Irvine, CA
+                </span>
+              </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <Link to="/privacy" className="transition-colors hover:text-gray-700">
                   Privacy Policy
