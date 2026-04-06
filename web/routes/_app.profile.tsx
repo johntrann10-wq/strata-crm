@@ -26,9 +26,8 @@ export default function ProfilePage() {
     : user.hasPassword
       ? "Email and password"
       : "Password not added";
-  const canChangePassword = Boolean(user.hasPassword && !user.googleProfileId);
-  const canSetPasswordFromGoogle = Boolean(user.googleProfileId);
-  const setPasswordLabel = user.hasPassword ? "Reset password" : "Add password";
+  const canChangePassword = Boolean(user.hasPassword);
+  const canAddPassword = Boolean(!user.hasPassword);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
@@ -56,11 +55,7 @@ export default function ProfilePage() {
               <Button variant="outline" onClick={() => setIsEditing(true)}>
                 Edit profile
               </Button>
-              {canSetPasswordFromGoogle ? (
-                <Button variant="ghost" onClick={() => setIsSettingPassword(true)}>
-                  {setPasswordLabel}
-                </Button>
-              ) : canChangePassword ? (
+              {canChangePassword ? (
                 <Button variant="ghost" onClick={() => setIsChangingPassword(true)}>
                   Change password
                 </Button>
@@ -88,7 +83,7 @@ export default function ProfilePage() {
             <div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
               {user.googleProfileId
                 ? user.hasPassword
-                  ? "This Google-connected account can replace its password directly from Profile whenever you want a new fallback login."
+                  ? "This Google-connected account can change its password from Profile. If you ever forget it, use the forgot-password flow instead."
                   : "Add a password if you want a fallback login option alongside Google."
                 : canChangePassword
                 ? "If you ever forget your password, use the forgot-password flow from sign-in to reset it securely."
@@ -137,20 +132,16 @@ export default function ProfilePage() {
               <Button variant="outline" onClick={() => setIsEditing(true)}>
                 Update profile
               </Button>
-              {canSetPasswordFromGoogle ? (
-                <Button onClick={() => setIsSettingPassword(true)}>
-                  {setPasswordLabel}
-                </Button>
-              ) : canChangePassword ? (
+              {canChangePassword ? (
                 <>
                   <Button onClick={() => setIsChangingPassword(true)}>Change password</Button>
                   <Button asChild variant="outline">
                     <Link to={`/forgot-password?email=${encodeURIComponent(user.email)}`}>Reset password</Link>
                   </Button>
                 </>
-              ) : (
+              ) : canAddPassword ? (
                 <Button onClick={() => setIsSettingPassword(true)}>Add password</Button>
-              )}
+              ) : null}
             </div>
           </CardContent>
         </Card>
