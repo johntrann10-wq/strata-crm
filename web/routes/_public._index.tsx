@@ -545,15 +545,9 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Feature categories</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-              Everything Strata includes, grouped the way a buyer actually thinks about the product.
-            </h2>
-            <p className="mt-4 text-lg leading-8 text-gray-600">
-              Instead of one long feature dump, this breaks the platform into the operating categories that matter when a shop is comparing systems.
-            </p>
           </div>
 
-          <div className="mt-10 grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-8 grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
             {featureCategories.map(({ icon: Icon, eyebrow, title, description, items }) => (
               <div
                 key={title}
