@@ -27,14 +27,14 @@ export default defineConfig({
           timeout: 180000,
         },
         {
-          command: "npm.cmd run dev -- --host 127.0.0.1 --port 4173",
+          command: "node scripts/run-playwright-web-dev.mjs",
           url: "http://127.0.0.1:4173",
           reuseExistingServer: !process.env.CI,
           timeout: 120000,
         },
       ]
       : {
-          command: "npm.cmd run dev -- --host 127.0.0.1 --port 4173",
+          command: "node scripts/run-playwright-web-dev.mjs",
           url: "http://127.0.0.1:4173",
           reuseExistingServer: !process.env.CI,
           timeout: 120000,
