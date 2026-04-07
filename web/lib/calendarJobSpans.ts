@@ -11,7 +11,12 @@ export type CalendarJobLike = {
   jobPhase?: string | null;
   status?: string | null;
   internalNotes?: string | null;
+  client?: unknown | null;
 };
+
+function isInternalCalendarAppointment(appointment: CalendarJobLike): boolean {
+  return isCalendarBlockAppointment(appointment) || appointment.client == null;
+}
 
 export type CalendarAgendaItem<T extends CalendarJobLike> = {
   appointment: T;
@@ -90,7 +95,7 @@ export function isVisibleCalendarAppointment(appointment: CalendarJobLike): bool
   return (
     appointment.status !== "cancelled" &&
     appointment.status !== "no-show" &&
-    (appointment.status !== "completed" || isCalendarBlockAppointment(appointment))
+    (appointment.status !== "completed" || isInternalCalendarAppointment(appointment))
   );
 }
 
