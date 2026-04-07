@@ -1122,8 +1122,16 @@ export default function AppointmentDetail() {
         ? Number(appointment.depositAmount ?? 0)
         : Number(appointment.totalPrice ?? 0)
       : Number(appointment.depositAmount ?? 0);
+  const depositAmountValue = Number(appointment.depositAmount ?? 0);
+  const totalPriceValue = Number(appointment.totalPrice ?? 0);
   const showsPaidStatusInsteadOfDeposit =
-    appointment.depositPaid === true && Number(appointment.depositAmount ?? 0) <= 0;
+    appointment.depositPaid === true &&
+    (
+      depositAmountValue <= 0 ||
+      (isInternalAppointment &&
+        totalPriceValue > 0 &&
+        Math.abs(depositAmountValue - totalPriceValue) < 0.009)
+    );
   const clientOptions = ((clientsForEdit as any[]) ?? []) as Array<{
     id: string;
     firstName: string;
@@ -2406,10 +2414,10 @@ export default function AppointmentDetail() {
                 depositActionLabel={
                   effectiveInternalPaymentAmount > 0
                     ? appointment.depositPaid
-                      ? isInternalCalendarBlock
+                      ? isInternalAppointment
                         ? "Payment recorded"
                         : "Deposit collected"
-                      : isInternalCalendarBlock
+                      : isInternalAppointment
                         ? "Mark paid"
                         : "Collect deposit"
                     : null
@@ -2426,7 +2434,7 @@ export default function AppointmentDetail() {
                 }
                 secondaryDepositActionLabel={
                   appointment.depositPaid
-                    ? isInternalCalendarBlock
+                    ? isInternalAppointment
                       ? "Mark unpaid"
                       : "Reverse deposit collection"
                     : null

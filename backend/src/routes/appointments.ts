@@ -1939,14 +1939,6 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   const updates: Record<string, unknown> = {
     depositPaid: true,
   };
-  if (
-    (!Number.isFinite(depositAmount) || depositAmount <= 0) &&
-    isInternalAppointment &&
-    Number.isFinite(totalPrice) &&
-    totalPrice > 0
-  ) {
-    updates.depositAmount = totalPrice.toFixed(2);
-  }
   if (columns.has("updated_at")) updates.updatedAt = new Date();
 
   let updated;
