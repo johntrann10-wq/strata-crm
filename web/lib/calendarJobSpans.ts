@@ -112,6 +112,12 @@ export function getVisibleCalendarAppointments<T extends CalendarJobLike>(appoin
   return appointments.filter((appointment) => isVisibleCalendarAppointment(appointment));
 }
 
+export function getHistoricalCalendarAppointments<T extends CalendarJobLike>(appointments: T[]): T[] {
+  return appointments.filter(
+    (appointment) => appointment.status !== "cancelled" && appointment.status !== "no-show"
+  );
+}
+
 export function getCalendarDaySnapshot<T extends CalendarJobLike & { id: string }>(appointments: T[], date: Date) {
   const visibleAppointments = getVisibleCalendarAppointments(appointments);
   const activeAppointments = getActiveCalendarAppointments(appointments);

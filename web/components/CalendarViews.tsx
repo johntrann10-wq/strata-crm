@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { getActiveCalendarAppointments, getCalendarDaySnapshot, getVisibleCalendarAppointments } from "@/lib/calendarJobSpans";
+import {
+  getActiveCalendarAppointments,
+  getCalendarDaySnapshot,
+  getHistoricalCalendarAppointments,
+  getVisibleCalendarAppointments,
+} from "@/lib/calendarJobSpans";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -714,6 +719,7 @@ export function MonthView({
   const grid = useMemo(() => getMonthGrid(currentDate), [currentDate]);
   const today = useMemo(() => new Date(), []);
   const visibleAppointments = useMemo(() => getVisibleCalendarAppointments(appointments), [appointments]);
+  const historicalAppointments = useMemo(() => getHistoricalCalendarAppointments(appointments), [appointments]);
   const currencyFormatter = useMemo(
     () =>
       new Intl.NumberFormat("en-US", {
@@ -741,9 +747,15 @@ export function MonthView({
               const isCurrentMonth = day.getMonth() === currentDate.getMonth();
               const isToday = isSameDay(day, today);
               const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
-              const { dayAppts, daySpans } = getCalendarDaySnapshot(visibleAppointments, day);
+              const historicalDayAppointments = historicalAppointments.filter((appointment) => hasLaborOnDay(appointment, day));
+              const historicalDaySpans = historicalAppointments.filter(
+                (appointment) => isMultiDayJob(appointment) && hasPresenceOnDay(appointment, day)
+              );
+              const { dayAppts: activeVisibleDayAppointments } = getCalendarDaySnapshot(visibleAppointments, day);
+              const dayAppts = historicalDayAppointments;
+              const daySpans = historicalDaySpans;
               const dayRevenue = dayAppts.reduce((total, apt) => total + Number(apt.totalPrice ?? 0), 0);
-              const hasConflict = !!conflictIds && dayAppts.some((a) => conflictIds.has(a.id));
+              const hasConflict = !!conflictIds && activeVisibleDayAppointments.some((a) => conflictIds.has(a.id));
               const dayLabel = day.toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "long",
