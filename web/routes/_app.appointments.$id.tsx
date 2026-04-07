@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from "react";
-import { useParams, Link, useOutletContext, useSearchParams } from "react-router";
+import { useParams, Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { useFindOne, useFindFirst, useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { toast } from "sonner";
@@ -434,6 +434,7 @@ const TIME_OPTIONS = buildQuarterHourOptions();
 
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, businessType, permissions, currentLocationId } = useOutletContext<AuthOutletContext>();
   const { setPageContext } = usePageContext();
@@ -445,6 +446,7 @@ export default function AppointmentDetail() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showCompleteWarningDialog, setShowCompleteWarningDialog] = useState(false);
   const [notesValue, setNotesValue] = useState("");
   const [internalNotesValue, setInternalNotesValue] = useState("");
@@ -635,6 +637,9 @@ export default function AppointmentDetail() {
   const [{ fetching: sendingConfirmation }, runSendConfirmation] = useAction(api.appointment.sendConfirmation);
   const [{ fetching: completing }, runComplete] = useAction(api.appointment.complete);
   const [{ fetching: cancelling }, runCancel] = useAction(api.appointment.cancel);
+  const [{ fetching: deletingAppointment }, runDeleteAppointment] = useAction(
+    (params: Record<string, unknown>) => api.appointment.delete(params)
+  );
   const [{ fetching: updatingNotes }, runUpdate] = useAction(api.appointment.update);
   const [{ fetching: recordingDeposit }, runRecordDepositPayment] = useAction(api.appointment.recordDepositPayment);
   const [{ fetching: creatingStripeDepositSession }, runCreateStripeDepositSession] = useAction(
@@ -854,6 +859,18 @@ export default function AppointmentDetail() {
     }
   };
 
+  const handleDeleteInternalAppointment = async () => {
+    if (!appointment) return;
+    const result = await runDeleteAppointment({ id: appointment.id });
+    if (result.error) {
+      toast.error(`Failed to delete appointment: ${result.error.message}`);
+      return;
+    }
+    toast.success("Internal appointment deleted");
+    setShowDeleteDialog(false);
+    navigate(returnTo);
+  };
+
   const handleSaveNotes = async () => {
     if (!appointment) return;
     const result = await runUpdate({
@@ -1044,13 +1061,14 @@ export default function AppointmentDetail() {
           ? `${appointment.client.firstName} ${appointment.client.lastName}`
           : "Appointment");
   const isInternalCalendarBlock = isCalendarBlockAppointment(appointment);
-  const blockCoverageLabel = isInternalCalendarBlock
+  const isInternalAppointment = isInternalCalendarBlock || !appointment.client?.id;
+  const blockCoverageLabel = isInternalAppointment
     ? isFullDayCalendarBlock(appointment)
       ? "Full-day block"
       : "Timed block"
     : null;
 
-  const isActionLoading = updatingStatus || completing || cancelling || sendingConfirmation;
+  const isActionLoading = updatingStatus || completing || cancelling || deletingAppointment || sendingConfirmation;
   const quoteNeedsFollowUp = !!quote && ["sent", "accepted"].includes(String((quote as any).status ?? "")) && (
     !safeDate((quote as any).followUpSentAt ?? null)
       ? isOlderThanDays((quote as any).sentAt ?? null, 2)
@@ -1071,7 +1089,7 @@ export default function AppointmentDetail() {
   } = getAppointmentDisplayState(
     appointment as AppointmentDetailRecord,
     appointmentServices?.length ?? 0,
-    isInternalCalendarBlock,
+    isInternalAppointment,
     blockCoverageLabel
   );
   const hasPlaceholderClient =
@@ -1081,7 +1099,7 @@ export default function AppointmentDetail() {
     appointment.vehicle?.model === "Vehicle";
   const missingLinkedRecords = !appointment.client || !appointment.vehicle;
   const effectiveInternalPaymentAmount =
-    isInternalCalendarBlock && Number(appointment.totalPrice ?? 0) > 0
+    isInternalAppointment && Number(appointment.totalPrice ?? 0) > 0
       ? Number(appointment.depositAmount ?? 0) > 0
         ? Number(appointment.depositAmount ?? 0)
         : Number(appointment.totalPrice ?? 0)
@@ -1202,7 +1220,7 @@ export default function AppointmentDetail() {
       notes: depositPaymentNotes || undefined,
     });
     if (!result.error) {
-      toast.success(isInternalCalendarBlock ? "Payment recorded" : "Deposit recorded");
+      toast.success(isInternalAppointment ? "Payment recorded" : "Deposit recorded");
       setRecordDepositOpen(false);
       void refetchAppointment();
       void refetchActivity();
@@ -1275,7 +1293,7 @@ export default function AppointmentDetail() {
             </div>
             <div>
               <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.5rem]">{pageTitle}</h1>
-              {isInternalCalendarBlock ? (
+              {isInternalAppointment ? (
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                   Review the blocked time, assigned team coverage, and notes here without mixing it up with a customer job.
                 </p>
@@ -1284,7 +1302,7 @@ export default function AppointmentDetail() {
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  {isInternalCalendarBlock ? "Block" : "Booked for"}
+                  {isInternalAppointment ? "Block" : "Booked for"}
                 </p>
                 <p className="mt-2 text-base font-semibold text-slate-950">{appointmentSubjectLabel}</p>
                 <p className="mt-1 text-sm text-slate-600">{appointmentSecondaryLabel}</p>
@@ -1296,7 +1314,7 @@ export default function AppointmentDetail() {
               </div>
               <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  {isInternalCalendarBlock ? "Coverage" : "Work in play"}
+                  {isInternalAppointment ? "Coverage" : "Work in play"}
                 </p>
                 <p className="mt-2 text-base font-semibold text-slate-950">{appointmentValueLabel}</p>
                 <p className="mt-1 text-sm text-slate-600">{appointmentLocationLabel}</p>
@@ -1369,7 +1387,7 @@ export default function AppointmentDetail() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {!isInternalCalendarBlock && appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
+          {!isInternalAppointment && appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
             <Button variant="outline" size="sm" onClick={() => void handleSendConfirmation()} disabled={isActionLoading}>
               {sendingConfirmation ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1380,7 +1398,7 @@ export default function AppointmentDetail() {
             </Button>
           ) : null}
 
-          {isInternalCalendarBlock && effectiveInternalPaymentAmount > 0 && !appointment.depositPaid ? (
+          {isInternalAppointment && effectiveInternalPaymentAmount > 0 && !appointment.depositPaid ? (
             <Button variant="outline" size="sm" onClick={handleOpenDepositDialog} disabled={recordingDeposit}>
               {recordingDeposit ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1391,7 +1409,7 @@ export default function AppointmentDetail() {
             </Button>
           ) : null}
 
-          {isInternalCalendarBlock && appointment.depositPaid ? (
+          {isInternalAppointment && appointment.depositPaid ? (
             <Button
               variant="outline"
               size="sm"
@@ -1404,6 +1422,23 @@ export default function AppointmentDetail() {
                 <RotateCcw className="h-4 w-4 mr-2" />
               )}
               Mark Unpaid
+            </Button>
+          ) : null}
+
+          {isInternalAppointment ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
+              onClick={() => setShowDeleteDialog(true)}
+              disabled={isActionLoading}
+            >
+              {deletingAppointment ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Delete Block
             </Button>
           ) : null}
 
@@ -1449,7 +1484,7 @@ export default function AppointmentDetail() {
             </Button>
           )}
 
-          {!isInternalCalendarBlock && !invoiceFetching && !invoice && appointment.status !== "cancelled" && (
+          {!isInternalAppointment && !invoiceFetching && !invoice && appointment.status !== "cancelled" && (
             <Button variant="outline" size="sm" asChild>
               <Link
                 to={`/invoices/new?appointmentId=${appointment.id}${
@@ -1462,7 +1497,7 @@ export default function AppointmentDetail() {
             </Button>
           )}
 
-          {!isInternalCalendarBlock && !quoteFetching && !quote && appointment.status !== "cancelled" && appointment.client?.id && (
+          {!isInternalAppointment && !quoteFetching && !quote && appointment.status !== "cancelled" && appointment.client?.id && (
             <Button variant="outline" size="sm" asChild>
               <Link
                 to={`/quotes/new?appointmentId=${appointment.id}&clientId=${appointment.client.id}`}
@@ -1473,7 +1508,7 @@ export default function AppointmentDetail() {
             </Button>
           )}
 
-            {!isInternalCalendarBlock && invoice && (
+            {!isInternalAppointment && invoice && (
               <Button variant="outline" size="sm" asChild>
                 <Link to={`/invoices/${invoice.id}`}>
                   <FileText className="h-4 w-4 mr-2" />
@@ -1482,7 +1517,7 @@ export default function AppointmentDetail() {
               </Button>
             )}
 
-            {!isInternalCalendarBlock && invoice && invoiceAllowsPayment(invoice.status) && invoice.status !== "paid" && (
+            {!isInternalAppointment && invoice && invoiceAllowsPayment(invoice.status) && invoice.status !== "paid" && (
               <Button variant="outline" size="sm" asChild>
                 <Link to={`/invoices/${invoice.id}?recordPayment=1`}>
                   <DollarSign className="h-4 w-4 mr-2" />
@@ -1491,7 +1526,7 @@ export default function AppointmentDetail() {
               </Button>
             )}
 
-            {!isInternalCalendarBlock && quote && (
+            {!isInternalAppointment && quote && (
               <Button variant="outline" size="sm" asChild>
                 <Link to={`/quotes/${quote.id}`}>
                   <FileText className="h-4 w-4 mr-2" />
@@ -1563,7 +1598,7 @@ export default function AppointmentDetail() {
               ) : null}
             </div>
 
-            {isInternalCalendarBlock && effectiveInternalPaymentAmount > 0 ? (
+            {isInternalAppointment && effectiveInternalPaymentAmount > 0 ? (
               <Button
                 variant="outline"
                 className="w-full justify-center"
@@ -1578,6 +1613,22 @@ export default function AppointmentDetail() {
                   <DollarSign className="h-4 w-4 mr-2" />
                 )}
                 {appointment.depositPaid ? "Mark Unpaid" : "Mark Paid"}
+              </Button>
+            ) : null}
+
+            {isInternalAppointment ? (
+              <Button
+                variant="outline"
+                className="w-full justify-center border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
+                onClick={() => setShowDeleteDialog(true)}
+                disabled={isActionLoading}
+              >
+                {deletingAppointment ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                Delete Block
               </Button>
             ) : null}
 
@@ -1635,7 +1686,7 @@ export default function AppointmentDetail() {
                     Reschedule appointment
                   </Button>
                 ) : null}
-                {appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
+                {!isInternalAppointment && appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
                   <Button
                     variant="outline"
                     className="justify-start"
@@ -1648,7 +1699,7 @@ export default function AppointmentDetail() {
                     Send confirmation
                   </Button>
                 ) : null}
-                {!invoiceFetching && !invoice && appointment.status !== "cancelled" ? (
+                {!isInternalAppointment && !invoiceFetching && !invoice && appointment.status !== "cancelled" ? (
                   <Button asChild variant="outline" className="justify-start">
                     <Link
                       to={`/invoices/new?appointmentId=${appointment.id}${
@@ -1661,7 +1712,7 @@ export default function AppointmentDetail() {
                     </Link>
                   </Button>
                 ) : null}
-                {!quoteFetching && !quote && appointment.status !== "cancelled" && appointment.client?.id ? (
+                {!isInternalAppointment && !quoteFetching && !quote && appointment.status !== "cancelled" && appointment.client?.id ? (
                   <Button asChild variant="outline" className="justify-start">
                     <Link
                       to={`/quotes/new?appointmentId=${appointment.id}&clientId=${appointment.client.id}`}
@@ -1672,7 +1723,7 @@ export default function AppointmentDetail() {
                     </Link>
                   </Button>
                 ) : null}
-                {invoice ? (
+                {!isInternalAppointment && invoice ? (
                   <Button asChild variant="outline" className="justify-start">
                     <Link to={`/invoices/${invoice.id}`} onClick={() => setShowMobileActions(false)}>
                       <FileText className="mr-2 h-4 w-4" />
@@ -1680,7 +1731,7 @@ export default function AppointmentDetail() {
                     </Link>
                   </Button>
                 ) : null}
-                {invoice && invoiceAllowsPayment(invoice.status) && invoice.status !== "paid" ? (
+                {!isInternalAppointment && invoice && invoiceAllowsPayment(invoice.status) && invoice.status !== "paid" ? (
                   <Button asChild variant="outline" className="justify-start">
                     <Link to={`/invoices/${invoice.id}?recordPayment=1`} onClick={() => setShowMobileActions(false)}>
                       <DollarSign className="mr-2 h-4 w-4" />
@@ -1688,7 +1739,7 @@ export default function AppointmentDetail() {
                     </Link>
                   </Button>
                 ) : null}
-                {quote ? (
+                {!isInternalAppointment && quote ? (
                   <Button asChild variant="outline" className="justify-start">
                     <Link to={`/quotes/${quote.id}`} onClick={() => setShowMobileActions(false)}>
                       <FileText className="mr-2 h-4 w-4" />
@@ -1722,6 +1773,19 @@ export default function AppointmentDetail() {
                       Pay with Stripe
                     </Button>
                   </>
+                ) : null}
+                {isInternalAppointment ? (
+                  <Button
+                    variant="outline"
+                    className="justify-start border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => {
+                      setShowMobileActions(false);
+                      setShowDeleteDialog(true);
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete block
+                  </Button>
                 ) : null}
                 {appointment.depositPaid ? (
                   <Button
@@ -1786,7 +1850,7 @@ export default function AppointmentDetail() {
         paidAt={(appointment as any).paidAt ?? null}
       />
 
-      {!isInternalCalendarBlock && (hasPlaceholderClient || hasPlaceholderVehicle || missingLinkedRecords) && (
+      {!isInternalAppointment && (hasPlaceholderClient || hasPlaceholderVehicle || missingLinkedRecords) && (
         <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -1826,7 +1890,7 @@ export default function AppointmentDetail() {
         </div>
       )}
 
-      {appointment && !isInternalCalendarBlock ? (
+      {appointment && !isInternalAppointment ? (
         <ContextualNextStep
           entityType="appointment"
           status={appointment.status}
@@ -1839,9 +1903,9 @@ export default function AppointmentDetail() {
         />
       ) : null}
 
-      {!isInternalCalendarBlock ? <RelatedRecordsPanel records={relatedRecords} loading={fetching} /> : null}
+      {!isInternalAppointment ? <RelatedRecordsPanel records={relatedRecords} loading={fetching} /> : null}
 
-      {!isInternalCalendarBlock && (quoteNeedsFollowUp || invoiceNeedsFollowUp) && (
+      {!isInternalAppointment && (quoteNeedsFollowUp || invoiceNeedsFollowUp) && (
         <div className="grid gap-3 md:grid-cols-2">
           {quoteNeedsFollowUp ? (
             <WorkflowWarningCard
@@ -2205,7 +2269,7 @@ export default function AppointmentDetail() {
 
             {/* Right column */}
             <div className="space-y-4">
-              {isInternalCalendarBlock ? (
+              {isInternalAppointment ? (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Block details</CardTitle>
@@ -2263,10 +2327,10 @@ export default function AppointmentDetail() {
                 depositActionLabel={
                   effectiveInternalPaymentAmount > 0
                     ? appointment.depositPaid
-                      ? isInternalCalendarBlock
+                      ? isInternalAppointment
                         ? "Payment recorded"
                         : "Deposit collected"
-                      : isInternalCalendarBlock
+                      : isInternalAppointment
                         ? "Mark paid"
                         : "Collect deposit"
                     : null
@@ -2283,7 +2347,7 @@ export default function AppointmentDetail() {
                 }
                 secondaryDepositActionLabel={
                   appointment.depositPaid
-                    ? isInternalCalendarBlock
+                    ? isInternalAppointment
                       ? "Mark unpaid"
                       : "Reverse deposit collection"
                     : null
@@ -2292,7 +2356,7 @@ export default function AppointmentDetail() {
                 secondaryDepositActionDisabled={reversingDeposit}
               />
 
-              {!isInternalCalendarBlock ? (
+              {!isInternalAppointment ? (
                 <CommunicationCard
                   title="Client communication"
                   recipientName={
@@ -2320,9 +2384,9 @@ export default function AppointmentDetail() {
       <Dialog open={recordDepositOpen} onOpenChange={setRecordDepositOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{isInternalCalendarBlock ? "Mark Payment" : "Collect Deposit"}</DialogTitle>
+            <DialogTitle>{isInternalAppointment ? "Mark Payment" : "Collect Deposit"}</DialogTitle>
             <DialogDescription>
-              {isInternalCalendarBlock
+              {isInternalAppointment
                 ? "Record this internal appointment amount as already settled without creating an invoice."
                 : "Collect the appointment deposit now without changing the rest of the booking."}
             </DialogDescription>
@@ -2340,7 +2404,7 @@ export default function AppointmentDetail() {
                 placeholder="0.00"
               />
               <p className="text-xs text-muted-foreground">
-                {isInternalCalendarBlock ? "Amount to record" : "Deposit to collect"}: {formatCurrency(effectiveInternalPaymentAmount)}
+                {isInternalAppointment ? "Amount to record" : "Deposit to collect"}: {formatCurrency(effectiveInternalPaymentAmount)}
               </p>
             </div>
             <div className="space-y-2">
@@ -2381,7 +2445,7 @@ export default function AppointmentDetail() {
             </Button>
             <Button onClick={() => void handleRecordDepositPayment()} disabled={recordingDeposit}>
               {recordingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isInternalCalendarBlock ? "Mark paid" : "Collect Deposit"}
+              {isInternalAppointment ? "Mark paid" : "Collect Deposit"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2390,9 +2454,9 @@ export default function AppointmentDetail() {
       <AlertDialog open={reverseDepositOpen} onOpenChange={setReverseDepositOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{isInternalCalendarBlock ? "Mark appointment unpaid?" : "Reverse deposit collection?"}</AlertDialogTitle>
+            <AlertDialogTitle>{isInternalAppointment ? "Mark appointment unpaid?" : "Reverse deposit collection?"}</AlertDialogTitle>
             <AlertDialogDescription>
-              {isInternalCalendarBlock
+              {isInternalAppointment
                 ? "This will mark the internal appointment amount as unpaid again."
                 : "This will mark the appointment deposit as uncollected again. Use this if the manual deposit record was entered by mistake."}
             </AlertDialogDescription>
@@ -2706,6 +2770,27 @@ export default function AppointmentDetail() {
               onClick={() => void handleCancel()}
             >
               Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this internal block?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the internal appointment and its attached services from the schedule.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingAppointment}>Keep block</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void handleDeleteInternalAppointment()}
+              disabled={deletingAppointment}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingAppointment ? "Deleting..." : "Delete block"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

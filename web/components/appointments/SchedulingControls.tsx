@@ -47,6 +47,26 @@ export function buildQuarterHourOptions() {
   });
 }
 
+export function formatDurationMinutes(minutes: number): string {
+  if (minutes <= 0) return "0 min";
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (hours > 0 && remainder > 0) return `${hours} hr ${remainder} min`;
+  if (hours > 0) return `${hours} hr${hours === 1 ? "" : "s"}`;
+  return `${remainder} min`;
+}
+
+export function buildQuarterHourDurationOptions(maxMinutes = 12 * 60) {
+  const safeMaxMinutes = Math.max(15, maxMinutes - (maxMinutes % 15));
+  return Array.from({ length: safeMaxMinutes / 15 }, (_, index) => {
+    const minutes = (index + 1) * 15;
+    return {
+      value: String(minutes),
+      label: formatDurationMinutes(minutes),
+    };
+  });
+}
+
 type ResponsiveTimeSelectProps = {
   id?: string;
   value: string;
@@ -126,6 +146,65 @@ export function ResponsiveTimeSelect({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+type QuarterHourDurationGridProps = {
+  value: string;
+  onChange: (value: string) => void;
+  allowEmpty?: boolean;
+  emptyLabel?: string;
+  maxMinutes?: number;
+  className?: string;
+};
+
+export function QuarterHourDurationGrid({
+  value,
+  onChange,
+  allowEmpty = false,
+  emptyLabel = "No set duration",
+  maxMinutes = 12 * 60,
+  className,
+}: QuarterHourDurationGridProps) {
+  const options = buildQuarterHourDurationOptions(maxMinutes);
+
+  return (
+    <div className={cn("space-y-2", className)}>
+      {allowEmpty ? (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className={cn(
+            "inline-flex rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+            value === ""
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border bg-background text-muted-foreground hover:bg-muted/40"
+          )}
+        >
+          {emptyLabel}
+        </button>
+      ) : null}
+      <div className="grid max-h-56 grid-cols-3 gap-2 overflow-y-auto pr-1 sm:grid-cols-4 lg:grid-cols-6">
+        {options.map((option) => {
+          const isSelected = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={cn(
+                "rounded-xl border px-2 py-2 text-center text-xs font-medium transition-colors",
+                isSelected
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-foreground hover:bg-muted/40"
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

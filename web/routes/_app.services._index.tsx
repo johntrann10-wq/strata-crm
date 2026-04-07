@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatServiceCategory } from "../lib/serviceCatalog";
+import { QuarterHourDurationGrid } from "../components/appointments/SchedulingControls";
 
 const UNCATEGORIZED_VALUE = "__uncategorized__";
 
@@ -297,14 +298,12 @@ function ServiceForm({
         </div>
         <div className="grid gap-2">
           <Label htmlFor="svc-duration">Est. duration (min)</Label>
-          <Input
-            id="svc-duration"
-            type="number"
-            min="0"
-            step="1"
+          <QuarterHourDurationGrid
             value={formData.duration}
-            onChange={(e) => onChange({ ...formData, duration: e.target.value })}
-            placeholder="e.g. 120"
+            onChange={(value) => onChange({ ...formData, duration: value })}
+            allowEmpty
+            emptyLabel="No set duration"
+            maxMinutes={12 * 60}
           />
         </div>
       </div>

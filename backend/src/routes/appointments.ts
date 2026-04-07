@@ -2,7 +2,7 @@ import express, { Router, Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { appointments, clients, vehicles, staff, locations, quotes, services, appointmentServices, businesses } from "../db/schema.js";
+import { appointments, clients, vehicles, staff, locations, quotes, services, appointmentServices, businesses, invoices } from "../db/schema.js";
 import { eq, and, or, desc, asc, gte, lte, ilike, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -1896,6 +1896,7 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   const [existing] = await db
     .select({
       id: appointments.id,
+      clientId: appointments.clientId,
       depositAmount: appointments.depositAmount,
       depositPaid: appointments.depositPaid,
       totalPrice: appointments.totalPrice,
@@ -1915,10 +1916,11 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   const depositAmount = Number(existing.depositAmount ?? 0);
   const totalPrice = Number(existing.totalPrice ?? 0);
   const isInternalCalendarBlock = isCalendarBlockInternalNotes(existing.internalNotes);
+  const isInternalAppointment = isInternalCalendarBlock || !existing.clientId;
   const effectiveRequiredAmount =
     Number.isFinite(depositAmount) && depositAmount > 0
       ? depositAmount
-      : isInternalCalendarBlock && Number.isFinite(totalPrice) && totalPrice > 0
+      : isInternalAppointment && Number.isFinite(totalPrice) && totalPrice > 0
         ? totalPrice
         : 0;
   if (!Number.isFinite(effectiveRequiredAmount) || effectiveRequiredAmount <= 0) {
@@ -1939,7 +1941,7 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   };
   if (
     (!Number.isFinite(depositAmount) || depositAmount <= 0) &&
-    isInternalCalendarBlock &&
+    isInternalAppointment &&
     Number.isFinite(totalPrice) &&
     totalPrice > 0
   ) {
@@ -2619,6 +2621,66 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (
   }
 
   res.json(updated);
+});
+
+appointmentsRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const [existing] = await db
+    .select({
+      id: appointments.id,
+      clientId: appointments.clientId,
+      internalNotes: appointments.internalNotes,
+    })
+    .from(appointments)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .limit(1);
+  if (!existing) throw new NotFoundError("Appointment not found.");
+
+  const isInternalAppointment = isCalendarBlockInternalNotes(existing.internalNotes) || !existing.clientId;
+  if (!isInternalAppointment) {
+    throw new BadRequestError("Only internal appointments can be deleted.");
+  }
+
+  const [linkedInvoice] = await db
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.businessId, bid),
+        eq(invoices.appointmentId, existing.id),
+        sql`${invoices.status} != 'void'`
+      )
+    )
+    .limit(1);
+  if (linkedInvoice) {
+    throw new BadRequestError("This internal appointment already has an invoice and cannot be deleted.");
+  }
+
+  const [linkedQuote] = await db
+    .select({ id: quotes.id })
+    .from(quotes)
+    .where(and(eq(quotes.businessId, bid), eq(quotes.appointmentId, existing.id)))
+    .limit(1);
+  if (linkedQuote) {
+    throw new BadRequestError("This internal appointment is linked to a quote and cannot be deleted.");
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(appointmentServices).where(eq(appointmentServices.appointmentId, existing.id));
+    await tx.delete(appointments).where(eq(appointments.id, existing.id));
+  });
+
+  await createRequestActivityLog(req, {
+    businessId: bid,
+    action: "appointment.deleted",
+    entityType: "appointment",
+    entityId: existing.id,
+    metadata: {
+      internal: true,
+    },
+  });
+
+  res.status(204).send();
 });
 
 appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, async (req: Request, res: Response) => {

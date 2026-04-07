@@ -64,6 +64,8 @@ import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { VehicleCatalogFields } from "../components/vehicles/VehicleCatalogFields";
 import {
   buildQuarterHourOptions,
+  formatDurationMinutes,
+  QuarterHourDurationGrid,
   ResponsiveTimeSelect,
 } from "../components/appointments/SchedulingControls";
 import {
@@ -201,12 +203,6 @@ function normalizePriceDraft(value: string) {
   const parts = normalized.split(".");
   if (parts.length <= 1) return normalized;
   return `${parts[0]}.${parts.slice(1).join("")}`;
-}
-
-function normalizeMinutesDraft(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  return trimmed.replace(/[^\d]/g, "");
 }
 
 function SelectionIndicator({ checked }: { checked: boolean }) {
@@ -610,10 +606,10 @@ export default function NewAppointmentPage() {
   }, [showQuotePrefilledBadge]);
 
   const formatDuration = (minutes: number) => {
-    if (minutes < 60) return `${minutes}m`;
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    return formatDurationMinutes(minutes)
+      .replace(" hrs", "h")
+      .replace(" hr", "h")
+      .replace(" min", "m");
   };
 
   const timeOptions = useMemo(() => buildQuarterHourOptions(), []);
@@ -698,7 +694,7 @@ export default function NewAppointmentPage() {
   };
 
   const handleServiceDurationOverrideChange = (serviceId: string, value: string) => {
-    const normalized = normalizeMinutesDraft(value);
+    const normalized = value.trim().replace(/[^\d]/g, "");
     setServiceDurationOverrides((current) => {
       if (!normalized) {
         if (!(serviceId in current)) return current;
@@ -1481,7 +1477,7 @@ export default function NewAppointmentPage() {
                         {selectedServices.map((service) => (
                           <div
                             key={`service-price-${service.id}`}
-                            className="grid gap-3 rounded-xl border border-border/70 bg-background/80 p-3 sm:grid-cols-[minmax(0,1fr)_120px_140px]"
+                            className="grid gap-3 rounded-xl border border-border/70 bg-background/80 p-3"
                           >
                             <div className="min-w-0">
                               <p className="text-sm font-medium text-foreground">{service.name}</p>
@@ -1491,15 +1487,17 @@ export default function NewAppointmentPage() {
                             </div>
                             <div className="space-y-1">
                               <Label htmlFor={`service-duration-${service.id}`}>Custom time</Label>
-                              <Input
-                                id={`service-duration-${service.id}`}
-                                inputMode="numeric"
-                                value={serviceDurationOverrides[service.id] ?? String(service.durationMinutes ?? 0)}
-                                onChange={(event) => handleServiceDurationOverrideChange(service.id, event.target.value)}
-                                placeholder="0"
-                              />
+                              <div id={`service-duration-${service.id}`}>
+                                <QuarterHourDurationGrid
+                                  value={serviceDurationOverrides[service.id] ?? String(service.durationMinutes ?? "")}
+                                  onChange={(value) => handleServiceDurationOverrideChange(service.id, value)}
+                                  allowEmpty
+                                  emptyLabel="Use catalog time"
+                                  maxMinutes={12 * 60}
+                                />
+                              </div>
                             </div>
-                            <div className="space-y-1">
+                            <div className="space-y-1 sm:max-w-[180px]">
                               <Label htmlFor={`service-price-${service.id}`}>Custom price</Label>
                               <Input
                                 id={`service-price-${service.id}`}
