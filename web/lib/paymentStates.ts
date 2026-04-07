@@ -12,20 +12,36 @@ export function getDepositSummary(params: {
   totalPrice?: number | string | null;
   depositAmount?: number | string | null;
   depositPaid?: boolean | null;
+  labels?: {
+    noun?: string;
+    collectedStateLabel?: string;
+    requiredStateLabel?: string;
+    noCollectionStateLabel?: string;
+    noCollectionDetail?: string;
+    dueWhenInvoicedDetail?: (totalPrice: number) => string;
+    collectedDetail?: (depositAmount: number, remainingBalance: number) => string;
+    requiredDetail?: (depositAmount: number, totalPrice: number) => string;
+  };
 }) {
   const totalPrice = toMoneyNumber(params.totalPrice);
   const depositAmount = toMoneyNumber(params.depositAmount);
   const depositPaid = params.depositPaid === true;
   const hasDeposit = depositAmount > 0;
   const remainingBalance = hasDeposit && depositPaid ? Math.max(0, totalPrice - depositAmount) : totalPrice;
+  const labels = params.labels ?? {};
+  const noun = labels.noun ?? "deposit";
+  const nounLabel = `${noun[0]?.toUpperCase() ?? "D"}${noun.slice(1)}`;
 
   if (!hasDeposit) {
     return {
       hasDeposit: false,
       depositAmount,
       remainingBalance,
-      stateLabel: "No deposit required",
-      detail: totalPrice > 0 ? `${formatCurrency(totalPrice)} due when invoiced.` : "This booking does not require upfront collection.",
+      stateLabel: labels.noCollectionStateLabel ?? `No ${noun} required`,
+      detail:
+        totalPrice > 0
+          ? labels.dueWhenInvoicedDetail?.(totalPrice) ?? `${formatCurrency(totalPrice)} due when invoiced.`
+          : labels.noCollectionDetail ?? "This booking does not require upfront collection.",
     };
   }
 
@@ -34,11 +50,12 @@ export function getDepositSummary(params: {
       hasDeposit: true,
       depositAmount,
       remainingBalance,
-      stateLabel: "Deposit collected",
+      stateLabel: labels.collectedStateLabel ?? `${nounLabel} collected`,
       detail:
-        remainingBalance > 0
+        labels.collectedDetail?.(depositAmount, remainingBalance) ??
+        (remainingBalance > 0
           ? `${formatCurrency(depositAmount)} collected. ${formatCurrency(remainingBalance)} remains for invoicing.`
-          : `${formatCurrency(depositAmount)} collected and no balance remains.`,
+          : `${formatCurrency(depositAmount)} collected and no balance remains.`),
     };
   }
 
@@ -46,11 +63,12 @@ export function getDepositSummary(params: {
     hasDeposit: true,
     depositAmount,
     remainingBalance,
-    stateLabel: "Deposit required",
+    stateLabel: labels.requiredStateLabel ?? `${nounLabel} required`,
     detail:
-      totalPrice > 0
+      labels.requiredDetail?.(depositAmount, totalPrice) ??
+      (totalPrice > 0
         ? `Collect ${formatCurrency(depositAmount)} before work starts. ${formatCurrency(totalPrice)} total booked value.`
-        : `Collect ${formatCurrency(depositAmount)} before work starts.`,
+        : `Collect ${formatCurrency(depositAmount)} before work starts.`),
   };
 }
 

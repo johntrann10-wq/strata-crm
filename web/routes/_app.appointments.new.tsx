@@ -1502,9 +1502,9 @@ export default function NewAppointmentPage() {
                               <Input
                                 id={`service-price-${service.id}`}
                                 inputMode="decimal"
-                                value={servicePriceOverrides[service.id] ?? String(toMoneyNumber(service.price).toFixed(2))}
+                                value={servicePriceOverrides[service.id] ?? ""}
                                 onChange={(event) => handleServicePriceOverrideChange(service.id, event.target.value)}
-                                placeholder="0.00"
+                                placeholder={toMoneyNumber(service.price).toFixed(2)}
                               />
                             </div>
                           </div>

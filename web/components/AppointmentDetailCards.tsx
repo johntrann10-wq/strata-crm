@@ -248,6 +248,17 @@ interface FinancialSummaryCardProps {
   secondaryDepositActionLabel?: string | null;
   onSecondaryDepositAction?: (() => void) | null;
   secondaryDepositActionDisabled?: boolean;
+  depositLabels?: {
+    rowLabel?: string;
+    noun?: string;
+    collectedStateLabel?: string;
+    requiredStateLabel?: string;
+    noCollectionStateLabel?: string;
+    noCollectionDetail?: string;
+    dueWhenInvoicedDetail?: (totalPrice: number) => string;
+    collectedDetail?: (depositAmount: number, remainingBalance: number) => string;
+    requiredDetail?: (depositAmount: number, totalPrice: number) => string;
+  };
 }
 
 export function FinancialSummaryCard({
@@ -267,11 +278,13 @@ export function FinancialSummaryCard({
   secondaryDepositActionLabel,
   onSecondaryDepositAction,
   secondaryDepositActionDisabled = false,
+  depositLabels,
 }: FinancialSummaryCardProps) {
   const depositSummary = getDepositSummary({
     totalPrice,
     depositAmount,
     depositPaid,
+    labels: depositLabels,
   });
   const showBalanceDue = totalPrice != null && depositSummary.remainingBalance > 0;
 
@@ -313,7 +326,7 @@ export function FinancialSummaryCard({
           </span>
         </div>
         <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Deposit</span>
+          <span className="text-muted-foreground">{depositLabels?.rowLabel ?? "Deposit"}</span>
           <div className="flex items-center gap-2 text-right">
             <span className="font-medium">
               {depositSummary.hasDeposit ? formatCurrency(depositSummary.depositAmount) : "—"}

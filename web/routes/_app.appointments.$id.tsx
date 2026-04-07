@@ -2004,13 +2004,17 @@ export default function AppointmentDetail() {
                       <DollarSign className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                       <div>
                         <p className="text-sm font-medium">
-                          Deposit: {formatCurrency(appointment.depositAmount)}
+                          {isInternalAppointment ? "Payment" : "Deposit"}: {formatCurrency(appointment.depositAmount)}
                         </p>
                         <p className="text-sm">
                           {appointment.depositPaid ? (
-                            <span className="text-green-600 font-medium">Collected</span>
+                            <span className="text-green-600 font-medium">
+                              {isInternalAppointment ? "Recorded" : "Collected"}
+                            </span>
                           ) : (
-                            <span className="text-amber-600 font-medium">Waiting on collection</span>
+                            <span className="text-amber-600 font-medium">
+                              {isInternalAppointment ? "Waiting on payment" : "Waiting on collection"}
+                            </span>
                           )}
                         </p>
                       </div>
@@ -2324,6 +2328,27 @@ export default function AppointmentDetail() {
                 totalPrice={appointment.totalPrice}
                 depositAmount={appointment.depositAmount}
                 depositPaid={appointment.depositPaid}
+                depositLabels={
+                  isInternalAppointment
+                    ? {
+                        rowLabel: "Payment",
+                        noun: "payment",
+                        collectedStateLabel: "Payment recorded",
+                        requiredStateLabel: "Payment due",
+                        noCollectionStateLabel: "No payment required",
+                        noCollectionDetail: "This internal block does not require payment tracking.",
+                        dueWhenInvoicedDetail: (total) => `${formatCurrency(total)} is currently uncollected.`,
+                        collectedDetail: (amount, remainingBalance) =>
+                          remainingBalance > 0
+                            ? `${formatCurrency(amount)} recorded. ${formatCurrency(remainingBalance)} is still uncollected.`
+                            : `${formatCurrency(amount)} recorded and no balance remains.`,
+                        requiredDetail: (amount, total) =>
+                          total > 0
+                            ? `Record ${formatCurrency(amount)} for this internal block. ${formatCurrency(total)} total scheduled value.`
+                            : `Record ${formatCurrency(amount)} for this internal block.`,
+                      }
+                    : undefined
+                }
                 depositActionLabel={
                   effectiveInternalPaymentAmount > 0
                     ? appointment.depositPaid
