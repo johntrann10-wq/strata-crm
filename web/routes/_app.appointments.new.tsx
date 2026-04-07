@@ -534,10 +534,11 @@ export default function NewAppointmentPage() {
 
   // Auto-select sole vehicle when client has exactly one vehicle
   useEffect(() => {
+    if (!selectedClientId) return;
     if (vehiclesData && vehiclesData.length === 1 && selectedVehicleId === null) {
       setSelectedVehicleId(vehiclesData[0].id);
     }
-  }, [selectedVehicleId, vehiclesData]);
+  }, [selectedClientId, selectedVehicleId, vehiclesData]);
 
   // Pre-select vehicle from linked quote
   useEffect(() => {
