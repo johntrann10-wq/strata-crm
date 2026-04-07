@@ -84,7 +84,11 @@ export function isMultiDayJob(appointment: CalendarJobLike): boolean {
 }
 
 export function isVisibleCalendarAppointment(appointment: CalendarJobLike): boolean {
-  return appointment.status !== "cancelled" && appointment.status !== "no-show";
+  return (
+    appointment.status !== "cancelled" &&
+    appointment.status !== "no-show" &&
+    appointment.status !== "completed"
+  );
 }
 
 export function getActiveCalendarAppointments<T extends CalendarJobLike>(appointments: T[]): T[] {

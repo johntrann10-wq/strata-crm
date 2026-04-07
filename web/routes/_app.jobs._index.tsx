@@ -50,6 +50,7 @@ type JobListRecord = {
   appointmentId?: string | null;
   jobNumber: string;
   status: string;
+  hasInvoice?: boolean;
   title?: string | null;
   scheduledStart?: string | null;
   totalPrice?: number | string | null;
@@ -78,13 +79,15 @@ function formatDate(date: string | null | undefined): string {
 function matchesTab(job: JobListRecord, tab: JobStatusTab): boolean {
   if (tab === "all") return true;
   if (tab === "scheduled") return ["scheduled", "confirmed"].includes(job.status);
+  if (tab === "completed") return job.status === "completed" && !job.hasInvoice;
   if (tab === "cancelled") return ["cancelled", "no-show"].includes(job.status);
   return job.status === tab;
 }
 
-function getWorkflowStage(status: string): string {
+function getWorkflowStage(status: string, hasInvoice = false): string {
   if (["scheduled", "confirmed"].includes(status)) return "Ready to start";
   if (status === "in_progress") return "In service";
+  if (status === "completed" && hasInvoice) return "Billed";
   if (status === "completed") return "Ready to invoice";
   if (["cancelled", "no-show"].includes(status)) return "Closed";
   return "Queued";
@@ -143,7 +146,7 @@ export default function JobsIndexPage() {
   const stats = useMemo(() => {
     const scheduled = records.filter((job) => ["scheduled", "confirmed"].includes(job.status)).length;
     const inProgress = records.filter((job) => job.status === "in_progress").length;
-    const completed = records.filter((job) => job.status === "completed").length;
+    const completed = records.filter((job) => job.status === "completed" && !job.hasInvoice).length;
     const myQueue = myStaffRecord
       ? records.filter((job) => job.assignedStaff?.id === myStaffRecord.id && ["scheduled", "confirmed", "in_progress"].includes(job.status)).length
       : 0;
@@ -288,7 +291,7 @@ export default function JobsIndexPage() {
               ? `${job.assignedStaff.firstName ?? ""} ${job.assignedStaff.lastName ?? ""}`.trim()
               : "Unassigned";
             const invoiceHref =
-              job.status === "completed" && job.client?.id
+              job.status === "completed" && !job.hasInvoice && job.client?.id
                 ? `/invoices/new?clientId=${job.client.id}&appointmentId=${job.appointmentId ?? job.id}`
                 : null;
 
@@ -304,7 +307,7 @@ export default function JobsIndexPage() {
                             {job.jobNumber}
                           </span>
                           <span className="rounded-full border border-border/70 px-2.5 py-1 text-[11px] font-medium text-foreground">
-                            {getWorkflowStage(job.status)}
+                            {getWorkflowStage(job.status, Boolean(job.hasInvoice))}
                           </span>
                         </div>
                         <div className="space-y-1">

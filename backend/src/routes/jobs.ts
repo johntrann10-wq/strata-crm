@@ -107,6 +107,13 @@ jobsRouter.get("/", requireAuth, requireTenant, requirePermission("jobs.read"), 
       notes: appointments.notes,
       internalNotes: appointments.internalNotes,
       completedAt: appointments.completedAt,
+      hasInvoice: sql<boolean>`exists (
+        select 1
+        from ${invoices}
+        where ${invoices.appointmentId} = ${appointments.id}
+          and ${invoices.businessId} = ${appointments.businessId}
+          and ${invoices.status} <> 'void'
+      )`,
       clientId: clients.id,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
@@ -142,6 +149,7 @@ jobsRouter.get("/", requireAuth, requireTenant, requirePermission("jobs.read"), 
       notes: row.notes,
       internalNotes: row.internalNotes,
       completedAt: row.completedAt,
+      hasInvoice: Boolean(row.hasInvoice),
       client: row.clientId
         ? { id: row.clientId, firstName: row.clientFirstName, lastName: row.clientLastName }
         : null,
