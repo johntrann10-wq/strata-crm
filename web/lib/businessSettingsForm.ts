@@ -10,6 +10,7 @@ export interface BusinessSettingsFormData {
   defaultTaxRate: number;
   defaultAdminFee: number;
   defaultAdminFeeEnabled: boolean;
+  defaultAppointmentStartTime: string;
   currency: string;
   appointmentBufferMinutes: number;
   calendarBlockCapacityPerSlot: number;
@@ -28,6 +29,7 @@ export const DEFAULT_BUSINESS_SETTINGS_FORM: BusinessSettingsFormData = {
   defaultTaxRate: 0,
   defaultAdminFee: 0,
   defaultAdminFeeEnabled: false,
+  defaultAppointmentStartTime: "09:00",
   currency: "USD",
   appointmentBufferMinutes: 15,
   calendarBlockCapacityPerSlot: 1,
@@ -44,6 +46,8 @@ export function businessSettingsFormFromSource(source: BusinessSettingsSource) {
     defaultAdminFee: source?.defaultAdminFee ?? DEFAULT_BUSINESS_SETTINGS_FORM.defaultAdminFee,
     defaultAdminFeeEnabled:
       source?.defaultAdminFeeEnabled ?? DEFAULT_BUSINESS_SETTINGS_FORM.defaultAdminFeeEnabled,
+    defaultAppointmentStartTime:
+      source?.defaultAppointmentStartTime ?? DEFAULT_BUSINESS_SETTINGS_FORM.defaultAppointmentStartTime,
     appointmentBufferMinutes:
       source?.appointmentBufferMinutes ?? DEFAULT_BUSINESS_SETTINGS_FORM.appointmentBufferMinutes,
     calendarBlockCapacityPerSlot:

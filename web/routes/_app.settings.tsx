@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useSearchParams } from "react-router";
 import type { AuthOutletContext } from "./_app";
 import { useAction, useFindFirst, useFindMany, useFindOne } from "../hooks/useApi";
@@ -77,6 +77,7 @@ import {
   type RuntimeErrorEntry,
 } from "../lib/runtimeErrors";
 import { PageHeader } from "../components/shared/PageHeader";
+import { buildQuarterHourOptions } from "../components/appointments/SchedulingControls";
 import {
   businessSettingsFormFromSource,
   DEFAULT_BUSINESS_SETTINGS_FORM,
@@ -1102,6 +1103,7 @@ export default function SettingsPage() {
   const [calendarBlockCapacityInput, setCalendarBlockCapacityInput] = useState(
     String(DEFAULT_BUSINESS_SETTINGS_FORM.calendarBlockCapacityPerSlot)
   );
+  const appointmentTimeOptions = useMemo(() => buildQuarterHourOptions(), []);
   const [automationSettings, setAutomationSettings] = useState<AutomationSettingsForm>(
     DEFAULT_AUTOMATION_SETTINGS
   );
@@ -2260,6 +2262,7 @@ export default function SettingsPage() {
         defaultTaxRate: formData.defaultTaxRate,
         defaultAdminFee: formData.defaultAdminFee,
         defaultAdminFeeEnabled: formData.defaultAdminFeeEnabled,
+        defaultAppointmentStartTime: formData.defaultAppointmentStartTime,
         currency: formData.currency || "USD",
         appointmentBufferMinutes: formData.appointmentBufferMinutes,
         calendarBlockCapacityPerSlot: formData.calendarBlockCapacityPerSlot,
@@ -2599,7 +2602,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="appointmentBufferMinutes">Appointment Buffer</Label>
                     <div className="flex">
@@ -2650,6 +2653,27 @@ export default function SettingsPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Controls how many appointments can share the same time slot before Strata blocks another booking.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="defaultAppointmentStartTime">Default Appointment Time</Label>
+                    <Select
+                      value={formData.defaultAppointmentStartTime}
+                      onValueChange={(value) => handleFieldChange("defaultAppointmentStartTime", value)}
+                    >
+                      <SelectTrigger id="defaultAppointmentStartTime">
+                        <SelectValue placeholder="Select a default time..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {appointmentTimeOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      New appointments start here unless a calendar click or direct link pre-fills a different time.
                     </p>
                   </div>
                 </div>

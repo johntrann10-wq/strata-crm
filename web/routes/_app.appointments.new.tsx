@@ -228,12 +228,7 @@ export default function NewAppointmentPage() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => undefined);
-  const [startTime, setStartTime] = useState<string>(() => {
-    const d = new Date();
-    d.setMinutes(0, 0, 0);
-    d.setHours(d.getHours() + 1);
-    return d.toTimeString().slice(0, 5);
-  });
+  const [startTime, setStartTime] = useState<string>(() => "09:00");
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isSmallViewport, setIsSmallViewport] = useState(false);
@@ -268,6 +263,7 @@ export default function NewAppointmentPage() {
   const [showQuotePrefilledBadge, setShowQuotePrefilledBadge] = useState(false);
   const hasPrefilledFromQuote = useRef(false);
   const hasSeededBusinessFinanceDefaults = useRef(false);
+  const hasSeededBusinessDefaultStartTime = useRef(false);
   const [clientSearchQuery, setClientSearchQuery] = useState<string>("");
   const [debouncedClientQuery, setDebouncedClientQuery] = useState<string>("");
   const [serviceSearchQuery, setServiceSearchQuery] = useState("");
@@ -331,7 +327,7 @@ export default function NewAppointmentPage() {
   // Data fetching
   const [{ data: businessData }] = useFindFirst(api.business, {
     filter: { id: { equals: businessId ?? "" } },
-    select: { defaultTaxRate: true, defaultAdminFee: true, defaultAdminFeeEnabled: true },
+    select: { defaultTaxRate: true, defaultAdminFee: true, defaultAdminFeeEnabled: true, defaultAppointmentStartTime: true },
     pause: !businessId,
   });
 
@@ -516,6 +512,17 @@ export default function NewAppointmentPage() {
     setApplyAdminFee(defaultAdminFeeEnabled && defaultAdminFee > 0);
     hasSeededBusinessFinanceDefaults.current = true;
   }, [businessData]);
+
+  useEffect(() => {
+    if (timeParam || hasSeededBusinessDefaultStartTime.current || !businessData) return;
+    const defaultStartTime = String(
+      (businessData as { defaultAppointmentStartTime?: string | null }).defaultAppointmentStartTime ?? "09:00"
+    );
+    if (/^([01]\d|2[0-3]):[0-5]\d$/.test(defaultStartTime)) {
+      setStartTime(defaultStartTime);
+    }
+    hasSeededBusinessDefaultStartTime.current = true;
+  }, [businessData, timeParam]);
 
   // Auto-select sole vehicle when client has exactly one vehicle
   useEffect(() => {

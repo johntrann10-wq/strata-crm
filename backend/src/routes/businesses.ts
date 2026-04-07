@@ -47,6 +47,7 @@ const createSchema = z.object({
   defaultTaxRate: z.coerce.number().min(0).max(100).optional(),
   defaultAdminFee: z.coerce.number().min(0).max(100).optional(),
   defaultAdminFeeEnabled: z.boolean().optional(),
+  defaultAppointmentStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
   appointmentBufferMinutes: z.number().int().min(0).max(1440).optional(),
   calendarBlockCapacityPerSlot: z.number().int().min(1).max(12).optional(),
   leadCaptureEnabled: z.boolean().optional(),
@@ -206,6 +207,7 @@ function coerceBusinessRecord(
     defaultTaxRate: record.defaultTaxRate ?? "0",
     defaultAdminFee: record.defaultAdminFee ?? "0",
     defaultAdminFeeEnabled: record.defaultAdminFeeEnabled ?? false,
+    defaultAppointmentStartTime: record.defaultAppointmentStartTime ?? "09:00",
     appointmentBufferMinutes: record.appointmentBufferMinutes ?? 15,
     calendarBlockCapacityPerSlot: record.calendarBlockCapacityPerSlot ?? 1,
     leadCaptureEnabled: record.leadCaptureEnabled ?? false,
@@ -312,6 +314,7 @@ async function ensureBusinessAutomationColumns(): Promise<void> {
           ADD COLUMN IF NOT EXISTS lead_auto_response_enabled boolean DEFAULT true,
           ADD COLUMN IF NOT EXISTS lead_auto_response_email_enabled boolean DEFAULT true,
           ADD COLUMN IF NOT EXISTS lead_auto_response_sms_enabled boolean DEFAULT false,
+          ADD COLUMN IF NOT EXISTS default_appointment_start_time text DEFAULT '09:00',
           ADD COLUMN IF NOT EXISTS missed_call_text_back_enabled boolean DEFAULT false,
           ADD COLUMN IF NOT EXISTS automation_uncontacted_leads_enabled boolean DEFAULT false,
           ADD COLUMN IF NOT EXISTS automation_uncontacted_lead_hours integer DEFAULT 2,
@@ -807,6 +810,9 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   if (parsed.data.defaultAdminFee !== undefined) updates.defaultAdminFee = String(parsed.data.defaultAdminFee ?? 0);
   if (parsed.data.defaultAdminFeeEnabled !== undefined) {
     updates.defaultAdminFeeEnabled = parsed.data.defaultAdminFeeEnabled ?? false;
+  }
+  if (parsed.data.defaultAppointmentStartTime !== undefined) {
+    updates.defaultAppointmentStartTime = parsed.data.defaultAppointmentStartTime ?? "09:00";
   }
   if (parsed.data.appointmentBufferMinutes !== undefined) {
     updates.appointmentBufferMinutes = parsed.data.appointmentBufferMinutes ?? 15;

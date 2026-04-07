@@ -136,6 +136,7 @@ export const businesses = pgTable("businesses", {
   defaultTaxRate: decimal("default_tax_rate", { precision: 5, scale: 2 }).default("0"),
   defaultAdminFee: decimal("default_admin_fee", { precision: 12, scale: 2 }).default("0"),
   defaultAdminFeeEnabled: boolean("default_admin_fee_enabled").default(false),
+  defaultAppointmentStartTime: text("default_appointment_start_time").default("09:00"),
   appointmentBufferMinutes: integer("appointment_buffer_minutes").default(15),
   calendarBlockCapacityPerSlot: integer("calendar_block_capacity_per_slot").default(1),
   leadCaptureEnabled: boolean("lead_capture_enabled").default(false),
