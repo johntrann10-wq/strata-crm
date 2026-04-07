@@ -711,13 +711,14 @@ export async function sendInvoiceEmail(options: {
   businessName: string;
   amount: string;
   invoiceNumber: string;
+  invoiceStatus?: string | null;
   invoiceUrl?: string | null;
   invoicePayUrl?: string | null;
   portalUrl?: string | null;
   message?: string | null;
 }) {
-  const primaryUrl = options.invoicePayUrl ?? options.invoiceUrl;
-  const hasDirectPayLink = !!options.invoicePayUrl;
+  const canPayInvoice = options.invoiceStatus !== "paid" && options.invoiceStatus !== "void" && !!options.invoicePayUrl;
+  const primaryUrl = canPayInvoice ? options.invoicePayUrl : options.invoiceUrl;
   await sendTemplatedEmail({
     to: options.to,
     templateSlug: "invoice_sent",
@@ -730,8 +731,8 @@ export async function sendInvoiceEmail(options: {
       invoiceUrl: optionalValue(options.invoiceUrl),
       invoicePayUrl: optionalValue(options.invoicePayUrl),
       invoicePrimaryUrl: optionalValue(primaryUrl),
-      invoicePrimaryLabel: hasDirectPayLink ? "Pay invoice" : "View invoice",
-      invoiceDetailsCopy: hasDirectPayLink
+      invoicePrimaryLabel: canPayInvoice ? "Pay invoice" : "View invoice",
+      invoiceDetailsCopy: canPayInvoice
         ? "Use the payment link to pay the invoice now, or open the invoice to review the completed work, payment status, and your service record."
         : "Open the invoice to review the completed work, payment status, and your service record.",
       portalUrl: optionalValue(options.portalUrl),

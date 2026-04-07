@@ -1459,6 +1459,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
     .select({
       id: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
+      status: invoices.status,
       total: invoices.total,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
@@ -1535,7 +1536,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       businessId: bid,
     });
     const invoicePayUrl =
-      Number(existing.total ?? 0) > 0
+      existing.status !== "paid" && existing.status !== "void" && Number(existing.total ?? 0) > 0
       ? buildPublicDocumentUrl(`/api/invoices/${existing.id}/public-pay?token=${encodeURIComponent(publicToken)}`)
       : null;
     await sendInvoiceEmail({
@@ -1545,6 +1546,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       businessName: existing.businessName ?? "Your shop",
       amount: Number(existing.total ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" }),
       invoiceNumber: existing.invoiceNumber ?? "Invoice",
+      invoiceStatus: existing.status,
       invoiceUrl: buildPublicDocumentUrl(`/api/invoices/${existing.id}/public-html?token=${encodeURIComponent(publicToken)}`),
       invoicePayUrl,
       portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(publicToken)}`),
