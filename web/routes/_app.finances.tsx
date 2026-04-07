@@ -206,7 +206,7 @@ function FinancesContent() {
               {isRefreshing ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : null}
             </span>
           }
-          subtitle="Track what came in, what went out, and keep the business-side money picture visible without leaving Strata."
+          subtitle="Track collected revenue, unpaid balances, and business spend from one place without letting deposits or open work blur together."
           right={
             canManage ? (
               <Button onClick={openCreateDialog}>
@@ -365,15 +365,15 @@ function FinancesContent() {
                 <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">Keep the shop-side picture honest</h2>
               </div>
               <div className="space-y-3">
-                <InsightCard label="Revenue today" value={formatCurrency(metrics?.todayRevenue ?? 0)} detail="Paid invoice value booked today." />
+                <InsightCard label="Revenue today" value={formatCurrency(metrics?.todayRevenue ?? 0)} detail="Money actually collected against active calendar work today." />
                 <InsightCard label="Expenses today" value={formatCurrency(metrics?.expensesToday ?? 0)} detail="Outflow recorded against today's operating spend." />
                 <InsightCard label="Tracked expense total" value={formatCurrency(totalTrackedExpenses)} detail="Visible across the currently loaded expense ledger." />
               </div>
               <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
                 <p className="text-sm font-medium text-foreground">What this tab covers</p>
                 <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                  <li>Revenue from paid invoices</li>
-                  <li>Outstanding invoice balance still waiting to be collected</li>
+                  <li>Collected revenue from invoices and deposits already taken</li>
+                  <li>Awaiting collection across open invoices and uninvoiced appointment balances</li>
                   <li>Logged business expenses with editable notes and categories</li>
                   <li>Net monthly picture without leaving the app</li>
                 </ul>

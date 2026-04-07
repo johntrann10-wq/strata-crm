@@ -257,6 +257,31 @@ function businessId(req: Request): string {
   return req.businessId;
 }
 
+function getStandaloneAppointmentCollectedAmountSql() {
+  return sql`greatest(
+    case
+      when ${appointments.depositPaid} = true
+        and coalesce(${appointments.depositAmount}, '0')::numeric > 0
+        then least(
+          coalesce(${appointments.depositAmount}, '0')::numeric,
+          coalesce(${appointments.totalPrice}, '0')::numeric
+        )
+      when ${appointments.depositPaid} = true
+        then coalesce(${appointments.totalPrice}, '0')::numeric
+      else 0
+    end,
+    0
+  )`;
+}
+
+function getStandaloneAppointmentAwaitingAmountSql() {
+  const collectedAmount = getStandaloneAppointmentCollectedAmountSql();
+  return sql`greatest(
+    coalesce(${appointments.totalPrice}, '0')::numeric - ${collectedAmount},
+    0
+  )`;
+}
+
 export function getCronExecutionGate(providedSecret: string | undefined) {
   const configuredSecret = process.env.CRON_SECRET?.trim();
   if (!configuredSecret) {
@@ -361,22 +386,44 @@ async function getCollectedInvoiceRevenueTotal(
   }
 }
 
-async function getStandaloneInternalRevenueTotal(
+async function getStandaloneAppointmentRevenueTotal(
   bid: string,
   start: Date,
   end: Date
 ) {
+  const collectedAmount = getStandaloneAppointmentCollectedAmountSql();
   const [row] = await db
-    .select({ total: sql<string>`coalesce(sum(${appointments.totalPrice}), 0)` })
+    .select({ total: sql<string>`coalesce(sum(${collectedAmount}), 0)` })
     .from(appointments)
     .where(
       and(
         eq(appointments.businessId, bid),
-        sql`${appointments.clientId} is null`,
         sql`${appointments.status} not in ('cancelled', 'no-show')`,
-        eq(appointments.depositPaid, true),
+        sql`${collectedAmount} > 0`,
         sql`${appointments.startTime} <= ${end}`,
         sql`coalesce(${appointments.endTime}, ${appointments.startTime}) >= ${start}`,
+        sql`not exists (
+          select 1
+          from ${invoices}
+          where ${invoices.businessId} = ${bid}
+            and ${invoices.appointmentId} = ${appointments.id}
+            and ${invoices.status} != 'void'
+        )`
+      )
+    );
+  return Number(row?.total ?? 0);
+}
+
+async function getStandaloneAppointmentAwaitingCollectionTotal(bid: string) {
+  const awaitingAmount = getStandaloneAppointmentAwaitingAmountSql();
+  const [row] = await db
+    .select({ total: sql<string>`coalesce(sum(${awaitingAmount}), 0)` })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.businessId, bid),
+        sql`${appointments.status} not in ('cancelled', 'no-show')`,
+        sql`${awaitingAmount} > 0`,
         sql`not exists (
           select 1
           from ${invoices}
@@ -399,37 +446,47 @@ actionsRouter.post("/getDashboardStats", requireAuth, requireTenant, async (req:
   startOfWeek.setHours(0, 0, 0, 0);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const startOfTime = new Date("1970-01-01T00:00:00.000Z");
+  const endOfTime = new Date("9999-12-31T23:59:59.999Z");
 
   const [
     apptCountWeek,
-    invTotalPaid,
+    collectedRevenueTotal,
     clientCount,
     todayAppts,
-    todayRevenueRows,
-    monthRevenueRows,
+    todayCollectedInvoiceRevenue,
+    monthCollectedInvoiceRevenue,
+    standaloneTodayRevenue,
+    standaloneMonthRevenue,
+    standaloneRevenueTotal,
     openInvoicesRows,
     openInvoicesTotalRows,
+    standaloneAwaitingCollection,
   ] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(appointments).where(and(eq(appointments.businessId, bid), gte(appointments.startTime, startOfWeek))),
-    db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), sql`${invoices.status} != 'void'`)),
+    getCollectedInvoiceRevenueTotal(bid, startOfTime, endOfTime),
     db.select({ count: sql<number>`count(*)::int` }).from(clients).where(and(eq(clients.businessId, bid), isNull(clients.deletedAt))),
     db.select({ count: sql<number>`count(*)::int` }).from(appointments).where(and(eq(appointments.businessId, bid), gte(appointments.startTime, startOfToday), lte(appointments.startTime, endOfToday), sql`${appointments.status} not in ('cancelled', 'no-show')`)),
-    db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), sql`${invoices.status} != 'void'`, gte(invoices.paidAt ?? invoices.updatedAt, startOfToday), lte(invoices.paidAt ?? invoices.updatedAt, endOfToday))),
-    db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), sql`${invoices.status} != 'void'`, gte(invoices.paidAt ?? invoices.updatedAt, startOfMonth), lte(invoices.paidAt ?? invoices.updatedAt, endOfMonth))),
+    getCollectedInvoiceRevenueTotal(bid, startOfToday, endOfToday),
+    getCollectedInvoiceRevenueTotal(bid, startOfMonth, endOfMonth),
+    getStandaloneAppointmentRevenueTotal(bid, startOfToday, endOfToday),
+    getStandaloneAppointmentRevenueTotal(bid, startOfMonth, endOfMonth),
+    getStandaloneAppointmentRevenueTotal(bid, startOfTime, endOfTime),
     db.select({ count: sql<number>`count(*)::int` }).from(invoices).where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('draft', 'sent', 'partial')`)),
     db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('sent', 'partial')`)),
+    getStandaloneAppointmentAwaitingCollectionTotal(bid),
   ]);
   const openPaid = await getOpenInvoicePaidTotal(bid);
 
   const openTotal = Number(openInvoicesTotalRows[0]?.total ?? 0);
-  const outstandingBalance = Math.max(0, openTotal - openPaid);
+  const outstandingBalance = Math.max(0, openTotal - openPaid) + standaloneAwaitingCollection;
 
   res.json({
     appointmentsThisWeek: apptCountWeek[0]?.count ?? 0,
-    revenueTotal: Number(invTotalPaid[0]?.total ?? 0),
+    revenueTotal: collectedRevenueTotal + standaloneRevenueTotal,
     totalClients: clientCount[0]?.count ?? 0,
-    todayRevenue: Number(todayRevenueRows[0]?.total ?? 0),
-    revenueThisMonth: Number(monthRevenueRows[0]?.total ?? 0),
+    todayRevenue: todayCollectedInvoiceRevenue + standaloneTodayRevenue,
+    revenueThisMonth: monthCollectedInvoiceRevenue + standaloneMonthRevenue,
     openInvoicesCount: openInvoicesRows[0]?.count ?? 0,
     outstandingBalance,
     todayAppointmentsCount: todayAppts[0]?.count ?? 0,
@@ -520,21 +577,23 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
   const [
     todayCollectedInvoiceRevenue,
     rangeCollectedInvoiceRevenue,
-    internalTodayRevenue,
-    internalRangeRevenue,
+    standaloneTodayRevenue,
+    standaloneRangeRevenue,
     openTotals,
+    standaloneAwaitingCollection,
     expenseMonthRows,
     expenseTodayRows,
     expenseCountRows,
   ] = await Promise.all([
     getCollectedInvoiceRevenueTotal(bid, startOfToday, endOfToday),
     getCollectedInvoiceRevenueTotal(bid, rangeStart, rangeEnd),
-    getStandaloneInternalRevenueTotal(bid, startOfToday, endOfToday),
-    getStandaloneInternalRevenueTotal(bid, rangeStart, rangeEnd),
+    getStandaloneAppointmentRevenueTotal(bid, startOfToday, endOfToday),
+    getStandaloneAppointmentRevenueTotal(bid, rangeStart, rangeEnd),
     db
       .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
       .from(invoices)
       .where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('draft', 'sent', 'partial')`)),
+    getStandaloneAppointmentAwaitingCollectionTotal(bid),
     db
       .select({ total: sql<string>`coalesce(sum(${expenses.amount}), 0)` })
       .from(expenses)
@@ -551,9 +610,9 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
 
   const openPaid = await getOpenInvoicePaidTotal(bid);
   const openTotal = Number(openTotals[0]?.total ?? 0);
-  const outstandingBalance = Math.max(0, openTotal - openPaid);
-  const todayRevenue = todayCollectedInvoiceRevenue + internalTodayRevenue;
-  const revenueThisMonth = rangeCollectedInvoiceRevenue + internalRangeRevenue;
+  const outstandingBalance = Math.max(0, openTotal - openPaid) + standaloneAwaitingCollection;
+  const todayRevenue = todayCollectedInvoiceRevenue + standaloneTodayRevenue;
+  const revenueThisMonth = rangeCollectedInvoiceRevenue + standaloneRangeRevenue;
   const expensesThisMonth = Number(expenseMonthRows[0]?.total ?? 0);
 
   res.json({
