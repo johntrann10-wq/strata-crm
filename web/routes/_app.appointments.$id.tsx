@@ -1065,12 +1065,26 @@ export default function AppointmentDetail() {
           ? `${appointment.client.firstName} ${appointment.client.lastName}`
           : "Appointment");
   const isInternalCalendarBlock = isCalendarBlockAppointment(appointment);
-  const isInternalAppointment = isInternalCalendarBlock || !appointment.client?.id;
+  const hasClientContext = Boolean(
+    appointment.client &&
+      (
+        appointment.client.id ||
+        appointment.client.firstName ||
+        appointment.client.lastName ||
+        appointment.client.phone ||
+        appointment.client.email
+      )
+  );
+  const isInternalAppointment = isInternalCalendarBlock || !hasClientContext;
   const blockCoverageLabel = isInternalAppointment
     ? isFullDayCalendarBlock(appointment)
       ? "Full-day block"
       : "Timed block"
     : null;
+  const canEditDeposit =
+    !appointment.depositPaid &&
+    appointment.status !== "cancelled" &&
+    appointment.status !== "no-show";
 
   const isActionLoading = updatingStatus || completing || cancelling || deletingAppointment || sendingConfirmation;
   const quoteNeedsFollowUp = !!quote && ["sent", "accepted"].includes(String((quote as any).status ?? "")) && (
@@ -1432,7 +1446,7 @@ export default function AppointmentDetail() {
             </Button>
           ) : null}
 
-          {!isInternalAppointment && !appointment.depositPaid ? (
+          {canEditDeposit ? (
             <Button variant="outline" size="sm" onClick={handleOpenDepositSettingsDialog} disabled={updatingNotes}>
               <DollarSign className="h-4 w-4 mr-2" />
               {Number(appointment.depositAmount ?? 0) > 0 ? "Edit Deposit" : "Set Deposit"}
@@ -2382,34 +2396,13 @@ export default function AppointmentDetail() {
                 totalPrice={appointment.totalPrice}
                 depositAmount={appointment.depositAmount}
                 depositPaid={appointment.depositPaid}
-                depositLabels={
-                  isInternalAppointment
-                    ? {
-                        rowLabel: "Payment",
-                        noun: "payment",
-                        collectedStateLabel: "Payment recorded",
-                        requiredStateLabel: "Payment due",
-                        noCollectionStateLabel: "No payment required",
-                        noCollectionDetail: "This internal block does not require payment tracking.",
-                        dueWhenInvoicedDetail: (total) => `${formatCurrency(total)} is currently uncollected.`,
-                        collectedDetail: (amount, remainingBalance) =>
-                          remainingBalance > 0
-                            ? `${formatCurrency(amount)} recorded. ${formatCurrency(remainingBalance)} is still uncollected.`
-                            : `${formatCurrency(amount)} recorded and no balance remains.`,
-                        requiredDetail: (amount, total) =>
-                          total > 0
-                            ? `Record ${formatCurrency(amount)} for this internal block. ${formatCurrency(total)} total scheduled value.`
-                            : `Record ${formatCurrency(amount)} for this internal block.`,
-                      }
-                    : undefined
-                }
                 depositActionLabel={
                   effectiveInternalPaymentAmount > 0
                     ? appointment.depositPaid
-                      ? isInternalAppointment
+                      ? isInternalCalendarBlock
                         ? "Payment recorded"
                         : "Deposit collected"
-                      : isInternalAppointment
+                      : isInternalCalendarBlock
                         ? "Mark paid"
                         : "Collect deposit"
                     : null
@@ -2426,7 +2419,7 @@ export default function AppointmentDetail() {
                 }
                 secondaryDepositActionLabel={
                   appointment.depositPaid
-                    ? isInternalAppointment
+                    ? isInternalCalendarBlock
                       ? "Mark unpaid"
                       : "Reverse deposit collection"
                     : null
@@ -2435,7 +2428,7 @@ export default function AppointmentDetail() {
                 secondaryDepositActionDisabled={reversingDeposit}
               />
 
-              {!isInternalAppointment && !appointment.depositPaid ? (
+              {canEditDeposit ? (
                 <Button
                   variant="outline"
                   size="sm"
