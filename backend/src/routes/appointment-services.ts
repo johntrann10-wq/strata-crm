@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { appointmentServices, appointments, serviceCategories, services } from "../db/schema.js";
+import { appointmentServices, appointments, invoices, serviceCategories, services } from "../db/schema.js";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { formatLegacyServiceCategory } from "../lib/serviceCategories.js";
@@ -275,9 +275,58 @@ appointmentServicesRouter.delete("/:id", requireAuth, requireTenant, async (req:
   if (!appointment[0]) throw new ForbiddenError("Access denied.");
 
   const apptId = existing.appointmentId;
-  await db.transaction(async (tx) => {
+  const cleanupResult = await db.transaction(async (tx) => {
     await tx.delete(appointmentServices).where(eq(appointmentServices.id, req.params.id));
     await recalculateAppointmentTotal(tx, apptId);
+    const [remainingServices] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(appointmentServices)
+      .where(eq(appointmentServices.appointmentId, apptId));
+
+    if ((remainingServices?.count ?? 0) > 0) {
+      return { autoCancelled: false };
+    }
+
+    const [appointmentRow] = await tx
+      .select({
+        status: appointments.status,
+      })
+      .from(appointments)
+      .where(eq(appointments.id, apptId))
+      .limit(1);
+
+    if (!appointmentRow || appointmentRow.status !== "completed") {
+      return { autoCancelled: false };
+    }
+
+    const [linkedInvoice] = await tx
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.businessId, bid),
+          eq(invoices.appointmentId, apptId),
+          sql`${invoices.status} != 'void'`
+        )
+      )
+      .limit(1);
+
+    if (linkedInvoice) {
+      return { autoCancelled: false };
+    }
+
+    const now = new Date();
+    await tx
+      .update(appointments)
+      .set({
+        status: "cancelled",
+        completedAt: null,
+        cancelledAt: now,
+        updatedAt: now,
+      })
+      .where(eq(appointments.id, apptId));
+
+    return { autoCancelled: true };
   });
   await createRequestActivityLog(req, {
     businessId: bid,
@@ -287,8 +336,20 @@ appointmentServicesRouter.delete("/:id", requireAuth, requireTenant, async (req:
     metadata: {
       appointmentServiceId: existing.id,
       serviceId: existing.serviceId,
+      appointmentAutoCancelled: cleanupResult.autoCancelled,
     },
   });
+  if (cleanupResult.autoCancelled) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "appointment.cancelled",
+      entityType: "appointment",
+      entityId: apptId,
+      metadata: {
+        reason: "last_service_removed_after_completion",
+      },
+    });
+  }
   res.status(204).send();
 });
 
