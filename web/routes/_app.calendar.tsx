@@ -712,7 +712,7 @@ export default function CalendarPage() {
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected date</p>
                       <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
                     </div>
-                    <div className="mt-3 grid min-w-0 gap-2 text-xs [grid-template-columns:repeat(3,minmax(0,1fr))]">
+                    <div className="mt-3 grid min-w-0 gap-2 text-xs [grid-template-columns:repeat(2,minmax(0,1fr))]">
                         <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 px-3 py-2">
                           <p className={cn("truncate font-semibold text-foreground", isMobileLayout && "text-[13px] leading-none")}>
                             {selectedDayActiveItems}
@@ -724,12 +724,6 @@ export default function CalendarPage() {
                           {formatCurrency(selectedDayRevenue)}
                         </p>
                         <p className="mt-1 truncate text-muted-foreground">Revenue</p>
-                      </div>
-                      <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                        <p className={cn("truncate font-semibold text-foreground", isMobileLayout && "text-[13px] leading-none")}>
-                          {selectedDayUnassigned}
-                        </p>
-                        <p className="mt-1 truncate text-muted-foreground">Open</p>
                       </div>
                     </div>
                     <div className={cn("mt-3 min-h-0 min-w-0", isMobileLayout && "flex flex-1 flex-col overflow-hidden")}>
