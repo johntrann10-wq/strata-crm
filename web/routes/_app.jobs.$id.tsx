@@ -24,9 +24,6 @@ import type { AuthOutletContext } from "./_app";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
-import { ChecklistCard } from "../components/shared/ChecklistCard";
-import { VerticalWorkflowCard } from "../components/shared/VerticalWorkflowCard";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { getIntakePreset } from "../lib/intakePresets";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
@@ -166,7 +163,7 @@ export default function JobDetailPage() {
     sort: { createdAt: "Descending" },
     pause: !businessId,
   } as any);
-  const [{ data: activityLogs, fetching: activityFetching }, refetchActivity] = useFindMany(api.activityLog, {
+  const [{ data: activityLogs }] = useFindMany(api.activityLog, {
     entityType: "job",
     entityId: id,
     first: 8,
@@ -202,7 +199,6 @@ export default function JobDetailPage() {
     internalNotes: "",
   });
   const [selectedServiceId, setSelectedServiceId] = useState("__none__");
-  const [showMobileWorkflowProgress, setShowMobileWorkflowProgress] = useState(false);
   const [showMobilePickupReadiness, setShowMobilePickupReadiness] = useState(false);
   const [showMobileFollowUp, setShowMobileFollowUp] = useState(false);
 
@@ -453,41 +449,6 @@ export default function JobDetailPage() {
           <TopMetric label="Pickup readiness" value={pickupReady ? "Ready" : record.status === "completed" ? "Needs wrap-up" : "In progress"} />
         </div>
 
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle>Workflow Progress</CardTitle>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="sm:hidden"
-                onClick={() => setShowMobileWorkflowProgress((value) => !value)}
-              >
-                {showMobileWorkflowProgress ? "Hide" : "Show"}
-                <ChevronDown className={showMobileWorkflowProgress ? "ml-1 h-4 w-4 rotate-180" : "ml-1 h-4 w-4"} />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className={showMobileWorkflowProgress ? "" : "hidden sm:block"}>
-            <div className="grid gap-3 md:grid-cols-5">
-              {progressStages.map((stage) => (
-                <div key={stage.key} className="rounded-xl border border-border/70 bg-background/95 p-4">
-                  <div className="flex items-center gap-3">
-                    <span className={stage.complete ? "inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-700" : stage.active ? "inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary" : "inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground"}>
-                      {stage.complete ? <CheckCircle2 className="h-4 w-4" /> : <CircleDot className="h-4 w-4" />}
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold">{stage.label}</p>
-                      <p className="text-xs text-muted-foreground">{stage.complete ? "Done" : stage.active ? "Current focus" : "Up next"}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
         <div className="grid gap-6 xl:grid-cols-[1.55fr_1fr]">
           <div className="space-y-6">
             <Card className="border-border/70 shadow-sm">
@@ -643,10 +604,6 @@ export default function JobDetailPage() {
               </CardContent>
             </Card>
 
-            <VerticalWorkflowCard businessType={businessType} mode="job" />
-
-            <ChecklistCard entityType="job" entityId={record.id} businessType={businessType} records={(activityLogs as any[]) ?? []} canWrite={canEdit} onChanged={() => { void refetchActivity(); }} />
-
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-4"><CardTitle>Customer and Vehicle</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
@@ -690,8 +647,6 @@ export default function JobDetailPage() {
                 </CardContent>
               </Card>
             ) : null}
-
-            <EntityCollaborationCard entityType="job" entityId={record.id} records={(activityLogs as any[]) ?? []} fetching={activityFetching} canWrite={canEdit} onCreated={() => { void refetchActivity(); }} />
           </div>
         </div>
       </div>
