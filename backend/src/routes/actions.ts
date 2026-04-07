@@ -328,6 +328,7 @@ async function getCollectedInvoiceRevenueTotal(
       .where(
         and(
           eq(invoices.businessId, bid),
+          sql`${invoices.status} != 'void'`,
           isNull(payments.reversedAt),
           gte(payments.paidAt, start),
           lte(payments.paidAt, end)
@@ -347,6 +348,7 @@ async function getCollectedInvoiceRevenueTotal(
         and(
           eq(invoices.businessId, bid),
           eq(invoices.status, "paid"),
+          sql`${invoices.status} != 'void'`,
           gte(invoices.paidAt ?? invoices.updatedAt, start),
           lte(invoices.paidAt ?? invoices.updatedAt, end)
         )
@@ -404,11 +406,11 @@ actionsRouter.post("/getDashboardStats", requireAuth, requireTenant, async (req:
     openInvoicesTotalRows,
   ] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(appointments).where(and(eq(appointments.businessId, bid), gte(appointments.startTime, startOfWeek))),
-    db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"))),
+    db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), sql`${invoices.status} != 'void'`)),
     db.select({ count: sql<number>`count(*)::int` }).from(clients).where(and(eq(clients.businessId, bid), isNull(clients.deletedAt))),
     db.select({ count: sql<number>`count(*)::int` }).from(appointments).where(and(eq(appointments.businessId, bid), gte(appointments.startTime, startOfToday), lte(appointments.startTime, endOfToday), sql`${appointments.status} not in ('cancelled', 'no-show')`)),
-    db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), gte(invoices.paidAt ?? invoices.updatedAt, startOfToday), lte(invoices.paidAt ?? invoices.updatedAt, endOfToday))),
-    db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), gte(invoices.paidAt ?? invoices.updatedAt, startOfMonth), lte(invoices.paidAt ?? invoices.updatedAt, endOfMonth))),
+    db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), sql`${invoices.status} != 'void'`, gte(invoices.paidAt ?? invoices.updatedAt, startOfToday), lte(invoices.paidAt ?? invoices.updatedAt, endOfToday))),
+    db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), sql`${invoices.status} != 'void'`, gte(invoices.paidAt ?? invoices.updatedAt, startOfMonth), lte(invoices.paidAt ?? invoices.updatedAt, endOfMonth))),
     db.select({ count: sql<number>`count(*)::int` }).from(invoices).where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('draft', 'sent', 'partial')`)),
     db.select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` }).from(invoices).where(and(eq(invoices.businessId, bid), sql`${invoices.status} in ('sent', 'partial')`)),
   ]);
