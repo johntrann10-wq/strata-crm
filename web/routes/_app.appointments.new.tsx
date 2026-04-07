@@ -254,6 +254,7 @@ export default function NewAppointmentPage() {
   const [notes, setNotes] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
+  const [markInternalAsPaid, setMarkInternalAsPaid] = useState(false);
   const [taxRate, setTaxRate] = useState("0");
   const [applyTax, setApplyTax] = useState(false);
   const [adminFeeRate, setAdminFeeRate] = useState("0");
@@ -800,6 +801,12 @@ export default function NewAppointmentPage() {
                   : undefined,
             }))
           : undefined;
+      const effectiveInternalPaid = !selectedClientId && markInternalAsPaid && totalPrice > 0;
+      const effectiveDepositAmount = effectiveInternalPaid
+        ? totalPrice
+        : depositAmount
+          ? Number(depositAmount)
+          : undefined;
       const result = await createAppointment({
         clientId: selectedClientId ?? undefined,
         vehicleId: selectedVehicleId ?? undefined,
@@ -813,7 +820,8 @@ export default function NewAppointmentPage() {
         title: autoTitle || undefined,
         assignedStaffId: selectedStaffId ?? undefined,
         locationId: selectedLocationId ?? undefined,
-        depositAmount: depositAmount ? Number(depositAmount) : undefined,
+        depositAmount: effectiveDepositAmount,
+        depositPaid: effectiveInternalPaid ? true : undefined,
         taxRate: parseFloat(taxRate) || 0,
         applyTax,
         adminFeeRate: parseFloat(adminFeeRate) || 0,
@@ -1839,6 +1847,27 @@ export default function NewAppointmentPage() {
                     />
                   </div>
                 </div>
+
+                {!selectedClientId && totalPrice > 0 ? (
+                  <div className="space-y-2">
+                    <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">Mark internal block as paid</p>
+                          <p className="text-xs text-muted-foreground">
+                            This records the full appointment amount as already settled without creating an invoice.
+                          </p>
+                        </div>
+                        <Switch checked={markInternalAsPaid} onCheckedChange={setMarkInternalAsPaid} />
+                      </div>
+                      {markInternalAsPaid ? (
+                        <p className="text-xs text-muted-foreground">
+                          Paid amount will be recorded as ${totalPrice.toFixed(2)}.
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="space-y-2">
                   <Label htmlFor="appointmentTaxRate">Tax Rate</Label>

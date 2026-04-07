@@ -470,6 +470,7 @@ const createSchema = z.object({
   assignedStaffId: z.string().uuid().optional(),
   locationId: z.string().uuid().optional(),
   depositAmount: z.coerce.number().min(0).optional(),
+  depositPaid: z.boolean().optional(),
   taxRate: z.coerce.number().min(0).max(100).optional(),
   applyTax: z.boolean().optional(),
   adminFeeRate: z.coerce.number().min(0).max(100).optional(),
@@ -504,6 +505,7 @@ const updateSchema = z
     assignedStaffId: z.string().uuid().optional(),
     locationId: z.string().uuid().optional(),
     depositAmount: z.coerce.number().min(0).optional(),
+    depositPaid: z.boolean().optional(),
     taxRate: z.coerce.number().min(0).max(100).optional(),
     applyTax: z.boolean().optional(),
     adminFeeRate: z.coerce.number().min(0).max(100).optional(),
@@ -1453,6 +1455,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
           assignedStaffId: parsed.data.assignedStaffId ?? null,
           locationId: parsed.data.locationId ?? null,
           depositAmount: parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0",
+          depositPaid: parsed.data.depositPaid ?? false,
           subtotal: String(baseFinance.subtotal),
           taxRate: String(baseFinance.taxRate),
           taxAmount: String(baseFinance.taxAmount),
@@ -1487,6 +1490,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       if (columns.has("assigned_staff_id")) fallbackValues.assignedStaffId = parsed.data.assignedStaffId ?? null;
       if (columns.has("location_id")) fallbackValues.locationId = parsed.data.locationId ?? null;
       if (columns.has("deposit_amount")) fallbackValues.depositAmount = parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0";
+      if (columns.has("deposit_paid")) fallbackValues.depositPaid = parsed.data.depositPaid ?? false;
       if (columns.has("subtotal")) fallbackValues.subtotal = String(baseFinance.subtotal);
       if (columns.has("tax_rate")) fallbackValues.taxRate = String(baseFinance.taxRate);
       if (columns.has("tax_amount")) fallbackValues.taxAmount = String(baseFinance.taxAmount);
@@ -1839,6 +1843,7 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
     updates.vehicleId = nextVehicleId;
   }
   if (parsed.data.depositAmount != null) updates.depositAmount = String(parsed.data.depositAmount);
+  if (parsed.data.depositPaid !== undefined) updates.depositPaid = parsed.data.depositPaid;
   if (parsed.data.taxRate !== undefined) updates.taxRate = String(parsed.data.taxRate ?? 0);
   if (parsed.data.applyTax !== undefined) updates.applyTax = parsed.data.applyTax;
   if (parsed.data.adminFeeRate !== undefined) updates.adminFeeRate = String(parsed.data.adminFeeRate ?? 0);
@@ -1893,6 +1898,8 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
       id: appointments.id,
       depositAmount: appointments.depositAmount,
       depositPaid: appointments.depositPaid,
+      totalPrice: appointments.totalPrice,
+      internalNotes: appointments.internalNotes,
       updatedAt: appointments.updatedAt,
     })
     .from(appointments)
@@ -1906,12 +1913,20 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   }
 
   const depositAmount = Number(existing.depositAmount ?? 0);
-  if (!Number.isFinite(depositAmount) || depositAmount <= 0) {
+  const totalPrice = Number(existing.totalPrice ?? 0);
+  const isInternalCalendarBlock = isCalendarBlockInternalNotes(existing.internalNotes);
+  const effectiveRequiredAmount =
+    Number.isFinite(depositAmount) && depositAmount > 0
+      ? depositAmount
+      : isInternalCalendarBlock && Number.isFinite(totalPrice) && totalPrice > 0
+        ? totalPrice
+        : 0;
+  if (!Number.isFinite(effectiveRequiredAmount) || effectiveRequiredAmount <= 0) {
     throw new BadRequestError("This appointment does not have a deposit to record.");
   }
 
-  if (parsed.data.amount !== depositAmount) {
-    throw new BadRequestError(`Deposit payment must match the required deposit amount (${depositAmount.toFixed(2)}).`);
+  if (parsed.data.amount !== effectiveRequiredAmount) {
+    throw new BadRequestError(`Deposit payment must match the required deposit amount (${effectiveRequiredAmount.toFixed(2)}).`);
   }
 
   if (existing.depositPaid) {
@@ -1922,6 +1937,14 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   const updates: Record<string, unknown> = {
     depositPaid: true,
   };
+  if (
+    (!Number.isFinite(depositAmount) || depositAmount <= 0) &&
+    isInternalCalendarBlock &&
+    Number.isFinite(totalPrice) &&
+    totalPrice > 0
+  ) {
+    updates.depositAmount = totalPrice.toFixed(2);
+  }
   if (columns.has("updated_at")) updates.updatedAt = new Date();
 
   let updated;

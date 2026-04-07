@@ -1084,6 +1084,12 @@ export default function AppointmentDetail() {
     appointment.vehicle?.make === "Unspecified" &&
     appointment.vehicle?.model === "Vehicle";
   const missingLinkedRecords = !appointment.client || !appointment.vehicle;
+  const effectiveInternalPaymentAmount =
+    isInternalCalendarBlock && Number(appointment.totalPrice ?? 0) > 0
+      ? Number(appointment.depositAmount ?? 0) > 0
+        ? Number(appointment.depositAmount ?? 0)
+        : Number(appointment.totalPrice ?? 0)
+      : Number(appointment.depositAmount ?? 0);
   const clientOptions = ((clientsForEdit as any[]) ?? []) as Array<{
     id: string;
     firstName: string;
@@ -1168,8 +1174,9 @@ export default function AppointmentDetail() {
   }
 
   const handleOpenDepositDialog = () => {
-    const depositAmount = Number(appointment.depositAmount ?? 0);
-    setDepositPaymentAmount(depositAmount > 0 ? depositAmount.toFixed(2) : "0.00");
+    setDepositPaymentAmount(
+      effectiveInternalPaymentAmount > 0 ? effectiveInternalPaymentAmount.toFixed(2) : "0.00"
+    );
     setDepositPaymentMethod("cash");
     setDepositPaymentDate(new Date().toISOString().split("T")[0]);
     setDepositPaymentNotes("");
@@ -1178,7 +1185,7 @@ export default function AppointmentDetail() {
 
   const handleRecordDepositPayment = async () => {
     if (!appointment?.id) return;
-    const depositAmount = Number(appointment.depositAmount ?? 0);
+    const depositAmount = effectiveInternalPaymentAmount;
     const amount = parseFloat(depositPaymentAmount);
     const validation = validatePaymentAmount(amount, depositAmount);
     if (!validation.ok) {
@@ -1199,7 +1206,7 @@ export default function AppointmentDetail() {
       notes: depositPaymentNotes || undefined,
     });
     if (!result.error) {
-      toast.success("Deposit recorded");
+      toast.success(isInternalCalendarBlock ? "Payment recorded" : "Deposit recorded");
       setRecordDepositOpen(false);
       void refetchAppointment();
       void refetchActivity();
@@ -2213,24 +2220,33 @@ export default function AppointmentDetail() {
                 depositAmount={appointment.depositAmount}
                 depositPaid={appointment.depositPaid}
                 depositActionLabel={
-                  appointment.depositAmount != null && appointment.depositAmount > 0
+                  effectiveInternalPaymentAmount > 0
                     ? appointment.depositPaid
-                      ? "Deposit collected"
-                      : "Collect deposit"
+                      ? isInternalCalendarBlock
+                        ? "Payment recorded"
+                        : "Deposit collected"
+                      : isInternalCalendarBlock
+                        ? "Mark paid"
+                        : "Collect deposit"
                     : null
                 }
                 onDepositAction={
-                  appointment.depositAmount != null && appointment.depositAmount > 0 && !appointment.depositPaid
+                  effectiveInternalPaymentAmount > 0 && !appointment.depositPaid
                     ? handleOpenDepositDialog
                     : null
                 }
                 depositActionDisabled={
                   recordingDeposit ||
-                  appointment.depositAmount == null ||
-                  appointment.depositAmount <= 0 ||
+                  effectiveInternalPaymentAmount <= 0 ||
                   appointment.depositPaid === true
                 }
-                secondaryDepositActionLabel={appointment.depositPaid ? "Reverse deposit collection" : null}
+                secondaryDepositActionLabel={
+                  appointment.depositPaid
+                    ? isInternalCalendarBlock
+                      ? "Mark unpaid"
+                      : "Reverse deposit collection"
+                    : null
+                }
                 onSecondaryDepositAction={appointment.depositPaid ? () => setReverseDepositOpen(true) : null}
                 secondaryDepositActionDisabled={reversingDeposit}
               />
@@ -2326,9 +2342,11 @@ export default function AppointmentDetail() {
       <Dialog open={recordDepositOpen} onOpenChange={setRecordDepositOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Collect Deposit</DialogTitle>
+            <DialogTitle>{isInternalCalendarBlock ? "Mark Payment" : "Collect Deposit"}</DialogTitle>
             <DialogDescription>
-              Collect the appointment deposit now without changing the rest of the booking.
+              {isInternalCalendarBlock
+                ? "Record this internal appointment amount as already settled without creating an invoice."
+                : "Collect the appointment deposit now without changing the rest of the booking."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -2344,7 +2362,7 @@ export default function AppointmentDetail() {
                 placeholder="0.00"
               />
               <p className="text-xs text-muted-foreground">
-                Deposit to collect: {formatCurrency(Number(appointment.depositAmount ?? 0))}
+                {isInternalCalendarBlock ? "Amount to record" : "Deposit to collect"}: {formatCurrency(effectiveInternalPaymentAmount)}
               </p>
             </div>
             <div className="space-y-2">
@@ -2385,7 +2403,7 @@ export default function AppointmentDetail() {
             </Button>
             <Button onClick={() => void handleRecordDepositPayment()} disabled={recordingDeposit}>
               {recordingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Collect Deposit
+              {isInternalCalendarBlock ? "Mark paid" : "Collect Deposit"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2394,9 +2412,11 @@ export default function AppointmentDetail() {
       <AlertDialog open={reverseDepositOpen} onOpenChange={setReverseDepositOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Reverse deposit collection?</AlertDialogTitle>
+            <AlertDialogTitle>{isInternalCalendarBlock ? "Mark appointment unpaid?" : "Reverse deposit collection?"}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will mark the appointment deposit as uncollected again. Use this if the manual deposit record was entered by mistake.
+              {isInternalCalendarBlock
+                ? "This will mark the internal appointment amount as unpaid again."
+                : "This will mark the appointment deposit as uncollected again. Use this if the manual deposit record was entered by mistake."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
