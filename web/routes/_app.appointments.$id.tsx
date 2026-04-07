@@ -457,6 +457,7 @@ export default function AppointmentDetail() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [recordDepositOpen, setRecordDepositOpen] = useState(false);
   const [reverseDepositOpen, setReverseDepositOpen] = useState(false);
+  const [editDepositOpen, setEditDepositOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editStartTime, setEditStartTime] = useState("");
@@ -479,6 +480,7 @@ export default function AppointmentDetail() {
   const [depositPaymentMethod, setDepositPaymentMethod] = useState("cash");
   const [depositPaymentDate, setDepositPaymentDate] = useState(new Date().toISOString().split("T")[0]);
   const [depositPaymentNotes, setDepositPaymentNotes] = useState("");
+  const [depositAmountDraft, setDepositAmountDraft] = useState("");
   const [showMobileAppointmentInfo, setShowMobileAppointmentInfo] = useState(false);
   const [showMobileServices, setShowMobileServices] = useState(false);
   const [showMobileNotes, setShowMobileNotes] = useState(false);
@@ -1197,6 +1199,36 @@ export default function AppointmentDetail() {
     setDepositPaymentDate(new Date().toISOString().split("T")[0]);
     setDepositPaymentNotes("");
     setRecordDepositOpen(true);
+  };
+
+  const handleOpenDepositSettingsDialog = () => {
+    const currentDepositAmount = Number(appointment?.depositAmount ?? 0);
+    setDepositAmountDraft(currentDepositAmount > 0 ? currentDepositAmount.toFixed(2) : "");
+    setEditDepositOpen(true);
+  };
+
+  const handleSaveDepositAmount = async () => {
+    if (!appointment?.id) return;
+    const nextAmount = depositAmountDraft.trim() === "" ? 0 : Number(depositAmountDraft);
+    if (!Number.isFinite(nextAmount) || nextAmount < 0) {
+      toast.error("Enter a valid deposit amount.");
+      return;
+    }
+    if (appointment.totalPrice != null && appointment.totalPrice > 0 && nextAmount > Number(appointment.totalPrice)) {
+      toast.error("Deposit cannot be greater than the appointment total.");
+      return;
+    }
+    const result = await runUpdate({
+      id: appointment.id,
+      depositAmount: nextAmount,
+    });
+    if (result.error) {
+      toast.error("Failed to update deposit: " + result.error.message);
+      return;
+    }
+    toast.success(nextAmount > 0 ? "Deposit updated" : "Deposit removed");
+    setEditDepositOpen(false);
+    void refetchAppointment();
   };
 
   const handleRecordDepositPayment = async () => {
@@ -2384,6 +2416,19 @@ export default function AppointmentDetail() {
                 secondaryDepositActionDisabled={reversingDeposit}
               />
 
+              {!isInternalAppointment && Number(appointment.totalPrice ?? 0) > 0 && !appointment.depositPaid ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={handleOpenDepositSettingsDialog}
+                  disabled={updatingNotes}
+                >
+                  <DollarSign className="mr-2 h-4 w-4" />
+                  {Number(appointment.depositAmount ?? 0) > 0 ? "Edit deposit / partial payment" : "Set deposit / partial payment"}
+                </Button>
+              ) : null}
+
               {!isInternalAppointment ? (
                 <CommunicationCard
                   title="Client communication"
@@ -2474,6 +2519,41 @@ export default function AppointmentDetail() {
             <Button onClick={() => void handleRecordDepositPayment()} disabled={recordingDeposit}>
               {recordingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {isInternalAppointment ? "Mark paid" : "Collect Deposit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editDepositOpen} onOpenChange={setEditDepositOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set deposit or partial payment</DialogTitle>
+            <DialogDescription>
+              Choose how much you want to collect up front for this appointment. Leave it blank or set it to 0 to remove the deposit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="deposit-amount-draft">Deposit amount</Label>
+              <Input
+                id="deposit-amount-draft"
+                inputMode="decimal"
+                value={depositAmountDraft}
+                onChange={(event) => setDepositAmountDraft(event.target.value.replace(/[^\d.]/g, ""))}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-muted-foreground">
+                Appointment total: {formatCurrency(Number(appointment?.totalPrice ?? 0))}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditDepositOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSaveDepositAmount()} disabled={updatingNotes}>
+              {updatingNotes ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save deposit
             </Button>
           </DialogFooter>
         </DialogContent>
