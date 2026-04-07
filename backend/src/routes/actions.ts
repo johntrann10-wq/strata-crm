@@ -315,6 +315,73 @@ async function getOpenInvoicePaidTotal(bid: string) {
   }
 }
 
+async function getCollectedInvoiceRevenueTotal(
+  bid: string,
+  start: Date,
+  end: Date
+) {
+  try {
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+      .from(payments)
+      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .where(
+        and(
+          eq(invoices.businessId, bid),
+          isNull(payments.reversedAt),
+          gte(payments.paidAt, start),
+          lte(payments.paidAt, end)
+        )
+      );
+    return Number(row?.total ?? 0);
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected in finance metrics; falling back to legacy invoice paid totals", {
+      businessId: bid,
+      error,
+    });
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.businessId, bid),
+          eq(invoices.status, "paid"),
+          gte(invoices.paidAt ?? invoices.updatedAt, start),
+          lte(invoices.paidAt ?? invoices.updatedAt, end)
+        )
+      );
+    return Number(row?.total ?? 0);
+  }
+}
+
+async function getStandaloneInternalRevenueTotal(
+  bid: string,
+  start: Date,
+  end: Date
+) {
+  const [row] = await db
+    .select({ total: sql<string>`coalesce(sum(${appointments.totalPrice}), 0)` })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.businessId, bid),
+        sql`${appointments.clientId} is null`,
+        eq(appointments.depositPaid, true),
+        gte(appointments.updatedAt, start),
+        lte(appointments.updatedAt, end),
+        sql`not exists (
+          select 1
+          from ${invoices}
+          where ${invoices.businessId} = ${bid}
+            and ${invoices.appointmentId} = ${appointments.id}
+            and ${invoices.status} != 'void'
+        )`
+      )
+    );
+  return Number(row?.total ?? 0);
+}
+
 actionsRouter.post("/getDashboardStats", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
   const now = new Date();
@@ -435,39 +502,20 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-  const [todayRevenueRows, revenueMonthRows, internalTodayRevenueRows, internalMonthRevenueRows, openTotals, expenseMonthRows, expenseTodayRows, expenseCountRows] = await Promise.all([
-    db
-      .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
-      .from(invoices)
-      .where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), gte(invoices.paidAt ?? invoices.updatedAt, startOfToday), lte(invoices.paidAt ?? invoices.updatedAt, endOfToday))),
-    db
-      .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
-      .from(invoices)
-      .where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), gte(invoices.paidAt ?? invoices.updatedAt, startOfMonth), lte(invoices.paidAt ?? invoices.updatedAt, endOfMonth))),
-    db
-      .select({ total: sql<string>`coalesce(sum(${appointments.totalPrice}), 0)` })
-      .from(appointments)
-      .where(
-        and(
-          eq(appointments.businessId, bid),
-          sql`${appointments.clientId} is null`,
-          eq(appointments.depositPaid, true),
-          gte(appointments.updatedAt, startOfToday),
-          lte(appointments.updatedAt, endOfToday)
-        )
-      ),
-    db
-      .select({ total: sql<string>`coalesce(sum(${appointments.totalPrice}), 0)` })
-      .from(appointments)
-      .where(
-        and(
-          eq(appointments.businessId, bid),
-          sql`${appointments.clientId} is null`,
-          eq(appointments.depositPaid, true),
-          gte(appointments.updatedAt, startOfMonth),
-          lte(appointments.updatedAt, endOfMonth)
-        )
-      ),
+  const [
+    todayCollectedInvoiceRevenue,
+    monthCollectedInvoiceRevenue,
+    internalTodayRevenue,
+    internalMonthRevenue,
+    openTotals,
+    expenseMonthRows,
+    expenseTodayRows,
+    expenseCountRows,
+  ] = await Promise.all([
+    getCollectedInvoiceRevenueTotal(bid, startOfToday, endOfToday),
+    getCollectedInvoiceRevenueTotal(bid, startOfMonth, endOfMonth),
+    getStandaloneInternalRevenueTotal(bid, startOfToday, endOfToday),
+    getStandaloneInternalRevenueTotal(bid, startOfMonth, endOfMonth),
     db
       .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
       .from(invoices)
@@ -489,8 +537,8 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
   const openPaid = await getOpenInvoicePaidTotal(bid);
   const openTotal = Number(openTotals[0]?.total ?? 0);
   const outstandingBalance = Math.max(0, openTotal - openPaid);
-  const todayRevenue = Number(todayRevenueRows[0]?.total ?? 0) + Number(internalTodayRevenueRows[0]?.total ?? 0);
-  const revenueThisMonth = Number(revenueMonthRows[0]?.total ?? 0) + Number(internalMonthRevenueRows[0]?.total ?? 0);
+  const todayRevenue = todayCollectedInvoiceRevenue + internalTodayRevenue;
+  const revenueThisMonth = monthCollectedInvoiceRevenue + internalMonthRevenue;
   const expensesThisMonth = Number(expenseMonthRows[0]?.total ?? 0);
 
   res.json({
