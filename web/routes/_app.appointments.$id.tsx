@@ -863,14 +863,14 @@ export default function AppointmentDetail() {
     }
   };
 
-  const handleDeleteInternalAppointment = async () => {
+  const handleDeleteAppointment = async () => {
     if (!appointment) return;
     const result = await runDeleteAppointment({ id: appointment.id });
     if (result.error) {
       toast.error(`Failed to delete appointment: ${result.error.message}`);
       return;
     }
-    toast.success("Internal appointment deleted");
+    toast.success("Appointment deleted");
     setShowDeleteDialog(false);
     navigate(returnTo);
   };
@@ -1480,22 +1480,20 @@ export default function AppointmentDetail() {
             </Button>
           ) : null}
 
-          {isInternalAppointment ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
-              onClick={() => setShowDeleteDialog(true)}
-              disabled={isActionLoading}
-            >
-              {deletingAppointment ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4 mr-2" />
-              )}
-              Delete Block
-            </Button>
-          ) : null}
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
+            onClick={() => setShowDeleteDialog(true)}
+            disabled={isActionLoading}
+          >
+            {deletingAppointment ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4 mr-2" />
+            )}
+            {isInternalAppointment ? "Delete Block" : "Delete Appointment"}
+          </Button>
 
           {canQuickCompleteAppointment && (
             <Button
@@ -1683,7 +1681,6 @@ export default function AppointmentDetail() {
               </Button>
             ) : null}
 
-            {isInternalAppointment ? (
               <Button
                 variant="outline"
                 className="w-full justify-center border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
@@ -1695,9 +1692,8 @@ export default function AppointmentDetail() {
                 ) : (
                   <Trash2 className="h-4 w-4 mr-2" />
                 )}
-                Delete Block
+                {isInternalAppointment ? "Delete Block" : "Delete Appointment"}
               </Button>
-            ) : null}
 
             {canQuickCompleteAppointment ? (
               <Button
@@ -1841,19 +1837,17 @@ export default function AppointmentDetail() {
                     </Button>
                   </>
                 ) : null}
-                {isInternalAppointment ? (
-                  <Button
-                    variant="outline"
-                    className="justify-start border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
-                    onClick={() => {
-                      setShowMobileActions(false);
-                      setShowDeleteDialog(true);
-                    }}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete block
-                  </Button>
-                ) : null}
+                <Button
+                  variant="outline"
+                  className="justify-start border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => {
+                    setShowMobileActions(false);
+                    setShowDeleteDialog(true);
+                  }}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {isInternalAppointment ? "Delete block" : "Delete appointment"}
+                </Button>
                 {appointment.depositPaid ? (
                   <Button
                     variant="outline"
@@ -2898,19 +2892,23 @@ export default function AppointmentDetail() {
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this internal block?</AlertDialogTitle>
+            <AlertDialogTitle>{isInternalAppointment ? "Delete this internal block?" : "Delete this appointment?"}</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes the internal appointment and its attached services from the schedule.
+              {isInternalAppointment
+                ? "This permanently removes the internal appointment and its attached services from the schedule."
+                : "This permanently removes the appointment and its attached services from the schedule."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingAppointment}>Keep block</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletingAppointment}>
+              {isInternalAppointment ? "Keep block" : "Keep appointment"}
+            </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => void handleDeleteInternalAppointment()}
+              onClick={() => void handleDeleteAppointment()}
               disabled={deletingAppointment}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deletingAppointment ? "Deleting..." : "Delete block"}
+              {deletingAppointment ? "Deleting..." : isInternalAppointment ? "Delete block" : "Delete appointment"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

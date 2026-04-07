@@ -2637,9 +2637,6 @@ appointmentsRouter.delete("/:id", requireAuth, requireTenant, async (req: Reques
   if (!existing) throw new NotFoundError("Appointment not found.");
 
   const isInternalAppointment = isCalendarBlockInternalNotes(existing.internalNotes) || !existing.clientId;
-  if (!isInternalAppointment) {
-    throw new BadRequestError("Only internal appointments can be deleted.");
-  }
 
   const [linkedInvoice] = await db
     .select({ id: invoices.id })
@@ -2653,7 +2650,7 @@ appointmentsRouter.delete("/:id", requireAuth, requireTenant, async (req: Reques
     )
     .limit(1);
   if (linkedInvoice) {
-    throw new BadRequestError("This internal appointment already has an invoice and cannot be deleted.");
+    throw new BadRequestError("This appointment already has an invoice and cannot be deleted.");
   }
 
   const [linkedQuote] = await db
@@ -2662,7 +2659,7 @@ appointmentsRouter.delete("/:id", requireAuth, requireTenant, async (req: Reques
     .where(and(eq(quotes.businessId, bid), eq(quotes.appointmentId, existing.id)))
     .limit(1);
   if (linkedQuote) {
-    throw new BadRequestError("This internal appointment is linked to a quote and cannot be deleted.");
+    throw new BadRequestError("This appointment is linked to a quote and cannot be deleted.");
   }
 
   await db.transaction(async (tx) => {
@@ -2676,7 +2673,7 @@ appointmentsRouter.delete("/:id", requireAuth, requireTenant, async (req: Reques
     entityType: "appointment",
     entityId: existing.id,
     metadata: {
-      internal: true,
+      internal: isInternalAppointment,
     },
   });
 
