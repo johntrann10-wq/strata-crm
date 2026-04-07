@@ -194,6 +194,15 @@ function getSelectedServiceCategoryKeys(
   );
 }
 
+function normalizePriceDraft(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const normalized = trimmed.replace(/[^\d.]/g, "");
+  const parts = normalized.split(".");
+  if (parts.length <= 1) return normalized;
+  return `${parts[0]}.${parts.slice(1).join("")}`;
+}
+
 function SelectionIndicator({ checked }: { checked: boolean }) {
   return (
     <span
@@ -227,6 +236,7 @@ export default function NewAppointmentPage() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [servicePriceOverrides, setServicePriceOverrides] = useState<Record<string, string>>({});
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => undefined);
   const [startTime, setStartTime] = useState<string>(() => "09:00");
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
@@ -452,14 +462,15 @@ export default function NewAppointmentPage() {
       (acc, id) => {
         const service = servicesData?.find((s) => s.id === id);
         if (service) {
-          acc.totalPrice += toMoneyNumber(service.price);
+          const override = servicePriceOverrides[id];
+          acc.totalPrice += override != null && override !== "" ? toMoneyNumber(override) : toMoneyNumber(service.price);
           acc.totalDuration += service.durationMinutes ?? 0;
         }
         return acc;
       },
       { totalPrice: 0, totalDuration: 0 }
     );
-  }, [selectedServiceIds, servicesData]);
+  }, [selectedServiceIds, servicePriceOverrides, servicesData]);
   const adminFeeRateNum = applyAdminFee ? parseFloat(adminFeeRate) || 0 : 0;
   const effectiveAdminFee = totalPrice * (adminFeeRateNum / 100);
   const taxableSubtotal = totalPrice + effectiveAdminFee;
@@ -641,11 +652,31 @@ export default function NewAppointmentPage() {
   };
 
   const toggleService = (serviceId: string) => {
-    setSelectedServiceIds((prev) =>
-      prev.includes(serviceId)
-        ? prev.filter((id) => id !== serviceId)
-        : [...prev, serviceId]
-    );
+    setSelectedServiceIds((prev) => {
+      if (prev.includes(serviceId)) {
+        setServicePriceOverrides((current) => {
+          if (!(serviceId in current)) return current;
+          const next = { ...current };
+          delete next[serviceId];
+          return next;
+        });
+        return prev.filter((id) => id !== serviceId);
+      }
+      return [...prev, serviceId];
+    });
+  };
+
+  const handleServicePriceOverrideChange = (serviceId: string, value: string) => {
+    const normalized = normalizePriceDraft(value);
+    setServicePriceOverrides((current) => {
+      if (!normalized) {
+        if (!(serviceId in current)) return current;
+        const next = { ...current };
+        delete next[serviceId];
+        return next;
+      }
+      return { ...current, [serviceId]: normalized };
+    });
   };
 
   const applyPackageTemplate = useCallback(
@@ -759,6 +790,16 @@ export default function NewAppointmentPage() {
         : selectedClientId
           ? "Appointment"
           : "Internal block";
+      const serviceSelections =
+        selectedServiceIds.length > 0
+          ? selectedServiceIds.map((serviceId) => ({
+              serviceId,
+              unitPrice:
+                servicePriceOverrides[serviceId] != null && servicePriceOverrides[serviceId] !== ""
+                  ? Number(servicePriceOverrides[serviceId])
+                  : undefined,
+            }))
+          : undefined;
       const result = await createAppointment({
         clientId: selectedClientId ?? undefined,
         vehicleId: selectedVehicleId ?? undefined,
@@ -780,6 +821,7 @@ export default function NewAppointmentPage() {
         notes: persistedNotes,
         internalNotes: internalNotes.trim() || undefined,
         ...(quoteIdParam ? { quoteId: quoteIdParam } : {}),
+        ...(serviceSelections?.length ? { serviceSelections } : {}),
         ...(selectedServiceIds.length > 0 ? { serviceIds: selectedServiceIds } : {}),
       } as Record<string, unknown>);
 
@@ -1132,7 +1174,11 @@ export default function NewAppointmentPage() {
                             <span>{service.name}</span>
                             <span className="text-xs text-muted-foreground">
                               {service.durationMinutes ? `${formatDuration(service.durationMinutes)} · ` : ""}
-                              ${toMoneyNumber(service.price).toFixed(2)}
+                              ${(
+                                servicePriceOverrides[service.id] != null && servicePriceOverrides[service.id] !== ""
+                                  ? toMoneyNumber(servicePriceOverrides[service.id])
+                                  : toMoneyNumber(service.price)
+                              ).toFixed(2)}
                             </span>
                             <X className="h-3.5 w-3.5 text-muted-foreground" />
                           </button>
@@ -1375,6 +1421,41 @@ export default function NewAppointmentPage() {
                       <p className="mt-1 text-lg font-semibold text-foreground">${totalPrice.toFixed(2)}</p>
                     </div>
                   </div>
+                  {!selectedClientId ? (
+                    <div className="mt-4 space-y-3 border-t border-primary/15 pt-4">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Adjust internal pricing</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Internal reminders can override service pricing without changing your catalog.
+                        </p>
+                      </div>
+                      <div className="grid gap-3">
+                        {selectedServices.map((service) => (
+                          <div
+                            key={`service-price-${service.id}`}
+                            className="grid gap-2 rounded-xl border border-border/70 bg-background/80 p-3 sm:grid-cols-[minmax(0,1fr)_140px]"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground">{service.name}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Catalog price: ${toMoneyNumber(service.price).toFixed(2)}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor={`service-price-${service.id}`}>Custom price</Label>
+                              <Input
+                                id={`service-price-${service.id}`}
+                                inputMode="decimal"
+                                value={servicePriceOverrides[service.id] ?? String(toMoneyNumber(service.price).toFixed(2))}
+                                onChange={(event) => handleServicePriceOverrideChange(service.id, event.target.value)}
+                                placeholder="0.00"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </CardContent>

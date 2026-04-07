@@ -480,6 +480,14 @@ const createSchema = z.object({
   quoteId: z.string().uuid().optional(),
   /** Catalog services to attach (prices from service catalog). */
   serviceIds: z.array(z.string().uuid()).optional(),
+  serviceSelections: z
+    .array(
+      z.object({
+        serviceId: z.string().uuid(),
+        unitPrice: z.coerce.number().min(0).optional(),
+      })
+    )
+    .optional(),
 });
 const updateSchema = z
   .object({
@@ -1506,15 +1514,24 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
         .where(eq(quotes.id, parsed.data.quoteId));
     }
 
-    if (parsed.data.serviceIds && parsed.data.serviceIds.length > 0) {
-      for (const sid of parsed.data.serviceIds) {
-        const svc = await getServiceForBusinessSafe(tx, sid, bid);
+    const requestedServiceSelections: Array<{ serviceId: string; unitPrice?: number }> =
+      parsed.data.serviceSelections && parsed.data.serviceSelections.length > 0
+        ? parsed.data.serviceSelections
+        : (parsed.data.serviceIds ?? []).map((serviceId) => ({ serviceId }));
+
+    if (requestedServiceSelections.length > 0) {
+      for (const selection of requestedServiceSelections) {
+        const svc = await getServiceForBusinessSafe(tx, selection.serviceId, bid);
         if (!svc) continue;
-        selectedServicesTotal += Number(svc.price ?? 0);
+        const effectiveUnitPrice =
+          selection.unitPrice != null && Number.isFinite(selection.unitPrice)
+            ? selection.unitPrice
+            : Number(svc.price ?? 0);
+        selectedServicesTotal += effectiveUnitPrice;
         const attached = await attachServiceToAppointment(tx, {
           appointmentId: apt.id,
-          serviceId: sid,
-          unitPrice: svc.price ?? null,
+          serviceId: selection.serviceId,
+          unitPrice: effectiveUnitPrice.toFixed(2),
         });
         attachedAnyService ||= attached;
       }
