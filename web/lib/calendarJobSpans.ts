@@ -92,11 +92,7 @@ export function isMultiDayJob(appointment: CalendarJobLike): boolean {
 }
 
 export function isVisibleCalendarAppointment(appointment: CalendarJobLike): boolean {
-  return (
-    appointment.status !== "cancelled" &&
-    appointment.status !== "no-show" &&
-    (appointment.status !== "completed" || isInternalCalendarAppointment(appointment))
-  );
+  return true;
 }
 
 export function getActiveCalendarAppointments<T extends CalendarJobLike>(appointments: T[]): T[] {
@@ -113,9 +109,7 @@ export function getVisibleCalendarAppointments<T extends CalendarJobLike>(appoin
 }
 
 export function getHistoricalCalendarAppointments<T extends CalendarJobLike>(appointments: T[]): T[] {
-  return appointments.filter(
-    (appointment) => appointment.status !== "cancelled" && appointment.status !== "no-show"
-  );
+  return appointments.filter((appointment) => isVisibleCalendarAppointment(appointment));
 }
 
 export function getCalendarDaySnapshot<T extends CalendarJobLike & { id: string }>(appointments: T[], date: Date) {

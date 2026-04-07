@@ -440,7 +440,7 @@ export default function CalendarPage() {
     void refetchAppointments();
   }
 
-  const selectedDaySnapshot = useMemo(() => getCalendarDaySnapshot(activeAppointments, currentDate), [activeAppointments, currentDate]);
+  const selectedDaySnapshot = useMemo(() => getCalendarDaySnapshot(appointments, currentDate), [appointments, currentDate]);
   const selectedDayAppointments = selectedDaySnapshot.dayAppts;
   const selectedDayOnSiteJobs = selectedDaySnapshot.daySpans;
   const selectedDayOnSiteOnlyJobs = selectedDaySnapshot.onSiteOnlyJobs;

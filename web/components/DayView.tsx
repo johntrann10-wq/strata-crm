@@ -46,6 +46,7 @@ export function DayView({
   const dayAppts = daySnapshot.dayAppts;
   const agendaItems = daySnapshot.agendaItems;
   const onSiteOnlyJobs = daySnapshot.onSiteOnlyJobs;
+  const visibleItemCount = agendaItems.length;
   const positionedAppointments = useMemo(() => {
     type Positioned = {
       appointment: ApptRecord;
@@ -161,7 +162,8 @@ export function DayView({
                 })}
               </p>
               <p className="text-xs text-muted-foreground">
-                {activeItemCount} {activeItemCount === 1 ? "item" : "items"} on calendar
+                {visibleItemCount} {visibleItemCount === 1 ? "item" : "items"} on calendar
+                {activeItemCount !== visibleItemCount ? ` - ${activeItemCount} active` : ""}
                 {unassignedCount > 0 ? ` - ${unassignedCount} unassigned` : ""}
               </p>
             </div>
@@ -190,7 +192,7 @@ export function DayView({
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
-          {activeItemCount === 0 ? (
+          {visibleItemCount === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 text-center">
               <CalendarIcon className="h-12 w-12 text-muted-foreground" />
               <div>
@@ -345,7 +347,8 @@ export function DayView({
               })}
             </p>
           <p className="text-xs text-muted-foreground">
-            {activeItemCount} {activeItemCount === 1 ? "item" : "items"} on calendar
+            {visibleItemCount} {visibleItemCount === 1 ? "item" : "items"} on calendar
+            {activeItemCount !== visibleItemCount ? ` - ${activeItemCount} active` : ""}
             {unassignedCount > 0 ? ` - ${unassignedCount} unassigned` : ""}
           </p>
         </div>
