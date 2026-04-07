@@ -1148,7 +1148,6 @@ export default function AppointmentDetail() {
     licensePlate?: string | null;
   }>;
   const canQuickEditAppointment =
-    appointment.status !== "completed" &&
     appointment.status !== "cancelled" &&
     appointment.status !== "no-show";
   const canQuickCancelAppointment =
@@ -1159,6 +1158,7 @@ export default function AppointmentDetail() {
     appointment.status !== "completed" &&
     appointment.status !== "cancelled" &&
     appointment.status !== "no-show";
+  const primaryEditLabel = appointment.status === "completed" ? "Edit Details" : "Reschedule";
 
   const relatedRecords: RelatedRecord[] = [];
   if (appointment) {
@@ -1415,7 +1415,7 @@ export default function AppointmentDetail() {
           {canQuickEditAppointment ? (
             <Button size="sm" onClick={handleOpenEditDialog}>
               <Clock className="h-4 w-4 mr-2" />
-              Reschedule
+              {primaryEditLabel}
             </Button>
           ) : null}
 
@@ -1628,7 +1628,7 @@ export default function AppointmentDetail() {
                   disabled={isActionLoading}
                 >
                   <Clock className="h-4 w-4 mr-2" />
-                  Reschedule
+                  {primaryEditLabel}
                 </Button>
               ) : null}
 
@@ -1756,7 +1756,7 @@ export default function AppointmentDetail() {
                     }}
                   >
                     <Clock className="mr-2 h-4 w-4" />
-                    Reschedule appointment
+                    {appointment.status === "completed" ? "Edit appointment details" : "Reschedule appointment"}
                   </Button>
                 ) : null}
                 {!isInternalAppointment && appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
@@ -2611,9 +2611,11 @@ export default function AppointmentDetail() {
         <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0">
           <div className="space-y-4 p-5 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Edit Appointment</DialogTitle>
+            <DialogTitle>{appointment.status === "completed" ? "Edit Appointment Details" : "Edit Appointment"}</DialogTitle>
             <DialogDescription>
-              Update the appointment details, timing, assignment, and notes for this booking.
+              {appointment.status === "completed"
+                ? "Attach the real client and vehicle, adjust assignment, and clean up the finished record without reopening the job."
+                : "Update the appointment details, timing, assignment, and notes for this booking."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
