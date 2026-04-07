@@ -3,7 +3,7 @@ import { useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AlertTriangle, Ban, CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
 import { api } from "../api";
-import { useAction, useFindMany } from "../hooks/useApi";
+import { useAction, useFindMany, useGlobalAction } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -242,6 +242,7 @@ export default function CalendarPage() {
   const [{ fetching: creatingBlock }, createAppointment] = useAction(api.appointment.create);
   const [{ fetching: updatingBlock }, updateAppointment] = useAction(api.appointment.update);
   const [{ fetching: unblockingBlock }, updateAppointmentStatus] = useAction(api.appointment.updateStatus);
+  const [{ data: monthFinanceMetrics }, runMonthFinanceMetrics] = useGlobalAction(api.getFinanceMetrics);
   const timeOptions = useMemo(() => buildQuarterHourOptions(), []);
   const timeSelectTriggerClassName =
     "h-11 rounded-xl border-input/90 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
@@ -457,21 +458,23 @@ export default function CalendarPage() {
   );
   const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
   const selectedDayConflicts = selectedDayAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
+  const selectedMonthRange = useMemo(() => {
+    const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1, 0, 0, 0, 0);
+    const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { start, end };
+  }, [currentDate]);
   const selectedMonthAppointments = useMemo(
     () =>
       overviewAppointments.filter((appointment) => {
-        const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-        const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999);
+        const monthStart = selectedMonthRange.start;
+        const monthEnd = selectedMonthRange.end;
         const spanStart = getJobSpanStart(appointment);
         const spanEnd = getJobSpanEnd(appointment);
         return spanStart.getTime() <= monthEnd.getTime() && spanEnd.getTime() >= monthStart.getTime();
       }),
-    [currentDate, overviewAppointments]
+    [overviewAppointments, selectedMonthRange]
   );
-  const selectedMonthRevenue = selectedMonthAppointments.reduce(
-    (total, appointment) => total + Number(appointment.totalPrice ?? 0),
-    0
-  );
+  const selectedMonthRevenue = monthFinanceMetrics?.revenueThisMonth ?? 0;
   const selectedMonthConflicts = selectedMonthAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
   const selectedMonthUnassigned = selectedMonthAppointments.filter((appointment) => !appointment.assignedStaffId).length;
   const selectedMonthDaysWithWork = useMemo(
@@ -513,6 +516,14 @@ export default function CalendarPage() {
     return Array.from(counts.values()).sort((a, b) => b.count - a.count)[0] ?? null;
   }, [currentDate, selectedMonthAppointments]);
   const availableViews = isMobileLayout ? (["day", "month"] as const) : (["day", "month"] as const);
+
+  useEffect(() => {
+    if (!businessId) return;
+    void runMonthFinanceMetrics({
+      rangeStart: selectedMonthRange.start.toISOString(),
+      rangeEnd: selectedMonthRange.end.toISOString(),
+    });
+  }, [businessId, runMonthFinanceMetrics, selectedMonthRange]);
 
   return (
     <div className="page-content flex h-full flex-col">

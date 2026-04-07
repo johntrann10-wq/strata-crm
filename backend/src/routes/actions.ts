@@ -496,26 +496,34 @@ actionsRouter.post("/getInvoiceMetrics", requireAuth, requireTenant, async (req:
 
 actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePermission("payments.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
+  const params = z
+    .object({
+      rangeStart: z.coerce.date().optional(),
+      rangeEnd: z.coerce.date().optional(),
+    })
+    .parse(req.body ?? {});
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
   const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const defaultStartOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const defaultEndOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const rangeStart = params.rangeStart ?? defaultStartOfMonth;
+  const rangeEnd = params.rangeEnd ?? defaultEndOfMonth;
 
   const [
     todayCollectedInvoiceRevenue,
-    monthCollectedInvoiceRevenue,
+    rangeCollectedInvoiceRevenue,
     internalTodayRevenue,
-    internalMonthRevenue,
+    internalRangeRevenue,
     openTotals,
     expenseMonthRows,
     expenseTodayRows,
     expenseCountRows,
   ] = await Promise.all([
     getCollectedInvoiceRevenueTotal(bid, startOfToday, endOfToday),
-    getCollectedInvoiceRevenueTotal(bid, startOfMonth, endOfMonth),
+    getCollectedInvoiceRevenueTotal(bid, rangeStart, rangeEnd),
     getStandaloneInternalRevenueTotal(bid, startOfToday, endOfToday),
-    getStandaloneInternalRevenueTotal(bid, startOfMonth, endOfMonth),
+    getStandaloneInternalRevenueTotal(bid, rangeStart, rangeEnd),
     db
       .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
       .from(invoices)
@@ -523,7 +531,7 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
     db
       .select({ total: sql<string>`coalesce(sum(${expenses.amount}), 0)` })
       .from(expenses)
-      .where(and(eq(expenses.businessId, bid), gte(expenses.expenseDate, startOfMonth), lte(expenses.expenseDate, endOfMonth))),
+      .where(and(eq(expenses.businessId, bid), gte(expenses.expenseDate, rangeStart), lte(expenses.expenseDate, rangeEnd))),
     db
       .select({ total: sql<string>`coalesce(sum(${expenses.amount}), 0)` })
       .from(expenses)
@@ -531,14 +539,14 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(expenses)
-      .where(and(eq(expenses.businessId, bid), gte(expenses.expenseDate, startOfMonth), lte(expenses.expenseDate, endOfMonth))),
+      .where(and(eq(expenses.businessId, bid), gte(expenses.expenseDate, rangeStart), lte(expenses.expenseDate, rangeEnd))),
   ]);
 
   const openPaid = await getOpenInvoicePaidTotal(bid);
   const openTotal = Number(openTotals[0]?.total ?? 0);
   const outstandingBalance = Math.max(0, openTotal - openPaid);
   const todayRevenue = todayCollectedInvoiceRevenue + internalTodayRevenue;
-  const revenueThisMonth = monthCollectedInvoiceRevenue + internalMonthRevenue;
+  const revenueThisMonth = rangeCollectedInvoiceRevenue + internalRangeRevenue;
   const expensesThisMonth = Number(expenseMonthRows[0]?.total ?? 0);
 
   res.json({
