@@ -259,6 +259,14 @@ interface FinancialSummaryCardProps {
     collectedDetail?: (depositAmount: number, remainingBalance: number) => string;
     requiredDetail?: (depositAmount: number, totalPrice: number) => string;
   };
+  paymentStateOverride?: {
+    rowLabel?: string;
+    stateLabel: string;
+    detail: string;
+    amountLabel?: string | null;
+    showRemainingBalance?: boolean;
+    remainingBalance?: number | null;
+  };
 }
 
 export function FinancialSummaryCard({
@@ -279,6 +287,7 @@ export function FinancialSummaryCard({
   onSecondaryDepositAction,
   secondaryDepositActionDisabled = false,
   depositLabels,
+  paymentStateOverride,
 }: FinancialSummaryCardProps) {
   const depositSummary = getDepositSummary({
     totalPrice,
@@ -286,7 +295,30 @@ export function FinancialSummaryCard({
     depositPaid,
     labels: depositLabels,
   });
-  const showBalanceDue = totalPrice != null && depositSummary.remainingBalance > 0;
+  const summaryRowLabel = paymentStateOverride?.rowLabel ?? depositLabels?.rowLabel ?? "Deposit";
+  const summaryAmountLabel =
+    paymentStateOverride?.amountLabel ?? (depositSummary.hasDeposit ? formatCurrency(depositSummary.depositAmount) : "-");
+  const summaryStateLabel = paymentStateOverride?.stateLabel ?? depositSummary.stateLabel;
+  const summaryDetail = paymentStateOverride?.detail ?? depositSummary.detail;
+  const summaryRemainingBalance =
+    paymentStateOverride?.remainingBalance != null ? paymentStateOverride.remainingBalance : depositSummary.remainingBalance;
+  const showBalanceDue =
+    paymentStateOverride?.showRemainingBalance !== undefined
+      ? paymentStateOverride.showRemainingBalance
+      : totalPrice != null && depositSummary.remainingBalance > 0;
+  const summaryBadgeTone = paymentStateOverride
+    ? summaryStateLabel.toLowerCase().includes("paid") ||
+      summaryStateLabel.toLowerCase().includes("collected") ||
+      summaryStateLabel.toLowerCase().includes("recorded")
+      ? "bg-green-100 text-green-800 border-green-200"
+      : summaryStateLabel.toLowerCase().includes("due") || summaryStateLabel.toLowerCase().includes("required")
+        ? "bg-amber-100 text-amber-800 border-amber-200"
+        : "bg-slate-100 text-slate-700 border-slate-200"
+    : depositPaid
+      ? "bg-green-100 text-green-800 border-green-200"
+      : depositSummary.hasDeposit
+        ? "bg-amber-100 text-amber-800 border-amber-200"
+        : "bg-slate-100 text-slate-700 border-slate-200";
 
   return (
     <Card>
@@ -322,34 +354,21 @@ export function FinancialSummaryCard({
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Total Price</span>
           <span className="font-medium">
-            {totalPrice != null ? formatCurrency(totalPrice) : "—"}
+            {totalPrice != null ? formatCurrency(totalPrice) : "-"}
           </span>
         </div>
         <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">{depositLabels?.rowLabel ?? "Deposit"}</span>
+          <span className="text-muted-foreground">{summaryRowLabel}</span>
           <div className="flex items-center gap-2 text-right">
-            <span className="font-medium">
-              {depositSummary.hasDeposit ? formatCurrency(depositSummary.depositAmount) : "—"}
-            </span>
-            <Badge
-              className={cn(
-                "text-xs hover:bg-inherit",
-                depositPaid
-                  ? "bg-green-100 text-green-800 border-green-200"
-                  : depositSummary.hasDeposit
-                    ? "bg-amber-100 text-amber-800 border-amber-200"
-                    : "bg-slate-100 text-slate-700 border-slate-200"
-              )}
-            >
-              {depositSummary.stateLabel}
-            </Badge>
+            <span className="font-medium">{summaryAmountLabel}</span>
+            <Badge className={cn("text-xs hover:bg-inherit", summaryBadgeTone)}>{summaryStateLabel}</Badge>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">{depositSummary.detail}</p>
+        <p className="text-xs text-muted-foreground">{summaryDetail}</p>
         {showBalanceDue ? (
           <div className="flex items-center justify-between text-sm pt-1 border-t">
             <span className="text-muted-foreground">Remaining balance</span>
-            <span className="font-semibold">{formatCurrency(depositSummary.remainingBalance)}</span>
+            <span className="font-semibold">{formatCurrency(summaryRemainingBalance)}</span>
           </div>
         ) : null}
         {(depositActionLabel && onDepositAction) || (secondaryDepositActionLabel && onSecondaryDepositAction) ? (
@@ -454,3 +473,4 @@ export function ReviewRequestCard({
     </Card>
   );
 }
+

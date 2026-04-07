@@ -1122,6 +1122,8 @@ export default function AppointmentDetail() {
         ? Number(appointment.depositAmount ?? 0)
         : Number(appointment.totalPrice ?? 0)
       : Number(appointment.depositAmount ?? 0);
+  const showsPaidStatusInsteadOfDeposit =
+    appointment.depositPaid === true && Number(appointment.depositAmount ?? 0) <= 0;
   const clientOptions = ((clientsForEdit as any[]) ?? []) as Array<{
     id: string;
     firstName: string;
@@ -2390,6 +2392,17 @@ export default function AppointmentDetail() {
                 totalPrice={appointment.totalPrice}
                 depositAmount={appointment.depositAmount}
                 depositPaid={appointment.depositPaid}
+                paymentStateOverride={
+                  showsPaidStatusInsteadOfDeposit
+                    ? {
+                        rowLabel: "Status",
+                        stateLabel: "Paid",
+                        detail: "This appointment has been marked paid.",
+                        amountLabel: "-",
+                        showRemainingBalance: false,
+                      }
+                    : undefined
+                }
                 depositActionLabel={
                   effectiveInternalPaymentAmount > 0
                     ? appointment.depositPaid
