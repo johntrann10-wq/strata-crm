@@ -264,6 +264,7 @@ export default function NewAppointmentPage() {
   const hasPrefilledFromQuote = useRef(false);
   const hasSeededBusinessFinanceDefaults = useRef(false);
   const hasSeededBusinessDefaultStartTime = useRef(false);
+  const [ignoreClientPrefill, setIgnoreClientPrefill] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState<string>("");
   const [debouncedClientQuery, setDebouncedClientQuery] = useState<string>("");
   const [serviceSearchQuery, setServiceSearchQuery] = useState("");
@@ -273,7 +274,7 @@ export default function NewAppointmentPage() {
 
   // Pre-fill client, date and time from URL query params
   useEffect(() => {
-    if (clientIdParam && selectedClientId === null) {
+    if (!ignoreClientPrefill && clientIdParam && selectedClientId === null) {
       setSelectedClientId(clientIdParam);
     }
     if (vehicleIdParam && selectedVehicleId === null) {
@@ -284,7 +285,7 @@ export default function NewAppointmentPage() {
       const d = new Date(dateParam + "T12:00:00");
       if (!isNaN(d.getTime())) setSelectedDate(d);
     }
-  }, [clientIdParam, dateParam, selectedClientId, selectedDate, selectedVehicleId, timeParam, vehicleIdParam]);
+  }, [clientIdParam, dateParam, ignoreClientPrefill, selectedClientId, selectedDate, selectedVehicleId, timeParam, vehicleIdParam]);
 
   // Default selectedDate to today on the client when no date param is provided
   useEffect(() => {
@@ -494,10 +495,10 @@ export default function NewAppointmentPage() {
 
   // Set selected client from prefilled data when arriving via URL param
   useEffect(() => {
-    if (prefilledClientData && selectedClientId === null) {
+    if (!ignoreClientPrefill && prefilledClientData && selectedClientId === null) {
       setSelectedClientId(prefilledClientData.id);
     }
-  }, [prefilledClientData, selectedClientId]);
+  }, [ignoreClientPrefill, prefilledClientData, selectedClientId]);
 
   useEffect(() => {
     if (!businessData || hasSeededBusinessFinanceDefaults.current) return;
@@ -623,7 +624,9 @@ export default function NewAppointmentPage() {
 
   // Handlers
   const handleClientSelect = (clientId: string) => {
-    setSelectedClientId(clientId === selectedClientId ? null : clientId);
+    const isClearingCurrentClient = clientId === selectedClientId;
+    setIgnoreClientPrefill(isClearingCurrentClient);
+    setSelectedClientId(isClearingCurrentClient ? null : clientId);
     setSelectedVehicleId(null);
     setClientSearchOpen(false);
     setClientSearchQuery("");
