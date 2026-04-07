@@ -349,6 +349,11 @@ function action(path: string) {
 export const api = {
     appointment: {
       ...resource("appointments"),
+      delete: (params: Record<string, unknown>) =>
+        request<unknown>("/appointments/" + (params?.id ?? "") + "/delete", {
+          method: "POST",
+          body: JSON.stringify(params),
+        }),
       sendConfirmation: (params: Record<string, unknown>) =>
         request<unknown>("/appointments/" + (params?.id ?? "") + "/sendConfirmation", {
           method: "POST",

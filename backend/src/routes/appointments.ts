@@ -2615,7 +2615,7 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (
   res.json(updated);
 });
 
-appointmentsRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+async function deleteAppointmentRecord(req: Request, res: Response) {
   const bid = businessId(req);
   const [existing] = await db
     .select({
@@ -2670,7 +2670,10 @@ appointmentsRouter.delete("/:id", requireAuth, requireTenant, async (req: Reques
   });
 
   res.status(204).send();
-});
+}
+
+appointmentsRouter.delete("/:id", requireAuth, requireTenant, deleteAppointmentRecord);
+appointmentsRouter.post("/:id/delete", requireAuth, requireTenant, deleteAppointmentRecord);
 
 appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
