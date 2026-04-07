@@ -258,10 +258,12 @@ function JobLifecycleStepper({
   status,
   invoicedAt,
   paidAt,
+  paymentRecorded = false,
 }: {
   status: string;
   invoicedAt: Date | null;
   paidAt: Date | null;
+  paymentRecorded?: boolean;
 }) {
   const stages = [
     { key: "scheduled", label: "Scheduled" },
@@ -301,7 +303,7 @@ function JobLifecycleStepper({
   } else if (status === "in_progress") {
     currentStageIndex = 2;
   } else if (status === "completed") {
-    if (paidAt) {
+    if (paidAt || paymentRecorded) {
       currentStageIndex = 5;
     } else if (invoicedAt) {
       currentStageIndex = 4;
@@ -1848,6 +1850,7 @@ export default function AppointmentDetail() {
         status={appointment.status}
         invoicedAt={(appointment as any).invoicedAt ?? null}
         paidAt={(appointment as any).paidAt ?? null}
+        paymentRecorded={Boolean((appointment as any).paidAt ?? appointment.depositPaid)}
       />
 
       {!isInternalAppointment && (hasPlaceholderClient || hasPlaceholderVehicle || missingLinkedRecords) && (
