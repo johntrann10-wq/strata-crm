@@ -20,12 +20,10 @@ type Props = {
   recipientName?: string | null;
   recipient?: string | null;
   primaryLabel: string;
-  followUpLabel?: string;
   activities: ActivityRecord[];
   sending?: boolean;
   canSend?: boolean;
   onPrimarySend: (payload?: { message?: string; recipientEmail?: string; recipientName?: string }) => Promise<{ error?: { message?: string } } | void>;
-  onFollowUpSend?: (payload?: { message?: string; recipientEmail?: string; recipientName?: string }) => Promise<{ error?: { message?: string } } | void>;
 };
 
 function parseMeta(record: ActivityRecord): { recipient?: string; message?: string; deliveryStatus?: string; deliveryError?: string } {
@@ -75,18 +73,15 @@ export function CommunicationCard({
   recipientName,
   recipient,
   primaryLabel,
-  followUpLabel,
   activities,
   sending,
   canSend = true,
   onPrimarySend,
-  onFollowUpSend,
 }: Props) {
   const [message, setMessage] = useState("");
   const [overrideName, setOverrideName] = useState(recipientName?.trim() ?? "");
   const [overrideEmail, setOverrideEmail] = useState(recipient?.trim() ?? "");
   const latestPrimary = useMemo(() => activities[0] ?? null, [activities]);
-  const latestFollowUp = useMemo(() => activities.find((record) => record.type?.includes("follow_up")) ?? null, [activities]);
 
   useEffect(() => {
     setOverrideName(recipientName?.trim() ?? "");
@@ -109,22 +104,7 @@ export function CommunicationCard({
     setMessage("");
   };
 
-  const handleFollowUp = async () => {
-    if (!onFollowUpSend) return;
-    const result = await onFollowUpSend({
-      message: message.trim() || undefined,
-      recipientEmail: overrideEmail.trim() || undefined,
-      recipientName: overrideName.trim() || undefined,
-    });
-    if ((result as any)?.error) {
-      toast.error((result as any).error.message);
-      return;
-    }
-    setMessage("");
-  };
-
   const latestPrimaryMeta = latestPrimary ? parseMeta(latestPrimary) : {};
-  const latestFollowUpMeta = latestFollowUp ? parseMeta(latestFollowUp) : {};
 
   return (
     <Card>
@@ -133,37 +113,19 @@ export function CommunicationCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Mail className="h-4 w-4" />
-            <span>{recipient?.trim() || "No recipient email on file"}</span>
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-border/70 bg-background px-3 py-2.5">
-              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                Last send
-              </p>
-              <p className="mt-1 text-sm font-medium text-foreground">
-                {latestPrimary ? formatWhen(latestPrimary.createdAt) : "Not sent yet"}
-              </p>
-              <div className="mt-2">
-                <Badge className={deliveryTone(latestPrimaryMeta.deliveryStatus)}>
-                  {formatDeliveryStatus(latestPrimaryMeta.deliveryStatus)}
-                </Badge>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate font-medium">{recipient?.trim() || "Recipient email missing"}</span>
               </div>
-            </div>
-            <div className="rounded-lg border border-border/70 bg-background px-3 py-2.5">
-              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                Last follow-up
+              <p className="text-xs text-muted-foreground">
+                {latestPrimary ? `Last sent ${formatWhen(latestPrimary.createdAt)}` : "No confirmation sent yet"}
               </p>
-              <p className="mt-1 text-sm font-medium text-foreground">
-                {latestFollowUp ? formatWhen(latestFollowUp.createdAt) : "No follow-up yet"}
-              </p>
-              <div className="mt-2">
-                <Badge className={deliveryTone(latestFollowUpMeta.deliveryStatus)}>
-                  {latestFollowUp ? formatDeliveryStatus(latestFollowUpMeta.deliveryStatus) : "Waiting"}
-                </Badge>
-              </div>
             </div>
+            <Badge className={deliveryTone(latestPrimaryMeta.deliveryStatus)}>
+              {latestPrimary ? formatDeliveryStatus(latestPrimaryMeta.deliveryStatus) : "Not sent"}
+            </Badge>
           </div>
           {latestPrimaryMeta.deliveryError ? (
             <p className="mt-3 text-sm text-destructive">{latestPrimaryMeta.deliveryError}</p>
@@ -208,12 +170,6 @@ export function CommunicationCard({
                 {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SendHorizonal className="mr-2 h-4 w-4" />}
                 {primaryLabel}
               </Button>
-              {onFollowUpSend && followUpLabel ? (
-                <Button variant="outline" onClick={() => void handleFollowUp()} disabled={sending}>
-                  {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SendHorizonal className="mr-2 h-4 w-4" />}
-                  {followUpLabel}
-                </Button>
-              ) : null}
             </div>
           </>
         ) : null}

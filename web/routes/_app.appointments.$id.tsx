@@ -44,8 +44,6 @@ import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
-import { ChecklistCard } from "../components/shared/ChecklistCard";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { CommunicationCard } from "../components/shared/CommunicationCard";
 import {
@@ -438,7 +436,6 @@ export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, businessType, permissions, currentLocationId } = useOutletContext<AuthOutletContext>();
-  const canEditCollaboration = permissions.has("appointments.write");
   const { setPageContext } = usePageContext();
   const intakePreset = getIntakePreset(businessType);
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/calendar?view=month";
@@ -481,7 +478,6 @@ export default function AppointmentDetail() {
   const [showMobileAppointmentInfo, setShowMobileAppointmentInfo] = useState(false);
   const [showMobileServices, setShowMobileServices] = useState(false);
   const [showMobileNotes, setShowMobileNotes] = useState(false);
-  const [showMobileWorkflowTools, setShowMobileWorkflowTools] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [editServiceIds, setEditServiceIds] = useState<string[]>([]);
   const [isSmallViewport, setIsSmallViewport] = useState(false);
@@ -1384,6 +1380,33 @@ export default function AppointmentDetail() {
             </Button>
           ) : null}
 
+          {isInternalCalendarBlock && effectiveInternalPaymentAmount > 0 && !appointment.depositPaid ? (
+            <Button variant="outline" size="sm" onClick={handleOpenDepositDialog} disabled={recordingDeposit}>
+              {recordingDeposit ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <DollarSign className="h-4 w-4 mr-2" />
+              )}
+              Mark Paid
+            </Button>
+          ) : null}
+
+          {isInternalCalendarBlock && appointment.depositPaid ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setReverseDepositOpen(true)}
+              disabled={reversingDeposit}
+            >
+              {reversingDeposit ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4 mr-2" />
+              )}
+              Mark Unpaid
+            </Button>
+          ) : null}
+
           {canQuickCompleteAppointment && (
             <Button
               variant="outline"
@@ -1539,6 +1562,24 @@ export default function AppointmentDetail() {
                 </Button>
               ) : null}
             </div>
+
+            {isInternalCalendarBlock && effectiveInternalPaymentAmount > 0 ? (
+              <Button
+                variant="outline"
+                className="w-full justify-center"
+                onClick={() => (appointment.depositPaid ? setReverseDepositOpen(true) : handleOpenDepositDialog())}
+                disabled={appointment.depositPaid ? reversingDeposit : recordingDeposit}
+              >
+                {(appointment.depositPaid ? reversingDeposit : recordingDeposit) ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : appointment.depositPaid ? (
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                ) : (
+                  <DollarSign className="h-4 w-4 mr-2" />
+                )}
+                {appointment.depositPaid ? "Mark Unpaid" : "Mark Paid"}
+              </Button>
+            ) : null}
 
             {canQuickCompleteAppointment ? (
               <Button
@@ -2271,69 +2312,6 @@ export default function AppointmentDetail() {
                   onPrimarySend={handleSendConfirmation}
                 />
               ) : null}
-
-              <Card className="lg:hidden">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <CardTitle className="text-base">Workflow Tools</CardTitle>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowMobileWorkflowTools((value) => !value)}
-                    >
-                      {showMobileWorkflowTools ? "Hide" : "Show"}
-                      <ChevronDown className={showMobileWorkflowTools ? "ml-1 h-4 w-4 rotate-180" : "ml-1 h-4 w-4"} />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className={showMobileWorkflowTools ? "space-y-4" : "hidden"}>
-                  <ChecklistCard
-                    entityType="appointment"
-                    entityId={appointment.id}
-                    businessType={businessType}
-                    records={(activityLogs as any[]) ?? []}
-                    canWrite={canEditCollaboration}
-                    onChanged={() => {
-                      void refetchActivity();
-                    }}
-                  />
-                  <EntityCollaborationCard
-                    entityType="appointment"
-                    entityId={appointment.id}
-                    records={(activityLogs as any[]) ?? []}
-                    fetching={activityFetching}
-                    canWrite={canEditCollaboration}
-                    onCreated={() => {
-                      void refetchActivity();
-                    }}
-                  />
-                </CardContent>
-              </Card>
-
-              <div className="hidden lg:block lg:space-y-4">
-                <ChecklistCard
-                  entityType="appointment"
-                  entityId={appointment.id}
-                  businessType={businessType}
-                  records={(activityLogs as any[]) ?? []}
-                  canWrite={canEditCollaboration}
-                  onChanged={() => {
-                    void refetchActivity();
-                  }}
-                />
-
-                <EntityCollaborationCard
-                  entityType="appointment"
-                  entityId={appointment.id}
-                  records={(activityLogs as any[]) ?? []}
-                  fetching={activityFetching}
-                  canWrite={canEditCollaboration}
-                  onCreated={() => {
-                    void refetchActivity();
-                  }}
-                />
-              </div>
 
             </div>
           </div>
