@@ -17,10 +17,22 @@ import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
 import { buildPublicAppUrl, buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 import { createInvoicePaymentCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
 import { createActivityLog } from "../lib/activity.js";
-import { getActiveInvoicePaymentTotal, isPaymentSchemaDriftError } from "../lib/invoicePayments.js";
+import { getActiveInvoicePaymentTotal, isPaymentSchemaDriftError, recordInvoicePayment } from "../lib/invoicePayments.js";
 import { enqueueQuickBooksInvoiceSync } from "../lib/quickbooks.js";
 
 export const invoicesRouter = Router({ mergeParams: true });
+
+function getAppointmentInvoiceCarryoverAmount(appointment: {
+  depositPaid?: boolean | null;
+  depositAmount?: string | number | null;
+  totalPrice?: string | number | null;
+}) {
+  if (appointment.depositPaid !== true) return 0;
+  const depositAmount = Number(appointment.depositAmount ?? 0);
+  if (Number.isFinite(depositAmount) && depositAmount > 0) return depositAmount;
+  const totalPrice = Number(appointment.totalPrice ?? 0);
+  return Number.isFinite(totalPrice) && totalPrice > 0 ? totalPrice : 0;
+}
 
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
@@ -1063,6 +1075,10 @@ invoicesRouter.post(
         id: string;
         clientId: string;
         vehicleId: string | null;
+        depositAmount: string | null;
+        depositPaid: boolean | null;
+        totalPrice: string | null;
+        updatedAt: Date | null;
       }
     | undefined;
   let quote:
@@ -1088,6 +1104,10 @@ invoicesRouter.post(
         id: appointments.id,
         clientId: appointments.clientId,
         vehicleId: appointments.vehicleId,
+        depositAmount: appointments.depositAmount,
+        depositPaid: appointments.depositPaid,
+        totalPrice: appointments.totalPrice,
+        updatedAt: appointments.updatedAt,
       })
       .from(appointments)
       .where(and(eq(appointments.id, parsed.data.appointmentId), eq(appointments.businessId, bid)))
@@ -1098,6 +1118,10 @@ invoicesRouter.post(
       id: apt.id,
       clientId: apt.clientId,
       vehicleId: apt.vehicleId,
+      depositAmount: apt.depositAmount,
+      depositPaid: apt.depositPaid,
+      totalPrice: apt.totalPrice,
+      updatedAt: apt.updatedAt,
     };
   }
 
@@ -1138,6 +1162,9 @@ invoicesRouter.post(
   const taxRate = parsed.data.taxRate ?? 0;
   const taxAmount = (subtotal * taxRate) / 100;
   const total = Math.max(0, subtotal + taxAmount - discountAmount);
+  const appointmentPaymentCarryoverAmount = appointment
+    ? Math.min(total, getAppointmentInvoiceCarryoverAmount(appointment))
+    : 0;
   const items = lineItems.map((li) => {
     const lineTotal = li.quantity * li.unitPrice;
     return { description: li.description, quantity: String(li.quantity), unitPrice: String(li.unitPrice), total: String(lineTotal) };
@@ -1177,7 +1204,7 @@ invoicesRouter.post(
           discountAmount: string;
           total: string;
           dueDate: Date | null;
-          paidAt: null;
+          paidAt: Date | null;
           notes: string | null;
           createdAt: Date;
           updatedAt: Date;
@@ -1336,6 +1363,26 @@ invoicesRouter.post(
           total: it.total,
         });
       }
+    }
+    if (appointmentPaymentCarryoverAmount > 0) {
+      await recordInvoicePayment(
+        {
+          businessId: bid,
+          invoiceId: created.id,
+          amount: appointmentPaymentCarryoverAmount,
+          method: "other",
+          paidAt: appointment?.updatedAt ?? now,
+          notes: "Carried over from appointment payment state.",
+          referenceNumber: appointment?.id ?? null,
+          idempotencyKey: `appointment-payment-carryover:${created.id}`,
+        },
+        executor
+      );
+      created = {
+        ...created,
+        status: appointmentPaymentCarryoverAmount >= total ? "paid" : "partial",
+        paidAt: appointmentPaymentCarryoverAmount >= total ? (appointment?.updatedAt ?? now) : null,
+      };
     }
     return created;
   }
