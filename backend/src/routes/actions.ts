@@ -325,13 +325,15 @@ async function getCollectedInvoiceRevenueTotal(
       .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
       .from(payments)
       .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .innerJoin(appointments, eq(invoices.appointmentId, appointments.id))
       .where(
         and(
           eq(invoices.businessId, bid),
           sql`${invoices.status} != 'void'`,
+          sql`${appointments.status} not in ('cancelled', 'no-show')`,
           isNull(payments.reversedAt),
-          gte(payments.paidAt, start),
-          lte(payments.paidAt, end)
+          sql`${appointments.startTime} <= ${end}`,
+          sql`coalesce(${appointments.endTime}, ${appointments.startTime}) >= ${start}`
         )
       );
     return Number(row?.total ?? 0);
@@ -344,13 +346,15 @@ async function getCollectedInvoiceRevenueTotal(
     const [row] = await db
       .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
       .from(invoices)
+      .innerJoin(appointments, eq(invoices.appointmentId, appointments.id))
       .where(
         and(
           eq(invoices.businessId, bid),
           eq(invoices.status, "paid"),
           sql`${invoices.status} != 'void'`,
-          gte(invoices.paidAt ?? invoices.updatedAt, start),
-          lte(invoices.paidAt ?? invoices.updatedAt, end)
+          sql`${appointments.status} not in ('cancelled', 'no-show')`,
+          sql`${appointments.startTime} <= ${end}`,
+          sql`coalesce(${appointments.endTime}, ${appointments.startTime}) >= ${start}`
         )
       );
     return Number(row?.total ?? 0);
@@ -369,9 +373,10 @@ async function getStandaloneInternalRevenueTotal(
       and(
         eq(appointments.businessId, bid),
         sql`${appointments.clientId} is null`,
+        sql`${appointments.status} not in ('cancelled', 'no-show')`,
         eq(appointments.depositPaid, true),
-        gte(appointments.updatedAt, start),
-        lte(appointments.updatedAt, end),
+        sql`${appointments.startTime} <= ${end}`,
+        sql`coalesce(${appointments.endTime}, ${appointments.startTime}) >= ${start}`,
         sql`not exists (
           select 1
           from ${invoices}
