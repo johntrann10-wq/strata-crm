@@ -54,6 +54,28 @@ type GrowthInvoiceRecord = {
   paidAt: Date | null;
 };
 
+type FinanceInvoiceSnapshot = {
+  id: string;
+  invoiceNumber: string | null;
+  status: string | null;
+  total: number | string | null;
+  dueDate: Date | null;
+  createdAt: Date;
+  totalPaid: number | string | null;
+  clientFirstName: string | null;
+  clientLastName: string | null;
+};
+
+type FinancePaymentSnapshot = {
+  id: string;
+  amount: number | string | null;
+  method: string | null;
+  paidAt: Date | null;
+  invoiceNumber: string | null;
+  clientFirstName: string | null;
+  clientLastName: string | null;
+};
+
 export function calculateGrowthMetrics(
   leads: GrowthLeadRecord[],
   paidInvoices: GrowthInvoiceRecord[],
@@ -436,6 +458,275 @@ async function getStandaloneAppointmentAwaitingCollectionTotal(bid: string) {
   return Number(row?.total ?? 0);
 }
 
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+}
+
+function endOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function formatFinanceMonthLabel(date: Date) {
+  return new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
+}
+
+function getFinanceClientName(firstName: string | null, lastName: string | null) {
+  const fullName = `${firstName ?? ""} ${lastName ?? ""}`.trim();
+  return fullName || "Walk-in";
+}
+
+function getInvoiceMoneyTotal(value: number | string | null | undefined) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getInvoiceBalanceDue(total: number | string | null | undefined, totalPaid: number | string | null | undefined) {
+  return Math.max(0, getInvoiceMoneyTotal(total) - getInvoiceMoneyTotal(totalPaid));
+}
+
+export function normalizeFinanceInvoiceStatus(
+  invoice: Pick<FinanceInvoiceSnapshot, "status" | "dueDate" | "total" | "totalPaid">,
+  referenceDate: Date = new Date()
+) {
+  const totalAmount = getInvoiceMoneyTotal(invoice.total);
+  const totalPaid = getInvoiceMoneyTotal(invoice.totalPaid);
+  const balanceDue = Math.max(0, totalAmount - totalPaid);
+  if (balanceDue <= 0.009 || invoice.status === "paid") return "paid" as const;
+  if (invoice.status === "draft") return "draft" as const;
+  const dueDate = invoice.dueDate ? new Date(invoice.dueDate) : null;
+  if (dueDate) {
+    const today = startOfDay(referenceDate);
+    if (dueDate < today) return "overdue" as const;
+  }
+  if (totalPaid > 0.009 || invoice.status === "partial") return "partial" as const;
+  return "sent" as const;
+}
+
+export function calculateFinanceCollectionRate(collectedAmount: number, grossRevenue: number) {
+  if (!Number.isFinite(collectedAmount) || !Number.isFinite(grossRevenue) || grossRevenue <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((Math.min(collectedAmount, grossRevenue) / grossRevenue) * 100)));
+}
+
+function buildFinanceMonthBuckets(now: Date, count: number) {
+  return Array.from({ length: count }, (_, index) => {
+    const monthDate = new Date(now.getFullYear(), now.getMonth() - (count - 1 - index), 1, 0, 0, 0, 0);
+    return {
+      key: `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, "0")}`,
+      label: formatFinanceMonthLabel(monthDate),
+      start: startOfMonth(monthDate),
+      end: endOfMonth(monthDate),
+    };
+  });
+}
+
+async function getInvoiceCollectedRevenueByPaidAt(
+  bid: string,
+  start: Date,
+  end: Date
+) {
+  try {
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+      .from(payments)
+      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .where(
+        and(
+          eq(invoices.businessId, bid),
+          sql`${invoices.status} != 'void'`,
+          isNull(payments.reversedAt),
+          gte(payments.paidAt, start),
+          lte(payments.paidAt, end)
+        )
+      );
+    return Number(row?.total ?? 0);
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected in finance dashboard collected totals; falling back to paid invoice totals", {
+      businessId: bid,
+      error,
+    });
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.businessId, bid),
+          eq(invoices.status, "paid"),
+          sql`${invoices.status} != 'void'`,
+          gte(sql`coalesce(${invoices.paidAt}, ${invoices.updatedAt})`, start),
+          lte(sql`coalesce(${invoices.paidAt}, ${invoices.updatedAt})`, end)
+        )
+      );
+    return Number(row?.total ?? 0);
+  }
+}
+
+async function getStandaloneAppointmentCollectedRevenueByUpdatedAt(
+  bid: string,
+  start: Date,
+  end: Date
+) {
+  const collectedAmount = getStandaloneAppointmentCollectedAmountSql();
+  const [row] = await db
+    .select({ total: sql<string>`coalesce(sum(${collectedAmount}), 0)` })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.businessId, bid),
+        sql`${appointments.status} not in ('cancelled', 'no-show')`,
+        sql`${collectedAmount} > 0`,
+        gte(appointments.updatedAt, start),
+        lte(appointments.updatedAt, end),
+        sql`not exists (
+          select 1
+          from ${invoices}
+          where ${invoices.businessId} = ${bid}
+            and ${invoices.appointmentId} = ${appointments.id}
+            and ${invoices.status} != 'void'
+        )`
+      )
+    );
+  return Number(row?.total ?? 0);
+}
+
+async function getIssuedInvoiceRevenueByCreatedAt(
+  bid: string,
+  start: Date,
+  end: Date
+) {
+  const [row] = await db
+    .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.businessId, bid),
+        sql`${invoices.status} != 'void'`,
+        sql`${invoices.status} != 'draft'`,
+        gte(invoices.createdAt, start),
+        lte(invoices.createdAt, end)
+      )
+    );
+  return Number(row?.total ?? 0);
+}
+
+async function getExpenseTotalForRange(bid: string, start: Date, end: Date) {
+  const [row] = await db
+    .select({ total: sql<string>`coalesce(sum(${expenses.amount}), 0)` })
+    .from(expenses)
+    .where(and(eq(expenses.businessId, bid), gte(expenses.expenseDate, start), lte(expenses.expenseDate, end)));
+  return Number(row?.total ?? 0);
+}
+
+async function listFinanceInvoiceSnapshots(bid: string): Promise<FinanceInvoiceSnapshot[]> {
+  const paymentTotals = db
+    .select({
+      invoiceId: payments.invoiceId,
+      totalPaid: sql<string>`coalesce(sum(case when ${payments.reversedAt} is null then ${payments.amount} else 0 end), 0)`.as("total_paid"),
+    })
+    .from(payments)
+    .groupBy(payments.invoiceId)
+    .as("payment_totals");
+
+  const paymentTotalsLegacy = db
+    .select({
+      invoiceId: payments.invoiceId,
+      totalPaid: sql<string>`coalesce(sum(${payments.amount}), 0)`.as("total_paid"),
+    })
+    .from(payments)
+    .groupBy(payments.invoiceId)
+    .as("payment_totals_legacy");
+
+  try {
+    return await db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        status: invoices.status,
+        total: invoices.total,
+        dueDate: invoices.dueDate,
+        createdAt: invoices.createdAt,
+        totalPaid: sql<string>`coalesce(${paymentTotals.totalPaid}, 0)`,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+      })
+      .from(invoices)
+      .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
+      .leftJoin(paymentTotals, eq(paymentTotals.invoiceId, invoices.id))
+      .where(and(eq(invoices.businessId, bid), sql`${invoices.status} != 'void'`))
+      .orderBy(desc(invoices.createdAt));
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected in finance dashboard invoice snapshots; falling back to legacy invoice metrics", {
+      businessId: bid,
+      error,
+    });
+    return await db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        status: invoices.status,
+        total: invoices.total,
+        dueDate: invoices.dueDate,
+        createdAt: invoices.createdAt,
+        totalPaid: sql<string>`coalesce(${paymentTotalsLegacy.totalPaid}, 0)`,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+      })
+      .from(invoices)
+      .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
+      .leftJoin(paymentTotalsLegacy, eq(paymentTotalsLegacy.invoiceId, invoices.id))
+      .where(and(eq(invoices.businessId, bid), sql`${invoices.status} != 'void'`))
+      .orderBy(desc(invoices.createdAt));
+  }
+}
+
+async function listRecentFinancePayments(bid: string, limit: number): Promise<FinancePaymentSnapshot[]> {
+  try {
+    return await db
+      .select({
+        id: payments.id,
+        amount: payments.amount,
+        method: payments.method,
+        paidAt: payments.paidAt,
+        invoiceNumber: invoices.invoiceNumber,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+      })
+      .from(payments)
+      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
+      .where(and(eq(invoices.businessId, bid), sql`${invoices.status} != 'void'`, isNull(payments.reversedAt)))
+      .orderBy(desc(payments.paidAt), desc(payments.createdAt))
+      .limit(limit);
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Payments schema drift detected in finance dashboard recent payments; falling back to legacy payment selection", {
+      businessId: bid,
+      error,
+    });
+    return await db
+      .select({
+        id: payments.id,
+        amount: payments.amount,
+        method: payments.method,
+        paidAt: payments.paidAt,
+        invoiceNumber: invoices.invoiceNumber,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+      })
+      .from(payments)
+      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
+      .where(and(eq(invoices.businessId, bid), sql`${invoices.status} != 'void'`))
+      .orderBy(desc(payments.paidAt), desc(payments.createdAt))
+      .limit(limit);
+  }
+}
+
 actionsRouter.post("/getDashboardStats", requireAuth, requireTenant, async (req: Request, res: Response) => {
   const bid = businessId(req);
   const now = new Date();
@@ -623,6 +914,143 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
     expensesThisMonth,
     netThisMonth: revenueThisMonth - expensesThisMonth,
     expenseCountThisMonth: expenseCountRows[0]?.count ?? 0,
+  });
+});
+
+actionsRouter.post("/getFinanceDashboard", requireAuth, requireTenant, requirePermission("payments.read"), async (req: Request, res: Response) => {
+  const bid = businessId(req);
+  const params = z
+    .object({
+      paymentLimit: z.coerce.number().int().min(1).max(20).optional(),
+      invoiceLimit: z.coerce.number().int().min(20).max(250).optional(),
+      monthCount: z.coerce.number().int().min(3).max(12).optional(),
+    })
+    .parse(req.body ?? {});
+
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+  const monthBuckets = buildFinanceMonthBuckets(now, params.monthCount ?? 6);
+
+  const [
+    invoiceSnapshots,
+    recentPayments,
+    monthIssuedRevenue,
+    monthCollectedInvoiceRevenue,
+    monthStandaloneCollectedRevenue,
+    monthExpenses,
+    standaloneAwaitingCollection,
+    trendRows,
+  ] = await Promise.all([
+    listFinanceInvoiceSnapshots(bid),
+    listRecentFinancePayments(bid, params.paymentLimit ?? 8),
+    getIssuedInvoiceRevenueByCreatedAt(bid, monthStart, monthEnd),
+    getInvoiceCollectedRevenueByPaidAt(bid, monthStart, monthEnd),
+    getStandaloneAppointmentCollectedRevenueByUpdatedAt(bid, monthStart, monthEnd),
+    getExpenseTotalForRange(bid, monthStart, monthEnd),
+    getStandaloneAppointmentAwaitingCollectionTotal(bid),
+    Promise.all(
+      monthBuckets.map(async (bucket) => ({
+        key: bucket.key,
+        label: bucket.label,
+        invoiced: await getIssuedInvoiceRevenueByCreatedAt(bid, bucket.start, bucket.end),
+        collected:
+          (await getInvoiceCollectedRevenueByPaidAt(bid, bucket.start, bucket.end)) +
+          (await getStandaloneAppointmentCollectedRevenueByUpdatedAt(bid, bucket.start, bucket.end)),
+        expenses: await getExpenseTotalForRange(bid, bucket.start, bucket.end),
+      }))
+    ),
+  ]);
+
+  const normalizedInvoices = invoiceSnapshots.map((invoice) => {
+    const totalAmount = getInvoiceMoneyTotal(invoice.total);
+    const amountPaid = getInvoiceMoneyTotal(invoice.totalPaid);
+    const balanceDue = getInvoiceBalanceDue(invoice.total, invoice.totalPaid);
+    const normalizedStatus = normalizeFinanceInvoiceStatus(invoice, now);
+    return {
+      id: invoice.id,
+      clientName: getFinanceClientName(invoice.clientFirstName, invoice.clientLastName),
+      invoiceNumber: invoice.invoiceNumber ?? "Draft",
+      totalAmount,
+      amountPaid,
+      balanceDue,
+      dueDate: invoice.dueDate ? invoice.dueDate.toISOString() : null,
+      status: normalizedStatus,
+      createdAt: invoice.createdAt.toISOString(),
+      isCurrentMonth: invoice.createdAt >= monthStart && invoice.createdAt <= monthEnd,
+    };
+  });
+
+  const issuedCurrentMonthInvoices = normalizedInvoices.filter(
+    (invoice) => invoice.isCurrentMonth && invoice.status !== "draft"
+  );
+  const grossRevenue = monthIssuedRevenue;
+  const moneyCollected = monthCollectedInvoiceRevenue + monthStandaloneCollectedRevenue;
+  const collectedAgainstCurrentMonthIssued = issuedCurrentMonthInvoices.reduce(
+    (sum, invoice) => sum + Math.min(invoice.amountPaid, invoice.totalAmount),
+    0
+  );
+  const invoiceAwaitingPayment = normalizedInvoices
+    .filter((invoice) => invoice.status === "sent" || invoice.status === "partial" || invoice.status === "overdue")
+    .reduce((sum, invoice) => sum + invoice.balanceDue, 0);
+  const overdueInvoices = normalizedInvoices.filter((invoice) => invoice.status === "overdue");
+  const overdueAmount = overdueInvoices.reduce((sum, invoice) => sum + invoice.balanceDue, 0);
+  const awaitingPayment = invoiceAwaitingPayment + standaloneAwaitingCollection;
+
+  const statusBuckets = (["draft", "sent", "partial", "paid", "overdue"] as const).map((status) => {
+    const matching = normalizedInvoices.filter((invoice) => invoice.status === status);
+    return {
+      status,
+      count: matching.length,
+      totalAmount: matching.reduce((sum, invoice) => sum + invoice.totalAmount, 0),
+    };
+  });
+
+  const invoicePriority = {
+    overdue: 0,
+    partial: 1,
+    sent: 2,
+    draft: 3,
+    paid: 4,
+  } as const;
+
+  const invoiceRows = [...normalizedInvoices]
+    .sort((left, right) => {
+      const priorityDiff = invoicePriority[left.status] - invoicePriority[right.status];
+      if (priorityDiff !== 0) return priorityDiff;
+      if (left.dueDate && right.dueDate) return new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime();
+      if (left.dueDate) return -1;
+      if (right.dueDate) return 1;
+      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    })
+    .slice(0, params.invoiceLimit ?? 150);
+
+  res.json({
+    kpis: {
+      grossRevenue,
+      moneyCollected,
+      awaitingPayment,
+      overdueInvoices: overdueAmount,
+      overdueInvoiceCount: overdueInvoices.length,
+      expenses: monthExpenses,
+      netProfit: moneyCollected - monthExpenses,
+      projectedNetProfit: grossRevenue - monthExpenses,
+      collectionRate: calculateFinanceCollectionRate(collectedAgainstCurrentMonthIssued, grossRevenue),
+    },
+    statusBuckets,
+    recentPayments: recentPayments.map((payment) => ({
+      id: payment.id,
+      clientName: getFinanceClientName(payment.clientFirstName, payment.clientLastName),
+      invoiceNumber: payment.invoiceNumber ?? "Invoice",
+      amount: getInvoiceMoneyTotal(payment.amount),
+      method: payment.method ?? "other",
+      paidAt: payment.paidAt ? payment.paidAt.toISOString() : null,
+    })),
+    invoiceRows,
+    trend: trendRows,
+    generatedAt: now.toISOString(),
+    referenceDate: todayStart.toISOString(),
   });
 });
 

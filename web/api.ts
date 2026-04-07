@@ -824,6 +824,53 @@ export const api = {
       netThisMonth: number;
       expenseCountThisMonth: number;
     }>("/actions/getFinanceMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
+  getFinanceDashboard: (params?: Record<string, unknown>) =>
+    request<{
+      kpis: {
+        grossRevenue: number;
+        moneyCollected: number;
+        awaitingPayment: number;
+        overdueInvoices: number;
+        overdueInvoiceCount: number;
+        expenses: number;
+        netProfit: number;
+        projectedNetProfit: number;
+        collectionRate: number;
+      };
+      statusBuckets: Array<{
+        status: "draft" | "sent" | "partial" | "paid" | "overdue";
+        count: number;
+        totalAmount: number;
+      }>;
+      recentPayments: Array<{
+        id: string;
+        clientName: string;
+        invoiceNumber: string;
+        amount: number;
+        method: string;
+        paidAt: string | null;
+      }>;
+      invoiceRows: Array<{
+        id: string;
+        clientName: string;
+        invoiceNumber: string;
+        totalAmount: number;
+        amountPaid: number;
+        balanceDue: number;
+        dueDate: string | null;
+        status: "draft" | "sent" | "partial" | "paid" | "overdue";
+        createdAt: string;
+      }>;
+      trend: Array<{
+        key: string;
+        label: string;
+        invoiced: number;
+        collected: number;
+        expenses: number;
+      }>;
+      generatedAt: string;
+      referenceDate: string;
+    }>("/actions/getFinanceDashboard", { method: "POST", body: JSON.stringify(params ?? {}) }),
   getGrowthMetrics: (params?: Record<string, unknown>) =>
     request<{
       periodDays: number | null;

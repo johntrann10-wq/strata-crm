@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { calculateGrowthMetrics, getCronExecutionGate } from "./actions.js";
+import { calculateFinanceCollectionRate, calculateGrowthMetrics, getCronExecutionGate, normalizeFinanceInvoiceStatus } from "./actions.js";
 
 describe("actions route logic", () => {
   const idParamSchema = z.object({ id: z.string().uuid() });
@@ -215,5 +215,37 @@ describe("actions route logic", () => {
       revenue: 300,
       shareOfRevenue: 100,
     });
+  });
+
+  it("normalizes overdue and partial finance invoice statuses from real balances", () => {
+    expect(
+      normalizeFinanceInvoiceStatus(
+        {
+          status: "sent",
+          dueDate: new Date("2026-04-01T00:00:00.000Z"),
+          total: 500,
+          totalPaid: 0,
+        },
+        new Date("2026-04-06T12:00:00.000Z")
+      )
+    ).toBe("overdue");
+
+    expect(
+      normalizeFinanceInvoiceStatus(
+        {
+          status: "sent",
+          dueDate: new Date("2026-04-10T00:00:00.000Z"),
+          total: 500,
+          totalPaid: 150,
+        },
+        new Date("2026-04-06T12:00:00.000Z")
+      )
+    ).toBe("partial");
+  });
+
+  it("caps finance collection rate between zero and one hundred percent", () => {
+    expect(calculateFinanceCollectionRate(500, 1000)).toBe(50);
+    expect(calculateFinanceCollectionRate(1500, 1000)).toBe(100);
+    expect(calculateFinanceCollectionRate(0, 0)).toBe(0);
   });
 });
