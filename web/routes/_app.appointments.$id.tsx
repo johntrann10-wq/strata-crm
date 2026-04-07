@@ -1432,6 +1432,13 @@ export default function AppointmentDetail() {
             </Button>
           ) : null}
 
+          {!isInternalAppointment && !appointment.depositPaid ? (
+            <Button variant="outline" size="sm" onClick={handleOpenDepositSettingsDialog} disabled={updatingNotes}>
+              <DollarSign className="h-4 w-4 mr-2" />
+              {Number(appointment.depositAmount ?? 0) > 0 ? "Edit Deposit" : "Set Deposit"}
+            </Button>
+          ) : null}
+
           {isInternalAppointment && effectiveInternalPaymentAmount > 0 && !appointment.depositPaid ? (
             <Button variant="outline" size="sm" onClick={handleOpenDepositDialog} disabled={recordingDeposit}>
               {recordingDeposit ? (
@@ -1647,6 +1654,18 @@ export default function AppointmentDetail() {
                   <DollarSign className="h-4 w-4 mr-2" />
                 )}
                 {appointment.depositPaid ? "Mark Unpaid" : "Mark Paid"}
+              </Button>
+            ) : null}
+
+            {!isInternalAppointment && !appointment.depositPaid ? (
+              <Button
+                variant="outline"
+                className="w-full justify-center"
+                onClick={handleOpenDepositSettingsDialog}
+                disabled={updatingNotes}
+              >
+                <DollarSign className="h-4 w-4 mr-2" />
+                {Number(appointment.depositAmount ?? 0) > 0 ? "Edit Deposit" : "Set Deposit"}
               </Button>
             ) : null}
 
@@ -2416,7 +2435,7 @@ export default function AppointmentDetail() {
                 secondaryDepositActionDisabled={reversingDeposit}
               />
 
-              {!isInternalAppointment && Number(appointment.totalPrice ?? 0) > 0 && !appointment.depositPaid ? (
+              {!isInternalAppointment && !appointment.depositPaid ? (
                 <Button
                   variant="outline"
                   size="sm"
