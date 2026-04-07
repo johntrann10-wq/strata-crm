@@ -277,7 +277,7 @@ export default function NewAppointmentPage() {
     if (!ignoreClientPrefill && clientIdParam && selectedClientId === null) {
       setSelectedClientId(clientIdParam);
     }
-    if (vehicleIdParam && selectedVehicleId === null) {
+    if (!ignoreClientPrefill && clientIdParam && vehicleIdParam && selectedVehicleId === null) {
       setSelectedVehicleId(vehicleIdParam);
     }
     if (timeParam) setStartTime(timeParam);
@@ -499,6 +499,13 @@ export default function NewAppointmentPage() {
       setSelectedClientId(prefilledClientData.id);
     }
   }, [ignoreClientPrefill, prefilledClientData, selectedClientId]);
+
+  useEffect(() => {
+    if (selectedClientId !== null) return;
+    if (selectedVehicleId !== null) {
+      setSelectedVehicleId(null);
+    }
+  }, [selectedClientId, selectedVehicleId]);
 
   useEffect(() => {
     if (!businessData || hasSeededBusinessFinanceDefaults.current) return;
@@ -872,7 +879,7 @@ export default function NewAppointmentPage() {
 
   const staff = staffData ?? [];
   const isLoading = isSubmitting || actionFetching;
-  const selectedVehicleLabel = selectedVehicleId
+  const selectedVehicleLabel = selectedClientId && selectedVehicleId
     ? formatVehicleLabel(vehicles.find((vehicle) => vehicle.id === selectedVehicleId) as any)
     : null;
   const bookingSnapshot = [
