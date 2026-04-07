@@ -104,6 +104,12 @@ export function getActiveCalendarAppointments<T extends CalendarJobLike>(appoint
   );
 }
 
+export function getOverviewCalendarAppointments<T extends CalendarJobLike>(appointments: T[]): T[] {
+  return appointments.filter(
+    (appointment) => appointment.status !== "cancelled" && appointment.status !== "no-show"
+  );
+}
+
 export function getVisibleCalendarAppointments<T extends CalendarJobLike>(appointments: T[]): T[] {
   return appointments.filter((appointment) => isVisibleCalendarAppointment(appointment));
 }

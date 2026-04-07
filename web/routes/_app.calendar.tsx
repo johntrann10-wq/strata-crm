@@ -21,7 +21,7 @@ import {
   getViewRange,
   navigateDate,
 } from "../components/CalendarViews";
-import { dayEnd, dayStart, getCalendarDaySnapshot, getJobPhaseLabel, getJobSpanEnd, getJobSpanStart, getActiveCalendarAppointments } from "@/lib/calendarJobSpans";
+import { dayEnd, dayStart, getCalendarDaySnapshot, getJobPhaseLabel, getJobSpanEnd, getJobSpanStart, getActiveCalendarAppointments, getOverviewCalendarAppointments } from "@/lib/calendarJobSpans";
 import { buildCalendarBlockInternalNotes, getCalendarBlockLabel, getCalendarBlockNote, isCalendarBlockAppointment, isFullDayCalendarBlock, parseCalendarBlock, type CalendarBlockMode } from "@/lib/calendarBlocks";
 import { buildQuarterHourOptions, ResponsiveTimeSelect } from "@/components/appointments/SchedulingControls";
 
@@ -259,6 +259,7 @@ export default function CalendarPage() {
   const isToday = currentDate.toDateString() === new Date().toDateString();
 
   const activeAppointments = useMemo(() => getActiveCalendarAppointments(appointments), [appointments]);
+  const overviewAppointments = useMemo(() => getOverviewCalendarAppointments(appointments), [appointments]);
 
   function handlePrev() {
     setCurrentDate((d) => navigateDate(d, view, -1));
@@ -446,19 +447,26 @@ export default function CalendarPage() {
   const selectedDayOnSiteOnlyJobs = selectedDaySnapshot.onSiteOnlyJobs;
   const selectedDayAgendaItems = selectedDaySnapshot.agendaItems;
   const selectedDayActiveItems = selectedDaySnapshot.activeItemCount;
-  const selectedDayRevenue = selectedDayAppointments.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
+  const selectedDayRevenue = useMemo(
+    () =>
+      getOverviewCalendarAppointments(selectedDayAppointments).reduce(
+        (total, appointment) => total + Number(appointment.totalPrice ?? 0),
+        0
+      ),
+    [selectedDayAppointments]
+  );
   const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
   const selectedDayConflicts = selectedDayAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
   const selectedMonthAppointments = useMemo(
     () =>
-      activeAppointments.filter((appointment) => {
+      overviewAppointments.filter((appointment) => {
         const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
         const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999);
         const spanStart = getJobSpanStart(appointment);
         const spanEnd = getJobSpanEnd(appointment);
         return spanStart.getTime() <= monthEnd.getTime() && spanEnd.getTime() >= monthStart.getTime();
       }),
-    [activeAppointments, currentDate]
+    [currentDate, overviewAppointments]
   );
   const selectedMonthRevenue = selectedMonthAppointments.reduce(
     (total, appointment) => total + Number(appointment.totalPrice ?? 0),

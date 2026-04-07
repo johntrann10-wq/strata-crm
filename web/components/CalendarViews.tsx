@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import {
   getActiveCalendarAppointments,
   getCalendarDaySnapshot,
+  getOverviewCalendarAppointments,
   getHistoricalCalendarAppointments,
   getVisibleCalendarAppointments,
 } from "@/lib/calendarJobSpans";
@@ -752,7 +753,7 @@ export function MonthView({
                 (appointment) => isMultiDayJob(appointment) && hasPresenceOnDay(appointment, day)
               );
               const { dayAppts: activeVisibleDayAppointments } = getCalendarDaySnapshot(visibleAppointments, day);
-              const dayAppts = historicalDayAppointments;
+              const dayAppts = getOverviewCalendarAppointments(historicalDayAppointments);
               const daySpans = historicalDaySpans;
               const dayRevenue = dayAppts.reduce((total, apt) => total + Number(apt.totalPrice ?? 0), 0);
               const hasConflict = !!conflictIds && activeVisibleDayAppointments.some((a) => conflictIds.has(a.id));
