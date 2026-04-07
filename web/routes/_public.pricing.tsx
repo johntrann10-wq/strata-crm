@@ -88,7 +88,7 @@ const included = [
   "Appointment scheduling with a cleaner month-to-day flow",
   "Client and vehicle CRM in one connected system",
   "Quotes, invoices, payment visibility, and print-ready documents",
-  "Business-type starter services and onboarding defaults",
+  "Business-type onboarding defaults and operational setup guidance",
   "Dashboard, daily workflow visibility, and operational follow-through",
 ];
 

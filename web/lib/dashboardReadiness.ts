@@ -76,11 +76,11 @@ export function buildActivationChecklist({
     },
     {
       key: "services",
-      label: "Review loaded services",
-      detail: "Your starter menu is preloaded. Confirm the catalog before you start booking.",
+      label: "Set up your services",
+      detail: "Build the service catalog you actually want to sell before you start booking work.",
       done: activationServicesCount > 0,
       href: "/services",
-      actionLabel: "Open services",
+      actionLabel: "Set up services",
     },
     {
       key: "appointment",

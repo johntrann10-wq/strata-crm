@@ -13,8 +13,6 @@ export type BusinessTypeWorkspaceDefaults = {
   label: string;
   description: string;
   exampleName: string;
-  starterCount: number;
-  sampleServices: string[];
   defaultStaffCount: string;
   defaultDays: string;
   defaultOpen: string;
@@ -35,8 +33,6 @@ export const BUSINESS_TYPE_WORKSPACE_DEFAULTS: BusinessTypeWorkspaceDefaults[] =
     label: "Auto Detailing",
     description: "Premium cleaning, correction, coating, and reconditioning work.",
     exampleName: "Elite Auto Detailing",
-    starterCount: 26,
-    sampleServices: ["Full Detail", "Paint Correction", "Ceramic Coating"],
     defaultStaffCount: "1",
     defaultDays: "Mon-Sat",
     defaultOpen: "08:00",
@@ -55,8 +51,6 @@ export const BUSINESS_TYPE_WORKSPACE_DEFAULTS: BusinessTypeWorkspaceDefaults[] =
     label: "Mobile Detailing",
     description: "On-site detailing with logistics, travel, and crew-readiness built in.",
     exampleName: "Roadside Detail Co.",
-    starterCount: 25,
-    sampleServices: ["Mobile Full Detail", "Maintenance Wash", "Seat Extraction"],
     defaultStaffCount: "1",
     defaultDays: "Mon-Sat",
     defaultOpen: "08:00",
@@ -75,8 +69,6 @@ export const BUSINESS_TYPE_WORKSPACE_DEFAULTS: BusinessTypeWorkspaceDefaults[] =
     label: "Wrap & PPF",
     description: "Film installs, color change wraps, protection packages, and prep-heavy work.",
     exampleName: "Precision Wrap Studio",
-    starterCount: 26,
-    sampleServices: ["Front-End PPF", "Color Change Wrap", "Chrome Delete"],
     defaultStaffCount: "2",
     defaultDays: "Mon-Fri",
     defaultOpen: "09:00",
@@ -95,8 +87,6 @@ export const BUSINESS_TYPE_WORKSPACE_DEFAULTS: BusinessTypeWorkspaceDefaults[] =
     label: "Window Tint",
     description: "Film selection, shade packages, windshield options, and install-driven scheduling.",
     exampleName: "Clear Shade Tint",
-    starterCount: 26,
-    sampleServices: ["Full Vehicle Tint", "Ceramic Film Tint", "Windshield Tint"],
     defaultStaffCount: "2",
     defaultDays: "Mon-Sat",
     defaultOpen: "09:00",
@@ -115,8 +105,6 @@ export const BUSINESS_TYPE_WORKSPACE_DEFAULTS: BusinessTypeWorkspaceDefaults[] =
     label: "Performance",
     description: "Parts installs, tuning, suspension, brakes, and track-focused shop work.",
     exampleName: "Apex Performance Garage",
-    starterCount: 26,
-    sampleServices: ["Coilover Install", "ECU Tune", "Brake Upgrade"],
     defaultStaffCount: "2",
     defaultDays: "Mon-Fri",
     defaultOpen: "09:00",
@@ -135,8 +123,6 @@ export const BUSINESS_TYPE_WORKSPACE_DEFAULTS: BusinessTypeWorkspaceDefaults[] =
     label: "Mechanic",
     description: "Repair, maintenance, diagnostics, and inspection work for general auto service shops.",
     exampleName: "Main Street Auto Repair",
-    starterCount: 26,
-    sampleServices: ["Synthetic Oil Change", "Brake Service", "Diagnostic"],
     defaultStaffCount: "2",
     defaultDays: "Mon-Fri",
     defaultOpen: "08:00",
@@ -155,8 +141,6 @@ export const BUSINESS_TYPE_WORKSPACE_DEFAULTS: BusinessTypeWorkspaceDefaults[] =
     label: "Tire Shop",
     description: "Fast-turn tire, alignment, TPMS, rotation, and seasonal service work.",
     exampleName: "Fast Lane Tire",
-    starterCount: 25,
-    sampleServices: ["Mount & Balance", "Flat Repair", "Alignment"],
     defaultStaffCount: "2",
     defaultDays: "Mon-Sat",
     defaultOpen: "08:00",
@@ -175,8 +159,6 @@ export const BUSINESS_TYPE_WORKSPACE_DEFAULTS: BusinessTypeWorkspaceDefaults[] =
     label: "Muffler / Exhaust",
     description: "Exhaust repair, fabrication, leak work, upgrades, and sound tuning.",
     exampleName: "Street Tone Exhaust",
-    starterCount: 25,
-    sampleServices: ["Muffler Replacement", "Custom Exhaust", "Leak Repair"],
     defaultStaffCount: "2",
     defaultDays: "Mon-Fri",
     defaultOpen: "09:00",

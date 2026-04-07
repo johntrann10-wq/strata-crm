@@ -2647,14 +2647,12 @@ function ShopTypePlaybookCard({
   businessName: string | null;
   defaults: {
     label: string;
-    starterCount: number;
     defaultDays: string;
     defaultOpen: string;
     defaultClose: string;
     bookingSettingsLabel: string;
     estimateTemplateSummary: string;
     invoiceTemplateSummary: string;
-    sampleServices: string[];
   };
   activationChecklist: {
     completed: number;

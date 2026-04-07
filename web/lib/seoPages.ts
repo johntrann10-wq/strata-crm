@@ -353,7 +353,7 @@ const pages: SeoPageConfig[] = [
     ],
     benefits: [
       { title: "Cleaner workflow design", description: "Strata is shaped around clarity first, especially for scheduling, customer records, invoices, and the daily dashboard." },
-      { title: "Faster first-session value", description: "Onboarding, starter data, and activation are tuned so a new shop reaches useful work faster." },
+      { title: "Faster first-session value", description: "Onboarding, defaults, and activation are tuned so a new shop reaches useful work faster." },
       { title: "A lighter operating feel", description: "The goal is a premium command center for the shop, not a crowded admin tool." },
     ],
     workflowSteps: [
@@ -391,7 +391,7 @@ const pages: SeoPageConfig[] = [
       },
       {
         title: "Faster time to value for smaller shops",
-        description: "Onboarding, starter defaults, activation, and dashboard guidance are tuned so a new shop reaches useful work quickly.",
+        description: "Onboarding, operational defaults, activation, and dashboard guidance are tuned so a new shop reaches useful work quickly.",
       },
       {
         title: "A more premium day-to-day feel",
@@ -399,7 +399,7 @@ const pages: SeoPageConfig[] = [
       },
     ],
     workflowSteps: [
-      { title: "Get operational faster", description: "Choose the shop type, preload starter data, and move into a guided first session instead of a blank setup burden." },
+      { title: "Get operational faster", description: "Choose the shop type, apply sensible defaults, and move into a guided first session instead of a blank setup burden." },
       { title: "Run the core workflow daily", description: "Manage clients, vehicles, appointments, quotes, invoices, and jobs from one command center." },
       { title: "Build records that become hard to leave", description: "As customer and vehicle history deepens, Strata becomes the system of record for the shop." },
     ],

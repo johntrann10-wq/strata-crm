@@ -62,8 +62,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
-import { formatBusinessPresetLabel } from "../lib/businessPresets";
-import type { BusinessPresetSummary } from "../lib/businessPresets";
 import {
   clearReliabilityDiagnostics,
   getReliabilityDiagnosticsEventName,
@@ -159,11 +157,6 @@ type TeamAccessState = {
   helperText: string | null;
   badgeClassName: string;
 };
-
-type BusinessPresetActionResult = BusinessPresetSummary;
-type ApplyBusinessPresetResult =
-  | { ok: true; created: number; skipped: number; group: string; appliedCount?: number; expectedCount?: number; fullyApplied?: boolean }
-  | { ok: false; message: string };
 
 type SystemStatus = {
   status: "idle" | "checking" | "healthy" | "degraded";
@@ -1221,8 +1214,6 @@ export default function SettingsPage() {
   const [{ fetching: deletingStaff }, deleteStaff] = useAction(api.staff.delete);
   const [{ fetching: resendingStaffInvite }, resendStaffInvite] = useAction(api.staff.resendInvite);
   const [{ fetching: copyingStaffInvite }, getStaffInviteLink] = useAction(api.staff.inviteLink);
-  const [{ data: presetSummary }, getBusinessPreset] = useAction(api.getBusinessPreset);
-  const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
   const [{ fetching: automationSummaryFetching }, getAutomationSummary] = useAction(api.getAutomationSummary);
   const [{ fetching: automationFeedFetching }, getAutomationFeed] = useAction(api.getAutomationFeed);
   const [{ data: workerHealthData, fetching: workerHealthFetching }, getWorkerHealth] = useAction(api.getWorkerHealth);
@@ -1247,10 +1238,6 @@ export default function SettingsPage() {
       { pause: !businessId }
     );
   const [{ fetching: retryingIntegrationJob }, retryIntegrationJob] = useAction(api.integration.retryJob);
-  const preset = presetSummary as BusinessPresetActionResult | undefined;
-  const presetServiceCount = preset?.count ?? 0;
-  const presetPreviewNames = preset?.names?.slice(0, 4) ?? [];
-  const presetHasRecommendations = presetServiceCount > 0;
   const integrationStatus = integrationStatusData as
     | {
         infrastructure: {
@@ -1499,11 +1486,6 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [googleCalendarConnection?.id, googleCalendarConnection?.status, googleCalendarRegistry?.featureFlagEnabled]);
-
-  useEffect(() => {
-    if (!businessId) return;
-    void getBusinessPreset();
-  }, [businessId, getBusinessPreset]);
 
   useEffect(() => {
     if (!businessId) return;
@@ -2268,39 +2250,9 @@ export default function SettingsPage() {
         calendarBlockCapacityPerSlot: formData.calendarBlockCapacityPerSlot,
         timezone: formData.timezone || null,
       });
-      await getBusinessPreset();
       toast.success("Settings saved successfully.");
     } catch (error: any) {
       toast.error(error?.message ?? "Failed to save settings. Please try again.");
-    }
-  };
-
-  const handleApplyPreset = async () => {
-    try {
-      const result = await applyBusinessPreset();
-      await getBusinessPreset();
-      const payload = result.data as ApplyBusinessPresetResult | null | undefined;
-      if (!payload) {
-        toast.error("Could not apply starter services.");
-        return;
-      }
-      if (payload.ok === false) {
-        toast.warning(payload.message);
-        return;
-      }
-      if (payload.fullyApplied === false) {
-        toast.warning(
-          `Starter services partially applied (${payload.appliedCount ?? 0}/${payload.expectedCount ?? 0}). Refresh Services and retry once the current deploy finishes.`
-        );
-        return;
-      }
-      if ((payload.created ?? 0) > 0) {
-        toast.success(`Added ${payload.created} starter services`);
-      } else {
-        toast.success("Starter services are already applied");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not apply starter services.");
     }
   };
 
@@ -2347,7 +2299,7 @@ export default function SettingsPage() {
       <div className="page-content page-section max-w-5xl pb-28 sm:pb-8">
         <PageHeader
           title="Settings"
-          subtitle="Set up your shop, team, starter services, billing, and diagnostics without digging through separate tools."
+          subtitle="Set up your shop, team, billing, and diagnostics without digging through separate tools."
           badge={
             business?.name ? (
               <Badge variant="outline" className="hidden sm:inline-flex">
@@ -2406,38 +2358,6 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-medium">Starter service preset</p>
-                        <Badge variant={presetHasRecommendations ? "secondary" : "outline"}>
-                          {presetServiceCount} recommended
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {formatBusinessPresetLabel(preset?.group ?? formData.type)} catalog. Use this to load or refresh the recommended starter services for this shop type.
-                      </p>
-                      {presetPreviewNames.length ? (
-                        <p className="text-xs text-muted-foreground">
-                          Includes {presetPreviewNames.join(", ")}
-                          {presetServiceCount > presetPreviewNames.length ? `, and ${presetServiceCount - presetPreviewNames.length} more.` : "."}
-                        </p>
-                      ) : null}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleApplyPreset}
-                      disabled={!canEditSettings || applyingPreset || !business?.id}
-                      className="w-full sm:w-auto"
-                    >
-                      {applyingPreset ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Apply starter services
-                    </Button>
-                  </div>
-                </div>
-
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="name">

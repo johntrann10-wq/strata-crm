@@ -132,7 +132,7 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
     id: "setup",
     label: "Catalog & Admin",
     items: [
-      { icon: Wrench, label: "Services", href: "/services", end: false, module: "services", permission: "services.read", description: "Manage services, packages, and starter presets." },
+      { icon: Wrench, label: "Services", href: "/services", end: false, module: "services", permission: "services.read", description: "Manage services, packages, and pricing structure." },
       { icon: Settings, label: "Settings", href: "/settings", end: false, permission: "settings.read", description: "Update team, locations, business profile, and billing." },
     ],
   },

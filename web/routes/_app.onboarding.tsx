@@ -103,8 +103,7 @@ export default function OnboardingPage() {
   } as any);
   const [{ fetching: creating, error }, createBusiness] = useAction(api.business.create);
   const [{ fetching: updating }, updateBusiness] = useAction(api.business.update);
-  const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
-  const fetching = creating || updating || applyingPreset;
+  const fetching = creating || updating;
 
   useEffect(() => {
     if (!existingBusiness) return;
@@ -187,16 +186,7 @@ export default function OnboardingPage() {
     try {
       await api.business.completeOnboarding(saved.id);
       setCurrentBusinessId(saved.id);
-      try {
-        const presetResult = await applyBusinessPreset();
-        if (presetResult.data && typeof presetResult.data === "object" && "ok" in presetResult.data && presetResult.data.ok === false) {
-          toast.warning(presetResult.data.message);
-        } else {
-          toast.success("Workspace ready. Starter services are loaded.");
-        }
-      } catch {
-        toast.warning("Workspace created. Starter services may still be loading.");
-      }
+      toast.success("Workspace ready.");
       window.location.replace("/subscribe");
     } catch (submitError) {
       setValidationError(submitError instanceof Error ? submitError.message : "Could not finish setup.");
@@ -233,7 +223,7 @@ export default function OnboardingPage() {
                 <h1 className="mb-3 mt-4 text-3xl font-semibold tracking-[-0.05em] sm:text-[3.4rem]">Choose your shop type</h1>
                 <p className="max-w-2xl text-sm leading-7 text-[#aab3c2] sm:text-lg">
                   Pick the kind of shop you run. Strata will shape the workspace around your real operating model so you
-                  start with usable services, realistic defaults, and a workflow that already makes sense.
+                  start with realistic defaults and a workflow that already makes sense.
                 </p>
               </div>
 
@@ -282,17 +272,17 @@ export default function OnboardingPage() {
                       {selectedTypeMeta.label}
                     </div>
                     <h2 className="mt-4 text-xl font-semibold">You will start with a usable workspace</h2>
-                    <p className="mt-2 text-sm leading-6 text-[#9ca3af]">No blank setup. Strata will preload services, workflow defaults, booking settings, and day-one language for this shop type.</p>
+                    <p className="mt-2 text-sm leading-6 text-[#9ca3af]">No blank setup. Strata will shape workflow defaults, booking settings, and day-one language around this shop type.</p>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                      <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Starter services</p>
-                      <p className="mt-2 text-2xl font-semibold">{selectedTypeMeta.starterCount}</p>
-                    </div>
                     <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                       <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Default schedule</p>
                       <p className="mt-2 text-lg font-semibold">{selectedTypeMeta.defaultDays}</p>
                       <p className="mt-1 text-sm text-[#9ca3af]">{selectedTypeMeta.defaultOpen}-{selectedTypeMeta.defaultClose}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Default schedule buffer</p>
+                      <p className="mt-2 text-2xl font-semibold">{selectedTypeMeta.appointmentBufferMinutes} min</p>
                     </div>
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
@@ -316,14 +306,6 @@ export default function OnboardingPage() {
                     </div>
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                    <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Starter menu preview</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {selectedTypeMeta.sampleServices.map((service) => (
-                        <span key={service} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-white/85">{service}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                     <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Estimate and invoice defaults</p>
                     <div className="mt-3 space-y-2 text-sm text-[#d4d8de]">
                       <p>{selectedTypeMeta.estimateTemplateSummary}</p>
@@ -340,7 +322,7 @@ export default function OnboardingPage() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-[#2b2b2b] bg-[#121212] p-5 text-sm text-[#8b929f]">Pick a business type to preview the starter workspace.</div>
+                <div className="rounded-2xl border border-dashed border-[#2b2b2b] bg-[#121212] p-5 text-sm text-[#8b929f]">Pick a business type to preview the workspace defaults.</div>
               )}
             </div>
           </section>
@@ -501,10 +483,6 @@ export default function OnboardingPage() {
                 <div className="rounded-3xl border border-[#272727] bg-[#131313] p-5 sm:p-6">
                   <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Recommended defaults</p>
                   <div className="mt-3 space-y-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[#9ca3af]">Starter services</span>
-                      <span className="font-medium text-white">{selectedTypeMeta.starterCount}</span>
-                    </div>
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-[#9ca3af]">Default team size</span>
                       <span className="font-medium text-white">{staffCount || selectedTypeMeta.defaultStaffCount}</span>
