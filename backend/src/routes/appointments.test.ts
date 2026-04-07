@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
+import { canDeleteAppointmentWithInvoiceStatuses } from "./appointments.js";
 
 describe("appointments route logic", () => {
   const appointmentStatusSchema = z.enum(["scheduled", "confirmed", "in_progress", "completed", "cancelled", "no-show"]);
@@ -108,5 +109,15 @@ describe("appointments route logic", () => {
       method: "wire",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("allows deleting appointments linked only to void invoices", () => {
+    expect(canDeleteAppointmentWithInvoiceStatuses(["void"])).toBe(true);
+    expect(canDeleteAppointmentWithInvoiceStatuses(["void", "void", null])).toBe(true);
+  });
+
+  it("blocks deleting appointments linked to active invoices", () => {
+    expect(canDeleteAppointmentWithInvoiceStatuses(["sent"])).toBe(false);
+    expect(canDeleteAppointmentWithInvoiceStatuses(["void", "paid"])).toBe(false);
   });
 });

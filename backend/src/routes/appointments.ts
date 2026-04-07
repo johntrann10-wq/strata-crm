@@ -27,6 +27,12 @@ export const appointmentsRouter = Router({ mergeParams: true });
 
 const CALENDAR_BLOCK_PREFIX = "[[calendar-block:";
 
+export function canDeleteAppointmentWithInvoiceStatuses(
+  statuses: Array<string | null | undefined>
+): boolean {
+  return statuses.every((status) => status == null || status === "void");
+}
+
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
   return req.businessId;
@@ -2630,19 +2636,17 @@ async function deleteAppointmentRecord(req: Request, res: Response) {
 
   const isInternalAppointment = isCalendarBlockInternalNotes(existing.internalNotes) || !existing.clientId;
 
-  const [linkedInvoice] = await db
-    .select({ id: invoices.id })
+  const linkedInvoices = await db
+    .select({ id: invoices.id, status: invoices.status })
     .from(invoices)
     .where(
       and(
         eq(invoices.businessId, bid),
-        eq(invoices.appointmentId, existing.id),
-        sql`${invoices.status} != 'void'`
+        eq(invoices.appointmentId, existing.id)
       )
-    )
-    .limit(1);
-  if (linkedInvoice) {
-    throw new BadRequestError("This appointment already has an invoice and cannot be deleted.");
+    );
+  if (!canDeleteAppointmentWithInvoiceStatuses(linkedInvoices.map((invoice) => invoice.status))) {
+    throw new BadRequestError("This appointment already has an active invoice and cannot be deleted.");
   }
 
   const [linkedQuote] = await db
@@ -2655,6 +2659,16 @@ async function deleteAppointmentRecord(req: Request, res: Response) {
   }
 
   await db.transaction(async (tx) => {
+    await tx
+      .update(invoices)
+      .set({ appointmentId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(invoices.businessId, bid),
+          eq(invoices.appointmentId, existing.id),
+          eq(invoices.status, "void")
+        )
+      );
     await tx.delete(appointmentServices).where(eq(appointmentServices.appointmentId, existing.id));
     await tx.delete(appointments).where(eq(appointments.id, existing.id));
   });
