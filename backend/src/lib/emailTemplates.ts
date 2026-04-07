@@ -91,7 +91,7 @@ export const appointmentConfirmation: BuiltinEmailTemplate = {
         { label: "Service details", value: "{{serviceSummary}}" },
       ]) +
       `<div style="margin-top:14px;">${renderInfoCard("Payment status", "{{paymentStatus}}")}</div>` +
-      `<div style="margin-top:14px;">${renderInfoCard("Customer hub", "View all active estimates, invoices, appointments, and vehicles from one place:<br>{{portalUrl}}")}</div>` +
+      `<div style="margin-top:14px;">${renderInfoCard("Customer hub", "You can open your customer hub any time from your appointment page to review active estimates, invoices, appointments, and vehicles in one place.")}</div>` +
       `<div style="margin-top:14px;">${renderInfoCard(
         "Need to change anything?",
         "If you need to reschedule or update anything before the appointment, contact us directly.<br>{{businessPhone}}<br>{{businessEmail}}<br>{{businessAddress}}"
@@ -114,7 +114,7 @@ Address: {{address}}
 Service details: {{serviceSummary}}
 Payment status: {{paymentStatus}}
 
-Customer hub: {{portalUrl}}
+Customer hub stays available from your appointment page.
 
 {{confirmationActionLabel}}: {{confirmationUrl}}
 
