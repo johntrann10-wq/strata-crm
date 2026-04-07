@@ -1,3 +1,5 @@
+import { isCalendarBlockAppointment } from "@/lib/calendarBlocks";
+
 export type CalendarJobLike = {
   id?: string;
   startTime: string;
@@ -8,6 +10,7 @@ export type CalendarJobLike = {
   vehicleOnSite?: boolean | null;
   jobPhase?: string | null;
   status?: string | null;
+  internalNotes?: string | null;
 };
 
 export type CalendarAgendaItem<T extends CalendarJobLike> = {
@@ -87,20 +90,34 @@ export function isVisibleCalendarAppointment(appointment: CalendarJobLike): bool
   return (
     appointment.status !== "cancelled" &&
     appointment.status !== "no-show" &&
-    appointment.status !== "completed"
+    (appointment.status !== "completed" || isCalendarBlockAppointment(appointment))
   );
 }
 
 export function getActiveCalendarAppointments<T extends CalendarJobLike>(appointments: T[]): T[] {
+  return appointments.filter(
+    (appointment) =>
+      appointment.status !== "cancelled" &&
+      appointment.status !== "no-show" &&
+      appointment.status !== "completed"
+  );
+}
+
+export function getVisibleCalendarAppointments<T extends CalendarJobLike>(appointments: T[]): T[] {
   return appointments.filter((appointment) => isVisibleCalendarAppointment(appointment));
 }
 
 export function getCalendarDaySnapshot<T extends CalendarJobLike & { id: string }>(appointments: T[], date: Date) {
+  const visibleAppointments = getVisibleCalendarAppointments(appointments);
   const activeAppointments = getActiveCalendarAppointments(appointments);
-  const dayAppts = activeAppointments.filter((appointment) => hasLaborOnDay(appointment, date));
-  const daySpans = activeAppointments.filter((appointment) => isMultiDayJob(appointment) && hasPresenceOnDay(appointment, date));
+  const dayAppts = visibleAppointments.filter((appointment) => hasLaborOnDay(appointment, date));
+  const daySpans = visibleAppointments.filter((appointment) => isMultiDayJob(appointment) && hasPresenceOnDay(appointment, date));
   const bookedIds = new Set(dayAppts.map((appointment) => appointment.id));
   const onSiteOnlyJobs = daySpans.filter((appointment) => !bookedIds.has(appointment.id));
+  const activeDayAppts = activeAppointments.filter((appointment) => hasLaborOnDay(appointment, date));
+  const activeDaySpans = activeAppointments.filter((appointment) => isMultiDayJob(appointment) && hasPresenceOnDay(appointment, date));
+  const activeBookedIds = new Set(activeDayAppts.map((appointment) => appointment.id));
+  const activeOnSiteOnlyJobs = activeDaySpans.filter((appointment) => !activeBookedIds.has(appointment.id));
   const agendaItems: CalendarAgendaItem<T>[] = [
     ...dayAppts.map((appointment) => ({ appointment, kind: "booked" as const })),
     ...onSiteOnlyJobs.map((appointment) => ({ appointment, kind: "onsite" as const })),
@@ -112,11 +129,12 @@ export function getCalendarDaySnapshot<T extends CalendarJobLike & { id: string 
 
   return {
     activeAppointments,
+    visibleAppointments,
     dayAppts,
     daySpans,
     onSiteOnlyJobs,
     agendaItems,
-    activeItemCount: dayAppts.length + onSiteOnlyJobs.length,
+    activeItemCount: activeDayAppts.length + activeOnSiteOnlyJobs.length,
   };
 }
 

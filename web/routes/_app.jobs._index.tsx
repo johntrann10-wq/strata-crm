@@ -79,7 +79,7 @@ function formatDate(date: string | null | undefined): string {
 function matchesTab(job: JobListRecord, tab: JobStatusTab): boolean {
   if (tab === "all") return true;
   if (tab === "scheduled") return ["scheduled", "confirmed"].includes(job.status);
-  if (tab === "completed") return job.status === "completed" && !job.hasInvoice;
+  if (tab === "completed") return job.status === "completed" && !job.hasInvoice && !!job.client?.id;
   if (tab === "cancelled") return ["cancelled", "no-show"].includes(job.status);
   return job.status === tab;
 }
@@ -146,7 +146,7 @@ export default function JobsIndexPage() {
   const stats = useMemo(() => {
     const scheduled = records.filter((job) => ["scheduled", "confirmed"].includes(job.status)).length;
     const inProgress = records.filter((job) => job.status === "in_progress").length;
-    const completed = records.filter((job) => job.status === "completed" && !job.hasInvoice).length;
+    const completed = records.filter((job) => job.status === "completed" && !job.hasInvoice && !!job.client?.id).length;
     const myQueue = myStaffRecord
       ? records.filter((job) => job.assignedStaff?.id === myStaffRecord.id && ["scheduled", "confirmed", "in_progress"].includes(job.status)).length
       : 0;

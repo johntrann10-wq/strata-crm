@@ -435,7 +435,7 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-  const [todayRevenueRows, revenueMonthRows, openTotals, expenseMonthRows, expenseTodayRows, expenseCountRows] = await Promise.all([
+  const [todayRevenueRows, revenueMonthRows, internalTodayRevenueRows, internalMonthRevenueRows, openTotals, expenseMonthRows, expenseTodayRows, expenseCountRows] = await Promise.all([
     db
       .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
       .from(invoices)
@@ -444,6 +444,30 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
       .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
       .from(invoices)
       .where(and(eq(invoices.businessId, bid), eq(invoices.status, "paid"), gte(invoices.paidAt ?? invoices.updatedAt, startOfMonth), lte(invoices.paidAt ?? invoices.updatedAt, endOfMonth))),
+    db
+      .select({ total: sql<string>`coalesce(sum(${appointments.totalPrice}), 0)` })
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.businessId, bid),
+          sql`${appointments.clientId} is null`,
+          eq(appointments.depositPaid, true),
+          gte(appointments.updatedAt, startOfToday),
+          lte(appointments.updatedAt, endOfToday)
+        )
+      ),
+    db
+      .select({ total: sql<string>`coalesce(sum(${appointments.totalPrice}), 0)` })
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.businessId, bid),
+          sql`${appointments.clientId} is null`,
+          eq(appointments.depositPaid, true),
+          gte(appointments.updatedAt, startOfMonth),
+          lte(appointments.updatedAt, endOfMonth)
+        )
+      ),
     db
       .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
       .from(invoices)
@@ -465,11 +489,12 @@ actionsRouter.post("/getFinanceMetrics", requireAuth, requireTenant, requirePerm
   const openPaid = await getOpenInvoicePaidTotal(bid);
   const openTotal = Number(openTotals[0]?.total ?? 0);
   const outstandingBalance = Math.max(0, openTotal - openPaid);
-  const revenueThisMonth = Number(revenueMonthRows[0]?.total ?? 0);
+  const todayRevenue = Number(todayRevenueRows[0]?.total ?? 0) + Number(internalTodayRevenueRows[0]?.total ?? 0);
+  const revenueThisMonth = Number(revenueMonthRows[0]?.total ?? 0) + Number(internalMonthRevenueRows[0]?.total ?? 0);
   const expensesThisMonth = Number(expenseMonthRows[0]?.total ?? 0);
 
   res.json({
-    todayRevenue: Number(todayRevenueRows[0]?.total ?? 0),
+    todayRevenue,
     revenueThisMonth,
     outstandingBalance,
     expensesToday: Number(expenseTodayRows[0]?.total ?? 0),
