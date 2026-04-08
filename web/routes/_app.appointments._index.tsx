@@ -643,8 +643,8 @@ export default function AppointmentsPage() {
             </>
           ) : null}
 
-          <div className="grid gap-4 px-3 sm:px-0 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
-            <section className="space-y-4">
+          <div className="mx-auto grid w-full max-w-[calc(100vw-1rem)] gap-4 xl:mx-0 xl:max-w-none xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
+            <section className="min-w-0 space-y-4">
               <OperationalListSection
                 title="Today queue"
                 eyebrow="What needs attention now"
@@ -666,7 +666,7 @@ export default function AppointmentsPage() {
               />
             </section>
 
-            <section className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+            <section className="min-w-0 space-y-4 xl:sticky xl:top-24 xl:self-start">
               <AppointmentInspectorPanel
                 appointment={selectedAppointment}
                 emptyDescription="Pick any row in the weekly board to inspect the customer, vehicle, timing, money, and current stage."
