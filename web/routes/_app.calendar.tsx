@@ -874,14 +874,16 @@ export default function CalendarPage() {
             </div>
           ) : null}
 
-          <div
-            className={cn(
-              "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
-              isMobileLayout ? "flex-1 min-h-[15rem] p-3" : "flex-1"
-            )}
-          >
-            {dayInspectorPanel}
-          </div>
+          {view === "month" ? (
+            <div
+              className={cn(
+                "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
+                isMobileLayout ? "flex-1 min-h-[15rem] p-3" : "flex-1"
+              )}
+            >
+              {dayInspectorPanel}
+            </div>
+          ) : null}
         </div>
       </div>
 

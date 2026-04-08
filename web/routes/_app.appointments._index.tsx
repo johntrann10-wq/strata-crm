@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
-  MapPin,
   Plus,
   Search,
 } from "lucide-react";
@@ -101,17 +100,6 @@ type DaySnapshot = {
   pickups: AppointmentRecord[];
   carryOvers: AppointmentRecord[];
   highlights: AppointmentRecord[];
-};
-
-type DaySignal = {
-  label: string;
-  value: number;
-};
-
-type SummaryMetric = {
-  label: string;
-  value: number;
-  tone: "slate" | "amber" | "sky" | "violet" | "zinc" | "emerald";
 };
 
 const FILTER_OPTIONS: Array<{ value: ScheduleFilter; label: string }> = [
@@ -255,25 +243,6 @@ function buildDaySnapshot(appointments: AppointmentRecord[], date: Date): DaySna
   return { date, jobs, dropOffs, active, waiting, ready, pickups, carryOvers, highlights };
 }
 
-function getDaySignals(snapshot: DaySnapshot): DaySignal[] {
-  return [
-    { label: "Drop-offs", value: snapshot.dropOffs.length },
-    { label: "In shop", value: snapshot.carryOvers.length + snapshot.active.length + snapshot.waiting.length + snapshot.ready.length },
-    { label: "Pickups", value: snapshot.pickups.length },
-  ].filter((signal) => signal.value > 0);
-}
-
-function buildSummaryMetrics(shopStatus: ShopStatusSnapshot): SummaryMetric[] {
-  return [
-    { label: "In shop", value: shopStatus.inShopNow.length, tone: "slate" },
-    { label: "Drop-offs", value: shopStatus.dropOffsToday.length, tone: "amber" },
-    { label: "Pickups", value: shopStatus.pickupsToday.length, tone: "sky" },
-    { label: "Active", value: shopStatus.activeWork.length, tone: "violet" },
-    { label: "Waiting", value: shopStatus.waitingJobs.length, tone: "zinc" },
-    { label: "Ready", value: shopStatus.readyForPickup.length, tone: "emerald" },
-  ];
-}
-
 function MobileFilterSelect({
   value,
   onChange,
@@ -402,17 +371,8 @@ export default function AppointmentsPage() {
 
   const weekSnapshots = useMemo(() => weekDays.map((date) => buildDaySnapshot(filteredRecords, date)), [filteredRecords, weekDays]);
   const shopStatus = useMemo(() => buildShopStatus(records, today), [records, today]);
-  const summaryMetrics = useMemo(() => buildSummaryMetrics(shopStatus), [shopStatus]);
   const todaySnapshot = useMemo(() => buildDaySnapshot(filteredRecords, today), [filteredRecords, today]);
-  const upcomingNext = useMemo(
-    () =>
-      sortByOperationalTime(
-        filteredRecords.filter((appointment) => new Date(appointment.startTime).getTime() >= today.getTime() && !isInShopOnDate(appointment, today))
-      ).slice(0, 6),
-    [filteredRecords, today]
-  );
   const inShopThisWeek = useMemo(() => sortByOperationalTime(filteredRecords.filter((appointment) => isInShopOnDate(appointment, today))), [filteredRecords, today]);
-  const multiDayThisWeek = useMemo(() => sortByOperationalTime(filteredRecords.filter((appointment) => isMultiDayJob(appointment))), [filteredRecords]);
   const pickupFocus = useMemo(
     () => sortByOperationalTime(filteredRecords.filter((appointment) => isReadyForPickupJob(appointment) || isPickupDay(appointment, today))),
     [filteredRecords, today]
@@ -438,12 +398,11 @@ export default function AppointmentsPage() {
     const nextSelection =
       todayAttention[0]?.id ??
       inShopThisWeek[0]?.id ??
-      multiDayThisWeek[0]?.id ??
-      upcomingNext[0]?.id ??
+      pickupFocus[0]?.id ??
       filteredRecords[0]?.id ??
       null;
     setSelectedAppointmentId(nextSelection);
-  }, [filteredRecords, inShopThisWeek, multiDayThisWeek, selectedAppointment, todayAttention, upcomingNext]);
+  }, [filteredRecords, inShopThisWeek, pickupFocus, selectedAppointment, todayAttention]);
 
   const isInitialLoad = fetching && appointmentsData === undefined;
   const weekLabel = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d")}`;
@@ -570,12 +529,6 @@ export default function AppointmentsPage() {
             </Select>
           </div>
         </div>
-
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
-          {summaryMetrics.map((metric) => (
-            <SummaryPill key={metric.label} label={metric.label} value={metric.value} tone={metric.tone} />
-          ))}
-        </div>
       </section>
 
       {error && !isInitialLoad ? (
@@ -689,7 +642,7 @@ export default function AppointmentsPage() {
             </>
           ) : null}
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.95fr)]">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
             <section className="space-y-4">
               <OperationalListSection
                 title="Today queue"
@@ -701,28 +654,10 @@ export default function AppointmentsPage() {
                 onSelectAppointment={setSelectedAppointmentId}
               />
               <OperationalListSection
-                title="Coming up next"
-                eyebrow="Next scheduled work"
-                items={upcomingNext}
-                emptyLabel="Nothing else is lined up in this view."
-                referenceDate={today}
-                selectedAppointmentId={selectedAppointmentId}
-                onSelectAppointment={setSelectedAppointmentId}
-              />
-              <OperationalListSection
                 title="In shop"
-                eyebrow="Vehicles occupying space"
+                eyebrow="Vehicles occupying shop space"
                 items={inShopThisWeek}
                 emptyLabel="No vehicles are occupying shop space right now."
-                referenceDate={today}
-                selectedAppointmentId={selectedAppointmentId}
-                onSelectAppointment={setSelectedAppointmentId}
-              />
-              <OperationalListSection
-                title="Multi-day jobs"
-                eyebrow="Work spanning the week"
-                items={multiDayThisWeek}
-                emptyLabel="No multi-day jobs are spanning this week."
                 multiDay
                 referenceDate={today}
                 selectedAppointmentId={selectedAppointmentId}
@@ -755,30 +690,6 @@ export default function AppointmentsPage() {
 
 export { RouteErrorBoundary as ErrorBoundary };
 
-function SummaryPill({ label, value, tone }: SummaryMetric) {
-  const toneClass =
-    tone === "amber"
-      ? "bg-amber-50 text-amber-700 border-amber-200/70"
-      : tone === "sky"
-        ? "bg-sky-50 text-sky-700 border-sky-200/70"
-        : tone === "violet"
-          ? "bg-violet-50 text-violet-700 border-violet-200/70"
-          : tone === "emerald"
-            ? "bg-emerald-50 text-emerald-700 border-emerald-200/70"
-            : tone === "zinc"
-              ? "bg-zinc-100 text-zinc-700 border-zinc-200/70"
-              : "bg-slate-100 text-slate-700 border-slate-200/70";
-
-  return (
-    <div className="rounded-xl border border-border/70 bg-white/90 px-3 py-2.5 shadow-[0_8px_18px_rgba(15,23,42,0.03)]">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-        <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold", toneClass)}>{value}</span>
-      </div>
-    </div>
-  );
-}
-
 function DaySnapshotCard({
   snapshot,
   selectedAppointmentId,
@@ -788,12 +699,10 @@ function DaySnapshotCard({
   selectedAppointmentId: string | null;
   onSelectAppointment: (id: string) => void;
 }) {
-  const daySignals = getDaySignals(snapshot);
-
   return (
     <div
       className={cn(
-        "w-[252px] shrink-0 rounded-[1.15rem] border border-border/70 bg-white/92 p-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)] xl:w-auto",
+        "w-[240px] shrink-0 rounded-[1.05rem] border border-border/70 bg-white/92 p-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)] xl:w-auto",
         isToday(snapshot.date) && "border-primary/20 bg-primary/[0.035]"
       )}
     >
@@ -810,14 +719,6 @@ function DaySnapshotCard({
           {snapshot.jobs.length} jobs
         </span>
       </div>
-
-      {daySignals.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {daySignals.map((signal) => (
-            <CompactSignal key={signal.label} label={signal.label} value={signal.value} />
-          ))}
-        </div>
-      ) : null}
 
       <div className="mt-3 space-y-2">
         {snapshot.highlights.length > 0 ? (
@@ -850,15 +751,6 @@ function DaySnapshotCard({
         )}
       </div>
     </div>
-  );
-}
-
-function CompactSignal({ label, value }: { label: string; value: number }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border/65 bg-muted/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-      <span className="text-foreground">{value}</span>
-      {label}
-    </span>
   );
 }
 
@@ -899,6 +791,9 @@ function OperationalListSection({
               const vehicleLabel = getVehicleLabel(appointment);
               const clientName = getClientName(appointment);
               const moneyLabel = getAppointmentMoneyLabel(appointment);
+              const timelineLabel = multiDay ? getOperationalTimelineLabel(appointment) : format(new Date(appointment.startTime), "EEE h:mm a");
+              const metaLine = [clientName || "Internal", vehicleLabel || "No vehicle"].join(" · ");
+              const detailLine = [timelineLabel, getTechName(appointment)].join(" · ");
 
               return (
                 <button
@@ -915,12 +810,8 @@ function OperationalListSection({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[13px] font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {clientName || "Internal"}
-                        </p>
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {vehicleLabel || "No vehicle"}
-                        </p>
+                        <p className="truncate text-[11px] text-muted-foreground">{metaLine}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">{detailLine}</p>
                       </div>
                       <div className="flex shrink-0 items-start gap-2">
                         {moneyLabel ? <span className="text-[11px] font-semibold text-foreground">{moneyLabel}</span> : null}
@@ -930,19 +821,9 @@ function OperationalListSection({
                       </div>
                     </div>
 
-                    <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-                      <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
-                        <Clock3 className="h-3 w-3" />
-                        {multiDay ? getOperationalTimelineLabel(appointment) : format(new Date(appointment.startTime), "EEE h:mm a")}
-                      </span>
-                      <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
-                        <MapPin className="h-3 w-3" />
-                        {appointment.location?.name ?? "No location"}
-                      </span>
-                      <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
-                        {getTechName(appointment)}
-                      </span>
-                    </div>
+                    {appointment.location?.name ? (
+                      <p className="mt-1 truncate text-[11px] text-muted-foreground">{appointment.location.name}</p>
+                    ) : null}
                   </div>
                 </button>
               );
