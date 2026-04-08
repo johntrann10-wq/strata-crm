@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AlertTriangle, Ban, CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
@@ -141,32 +141,6 @@ function DetailStat({ label, value }: { label: string; value: string | number })
   );
 }
 
-function CompactToolbarChip({
-  active,
-  children,
-  onClick,
-}: {
-  active?: boolean;
-  children: ReactNode;
-  onClick?: () => void;
-}) {
-  const Comp = onClick ? "button" : "div";
-  return (
-    <Comp
-      type={onClick ? "button" : undefined}
-      onClick={onClick}
-      className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-        active
-          ? "border-foreground bg-foreground text-background shadow-[0_8px_20px_rgba(15,23,42,0.14)]"
-          : "border-border/70 bg-background/85 text-muted-foreground hover:border-border hover:text-foreground"
-      )}
-    >
-      {children}
-    </Comp>
-  );
-}
-
 function getCalendarAppointmentLabel(appointment: ApptRecord): string {
   if (isCalendarBlockAppointment(appointment)) return getCalendarBlockLabel(appointment);
   if (appointment.title?.trim()) return appointment.title.trim();
@@ -230,8 +204,6 @@ export default function CalendarPage() {
   const [blockNotes, setBlockNotes] = useState("");
   const [selectedBlock, setSelectedBlock] = useState<ApptRecord | null>(null);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
-  const [showMobileDayInspector, setShowMobileDayInspector] = useState(false);
-  const [showMobileAppointmentInspector, setShowMobileAppointmentInspector] = useState(false);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const layoutInitializedRef = useRef(false);
 
@@ -684,21 +656,6 @@ export default function CalendarPage() {
   );
 
   useEffect(() => {
-    if (!isMobileLayout) {
-      setShowMobileDayInspector(false);
-      setShowMobileAppointmentInspector(false);
-    }
-  }, [isMobileLayout]);
-
-  useEffect(() => {
-    if (!selectedAppointment) {
-      setShowMobileAppointmentInspector(false);
-    }
-  }, [selectedAppointment]);
-
-  const mainPaneHeightClass = view === "month" ? "min-h-[26rem] xl:min-h-0" : "min-h-[34rem] xl:min-h-0";
-
-  useEffect(() => {
     if (selectedAppointment && selectableDayAgendaItems.some(({ appointment }) => appointment.id === selectedAppointment.id)) return;
     setSelectedAppointmentId(selectableDayAgendaItems[0]?.appointment.id ?? null);
   }, [selectableDayAgendaItems, selectedAppointment]);
@@ -712,7 +669,7 @@ export default function CalendarPage() {
   }, [businessId, runMonthFinanceMetrics, selectedMonthRange]);
 
   const monthOverviewPanel = (
-    <div className="surface-panel flex min-h-0 flex-col rounded-[1.35rem] p-3">
+    <div className="flex min-h-0 flex-col">
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Month</p>
         <h2 className="mt-1 text-base font-semibold text-foreground">
@@ -738,7 +695,7 @@ export default function CalendarPage() {
   );
 
   const dayInspectorPanel = (
-    <div className="surface-panel flex min-h-0 flex-col overflow-hidden rounded-[1.35rem] p-3">
+    <div className="flex min-h-0 flex-col overflow-hidden">
       <div className="space-y-1">
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           {view === "month" ? "Day inspector" : "Day overview"}
@@ -815,82 +772,88 @@ export default function CalendarPage() {
   );
 
   return (
-    <div className="page-content flex h-[calc(100dvh-4rem)] min-h-0 max-w-none flex-col overflow-hidden !px-2.5 !py-2 sm:h-[calc(100dvh-4.75rem)] sm:!px-4 sm:!py-3 lg:h-[calc(100dvh-5.5rem)] lg:!px-6">
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-        <div className="surface-panel sticky top-0 z-20 overflow-hidden rounded-[1.4rem]">
-          <div className="border-b border-white/60 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.08),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-3 py-3 sm:px-4">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      <CalendarDays className="h-3.5 w-3.5" />
-                      Calendar
+    <div className="page-content flex h-full flex-col">
+      <div className="page-section space-y-4">
+        <div className="surface-panel overflow-hidden sm:rounded-[2rem]">
+          <div className="border-b border-white/60 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.1),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] px-4 py-4 sm:px-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    Scheduling
+                  </span>
+                  {activeLocationName ? (
+                    <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {activeLocationName}
                     </span>
-                    {activeLocationName ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
-                        <MapPin className="h-3.5 w-3.5" />
-                        {activeLocationName}
-                      </span>
-                    ) : null}
-                  </div>
-                  <h1 className="mt-2 truncate text-xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-2xl">
+                  ) : null}
+                </div>
+
+                <div>
+                  <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.6rem]">
                     {getHeaderTitle(currentDate, view)}
                   </h1>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {view === "month" ? "Month for density and date navigation." : "Day for timed work and in-shop awareness."}
+                  </p>
                 </div>
-                <div className="hidden items-center gap-2 md:flex">
-                  <Button size="sm" className="rounded-xl" onClick={handleOpenBlockDialog}>
-                    <Ban className="mr-2 h-4 w-4" />
-                    Block
-                  </Button>
-                  <Button size="sm" className="rounded-xl shadow-[0_12px_28px_rgba(249,115,22,0.2)]" onClick={handleNewAppointment}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    New appointment
-                  </Button>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <div className="inline-flex w-full items-center justify-between rounded-full border border-white/70 bg-white/72 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_10px_24px_rgba(15,23,42,0.05)] sm:w-auto sm:justify-start">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={handlePrev} aria-label="Previous">
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant={isToday ? "default" : "secondary"}
+                      size="sm"
+                      className="rounded-full px-4"
+                      onClick={handleToday}
+                    >
+                      Today
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={handleNext} aria-label="Next">
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="inline-flex w-full items-center overflow-x-auto rounded-full border border-white/70 bg-white/72 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_10px_24px_rgba(15,23,42,0.05)] sm:w-auto">
+                    {availableViews.map((calendarView) => (
+                      <button
+                        key={calendarView}
+                        type="button"
+                        onClick={() => setView(calendarView)}
+                        className={cn(
+                          "shrink-0 rounded-full px-4 py-2 text-sm font-medium capitalize transition-colors",
+                          view === calendarView
+                            ? "bg-foreground text-background shadow-[0_8px_20px_rgba(15,23,42,0.18)]"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        {calendarView === "month" ? "Month" : "Day"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <CompactToolbarChip onClick={handlePrev}>
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                  Prev
-                </CompactToolbarChip>
-                <CompactToolbarChip onClick={handleToday} active={isToday}>
-                  Today
-                </CompactToolbarChip>
-                <CompactToolbarChip onClick={handleNext}>
-                  Next
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </CompactToolbarChip>
-                {availableViews.map((calendarView) => (
-                  <CompactToolbarChip
-                    key={calendarView}
-                    active={view === calendarView}
-                    onClick={() => setView(calendarView)}
-                  >
-                    {calendarView === "month" ? "Month" : "Day"}
-                  </CompactToolbarChip>
-                ))}
-                <div className="ml-auto flex items-center gap-2 md:hidden">
-                  <Button size="sm" variant="outline" className="rounded-xl" onClick={handleOpenBlockDialog}>
-                    <Ban className="h-4 w-4" />
-                  </Button>
-                  <Button size="sm" className="rounded-xl" onClick={handleNewAppointment}>
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
+              <div className="flex flex-col gap-2.5 lg:min-w-[220px] lg:items-end">
+                <Button size="lg" className="justify-center rounded-2xl shadow-[0_16px_36px_rgba(249,115,22,0.24)] lg:min-w-[220px]" onClick={handleNewAppointment}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New appointment
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="justify-center rounded-2xl border-border/70 bg-white/82 lg:min-w-[220px]"
+                  onClick={handleOpenBlockDialog}
+                >
+                  <Ban className="mr-2 h-4 w-4" />
+                  Block time
+                </Button>
               </div>
-
-              {isMobileLayout ? (
-                <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
-                  <CompactToolbarChip onClick={() => setShowMobileDayInspector(true)}>
-                    {view === "month" ? "Day details" : "Day summary"}
-                  </CompactToolbarChip>
-                  <CompactToolbarChip onClick={() => setShowMobileAppointmentInspector(true)} active={showMobileAppointmentInspector}>
-                    {selectedAppointment ? "Inspector" : "Select a job"}
-                  </CompactToolbarChip>
-                </div>
-              ) : null}
             </div>
           </div>
         </div>
@@ -925,11 +888,10 @@ export default function CalendarPage() {
           </div>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
           <div
             className={cn(
-              "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-              mainPaneHeightClass,
+              "flex min-h-0 flex-1 flex-col overflow-hidden pb-2",
               (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
             )}
           >
@@ -959,36 +921,48 @@ export default function CalendarPage() {
             ) : null}
           </div>
 
-          {!isMobileLayout ? (
-            <aside className="hidden min-h-0 w-[360px] shrink-0 xl:flex 2xl:w-[390px]">
-              <div className="flex min-h-0 w-full flex-col gap-3 overflow-hidden">
-                {view === "month" ? monthOverviewPanel : null}
-                <div className="min-h-0" style={{ flex: view === "month" ? "0 0 22rem" : "0 0 18rem" }}>
+          <aside
+            className={cn(
+              "space-y-4 xl:sticky xl:top-24 xl:self-start",
+              isMobileLayout && "flex min-w-0 max-w-full flex-col overflow-hidden space-y-3"
+            )}
+          >
+            {view === "month" ? (
+              <>
+                <div
+                  className={cn(
+                    "surface-panel min-w-0 max-w-full rounded-[1.6rem] p-4",
+                    isMobileLayout && "order-2 overflow-hidden xl:order-none"
+                  )}
+                >
+                  {monthOverviewPanel}
+                </div>
+
+                <div
+                  className={cn(
+                    "surface-panel min-w-0 max-w-full rounded-[1.5rem] p-4",
+                    isMobileLayout && "order-1 h-[19rem] min-h-[19rem] max-h-[19rem] overflow-hidden [contain:layout_paint] xl:order-none"
+                  )}
+                >
                   {dayInspectorPanel}
                 </div>
-                <div className="min-h-0 flex-1">{appointmentInspectorPanel}</div>
-              </div>
-            </aside>
-          ) : null}
+
+                {appointmentInspectorPanel}
+              </>
+            ) : null}
+
+            {view === "day" ? (
+              <>
+                <div className="surface-panel rounded-[1.6rem] p-4">
+                  {dayInspectorPanel}
+                </div>
+
+                {appointmentInspectorPanel}
+              </>
+            ) : null}
+          </aside>
         </div>
       </div>
-
-      <Dialog open={showMobileDayInspector} onOpenChange={setShowMobileDayInspector}>
-        <DialogContent className="flex h-[min(88dvh,48rem)] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-[1.5rem] p-0">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-            {view === "month" ? (
-              <div className="mb-3 shrink-0">{monthOverviewPanel}</div>
-            ) : null}
-            <div className="min-h-0 flex-1">{dayInspectorPanel}</div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showMobileAppointmentInspector} onOpenChange={setShowMobileAppointmentInspector}>
-        <DialogContent className="flex h-[min(90dvh,52rem)] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-[1.5rem] p-4">
-          <div className="min-h-0 flex-1">{appointmentInspectorPanel}</div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={showBlockDialog}
