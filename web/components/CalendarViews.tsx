@@ -796,7 +796,9 @@ interface MonthViewProps {
   appointments: ApptRecord[];
   onDayClick: (date: Date) => void;
   onApptClick: (apt: ApptRecord) => void;
+  onDayHover?: (date: Date | null) => void;
   conflictIds?: Set<string>;
+  isMobileLayout?: boolean;
 }
 
 export function MonthView({
@@ -806,7 +808,9 @@ export function MonthView({
   appointments,
   onDayClick,
   onApptClick,
+  onDayHover,
   conflictIds,
+  isMobileLayout = false,
 }: MonthViewProps) {
   const grid = useMemo(() => getMonthGrid(currentDate), [currentDate]);
   const today = useMemo(() => new Date(), []);
@@ -877,6 +881,14 @@ export function MonthView({
                     isSelectedAppointmentDay && "bg-primary/[0.06]"
                   )}
                   onClick={() => onDayClick(day)}
+                  onMouseEnter={() => {
+                    if (isMobileLayout) return;
+                    onDayHover?.(day);
+                  }}
+                  onMouseLeave={() => {
+                    if (isMobileLayout) return;
+                    onDayHover?.(null);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
