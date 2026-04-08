@@ -287,3 +287,55 @@ export function getMultiDayDayTone(kind: MultiDayDayKind | null): string {
       return "bg-slate-500";
   }
 }
+
+function formatShortDateTime(value: Date): string {
+  return value.toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatShortDate(value: Date): string {
+  return value.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export function getOperationalDayLabel(appointment: CalendarJobLike, date: Date): string {
+  const multiDayKind = getMultiDayDayKind(appointment, date);
+  if (multiDayKind) return getMultiDayDayLabel(multiDayKind);
+
+  switch (appointment.status) {
+    case "in_progress":
+      return "Active work";
+    case "completed":
+      return "Completed";
+    case "confirmed":
+      return "Confirmed";
+    case "cancelled":
+      return "Cancelled";
+    case "no-show":
+      return "No show";
+    default:
+      return "Scheduled";
+  }
+}
+
+export function getOperationalTimelineLabel(appointment: CalendarJobLike): string {
+  if (isMultiDayJob(appointment) || appointment.vehicleOnSite) {
+    return `${formatShortDateTime(getJobSpanStart(appointment))} - ${formatShortDateTime(getJobSpanEnd(appointment))}`;
+  }
+
+  const workStart = getWorkStart(appointment);
+  const workEnd = getWorkEnd(appointment);
+  if (isSameCalendarDay(workStart, workEnd)) {
+    return `${formatShortDate(workStart)} · ${workStart.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} - ${workEnd.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+  }
+
+  return `${formatShortDateTime(workStart)} - ${formatShortDateTime(workEnd)}`;
+}

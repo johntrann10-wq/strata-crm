@@ -578,6 +578,14 @@ export default function NewAppointmentPage() {
     }
   }, [isMultiDayJob, selectedDate, startTime]);
 
+  useEffect(() => {
+    if (!isMultiDayJob || !selectedDate || !jobStartDate || !jobStartTime || !startTime) return;
+    const activeWorkDate = format(selectedDate, "yyyy-MM-dd");
+    if (jobStartDate !== activeWorkDate) return;
+    if (jobStartTime <= startTime) return;
+    setJobStartTime(startTime);
+  }, [isMultiDayJob, jobStartDate, jobStartTime, selectedDate, startTime]);
+
   // Set selected client from prefilled data when arriving via URL param
   useEffect(() => {
     if (!ignoreClientPrefill && prefilledClientData && selectedClientId === null) {

@@ -21,7 +21,18 @@ import {
   getViewRange,
   navigateDate,
 } from "../components/CalendarViews";
-import { dayEnd, dayStart, getCalendarDaySnapshot, getJobPhaseLabel, getJobSpanEnd, getJobSpanStart, getActiveCalendarAppointments, getOverviewCalendarAppointments } from "@/lib/calendarJobSpans";
+import {
+  dayEnd,
+  dayStart,
+  getCalendarDaySnapshot,
+  getJobPhaseLabel,
+  getJobSpanEnd,
+  getJobSpanStart,
+  getActiveCalendarAppointments,
+  getOperationalDayLabel,
+  getOperationalTimelineLabel,
+  getOverviewCalendarAppointments,
+} from "@/lib/calendarJobSpans";
 import { buildCalendarBlockInternalNotes, getCalendarBlockLabel, getCalendarBlockNote, isCalendarBlockAppointment, isFullDayCalendarBlock, parseCalendarBlock, type CalendarBlockMode } from "@/lib/calendarBlocks";
 import { buildQuarterHourOptions, ResponsiveTimeSelect } from "@/components/appointments/SchedulingControls";
 
@@ -773,17 +784,17 @@ export default function CalendarPage() {
                                     )}
                                   >
                                     {kind === "onsite"
-                                      ? getJobPhaseLabel(appointment.jobPhase)
+                                      ? getOperationalDayLabel(appointment, currentDate)
                                       : isCalendarBlockAppointment(appointment)
                                         ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
-                                        : appointment.status.replace("_", " ")}
+                                        : getOperationalDayLabel(appointment, currentDate)}
                                   </span>
                                 </div>
                                 <p className={cn("truncate text-muted-foreground", isMobileLayout ? "text-[11px] leading-4" : "text-xs")}>
                                   {kind === "onsite"
                                     ? appointment.vehicle
-                                      ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} on site`
-                                      : "Vehicle on site"
+                                      ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} · ${getOperationalTimelineLabel(appointment)}`
+                                      : `Vehicle on site · ${getOperationalTimelineLabel(appointment)}`
                                     : isCalendarBlockAppointment(appointment)
                                       ? appointment.assignedStaff
                                         ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
@@ -877,17 +888,17 @@ export default function CalendarPage() {
                               </p>
                               <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                                 {kind === "onsite"
-                                  ? getJobPhaseLabel(appointment.jobPhase)
+                                  ? getOperationalDayLabel(appointment, currentDate)
                                   : isCalendarBlockAppointment(appointment)
                                     ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
-                                    : appointment.status.replace("_", " ")}
+                                    : getOperationalDayLabel(appointment, currentDate)}
                               </span>
                             </div>
                             <p className="truncate text-xs text-muted-foreground">
                               {kind === "onsite"
                                 ? appointment.vehicle
-                                  ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} on site`
-                                  : "Vehicle on site"
+                                  ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} · ${getOperationalTimelineLabel(appointment)}`
+                                  : `Vehicle on site · ${getOperationalTimelineLabel(appointment)}`
                                 : isCalendarBlockAppointment(appointment)
                                   ? appointment.assignedStaff
                                     ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`

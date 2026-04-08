@@ -24,6 +24,8 @@ import type { AuthOutletContext } from "./_app";
 import {
   getJobPhaseLabel,
   getJobPhaseTone,
+  getOperationalDayLabel,
+  getOperationalTimelineLabel,
   getJobSpanEnd,
   getJobSpanStart,
   hasLaborOnDay,
@@ -737,11 +739,7 @@ function DaySnapshotCard({ snapshot }: { snapshot: DaySnapshot }) {
                 </p>
               </div>
               <span className="shrink-0 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {isPickupDay(appointment, snapshot.date)
-                  ? "Pickup"
-                  : isDropOffDay(appointment, snapshot.date)
-                    ? "Drop-off"
-                    : getJobPhaseLabel(appointment.jobPhase)}
+                {getOperationalDayLabel(appointment, snapshot.date)}
               </span>
             </Link>
           ))
@@ -792,8 +790,6 @@ function OperationalListSection({
         ) : (
           <div className="space-y-2">
             {items.slice(0, 8).map((appointment) => {
-              const spanStart = getJobSpanStart(appointment);
-              const spanEnd = getJobSpanEnd(appointment);
               const vehicleLabel = getVehicleLabel(appointment);
               const clientName = getClientName(appointment);
 
@@ -813,16 +809,14 @@ function OperationalListSection({
                         </p>
                       </div>
                       <span className="shrink-0 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        {getJobPhaseLabel(appointment.jobPhase)}
+                        {multiDay ? getOperationalDayLabel(appointment, today) : getJobPhaseLabel(appointment.jobPhase)}
                       </span>
                     </div>
 
                     <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
                       <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
                         <Clock3 className="h-3 w-3" />
-                        {multiDay
-                          ? `${format(spanStart, "EEE h:mm a")} - ${format(spanEnd, "EEE h:mm a")}`
-                          : format(new Date(appointment.startTime), "EEE h:mm a")}
+                        {multiDay ? getOperationalTimelineLabel(appointment) : format(new Date(appointment.startTime), "EEE h:mm a")}
                       </span>
                       <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
                         <MapPin className="h-3 w-3" />
