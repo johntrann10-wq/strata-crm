@@ -851,7 +851,7 @@ export function MonthView({
         ))}
       </div>
 
-      <div className="grid h-[24.5rem] min-h-[24.5rem] min-w-0 grid-rows-6 overflow-hidden [grid-template-rows:repeat(6,minmax(0,1fr))] sm:h-[25rem] sm:min-h-[25rem] md:h-auto md:min-h-0 md:flex-1 md:auto-rows-fr md:[grid-template-rows:repeat(6,minmax(0,1fr))]">
+      <div className="grid h-[23rem] min-h-[23rem] min-w-0 grid-rows-6 overflow-hidden [grid-template-rows:repeat(6,minmax(0,1fr))] sm:h-[24rem] sm:min-h-[24rem] md:h-auto md:min-h-0 md:flex-1 md:auto-rows-fr md:[grid-template-rows:repeat(6,minmax(0,1fr))] xl:min-h-[26rem]">
         {grid.map((week, wi) => (
           <div key={wi} className="grid min-h-0 grid-cols-7 border-b border-border/60 last:border-b-0">
             {week.map((day, di) => {
@@ -883,7 +883,7 @@ export function MonthView({
                   tabIndex={0}
                   aria-label={`Open ${dayLabel}`}
                   className={cn(
-                    "group relative flex h-full min-h-0 touch-manipulation select-none flex-col border-r border-border/60 px-1.5 py-1.5 text-left transition-colors last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-2",
+                    "group relative flex h-full min-h-0 touch-manipulation select-none flex-col border-r border-border/60 px-1 py-1 text-left transition-colors last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-1.5 xl:px-2.5 xl:py-2",
                     "hover:bg-muted/25",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
@@ -937,23 +937,18 @@ export function MonthView({
                         {day.getDate()}
                       </span>
                       <div className="flex min-w-0 flex-col items-end gap-1">
-                        {dayAppts.length > 0 ? (
-                          <span className="hidden sm:inline-flex max-w-full truncate text-[10px] font-semibold leading-none text-foreground/80">
-                            {currencyFormatter.format(dayRevenue)}
-                          </span>
-                        ) : null}
                         {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
                       </div>
                       </div>
 
                       <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                        <div className="pointer-events-none flex flex-wrap gap-1">
+                        <div className="pointer-events-none hidden flex-wrap gap-1 sm:flex">
                           <DaySignalBadge count={startCount} dotClassName="bg-amber-500" />
                           <DaySignalBadge count={onSiteCount} dotClassName="border-sky-500" outlined />
                           <DaySignalBadge count={pickupCount} dotClassName="bg-emerald-500" />
                         </div>
 
-                        <div className="mt-auto space-y-1 pt-2">
+                        <div className="mt-auto space-y-1 pt-1 sm:pt-2">
                           <DayStatusDots appointments={dayAppts} />
                         </div>
                     </div>
@@ -967,12 +962,12 @@ export function MonthView({
 
       {!isMobileLayout && hoverPreview ? (
         <div
-          className="pointer-events-none absolute z-20 w-72 rounded-[1.35rem] border border-border/70 bg-white/97 p-3 shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-sm transition-opacity duration-150"
+          className="pointer-events-none absolute z-20 w-64 rounded-[1.2rem] border border-border/70 bg-white/97 p-3 shadow-[0_20px_48px_rgba(15,23,42,0.14)] backdrop-blur-sm transition-opacity duration-150"
           style={{ left: hoverPreview.left, top: hoverPreview.top }}
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Day preview</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Day</p>
               <h4 className="mt-1 text-sm font-semibold text-foreground">
                 {hoverPreview.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
               </h4>
@@ -992,7 +987,7 @@ export function MonthView({
 
           <div className="mt-3 space-y-2">
             {hoverPreview.appointments.length > 0 ? (
-              hoverPreview.appointments.map((appointment) => (
+              hoverPreview.appointments.slice(0, 2).map((appointment) => (
                 <div key={appointment.id} className="rounded-xl border border-border/60 bg-muted/[0.12] px-3 py-2">
                   <div className="flex items-start justify-between gap-2">
                     <p className="min-w-0 truncate text-sm font-semibold text-foreground">{apptLabel(appointment)}</p>

@@ -158,11 +158,13 @@ export function AppointmentInspectorPanel({
   appointment,
   emptyTitle = "Select a job",
   emptyDescription = "Pick any job to inspect the customer, vehicle, timing, money, and current stage.",
+  compact = false,
   onAppointmentChange,
 }: {
   appointment: AppointmentInspectorRecord | null;
   emptyTitle?: string;
   emptyDescription?: string;
+  compact?: boolean;
   onAppointmentChange?: (() => void | Promise<void>) | undefined;
 }) {
   const [{ fetching: updatingLifecycle }, updateAppointmentStatus] = useAction(api.appointment.updateStatus);
@@ -276,7 +278,7 @@ export function AppointmentInspectorPanel({
   if (!appointment) {
     return (
       <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
-        <CardContent className="space-y-2 p-4">
+        <CardContent className={cn("space-y-2", compact ? "p-3" : "p-4")}>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Inspector</p>
           <p className="text-sm font-medium text-foreground">{emptyTitle}</p>
           <p className="text-sm text-muted-foreground">{emptyDescription}</p>
@@ -578,7 +580,7 @@ export function AppointmentInspectorPanel({
   return (
     <>
       <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
-        <CardContent className="space-y-4 p-4">
+        <CardContent className={cn("space-y-4", compact ? "p-3" : "p-4")}>
         <div className="space-y-1">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Appointment Inspector</p>
@@ -624,7 +626,7 @@ export function AppointmentInspectorPanel({
           <div className="space-y-3 rounded-xl border border-border/60 bg-muted/[0.12] p-3">
             <div className="space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Quick controls</p>
-              <p className="text-xs text-muted-foreground">Move the job forward without leaving the board.</p>
+              {!compact ? <p className="text-xs text-muted-foreground">Move the job forward without leaving the board.</p> : null}
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -768,6 +770,7 @@ export function AppointmentInspectorPanel({
           </div>
         ) : null}
 
+        {!compact ? (
         <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -839,19 +842,34 @@ export function AppointmentInspectorPanel({
             </div>
           )}
         </div>
+        ) : (
+          <div className="rounded-xl border border-border/60 bg-background/70 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Services</p>
+                <p className="text-sm font-semibold text-foreground">{appointmentServices.length} booked</p>
+              </div>
+              <Button asChild size="sm" variant="outline" className="rounded-xl">
+                <Link to={`/appointments/${appointment.id}`}>Manage</Link>
+              </Button>
+            </div>
+          </div>
+        )}
 
-        <div className="flex flex-col gap-2">
+        <div className={cn("gap-2", compact ? "grid grid-cols-1" : "flex flex-col")}>
           <Button asChild className="w-full rounded-xl">
             <Link to={`/appointments/${appointment.id}`}>
               Open full details
-              <ExternalLink className="ml-2 h-4 w-4" />
+              {!compact ? <ExternalLink className="ml-2 h-4 w-4" /> : null}
             </Link>
           </Button>
-          <Button asChild variant="outline" className="w-full rounded-xl">
-            <Link to={`/appointments/${appointment.id}`}>
-              Manage timing and payment
-            </Link>
-          </Button>
+          {!compact ? (
+            <Button asChild variant="outline" className="w-full rounded-xl">
+              <Link to={`/appointments/${appointment.id}`}>
+                Manage timing and payment
+              </Link>
+            </Button>
+          ) : null}
         </div>
         </CardContent>
       </Card>

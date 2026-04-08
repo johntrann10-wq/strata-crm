@@ -758,19 +758,6 @@ export default function CalendarPage() {
     </div>
   );
 
-  const appointmentInspectorPanel = (
-    <AppointmentInspectorPanel
-      appointment={selectedAppointment}
-      emptyTitle="Select an appointment"
-      emptyDescription={
-        view === "month"
-          ? "Choose a job from the month day list or calendar to inspect money, customer, vehicle, timing, and stage."
-          : "Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
-      }
-      onAppointmentChange={() => refetchAppointments()}
-    />
-  );
-
   return (
     <div className="page-content flex h-full min-h-0 flex-col overflow-hidden">
       <div className="page-section flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
@@ -885,7 +872,14 @@ export default function CalendarPage() {
               (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
             )}
           >
-            <div className={cn("overflow-hidden", view === "month" ? "h-[21rem] sm:h-[22rem] xl:h-[23rem]" : "h-[23rem] sm:h-[24rem] xl:h-[25rem]")}>
+            <div
+              className={cn(
+                "overflow-hidden",
+                view === "month"
+                  ? "h-[21rem] sm:h-[22rem] xl:h-[24.5rem]"
+                  : "h-[21.5rem] sm:h-[23rem] xl:h-[25rem]"
+              )}
+            >
               {view === "month" ? (
                 <MonthView
                   currentDate={currentDate}
@@ -913,22 +907,22 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="scrollbar-none -mx-1 flex shrink-0 gap-2 overflow-x-auto px-1 xl:mx-0 xl:grid xl:grid-cols-6 xl:overflow-visible xl:px-0">
             {controlCards.map((card) => (
-              <div key={card.label} className="surface-panel rounded-[1.25rem] p-3">
+              <div key={card.label} className="surface-panel min-w-[9.5rem] rounded-[1.25rem] p-3 xl:min-w-0">
                 <MetricBadge label={card.label} value={card.value} />
               </div>
             ))}
           </div>
 
-          <div className="surface-panel min-h-0 flex-1 overflow-hidden rounded-[1.7rem] p-4">
+          <div className={cn("surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4", isMobileLayout ? "flex-[0_0_17rem]" : "flex-1")}>
             {dayInspectorPanel}
           </div>
         </div>
       </div>
 
       <Dialog open={isAppointmentInspectorOpen} onOpenChange={setIsAppointmentInspectorOpen}>
-        <DialogContent className="flex h-[100dvh] max-w-none flex-col overflow-hidden rounded-none p-0 sm:ml-auto sm:mr-4 sm:mt-6 sm:h-[calc(100dvh-3rem)] sm:max-h-[calc(100dvh-3rem)] sm:w-[30rem] sm:max-w-[30rem] sm:rounded-[1.75rem] lg:w-[34rem] lg:max-w-[34rem]">
+        <DialogContent className="flex h-[92dvh] max-w-none flex-col overflow-hidden rounded-[1.25rem] p-0 sm:ml-auto sm:mr-4 sm:mt-6 sm:h-[calc(100dvh-3rem)] sm:max-h-[calc(100dvh-3rem)] sm:w-[30rem] sm:max-w-[30rem] sm:rounded-[1.75rem] lg:w-[34rem] lg:max-w-[34rem]">
           <div className="border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 py-4">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Appointment inspector</p>
             <h2 className="mt-1 text-lg font-semibold text-foreground">
@@ -936,7 +930,17 @@ export default function CalendarPage() {
             </h2>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            {appointmentInspectorPanel}
+            <AppointmentInspectorPanel
+              appointment={selectedAppointment}
+              emptyTitle="Select an appointment"
+              emptyDescription={
+                view === "month"
+                  ? "Choose a job from the month day list or calendar to inspect money, customer, vehicle, timing, and stage."
+                  : "Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
+              }
+              compact={isMobileLayout}
+              onAppointmentChange={() => refetchAppointments()}
+            />
           </div>
         </DialogContent>
       </Dialog>
