@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   getActiveCalendarAppointments,
@@ -820,20 +820,23 @@ export function MonthView({
   isMobileLayout = false,
 }: MonthViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const hoverPreviewRef = useRef<HTMLDivElement | null>(null);
   const grid = useMemo(() => getMonthGrid(currentDate), [currentDate]);
   const today = useMemo(() => new Date(), []);
   const visibleAppointments = useMemo(() => getVisibleCalendarAppointments(appointments), [appointments]);
   const historicalAppointments = useMemo(() => getHistoricalCalendarAppointments(appointments), [appointments]);
   const [hoverPreview, setHoverPreview] = useState<{
     date: Date;
-    left: number;
-    top: number;
+    anchorLeft: number;
+    anchorRight: number;
+    anchorTop: number;
     starts: number;
     inShop: number;
     pickups: number;
     revenue: number;
     appointments: ApptRecord[];
   } | null>(null);
+  const [hoverPreviewPosition, setHoverPreviewPosition] = useState<{ left: number; top: number } | null>(null);
   const currencyFormatter = useMemo(
     () =>
       new Intl.NumberFormat("en-US", {
@@ -843,6 +846,44 @@ export function MonthView({
       }),
     []
   );
+
+  useEffect(() => {
+    if (!hoverPreview || isMobileLayout) {
+      setHoverPreviewPosition(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const containerRect = containerRef.current?.getBoundingClientRect();
+      const previewRect = hoverPreviewRef.current?.getBoundingClientRect();
+      if (!containerRect || !previewRect) return;
+
+      const gutter = 12;
+      const edgePadding = 8;
+      let left = hoverPreview.anchorRight + gutter;
+      let top = hoverPreview.anchorTop;
+
+      if (left + previewRect.width > containerRect.width - edgePadding) {
+        left = hoverPreview.anchorLeft - previewRect.width - gutter;
+      }
+      if (left < edgePadding) {
+        left = edgePadding;
+      }
+
+      if (top + previewRect.height > containerRect.height - edgePadding) {
+        top = Math.max(edgePadding, containerRect.height - previewRect.height - edgePadding);
+      }
+      if (top < edgePadding) {
+        top = edgePadding;
+      }
+
+      setHoverPreviewPosition({ left, top });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    return () => window.removeEventListener("resize", updatePosition);
+  }, [hoverPreview, isMobileLayout]);
 
   return (
     <div
@@ -906,22 +947,11 @@ export function MonthView({
                     const containerRect = containerRef.current?.getBoundingClientRect();
                     const targetRect = event.currentTarget.getBoundingClientRect();
                     if (!containerRect) return;
-                    const previewWidth = 256;
-                    const previewHeight = 188;
-                    const gutter = 12;
-                    let left = targetRect.right - containerRect.left + gutter;
-                    let top = targetRect.top - containerRect.top;
-                    if (left + previewWidth > containerRect.width - 8) {
-                      left = targetRect.left - containerRect.left - previewWidth - gutter;
-                    }
-                    if (left < 8) left = 8;
-                    if (top + previewHeight > containerRect.height - 8) {
-                      top = Math.max(8, containerRect.height - previewHeight - 8);
-                    }
                     setHoverPreview({
                       date: day,
-                      left,
-                      top,
+                      anchorLeft: targetRect.left - containerRect.left,
+                      anchorRight: targetRect.right - containerRect.left,
+                      anchorTop: targetRect.top - containerRect.top,
                       starts: startCount,
                       inShop: onSiteCount,
                       pickups: pickupCount,
@@ -987,8 +1017,13 @@ export function MonthView({
 
       {!isMobileLayout && hoverPreview ? (
         <div
+          ref={hoverPreviewRef}
           className="pointer-events-none absolute z-20 w-64 rounded-[1.2rem] border border-border/70 bg-white/97 p-3 shadow-[0_20px_48px_rgba(15,23,42,0.14)] backdrop-blur-sm transition-opacity duration-150"
-          style={{ left: hoverPreview.left, top: hoverPreview.top }}
+          style={{
+            left: hoverPreviewPosition?.left ?? -9999,
+            top: hoverPreviewPosition?.top ?? -9999,
+            opacity: hoverPreviewPosition ? 1 : 0,
+          }}
         >
           <div className="flex items-start justify-between gap-3">
             <div>
