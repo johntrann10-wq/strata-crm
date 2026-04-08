@@ -296,6 +296,10 @@ export default function CalendarPage() {
 
   function handleDayClick(date: Date) {
     setCurrentDate(date);
+    const daySnapshot = getCalendarDaySnapshot(appointments, date);
+    const nextAppointment =
+      daySnapshot.agendaItems.find(({ appointment }) => !isCalendarBlockAppointment(appointment))?.appointment ?? null;
+    setSelectedAppointmentId(nextAppointment?.id ?? null);
   }
 
   function handleSlotClick(date: Date) {
@@ -683,6 +687,7 @@ export default function CalendarPage() {
               <MonthView
                 currentDate={currentDate}
                 selectedDate={currentDate}
+                selectedAppointmentId={selectedAppointmentId}
                 appointments={appointments}
                 onDayClick={handleDayClick}
                 onApptClick={handleApptClick}
@@ -695,6 +700,7 @@ export default function CalendarPage() {
                 appointments={appointments}
                 onSlotClick={handleSlotClick}
                 onApptClick={handleApptClick}
+                selectedAppointmentId={selectedAppointmentId}
                 isMobileLayout={isMobileLayout}
                 onReschedule={handleReschedule}
                 conflictIds={activeConflicts}

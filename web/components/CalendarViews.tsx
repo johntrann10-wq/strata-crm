@@ -427,6 +427,7 @@ interface AppointmentBlockProps {
   apt: ApptRecord;
   dayContext?: Date;
   onClick: () => void;
+  isSelected?: boolean;
   draggable?: boolean;
   onDragStart?: (apt: ApptRecord, e: React.DragEvent) => void;
   isConflict?: boolean;
@@ -439,6 +440,7 @@ export function AppointmentBlock({
   apt,
   dayContext,
   onClick,
+  isSelected = false,
   draggable: draggableProp,
   onDragStart,
   isConflict,
@@ -495,6 +497,7 @@ export function AppointmentBlock({
         isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
         isBlock ? "" : style.text,
         isBlock ? "" : style.border,
+        isSelected && "ring-2 ring-primary/45 shadow-md",
         narrow && "px-2 py-1.5",
         hovered && !isDragging && "shadow-md -translate-y-px",
         isDragging ? "cursor-grabbing opacity-50" : "cursor-grab",
@@ -787,6 +790,7 @@ export function ConflictBanner({
 interface MonthViewProps {
   currentDate: Date;
   selectedDate?: Date;
+  selectedAppointmentId?: string | null;
   appointments: ApptRecord[];
   onDayClick: (date: Date) => void;
   onApptClick: (apt: ApptRecord) => void;
@@ -796,6 +800,7 @@ interface MonthViewProps {
 export function MonthView({
   currentDate,
   selectedDate,
+  selectedAppointmentId,
   appointments,
   onDayClick,
   onApptClick,
@@ -842,6 +847,10 @@ export function MonthView({
               const startCount = selectedMonthStartingCount(dayAppts, day);
               const pickupCount = selectedMonthPickupCount(dayAppts, daySpans, day);
               const onSiteCount = daySpans.length;
+              const isSelectedAppointmentDay = Boolean(
+                selectedAppointmentId &&
+                  [...dayAppts, ...daySpans].some((appointment) => appointment.id === selectedAppointmentId)
+              );
               const hasConflict = !!conflictIds && activeVisibleDayAppointments.some((a) => conflictIds.has(a.id));
               const dayLabel = day.toLocaleDateString("en-US", {
                 weekday: "long",
@@ -861,7 +870,8 @@ export function MonthView({
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
                     isToday && "bg-primary/[0.045]",
-                    isSelected && "ring-1 ring-inset ring-primary/30"
+                    isSelected && "ring-1 ring-inset ring-primary/30",
+                    isSelectedAppointmentDay && "bg-primary/[0.06]"
                   )}
                   onClick={() => onDayClick(day)}
                   onKeyDown={(event) => {

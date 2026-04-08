@@ -37,6 +37,7 @@ interface DayViewProps {
   appointments: ApptRecord[];
   onSlotClick: (date: Date) => void;
   onApptClick: (apt: ApptRecord) => void;
+  selectedAppointmentId?: string | null;
   isMobileLayout: boolean;
   onReschedule?: (appointmentId: string, newStart: Date, newEnd: Date | null) => void;
   conflictIds?: Set<string>;
@@ -47,6 +48,7 @@ export function DayView({
   appointments,
   onSlotClick,
   onApptClick,
+  selectedAppointmentId,
   isMobileLayout,
   onReschedule,
   conflictIds,
@@ -230,6 +232,7 @@ export function DayView({
                       isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
                       isBlock ? "" : style.text,
                       isBlock ? "" : style.border,
+                      selectedAppointmentId === appointment.id && !isBlock && "ring-2 ring-primary/40",
                       conflictIds?.has(appointment.id) && "ring-1 ring-rose-300"
                     )}
                     onClick={(event) => {
@@ -402,7 +405,10 @@ export function DayView({
                   key={`${apt.id}-onsite`}
                   type="button"
                   onClick={() => onApptClick(apt)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-background/85 px-3 py-3 text-left"
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-background/85 px-3 py-3 text-left",
+                    selectedAppointmentId === apt.id && "border-primary/35 bg-primary/[0.05] ring-2 ring-primary/30"
+                  )}
                 >
                   <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", getMultiDayDayTone(multiDayKind))} />
                   <div className="min-w-0 flex-1">
@@ -499,6 +505,7 @@ export function DayView({
                   event.stopPropagation();
                   onApptClick(apt);
                 }}
+                isSelected={selectedAppointmentId === apt.id}
                 isConflict={conflictIds?.has(apt.id)}
                 zIndex={10}
               />
@@ -512,6 +519,7 @@ export function DayView({
                   event.stopPropagation();
                   onApptClick(appointment);
                 }}
+                isSelected={selectedAppointmentId === appointment.id}
                 isConflict={conflictIds?.has(appointment.id)}
                 leftCss={leftCss}
                 widthCss={widthCss}
