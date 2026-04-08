@@ -958,6 +958,21 @@ export function MonthView({
                           <DaySignalBadge count={pickupCount} dotClassName="bg-emerald-500" />
                         </div>
 
+                        {!isMobileLayout && dayDensityItems.length > 0 ? (
+                          <div className="mt-1 hidden min-h-0 flex-1 space-y-1 overflow-hidden pt-1 sm:block">
+                            {dayDensityItems.slice(0, 2).map((appointment) => (
+                              <div
+                                key={`${appointment.id}-${day.toISOString()}-label`}
+                                className="truncate rounded-md bg-muted/[0.16] px-1.5 py-0.5 text-[10px] font-medium text-foreground/85"
+                              >
+                                {apptLabel(appointment)}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="min-h-0 flex-1" />
+                        )}
+
                         <div className="mt-auto space-y-1 pt-1 sm:pt-2">
                           <DayStatusDots appointments={dayDensityItems} />
                         </div>

@@ -60,6 +60,10 @@ function formatPanelTime(value: string): string {
   return new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
+function formatPanelShortDate(value: Date): string {
+  return value.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function InlineMetricPill({ label, value }: { label: string; value: string }) {
   return (
     <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-white/84 px-3 py-1.5 text-xs shadow-sm">
@@ -113,7 +117,7 @@ function AgendaPreviewRow({
         </p>
         <p className="mt-1 truncate text-[11px] text-muted-foreground">
           {kind === "onsite"
-            ? getOperationalTimelineLabel(appointment)
+            ? `${getOperationalDayLabel(appointment, currentDate)} · ${formatPanelShortDate(getJobSpanStart(appointment))} to ${formatPanelShortDate(getJobSpanEnd(appointment))}`
             : isCalendarBlockAppointment(appointment)
               ? isFullDayCalendarBlock(appointment)
                 ? "All-day block"
@@ -733,7 +737,7 @@ export default function CalendarPage() {
                       {activeLocationName}
                     </span>
                   ) : null}
-                  <span className="text-sm font-semibold text-foreground">{getHeaderTitle(currentDate, view)}</span>
+                  <h1 className="text-sm font-semibold text-foreground">{getHeaderTitle(currentDate, view)}</h1>
                 </div>
 
                 <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">

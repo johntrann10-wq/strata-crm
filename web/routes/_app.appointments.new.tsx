@@ -1707,7 +1707,7 @@ export default function NewAppointmentPage() {
                     >
                       <SelectionIndicator checked={isMultiDayJob} />
                       <div>
-                        <p className="font-medium text-foreground">Multi-day job</p>
+                        <p className="font-medium text-foreground">Multi-day / on-site job</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           Track drop-off, in-shop stage, and pickup without stretching one appointment across the whole calendar.
                         </p>
@@ -1753,7 +1753,17 @@ export default function NewAppointmentPage() {
                           className="w-full p-2"
                         />
                       </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="job-start-date">Drop-off date</Label>
+                          <Input
+                            id="job-start-date"
+                            type="date"
+                            value={jobStartDate}
+                            onChange={(event) => setJobStartDate(event.target.value)}
+                            className={dateInputClassName}
+                          />
+                        </div>
                         <div className="space-y-2">
                           <Label htmlFor="job-start-time">Drop-off time</Label>
                           <ResponsiveTimeSelect
@@ -1765,6 +1775,16 @@ export default function NewAppointmentPage() {
                             desktopClassName={timeSelectTriggerClassName}
                             mobileClassName={mobileTimeSelectClassName}
                             useNative={isSmallViewport}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="expected-completion-date">Pickup date</Label>
+                          <Input
+                            id="expected-completion-date"
+                            type="date"
+                            value={expectedCompletionDate}
+                            onChange={(event) => setExpectedCompletionDate(event.target.value)}
+                            className={dateInputClassName}
                           />
                         </div>
                         <div className="space-y-2">

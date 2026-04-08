@@ -2033,7 +2033,10 @@ export default function AppointmentDetail() {
 
                   {(appointment as any).vehicleOnSite ? (
                     <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">In-shop timeline</p>
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-foreground">Job lifecycle</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">In-shop timeline</p>
+                      </div>
                       <div className="mt-2 grid gap-3 sm:grid-cols-2">
                         <div>
                           <p className="text-xs text-muted-foreground">Drop-off</p>
@@ -2723,13 +2726,15 @@ export default function AppointmentDetail() {
 
             <div className="space-y-3 rounded-lg border border-border/70 p-3">
               <div className="flex items-start gap-3">
-                <Checkbox
+                <input
                   id="edit-vehicle-on-site"
+                  type="checkbox"
                   checked={editVehicleOnSite}
-                  onCheckedChange={(checked) => setEditVehicleOnSite(Boolean(checked))}
+                  onChange={(event) => setEditVehicleOnSite(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/30"
                 />
                 <div>
-                  <Label htmlFor="edit-vehicle-on-site">Multi-day job</Label>
+                  <Label htmlFor="edit-vehicle-on-site">Multi-day / on-site job</Label>
                   <p className="text-xs text-muted-foreground">
                     Keep the vehicle visible in the shop across drop-off, work, waiting, curing, and pickup.
                   </p>
