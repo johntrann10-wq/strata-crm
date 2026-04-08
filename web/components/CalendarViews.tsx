@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 import {
   getActiveCalendarAppointments,
   getCalendarDaySnapshot,
+  getJobSpanEnd,
+  getJobSpanStart,
   getOverviewCalendarAppointments,
   getHistoricalCalendarAppointments,
   getVisibleCalendarAppointments,
