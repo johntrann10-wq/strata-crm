@@ -2,16 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { endOfWeek, format, isSameDay, isToday, startOfWeek } from "date-fns";
 import { Link, useOutletContext } from "react-router";
 import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
   CalendarRange,
-  CarFront,
   ChevronLeft,
   ChevronRight,
   Clock3,
   MapPin,
-  PauseCircle,
-  Pickaxe,
   Plus,
   Search,
 } from "lucide-react";
@@ -102,6 +97,12 @@ type DaySnapshot = {
 type DaySignal = {
   label: string;
   value: number;
+};
+
+type SummaryMetric = {
+  label: string;
+  value: number;
+  tone: "slate" | "amber" | "sky" | "violet" | "zinc" | "emerald";
 };
 
 const FILTER_OPTIONS: Array<{ value: ScheduleFilter; label: string }> = [
@@ -247,6 +248,17 @@ function getDaySignals(snapshot: DaySnapshot): DaySignal[] {
   ].filter((signal) => signal.value > 0);
 }
 
+function buildSummaryMetrics(shopStatus: ShopStatusSnapshot): SummaryMetric[] {
+  return [
+    { label: "In shop", value: shopStatus.inShopNow.length, tone: "slate" },
+    { label: "Drop-offs", value: shopStatus.dropOffsToday.length, tone: "amber" },
+    { label: "Pickups", value: shopStatus.pickupsToday.length, tone: "sky" },
+    { label: "Active", value: shopStatus.activeWork.length, tone: "violet" },
+    { label: "Waiting", value: shopStatus.waitingJobs.length, tone: "zinc" },
+    { label: "Ready", value: shopStatus.readyForPickup.length, tone: "emerald" },
+  ];
+}
+
 function MobileFilterSelect({
   value,
   onChange,
@@ -368,6 +380,8 @@ export default function AppointmentsPage() {
 
   const weekSnapshots = useMemo(() => weekDays.map((date) => buildDaySnapshot(filteredRecords, date)), [filteredRecords, weekDays]);
   const shopStatus = useMemo(() => buildShopStatus(records, today), [records, today]);
+  const summaryMetrics = useMemo(() => buildSummaryMetrics(shopStatus), [shopStatus]);
+  const todaySnapshot = useMemo(() => buildDaySnapshot(filteredRecords, today), [filteredRecords, today]);
   const upcomingNext = useMemo(
     () =>
       sortByOperationalTime(
@@ -381,6 +395,17 @@ export default function AppointmentsPage() {
     () => sortByOperationalTime(filteredRecords.filter((appointment) => isReadyForPickupJob(appointment) || isPickupDay(appointment, today))),
     [filteredRecords, today]
   );
+  const todayAttention = useMemo(
+    () =>
+      dedupeAppointments([
+        ...shopStatus.dropOffsToday,
+        ...todaySnapshot.active,
+        ...todaySnapshot.waiting,
+        ...todaySnapshot.ready,
+        ...shopStatus.pickupsToday,
+      ]),
+    [shopStatus.dropOffsToday, shopStatus.pickupsToday, todaySnapshot.active, todaySnapshot.ready, todaySnapshot.waiting]
+  );
 
   const isInitialLoad = fetching && appointmentsData === undefined;
   const weekLabel = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d")}`;
@@ -392,43 +417,6 @@ export default function AppointmentsPage() {
         subtitle="Weekly operations"
         right={
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            {isSmallViewport ? (
-              <MobileFilterSelect
-                value={activeLocationId}
-                ariaLabel="Filter schedule by location"
-                onChange={(value) => {
-                  setActiveLocationId(value);
-                  setCurrentLocationId(value === "all" ? null : value);
-                }}
-              >
-                <option value="all">All locations</option>
-                {locationRecords.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.name?.trim() || "Unnamed location"}
-                  </option>
-                ))}
-              </MobileFilterSelect>
-            ) : (
-              <Select
-                value={activeLocationId}
-                onValueChange={(value) => {
-                  setActiveLocationId(value);
-                  setCurrentLocationId(value === "all" ? null : value);
-                }}
-              >
-                <SelectTrigger className="hidden w-full lg:w-52 sm:flex">
-                  <SelectValue placeholder="All locations" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All locations</SelectItem>
-                  {locationRecords.map((location) => (
-                    <SelectItem key={location.id} value={location.id}>
-                      {location.name?.trim() || "Unnamed location"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
             <Button asChild variant="outline" className="w-full lg:w-auto">
               <Link to="/calendar?view=day">
                 <CalendarRange className="mr-2 h-4 w-4" />
@@ -446,27 +434,49 @@ export default function AppointmentsPage() {
       />
 
       <section className="space-y-4">
-        <div className="rounded-[1.6rem] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.08),transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.06)] sm:p-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="rounded-[1.35rem] border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Week control</p>
-              <h2 className="text-xl font-semibold tracking-tight text-foreground">{weekLabel}</h2>
-              <p className="text-sm text-muted-foreground">{format(currentDate, "EEEE, MMMM d")}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Scheduling</p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h2 className="text-xl font-semibold tracking-tight text-foreground">{weekLabel}</h2>
+                <span className="text-sm text-muted-foreground">{format(currentDate, "EEEE, MMMM d")}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 7))}>
+            <div className="flex items-center gap-2 self-start xl:self-auto">
+              <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 7))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button variant="outline" onClick={() => setCurrentDate(new Date())}>
+              <Button variant="outline" className="h-9 rounded-xl px-3 text-sm" onClick={() => setCurrentDate(new Date())}>
                 This week
               </Button>
-              <Button variant="outline" size="icon" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7))}>
+              <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7))}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1.2fr)_160px_180px] lg:grid-cols-[minmax(0,1.4fr)_170px_190px]">
+          {isSmallViewport ? (
+            <div className="mt-4">
+              <MobileFilterSelect
+                value={activeLocationId}
+                ariaLabel="Filter schedule by location"
+                onChange={(value) => {
+                  setActiveLocationId(value);
+                  setCurrentLocationId(value === "all" ? null : value);
+                }}
+              >
+                <option value="all">All locations</option>
+                {locationRecords.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name?.trim() || "Unnamed location"}
+                  </option>
+                ))}
+              </MobileFilterSelect>
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid gap-2 lg:grid-cols-[minmax(0,1.25fr)_150px_170px_170px]">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -476,6 +486,25 @@ export default function AppointmentsPage() {
                 className="h-10 rounded-xl pl-9"
               />
             </div>
+            <Select
+              value={activeLocationId}
+              onValueChange={(value) => {
+                setActiveLocationId(value);
+                setCurrentLocationId(value === "all" ? null : value);
+              }}
+            >
+              <SelectTrigger className="hidden h-10 rounded-xl sm:flex">
+                <SelectValue placeholder="All locations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All locations</SelectItem>
+                {locationRecords.map((location) => (
+                  <SelectItem key={location.id} value={location.id}>
+                    {location.name?.trim() || "Unnamed location"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={activeTechFilter} onValueChange={setActiveTechFilter}>
               <SelectTrigger className="h-10 rounded-xl">
                 <SelectValue placeholder="All techs" />
@@ -502,33 +531,12 @@ export default function AppointmentsPage() {
               </SelectContent>
             </Select>
           </div>
-
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {FILTER_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setActiveFilter(option.value)}
-                className={cn(
-                  "inline-flex shrink-0 items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
-                  activeFilter === option.value
-                    ? "border-primary/25 bg-primary/10 text-primary"
-                    : "border-border/70 bg-background text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <StatusCard label="In shop now" value={shopStatus.inShopNow.length} tone="slate" icon={CarFront} />
-          <StatusCard label="Drop-offs today" value={shopStatus.dropOffsToday.length} tone="amber" icon={ArrowDownToLine} />
-          <StatusCard label="Pickups today" value={shopStatus.pickupsToday.length} tone="sky" icon={ArrowUpFromLine} />
-          <StatusCard label="Active work" value={shopStatus.activeWork.length} tone="violet" icon={Pickaxe} />
-          <StatusCard label="Waiting / curing / hold" value={shopStatus.waitingJobs.length} tone="zinc" icon={PauseCircle} />
-          <StatusCard label="Ready for pickup" value={shopStatus.readyForPickup.length} tone="emerald" icon={Clock3} />
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
+          {summaryMetrics.map((metric) => (
+            <SummaryPill key={metric.label} label={metric.label} value={metric.value} tone={metric.tone} />
+          ))}
         </div>
       </section>
 
@@ -591,33 +599,33 @@ export default function AppointmentsPage() {
           />
         </div>
       ) : (
-        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,1fr)]">
-          <section className="space-y-4">
-            <Card className="overflow-hidden border-border/70 shadow-[0_18px_50px_rgba(15,23,42,0.05)]">
-              <CardContent className="p-0">
-                <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Weekly breakdown</p>
-                    <h3 className="text-base font-semibold text-foreground">Operational week</h3>
-                  </div>
-                  <span className="rounded-full border border-border/70 bg-muted/30 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    {filteredRecords.length} jobs touching this week
-                  </span>
+        <div className="mt-4 space-y-4">
+          <Card className="overflow-hidden border-border/70 shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
+            <CardContent className="p-0">
+              <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Week strip</p>
+                  <h3 className="text-base font-semibold text-foreground">Operational week</h3>
                 </div>
-                <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-7">
-                  {weekSnapshots.map((snapshot) => (
-                    <DaySnapshotCard key={snapshot.date.toISOString()} snapshot={snapshot} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                <span className="rounded-full border border-border/70 bg-muted/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {filteredRecords.length} jobs
+                </span>
+              </div>
+              <div className="flex gap-3 overflow-x-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:grid xl:grid-cols-7 xl:overflow-visible">
+                {weekSnapshots.map((snapshot) => (
+                  <DaySnapshotCard key={snapshot.date.toISOString()} snapshot={snapshot} />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.95fr)]">
+            <section className="space-y-4">
               <OperationalListSection
-                title="In shop now"
-                eyebrow="Live occupancy"
-                items={inShopThisWeek}
-                emptyLabel="No vehicles are occupying shop space right now."
+                title="Today queue"
+                eyebrow="What needs attention now"
+                items={todayAttention}
+                emptyLabel="Nothing needs attention on today's board."
               />
               <OperationalListSection
                 title="Coming up next"
@@ -625,24 +633,30 @@ export default function AppointmentsPage() {
                 items={upcomingNext}
                 emptyLabel="Nothing else is lined up in this view."
               />
-            </div>
-          </section>
+            </section>
 
-          <section className="space-y-4">
-            <OperationalListSection
-              title="Multi-day jobs this week"
-              eyebrow="Shop occupancy"
-              items={multiDayThisWeek}
-              emptyLabel="No multi-day jobs are spanning this week."
-              multiDay
-            />
-            <OperationalListSection
-              title="Pickup focus"
-              eyebrow="Pickup-ready and leaving today"
-              items={pickupFocus}
-              emptyLabel="No pickup-ready or pickup-today jobs in this view."
-            />
-          </section>
+            <section className="space-y-4">
+              <OperationalListSection
+                title="In shop"
+                eyebrow="Vehicles occupying space"
+                items={inShopThisWeek}
+                emptyLabel="No vehicles are occupying shop space right now."
+              />
+              <OperationalListSection
+                title="Multi-day jobs"
+                eyebrow="Work spanning the week"
+                items={multiDayThisWeek}
+                emptyLabel="No multi-day jobs are spanning this week."
+                multiDay
+              />
+              <OperationalListSection
+                title="Pickup focus"
+                eyebrow="Leaving soon"
+                items={pickupFocus}
+                emptyLabel="No pickup-ready or pickup-today jobs in this view."
+              />
+            </section>
+          </div>
         </div>
       )}
     </div>
@@ -651,17 +665,7 @@ export default function AppointmentsPage() {
 
 export { RouteErrorBoundary as ErrorBoundary };
 
-function StatusCard({
-  label,
-  value,
-  tone,
-  icon: Icon,
-}: {
-  label: string;
-  value: number;
-  tone: "slate" | "amber" | "sky" | "violet" | "zinc" | "emerald";
-  icon: React.ElementType;
-}) {
+function SummaryPill({ label, value, tone }: SummaryMetric) {
   const toneClass =
     tone === "amber"
       ? "bg-amber-50 text-amber-700 border-amber-200/70"
@@ -676,17 +680,12 @@ function StatusCard({
               : "bg-slate-100 text-slate-700 border-slate-200/70";
 
   return (
-    <Card className="border-border/70 shadow-[0_10px_32px_rgba(15,23,42,0.04)]">
-      <CardContent className="flex items-start justify-between gap-3 p-4">
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-          <p className="text-3xl font-semibold tracking-tight text-foreground">{value}</p>
-        </div>
-        <div className={cn("inline-flex h-10 w-10 items-center justify-center rounded-2xl border", toneClass)}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </CardContent>
-    </Card>
+    <div className="rounded-xl border border-border/70 bg-white/90 px-3 py-2.5 shadow-[0_8px_18px_rgba(15,23,42,0.03)]">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+        <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold", toneClass)}>{value}</span>
+      </div>
+    </div>
   );
 }
 
@@ -696,7 +695,7 @@ function DaySnapshotCard({ snapshot }: { snapshot: DaySnapshot }) {
   return (
     <div
       className={cn(
-        "rounded-[1.35rem] border border-border/70 bg-white/90 p-3 shadow-[0_10px_25px_rgba(15,23,42,0.04)]",
+        "w-[252px] shrink-0 rounded-[1.15rem] border border-border/70 bg-white/92 p-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)] xl:w-auto",
         isToday(snapshot.date) && "border-primary/20 bg-primary/[0.035]"
       )}
     >
@@ -724,20 +723,20 @@ function DaySnapshotCard({ snapshot }: { snapshot: DaySnapshot }) {
 
       <div className="mt-3 space-y-2">
         {snapshot.highlights.length > 0 ? (
-          snapshot.highlights.map((appointment) => (
+          snapshot.highlights.slice(0, 2).map((appointment) => (
             <Link
               key={appointment.id}
               to={`/appointments/${appointment.id}`}
-              className="flex items-start gap-2 rounded-2xl border border-border/65 bg-background/85 px-3 py-2.5 transition-colors hover:bg-background"
+              className="flex items-start gap-2 rounded-xl border border-border/60 bg-background/80 px-2.5 py-2 transition-colors hover:bg-background"
             >
               <span className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
+                <p className="truncate text-[13px] font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
                 <p className="truncate text-[11px] text-muted-foreground">
                   {getVehicleLabel(appointment) || getClientName(appointment) || getTechName(appointment)}
                 </p>
               </div>
-              <span className="shrink-0 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <span className="shrink-0 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {isPickupDay(appointment, snapshot.date)
                   ? "Pickup"
                   : isDropOffDay(appointment, snapshot.date)
@@ -779,9 +778,9 @@ function OperationalListSection({
   multiDay?: boolean;
 }) {
   return (
-    <Card className="border-border/70 shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
+    <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
       <CardContent className="space-y-3 p-4">
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{eyebrow}</p>
           <h3 className="text-base font-semibold text-foreground">{title}</h3>
         </div>
@@ -802,14 +801,14 @@ function OperationalListSection({
                 <Link
                   key={appointment.id}
                   to={`/appointments/${appointment.id}`}
-                  className="flex items-start gap-3 rounded-[1.1rem] border border-border/65 bg-white/85 px-3 py-3 transition-colors hover:bg-white"
+                  className="flex items-start gap-3 rounded-xl border border-border/60 bg-white/88 px-3 py-2.5 transition-colors hover:bg-white"
                 >
                   <div className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
-                        <p className="truncate text-[12px] text-muted-foreground">
+                        <p className="truncate text-[13px] font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">
                           {vehicleLabel || clientName || "Internal block"}
                         </p>
                       </div>
@@ -818,7 +817,7 @@ function OperationalListSection({
                       </span>
                     </div>
 
-                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                    <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
                       <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
                         <Clock3 className="h-3 w-3" />
                         {multiDay
