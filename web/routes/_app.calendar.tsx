@@ -850,54 +850,14 @@ export default function CalendarPage() {
                           )}
                         >
                           {selectedDayAgendaItems.slice(0, 5).map(({ appointment, kind }) => (
-                            <button
+                            <AgendaPreviewRow
                               key={`${appointment.id}-${kind}`}
-                              type="button"
+                              appointment={appointment}
+                              kind={kind}
+                              selected={selectedAppointmentId === appointment.id}
+                              currentDate={currentDate}
                               onClick={() => handleApptClick(appointment)}
-                              className={cn(
-                                "flex w-full min-w-0 items-start gap-3 overflow-hidden rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88",
-                                isMobileLayout && "gap-2.5 px-3 py-2.5",
-                                selectedAppointmentId === appointment.id && !isCalendarBlockAppointment(appointment) && "border-primary/35 bg-primary/[0.05]"
-                              )}
-                            >
-                              <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                {kind === "onsite" ? "On site" : formatPanelTime(appointment.startTime)}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex min-w-0 items-start justify-between gap-2">
-                                  <p className={cn("min-w-0 flex-1 truncate font-semibold text-foreground", isMobileLayout ? "text-[13px] leading-4" : "text-sm")}>
-                                    {getCalendarAppointmentLabel(appointment as ApptRecord)}
-                                  </p>
-                                  <span
-                                    className={cn(
-                                      "max-w-[6.75rem] shrink-0 truncate rounded-full border border-border/70 bg-background px-2 py-0.5 font-semibold uppercase tracking-[0.12em] text-muted-foreground",
-                                      isMobileLayout && "max-w-[5.5rem] text-[9px] leading-none"
-                                    )}
-                                  >
-                                    {kind === "onsite"
-                                      ? getOperationalDayLabel(appointment, currentDate)
-                                      : isCalendarBlockAppointment(appointment)
-                                        ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
-                                        : getOperationalDayLabel(appointment, currentDate)}
-                                  </span>
-                                </div>
-                                <p className={cn("truncate text-muted-foreground", isMobileLayout ? "text-[11px] leading-4" : "text-xs")}>
-                                  {kind === "onsite"
-                                    ? appointment.vehicle
-                                      ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} · ${getOperationalTimelineLabel(appointment)}`
-                                      : `Vehicle on site · ${getOperationalTimelineLabel(appointment)}`
-                                    : isCalendarBlockAppointment(appointment)
-                                      ? appointment.assignedStaff
-                                        ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-                                        : "Business-wide block"
-                                    : appointment.vehicle
-                                      ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
-                                      : appointment.assignedStaff
-                                        ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-                                        : "Unassigned"}
-                                </p>
-                              </div>
-                            </button>
+                            />
                           ))}
                           {selectedDayAgendaItems.length > 5 ? (
                             <p className="px-1 text-xs text-muted-foreground">+{selectedDayAgendaItems.length - 5} more on this date</p>
@@ -961,48 +921,14 @@ export default function CalendarPage() {
                   {selectedDayAgendaItems.length > 0 ? (
                     <div className="mt-3 space-y-2">
                       {selectedDayAgendaItems.slice(0, 6).map(({ appointment, kind }) => (
-                        <button
+                        <AgendaPreviewRow
                           key={`${appointment.id}-${kind}-day`}
-                          type="button"
+                          appointment={appointment}
+                          kind={kind}
+                          selected={selectedAppointmentId === appointment.id}
+                          currentDate={currentDate}
                           onClick={() => handleApptClick(appointment)}
-                          className={cn(
-                            "flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88",
-                            selectedAppointmentId === appointment.id && !isCalendarBlockAppointment(appointment) && "border-primary/35 bg-primary/[0.05]"
-                          )}
-                        >
-                          <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                            {kind === "onsite" ? "On site" : formatPanelTime(appointment.startTime)}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="truncate text-sm font-semibold text-foreground">
-                                {getCalendarAppointmentLabel(appointment as ApptRecord)}
-                              </p>
-                              <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                {kind === "onsite"
-                                  ? getOperationalDayLabel(appointment, currentDate)
-                                  : isCalendarBlockAppointment(appointment)
-                                    ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
-                                    : getOperationalDayLabel(appointment, currentDate)}
-                              </span>
-                            </div>
-                            <p className="truncate text-xs text-muted-foreground">
-                              {kind === "onsite"
-                                ? appointment.vehicle
-                                  ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} · ${getOperationalTimelineLabel(appointment)}`
-                                  : `Vehicle on site · ${getOperationalTimelineLabel(appointment)}`
-                                : isCalendarBlockAppointment(appointment)
-                                  ? appointment.assignedStaff
-                                    ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-                                    : "Business-wide block"
-                                : appointment.vehicle
-                                  ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
-                                  : appointment.assignedStaff
-                                    ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-                                    : "Unassigned"}
-                            </p>
-                          </div>
-                        </button>
+                        />
                       ))}
                       {selectedDayAgendaItems.length > 6 ? (
                         <p className="px-1 text-xs text-muted-foreground">+{selectedDayAgendaItems.length - 6} more on this day</p>
