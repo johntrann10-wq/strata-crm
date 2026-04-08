@@ -123,8 +123,6 @@ export default function CalendarPage() {
   const [blockNotes, setBlockNotes] = useState("");
   const [selectedBlock, setSelectedBlock] = useState<ApptRecord | null>(null);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
-  const [hoverPreviewDate, setHoverPreviewDate] = useState<Date | null>(null);
-  const [hoverPreviewAppointmentId, setHoverPreviewAppointmentId] = useState<string | null>(null);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const layoutInitializedRef = useRef(false);
 
@@ -303,25 +301,10 @@ export default function CalendarPage() {
 
   function handleDayClick(date: Date) {
     setCurrentDate(date);
-    setHoverPreviewDate(null);
-    setHoverPreviewAppointmentId(null);
     const daySnapshot = getCalendarDaySnapshot(appointments, date);
     const nextAppointment =
       daySnapshot.agendaItems.find(({ appointment }) => !isCalendarBlockAppointment(appointment))?.appointment ?? null;
     setSelectedAppointmentId(nextAppointment?.id ?? null);
-  }
-
-  function handleDayHover(date: Date | null) {
-    if (!date) {
-      setHoverPreviewDate(null);
-      setHoverPreviewAppointmentId(null);
-      return;
-    }
-    const daySnapshot = getCalendarDaySnapshot(appointments, date);
-    const nextAppointment =
-      daySnapshot.agendaItems.find(({ appointment }) => !isCalendarBlockAppointment(appointment))?.appointment ?? null;
-    setHoverPreviewDate(date);
-    setHoverPreviewAppointmentId(nextAppointment?.id ?? null);
   }
 
   function handleSlotClick(date: Date) {
@@ -489,17 +472,15 @@ export default function CalendarPage() {
   }
 
   const selectedDaySnapshot = useMemo(() => getCalendarDaySnapshot(appointments, currentDate), [appointments, currentDate]);
-  const inspectorDate = hoverPreviewDate ?? currentDate;
-  const inspectorDaySnapshot = useMemo(() => getCalendarDaySnapshot(appointments, inspectorDate), [appointments, inspectorDate]);
-  const selectedDayAppointments = inspectorDaySnapshot.dayAppts;
-  const selectedDayOnSiteJobs = inspectorDaySnapshot.daySpans;
-  const selectedDayOnSiteOnlyJobs = inspectorDaySnapshot.onSiteOnlyJobs;
-  const selectedDayAgendaItems = inspectorDaySnapshot.agendaItems;
+  const selectedDayAppointments = selectedDaySnapshot.dayAppts;
+  const selectedDayOnSiteJobs = selectedDaySnapshot.daySpans;
+  const selectedDayOnSiteOnlyJobs = selectedDaySnapshot.onSiteOnlyJobs;
+  const selectedDayAgendaItems = selectedDaySnapshot.agendaItems;
   const selectableDayAgendaItems = useMemo(
     () => selectedDayAgendaItems.filter(({ appointment }) => !isCalendarBlockAppointment(appointment)),
     [selectedDayAgendaItems]
   );
-  const selectedDayActiveItems = inspectorDaySnapshot.activeItemCount;
+  const selectedDayActiveItems = selectedDaySnapshot.activeItemCount;
   const selectedDayRevenue = useMemo(
     () =>
       getOverviewCalendarAppointments(selectedDayAppointments).reduce(
@@ -568,11 +549,10 @@ export default function CalendarPage() {
     return Array.from(counts.values()).sort((a, b) => b.count - a.count)[0] ?? null;
   }, [currentDate, selectedMonthAppointments]);
   const availableViews = isMobileLayout ? (["day", "month"] as const) : (["day", "month"] as const);
-  const selectedAppointment = useMemo(() => {
-    const previewId = hoverPreviewAppointmentId;
-    if (previewId) return appointments.find((appointment) => appointment.id === previewId) ?? null;
-    return appointments.find((appointment) => appointment.id === selectedAppointmentId) ?? null;
-  }, [appointments, hoverPreviewAppointmentId, selectedAppointmentId]);
+  const selectedAppointment = useMemo(
+    () => appointments.find((appointment) => appointment.id === selectedAppointmentId) ?? null,
+    [appointments, selectedAppointmentId]
+  );
 
   useEffect(() => {
     if (selectedAppointment && selectableDayAgendaItems.some(({ appointment }) => appointment.id === selectedAppointment.id)) return;
@@ -716,7 +696,6 @@ export default function CalendarPage() {
                 appointments={appointments}
                 onDayClick={handleDayClick}
                 onApptClick={handleApptClick}
-                onDayHover={handleDayHover}
                 conflictIds={activeConflicts}
                 isMobileLayout={isMobileLayout}
               />
@@ -787,7 +766,7 @@ export default function CalendarPage() {
                   <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
                     <div className="min-w-0 space-y-1">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day inspector</p>
-                      <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(inspectorDate)}</h3>
+                      <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
                     </div>
                     <div className="mt-3 grid min-w-0 gap-2 text-xs [grid-template-columns:repeat(2,minmax(0,1fr))]">
                         <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 px-3 py-2">

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   getActiveCalendarAppointments,
@@ -796,7 +796,6 @@ interface MonthViewProps {
   appointments: ApptRecord[];
   onDayClick: (date: Date) => void;
   onApptClick: (apt: ApptRecord) => void;
-  onDayHover?: (date: Date | null) => void;
   conflictIds?: Set<string>;
   isMobileLayout?: boolean;
 }
@@ -808,14 +807,24 @@ export function MonthView({
   appointments,
   onDayClick,
   onApptClick,
-  onDayHover,
   conflictIds,
   isMobileLayout = false,
 }: MonthViewProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const grid = useMemo(() => getMonthGrid(currentDate), [currentDate]);
   const today = useMemo(() => new Date(), []);
   const visibleAppointments = useMemo(() => getVisibleCalendarAppointments(appointments), [appointments]);
   const historicalAppointments = useMemo(() => getHistoricalCalendarAppointments(appointments), [appointments]);
+  const [hoverPreview, setHoverPreview] = useState<{
+    date: Date;
+    left: number;
+    top: number;
+    starts: number;
+    inShop: number;
+    pickups: number;
+    revenue: number;
+    appointments: ApptRecord[];
+  } | null>(null);
   const currencyFormatter = useMemo(
     () =>
       new Intl.NumberFormat("en-US", {
@@ -827,7 +836,13 @@ export function MonthView({
   );
 
   return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-border/70 bg-background/95 shadow-sm sm:rounded-[24px]">
+    <div
+      ref={containerRef}
+      className="relative flex h-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-border/70 bg-background/95 shadow-sm sm:rounded-[24px]"
+      onMouseLeave={() => {
+        if (!isMobileLayout) setHoverPreview(null);
+      }}
+    >
       <div className="grid grid-cols-7 border-b border-border/70 bg-muted/20 px-2 py-2">
         {DAY_NAMES.map((name) => (
           <div key={name} className="px-2 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -881,13 +896,33 @@ export function MonthView({
                     isSelectedAppointmentDay && "bg-primary/[0.06]"
                   )}
                   onClick={() => onDayClick(day)}
-                  onMouseEnter={() => {
+                  onMouseEnter={(event) => {
                     if (isMobileLayout) return;
-                    onDayHover?.(day);
-                  }}
-                  onMouseLeave={() => {
-                    if (isMobileLayout) return;
-                    onDayHover?.(null);
+                    const containerRect = containerRef.current?.getBoundingClientRect();
+                    const targetRect = event.currentTarget.getBoundingClientRect();
+                    if (!containerRect) return;
+                    const previewWidth = 288;
+                    const previewHeight = 216;
+                    const gutter = 12;
+                    let left = targetRect.right - containerRect.left + gutter;
+                    let top = targetRect.top - containerRect.top;
+                    if (left + previewWidth > containerRect.width - 8) {
+                      left = targetRect.left - containerRect.left - previewWidth - gutter;
+                    }
+                    if (left < 8) left = 8;
+                    if (top + previewHeight > containerRect.height - 8) {
+                      top = Math.max(8, containerRect.height - previewHeight - 8);
+                    }
+                    setHoverPreview({
+                      date: day,
+                      left,
+                      top,
+                      starts: startCount,
+                      inShop: onSiteCount,
+                      pickups: pickupCount,
+                      revenue: dayRevenue,
+                      appointments: [...dayAppts, ...daySpans].slice(0, 4),
+                    });
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
@@ -934,6 +969,55 @@ export function MonthView({
           </div>
         ))}
       </div>
+
+      {!isMobileLayout && hoverPreview ? (
+        <div
+          className="pointer-events-none absolute z-20 w-72 rounded-[1.35rem] border border-border/70 bg-white/96 p-3 shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-sm transition-opacity duration-150"
+          style={{ left: hoverPreview.left, top: hoverPreview.top }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Day preview</p>
+              <h4 className="mt-1 text-sm font-semibold text-foreground">
+                {hoverPreview.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              </h4>
+            </div>
+            {hoverPreview.revenue > 0 ? (
+              <span className="rounded-full border border-border/70 bg-muted/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground">
+                {currencyFormatter.format(hoverPreview.revenue)}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <CompactSignal label="Starts" value={hoverPreview.starts} />
+            <CompactSignal label="In shop" value={hoverPreview.inShop} />
+            <CompactSignal label="Pickups" value={hoverPreview.pickups} />
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {hoverPreview.appointments.length > 0 ? (
+              hoverPreview.appointments.map((appointment) => (
+                <div key={appointment.id} className="rounded-xl border border-border/60 bg-muted/[0.12] px-3 py-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 truncate text-sm font-semibold text-foreground">{apptLabel(appointment)}</p>
+                    <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      {apptStageLabel(appointment, hoverPreview.date)}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                    {apptClientLabel(appointment)} · {apptVehicleLabel(appointment)}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
+                No jobs touching this day.
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
