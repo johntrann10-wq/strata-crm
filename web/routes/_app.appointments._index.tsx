@@ -69,6 +69,9 @@ type AppointmentRecord = {
   vehicleOnSite?: boolean | null;
   jobPhase?: string | null;
   totalPrice?: number | null;
+  depositAmount?: number | null;
+  depositPaid?: boolean | null;
+  paidAt?: string | null;
   assignedStaffId?: string | null;
   internalNotes?: string | null;
   location?: { name?: string | null } | null;
@@ -335,7 +338,7 @@ export default function AppointmentsPage() {
   );
   const today = useMemo(() => new Date(), []);
 
-  const [{ data: appointmentsData, fetching, error }] = useFindMany(api.appointment, {
+  const [{ data: appointmentsData, fetching, error }, refetchAppointments] = useFindMany(api.appointment, {
     startGte: queryStart,
     startLte: queryEnd,
     locationId: activeLocationId !== "all" ? activeLocationId : undefined,
@@ -354,6 +357,9 @@ export default function AppointmentsPage() {
       vehicleOnSite: true,
       jobPhase: true,
       totalPrice: true,
+      depositAmount: true,
+      depositPaid: true,
+      paidAt: true,
       assignedStaffId: true,
       internalNotes: true,
       location: { name: true },
@@ -671,6 +677,7 @@ export default function AppointmentsPage() {
                     <AppointmentInspectorPanel
                       appointment={selectedAppointment}
                       emptyDescription="Pick any row in the weekly board to inspect the customer, vehicle, timing, money, and current stage."
+                      onAppointmentChange={() => refetchAppointments()}
                     />
                   </div>
                 </DialogContent>
@@ -723,6 +730,7 @@ export default function AppointmentsPage() {
               <AppointmentInspectorPanel
                 appointment={selectedAppointment}
                 emptyDescription="Pick any row in the weekly board to inspect the customer, vehicle, timing, money, and current stage."
+                onAppointmentChange={() => refetchAppointments()}
               />
               <OperationalListSection
                 title="Pickup focus"

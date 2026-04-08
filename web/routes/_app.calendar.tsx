@@ -189,6 +189,9 @@ export default function CalendarPage() {
       jobPhase: true,
       status: true,
       totalPrice: true,
+      depositAmount: true,
+      depositPaid: true,
+      paidAt: true,
       assignedStaffId: true,
       isMobile: true,
       internalNotes: true,
@@ -861,6 +864,7 @@ export default function CalendarPage() {
                   appointment={selectedAppointment}
                   emptyTitle="Select an appointment"
                   emptyDescription="Choose a job from the day agenda or calendar to inspect money, customer, vehicle, timing, and stage."
+                  onAppointmentChange={() => refetchAppointments()}
                 />
               </>
             ) : null}
@@ -959,6 +963,7 @@ export default function CalendarPage() {
                   appointment={selectedAppointment}
                   emptyTitle="Select an appointment"
                   emptyDescription="Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
+                  onAppointmentChange={() => refetchAppointments()}
                 />
               </>
             ) : null}
