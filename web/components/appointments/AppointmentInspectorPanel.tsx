@@ -170,11 +170,11 @@ export function AppointmentInspectorPanel({
   const [{ fetching: completingAppointment }, completeAppointment] = useAction(api.appointment.complete);
   const [{ data: staffOptionsRaw }] = useFindMany(api.staff, { first: 100 } as any);
   const [{ data: clientOptionsRaw, fetching: clientOptionsFetching }] = useFindMany(api.client, {
-    filter: appointment.businessId ? { businessId: { equals: appointment.businessId } } : { id: { equals: "" } },
+    filter: appointment?.businessId ? { businessId: { equals: appointment.businessId } } : { id: { equals: "" } },
     select: { id: true, firstName: true, lastName: true, phone: true, email: true },
     sort: { firstName: "Ascending" },
     first: 200,
-    pause: !appointment.businessId,
+    pause: !appointment?.businessId,
   } as any);
   const [{ fetching: savingDeposit }, updateAppointmentMoney] = useAction(api.appointment.update);
   const [{ fetching: addingService }, addAppointmentService] = useAction(api.appointmentService.create);
