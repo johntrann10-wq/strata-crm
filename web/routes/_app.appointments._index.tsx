@@ -59,6 +59,7 @@ type ScheduleFilter =
 
 type AppointmentRecord = {
   id: string;
+  businessId?: string | null;
   title?: string | null;
   status?: string | null;
   startTime: string;
@@ -348,6 +349,7 @@ export default function AppointmentsPage() {
     pause: !businessId,
     select: {
       id: true,
+      businessId: true,
       title: true,
       status: true,
       startTime: true,

@@ -16,6 +16,7 @@ import { getJobPhaseLabel, getOperationalDayLabel, getOperationalTimelineLabel, 
 
 export type AppointmentInspectorRecord = {
   id: string;
+  businessId?: string | null;
   title?: string | null;
   status?: string | null;
   startTime: string;
@@ -33,8 +34,8 @@ export type AppointmentInspectorRecord = {
   notes?: string | null;
   internalNotes?: string | null;
   location?: { name?: string | null } | null;
-  client?: { firstName?: string | null; lastName?: string | null } | null;
-  vehicle?: { year?: number | null; make?: string | null; model?: string | null } | null;
+  client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
+  vehicle?: { id?: string | null; year?: number | null; make?: string | null; model?: string | null } | null;
   assignedStaff?: { firstName?: string | null; lastName?: string | null } | null;
 };
 
@@ -168,6 +169,13 @@ export function AppointmentInspectorPanel({
   const [{ fetching: updatingPhase }, updateAppointment] = useAction(api.appointment.update);
   const [{ fetching: completingAppointment }, completeAppointment] = useAction(api.appointment.complete);
   const [{ data: staffOptionsRaw }] = useFindMany(api.staff, { first: 100 } as any);
+  const [{ data: clientOptionsRaw, fetching: clientOptionsFetching }] = useFindMany(api.client, {
+    filter: appointment.businessId ? { businessId: { equals: appointment.businessId } } : { id: { equals: "" } },
+    select: { id: true, firstName: true, lastName: true, phone: true, email: true },
+    sort: { firstName: "Ascending" },
+    first: 200,
+    pause: !appointment.businessId,
+  } as any);
   const [{ fetching: savingDeposit }, updateAppointmentMoney] = useAction(api.appointment.update);
   const [{ fetching: recordingPayment }, recordDepositPayment] = useAction(api.appointment.recordDepositPayment);
   const [{ fetching: reversingPayment }, reverseDepositPayment] = useAction(api.appointment.reverseDepositPayment);
@@ -177,6 +185,8 @@ export function AppointmentInspectorPanel({
   const [timingDialogOpen, setTimingDialogOpen] = useState(false);
   const [depositDialogOpen, setDepositDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [clientIdDraft, setClientIdDraft] = useState("internal");
+  const [vehicleIdDraft, setVehicleIdDraft] = useState("none");
   const [assignedStaffIdDraft, setAssignedStaffIdDraft] = useState("unassigned");
   const [notesDraft, setNotesDraft] = useState("");
   const [internalNotesDraft, setInternalNotesDraft] = useState("");
@@ -193,6 +203,45 @@ export function AppointmentInspectorPanel({
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
+  const selectedClientId = clientIdDraft !== "internal" ? clientIdDraft : null;
+  const [{ data: vehicleOptionsRaw, fetching: vehicleOptionsFetching }] = useFindMany(api.vehicle, {
+    filter: selectedClientId ? { clientId: { equals: selectedClientId } } : { id: { equals: "" } },
+    select: { id: true, year: true, make: true, model: true, color: true, licensePlate: true },
+    sort: { updatedAt: "Descending" },
+    first: 100,
+    pause: !selectedClientId,
+  } as any);
+
+  const staffOptions = ((staffOptionsRaw ?? []) as Array<{ id: string; firstName?: string | null; lastName?: string | null }>).map((staff) => ({
+    id: staff.id,
+    label: [staff.firstName, staff.lastName].filter(Boolean).join(" ").trim() || "Unnamed staff",
+  }));
+  const clientOptions = ((clientOptionsRaw ?? []) as Array<{
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    phone?: string | null;
+    email?: string | null;
+  }>).map((client) => ({
+    id: client.id,
+    label: [
+      [client.firstName, client.lastName].filter(Boolean).join(" ").trim() || "Unnamed client",
+      client.phone ?? client.email ?? null,
+    ]
+      .filter(Boolean)
+      .join(" - "),
+  }));
+  const vehicleOptions = ((vehicleOptionsRaw ?? []) as Array<{
+    id: string;
+    year?: number | null;
+    make?: string | null;
+    model?: string | null;
+    color?: string | null;
+    licensePlate?: string | null;
+  }>).map((vehicle) => ({
+    id: vehicle.id,
+    label: [vehicle.year, vehicle.make, vehicle.model, vehicle.color, vehicle.licensePlate].filter(Boolean).join(" "),
+  }));
 
   if (!appointment) {
     return (
@@ -220,11 +269,6 @@ export function AppointmentInspectorPanel({
         : totalAmount
       : Number(appointment.depositAmount ?? 0);
   const canManageMoney = appointment.status !== "cancelled" && appointment.status !== "no-show" && totalAmount > 0;
-  const staffOptions = ((staffOptionsRaw ?? []) as Array<{ id: string; firstName?: string | null; lastName?: string | null }>).map((staff) => ({
-    id: staff.id,
-    label: [staff.firstName, staff.lastName].filter(Boolean).join(" ").trim() || "Unnamed staff",
-  }));
-
   async function handleLifecycleUpdate(nextStatus: "confirmed" | "in_progress") {
     setPendingStatus(nextStatus);
     const result = await updateAppointmentStatus({ id: appointment.id, status: nextStatus } as any);
@@ -281,6 +325,8 @@ export function AppointmentInspectorPanel({
   }
 
   function openDetailsDialog() {
+    setClientIdDraft(appointment.client?.id || "internal");
+    setVehicleIdDraft(appointment.vehicle?.id || "none");
     setAssignedStaffIdDraft(appointment.assignedStaffId || "unassigned");
     setNotesDraft(appointment.notes ?? "");
     setInternalNotesDraft(appointment.internalNotes ?? "");
@@ -401,8 +447,14 @@ export function AppointmentInspectorPanel({
   }
 
   async function handleSaveDetails() {
+    if (selectedClientId && vehicleIdDraft === "none") {
+      toast.error("Select a vehicle for the chosen client before saving.");
+      return;
+    }
     const result = await updateAppointment({
       id: appointment.id,
+      clientId: selectedClientId ?? null,
+      vehicleId: selectedClientId ? (vehicleIdDraft === "none" ? null : vehicleIdDraft) : null,
       assignedStaffId: assignedStaffIdDraft === "unassigned" ? undefined : assignedStaffIdDraft,
       notes: notesDraft,
       internalNotes: internalNotesDraft,
@@ -411,7 +463,7 @@ export function AppointmentInspectorPanel({
       toast.error("Failed to update appointment details: " + result.error.message);
       return;
     }
-    toast.success("Assignment and notes updated");
+    toast.success("Job details updated");
     setDetailsDialogOpen(false);
     await onAppointmentChange?.();
   }
@@ -605,7 +657,7 @@ export function AppointmentInspectorPanel({
                   onClick={openDetailsDialog}
                   disabled={updatingPhase || updatingLifecycle || completingAppointment}
                 >
-                  Edit assignment
+                  Edit details
                 </Button>
               </div>
             </div>
@@ -793,12 +845,63 @@ export function AppointmentInspectorPanel({
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit assignment and notes</DialogTitle>
+            <DialogTitle>Edit job details</DialogTitle>
             <DialogDescription>
-              Update who owns the job and keep the team notes current without leaving the board.
+              Update client, vehicle, assignment, and notes without leaving the board.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="inspector-client">Client</Label>
+                <select
+                  id="inspector-client"
+                  value={clientIdDraft}
+                  onChange={(event) => {
+                    const nextClientId = event.target.value;
+                    setClientIdDraft(nextClientId);
+                    setVehicleIdDraft("none");
+                  }}
+                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="internal">Internal / no client</option>
+                  <option value="loading" disabled>
+                    {clientOptionsFetching ? "Loading clients..." : "Select client"}
+                  </option>
+                  {clientOptions.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="inspector-vehicle">Vehicle</Label>
+                <select
+                  id="inspector-vehicle"
+                  value={vehicleIdDraft}
+                  onChange={(event) => setVehicleIdDraft(event.target.value)}
+                  disabled={!selectedClientId || vehicleOptionsFetching}
+                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <option value="none">
+                    {!selectedClientId
+                      ? "Internal / no vehicle"
+                      : vehicleOptionsFetching
+                        ? "Loading vehicles..."
+                        : "Select vehicle"}
+                  </option>
+                  {vehicleOptions.map((vehicle) => (
+                    <option key={vehicle.id} value={vehicle.id}>
+                      {vehicle.label}
+                    </option>
+                  ))}
+                </select>
+                {selectedClientId && !vehicleOptionsFetching && vehicleOptions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">This client has no vehicles on file yet.</p>
+                ) : null}
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="inspector-assigned-tech">Assigned tech</Label>
               <select

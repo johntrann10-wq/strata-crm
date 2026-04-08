@@ -179,6 +179,7 @@ export default function CalendarPage() {
     pause: !businessId,
     select: {
       id: true,
+      businessId: true,
       title: true,
       startTime: true,
       endTime: true,
@@ -196,9 +197,9 @@ export default function CalendarPage() {
       isMobile: true,
       notes: true,
       internalNotes: true,
-      client: { firstName: true, lastName: true },
-      vehicle: { make: true, model: true, year: true },
-      assignedStaff: { firstName: true, lastName: true },
+      client: { id: true, firstName: true, lastName: true },
+      vehicle: { id: true, make: true, model: true, year: true },
+      assignedStaff: { id: true, firstName: true, lastName: true },
     },
     first: 500,
   });
