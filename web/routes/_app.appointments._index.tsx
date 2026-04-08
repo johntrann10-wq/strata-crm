@@ -628,12 +628,14 @@ export default function AppointmentsPage() {
                 eyebrow="What needs attention now"
                 items={todayAttention}
                 emptyLabel="Nothing needs attention on today's board."
+                referenceDate={today}
               />
               <OperationalListSection
                 title="Coming up next"
                 eyebrow="Next scheduled work"
                 items={upcomingNext}
                 emptyLabel="Nothing else is lined up in this view."
+                referenceDate={today}
               />
             </section>
 
@@ -643,6 +645,7 @@ export default function AppointmentsPage() {
                 eyebrow="Vehicles occupying space"
                 items={inShopThisWeek}
                 emptyLabel="No vehicles are occupying shop space right now."
+                referenceDate={today}
               />
               <OperationalListSection
                 title="Multi-day jobs"
@@ -650,12 +653,14 @@ export default function AppointmentsPage() {
                 items={multiDayThisWeek}
                 emptyLabel="No multi-day jobs are spanning this week."
                 multiDay
+                referenceDate={today}
               />
               <OperationalListSection
                 title="Pickup focus"
                 eyebrow="Leaving soon"
                 items={pickupFocus}
                 emptyLabel="No pickup-ready or pickup-today jobs in this view."
+                referenceDate={today}
               />
             </section>
           </div>
@@ -768,12 +773,14 @@ function OperationalListSection({
   items,
   emptyLabel,
   multiDay = false,
+  referenceDate,
 }: {
   title: string;
   eyebrow: string;
   items: AppointmentRecord[];
   emptyLabel: string;
   multiDay?: boolean;
+  referenceDate: Date;
 }) {
   return (
     <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
@@ -809,7 +816,7 @@ function OperationalListSection({
                         </p>
                       </div>
                       <span className="shrink-0 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        {multiDay ? getOperationalDayLabel(appointment, today) : getJobPhaseLabel(appointment.jobPhase)}
+                        {multiDay ? getOperationalDayLabel(appointment, referenceDate) : getJobPhaseLabel(appointment.jobPhase)}
                       </span>
                     </div>
 
