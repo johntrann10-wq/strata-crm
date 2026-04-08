@@ -6,14 +6,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
-  ExternalLink,
   MapPin,
   Plus,
   Search,
-  User,
-  CarFront,
-  CircleDollarSign,
-  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
+import { AppointmentInspectorPanel } from "@/components/appointments/AppointmentInspectorPanel";
 import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
 import { api, ApiError } from "../api";
@@ -672,7 +668,10 @@ export default function AppointmentsPage() {
                     <DialogTitle>Appointment Inspector</DialogTitle>
                   </DialogHeader>
                   <div className="p-4">
-                    <AppointmentInspector appointment={selectedAppointment} />
+                    <AppointmentInspectorPanel
+                      appointment={selectedAppointment}
+                      emptyDescription="Pick any row in the weekly board to inspect the customer, vehicle, timing, money, and current stage."
+                    />
                   </div>
                 </DialogContent>
               </Dialog>
@@ -721,7 +720,10 @@ export default function AppointmentsPage() {
             </section>
 
             <section className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-              <AppointmentInspector appointment={selectedAppointment} />
+              <AppointmentInspectorPanel
+                appointment={selectedAppointment}
+                emptyDescription="Pick any row in the weekly board to inspect the customer, vehicle, timing, money, and current stage."
+              />
               <OperationalListSection
                 title="Pickup focus"
                 eyebrow="Leaving soon"
@@ -937,86 +939,5 @@ function OperationalListSection({
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function AppointmentInspector({ appointment }: { appointment: AppointmentRecord | null }) {
-  if (!appointment) {
-    return (
-      <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
-        <CardContent className="space-y-2 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Inspector</p>
-          <p className="text-sm font-medium text-foreground">Select a job</p>
-          <p className="text-sm text-muted-foreground">Pick any row in the weekly board to inspect the customer, vehicle, timing, money, and current stage.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const clientName = getClientName(appointment) || "Internal";
-  const vehicleLabel = getVehicleLabel(appointment) || "No vehicle";
-  const moneyLabel = getAppointmentMoneyLabel(appointment) ?? "No amount set";
-  const stageLabel = isMultiDayJob(appointment)
-    ? getOperationalDayLabel(appointment, new Date())
-    : getJobPhaseLabel(appointment.jobPhase);
-  const timingLabel = isMultiDayJob(appointment)
-    ? getOperationalTimelineLabel(appointment)
-    : `${format(new Date(appointment.startTime), "EEE h:mm a")}${appointment.endTime ? ` - ${format(new Date(appointment.endTime), "h:mm a")}` : ""}`;
-
-  return (
-    <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
-      <CardContent className="space-y-4 p-4">
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Appointment Inspector</p>
-          <h3 className="text-lg font-semibold text-foreground">{getAppointmentLabel(appointment)}</h3>
-        </div>
-
-        <div className="grid gap-3 text-sm">
-          <InspectorRow icon={CircleDollarSign} label="Amount" value={moneyLabel} strong />
-          <InspectorRow icon={User} label="Customer" value={clientName} />
-          <InspectorRow icon={CarFront} label="Vehicle" value={vehicleLabel} />
-          <InspectorRow icon={Clock3} label="Timing" value={timingLabel} />
-          <InspectorRow icon={Wrench} label="Stage" value={stageLabel} />
-          <InspectorRow icon={MapPin} label="Location" value={appointment.location?.name ?? "No location"} />
-          <InspectorRow icon={Wrench} label="Assigned tech" value={getTechName(appointment)} />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Button asChild className="w-full rounded-xl">
-            <Link to={`/appointments/${appointment.id}`}>
-              Open full details
-              <ExternalLink className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="w-full rounded-xl">
-            <Link to={`/appointments/${appointment.id}`}>
-              Edit appointment
-            </Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function InspectorRow({
-  icon: Icon,
-  label,
-  value,
-  strong = false,
-}: {
-  icon: typeof Clock3;
-  label: string;
-  value: string;
-  strong?: boolean;
-}) {
-  return (
-    <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2.5">
-      <Icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-        <p className={cn("mt-1 text-sm text-foreground", strong && "font-semibold")}>{value}</p>
-      </div>
-    </div>
   );
 }

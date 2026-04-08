@@ -6,6 +6,7 @@ import { api } from "../api";
 import { useAction, useFindMany, useGlobalAction } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { cn } from "@/lib/utils";
+import { AppointmentInspectorPanel } from "@/components/appointments/AppointmentInspectorPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -121,6 +122,7 @@ export default function CalendarPage() {
   const [blockStaffId, setBlockStaffId] = useState("none");
   const [blockNotes, setBlockNotes] = useState("");
   const [selectedBlock, setSelectedBlock] = useState<ApptRecord | null>(null);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const layoutInitializedRef = useRef(false);
 
@@ -310,7 +312,7 @@ export default function CalendarPage() {
       setSelectedBlock(apt);
       return;
     }
-    navigate(`/appointments/${apt.id}`);
+    setSelectedAppointmentId(apt.id);
   }
 
   function handleNewAppointment() {
@@ -465,6 +467,10 @@ export default function CalendarPage() {
   const selectedDayOnSiteJobs = selectedDaySnapshot.daySpans;
   const selectedDayOnSiteOnlyJobs = selectedDaySnapshot.onSiteOnlyJobs;
   const selectedDayAgendaItems = selectedDaySnapshot.agendaItems;
+  const selectableDayAgendaItems = useMemo(
+    () => selectedDayAgendaItems.filter(({ appointment }) => !isCalendarBlockAppointment(appointment)),
+    [selectedDayAgendaItems]
+  );
   const selectedDayActiveItems = selectedDaySnapshot.activeItemCount;
   const selectedDayRevenue = useMemo(
     () =>
@@ -534,6 +540,15 @@ export default function CalendarPage() {
     return Array.from(counts.values()).sort((a, b) => b.count - a.count)[0] ?? null;
   }, [currentDate, selectedMonthAppointments]);
   const availableViews = isMobileLayout ? (["day", "month"] as const) : (["day", "month"] as const);
+  const selectedAppointment = useMemo(
+    () => appointments.find((appointment) => appointment.id === selectedAppointmentId) ?? null,
+    [appointments, selectedAppointmentId]
+  );
+
+  useEffect(() => {
+    if (selectedAppointment && selectableDayAgendaItems.some(({ appointment }) => appointment.id === selectedAppointment.id)) return;
+    setSelectedAppointmentId(selectableDayAgendaItems[0]?.appointment.id ?? null);
+  }, [selectableDayAgendaItems, selectedAppointment]);
 
   useEffect(() => {
     if (!businessId) return;
@@ -770,7 +785,8 @@ export default function CalendarPage() {
                               onClick={() => handleApptClick(appointment)}
                               className={cn(
                                 "flex w-full min-w-0 items-start gap-3 overflow-hidden rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88",
-                                isMobileLayout && "gap-2.5 px-3 py-2.5"
+                                isMobileLayout && "gap-2.5 px-3 py-2.5",
+                                selectedAppointmentId === appointment.id && !isCalendarBlockAppointment(appointment) && "border-primary/35 bg-primary/[0.05]"
                               )}
                             >
                               <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -834,6 +850,12 @@ export default function CalendarPage() {
                     </div>
                   </div>
                 </div>
+
+                <AppointmentInspectorPanel
+                  appointment={selectedAppointment}
+                  emptyTitle="Select an appointment"
+                  emptyDescription="Choose a job from the day agenda or calendar to inspect money, customer, vehicle, timing, and stage."
+                />
               </>
             ) : null}
 
@@ -877,7 +899,10 @@ export default function CalendarPage() {
                           key={`${appointment.id}-${kind}-day`}
                           type="button"
                           onClick={() => handleApptClick(appointment)}
-                          className="flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88"
+                          className={cn(
+                            "flex w-full items-start gap-3 rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-left transition-colors hover:bg-white/88",
+                            selectedAppointmentId === appointment.id && !isCalendarBlockAppointment(appointment) && "border-primary/35 bg-primary/[0.05]"
+                          )}
                         >
                           <div className="min-w-[62px] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                             {kind === "onsite" ? "On site" : formatPanelTime(appointment.startTime)}
@@ -923,6 +948,12 @@ export default function CalendarPage() {
                     </div>
                   )}
                 </div>
+
+                <AppointmentInspectorPanel
+                  appointment={selectedAppointment}
+                  emptyTitle="Select an appointment"
+                  emptyDescription="Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
+                />
               </>
             ) : null}
           </aside>
