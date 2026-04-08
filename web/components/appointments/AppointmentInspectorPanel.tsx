@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ResponsiveTimeSelect, buildQuarterHourOptions, toDateInputValue } from "@/components/appointments/SchedulingControls";
 import { cn } from "@/lib/utils";
 import { getJobPhaseLabel, getOperationalDayLabel, getOperationalTimelineLabel, isMultiDayJob } from "@/lib/calendarJobSpans";
 
@@ -50,12 +51,23 @@ const QUICK_PHASE_OPTIONS = [
   { value: "pickup_ready", label: "Ready" },
 ] as const;
 
+const TIME_OPTIONS = buildQuarterHourOptions();
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function toTimeInputValue(date: Date | string | null | undefined): string {
+  if (!date) return "";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const hh = String(parsed.getHours()).padStart(2, "0");
+  const mm = String(parsed.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
 }
 
 function getAppointmentLabel(appointment: AppointmentInspectorRecord): string {
@@ -156,8 +168,18 @@ export function AppointmentInspectorPanel({
   const [{ fetching: reversingPayment }, reverseDepositPayment] = useAction(api.appointment.reverseDepositPayment);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [pendingPhase, setPendingPhase] = useState<string | null>(null);
+  const [timingDialogOpen, setTimingDialogOpen] = useState(false);
   const [depositDialogOpen, setDepositDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [serviceDate, setServiceDate] = useState("");
+  const [serviceStartTime, setServiceStartTime] = useState("");
+  const [serviceEndTime, setServiceEndTime] = useState("");
+  const [dropoffDate, setDropoffDate] = useState("");
+  const [dropoffTime, setDropoffTime] = useState("");
+  const [pickupDate, setPickupDate] = useState("");
+  const [pickupTime, setPickupTime] = useState("");
+  const [pickupReadyDate, setPickupReadyDate] = useState("");
+  const [pickupReadyTime, setPickupReadyTime] = useState("");
   const [depositDraft, setDepositDraft] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
@@ -232,6 +254,19 @@ export function AppointmentInspectorPanel({
     setDepositDialogOpen(true);
   }
 
+  function openTimingDialog() {
+    setServiceDate(toDateInputValue(appointment.startTime));
+    setServiceStartTime(toTimeInputValue(appointment.startTime));
+    setServiceEndTime(toTimeInputValue(appointment.endTime));
+    setDropoffDate(toDateInputValue(appointment.jobStartTime));
+    setDropoffTime(toTimeInputValue(appointment.jobStartTime));
+    setPickupDate(toDateInputValue(appointment.expectedCompletionTime));
+    setPickupTime(toTimeInputValue(appointment.expectedCompletionTime));
+    setPickupReadyDate(toDateInputValue(appointment.pickupReadyTime));
+    setPickupReadyTime(toTimeInputValue(appointment.pickupReadyTime));
+    setTimingDialogOpen(true);
+  }
+
   function openPaymentDialog() {
     setPaymentAmount(effectiveCollectionAmount > 0 ? effectiveCollectionAmount.toFixed(2) : "0.00");
     setPaymentMethod("cash");
@@ -283,6 +318,65 @@ export function AppointmentInspectorPanel({
     }
     toast.success(isInternalAppointment ? "Payment recorded" : "Deposit recorded");
     setPaymentDialogOpen(false);
+    await onAppointmentChange?.();
+  }
+
+  async function handleSaveTiming() {
+    if (!serviceDate || !serviceStartTime) {
+      toast.error("Choose the service date and start time.");
+      return;
+    }
+
+    const nextStartTime = new Date(`${serviceDate}T${serviceStartTime}`);
+    const nextEndTime = serviceEndTime ? new Date(`${serviceDate}T${serviceEndTime}`) : undefined;
+    if (nextEndTime && nextEndTime.getTime() <= nextStartTime.getTime()) {
+      toast.error("Work end must be after work start.");
+      return;
+    }
+
+    let nextJobStartTime: Date | null = null;
+    let nextExpectedCompletionTime: Date | null = null;
+    let nextPickupReadyTime: Date | null = null;
+
+    if (isMultiDayJob(appointment)) {
+      if (!dropoffDate || !dropoffTime || !pickupDate || !pickupTime) {
+        toast.error("Choose both drop-off and pickup timing.");
+        return;
+      }
+      nextJobStartTime = new Date(`${dropoffDate}T${dropoffTime}`);
+      nextExpectedCompletionTime = new Date(`${pickupDate}T${pickupTime}`);
+      if (nextExpectedCompletionTime.getTime() < nextJobStartTime.getTime()) {
+        toast.error("Pickup must be after drop-off.");
+        return;
+      }
+      if (
+        toDateInputValue(nextJobStartTime) === toDateInputValue(nextStartTime) &&
+        nextJobStartTime.getTime() > nextStartTime.getTime()
+      ) {
+        toast.error("Drop-off cannot be after the scheduled labor start.");
+        return;
+      }
+      if (pickupReadyDate && pickupReadyTime) {
+        nextPickupReadyTime = new Date(`${pickupReadyDate}T${pickupReadyTime}`);
+      }
+    }
+
+    const result = await updateAppointment({
+      id: appointment.id,
+      startTime: nextStartTime,
+      endTime: nextEndTime,
+      jobStartTime: isMultiDayJob(appointment) ? nextJobStartTime : null,
+      expectedCompletionTime: isMultiDayJob(appointment) ? nextExpectedCompletionTime : null,
+      pickupReadyTime: nextPickupReadyTime,
+      vehicleOnSite: Boolean(isMultiDayJob(appointment)),
+      jobPhase: isMultiDayJob(appointment) ? appointment.jobPhase ?? "scheduled" : "scheduled",
+    } as any);
+    if (result.error) {
+      toast.error("Failed to update timing: " + result.error.message);
+      return;
+    }
+    toast.success("Timing updated");
+    setTimingDialogOpen(false);
     await onAppointmentChange?.();
   }
 
@@ -455,6 +549,21 @@ export function AppointmentInspectorPanel({
                 </div>
               </div>
             ) : null}
+
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Timing</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={openTimingDialog}
+                  disabled={updatingPhase || updatingLifecycle || completingAppointment}
+                >
+                  Edit timing
+                </Button>
+              </div>
+            </div>
           </div>
         ) : null}
 
@@ -502,6 +611,135 @@ export function AppointmentInspectorPanel({
             <Button onClick={() => void handleSaveDeposit()} disabled={savingDeposit}>
               {savingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save deposit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={timingDialogOpen} onOpenChange={setTimingDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit timing</DialogTitle>
+            <DialogDescription>
+              Update the service window and, for multi-day jobs, the shop stay timeline.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="inspector-service-date">Service date</Label>
+                <Input
+                  id="inspector-service-date"
+                  type="date"
+                  value={serviceDate}
+                  onChange={(event) => setServiceDate(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="inspector-service-start">Work start</Label>
+                <ResponsiveTimeSelect
+                  id="inspector-service-start"
+                  value={serviceStartTime}
+                  onChange={setServiceStartTime}
+                  options={TIME_OPTIONS}
+                  placeholder="Select a start time"
+                  useNative={false}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="inspector-service-end">Work end</Label>
+              <ResponsiveTimeSelect
+                id="inspector-service-end"
+                value={serviceEndTime}
+                onChange={setServiceEndTime}
+                options={TIME_OPTIONS}
+                placeholder="No end time"
+                useNative={false}
+                allowEmpty
+              />
+            </div>
+
+            {isMultiDayJob(appointment) ? (
+              <div className="space-y-4 rounded-xl border border-border/60 bg-muted/[0.12] p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="inspector-dropoff-date">Drop-off date</Label>
+                    <Input
+                      id="inspector-dropoff-date"
+                      type="date"
+                      value={dropoffDate}
+                      onChange={(event) => setDropoffDate(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="inspector-dropoff-time">Drop-off time</Label>
+                    <ResponsiveTimeSelect
+                      id="inspector-dropoff-time"
+                      value={dropoffTime}
+                      onChange={setDropoffTime}
+                      options={TIME_OPTIONS}
+                      placeholder="Select a time"
+                      useNative={false}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="inspector-pickup-date">Pickup date</Label>
+                    <Input
+                      id="inspector-pickup-date"
+                      type="date"
+                      value={pickupDate}
+                      onChange={(event) => setPickupDate(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="inspector-pickup-time">Pickup time</Label>
+                    <ResponsiveTimeSelect
+                      id="inspector-pickup-time"
+                      value={pickupTime}
+                      onChange={setPickupTime}
+                      options={TIME_OPTIONS}
+                      placeholder="Select a time"
+                      useNative={false}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="inspector-ready-date">Pickup ready date</Label>
+                    <Input
+                      id="inspector-ready-date"
+                      type="date"
+                      value={pickupReadyDate}
+                      onChange={(event) => setPickupReadyDate(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="inspector-ready-time">Pickup ready time</Label>
+                    <ResponsiveTimeSelect
+                      id="inspector-ready-time"
+                      value={pickupReadyTime}
+                      onChange={setPickupReadyTime}
+                      options={TIME_OPTIONS}
+                      placeholder="Not set"
+                      useNative={false}
+                      allowEmpty
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTimingDialogOpen(false)} disabled={updatingPhase}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSaveTiming()} disabled={updatingPhase}>
+              {updatingPhase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save timing
             </Button>
           </DialogFooter>
         </DialogContent>
