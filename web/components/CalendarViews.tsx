@@ -846,6 +846,7 @@ export function MonthView({
               const { dayAppts: activeVisibleDayAppointments } = getCalendarDaySnapshot(visibleAppointments, day);
               const dayAppts = getOverviewCalendarAppointments(historicalDayAppointments);
               const daySpans = historicalDaySpans;
+              const dayRevenue = dayAppts.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
               const startCount = selectedMonthStartingCount(dayAppts, day);
               const pickupCount = selectedMonthPickupCount(dayAppts, daySpans, day);
               const onSiteCount = daySpans.length;
