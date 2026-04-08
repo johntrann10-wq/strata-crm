@@ -22,6 +22,10 @@ import {
   formatTime,
   getStatusStyle,
   apptLabel,
+  apptClientLabel,
+  apptMoneyLabel,
+  apptStageLabel,
+  apptVehicleLabel,
   type ApptRecord,
   AppointmentBlock,
   StaffWorkloadBar,
@@ -216,6 +220,7 @@ export function DayView({
                 const style = getStatusStyle(appointment.status);
                 const isBlock = isCalendarBlockAppointment(appointment);
                 const multiDayKind = isMultiDayJob(appointment) ? getMultiDayDayKind(appointment, currentDate) : null;
+                const moneyLabel = apptMoneyLabel(appointment);
                 return (
                   <button
                     key={`${appointment.id}-${kind}-mobile`}
@@ -237,10 +242,9 @@ export function DayView({
                         <p className="truncate text-base font-semibold">
                           {isBlock ? getCalendarBlockLabel(appointment) : apptLabel(appointment)}
                         </p>
+                        <p className="mt-1 text-sm text-muted-foreground">{apptClientLabel(appointment)}</p>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          {kind === "onsite"
-                            ? getMultiDayDayLabel(multiDayKind)
-                            : `${formatTime(new Date(appointment.startTime))}${appointment.endTime ? ` - ${formatTime(new Date(appointment.endTime))}` : ""}`}
+                          {apptVehicleLabel(appointment)}
                         </p>
                       </div>
                       <span
@@ -253,21 +257,18 @@ export function DayView({
                           ? getMultiDayDayLabel(multiDayKind)
                           : multiDayKind
                             ? getMultiDayDayLabel(multiDayKind)
-                          : isBlock
-                            ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
-                            : appointment.status.replace("_", " ")}
+                            : isBlock
+                              ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
+                              : apptStageLabel(appointment, currentDate)}
                       </span>
                     </div>
-
-                    {appointment.vehicle ? (
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        {kind === "onsite"
-                          ? `${[appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")} on site`
-                          : [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")}
-                      </p>
-                    ) : null}
-
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span>
+                        {kind === "onsite"
+                          ? `${getMultiDayDayLabel(multiDayKind)} · until ${getJobSpanEnd(appointment).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : `${formatTime(new Date(appointment.startTime))}${appointment.endTime ? ` - ${formatTime(new Date(appointment.endTime))}` : ""}`}
+                      </span>
+                      {moneyLabel ? <span className="font-semibold text-foreground">{moneyLabel}</span> : null}
                       <span>
                         {kind === "onsite"
                           ? "Vehicle on site"
@@ -395,6 +396,7 @@ export function DayView({
             <div className="space-y-2">
               {onSiteOnlyJobs.map((apt) => {
                 const multiDayKind = getMultiDayDayKind(apt, currentDate);
+                const moneyLabel = apptMoneyLabel(apt);
                 return (
                 <button
                   key={`${apt.id}-onsite`}
@@ -405,17 +407,17 @@ export function DayView({
                   <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", getMultiDayDayTone(multiDayKind))} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-foreground">{apptLabel(apt)}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {apt.vehicle
-                        ? `${[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")} on site`
-                        : "Vehicle on site"}
+                    <p className="truncate text-xs text-muted-foreground">{apptClientLabel(apt)}</p>
+                    <p className="truncate text-xs text-muted-foreground">{apptVehicleLabel(apt)}</p>
+                    <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                      {getJobSpanEnd(apt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) === currentDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                        ? `Leaves today · ${getMultiDayDayLabel(multiDayKind)}`
+                        : `${new Date(apt.startTime).toLocaleDateString("en-US", { month: "short", day: "numeric" })} drop-off → ${getJobSpanEnd(apt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} pickup`}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
+                    {moneyLabel ? <p className="text-[11px] font-semibold text-foreground">{moneyLabel}</p> : null}
                     <p className="text-[11px] font-semibold text-muted-foreground">{getMultiDayDayLabel(multiDayKind)}</p>
-                    <p className="hidden text-[11px] text-muted-foreground sm:block">
-                      until {getJobSpanEnd(apt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </p>
                   </div>
                 </button>
                 );

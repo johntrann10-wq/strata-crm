@@ -342,6 +342,32 @@ export function apptLabel(apt: ApptRecord): string {
   return "Appointment";
 }
 
+export function apptClientLabel(apt: ApptRecord): string {
+  if (!apt.client) return "Internal";
+  return [apt.client.firstName, apt.client.lastName].filter(Boolean).join(" ").trim() || "Client";
+}
+
+export function apptVehicleLabel(apt: ApptRecord): string {
+  if (!apt.vehicle) return "No vehicle";
+  return [apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ").trim() || "Vehicle";
+}
+
+export function apptMoneyLabel(apt: ApptRecord): string | null {
+  const amount = Number(apt.totalPrice ?? 0);
+  if (amount <= 0) return null;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+export function apptStageLabel(apt: ApptRecord, dayContext?: Date): string {
+  const multiDayKind = dayContext ? getMultiDayDayKind(apt, dayContext) : null;
+  if (multiDayKind) return getMultiDayDayLabel(multiDayKind);
+  return formatStatusLabel(apt.status);
+}
+
 export const TIME_HOURS: number[] = Array.from(
   { length: END_HOUR - START_HOUR },
   (_, i) => START_HOUR + i
@@ -436,6 +462,9 @@ export function AppointmentBlock({
   const isBlock = isCalendarBlockAppointment(apt);
   const multiDayKind = dayContext ? getMultiDayDayKind(apt, dayContext) : null;
   const multiDayLabel = getMultiDayDayLabel(multiDayKind);
+  const moneyLabel = apptMoneyLabel(apt);
+  const customerLabel = apptClientLabel(apt);
+  const vehicleLabel = apptVehicleLabel(apt);
   const dense = height < 74;
   const constrainedWidth = Boolean(widthCss);
   const narrow = constrainedWidth;
@@ -497,15 +526,13 @@ export function AppointmentBlock({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className={cn("truncate font-semibold", dense || narrow ? "text-[10px]" : "text-[12px]")}>{apptLabel(apt)}</p>
-              <p className={cn("truncate text-muted-foreground", dense || narrow ? "text-[9px]" : "text-[11px]")}>
-                {formatTime(start)}
-                {apt.endTime ? ` - ${formatTime(end)}` : ""}
-              </p>
-              {multiDayKind ? (
-                <p className={cn("mt-1 flex items-center gap-1 font-medium text-muted-foreground", dense || narrow ? "text-[8px]" : "text-[10px]")}>
-                  <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", getMultiDayDayTone(multiDayKind))} />
-                  <span className="truncate">{multiDayLabel}</span>
+              {!ultraNarrow ? (
+                <p className={cn("truncate text-muted-foreground", dense || narrow ? "text-[9px]" : "text-[11px]")}>
+                  {customerLabel}
                 </p>
+              ) : null}
+              {!dense && !narrow ? (
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{vehicleLabel}</p>
               ) : null}
             </div>
             <span
@@ -515,17 +542,29 @@ export function AppointmentBlock({
                 dense || narrow ? "text-[8px]" : "text-[10px]"
               )}
             >
-              {isBlock ? (isFullDayCalendarBlock(apt) ? "All day" : "Blocked") : formatDuration(apt.startTime, apt.endTime)}
+              {isBlock ? (isFullDayCalendarBlock(apt) ? "All day" : "Blocked") : moneyLabel ?? formatDuration(apt.startTime, apt.endTime)}
             </span>
           </div>
 
-          {!dense && !narrow && apt.vehicle ? (
-            <p className="mt-1 truncate text-[11px] text-muted-foreground">
-              {[apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ")}
+          <div className={cn("mt-1.5 flex items-center justify-between gap-2", height <= 92 && "mt-1")}>
+            <p className={cn("truncate text-muted-foreground", dense || narrow ? "text-[8px]" : "text-[10px]")}>
+              {formatTime(start)}
+              {apt.endTime ? ` - ${formatTime(end)}` : ""}
             </p>
-          ) : null}
+            {!isBlock ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/80 px-1.5 py-0.5 font-medium text-muted-foreground",
+                  dense || narrow ? "text-[8px]" : "text-[10px]"
+                )}
+              >
+                {multiDayKind ? <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", getMultiDayDayTone(multiDayKind))} /> : null}
+                <span className="truncate">{multiDayKind ? multiDayLabel : formatStatusLabel(apt.status)}</span>
+              </span>
+            ) : null}
+          </div>
 
-          {height > 92 ? (
+          {height > 110 ? (
             <div className="mt-1.5 flex items-center justify-between gap-2">
               <p className={cn("truncate uppercase tracking-[0.12em] text-muted-foreground", narrow ? "text-[8px]" : "text-[10px]")}>
                 {apt.assignedStaff ? `${apt.assignedStaff.firstName} ${apt.assignedStaff.lastName}` : "Unassigned"}
@@ -568,6 +607,39 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
       </div>
       <span className="hidden sm:inline-flex text-[10px] font-semibold leading-none text-foreground/80">
         {countLabel}
+      </span>
+    </div>
+  );
+}
+
+function DaySignalRow({
+  label,
+  count,
+  dotClassName,
+  outlined = false,
+}: {
+  label: string;
+  count: number;
+  dotClassName: string;
+  outlined?: boolean;
+}) {
+  if (count <= 0) return null;
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
+        {Array.from({ length: Math.min(count, 4) }).map((_, index) => (
+          <span
+            key={`${label}-${index}`}
+            className={cn(
+              "h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2",
+              outlined ? "border" : "",
+              dotClassName
+            )}
+          />
+        ))}
+      </div>
+      <span className="text-[9px] font-medium uppercase tracking-[0.1em] text-muted-foreground sm:text-[10px]">
+        {label} {count > 4 ? `+${count - 4}` : count}
       </span>
     </div>
   );
@@ -767,7 +839,9 @@ export function MonthView({
               const { dayAppts: activeVisibleDayAppointments } = getCalendarDaySnapshot(visibleAppointments, day);
               const dayAppts = getOverviewCalendarAppointments(historicalDayAppointments);
               const daySpans = historicalDaySpans;
-              const dayRevenue = dayAppts.reduce((total, apt) => total + Number(apt.totalPrice ?? 0), 0);
+              const startCount = selectedMonthStartingCount(dayAppts, day);
+              const pickupCount = selectedMonthPickupCount(dayAppts, daySpans, day);
+              const onSiteCount = daySpans.length;
               const hasConflict = !!conflictIds && activeVisibleDayAppointments.some((a) => conflictIds.has(a.id));
               const dayLabel = day.toLocaleDateString("en-US", {
                 weekday: "long",
@@ -797,8 +871,8 @@ export function MonthView({
                     }
                   }}
                 >
-                  <div className="flex h-full min-h-0 flex-col">
-                    <div className="flex items-start justify-between gap-1 sm:mb-2 sm:items-center sm:gap-2">
+                    <div className="flex h-full min-h-0 flex-col">
+                      <div className="flex items-start justify-between gap-1 sm:mb-2 sm:items-center sm:gap-2">
                       <span
                         className={cn(
                           "inline-flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold sm:h-8 sm:w-8 sm:text-sm",
@@ -815,36 +889,18 @@ export function MonthView({
                         ) : null}
                         {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
                       </div>
-                    </div>
-
-                    <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                      <div className="pointer-events-none mb-1 space-y-0.5">
-                        {daySpans.slice(0, 2).map((apt) => (
-                          <div
-                            key={`${apt.id}-span`}
-                            className="flex items-center gap-1 overflow-hidden rounded-full border border-border/60 bg-background/90 px-1.5 py-[2px] text-[8.5px] shadow-sm sm:gap-1.5 sm:px-2 sm:py-[3px] sm:text-[9px]"
-                          >
-                            <span
-                              className={cn(
-                                "shrink-0 rounded-full px-1 py-0.5 text-[7px] font-semibold uppercase tracking-[0.08em] text-white sm:text-[8px]",
-                                getMultiDayDayTone(getMultiDayDayKind(apt, day))
-                              )}
-                            >
-                              {getMultiDayDayShortLabel(getMultiDayDayKind(apt, day))}
-                            </span>
-                            <span className="truncate font-medium text-foreground">
-                              {apt.title || apt.vehicle?.model || apt.client?.lastName || "Job"}
-                            </span>
-                          </div>
-                        ))}
-                        {daySpans.length > 2 ? (
-                          <p className="px-1 text-[9px] font-medium text-muted-foreground">+{daySpans.length - 2} on site</p>
-                        ) : null}
                       </div>
 
-                      <div className="mt-auto space-y-1">
-                        <DayStatusDots appointments={dayAppts} />
-                      </div>
+                      <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <div className="pointer-events-none space-y-1">
+                          <DaySignalRow label="Starts" count={startCount} dotClassName="bg-amber-500" />
+                          <DaySignalRow label="In shop" count={onSiteCount} dotClassName="border-sky-500" outlined />
+                          <DaySignalRow label="Pickups" count={pickupCount} dotClassName="bg-emerald-500" />
+                        </div>
+
+                        <div className="mt-auto space-y-1">
+                          <DayStatusDots appointments={dayAppts} />
+                        </div>
                     </div>
                   </div>
                 </div>
@@ -855,6 +911,18 @@ export function MonthView({
       </div>
     </div>
   );
+}
+
+function selectedMonthStartingCount(appointments: ApptRecord[], day: Date): number {
+  return appointments.filter((apt) => isSameDay(getJobSpanStart(apt), day)).length;
+}
+
+function selectedMonthPickupCount(appointments: ApptRecord[], spans: ApptRecord[], day: Date): number {
+  const ids = new Set<string>();
+  [...appointments, ...spans].forEach((apt) => {
+    if (isSameDay(getJobSpanEnd(apt), day)) ids.add(apt.id);
+  });
+  return ids.size;
 }
 
 export { WeekView } from "./WeekView";

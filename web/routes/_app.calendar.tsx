@@ -59,6 +59,13 @@ function formatPanelTime(value: string): string {
   return new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
+function getCalendarAppointmentLabel(appointment: ApptRecord): string {
+  if (isCalendarBlockAppointment(appointment)) return getCalendarBlockLabel(appointment);
+  if (appointment.title?.trim()) return appointment.title.trim();
+  if (appointment.client) return [appointment.client.firstName, appointment.client.lastName].filter(Boolean).join(" ").trim() || "Appointment";
+  return "Appointment";
+}
+
 function parseDateInput(value: string): Date {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(year, (month || 1) - 1, day || 1);
@@ -731,7 +738,7 @@ export default function CalendarPage() {
                 >
                   <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
                     <div className="min-w-0 space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected date</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day inspector</p>
                       <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
                     </div>
                     <div className="mt-3 grid min-w-0 gap-2 text-xs [grid-template-columns:repeat(2,minmax(0,1fr))]">
@@ -772,10 +779,7 @@ export default function CalendarPage() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex min-w-0 items-start justify-between gap-2">
                                   <p className={cn("min-w-0 flex-1 truncate font-semibold text-foreground", isMobileLayout ? "text-[13px] leading-4" : "text-sm")}>
-                                    {isCalendarBlockAppointment(appointment)
-                                      ? getCalendarBlockLabel(appointment)
-                                      : appointment.title ||
-                                        (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                                    {getCalendarAppointmentLabel(appointment as ApptRecord)}
                                   </p>
                                   <span
                                     className={cn(
@@ -837,7 +841,7 @@ export default function CalendarPage() {
               <>
                 <div className="surface-panel rounded-[1.6rem] p-4">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day summary</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day inspector</p>
                     <h2 className="mt-1 text-lg font-semibold text-foreground">{formatPanelDate(currentDate)}</h2>
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-3">
@@ -881,10 +885,7 @@ export default function CalendarPage() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
                               <p className="truncate text-sm font-semibold text-foreground">
-                                {isCalendarBlockAppointment(appointment)
-                                  ? getCalendarBlockLabel(appointment)
-                                  : appointment.title ||
-                                    (appointment.client ? `${appointment.client.firstName} ${appointment.client.lastName}` : "Appointment")}
+                                {getCalendarAppointmentLabel(appointment as ApptRecord)}
                               </p>
                               <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                                 {kind === "onsite"

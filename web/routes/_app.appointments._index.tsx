@@ -146,6 +146,12 @@ function getAppointmentLabel(appointment: AppointmentRecord): string {
   return "Internal block";
 }
 
+function getAppointmentMoneyLabel(appointment: AppointmentRecord): string | null {
+  const amount = Number(appointment.totalPrice ?? 0);
+  if (amount <= 0) return null;
+  return formatCurrency(amount);
+}
+
 function isOperationalAppointment(appointment: AppointmentRecord): boolean {
   return appointment.status !== "cancelled" && appointment.status !== "no-show";
 }
@@ -799,6 +805,7 @@ function OperationalListSection({
             {items.slice(0, 8).map((appointment) => {
               const vehicleLabel = getVehicleLabel(appointment);
               const clientName = getClientName(appointment);
+              const moneyLabel = getAppointmentMoneyLabel(appointment);
 
               return (
                 <Link
@@ -809,15 +816,21 @@ function OperationalListSection({
                   <div className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-[13px] font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
                         <p className="truncate text-[11px] text-muted-foreground">
-                          {vehicleLabel || clientName || "Internal block"}
+                          {clientName || "Internal"}
+                        </p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {vehicleLabel || "No vehicle"}
                         </p>
                       </div>
-                      <span className="shrink-0 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        {multiDay ? getOperationalDayLabel(appointment, referenceDate) : getJobPhaseLabel(appointment.jobPhase)}
-                      </span>
+                      <div className="flex shrink-0 items-start gap-2">
+                        {moneyLabel ? <span className="text-[11px] font-semibold text-foreground">{moneyLabel}</span> : null}
+                        <span className="shrink-0 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          {multiDay ? getOperationalDayLabel(appointment, referenceDate) : getJobPhaseLabel(appointment.jobPhase)}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
@@ -832,11 +845,6 @@ function OperationalListSection({
                       <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
                         {getTechName(appointment)}
                       </span>
-                      {Number(appointment.totalPrice ?? 0) > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
-                          {formatCurrency(Number(appointment.totalPrice ?? 0))}
-                        </span>
-                      ) : null}
                     </div>
                   </div>
                 </Link>
