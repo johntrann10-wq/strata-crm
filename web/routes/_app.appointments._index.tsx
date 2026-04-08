@@ -626,14 +626,15 @@ export default function AppointmentsPage() {
                 Inspect selected job
               </Button>
               <Dialog open={mobileInspectorOpen} onOpenChange={setMobileInspectorOpen}>
-                <DialogContent className="max-w-[calc(100vw-1rem)] rounded-[1.5rem] p-0">
+                <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[1.5rem] p-0">
                   <DialogHeader className="border-b border-border/60 px-5 py-4">
                     <DialogTitle>Appointment Inspector</DialogTitle>
                   </DialogHeader>
-                  <div className="p-4">
+                  <div className="max-h-[calc(90dvh-5rem)] overflow-y-auto p-3">
                     <AppointmentInspectorPanel
                       appointment={selectedAppointment}
                       emptyDescription="Pick any row in the weekly board to inspect the customer, vehicle, timing, money, and current stage."
+                      compact
                       onAppointmentChange={() => refetchAppointments()}
                     />
                   </div>
@@ -734,7 +735,7 @@ function DaySnapshotCard({
             >
               <span className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
+                <p className="line-clamp-2 break-words text-[13px] font-semibold leading-4 text-foreground">{getAppointmentLabel(appointment)}</p>
                 <p className="truncate text-[11px] text-muted-foreground">
                   {getVehicleLabel(appointment) || getClientName(appointment) || getTechName(appointment)}
                 </p>
@@ -807,13 +808,13 @@ function OperationalListSection({
                 >
                   <div className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
+                        <p className="line-clamp-2 break-words text-[13px] font-semibold leading-4 text-foreground">{getAppointmentLabel(appointment)}</p>
                         <p className="truncate text-[11px] text-muted-foreground">{metaLine}</p>
                         <p className="truncate text-[11px] text-muted-foreground">{detailLine}</p>
                       </div>
-                      <div className="flex shrink-0 items-start gap-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
                         {moneyLabel ? <span className="text-[11px] font-semibold text-foreground">{moneyLabel}</span> : null}
                         <span className="shrink-0 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                           {multiDay ? getOperationalDayLabel(appointment, referenceDate) : getJobPhaseLabel(appointment.jobPhase)}
