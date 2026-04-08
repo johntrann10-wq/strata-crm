@@ -590,8 +590,8 @@ export default function AppointmentsPage() {
           />
         </div>
       ) : (
-        <div className="mt-4 space-y-4 px-1 sm:px-0">
-          <Card className="overflow-hidden border-border/70 shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
+        <div className="mt-4 space-y-4">
+          <Card className="mx-1 overflow-hidden border-border/70 shadow-[0_14px_36px_rgba(15,23,42,0.04)] sm:mx-0">
             <CardContent className="p-0">
               <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
                 <div>
@@ -620,7 +620,7 @@ export default function AppointmentsPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="mx-1 w-auto rounded-2xl border-border/70 bg-white/90"
+                className="w-full rounded-2xl border-border/70 bg-white/90"
                 onClick={() => setMobileInspectorOpen(true)}
               >
                 Inspect selected job
@@ -643,7 +643,7 @@ export default function AppointmentsPage() {
             </>
           ) : null}
 
-          <div className="grid gap-4 px-1 sm:px-0 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
             <section className="space-y-4">
               <OperationalListSection
                 title="Today queue"
@@ -775,7 +775,7 @@ function OperationalListSection({
   onSelectAppointment: (id: string) => void;
 }) {
   return (
-    <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
+    <Card className="mx-1 border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)] sm:mx-0">
       <CardContent className="space-y-3 p-4">
         <div className="space-y-0.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{eyebrow}</p>
