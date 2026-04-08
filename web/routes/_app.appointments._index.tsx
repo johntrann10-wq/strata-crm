@@ -1,35 +1,47 @@
 import { useEffect, useMemo, useState } from "react";
+import { endOfWeek, format, isSameDay, isToday, startOfWeek } from "date-fns";
 import { Link, useOutletContext } from "react-router";
-import { format } from "date-fns";
-import { toast } from "sonner";
-import { AlertCircle, Calendar, ChevronDown, ChevronRight, Loader2, Plus, Search, UserPlus } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  CalendarRange,
+  CarFront,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  MapPin,
+  PauseCircle,
+  Pickaxe,
+  Plus,
+  Search,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
-import { api, ApiError } from "../api";
-import { useAction, useFindMany } from "../hooks/useApi";
-import type { AuthOutletContext } from "./_app";
 import { PageHeader } from "../components/shared/PageHeader";
-import { StatusBadge } from "../components/shared/StatusBadge";
 import { EmptyState } from "../components/shared/EmptyState";
-import { ListViewToolbar } from "../components/shared/ListViewToolbar";
-
-type AppointmentStatusTab = "all" | "scheduled" | "confirmed" | "in_progress" | "completed" | "cancelled";
-type AppointmentView = AppointmentStatusTab | "mine";
+import { api, ApiError } from "../api";
+import { useFindMany } from "../hooks/useApi";
+import type { AuthOutletContext } from "./_app";
+import {
+  getJobPhaseLabel,
+  getJobPhaseTone,
+  getJobSpanEnd,
+  getJobSpanStart,
+  hasLaborOnDay,
+  hasPresenceOnDay,
+  isMultiDayJob,
+} from "@/lib/calendarJobSpans";
+import { isCalendarBlockAppointment } from "@/lib/calendarBlocks";
+import { cn } from "@/lib/utils";
 
 type StaffRecord = {
   id: string;
-  userId?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
 };
 
 type LocationRecord = {
@@ -37,136 +49,189 @@ type LocationRecord = {
   name?: string | null;
 };
 
-type AppointmentListRecord = {
+type ScheduleFilter =
+  | "all"
+  | "drop_offs"
+  | "in_shop"
+  | "active_work"
+  | "waiting"
+  | "ready"
+  | "pickups";
+
+type AppointmentRecord = {
   id: string;
   title?: string | null;
   status?: string | null;
-  startTime?: string | null;
+  startTime: string;
   endTime?: string | null;
+  jobStartTime?: string | null;
+  expectedCompletionTime?: string | null;
+  pickupReadyTime?: string | null;
+  vehicleOnSite?: boolean | null;
+  jobPhase?: string | null;
+  totalPrice?: number | null;
+  assignedStaffId?: string | null;
+  internalNotes?: string | null;
   location?: { name?: string | null } | null;
   client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
   vehicle?: { id?: string | null; year?: number | null; make?: string | null; model?: string | null } | null;
   assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
 };
 
-type AppointmentListStats = {
-  scheduled: number;
-  confirmed: number;
-  inProgress: number;
-  myQueue: number;
+type ShopStatusSnapshot = {
+  inShopNow: AppointmentRecord[];
+  dropOffsToday: AppointmentRecord[];
+  pickupsToday: AppointmentRecord[];
+  activeWork: AppointmentRecord[];
+  waitingJobs: AppointmentRecord[];
+  readyForPickup: AppointmentRecord[];
 };
 
-const QUICK_TRANSITIONS: Record<string, string[]> = {
-  scheduled: ["confirmed", "cancelled"],
-  confirmed: ["in_progress", "cancelled"],
-  in_progress: ["completed", "cancelled"],
-  completed: [],
-  cancelled: [],
-  "no-show": [],
+type DaySnapshot = {
+  date: Date;
+  jobs: AppointmentRecord[];
+  dropOffs: AppointmentRecord[];
+  active: AppointmentRecord[];
+  waiting: AppointmentRecord[];
+  ready: AppointmentRecord[];
+  pickups: AppointmentRecord[];
+  carryOvers: AppointmentRecord[];
+  highlights: AppointmentRecord[];
 };
 
-function formatStatus(status: string): string {
-  return status
-    .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+const FILTER_OPTIONS: Array<{ value: ScheduleFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "drop_offs", label: "Drop-offs" },
+  { value: "in_shop", label: "In shop" },
+  { value: "active_work", label: "Active work" },
+  { value: "waiting", label: "Waiting / curing / hold" },
+  { value: "ready", label: "Ready for pickup" },
+  { value: "pickups", label: "Pickups" },
+];
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
-function notifyAppointmentConfirmation(
-  deliveryStatus?: string | null,
-  deliveryError?: string | null,
-  fallbackMessage = "Appointment confirmed"
-) {
-  if (deliveryStatus === "emailed") {
-    toast.success(`${fallbackMessage} and email sent`);
-    return;
-  }
-  if (deliveryStatus === "missing_email") {
-    toast.warning(`${fallbackMessage}, but the client has no email address.`);
-    return;
-  }
-  if (deliveryStatus === "smtp_disabled") {
-    toast.warning(`${fallbackMessage}, but transactional email is not configured.`);
-    return;
-  }
-  if (deliveryStatus === "email_failed") {
-    toast.warning(`${fallbackMessage}, but confirmation email failed${deliveryError ? `: ${deliveryError}` : "."}`);
-    return;
-  }
-  toast.success(fallbackMessage);
-}
-
-function matchesTab(status: string | null | undefined, tab: AppointmentStatusTab): boolean {
-  if (tab === "all") return true;
-  if (tab === "cancelled") return status === "cancelled" || status === "no-show";
-  return status === tab;
-}
-
-function buildAppointmentStats(records: AppointmentListRecord[], myStaffRecord: StaffRecord | null): AppointmentListStats {
-  const scheduled = records.filter((appointment) => appointment.status === "scheduled").length;
-  const confirmed = records.filter((appointment) => appointment.status === "confirmed").length;
-  const inProgress = records.filter((appointment) => appointment.status === "in_progress").length;
-  const myQueue = myStaffRecord
-    ? records.filter(
-        (appointment) =>
-          appointment.assignedStaff?.id === myStaffRecord.id &&
-          ["scheduled", "confirmed", "in_progress"].includes(appointment.status ?? "")
-      ).length
-    : 0;
-
-  return { scheduled, confirmed, inProgress, myQueue };
-}
-
-function getAppointmentClientName(appointment: AppointmentListRecord) {
+function getClientName(appointment: AppointmentRecord): string {
   return [appointment.client?.firstName, appointment.client?.lastName].filter(Boolean).join(" ").trim();
 }
 
-function getAppointmentVehicleLabel(appointment: AppointmentListRecord) {
+function getVehicleLabel(appointment: AppointmentRecord): string {
   return [appointment.vehicle?.year, appointment.vehicle?.make, appointment.vehicle?.model].filter(Boolean).join(" ").trim();
 }
 
-function getAppointmentTechName(appointment: AppointmentListRecord) {
+function getTechName(appointment: AppointmentRecord): string {
   const techName = [appointment.assignedStaff?.firstName, appointment.assignedStaff?.lastName].filter(Boolean).join(" ").trim();
   return techName || "Unassigned";
 }
 
-function getAppointmentQuoteHref(appointment: AppointmentListRecord) {
-  if (!appointment.client?.id) return null;
-  return `/quotes/new?clientId=${appointment.client.id}${
-    appointment.vehicle?.id ? `&vehicleId=${appointment.vehicle.id}` : ""
-  }`;
+function getAppointmentLabel(appointment: AppointmentRecord): string {
+  if (appointment.title?.trim()) return appointment.title.trim();
+  const clientName = getClientName(appointment);
+  if (clientName) return clientName;
+  if (isCalendarBlockAppointment(appointment)) return "Blocked time";
+  return "Internal block";
 }
 
-function getAppointmentInvoiceHref(appointment: AppointmentListRecord) {
-  if (appointment.status !== "completed" || !appointment.client?.id) return null;
-  return `/invoices/new?clientId=${appointment.client.id}&appointmentId=${appointment.id}`;
+function isOperationalAppointment(appointment: AppointmentRecord): boolean {
+  return appointment.status !== "cancelled" && appointment.status !== "no-show";
 }
 
-function getAppointmentScheduleLabel(timestamp?: string | null, fallback = "") {
-  if (!timestamp) return fallback;
-  try {
-    return format(new Date(timestamp), "MMM d, yyyy h:mm a");
-  } catch {
-    return fallback;
+function isDropOffDay(appointment: AppointmentRecord, date: Date): boolean {
+  return isSameDay(getJobSpanStart(appointment), date);
+}
+
+function isPickupDay(appointment: AppointmentRecord, date: Date): boolean {
+  return isSameDay(getJobSpanEnd(appointment), date);
+}
+
+function isWaitingJob(appointment: AppointmentRecord): boolean {
+  return ["waiting", "curing", "hold"].includes(String(appointment.jobPhase ?? ""));
+}
+
+function isReadyForPickupJob(appointment: AppointmentRecord): boolean {
+  return appointment.jobPhase === "pickup_ready";
+}
+
+function isActiveWorkJob(appointment: AppointmentRecord): boolean {
+  return appointment.jobPhase === "active_work" || appointment.status === "in_progress";
+}
+
+function isInShopOnDate(appointment: AppointmentRecord, date: Date): boolean {
+  return hasPresenceOnDay(appointment, date) && (Boolean(appointment.vehicleOnSite) || isMultiDayJob(appointment));
+}
+
+function sortByOperationalTime(records: AppointmentRecord[]): AppointmentRecord[] {
+  return [...records].sort((a, b) => getJobSpanStart(a).getTime() - getJobSpanStart(b).getTime());
+}
+
+function dedupeAppointments(records: AppointmentRecord[]): AppointmentRecord[] {
+  const seen = new Set<string>();
+  return records.filter((record) => {
+    if (seen.has(record.id)) return false;
+    seen.add(record.id);
+    return true;
+  });
+}
+
+function matchesScheduleFilter(appointment: AppointmentRecord, filter: ScheduleFilter, today: Date): boolean {
+  switch (filter) {
+    case "drop_offs":
+      return isDropOffDay(appointment, today);
+    case "in_shop":
+      return isInShopOnDate(appointment, today);
+    case "active_work":
+      return isActiveWorkJob(appointment) && hasPresenceOnDay(appointment, today);
+    case "waiting":
+      return isWaitingJob(appointment) && hasPresenceOnDay(appointment, today);
+    case "ready":
+      return isReadyForPickupJob(appointment) && hasPresenceOnDay(appointment, today);
+    case "pickups":
+      return isPickupDay(appointment, today);
+    default:
+      return true;
   }
 }
 
-function getAppointmentEndTimeLabel(timestamp?: string | null) {
-  if (!timestamp) return "No end time";
-  try {
-    return `Ends ${format(new Date(timestamp), "h:mm a")}`;
-  } catch {
-    return "No end time";
-  }
+function buildShopStatus(appointments: AppointmentRecord[], today: Date): ShopStatusSnapshot {
+  return {
+    inShopNow: sortByOperationalTime(appointments.filter((appointment) => isInShopOnDate(appointment, today))),
+    dropOffsToday: sortByOperationalTime(
+      appointments.filter((appointment) => hasLaborOnDay(appointment, today) && isDropOffDay(appointment, today))
+    ),
+    pickupsToday: sortByOperationalTime(
+      appointments.filter((appointment) => hasPresenceOnDay(appointment, today) && isPickupDay(appointment, today))
+    ),
+    activeWork: sortByOperationalTime(
+      appointments.filter((appointment) => isActiveWorkJob(appointment) && hasPresenceOnDay(appointment, today))
+    ),
+    waitingJobs: sortByOperationalTime(
+      appointments.filter((appointment) => isWaitingJob(appointment) && hasPresenceOnDay(appointment, today))
+    ),
+    readyForPickup: sortByOperationalTime(
+      appointments.filter((appointment) => isReadyForPickupJob(appointment) && hasPresenceOnDay(appointment, today))
+    ),
+  };
 }
 
-function getAppointmentTimeOnlyLabel(timestamp?: string | null) {
-  if (!timestamp) return "No end time";
-  try {
-    return format(new Date(timestamp), "h:mm a");
-  } catch {
-    return "No end time";
-  }
+function buildDaySnapshot(appointments: AppointmentRecord[], date: Date): DaySnapshot {
+  const jobs = sortByOperationalTime(appointments.filter((appointment) => hasPresenceOnDay(appointment, date) || hasLaborOnDay(appointment, date)));
+  const dropOffs = jobs.filter((appointment) => isDropOffDay(appointment, date));
+  const active = jobs.filter((appointment) => isActiveWorkJob(appointment) && hasPresenceOnDay(appointment, date));
+  const waiting = jobs.filter((appointment) => isWaitingJob(appointment) && hasPresenceOnDay(appointment, date));
+  const ready = jobs.filter((appointment) => isReadyForPickupJob(appointment) && hasPresenceOnDay(appointment, date));
+  const pickups = jobs.filter((appointment) => isPickupDay(appointment, date));
+  const carryOvers = jobs.filter(
+    (appointment) => isMultiDayJob(appointment) && hasPresenceOnDay(appointment, date) && !isDropOffDay(appointment, date) && !isPickupDay(appointment, date)
+  );
+  const highlights = dedupeAppointments([...ready, ...dropOffs, ...active, ...pickups, ...carryOvers]).slice(0, 3);
+
+  return { date, jobs, dropOffs, active, waiting, ready, pickups, carryOvers, highlights };
 }
 
 function MobileFilterSelect({
@@ -184,32 +249,25 @@ function MobileFilterSelect({
     <div className="relative sm:hidden">
       <select
         aria-label={ariaLabel}
-        className="border-input/90 h-10 w-full appearance-none rounded-xl border bg-background/85 px-3.5 py-2 pr-10 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40"
+        className="border-input/90 h-10 w-full appearance-none rounded-xl border bg-background px-3.5 py-2 pr-10 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
         {children}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground" />
     </div>
   );
 }
 
 export default function AppointmentsPage() {
-  const { businessId, user, currentLocationId, setCurrentLocationId } = useOutletContext<AuthOutletContext>();
+  const { businessId, currentLocationId, setCurrentLocationId } = useOutletContext<AuthOutletContext>();
+  const [currentDate, setCurrentDate] = useState(() => new Date());
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<AppointmentView>("all");
   const [activeLocationId, setActiveLocationId] = useState<string>(currentLocationId ?? "all");
+  const [activeFilter, setActiveFilter] = useState<ScheduleFilter>("all");
+  const [activeTechFilter, setActiveTechFilter] = useState<string>("all");
   const [isSmallViewport, setIsSmallViewport] = useState(false);
-
-  const [, runUpdateStatus] = useAction(api.appointment.updateStatus);
-  const [, runUpdateAppointment] = useAction(api.appointment.update);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
-    return () => clearTimeout(timer);
-  }, [search]);
 
   useEffect(() => {
     setActiveLocationId(currentLocationId ?? "all");
@@ -224,104 +282,107 @@ export default function AppointmentsPage() {
     return () => media.removeEventListener?.("change", sync);
   }, []);
 
-  const handleQuickStatusChange = async (appointmentId: string, newStatus: string) => {
-    const result = await runUpdateStatus({ id: appointmentId, status: newStatus });
-    if (result?.error) {
-      toast.error("Failed: " + result.error.message);
-    } else {
-      const payload = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
-      if (newStatus === "confirmed") {
-        notifyAppointmentConfirmation(payload?.deliveryStatus ?? null, payload?.deliveryError ?? null);
-      } else {
-        toast.success("Status updated to " + formatStatus(newStatus));
-      }
-      void refetch();
-    }
-  };
-
-  const handleQuickStatus = async (event: Event | React.SyntheticEvent, appointmentId: string, newStatus: string) => {
-    event.preventDefault();
-    event.stopPropagation();
-    await handleQuickStatusChange(appointmentId, newStatus);
-  };
-
-  const handleAssignToMe = async (event: Event | React.SyntheticEvent, appointmentId: string) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!myStaffRecord?.id) return;
-    const result = await runUpdateAppointment({ id: appointmentId, assignedStaffId: myStaffRecord.id });
-    if (result?.error) {
-      toast.error("Failed: " + result.error.message);
-    } else {
-      toast.success("Appointment assigned to you");
-      void refetch();
-    }
-  };
-
-  const [{ data: appointments, fetching: appointmentsFetching, error: appointmentsError }, refetch] = useFindMany(
-    api.appointment,
-    {
-      search: debouncedSearch || undefined,
-      locationId: activeLocationId !== "all" ? activeLocationId : undefined,
-      sort: { startTime: "Descending" },
-      first: 100,
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        startTime: true,
-        endTime: true,
-        location: { name: true },
-        client: { id: true, firstName: true, lastName: true },
-        vehicle: { id: true, year: true, make: true, model: true },
-        assignedStaff: { id: true, firstName: true, lastName: true },
-      },
-      pause: !businessId,
-    }
+  const weekStart = useMemo(() => startOfWeek(currentDate, { weekStartsOn: 1 }), [currentDate]);
+  const weekEnd = useMemo(() => endOfWeek(currentDate, { weekStartsOn: 1 }), [currentDate]);
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, index) => new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + index)),
+    [weekStart]
   );
-  const [{ data: staffRaw }] = useFindMany(api.staff, {
-    first: 100,
+  const queryStart = useMemo(
+    () => new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate(), 0, 0, 0, 0).toISOString(),
+    [weekStart]
+  );
+  const queryEnd = useMemo(
+    () => new Date(weekEnd.getFullYear(), weekEnd.getMonth(), weekEnd.getDate(), 23, 59, 59, 999).toISOString(),
+    [weekEnd]
+  );
+  const today = useMemo(() => new Date(), []);
+
+  const [{ data: appointmentsData, fetching, error }] = useFindMany(api.appointment, {
+    startGte: queryStart,
+    startLte: queryEnd,
+    locationId: activeLocationId !== "all" ? activeLocationId : undefined,
+    sort: { startTime: "Ascending" },
+    first: 500,
     pause: !businessId,
-  } as any);
-  const [{ data: locationsRaw }] = useFindMany(api.location, {
-    first: 100,
-    pause: !businessId,
-  } as any);
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      startTime: true,
+      endTime: true,
+      jobStartTime: true,
+      expectedCompletionTime: true,
+      pickupReadyTime: true,
+      vehicleOnSite: true,
+      jobPhase: true,
+      totalPrice: true,
+      assignedStaffId: true,
+      internalNotes: true,
+      location: { name: true },
+      client: { id: true, firstName: true, lastName: true },
+      vehicle: { id: true, year: true, make: true, model: true },
+      assignedStaff: { id: true, firstName: true, lastName: true },
+    },
+  });
+  const [{ data: staffRaw }] = useFindMany(api.staff, { first: 100, pause: !businessId } as any);
+  const [{ data: locationsRaw }] = useFindMany(api.location, { first: 100, pause: !businessId } as any);
 
-  const isInitialLoad = appointmentsFetching && appointments === undefined;
-  const records = useMemo(
-    () => (Array.isArray(appointments) ? appointments : []) as AppointmentListRecord[],
-    [appointments]
-  );
-  const staffRecords = ((staffRaw ?? []) as StaffRecord[]).filter(Boolean);
-  const locationRecords = ((locationsRaw ?? []) as LocationRecord[]).filter(Boolean);
-  const myStaffRecord = useMemo(
-    () => staffRecords.find((staff) => staff.userId === user?.id) ?? null,
-    [staffRecords, user?.id]
-  );
-  const filteredAppointments = useMemo(
+  const records = useMemo(() => ((appointmentsData ?? []) as AppointmentRecord[]).filter(isOperationalAppointment), [appointmentsData]);
+  const staffRecords = useMemo(() => ((staffRaw ?? []) as StaffRecord[]).filter(Boolean), [staffRaw]);
+  const locationRecords = useMemo(() => ((locationsRaw ?? []) as LocationRecord[]).filter(Boolean), [locationsRaw]);
+  const searchTerm = search.trim().toLowerCase();
+
+  const filteredRecords = useMemo(() => {
+    return records.filter((appointment) => {
+      if (activeTechFilter !== "all" && appointment.assignedStaffId !== activeTechFilter) return false;
+      if (activeFilter !== "all" && !matchesScheduleFilter(appointment, activeFilter, today)) return false;
+      if (!searchTerm) return true;
+
+      const haystack = [
+        getAppointmentLabel(appointment),
+        getClientName(appointment),
+        getVehicleLabel(appointment),
+        getTechName(appointment),
+        appointment.location?.name ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(searchTerm);
+    });
+  }, [activeFilter, activeTechFilter, records, searchTerm, today]);
+
+  const weekSnapshots = useMemo(() => weekDays.map((date) => buildDaySnapshot(filteredRecords, date)), [filteredRecords, weekDays]);
+  const shopStatus = useMemo(() => buildShopStatus(records, today), [records, today]);
+  const upcomingNext = useMemo(
     () =>
-      records.filter((appointment) => {
-        if (activeTab === "mine") {
-          return !!myStaffRecord && appointment.assignedStaff?.id === myStaffRecord.id;
-        }
-        return matchesTab(appointment.status ?? null, activeTab);
-      }),
-    [records, activeTab, myStaffRecord]
+      sortByOperationalTime(
+        filteredRecords.filter((appointment) => new Date(appointment.startTime).getTime() >= today.getTime() && !isInShopOnDate(appointment, today))
+      ).slice(0, 6),
+    [filteredRecords, today]
   );
-  const stats = useMemo(() => buildAppointmentStats(records, myStaffRecord), [records, myStaffRecord]);
+  const inShopThisWeek = useMemo(() => sortByOperationalTime(filteredRecords.filter((appointment) => isInShopOnDate(appointment, today))), [filteredRecords, today]);
+  const multiDayThisWeek = useMemo(() => sortByOperationalTime(filteredRecords.filter((appointment) => isMultiDayJob(appointment))), [filteredRecords]);
+  const pickupFocus = useMemo(
+    () => sortByOperationalTime(filteredRecords.filter((appointment) => isReadyForPickupJob(appointment) || isPickupDay(appointment, today))),
+    [filteredRecords, today]
+  );
+
+  const isInitialLoad = fetching && appointmentsData === undefined;
+  const weekLabel = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d")}`;
 
   return (
-    <div className="page-content page-section max-w-6xl">
+    <div className="page-content page-section max-w-7xl">
       <PageHeader
-        title="Appointments"
-        subtitle="Service board"
+        title="Schedule"
+        subtitle="Weekly operations"
         right={
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
             {isSmallViewport ? (
               <MobileFilterSelect
                 value={activeLocationId}
-                ariaLabel="Filter appointments by location"
+                ariaLabel="Filter schedule by location"
                 onChange={(value) => {
                   setActiveLocationId(value);
                   setCurrentLocationId(value === "all" ? null : value);
@@ -356,8 +417,8 @@ export default function AppointmentsPage() {
               </Select>
             )}
             <Button asChild variant="outline" className="w-full lg:w-auto">
-              <Link to="/calendar?view=month">
-                <Calendar className="mr-2 h-4 w-4" />
+              <Link to="/calendar?view=day">
+                <CalendarRange className="mr-2 h-4 w-4" />
                 Open Calendar
               </Link>
             </Button>
@@ -371,244 +432,204 @@ export default function AppointmentsPage() {
         }
       />
 
-      <ListViewToolbar
-        search={search}
-        onSearchChange={setSearch}
-        placeholder="Search appointments, clients, vehicles, or techs..."
-        loading={appointmentsFetching && records.length > 0}
-        resultCount={filteredAppointments.length}
-        noun="appointments"
-        filtersLabel={
-          [
-            activeTab !== "all" ? `View: ${activeTab === "mine" ? "my queue" : activeTab}` : null,
-            activeLocationId !== "all"
-              ? `Location: ${locationRecords.find((record) => record.id === activeLocationId)?.name ?? "Selected"}`
-              : null,
-            debouncedSearch ? `Search: ${debouncedSearch}` : null,
-          ]
-            .filter(Boolean)
-            .join(" | ") || null
-        }
-        onClear={() => {
-          setSearch("");
-          setDebouncedSearch("");
-          setActiveTab("all");
-          setActiveLocationId("all");
-          setCurrentLocationId(null);
-        }}
-      />
+      <section className="space-y-4">
+        <div className="rounded-[1.6rem] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.08),transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.06)] sm:p-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Week control</p>
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">{weekLabel}</h2>
+              <p className="text-sm text-muted-foreground">{format(currentDate, "EEEE, MMMM d")}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 7))}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" onClick={() => setCurrentDate(new Date())}>
+                This week
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7))}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AppointmentView)}>
-        <TabsList className="flex w-full gap-2 overflow-x-auto rounded-xl bg-transparent p-0 sm:grid sm:w-auto sm:grid-cols-7 xl:w-full">
-          <TabsTrigger value="all" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
-            All
-          </TabsTrigger>
-          <TabsTrigger value="mine" disabled={!myStaffRecord} className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
-            My Queue
-          </TabsTrigger>
-          <TabsTrigger value="scheduled" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">Scheduled</TabsTrigger>
-          <TabsTrigger value="confirmed" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">Confirmed</TabsTrigger>
-          <TabsTrigger value="in_progress" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">In Progress</TabsTrigger>
-          <TabsTrigger value="completed" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">Completed</TabsTrigger>
-          <TabsTrigger value="cancelled" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">Cancelled</TabsTrigger>
-        </TabsList>
-      </Tabs>
+          <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1.2fr)_160px_180px] lg:grid-cols-[minmax(0,1.4fr)_170px_190px]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Find a client, vehicle, job, or tech"
+                className="h-10 rounded-xl pl-9"
+              />
+            </div>
+            <Select value={activeTechFilter} onValueChange={setActiveTechFilter}>
+              <SelectTrigger className="h-10 rounded-xl">
+                <SelectValue placeholder="All techs" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All techs</SelectItem>
+                {staffRecords.map((staff) => (
+                  <SelectItem key={staff.id} value={staff.id}>
+                    {[staff.firstName, staff.lastName].filter(Boolean).join(" ").trim() || "Unnamed staff"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={activeFilter} onValueChange={(value) => setActiveFilter(value as ScheduleFilter)}>
+              <SelectTrigger className="h-10 rounded-xl">
+                <SelectValue placeholder="All work" />
+              </SelectTrigger>
+              <SelectContent>
+                {FILTER_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Scheduled" value={String(stats.scheduled)} />
-        <MetricCard label="Confirmed" value={String(stats.confirmed)} />
-        <MetricCard label="In progress" value={String(stats.inProgress)} />
-        <MetricCard
-          label="My queue"
-          value={myStaffRecord ? String(stats.myQueue) : "-"}
-        />
-      </div>
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setActiveFilter(option.value)}
+                className={cn(
+                  "inline-flex shrink-0 items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                  activeFilter === option.value
+                    ? "border-primary/25 bg-primary/10 text-primary"
+                    : "border-border/70 bg-background text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      {appointmentsError && !isInitialLoad ? (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <StatusCard label="In shop now" value={shopStatus.inShopNow.length} tone="slate" icon={CarFront} />
+          <StatusCard label="Drop-offs today" value={shopStatus.dropOffsToday.length} tone="amber" icon={ArrowDownToLine} />
+          <StatusCard label="Pickups today" value={shopStatus.pickupsToday.length} tone="sky" icon={ArrowUpFromLine} />
+          <StatusCard label="Active work" value={shopStatus.activeWork.length} tone="violet" icon={Pickaxe} />
+          <StatusCard label="Waiting / curing / hold" value={shopStatus.waitingJobs.length} tone="zinc" icon={PauseCircle} />
+          <StatusCard label="Ready for pickup" value={shopStatus.readyForPickup.length} tone="emerald" icon={Clock3} />
+        </div>
+      </section>
+
+      {error && !isInitialLoad ? (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <span>
-            {appointmentsError instanceof ApiError && (appointmentsError.status === 401 || appointmentsError.status === 403)
+            {error instanceof ApiError && (error.status === 401 || error.status === 403)
               ? "Your session expired. Redirecting to sign-in..."
-              : "Could not load appointments. Please refresh the page."}
+              : "Could not load the weekly schedule. Please refresh the page."}
           </span>
-          {!(appointmentsError instanceof ApiError && (appointmentsError.status === 401 || appointmentsError.status === 403)) ? (
-            <span className="text-xs text-destructive/70">({appointmentsError.message})</span>
-          ) : null}
         </div>
       ) : isInitialLoad ? (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="flex items-center justify-between rounded-lg border bg-white p-4">
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-48" />
-                <Skeleton className="h-3 w-32" />
-              </div>
-              <Skeleton className="h-4 w-24" />
-            </div>
-          ))}
-        </div>
-      ) : filteredAppointments.length === 0 ? (
-        <EmptyState
-          icon={Calendar}
-          title={debouncedSearch ? "No matching appointments" : "No appointments in this view"}
-          description={
-            debouncedSearch
-              ? "Try a different customer, vehicle, or technician search."
-              : activeTab === "mine" && !myStaffRecord
-              ? "Link this user to a staff profile to unlock an assigned queue."
-                : activeTab === "mine"
-                  ? "No appointments are assigned to this staff account right now."
-              : "No appointments in this view."
-          }
-          action={
-            <Button asChild>
-              <Link to="/appointments/new">
-                <Plus className="mr-2 h-4 w-4" />
-                New Appointment
-              </Link>
-            </Button>
-          }
-        />
-      ) : (
-        <div className={appointmentsFetching ? "space-y-2 opacity-70" : "space-y-2"}>
-          <div className="hidden items-center rounded-xl border border-border/70 bg-muted/20 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground lg:grid lg:grid-cols-[minmax(0,1.8fr)_190px_150px_190px_auto] lg:gap-4">
-            <span>Appointment</span>
-            <span>Schedule</span>
-            <span>Location</span>
-            <span>Assigned</span>
-            <span className="text-right">Actions</span>
+        <div className="mt-4 space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Card key={index} className="border-border/70">
+                <CardContent className="space-y-3 p-4">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-8 w-14" />
+                </CardContent>
+              </Card>
+            ))}
           </div>
-          {filteredAppointments.map((appointment) => {
-            const clientName = getAppointmentClientName(appointment);
-            const vehicleLabel = getAppointmentVehicleLabel(appointment);
-            const techName = getAppointmentTechName(appointment);
-            const quoteHref = getAppointmentQuoteHref(appointment);
-            const invoiceHref = getAppointmentInvoiceHref(appointment);
-            const formattedTime = getAppointmentScheduleLabel(appointment.startTime, "");
-
-            return (
-              <div
-                key={appointment.id}
-                className="rounded-xl border bg-white p-3 transition-colors hover:border-primary sm:rounded-lg sm:p-4 lg:p-0"
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.75fr)_minmax(320px,1fr)]">
+            <Card className="border-border/70">
+              <CardContent className="space-y-3 p-4">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <Skeleton key={index} className="h-20 w-full rounded-2xl" />
+                ))}
+              </CardContent>
+            </Card>
+            <Card className="border-border/70">
+              <CardContent className="space-y-3 p-4">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <Skeleton key={index} className="h-12 w-full rounded-2xl" />
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      ) : filteredRecords.length === 0 ? (
+        <div className="mt-4">
+          <EmptyState
+            icon={CalendarRange}
+            title="No schedule activity in this view"
+            description="Try clearing the search or filters, or move to a different week."
+            action={
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearch("");
+                  setActiveFilter("all");
+                  setActiveTechFilter("all");
+                  setCurrentDate(new Date());
+                }}
               >
-                <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1.8fr)_190px_150px_190px_auto] lg:items-center lg:gap-4 lg:px-4 lg:py-3">
-                  <div className="min-w-0 flex-1 space-y-1 lg:min-w-0">
-                    <Link
-                      to={`/appointments/${appointment.id}`}
-                      className="block rounded-lg transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={appointment.status ?? ""} type="appointment" />
-                        <span className="font-medium">{appointment.title || clientName || "Appointment"}</span>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {clientName || "Internal block"}
-                        {vehicleLabel ? ` - ${vehicleLabel}` : ""}
-                      </div>
-                    </Link>
+                Reset view
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,1fr)]">
+          <section className="space-y-4">
+            <Card className="overflow-hidden border-border/70 shadow-[0_18px_50px_rgba(15,23,42,0.05)]">
+              <CardContent className="p-0">
+                <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Weekly breakdown</p>
+                    <h3 className="text-base font-semibold text-foreground">Operational week</h3>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-2 sm:gap-x-6 sm:text-sm lg:block">
-                    <Link
-                      to={`/appointments/${appointment.id}`}
-                      className="block rounded-lg transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      <span className="block">{formattedTime || "Unscheduled"}</span>
-                      <span className="mt-1 hidden text-xs text-muted-foreground lg:block">
-                        {getAppointmentEndTimeLabel(appointment.endTime)}
-                      </span>
-                    </Link>
-                  </div>
-                  <Link
-                    to={`/appointments/${appointment.id}`}
-                    className="block rounded-lg text-xs text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-sm"
-                  >
-                    {appointment.location?.name ?? "No location set"}
-                  </Link>
-                  <Link
-                    to={`/appointments/${appointment.id}`}
-                    className="block rounded-lg text-xs text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-sm"
-                  >
-                    <span className="block">{techName}</span>
-                    <span className="mt-1 hidden text-xs text-muted-foreground lg:block">
-                      {getAppointmentTimeOnlyLabel(appointment.endTime)}
-                    </span>
-                  </Link>
-                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:justify-end lg:gap-2">
-                    {myStaffRecord && !appointment.assignedStaff?.id ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="min-h-[38px] px-2 text-xs lg:min-w-[108px]"
-                        onClick={(event) => void handleAssignToMe(event, appointment.id)}
-                      >
-                        <UserPlus className="mr-1 h-3 w-3" />
-                        Assign to me
-                      </Button>
-                    ) : null}
-                    {(QUICK_TRANSITIONS[appointment.status ?? ""]?.length ?? 0) > 0 ? (
-                      <>
-                        <label className="sr-only" htmlFor={`appointment-status-${appointment.id}`}>
-                          Change status
-                        </label>
-                        <select
-                          id={`appointment-status-${appointment.id}`}
-                          className="min-h-[38px] rounded-lg border border-border/90 bg-background px-2 text-xs text-foreground sm:hidden"
-                          defaultValue=""
-                          onClick={(event) => event.stopPropagation()}
-                          onChange={(event) => {
-                            const nextStatus = event.currentTarget.value;
-                            if (!nextStatus) return;
-                            void handleQuickStatusChange(appointment.id, nextStatus);
-                            event.currentTarget.value = "";
-                          }}
-                        >
-                          <option value="">Status</option>
-                          {QUICK_TRANSITIONS[appointment.status ?? ""].map((status) => (
-                            <option key={status} value={status}>
-                              {formatStatus(status)}
-                            </option>
-                          ))}
-                        </select>
-
-                        <div className="hidden sm:block">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button type="button" variant="outline" size="sm" className="min-h-[38px] px-2 text-xs lg:min-w-[92px]">
-                                Status
-                                <ChevronDown className="ml-1 h-3 w-3" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {QUICK_TRANSITIONS[appointment.status ?? ""].map((status) => (
-                                <DropdownMenuItem key={status} onSelect={(event) => handleQuickStatus(event, appointment.id, status)}>
-                                  {formatStatus(status)}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </>
-                    ) : null}
-                    {quoteHref ? (
-                      <Button asChild variant="outline" size="sm" className="min-h-[38px] px-2 text-xs lg:min-w-[76px]">
-                        <Link to={quoteHref}>Quote</Link>
-                      </Button>
-                    ) : null}
-                    {invoiceHref ? (
-                      <Button asChild variant="outline" size="sm" className="min-h-[38px] px-2 text-xs lg:min-w-[76px]">
-                        <Link to={invoiceHref}>Invoice</Link>
-                      </Button>
-                    ) : null}
-                    <Button asChild variant="ghost" size="sm" className="min-h-[38px] px-2 text-xs lg:min-w-[72px]">
-                      <Link to={`/appointments/${appointment.id}`}>Open</Link>
-                    </Button>
-                    <ChevronRight className="ml-auto hidden h-4 w-4 text-muted-foreground sm:block" />
-                  </div>
+                  <span className="rounded-full border border-border/70 bg-muted/30 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    {filteredRecords.length} jobs touching this week
+                  </span>
                 </div>
-              </div>
-            );
-          })}
+                <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-7">
+                  {weekSnapshots.map((snapshot) => (
+                    <DaySnapshotCard key={snapshot.date.toISOString()} snapshot={snapshot} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <OperationalListSection
+                title="In shop now"
+                eyebrow="Live occupancy"
+                items={inShopThisWeek}
+                emptyLabel="No vehicles are occupying shop space right now."
+              />
+              <OperationalListSection
+                title="Coming up next"
+                eyebrow="Next scheduled work"
+                items={upcomingNext}
+                emptyLabel="Nothing else is lined up in this view."
+              />
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <OperationalListSection
+              title="Multi-day jobs this week"
+              eyebrow="Shop occupancy"
+              items={multiDayThisWeek}
+              emptyLabel="No multi-day jobs are spanning this week."
+              multiDay
+            />
+            <OperationalListSection
+              title="Pickup focus"
+              eyebrow="Pickup-ready and leaving today"
+              items={pickupFocus}
+              emptyLabel="No pickup-ready or pickup-today jobs in this view."
+            />
+          </section>
         </div>
       )}
     </div>
@@ -617,12 +638,198 @@ export default function AppointmentsPage() {
 
 export { RouteErrorBoundary as ErrorBoundary };
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function StatusCard({
+  label,
+  value,
+  tone,
+  icon: Icon,
+}: {
+  label: string;
+  value: number;
+  tone: "slate" | "amber" | "sky" | "violet" | "zinc" | "emerald";
+  icon: React.ElementType;
+}) {
+  const toneClass =
+    tone === "amber"
+      ? "bg-amber-50 text-amber-700 border-amber-200/70"
+      : tone === "sky"
+        ? "bg-sky-50 text-sky-700 border-sky-200/70"
+        : tone === "violet"
+          ? "bg-violet-50 text-violet-700 border-violet-200/70"
+          : tone === "emerald"
+            ? "bg-emerald-50 text-emerald-700 border-emerald-200/70"
+            : tone === "zinc"
+              ? "bg-zinc-100 text-zinc-700 border-zinc-200/70"
+              : "bg-slate-100 text-slate-700 border-slate-200/70";
+
   return (
-    <Card className="border-border/70 shadow-sm">
-      <CardContent className="space-y-1 p-4">
-        <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{label}</div>
-        <div className="text-2xl font-semibold tracking-tight text-foreground">{value}</div>
+    <Card className="border-border/70 shadow-[0_10px_32px_rgba(15,23,42,0.04)]">
+      <CardContent className="flex items-start justify-between gap-3 p-4">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+          <p className="text-3xl font-semibold tracking-tight text-foreground">{value}</p>
+        </div>
+        <div className={cn("inline-flex h-10 w-10 items-center justify-center rounded-2xl border", toneClass)}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DaySnapshotCard({ snapshot }: { snapshot: DaySnapshot }) {
+  return (
+    <div
+      className={cn(
+        "rounded-[1.35rem] border border-border/70 bg-white/90 p-3 shadow-[0_10px_25px_rgba(15,23,42,0.04)]",
+        isToday(snapshot.date) && "border-primary/20 bg-primary/[0.035]"
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            {format(snapshot.date, "EEE")}
+          </p>
+          <h4 className="mt-1 text-lg font-semibold tracking-tight text-foreground">
+            {format(snapshot.date, "MMM d")}
+          </h4>
+        </div>
+        <span className="rounded-full border border-border/70 bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          {snapshot.jobs.length} jobs
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+        <MiniMetric label="Drop-offs" value={snapshot.dropOffs.length} />
+        <MiniMetric label="Active" value={snapshot.active.length} />
+        <MiniMetric label="Waiting" value={snapshot.waiting.length} />
+        <MiniMetric label="Ready" value={snapshot.ready.length} />
+        <MiniMetric label="Pickups" value={snapshot.pickups.length} />
+        <MiniMetric label="Carry" value={snapshot.carryOvers.length} />
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {snapshot.highlights.length > 0 ? (
+          snapshot.highlights.map((appointment) => (
+            <Link
+              key={appointment.id}
+              to={`/appointments/${appointment.id}`}
+              className="flex items-start gap-2 rounded-2xl border border-border/65 bg-background/85 px-3 py-2.5 transition-colors hover:bg-background"
+            >
+              <span className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {getVehicleLabel(appointment) || getClientName(appointment) || getTechName(appointment)}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {isPickupDay(appointment, snapshot.date)
+                  ? "Pickup"
+                  : isDropOffDay(appointment, snapshot.date)
+                    ? "Drop-off"
+                    : getJobPhaseLabel(appointment.jobPhase)}
+              </span>
+            </Link>
+          ))
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
+            No operational pressure on this day.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/20 px-2.5 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function OperationalListSection({
+  title,
+  eyebrow,
+  items,
+  emptyLabel,
+  multiDay = false,
+}: {
+  title: string;
+  eyebrow: string;
+  items: AppointmentRecord[];
+  emptyLabel: string;
+  multiDay?: boolean;
+}) {
+  return (
+    <Card className="border-border/70 shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
+      <CardContent className="space-y-3 p-4">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{eyebrow}</p>
+          <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        </div>
+
+        {items.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
+            {emptyLabel}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {items.slice(0, 8).map((appointment) => {
+              const spanStart = getJobSpanStart(appointment);
+              const spanEnd = getJobSpanEnd(appointment);
+              const vehicleLabel = getVehicleLabel(appointment);
+              const clientName = getClientName(appointment);
+
+              return (
+                <Link
+                  key={appointment.id}
+                  to={`/appointments/${appointment.id}`}
+                  className="flex items-start gap-3 rounded-[1.1rem] border border-border/65 bg-white/85 px-3 py-3 transition-colors hover:bg-white"
+                >
+                  <div className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
+                        <p className="truncate text-[12px] text-muted-foreground">
+                          {vehicleLabel || clientName || "Internal block"}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        {getJobPhaseLabel(appointment.jobPhase)}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
+                        <Clock3 className="h-3 w-3" />
+                        {multiDay
+                          ? `${format(spanStart, "EEE h:mm a")} - ${format(spanEnd, "EEE h:mm a")}`
+                          : format(new Date(appointment.startTime), "EEE h:mm a")}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
+                        <MapPin className="h-3 w-3" />
+                        {appointment.location?.name ?? "No location"}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
+                        {getTechName(appointment)}
+                      </span>
+                      {Number(appointment.totalPrice ?? 0) > 0 ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-border/65 bg-background px-2 py-0.5">
+                          {formatCurrency(Number(appointment.totalPrice ?? 0))}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
