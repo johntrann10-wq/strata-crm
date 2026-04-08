@@ -617,36 +617,27 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   );
 }
 
-function DaySignalRow({
-  label,
+function DaySignalBadge({
   count,
   dotClassName,
   outlined = false,
 }: {
-  label: string;
   count: number;
   dotClassName: string;
   outlined?: boolean;
 }) {
   if (count <= 0) return null;
   return (
-    <div className="flex items-center gap-1.5">
-      <div className="flex items-center gap-1">
-        {Array.from({ length: Math.min(count, 4) }).map((_, index) => (
-          <span
-            key={`${label}-${index}`}
-            className={cn(
-              "h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2",
-              outlined ? "border" : "",
-              dotClassName
-            )}
-          />
-        ))}
-      </div>
-      <span className="text-[9px] font-medium uppercase tracking-[0.1em] text-muted-foreground sm:text-[10px]">
-        {label} {count > 4 ? `+${count - 4}` : count}
-      </span>
-    </div>
+    <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/90 px-1.5 py-0.5 text-[9px] font-semibold text-foreground/80 sm:text-[10px]">
+      <span
+        className={cn(
+          "h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2",
+          outlined ? "border" : "",
+          dotClassName
+        )}
+      />
+      {count > 9 ? "9+" : count}
+    </span>
   );
 }
 
@@ -897,11 +888,11 @@ export function MonthView({
                   aria-label={`Open ${dayLabel}`}
                   className={cn(
                     "group relative flex h-full min-h-0 touch-manipulation select-none flex-col border-r border-border/60 px-1.5 py-1.5 text-left transition-colors last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-2",
-                    "hover:bg-muted/35",
+                    "hover:bg-muted/25",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
-                    isToday && "bg-primary/[0.045]",
-                    isSelected && "ring-1 ring-inset ring-primary/30",
+                    isToday && "bg-primary/[0.04]",
+                    isSelected && "bg-primary/[0.03] ring-1 ring-inset ring-primary/30",
                     isSelectedAppointmentDay && "bg-primary/[0.06]"
                   )}
                   onClick={() => onDayClick(day)}
@@ -941,7 +932,7 @@ export function MonthView({
                   }}
                 >
                     <div className="flex h-full min-h-0 flex-col">
-                      <div className="flex items-start justify-between gap-1 sm:mb-2 sm:items-center sm:gap-2">
+                      <div className="flex items-start justify-between gap-1 sm:items-center sm:gap-2">
                       <span
                         className={cn(
                           "inline-flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold sm:h-8 sm:w-8 sm:text-sm",
@@ -950,7 +941,7 @@ export function MonthView({
                       >
                         {day.getDate()}
                       </span>
-                      <div className="flex min-w-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                      <div className="flex min-w-0 flex-col items-end gap-1">
                         {dayAppts.length > 0 ? (
                           <span className="hidden sm:inline-flex max-w-full truncate text-[10px] font-semibold leading-none text-foreground/80">
                             {currencyFormatter.format(dayRevenue)}
@@ -961,13 +952,13 @@ export function MonthView({
                       </div>
 
                       <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                        <div className="pointer-events-none space-y-1">
-                          <DaySignalRow label="Starts" count={startCount} dotClassName="bg-amber-500" />
-                          <DaySignalRow label="In shop" count={onSiteCount} dotClassName="border-sky-500" outlined />
-                          <DaySignalRow label="Pickups" count={pickupCount} dotClassName="bg-emerald-500" />
+                        <div className="pointer-events-none flex flex-wrap gap-1">
+                          <DaySignalBadge count={startCount} dotClassName="bg-amber-500" />
+                          <DaySignalBadge count={onSiteCount} dotClassName="border-sky-500" outlined />
+                          <DaySignalBadge count={pickupCount} dotClassName="bg-emerald-500" />
                         </div>
 
-                        <div className="mt-auto space-y-1">
+                        <div className="mt-auto space-y-1 pt-2">
                           <DayStatusDots appointments={dayAppts} />
                         </div>
                     </div>
@@ -981,7 +972,7 @@ export function MonthView({
 
       {!isMobileLayout && hoverPreview ? (
         <div
-          className="pointer-events-none absolute z-20 w-72 rounded-[1.35rem] border border-border/70 bg-white/96 p-3 shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-sm transition-opacity duration-150"
+          className="pointer-events-none absolute z-20 w-72 rounded-[1.35rem] border border-border/70 bg-white/97 p-3 shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-sm transition-opacity duration-150"
           style={{ left: hoverPreview.left, top: hoverPreview.top }}
         >
           <div className="flex items-start justify-between gap-3">

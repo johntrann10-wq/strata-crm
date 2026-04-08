@@ -60,6 +60,78 @@ function formatPanelTime(value: string): string {
   return new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
+function MetricBadge({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[18px] border border-border/70 bg-white/78 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function AgendaPreviewRow({
+  appointment,
+  kind,
+  selected,
+  currentDate,
+  onClick,
+}: {
+  appointment: ApptRecord;
+  kind: "timed" | "onsite";
+  selected: boolean;
+  currentDate: Date;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-2xl border border-border/60 bg-white/82 px-3 py-3 text-left transition-colors hover:bg-white",
+        selected && !isCalendarBlockAppointment(appointment) && "border-primary/35 bg-primary/[0.05]"
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-foreground">
+          {[getCalendarAppointmentLabel(appointment), Number(appointment.totalPrice ?? 0) > 0 ? formatCurrency(Number(appointment.totalPrice ?? 0)) : null]
+            .filter(Boolean)
+            .join(" • ")}
+        </p>
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {appointment.client
+            ? [appointment.client.firstName, appointment.client.lastName].filter(Boolean).join(" ").trim() || "Client"
+            : "Internal"}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {appointment.vehicle
+            ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+            : appointment.assignedStaff
+              ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+              : kind === "onsite"
+                ? "Vehicle in shop"
+                : "Unassigned"}
+        </p>
+        <p className="mt-1 truncate text-[11px] text-muted-foreground">
+          {kind === "onsite"
+            ? getOperationalTimelineLabel(appointment)
+            : isCalendarBlockAppointment(appointment)
+              ? isFullDayCalendarBlock(appointment)
+                ? "All-day block"
+                : `${formatPanelTime(appointment.startTime)} - ${formatPanelTime(appointment.endTime)}`
+              : `${formatPanelTime(appointment.startTime)}${appointment.endTime ? ` - ${formatPanelTime(appointment.endTime)}` : ""}`}
+        </p>
+      </div>
+      <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {kind === "onsite"
+          ? getOperationalDayLabel(appointment, currentDate)
+          : isCalendarBlockAppointment(appointment)
+            ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
+            : getOperationalDayLabel(appointment, currentDate)}
+      </span>
+    </button>
+  );
+}
+
 function getCalendarAppointmentLabel(appointment: ApptRecord): string {
   if (isCalendarBlockAppointment(appointment)) return getCalendarBlockLabel(appointment);
   if (appointment.title?.trim()) return appointment.title.trim();
@@ -571,7 +643,7 @@ export default function CalendarPage() {
     <div className="page-content flex h-full flex-col">
       <div className="page-section space-y-4">
         <div className="surface-panel overflow-hidden sm:rounded-[2rem]">
-          <div className="border-b border-white/60 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.14),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,249,252,0.9))] px-4 py-4 sm:px-6">
+          <div className="border-b border-white/60 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.1),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] px-4 py-4 sm:px-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -591,6 +663,9 @@ export default function CalendarPage() {
                   <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.6rem]">
                     {getHeaderTitle(currentDate, view)}
                   </h1>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {view === "month" ? "Month for density and date navigation." : "Day for timed work and in-shop awareness."}
+                  </p>
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -633,6 +708,10 @@ export default function CalendarPage() {
               </div>
 
               <div className="flex flex-col gap-2.5 lg:min-w-[220px] lg:items-end">
+                <Button size="lg" className="justify-center rounded-2xl shadow-[0_16px_36px_rgba(249,115,22,0.24)] lg:min-w-[220px]" onClick={handleNewAppointment}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New appointment
+                </Button>
                 <Button
                   size="lg"
                   variant="outline"
@@ -641,10 +720,6 @@ export default function CalendarPage() {
                 >
                   <Ban className="mr-2 h-4 w-4" />
                   Block time
-                </Button>
-                <Button size="lg" className="justify-center rounded-2xl shadow-[0_16px_36px_rgba(249,115,22,0.24)] lg:min-w-[220px]" onClick={handleNewAppointment}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  New appointment
                 </Button>
               </div>
             </div>
@@ -735,14 +810,8 @@ export default function CalendarPage() {
                     </h2>
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
-                      <p className="mt-2 text-2xl font-semibold text-foreground">{selectedMonthAppointments.length}</p>
-                    </div>
-                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Revenue</p>
-                      <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(selectedMonthRevenue)}</p>
-                    </div>
+                    <MetricBadge label="Jobs" value={String(selectedMonthAppointments.length)} />
+                    <MetricBadge label="Revenue" value={formatCurrency(selectedMonthRevenue)} />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
                     <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
@@ -769,18 +838,8 @@ export default function CalendarPage() {
                       <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
                     </div>
                     <div className="mt-3 grid min-w-0 gap-2 text-xs [grid-template-columns:repeat(2,minmax(0,1fr))]">
-                        <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                          <p className={cn("truncate font-semibold text-foreground", isMobileLayout && "text-[13px] leading-none")}>
-                            {selectedDayActiveItems}
-                          </p>
-                          <p className="mt-1 truncate text-muted-foreground">Active</p>
-                        </div>
-                      <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                        <p className={cn("truncate font-semibold text-foreground", isMobileLayout && "text-[13px] leading-none tracking-tight")}>
-                          {formatCurrency(selectedDayRevenue)}
-                        </p>
-                        <p className="mt-1 truncate text-muted-foreground">Revenue</p>
-                      </div>
+                      <MetricBadge label="Active" value={String(selectedDayActiveItems)} />
+                      <MetricBadge label="Revenue" value={formatCurrency(selectedDayRevenue)} />
                     </div>
                     <div className={cn("mt-3 min-h-0 min-w-0", isMobileLayout && "flex flex-1 flex-col overflow-hidden")}>
                       {selectedDayAgendaItems.length > 0 ? (
@@ -880,14 +939,8 @@ export default function CalendarPage() {
                     <h2 className="mt-1 text-lg font-semibold text-foreground">{formatPanelDate(currentDate)}</h2>
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-3">
-                      <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointments</p>
-                        <p className="mt-2 text-2xl font-semibold text-foreground">{selectedDayActiveItems}</p>
-                      </div>
-                    <div className="rounded-[20px] border border-white/70 bg-white/78 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Revenue</p>
-                      <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(selectedDayRevenue)}</p>
-                    </div>
+                    <MetricBadge label="Active" value={String(selectedDayActiveItems)} />
+                    <MetricBadge label="Revenue" value={formatCurrency(selectedDayRevenue)} />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
                     <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">

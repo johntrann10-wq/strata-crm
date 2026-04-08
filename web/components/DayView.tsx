@@ -28,7 +28,6 @@ import {
   apptVehicleLabel,
   type ApptRecord,
   AppointmentBlock,
-  StaffWorkloadBar,
   activeDragDurationMs,
 } from "./CalendarViews";
 
@@ -390,12 +389,10 @@ export function DayView({
         ) : null}
       </div>
 
-      <StaffWorkloadBar appointments={dayAppts} />
-
       <div id="day-scroll-container" className="flex-1 overflow-y-auto">
         {onSiteOnlyJobs.length > 0 ? (
           <div className="border-b border-border/60 bg-muted/10 px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">On-site jobs</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">In shop today</p>
             <div className="space-y-2">
               {onSiteOnlyJobs.map((apt) => {
                 const multiDayKind = getMultiDayDayKind(apt, currentDate);
