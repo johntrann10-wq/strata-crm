@@ -60,20 +60,6 @@ function formatPanelTime(value: string): string {
   return new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
-function MetricBadge({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
-  return (
-    <div
-      className={cn(
-        "rounded-[18px] border border-border/70 bg-white/78 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]",
-        compact ? "px-2.5 py-2" : "px-3 py-2.5"
-      )}
-    >
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <p className={cn("mt-1 font-semibold text-foreground", compact ? "text-[13px]" : "text-sm")}>{value}</p>
-    </div>
-  );
-}
-
 function InlineMetricPill({ label, value }: { label: string; value: string }) {
   return (
     <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-white/84 px-3 py-1.5 text-xs shadow-sm">
@@ -664,36 +650,6 @@ export default function CalendarPage() {
     });
   }, [businessId, runMonthFinanceMetrics, selectedMonthRange]);
 
-  const controlCards =
-    view === "month"
-      ? []
-      : [
-          {
-            label: "Booked today",
-            value: String(selectedDayAgendaItems.length),
-          },
-          {
-            label: "Due today",
-            value: formatCurrency(selectedDayRevenue),
-          },
-          {
-            label: "In shop",
-            value: String(selectedDayInShopCount),
-          },
-          {
-            label: "Drop-offs",
-            value: String(selectedDayDropoffs),
-          },
-          {
-            label: "Pickups",
-            value: String(selectedDayPickups),
-          },
-          {
-            label: "Active",
-            value: String(selectedDayActiveItems),
-          },
-        ];
-
   const dayInspectorPanel = (
     <div className="flex min-h-0 flex-col overflow-hidden">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3">
@@ -939,15 +895,7 @@ export default function CalendarPage() {
             <div className="flex shrink-0 justify-start">
               <InlineMetricPill label="Month revenue" value={formatCurrency(selectedMonthRevenue)} />
             </div>
-          ) : (
-            <div className="grid shrink-0 grid-cols-3 gap-2 xl:grid-cols-6">
-              {controlCards.map((card) => (
-                <div key={card.label} className="surface-panel rounded-[1.1rem] p-2.5 xl:rounded-[1.25rem] xl:p-3">
-                  <MetricBadge label={card.label} value={card.value} compact={isMobileLayout} />
-                </div>
-              ))}
-            </div>
-          )}
+          ) : null}
 
           <div
             className={cn(

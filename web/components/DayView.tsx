@@ -64,6 +64,17 @@ function DaySection({
   );
 }
 
+function MobileAgendaSectionLabel({ title, count }: { title: string; count: number }) {
+  return (
+    <div className="mb-2 flex items-center justify-between gap-2">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{title}</p>
+      <span className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+        {count}
+      </span>
+    </div>
+  );
+}
+
 export function DayView({
   currentDate,
   appointments,
@@ -187,7 +198,7 @@ export function DayView({
   if (isMobileLayout) {
     return (
       <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm">
-        <div className="border-b border-border/70 bg-white/80 px-4 py-4">
+        <div className="border-b border-border/70 bg-white/80 px-3 py-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-foreground">
@@ -197,50 +208,34 @@ export function DayView({
                   day: "numeric",
                 })}
               </p>
-              <p className="text-xs text-muted-foreground">
-                {visibleItemCount} {visibleItemCount === 1 ? "item" : "items"} on calendar
-                {activeItemCount !== visibleItemCount ? ` - ${activeItemCount} active` : ""}
-                {unassignedCount > 0 ? ` - ${unassignedCount} unassigned` : ""}
+              <p className="text-[11px] text-muted-foreground">
+                {timedAgendaItems.length} timed
+                {onSiteAgendaItems.length > 0 ? ` · ${onSiteAgendaItems.length} in shop` : ""}
+                {unassignedCount > 0 ? ` · ${unassignedCount} unassigned` : ""}
               </p>
             </div>
-            <Button size="sm" onClick={() => onSlotClick(currentDate)}>
-              <Plus className="mr-2 h-4 w-4" />
-              New appointment
+            <Button size="sm" className="h-8 rounded-full px-3" onClick={() => onSlotClick(currentDate)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New
             </Button>
           </div>
-          {dayAppts.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-medium">
-              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-                {timedAgendaItems.length} timed
-              </span>
-              {onSiteAgendaItems.length > 0 ? (
-                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-                  {onSiteAgendaItems.length} in shop
-                </span>
-              ) : null}
-              {unassignedCount > 0 ? (
-                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-                  {unassignedCount} unassigned
-                </span>
-              ) : null}
-            </div>
-          ) : null}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3">
+        <div className="flex-1 overflow-y-auto p-2.5">
           {visibleItemCount === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 text-center">
-              <CalendarIcon className="h-12 w-12 text-muted-foreground" />
+            <div className="flex h-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-5 text-center">
+              <CalendarIcon className="h-10 w-10 text-muted-foreground" />
               <div>
-                <p className="text-base font-semibold text-foreground">Nothing on calendar yet</p>
+                <p className="text-sm font-semibold text-foreground">Nothing on calendar yet</p>
               </div>
-              <Button onClick={() => onSlotClick(currentDate)}>
+              <Button className="h-9 rounded-full px-4" onClick={() => onSlotClick(currentDate)}>
                 <Plus className="mr-2 h-4 w-4" />
                 New appointment
               </Button>
             </div>
           ) : (
             <div className="space-y-3">
+              {timedAgendaItems.length > 0 ? <MobileAgendaSectionLabel title="Timed work" count={timedAgendaItems.length} /> : null}
               {agendaItems.map(({ appointment, kind }) => {
                 const style = getStatusStyle(appointment.status);
                 const isBlock = isCalendarBlockAppointment(appointment);
@@ -251,7 +246,7 @@ export function DayView({
                     key={`${appointment.id}-${kind}-mobile`}
                     type="button"
                     className={cn(
-                      "w-full rounded-2xl border bg-white px-4 py-4 text-left shadow-sm transition-all hover:-translate-y-px hover:shadow-md",
+                      "w-full rounded-2xl border bg-white px-3 py-2.5 text-left shadow-sm transition-all hover:shadow-md",
                       isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
                       isBlock ? "" : style.text,
                       isBlock ? "" : style.border,
@@ -265,17 +260,16 @@ export function DayView({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-base font-semibold">
-                          {isBlock ? getCalendarBlockLabel(appointment) : apptLabel(appointment)}
+                        <p className="truncate text-sm font-semibold">
+                          {[isBlock ? getCalendarBlockLabel(appointment) : apptLabel(appointment), moneyLabel].filter(Boolean).join(" · ")}
                         </p>
-                        <p className="mt-1 text-sm text-muted-foreground">{apptClientLabel(appointment)}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {apptVehicleLabel(appointment)}
+                        <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                          {apptClientLabel(appointment)} · {apptVehicleLabel(appointment)}
                         </p>
                       </div>
                       <span
                         className={cn(
-                          "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize",
+                          "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize",
                           isBlock ? "bg-slate-200 text-slate-700" : style.pill
                         )}
                       >
