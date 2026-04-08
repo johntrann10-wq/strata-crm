@@ -74,6 +74,15 @@ function MetricBadge({ label, value, compact = false }: { label: string; value: 
   );
 }
 
+function InlineMetricPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-white/84 px-3 py-1.5 text-xs shadow-sm">
+      <span className="font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
+      <span className="font-semibold text-foreground">{value}</span>
+    </div>
+  );
+}
+
 function AgendaPreviewRow({
   appointment,
   kind,
@@ -655,62 +664,72 @@ export default function CalendarPage() {
     });
   }, [businessId, runMonthFinanceMetrics, selectedMonthRange]);
 
-  const controlCards = [
-    {
-      label: view === "month" ? "Month jobs" : "Booked today",
-      value: view === "month" ? String(selectedMonthAppointments.length) : String(selectedDayAgendaItems.length),
-    },
-    {
-      label: view === "month" ? "Month revenue" : "Due today",
-      value: view === "month" ? formatCurrency(selectedMonthRevenue) : formatCurrency(selectedDayRevenue),
-    },
-    {
-      label: "In shop",
-      value: String(selectedDayInShopCount),
-    },
-    {
-      label: "Drop-offs",
-      value: String(selectedDayDropoffs),
-    },
-    {
-      label: "Pickups",
-      value: String(selectedDayPickups),
-    },
-    {
-      label: "Active",
-      value: String(selectedDayActiveItems),
-    },
-  ];
+  const controlCards =
+    view === "month"
+      ? []
+      : [
+          {
+            label: "Booked today",
+            value: String(selectedDayAgendaItems.length),
+          },
+          {
+            label: "Due today",
+            value: formatCurrency(selectedDayRevenue),
+          },
+          {
+            label: "In shop",
+            value: String(selectedDayInShopCount),
+          },
+          {
+            label: "Drop-offs",
+            value: String(selectedDayDropoffs),
+          },
+          {
+            label: "Pickups",
+            value: String(selectedDayPickups),
+          },
+          {
+            label: "Active",
+            value: String(selectedDayActiveItems),
+          },
+        ];
 
   const dayInspectorPanel = (
     <div className="flex min-h-0 flex-col overflow-hidden">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3">
-        <div className="space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Day inspector</p>
-          <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-            {selectedDayDropoffs} drop-offs
-          </span>
-          <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-            {selectedDayInShopCount} in shop
-          </span>
-          <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-            {selectedDayPickups} pickups
-          </span>
-          <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-            {selectedDayUnassigned} unassigned
-          </span>
-          <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-            {selectedDayConflicts} conflicts
-          </span>
-        </div>
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3">
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Day inspector</p>
+            <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
+          </div>
+          {isMobileLayout ? (
+            <div className="flex flex-wrap gap-2 text-xs">
+              <InlineMetricPill label="Revenue" value={formatCurrency(selectedDayRevenue)} />
+              <InlineMetricPill label="Jobs" value={String(selectedDayAgendaItems.length)} />
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                {selectedDayDropoffs} drop-offs
+              </span>
+              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                {selectedDayInShopCount} in shop
+              </span>
+              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                {selectedDayPickups} pickups
+              </span>
+              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                {selectedDayUnassigned} unassigned
+              </span>
+              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
+                {selectedDayConflicts} conflicts
+              </span>
+            </div>
+          )}
       </div>
       <div className="mt-3 min-h-0 flex-1">
         {selectedDayAgendaItems.length > 0 ? (
-          <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-            <div className="min-h-0 rounded-[1.3rem] border border-border/60 bg-white/72 p-3">
+          <div className={cn("grid h-full min-h-0 gap-3", isMobileLayout ? "grid-cols-1" : "lg:grid-cols-[minmax(0,1fr)_220px]")}>
+            <div className={cn("min-h-0 rounded-[1.3rem] border border-border/60 bg-white/72", isMobileLayout ? "p-2.5" : "p-3")}>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                   {view === "month" ? "Selected date" : "Today plan"}
@@ -732,17 +751,19 @@ export default function CalendarPage() {
                 ))}
               </div>
             </div>
-            <div className="grid gap-2 lg:auto-rows-min">
-              <DetailStat label="Revenue" value={formatCurrency(selectedDayRevenue)} />
-              <DetailStat label="Active" value={selectedDayActiveItems} />
-              <DetailStat label="Drop-offs" value={selectedDayDropoffs} />
-              <DetailStat label="In shop" value={selectedDayInShopCount} />
-              <DetailStat label="Pickups" value={selectedDayPickups} />
-            </div>
+            {!isMobileLayout ? (
+              <div className="grid gap-2 lg:auto-rows-min">
+                <DetailStat label="Revenue" value={formatCurrency(selectedDayRevenue)} />
+                <DetailStat label="Active" value={selectedDayActiveItems} />
+                <DetailStat label="Drop-offs" value={selectedDayDropoffs} />
+                <DetailStat label="In shop" value={selectedDayInShopCount} />
+                <DetailStat label="Pickups" value={selectedDayPickups} />
+              </div>
+            ) : null}
           </div>
         ) : (
-          <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-            <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-5">
+          <div className={cn("grid h-full min-h-0 gap-3", isMobileLayout ? "grid-cols-1" : "lg:grid-cols-[minmax(0,1fr)_220px]")}>
+            <div className={cn("rounded-2xl border border-dashed border-border/70 bg-muted/10", isMobileLayout ? "px-3 py-4" : "px-4 py-5")}>
               <p className="text-sm font-medium text-foreground">No appointments on this {view === "month" ? "date" : "day"}</p>
               {view === "month" && busiestMonthDay ? (
                 <p className="mt-2 text-xs text-muted-foreground">
@@ -750,13 +771,15 @@ export default function CalendarPage() {
                 </p>
               ) : null}
             </div>
-            <div className="grid gap-2 lg:auto-rows-min">
-              <DetailStat label="Revenue" value={formatCurrency(selectedDayRevenue)} />
-              <DetailStat label="Active" value={selectedDayActiveItems} />
-              <DetailStat label="Drop-offs" value={selectedDayDropoffs} />
-              <DetailStat label="In shop" value={selectedDayInShopCount} />
-              <DetailStat label="Pickups" value={selectedDayPickups} />
-            </div>
+            {!isMobileLayout ? (
+              <div className="grid gap-2 lg:auto-rows-min">
+                <DetailStat label="Revenue" value={formatCurrency(selectedDayRevenue)} />
+                <DetailStat label="Active" value={selectedDayActiveItems} />
+                <DetailStat label="Drop-offs" value={selectedDayDropoffs} />
+                <DetailStat label="In shop" value={selectedDayInShopCount} />
+                <DetailStat label="Pickups" value={selectedDayPickups} />
+              </div>
+            ) : null}
           </div>
         )}
       </div>
@@ -912,18 +935,24 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          <div className="grid shrink-0 grid-cols-3 gap-2 xl:grid-cols-6">
-            {controlCards.map((card) => (
-              <div key={card.label} className="surface-panel rounded-[1.1rem] p-2.5 xl:rounded-[1.25rem] xl:p-3">
-                <MetricBadge label={card.label} value={card.value} compact={isMobileLayout} />
-              </div>
-            ))}
-          </div>
+          {view === "month" ? (
+            <div className="flex shrink-0 justify-start">
+              <InlineMetricPill label="Month revenue" value={formatCurrency(selectedMonthRevenue)} />
+            </div>
+          ) : (
+            <div className="grid shrink-0 grid-cols-3 gap-2 xl:grid-cols-6">
+              {controlCards.map((card) => (
+                <div key={card.label} className="surface-panel rounded-[1.1rem] p-2.5 xl:rounded-[1.25rem] xl:p-3">
+                  <MetricBadge label={card.label} value={card.value} compact={isMobileLayout} />
+                </div>
+              ))}
+            </div>
+          )}
 
           <div
             className={cn(
               "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
-              isMobileLayout ? "flex-[0_0_19.5rem]" : "flex-1"
+              isMobileLayout ? "flex-1 min-h-[15rem] p-3" : "flex-1"
             )}
           >
             {dayInspectorPanel}
