@@ -6,6 +6,9 @@ import { api } from "@/api";
 import { useAction } from "@/hooks/useApi";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { getJobPhaseLabel, getOperationalDayLabel, getOperationalTimelineLabel, isMultiDayJob } from "@/lib/calendarJobSpans";
 
@@ -148,8 +151,17 @@ export function AppointmentInspectorPanel({
   const [{ fetching: updatingLifecycle }, updateAppointmentStatus] = useAction(api.appointment.updateStatus);
   const [{ fetching: updatingPhase }, updateAppointment] = useAction(api.appointment.update);
   const [{ fetching: completingAppointment }, completeAppointment] = useAction(api.appointment.complete);
+  const [{ fetching: savingDeposit }, updateAppointmentMoney] = useAction(api.appointment.update);
+  const [{ fetching: recordingPayment }, recordDepositPayment] = useAction(api.appointment.recordDepositPayment);
+  const [{ fetching: reversingPayment }, reverseDepositPayment] = useAction(api.appointment.reverseDepositPayment);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [pendingPhase, setPendingPhase] = useState<string | null>(null);
+  const [depositDialogOpen, setDepositDialogOpen] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [depositDraft, setDepositDraft] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
 
   if (!appointment) {
     return (
@@ -168,6 +180,15 @@ export function AppointmentInspectorPanel({
   const collectedAmount = getCollectedAmount(appointment);
   const balanceDue = getBalanceDue(appointment);
   const totalAmount = Number(appointment.totalPrice ?? 0);
+  const hasClient = Boolean(appointment.client?.firstName || appointment.client?.lastName);
+  const isInternalAppointment = !hasClient;
+  const effectiveCollectionAmount =
+    isInternalAppointment && totalAmount > 0
+      ? Number(appointment.depositAmount ?? 0) > 0
+        ? Number(appointment.depositAmount ?? 0)
+        : totalAmount
+      : Number(appointment.depositAmount ?? 0);
+  const canManageMoney = appointment.status !== "cancelled" && appointment.status !== "no-show" && totalAmount > 0;
 
   async function handleLifecycleUpdate(nextStatus: "confirmed" | "in_progress") {
     setPendingStatus(nextStatus);
@@ -205,9 +226,82 @@ export function AppointmentInspectorPanel({
     await onAppointmentChange?.();
   }
 
+  function openDepositDialog() {
+    const currentAmount = Number(appointment.depositAmount ?? 0);
+    setDepositDraft(currentAmount > 0 ? currentAmount.toFixed(2) : "");
+    setDepositDialogOpen(true);
+  }
+
+  function openPaymentDialog() {
+    setPaymentAmount(effectiveCollectionAmount > 0 ? effectiveCollectionAmount.toFixed(2) : "0.00");
+    setPaymentMethod("cash");
+    setPaymentDate(new Date().toISOString().split("T")[0]);
+    setPaymentDialogOpen(true);
+  }
+
+  async function handleSaveDeposit() {
+    const nextAmount = depositDraft.trim() === "" ? 0 : Number(depositDraft);
+    if (!Number.isFinite(nextAmount) || nextAmount < 0) {
+      toast.error("Enter a valid deposit amount.");
+      return;
+    }
+    if (totalAmount > 0 && nextAmount > totalAmount) {
+      toast.error("Deposit cannot be greater than the appointment total.");
+      return;
+    }
+    const result = await updateAppointmentMoney({ id: appointment.id, depositAmount: nextAmount } as any);
+    if (result.error) {
+      toast.error("Failed to update deposit: " + result.error.message);
+      return;
+    }
+    toast.success(nextAmount > 0 ? "Deposit updated" : "Deposit removed");
+    setDepositDialogOpen(false);
+    await onAppointmentChange?.();
+  }
+
+  async function handleRecordPayment() {
+    const amount = Number(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid payment amount.");
+      return;
+    }
+    if (Math.abs(amount - effectiveCollectionAmount) > 0.009) {
+      toast.error(`Payment must match ${formatCurrency(effectiveCollectionAmount)}.`);
+      return;
+    }
+    const [year, month, day] = paymentDate.split("-").map(Number);
+    const paidAtDate = new Date(year, (month || 1) - 1, day || 1);
+    const result = await recordDepositPayment({
+      id: appointment.id,
+      amount,
+      method: paymentMethod,
+      paidAt: paidAtDate.toISOString(),
+    } as any);
+    if (result.error) {
+      toast.error("Failed to record payment: " + result.error.message);
+      return;
+    }
+    toast.success(isInternalAppointment ? "Payment recorded" : "Deposit recorded");
+    setPaymentDialogOpen(false);
+    await onAppointmentChange?.();
+  }
+
+  async function handleReversePayment() {
+    const confirmed = window.confirm(isInternalAppointment ? "Mark this appointment unpaid again?" : "Reverse this deposit collection?");
+    if (!confirmed) return;
+    const result = await reverseDepositPayment({ id: appointment.id } as any);
+    if (result.error) {
+      toast.error("Failed to reverse payment: " + result.error.message);
+      return;
+    }
+    toast.success(isInternalAppointment ? "Payment reversed" : "Deposit reversed");
+    await onAppointmentChange?.();
+  }
+
   return (
-    <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
-      <CardContent className="space-y-4 p-4">
+    <>
+      <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
+        <CardContent className="space-y-4 p-4">
         <div className="space-y-1">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Appointment Inspector</p>
@@ -318,6 +412,49 @@ export function AppointmentInspectorPanel({
                 </div>
               </div>
             ) : null}
+
+            {canManageMoney ? (
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Money actions</p>
+                <div className="flex flex-wrap gap-2">
+                  {!isInternalAppointment ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={openDepositDialog}
+                      disabled={savingDeposit || recordingPayment || reversingPayment}
+                    >
+                      {Number(appointment.depositAmount ?? 0) > 0 ? "Edit deposit" : "Set deposit"}
+                    </Button>
+                  ) : null}
+                  {!appointment.depositPaid && effectiveCollectionAmount > 0 ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={openPaymentDialog}
+                      disabled={savingDeposit || recordingPayment || reversingPayment}
+                    >
+                      {recordingPayment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                      {isInternalAppointment ? "Mark paid" : "Collect deposit"}
+                    </Button>
+                  ) : null}
+                  {appointment.depositPaid ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => void handleReversePayment()}
+                      disabled={savingDeposit || recordingPayment || reversingPayment}
+                    >
+                      {reversingPayment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                      {isInternalAppointment ? "Mark unpaid" : "Reverse deposit"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -334,8 +471,105 @@ export function AppointmentInspectorPanel({
             </Link>
           </Button>
         </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      <Dialog open={depositDialogOpen} onOpenChange={setDepositDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set deposit</DialogTitle>
+            <DialogDescription>
+              Choose how much you want to collect up front for this appointment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="inspector-deposit-amount">Deposit amount</Label>
+              <Input
+                id="inspector-deposit-amount"
+                inputMode="decimal"
+                value={depositDraft}
+                onChange={(event) => setDepositDraft(event.target.value.replace(/[^\d.]/g, ""))}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-muted-foreground">Appointment total: {formatCurrency(totalAmount)}</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDepositDialogOpen(false)} disabled={savingDeposit}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSaveDeposit()} disabled={savingDeposit}>
+              {savingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save deposit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{isInternalAppointment ? "Record payment" : "Collect deposit"}</DialogTitle>
+            <DialogDescription>
+              {isInternalAppointment
+                ? "Record the collected amount for this internal appointment."
+                : "Record the required deposit for this appointment."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="inspector-payment-amount">Amount</Label>
+              <Input
+                id="inspector-payment-amount"
+                inputMode="decimal"
+                value={paymentAmount}
+                onChange={(event) => setPaymentAmount(event.target.value.replace(/[^\d.]/g, ""))}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-muted-foreground">
+                Required amount: {formatCurrency(effectiveCollectionAmount)}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inspector-payment-method">Method</Label>
+              <select
+                id="inspector-payment-method"
+                value={paymentMethod}
+                onChange={(event) => setPaymentMethod(event.target.value)}
+                className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="check">Check</option>
+                <option value="venmo">Venmo</option>
+                <option value="cashapp">CashApp</option>
+                <option value="zelle">Zelle</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inspector-payment-date">Paid on</Label>
+              <Input
+                id="inspector-payment-date"
+                type="date"
+                value={paymentDate}
+                onChange={(event) => setPaymentDate(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)} disabled={recordingPayment}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleRecordPayment()} disabled={recordingPayment}>
+              {recordingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isInternalAppointment ? "Mark paid" : "Record deposit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
