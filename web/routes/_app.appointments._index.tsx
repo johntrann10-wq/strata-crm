@@ -590,7 +590,7 @@ export default function AppointmentsPage() {
           />
         </div>
       ) : (
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 space-y-4 px-1 sm:px-0">
           <Card className="overflow-hidden border-border/70 shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
             <CardContent className="p-0">
               <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
@@ -620,17 +620,17 @@ export default function AppointmentsPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full rounded-2xl border-border/70 bg-white/90"
+                className="mx-1 w-auto rounded-2xl border-border/70 bg-white/90"
                 onClick={() => setMobileInspectorOpen(true)}
               >
                 Inspect selected job
               </Button>
               <Dialog open={mobileInspectorOpen} onOpenChange={setMobileInspectorOpen}>
-                <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[1.5rem] p-0">
+                <DialogContent className="max-h-[90dvh] w-[calc(100vw-1.5rem)] max-w-[26rem] overflow-hidden rounded-[1.5rem] p-0">
                   <DialogHeader className="border-b border-border/60 px-5 py-4">
                     <DialogTitle>Appointment Inspector</DialogTitle>
                   </DialogHeader>
-                  <div className="max-h-[calc(90dvh-5rem)] overflow-y-auto p-3">
+                  <div className="max-h-[calc(90dvh-5rem)] overflow-y-auto px-2.5 py-3">
                     <AppointmentInspectorPanel
                       appointment={selectedAppointment}
                       emptyDescription="Pick any row in the weekly board to inspect the customer, vehicle, timing, money, and current stage."
@@ -643,7 +643,7 @@ export default function AppointmentsPage() {
             </>
           ) : null}
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
+          <div className="grid gap-4 px-1 sm:px-0 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
             <section className="space-y-4">
               <OperationalListSection
                 title="Today queue"
