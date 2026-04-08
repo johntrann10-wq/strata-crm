@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useOutletContext, useSearchParams, Link } from "react-router";
+import type { DateRange } from "react-day-picker";
 import { useFindFirst, useFindMany, useFindOne, useAction } from "../hooks/useApi";
 import { format, addMinutes } from "date-fns";
 import {
@@ -532,6 +533,39 @@ export default function NewAppointmentPage() {
     const parsed = new Date(`${pickupReadyDate}T${pickupReadyTime}`);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }, [pickupReadyDate, pickupReadyTime]);
+
+  const multiDayDateRange = useMemo<DateRange | undefined>(() => {
+    const from = jobStartDate ? new Date(`${jobStartDate}T12:00:00`) : undefined;
+    const to = expectedCompletionDate ? new Date(`${expectedCompletionDate}T12:00:00`) : undefined;
+    if (!from && !to) return undefined;
+    return {
+      from,
+      to,
+    };
+  }, [expectedCompletionDate, jobStartDate]);
+
+  const handleMultiDayRangeChange = useCallback((range: DateRange | undefined) => {
+    if (!range?.from) {
+      setJobStartDate("");
+      setExpectedCompletionDate("");
+      return;
+    }
+
+    const from = format(range.from, "yyyy-MM-dd");
+    const to = format(range.to ?? range.from, "yyyy-MM-dd");
+    setJobStartDate(from);
+    setExpectedCompletionDate(to);
+
+    if (!selectedDate) {
+      setSelectedDate(range.from);
+      return;
+    }
+
+    const selectedDay = format(selectedDate, "yyyy-MM-dd");
+    if (selectedDay < from || selectedDay > to) {
+      setSelectedDate(range.from);
+    }
+  }, [selectedDate]);
 
   useEffect(() => {
     if (!selectedDate) return;
@@ -1688,72 +1722,55 @@ export default function NewAppointmentPage() {
                       </Badge>
                     </div>
 
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-3 rounded-xl border border-border/60 bg-background/90 p-3">
+                    <div className="space-y-3 rounded-xl border border-border/60 bg-background/90 p-3">
+                      <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Drop-off</p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Shop stay</p>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            When the vehicle first arrives and starts occupying the shop.
+                            Tap the drop-off day first, then the pickup day. The calendar will highlight the full in-shop span.
                           </p>
                         </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label htmlFor="job-start-date">Drop-off date</Label>
-                            <Input
-                              id="job-start-date"
-                              type="date"
-                              value={jobStartDate}
-                              onChange={(e) => setJobStartDate(e.target.value)}
-                              className={dateInputClassName}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="job-start-time">Drop-off time</Label>
-                            <ResponsiveTimeSelect
-                              id="job-start-time"
-                              value={jobStartTime}
-                              onChange={setJobStartTime}
-                              options={timeOptions}
-                              placeholder="Select a time"
-                              desktopClassName={timeSelectTriggerClassName}
-                              mobileClassName={mobileTimeSelectClassName}
-                              useNative={isSmallViewport}
-                            />
-                          </div>
+                        <div className="text-right text-[11px] text-muted-foreground">
+                          <p>{dropOffDateTime ? `Drop-off ${format(dropOffDateTime, "MMM d")}` : "Pick drop-off"}</p>
+                          <p>{pickupDateTime ? `Pickup ${format(pickupDateTime, "MMM d")}` : "Pick pickup"}</p>
                         </div>
                       </div>
-
-                      <div className="space-y-3 rounded-xl border border-border/60 bg-background/90 p-3">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Vehicle leaves shop</p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Set the planned pickup or handoff time.
-                          </p>
+                      <div className="overflow-hidden rounded-xl border border-border/60">
+                        <Calendar
+                          mode="range"
+                          selected={multiDayDateRange}
+                          onSelect={handleMultiDayRangeChange}
+                          defaultMonth={multiDayDateRange?.from ?? selectedDate ?? new Date()}
+                          numberOfMonths={isSmallViewport ? 1 : 2}
+                          className="w-full p-2"
+                        />
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="job-start-time">Drop-off time</Label>
+                          <ResponsiveTimeSelect
+                            id="job-start-time"
+                            value={jobStartTime}
+                            onChange={setJobStartTime}
+                            options={timeOptions}
+                            placeholder="Select a time"
+                            desktopClassName={timeSelectTriggerClassName}
+                            mobileClassName={mobileTimeSelectClassName}
+                            useNative={isSmallViewport}
+                          />
                         </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label htmlFor="expected-completion-date">Pickup date</Label>
-                            <Input
-                              id="expected-completion-date"
-                              type="date"
-                              value={expectedCompletionDate}
-                              onChange={(e) => setExpectedCompletionDate(e.target.value)}
-                              className={dateInputClassName}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="expected-completion-time">Pickup time</Label>
-                            <ResponsiveTimeSelect
-                              id="expected-completion-time"
-                              value={expectedCompletionTime}
-                              onChange={setExpectedCompletionTime}
-                              options={timeOptions}
-                              placeholder="Select a time"
-                              desktopClassName={timeSelectTriggerClassName}
-                              mobileClassName={mobileTimeSelectClassName}
-                              useNative={isSmallViewport}
-                            />
-                          </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="expected-completion-time">Pickup time</Label>
+                          <ResponsiveTimeSelect
+                            id="expected-completion-time"
+                            value={expectedCompletionTime}
+                            onChange={setExpectedCompletionTime}
+                            options={timeOptions}
+                            placeholder="Select a time"
+                            desktopClassName={timeSelectTriggerClassName}
+                            mobileClassName={mobileTimeSelectClassName}
+                            useNative={isSmallViewport}
+                          />
                         </div>
                       </div>
                     </div>
