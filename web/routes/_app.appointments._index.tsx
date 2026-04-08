@@ -643,7 +643,7 @@ export default function AppointmentsPage() {
             </>
           ) : null}
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
+          <div className="grid gap-4 px-1 sm:px-0 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
             <section className="space-y-4">
               <OperationalListSection
                 title="Today queue"

@@ -277,7 +277,7 @@ export function AppointmentInspectorPanel({
 
   if (!appointment) {
     return (
-      <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
+      <Card className="mx-1 border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)] sm:mx-0">
         <CardContent className={cn("space-y-2", compact ? "p-3" : "p-4")}>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Inspector</p>
           <p className="text-sm font-medium text-foreground">{emptyTitle}</p>
@@ -579,7 +579,7 @@ export function AppointmentInspectorPanel({
 
   return (
     <>
-      <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
+      <Card className="mx-1 border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)] sm:mx-0">
         <CardContent className={cn(compact ? "space-y-3 p-3" : "space-y-4 p-4")}>
         <div className="space-y-1">
           <div className="flex items-start justify-between gap-3">
