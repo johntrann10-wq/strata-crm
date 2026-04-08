@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,28 @@ interface DayViewProps {
   conflictIds?: Set<string>;
 }
 
+function DaySection({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count: number;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-[20px] border border-border/70 bg-white/80 p-3 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{title}</p>
+        <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+          {count}
+        </span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function DayView({
   currentDate,
   appointments,
@@ -59,6 +81,8 @@ export function DayView({
   const agendaItems = daySnapshot.agendaItems;
   const onSiteOnlyJobs = daySnapshot.onSiteOnlyJobs;
   const visibleItemCount = agendaItems.length;
+  const timedAgendaItems = useMemo(() => agendaItems.filter((item) => item.kind !== "onsite"), [agendaItems]);
+  const onSiteAgendaItems = useMemo(() => agendaItems.filter((item) => item.kind === "onsite"), [agendaItems]);
   const positionedAppointments = useMemo(() => {
     type Positioned = {
       appointment: ApptRecord;
@@ -187,11 +211,11 @@ export function DayView({
           {dayAppts.length > 0 ? (
             <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-medium">
               <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-                {dayAppts.length} booked
+                {timedAgendaItems.length} timed
               </span>
-              {onSiteOnlyJobs.length > 0 ? (
+              {onSiteAgendaItems.length > 0 ? (
                 <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-                  {onSiteOnlyJobs.length} on site
+                  {onSiteAgendaItems.length} in shop
                 </span>
               ) : null}
               {unassignedCount > 0 ? (
@@ -373,11 +397,11 @@ export function DayView({
         {dayAppts.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-medium">
             <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-              {dayAppts.length} booked
+              {timedAgendaItems.length} timed
             </span>
-            {onSiteOnlyJobs.length > 0 ? (
+            {onSiteAgendaItems.length > 0 ? (
               <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
-                {onSiteOnlyJobs.length} on site
+                {onSiteAgendaItems.length} in shop
               </span>
             ) : null}
             {unassignedCount > 0 ? (
@@ -392,8 +416,8 @@ export function DayView({
       <div id="day-scroll-container" className="flex-1 overflow-y-auto">
         {onSiteOnlyJobs.length > 0 ? (
           <div className="border-b border-border/60 bg-muted/10 px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">In shop today</p>
-            <div className="space-y-2">
+            <DaySection title="In Shop Today" count={onSiteOnlyJobs.length}>
+              <div className="space-y-2">
               {onSiteOnlyJobs.map((apt) => {
                 const multiDayKind = getMultiDayDayKind(apt, currentDate);
                 const moneyLabel = apptMoneyLabel(apt);
@@ -425,9 +449,19 @@ export function DayView({
                 </button>
                 );
               })}
-            </div>
+              </div>
+            </DaySection>
           </div>
         ) : null}
+
+        <div className="border-b border-border/60 bg-background/90 px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Timed Work</p>
+            <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+              {positionedAppointments.timed.length + positionedAppointments.blocks.length}
+            </span>
+          </div>
+        </div>
 
         <div
           className="grid grid-cols-[72px_1fr] relative"
