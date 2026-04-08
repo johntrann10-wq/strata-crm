@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { CarFront, CircleDollarSign, Clock3, ExternalLink, Loader2, MapPin, User, Wrench } from "lucide-react";
+import { CarFront, CircleDollarSign, Clock3, ExternalLink, Loader2, MapPin, Plus, Trash2, User, Wrench } from "lucide-react";
 import { api } from "@/api";
 import { useAction, useFindMany } from "@/hooks/useApi";
 import { Card, CardContent } from "@/components/ui/card";
@@ -177,6 +177,10 @@ export function AppointmentInspectorPanel({
     pause: !appointment.businessId,
   } as any);
   const [{ fetching: savingDeposit }, updateAppointmentMoney] = useAction(api.appointment.update);
+  const [{ fetching: addingService }, addAppointmentService] = useAction(api.appointmentService.create);
+  const [{ fetching: removingService }, removeAppointmentService] = useAction((params: Record<string, unknown>) =>
+    api.appointmentService.delete(params)
+  );
   const [{ fetching: recordingPayment }, recordDepositPayment] = useAction(api.appointment.recordDepositPayment);
   const [{ fetching: reversingPayment }, reverseDepositPayment] = useAction(api.appointment.reverseDepositPayment);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
@@ -185,6 +189,7 @@ export function AppointmentInspectorPanel({
   const [timingDialogOpen, setTimingDialogOpen] = useState(false);
   const [depositDialogOpen, setDepositDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [priceDialogOpen, setPriceDialogOpen] = useState(false);
   const [clientIdDraft, setClientIdDraft] = useState("internal");
   const [vehicleIdDraft, setVehicleIdDraft] = useState("none");
   const [assignedStaffIdDraft, setAssignedStaffIdDraft] = useState("unassigned");
@@ -200,6 +205,8 @@ export function AppointmentInspectorPanel({
   const [pickupReadyDate, setPickupReadyDate] = useState("");
   const [pickupReadyTime, setPickupReadyTime] = useState("");
   const [depositDraft, setDepositDraft] = useState("");
+  const [priceDraft, setPriceDraft] = useState("");
+  const [selectedServiceId, setSelectedServiceId] = useState("__none__");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
@@ -242,6 +249,29 @@ export function AppointmentInspectorPanel({
     id: vehicle.id,
     label: [vehicle.year, vehicle.make, vehicle.model, vehicle.color, vehicle.licensePlate].filter(Boolean).join(" "),
   }));
+  const [{ data: appointmentServicesRaw }] = useFindMany(api.appointmentService, {
+    filter: appointment?.id ? { appointmentId: { equals: appointment.id } } : { id: { equals: "" } },
+    first: 50,
+    select: {
+      id: true,
+      serviceId: true,
+      quantity: true,
+      unitPrice: true,
+      service: {
+        id: true,
+        name: true,
+        category: true,
+        durationMinutes: true,
+      },
+    },
+    pause: !appointment?.id,
+  } as any);
+  const [{ data: serviceCatalogRaw, fetching: servicesFetching }] = useFindMany(api.service, {
+    filter: appointment?.businessId ? { businessId: { equals: appointment.businessId } } : { id: { equals: "" } },
+    first: 200,
+    sort: { createdAt: "Descending" },
+    pause: !appointment?.businessId,
+  } as any);
 
   if (!appointment) {
     return (
@@ -269,6 +299,25 @@ export function AppointmentInspectorPanel({
         : totalAmount
       : Number(appointment.depositAmount ?? 0);
   const canManageMoney = appointment.status !== "cancelled" && appointment.status !== "no-show" && totalAmount > 0;
+  const appointmentServices = (appointmentServicesRaw ?? []) as Array<{
+    id: string;
+    serviceId?: string | null;
+    quantity?: number | null;
+    unitPrice?: number | null;
+    service?: {
+      id?: string | null;
+      name?: string | null;
+      category?: string | null;
+      durationMinutes?: number | null;
+    } | null;
+  }>;
+  const existingServiceIds = new Set(appointmentServices.map((service) => service.serviceId).filter(Boolean));
+  const availableServices = ((serviceCatalogRaw ?? []) as Array<{
+    id: string;
+    name?: string | null;
+    category?: string | null;
+    price?: number | string | null;
+  }>).filter((service) => service.id && !existingServiceIds.has(service.id));
   async function handleLifecycleUpdate(nextStatus: "confirmed" | "in_progress") {
     setPendingStatus(nextStatus);
     const result = await updateAppointmentStatus({ id: appointment.id, status: nextStatus } as any);
@@ -309,6 +358,11 @@ export function AppointmentInspectorPanel({
     const currentAmount = Number(appointment.depositAmount ?? 0);
     setDepositDraft(currentAmount > 0 ? currentAmount.toFixed(2) : "");
     setDepositDialogOpen(true);
+  }
+
+  function openPriceDialog() {
+    setPriceDraft(totalAmount > 0 ? totalAmount.toFixed(2) : "");
+    setPriceDialogOpen(true);
   }
 
   function openTimingDialog() {
@@ -357,6 +411,47 @@ export function AppointmentInspectorPanel({
     }
     toast.success(nextAmount > 0 ? "Deposit updated" : "Deposit removed");
     setDepositDialogOpen(false);
+    await onAppointmentChange?.();
+  }
+
+  async function handleSavePrice() {
+    const nextAmount = priceDraft.trim() === "" ? 0 : Number(priceDraft);
+    if (!Number.isFinite(nextAmount) || nextAmount < 0) {
+      toast.error("Enter a valid total price.");
+      return;
+    }
+    const result = await updateAppointmentMoney({ id: appointment.id, totalPrice: nextAmount } as any);
+    if (result.error) {
+      toast.error("Failed to update total price: " + result.error.message);
+      return;
+    }
+    toast.success(nextAmount > 0 ? "Total price updated" : "Total price cleared");
+    setPriceDialogOpen(false);
+    await onAppointmentChange?.();
+  }
+
+  async function handleAddService() {
+    if (selectedServiceId === "__none__") return;
+    const result = await addAppointmentService({
+      appointmentId: appointment.id,
+      serviceId: selectedServiceId,
+    } as any);
+    if (result.error) {
+      toast.error("Failed to add service: " + result.error.message);
+      return;
+    }
+    toast.success("Service added");
+    setSelectedServiceId("__none__");
+    await onAppointmentChange?.();
+  }
+
+  async function handleRemoveService(appointmentServiceId: string) {
+    const result = await removeAppointmentService({ id: appointmentServiceId } as any);
+    if (result.error) {
+      toast.error("Failed to remove service: " + result.error.message);
+      return;
+    }
+    toast.success("Service removed");
     await onAppointmentChange?.();
   }
 
@@ -599,6 +694,15 @@ export function AppointmentInspectorPanel({
               <div className="space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Money actions</p>
                 <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-xl"
+                    onClick={openPriceDialog}
+                    disabled={savingDeposit || recordingPayment || reversingPayment}
+                  >
+                    Edit total
+                  </Button>
                   {!isInternalAppointment ? (
                     <Button
                       size="sm"
@@ -664,6 +768,78 @@ export function AppointmentInspectorPanel({
           </div>
         ) : null}
 
+        <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Services</p>
+              <p className="text-xs text-muted-foreground">Manage booked line items from the board.</p>
+            </div>
+            <span className="rounded-full border border-border/70 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {appointmentServices.length}
+            </span>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <select
+              value={selectedServiceId}
+              onChange={(event) => setSelectedServiceId(event.target.value)}
+              disabled={servicesFetching}
+              className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm sm:flex-1"
+            >
+              <option value="__none__">
+                {servicesFetching ? "Loading services..." : "Add a service from your catalog"}
+              </option>
+              {availableServices.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name ?? "Service"}
+                  {service.category ? ` - ${service.category}` : ""}
+                  {service.price != null ? ` - ${formatCurrency(Number(service.price))}` : ""}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => void handleAddService()}
+              disabled={addingService || selectedServiceId === "__none__"}
+            >
+              {addingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              Add
+            </Button>
+          </div>
+          {appointmentServices.length > 0 ? (
+            <div className="space-y-2">
+              {appointmentServices.map((item) => (
+                <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-muted/[0.12] px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{item.service?.name ?? "Service"}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {[item.service?.category, item.quantity ? `Qty ${item.quantity}` : null, item.service?.durationMinutes ? `${item.service.durationMinutes} min` : null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">{formatCurrency(Number(item.unitPrice ?? 0))}</span>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive"
+                      onClick={() => void handleRemoveService(item.id)}
+                      disabled={removingService}
+                    >
+                      {removingService ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-3 py-3 text-sm text-muted-foreground">
+              No services attached yet.
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-col gap-2">
           <Button asChild className="w-full rounded-xl">
             <Link to={`/appointments/${appointment.id}`}>
@@ -708,6 +884,36 @@ export function AppointmentInspectorPanel({
             <Button onClick={() => void handleSaveDeposit()} disabled={savingDeposit}>
               {savingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save deposit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={priceDialogOpen} onOpenChange={setPriceDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit total price</DialogTitle>
+            <DialogDescription>
+              Update the appointment total without leaving the scheduling surface.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="inspector-total-price">Total price</Label>
+            <Input
+              id="inspector-total-price"
+              inputMode="decimal"
+              value={priceDraft}
+              onChange={(event) => setPriceDraft(event.target.value.replace(/[^\d.]/g, ""))}
+              placeholder="0.00"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPriceDialogOpen(false)} disabled={savingDeposit}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSavePrice()} disabled={savingDeposit}>
+              {savingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save total
             </Button>
           </DialogFooter>
         </DialogContent>
