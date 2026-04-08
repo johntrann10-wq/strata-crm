@@ -132,15 +132,6 @@ function AgendaPreviewRow({
   );
 }
 
-function DetailStat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-xl border border-border/60 bg-background/72 px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-foreground">{value}</p>
-    </div>
-  );
-}
-
 function getCalendarAppointmentLabel(appointment: ApptRecord): string {
   if (isCalendarBlockAppointment(appointment)) return getCalendarBlockLabel(appointment);
   if (appointment.title?.trim()) return appointment.title.trim();
@@ -684,7 +675,7 @@ export default function CalendarPage() {
       </div>
       <div className="mt-3 min-h-0 flex-1">
         {selectedDayAgendaItems.length > 0 ? (
-          <div className={cn("grid h-full min-h-0 gap-3", isMobileLayout ? "grid-cols-1" : "lg:grid-cols-[minmax(0,1fr)_220px]")}>
+          <div className="grid h-full min-h-0 gap-3 grid-cols-1">
             <div className={cn("min-h-0 rounded-[1.3rem] border border-border/60 bg-white/72", isMobileLayout ? "p-2.5" : "p-3")}>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -707,18 +698,9 @@ export default function CalendarPage() {
                 ))}
               </div>
             </div>
-            {!isMobileLayout ? (
-              <div className="grid gap-2 lg:auto-rows-min">
-                <DetailStat label="Revenue" value={formatCurrency(selectedDayRevenue)} />
-                <DetailStat label="Active" value={selectedDayActiveItems} />
-                <DetailStat label="Drop-offs" value={selectedDayDropoffs} />
-                <DetailStat label="In shop" value={selectedDayInShopCount} />
-                <DetailStat label="Pickups" value={selectedDayPickups} />
-              </div>
-            ) : null}
           </div>
         ) : (
-          <div className={cn("grid h-full min-h-0 gap-3", isMobileLayout ? "grid-cols-1" : "lg:grid-cols-[minmax(0,1fr)_220px]")}>
+          <div className="grid h-full min-h-0 gap-3 grid-cols-1">
             <div className={cn("rounded-2xl border border-dashed border-border/70 bg-muted/10", isMobileLayout ? "px-3 py-4" : "px-4 py-5")}>
               <p className="text-sm font-medium text-foreground">No appointments on this {view === "month" ? "date" : "day"}</p>
               {view === "month" && busiestMonthDay ? (
@@ -727,15 +709,6 @@ export default function CalendarPage() {
                 </p>
               ) : null}
             </div>
-            {!isMobileLayout ? (
-              <div className="grid gap-2 lg:auto-rows-min">
-                <DetailStat label="Revenue" value={formatCurrency(selectedDayRevenue)} />
-                <DetailStat label="Active" value={selectedDayActiveItems} />
-                <DetailStat label="Drop-offs" value={selectedDayDropoffs} />
-                <DetailStat label="In shop" value={selectedDayInShopCount} />
-                <DetailStat label="Pickups" value={selectedDayPickups} />
-              </div>
-            ) : null}
           </div>
         )}
       </div>
