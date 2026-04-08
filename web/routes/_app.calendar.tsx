@@ -60,11 +60,16 @@ function formatPanelTime(value: string): string {
   return new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
-function MetricBadge({ label, value }: { label: string; value: string }) {
+function MetricBadge({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className="rounded-[18px] border border-border/70 bg-white/78 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+    <div
+      className={cn(
+        "rounded-[18px] border border-border/70 bg-white/78 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]",
+        compact ? "px-2.5 py-2" : "px-3 py-2.5"
+      )}
+    >
       <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-foreground">{value}</p>
+      <p className={cn("mt-1 font-semibold text-foreground", compact ? "text-[13px]" : "text-sm")}>{value}</p>
     </div>
   );
 }
@@ -876,8 +881,8 @@ export default function CalendarPage() {
               className={cn(
                 "overflow-hidden",
                 view === "month"
-                  ? "h-[21rem] sm:h-[22rem] xl:h-[24.5rem]"
-                  : "h-[21.5rem] sm:h-[23rem] xl:h-[25rem]"
+                  ? "h-[21rem] sm:h-[23rem] xl:h-[clamp(26rem,48dvh,38rem)]"
+                  : "h-[21.5rem] sm:h-[23rem] xl:h-[clamp(24rem,46dvh,34rem)]"
               )}
             >
               {view === "month" ? (
@@ -907,15 +912,20 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          <div className="scrollbar-none -mx-1 flex shrink-0 gap-2 overflow-x-auto px-1 xl:mx-0 xl:grid xl:grid-cols-6 xl:overflow-visible xl:px-0">
+          <div className="grid shrink-0 grid-cols-3 gap-2 xl:grid-cols-6">
             {controlCards.map((card) => (
-              <div key={card.label} className="surface-panel min-w-[9.5rem] rounded-[1.25rem] p-3 xl:min-w-0">
-                <MetricBadge label={card.label} value={card.value} />
+              <div key={card.label} className="surface-panel rounded-[1.1rem] p-2.5 xl:rounded-[1.25rem] xl:p-3">
+                <MetricBadge label={card.label} value={card.value} compact={isMobileLayout} />
               </div>
             ))}
           </div>
 
-          <div className={cn("surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4", isMobileLayout ? "flex-[0_0_17rem]" : "flex-1")}>
+          <div
+            className={cn(
+              "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
+              isMobileLayout ? "flex-[0_0_19.5rem]" : "flex-1"
+            )}
+          >
             {dayInspectorPanel}
           </div>
         </div>

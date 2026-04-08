@@ -617,6 +617,15 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   );
 }
 
+function uniqueAppointmentsById(appointments: ApptRecord[]): ApptRecord[] {
+  const seen = new Set<string>();
+  return appointments.filter((appointment) => {
+    if (seen.has(appointment.id)) return false;
+    seen.add(appointment.id);
+    return true;
+  });
+}
+
 function DaySignalBadge({
   count,
   dotClassName,
@@ -866,6 +875,7 @@ export function MonthView({
               const dayAppts = getOverviewCalendarAppointments(historicalDayAppointments);
               const daySpans = historicalDaySpans;
               const dayRevenue = dayAppts.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
+              const dayDensityItems = uniqueAppointmentsById([...dayAppts, ...daySpans]);
               const startCount = selectedMonthStartingCount(dayAppts, day);
               const pickupCount = selectedMonthPickupCount(dayAppts, daySpans, day);
               const onSiteCount = daySpans.length;
@@ -896,8 +906,8 @@ export function MonthView({
                     const containerRect = containerRef.current?.getBoundingClientRect();
                     const targetRect = event.currentTarget.getBoundingClientRect();
                     if (!containerRect) return;
-                    const previewWidth = 288;
-                    const previewHeight = 216;
+                    const previewWidth = 256;
+                    const previewHeight = 188;
                     const gutter = 12;
                     let left = targetRect.right - containerRect.left + gutter;
                     let top = targetRect.top - containerRect.top;
@@ -942,14 +952,14 @@ export function MonthView({
                       </div>
 
                       <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                        <div className="pointer-events-none hidden flex-wrap gap-1 sm:flex">
+                        <div className="pointer-events-none flex flex-wrap gap-1">
                           <DaySignalBadge count={startCount} dotClassName="bg-amber-500" />
                           <DaySignalBadge count={onSiteCount} dotClassName="border-sky-500" outlined />
                           <DaySignalBadge count={pickupCount} dotClassName="bg-emerald-500" />
                         </div>
 
                         <div className="mt-auto space-y-1 pt-1 sm:pt-2">
-                          <DayStatusDots appointments={dayAppts} />
+                          <DayStatusDots appointments={dayDensityItems} />
                         </div>
                     </div>
                   </div>

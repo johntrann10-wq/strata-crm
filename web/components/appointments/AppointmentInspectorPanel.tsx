@@ -629,7 +629,7 @@ export function AppointmentInspectorPanel({
               {!compact ? <p className="text-xs text-muted-foreground">Move the job forward without leaving the board.</p> : null}
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               {canConfirmAppointment(appointment) ? (
                 <Button
                   size="sm"
@@ -671,7 +671,7 @@ export function AppointmentInspectorPanel({
             {isMultiDayJob(appointment) ? (
               <div className="space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">In-shop stage</p>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid gap-2 sm:grid-cols-3">
                   {QUICK_PHASE_OPTIONS.map((option) => {
                     const active = appointment.jobPhase === option.value;
                     return (
@@ -695,7 +695,7 @@ export function AppointmentInspectorPanel({
             {canManageMoney ? (
               <div className="space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Money actions</p>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   <Button
                     size="sm"
                     variant="outline"
@@ -746,7 +746,7 @@ export function AppointmentInspectorPanel({
 
             <div className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Timing</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 <Button
                   size="sm"
                   variant="outline"
