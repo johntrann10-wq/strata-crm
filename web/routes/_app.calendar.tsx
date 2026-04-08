@@ -194,6 +194,7 @@ export default function CalendarPage() {
       paidAt: true,
       assignedStaffId: true,
       isMobile: true,
+      notes: true,
       internalNotes: true,
       client: { firstName: true, lastName: true },
       vehicle: { make: true, model: true, year: true },

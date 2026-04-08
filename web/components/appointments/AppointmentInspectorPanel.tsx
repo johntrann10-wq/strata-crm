@@ -3,12 +3,13 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 import { CarFront, CircleDollarSign, Clock3, ExternalLink, Loader2, MapPin, User, Wrench } from "lucide-react";
 import { api } from "@/api";
-import { useAction } from "@/hooks/useApi";
+import { useAction, useFindMany } from "@/hooks/useApi";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { ResponsiveTimeSelect, buildQuarterHourOptions, toDateInputValue } from "@/components/appointments/SchedulingControls";
 import { cn } from "@/lib/utils";
 import { getJobPhaseLabel, getOperationalDayLabel, getOperationalTimelineLabel, isMultiDayJob } from "@/lib/calendarJobSpans";
@@ -28,6 +29,9 @@ export type AppointmentInspectorRecord = {
   depositAmount?: number | null;
   depositPaid?: boolean | null;
   paidAt?: string | null;
+  assignedStaffId?: string | null;
+  notes?: string | null;
+  internalNotes?: string | null;
   location?: { name?: string | null } | null;
   client?: { firstName?: string | null; lastName?: string | null } | null;
   vehicle?: { year?: number | null; make?: string | null; model?: string | null } | null;
@@ -163,14 +167,19 @@ export function AppointmentInspectorPanel({
   const [{ fetching: updatingLifecycle }, updateAppointmentStatus] = useAction(api.appointment.updateStatus);
   const [{ fetching: updatingPhase }, updateAppointment] = useAction(api.appointment.update);
   const [{ fetching: completingAppointment }, completeAppointment] = useAction(api.appointment.complete);
+  const [{ data: staffOptionsRaw }] = useFindMany(api.staff, { first: 100 } as any);
   const [{ fetching: savingDeposit }, updateAppointmentMoney] = useAction(api.appointment.update);
   const [{ fetching: recordingPayment }, recordDepositPayment] = useAction(api.appointment.recordDepositPayment);
   const [{ fetching: reversingPayment }, reverseDepositPayment] = useAction(api.appointment.reverseDepositPayment);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [pendingPhase, setPendingPhase] = useState<string | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [timingDialogOpen, setTimingDialogOpen] = useState(false);
   const [depositDialogOpen, setDepositDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [assignedStaffIdDraft, setAssignedStaffIdDraft] = useState("unassigned");
+  const [notesDraft, setNotesDraft] = useState("");
+  const [internalNotesDraft, setInternalNotesDraft] = useState("");
   const [serviceDate, setServiceDate] = useState("");
   const [serviceStartTime, setServiceStartTime] = useState("");
   const [serviceEndTime, setServiceEndTime] = useState("");
@@ -211,6 +220,10 @@ export function AppointmentInspectorPanel({
         : totalAmount
       : Number(appointment.depositAmount ?? 0);
   const canManageMoney = appointment.status !== "cancelled" && appointment.status !== "no-show" && totalAmount > 0;
+  const staffOptions = ((staffOptionsRaw ?? []) as Array<{ id: string; firstName?: string | null; lastName?: string | null }>).map((staff) => ({
+    id: staff.id,
+    label: [staff.firstName, staff.lastName].filter(Boolean).join(" ").trim() || "Unnamed staff",
+  }));
 
   async function handleLifecycleUpdate(nextStatus: "confirmed" | "in_progress") {
     setPendingStatus(nextStatus);
@@ -265,6 +278,13 @@ export function AppointmentInspectorPanel({
     setPickupReadyDate(toDateInputValue(appointment.pickupReadyTime));
     setPickupReadyTime(toTimeInputValue(appointment.pickupReadyTime));
     setTimingDialogOpen(true);
+  }
+
+  function openDetailsDialog() {
+    setAssignedStaffIdDraft(appointment.assignedStaffId || "unassigned");
+    setNotesDraft(appointment.notes ?? "");
+    setInternalNotesDraft(appointment.internalNotes ?? "");
+    setDetailsDialogOpen(true);
   }
 
   function openPaymentDialog() {
@@ -377,6 +397,22 @@ export function AppointmentInspectorPanel({
     }
     toast.success("Timing updated");
     setTimingDialogOpen(false);
+    await onAppointmentChange?.();
+  }
+
+  async function handleSaveDetails() {
+    const result = await updateAppointment({
+      id: appointment.id,
+      assignedStaffId: assignedStaffIdDraft === "unassigned" ? undefined : assignedStaffIdDraft,
+      notes: notesDraft,
+      internalNotes: internalNotesDraft,
+    } as any);
+    if (result.error) {
+      toast.error("Failed to update appointment details: " + result.error.message);
+      return;
+    }
+    toast.success("Assignment and notes updated");
+    setDetailsDialogOpen(false);
     await onAppointmentChange?.();
   }
 
@@ -562,6 +598,15 @@ export function AppointmentInspectorPanel({
                 >
                   Edit timing
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={openDetailsDialog}
+                  disabled={updatingPhase || updatingLifecycle || completingAppointment}
+                >
+                  Edit assignment
+                </Button>
               </div>
             </div>
           </div>
@@ -740,6 +785,64 @@ export function AppointmentInspectorPanel({
             <Button onClick={() => void handleSaveTiming()} disabled={updatingPhase}>
               {updatingPhase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save timing
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit assignment and notes</DialogTitle>
+            <DialogDescription>
+              Update who owns the job and keep the team notes current without leaving the board.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="inspector-assigned-tech">Assigned tech</Label>
+              <select
+                id="inspector-assigned-tech"
+                value={assignedStaffIdDraft}
+                onChange={(event) => setAssignedStaffIdDraft(event.target.value)}
+                className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="unassigned">Unassigned</option>
+                {staffOptions.map((staff) => (
+                  <option key={staff.id} value={staff.id}>
+                    {staff.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inspector-client-notes">Client notes</Label>
+              <Textarea
+                id="inspector-client-notes"
+                value={notesDraft}
+                onChange={(event) => setNotesDraft(event.target.value)}
+                placeholder="Notes visible on the appointment"
+                rows={4}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inspector-internal-notes">Internal notes</Label>
+              <Textarea
+                id="inspector-internal-notes"
+                value={internalNotesDraft}
+                onChange={(event) => setInternalNotesDraft(event.target.value)}
+                placeholder="Private team notes"
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailsDialogOpen(false)} disabled={updatingPhase}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSaveDetails()} disabled={updatingPhase}>
+              {updatingPhase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save details
             </Button>
           </DialogFooter>
         </DialogContent>

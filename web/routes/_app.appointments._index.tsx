@@ -73,6 +73,7 @@ type AppointmentRecord = {
   depositPaid?: boolean | null;
   paidAt?: string | null;
   assignedStaffId?: string | null;
+  notes?: string | null;
   internalNotes?: string | null;
   location?: { name?: string | null } | null;
   client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
@@ -361,6 +362,7 @@ export default function AppointmentsPage() {
       depositPaid: true,
       paidAt: true,
       assignedStaffId: true,
+      notes: true,
       internalNotes: true,
       location: { name: true },
       client: { id: true, firstName: true, lastName: true },
