@@ -650,6 +650,15 @@ function DaySignalRow({
   );
 }
 
+function CompactSignal({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border/65 bg-muted/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <span className="text-foreground">{value}</span>
+      {label}
+    </span>
+  );
+}
+
 interface StaffWorkloadBarProps {
   appointments: ApptRecord[];
 }
