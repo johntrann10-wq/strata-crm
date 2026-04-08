@@ -99,6 +99,11 @@ type DaySnapshot = {
   highlights: AppointmentRecord[];
 };
 
+type DaySignal = {
+  label: string;
+  value: number;
+};
+
 const FILTER_OPTIONS: Array<{ value: ScheduleFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "drop_offs", label: "Drop-offs" },
@@ -232,6 +237,14 @@ function buildDaySnapshot(appointments: AppointmentRecord[], date: Date): DaySna
   const highlights = dedupeAppointments([...ready, ...dropOffs, ...active, ...pickups, ...carryOvers]).slice(0, 3);
 
   return { date, jobs, dropOffs, active, waiting, ready, pickups, carryOvers, highlights };
+}
+
+function getDaySignals(snapshot: DaySnapshot): DaySignal[] {
+  return [
+    { label: "Drop-offs", value: snapshot.dropOffs.length },
+    { label: "In shop", value: snapshot.carryOvers.length + snapshot.active.length + snapshot.waiting.length + snapshot.ready.length },
+    { label: "Pickups", value: snapshot.pickups.length },
+  ].filter((signal) => signal.value > 0);
 }
 
 function MobileFilterSelect({
@@ -678,6 +691,8 @@ function StatusCard({
 }
 
 function DaySnapshotCard({ snapshot }: { snapshot: DaySnapshot }) {
+  const daySignals = getDaySignals(snapshot);
+
   return (
     <div
       className={cn(
@@ -699,14 +714,13 @@ function DaySnapshotCard({ snapshot }: { snapshot: DaySnapshot }) {
         </span>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-        <MiniMetric label="Drop-offs" value={snapshot.dropOffs.length} />
-        <MiniMetric label="Active" value={snapshot.active.length} />
-        <MiniMetric label="Waiting" value={snapshot.waiting.length} />
-        <MiniMetric label="Ready" value={snapshot.ready.length} />
-        <MiniMetric label="Pickups" value={snapshot.pickups.length} />
-        <MiniMetric label="Carry" value={snapshot.carryOvers.length} />
-      </div>
+      {daySignals.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {daySignals.map((signal) => (
+            <CompactSignal key={signal.label} label={signal.label} value={signal.value} />
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-3 space-y-2">
         {snapshot.highlights.length > 0 ? (
@@ -742,12 +756,12 @@ function DaySnapshotCard({ snapshot }: { snapshot: DaySnapshot }) {
   );
 }
 
-function MiniMetric({ label, value }: { label: string; value: number }) {
+function CompactSignal({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-muted/20 px-2.5 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-foreground">{value}</p>
-    </div>
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border/65 bg-muted/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <span className="text-foreground">{value}</span>
+      {label}
+    </span>
   );
 }
 
