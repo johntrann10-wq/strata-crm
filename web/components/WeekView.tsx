@@ -306,6 +306,7 @@ export function WeekView({
                   <AppointmentBlock
                     key={apt.id}
                     apt={apt}
+                    dayContext={day}
                     onClick={(event) => {
                       event.stopPropagation();
                       onApptClick(apt);

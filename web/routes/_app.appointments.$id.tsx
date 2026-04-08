@@ -2033,22 +2033,22 @@ export default function AppointmentDetail() {
 
                   {(appointment as any).vehicleOnSite ? (
                     <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job lifecycle</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">In-shop timeline</p>
                       <div className="mt-2 grid gap-3 sm:grid-cols-2">
                         <div>
-                          <p className="text-xs text-muted-foreground">Span start</p>
+                          <p className="text-xs text-muted-foreground">Drop-off</p>
                           <p className="text-sm font-medium">{formatDateTime((appointment as any).jobStartTime ?? appointment.startTime)}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">Expected completion</p>
+                          <p className="text-xs text-muted-foreground">Vehicle leaves shop</p>
                           <p className="text-sm font-medium">{formatDateTime((appointment as any).expectedCompletionTime)}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">Phase</p>
+                          <p className="text-xs text-muted-foreground">Current stage</p>
                           <p className="text-sm font-medium">{JOB_PHASE_LABELS[String((appointment as any).jobPhase ?? "scheduled")] ?? "Scheduled"}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">Pickup</p>
+                          <p className="text-xs text-muted-foreground">Pickup ready</p>
                           <p className="text-sm font-medium">
                             {(appointment as any).pickupReadyTime ? formatDateTime((appointment as any).pickupReadyTime) : "Not scheduled"}
                           </p>
@@ -2697,7 +2697,7 @@ export default function AppointmentDetail() {
             {/* Start Time / End Time */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="edit-start-time">Start Time</Label>
+                <Label htmlFor="edit-start-time">{editVehicleOnSite ? "Work start" : "Start Time"}</Label>
                 <ResponsiveTimeSelect
                   id="edit-start-time"
                   value={editStartTime}
@@ -2708,7 +2708,7 @@ export default function AppointmentDetail() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-end-time">End Time</Label>
+                <Label htmlFor="edit-end-time">{editVehicleOnSite ? "Work end" : "End Time"}</Label>
                 <ResponsiveTimeSelect
                   id="edit-end-time"
                   value={editEndTime}
@@ -2729,9 +2729,9 @@ export default function AppointmentDetail() {
                   onCheckedChange={(checked) => setEditVehicleOnSite(Boolean(checked))}
                 />
                 <div>
-                  <Label htmlFor="edit-vehicle-on-site">Multi-day / on-site job</Label>
+                  <Label htmlFor="edit-vehicle-on-site">Multi-day job</Label>
                   <p className="text-xs text-muted-foreground">
-                    Keep vehicle presence visible without blocking the full schedule.
+                    Keep the vehicle visible in the shop across drop-off, work, waiting, curing, and pickup.
                   </p>
                 </div>
               </div>
@@ -2739,7 +2739,7 @@ export default function AppointmentDetail() {
               {editVehicleOnSite ? (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-job-start-date">Job Span Start</Label>
+                    <Label htmlFor="edit-job-start-date">Drop-off date</Label>
                     <FormDatePicker
                       id="edit-job-start-date"
                       value={editJobStartDate}
@@ -2748,7 +2748,7 @@ export default function AppointmentDetail() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-job-start-time">Span Start Time</Label>
+                    <Label htmlFor="edit-job-start-time">Drop-off time</Label>
                     <ResponsiveTimeSelect
                       id="edit-job-start-time"
                       value={editJobStartTime}
@@ -2759,7 +2759,7 @@ export default function AppointmentDetail() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-expected-completion-date">Expected Completion</Label>
+                    <Label htmlFor="edit-expected-completion-date">Pickup date</Label>
                     <FormDatePicker
                       id="edit-expected-completion-date"
                       value={editExpectedCompletionDate}
@@ -2768,7 +2768,7 @@ export default function AppointmentDetail() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-expected-completion-time">Completion Time</Label>
+                    <Label htmlFor="edit-expected-completion-time">Pickup time</Label>
                     <ResponsiveTimeSelect
                       id="edit-expected-completion-time"
                       value={editExpectedCompletionTime}
@@ -2779,7 +2779,7 @@ export default function AppointmentDetail() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Job Phase</Label>
+                    <Label>Current stage</Label>
                     <FormSelect value={editJobPhase} onChange={setEditJobPhase}>
                       <option value="scheduled">Scheduled</option>
                       <option value="active_work">Active work</option>
@@ -2790,7 +2790,7 @@ export default function AppointmentDetail() {
                     </FormSelect>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-pickup-ready-date">Pickup Ready</Label>
+                    <Label htmlFor="edit-pickup-ready-date">Pickup ready</Label>
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                       <FormDatePicker
                         id="edit-pickup-ready-date"

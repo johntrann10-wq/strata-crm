@@ -3,7 +3,14 @@ import { cn } from "@/lib/utils";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarIcon, Plus } from "lucide-react";
-import { getCalendarDaySnapshot, getJobPhaseLabel, getJobPhaseTone, getJobSpanEnd } from "@/lib/calendarJobSpans";
+import {
+  getCalendarDaySnapshot,
+  getJobSpanEnd,
+  getMultiDayDayKind,
+  getMultiDayDayLabel,
+  getMultiDayDayTone,
+  isMultiDayJob,
+} from "@/lib/calendarJobSpans";
 import {
   START_HOUR,
   END_HOUR,
@@ -208,6 +215,7 @@ export function DayView({
               {agendaItems.map(({ appointment, kind }) => {
                 const style = getStatusStyle(appointment.status);
                 const isBlock = isCalendarBlockAppointment(appointment);
+                const multiDayKind = isMultiDayJob(appointment) ? getMultiDayDayKind(appointment, currentDate) : null;
                 return (
                   <button
                     key={`${appointment.id}-${kind}-mobile`}
@@ -231,7 +239,7 @@ export function DayView({
                         </p>
                         <p className="mt-1 text-sm text-muted-foreground">
                           {kind === "onsite"
-                            ? "On site"
+                            ? getMultiDayDayLabel(multiDayKind)
                             : `${formatTime(new Date(appointment.startTime))}${appointment.endTime ? ` - ${formatTime(new Date(appointment.endTime))}` : ""}`}
                         </p>
                       </div>
@@ -242,7 +250,9 @@ export function DayView({
                         )}
                       >
                         {kind === "onsite"
-                          ? getJobPhaseLabel(appointment.jobPhase)
+                          ? getMultiDayDayLabel(multiDayKind)
+                          : multiDayKind
+                            ? getMultiDayDayLabel(multiDayKind)
                           : isBlock
                             ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
                             : appointment.status.replace("_", " ")}
@@ -383,14 +393,16 @@ export function DayView({
           <div className="border-b border-border/60 bg-muted/10 px-4 py-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">On-site jobs</p>
             <div className="space-y-2">
-              {onSiteOnlyJobs.map((apt) => (
+              {onSiteOnlyJobs.map((apt) => {
+                const multiDayKind = getMultiDayDayKind(apt, currentDate);
+                return (
                 <button
                   key={`${apt.id}-onsite`}
                   type="button"
                   onClick={() => onApptClick(apt)}
                   className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-background/85 px-3 py-3 text-left"
                 >
-                  <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(apt.jobPhase))} />
+                  <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", getMultiDayDayTone(multiDayKind))} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-foreground">{apptLabel(apt)}</p>
                     <p className="truncate text-xs text-muted-foreground">
@@ -400,13 +412,14 @@ export function DayView({
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-[11px] font-semibold text-muted-foreground">{getJobPhaseLabel(apt.jobPhase)}</p>
+                    <p className="text-[11px] font-semibold text-muted-foreground">{getMultiDayDayLabel(multiDayKind)}</p>
                     <p className="hidden text-[11px] text-muted-foreground sm:block">
                       until {getJobSpanEnd(apt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </p>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         ) : null}
@@ -479,6 +492,7 @@ export function DayView({
               <AppointmentBlock
                 key={apt.id}
                 apt={apt}
+                dayContext={currentDate}
                 onClick={(event) => {
                   event.stopPropagation();
                   onApptClick(apt);

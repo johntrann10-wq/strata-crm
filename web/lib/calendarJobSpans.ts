@@ -91,6 +91,48 @@ export function isMultiDayJob(appointment: CalendarJobLike): boolean {
   );
 }
 
+function isSameCalendarDay(left: Date, right: Date): boolean {
+  return dayStart(left).getTime() === dayStart(right).getTime();
+}
+
+export type MultiDayDayKind =
+  | "dropoff"
+  | "active_work"
+  | "waiting"
+  | "curing"
+  | "hold"
+  | "pickup_ready"
+  | "pickup";
+
+export function getMultiDayDayKind(
+  appointment: CalendarJobLike,
+  date: Date,
+): MultiDayDayKind | null {
+  if (!isMultiDayJob(appointment) || !hasPresenceOnDay(appointment, date)) return null;
+
+  const spanStart = getJobSpanStart(appointment);
+  const spanEnd = getJobSpanEnd(appointment);
+  const pickupReady = appointment.pickupReadyTime ? new Date(appointment.pickupReadyTime) : null;
+
+  if (isSameCalendarDay(spanStart, date)) return "dropoff";
+  if (isSameCalendarDay(spanEnd, date)) return "pickup";
+  if (pickupReady && isSameCalendarDay(pickupReady, date)) return "pickup_ready";
+  if (hasLaborOnDay(appointment, date)) return "active_work";
+
+  switch (appointment.jobPhase) {
+    case "waiting":
+      return "waiting";
+    case "curing":
+      return "curing";
+    case "hold":
+      return "hold";
+    case "pickup_ready":
+      return "pickup_ready";
+    default:
+      return "active_work";
+  }
+}
+
 export function isVisibleCalendarAppointment(appointment: CalendarJobLike): boolean {
   return true;
 }
@@ -180,5 +222,68 @@ export function getJobPhaseTone(phase: string | null | undefined): string {
       return "bg-sky-500";
     default:
       return "bg-amber-500";
+  }
+}
+
+export function getMultiDayDayLabel(kind: MultiDayDayKind | null): string {
+  switch (kind) {
+    case "dropoff":
+      return "Drop-off";
+    case "active_work":
+      return "Active work";
+    case "waiting":
+      return "Waiting";
+    case "curing":
+      return "Curing";
+    case "hold":
+      return "On hold";
+    case "pickup_ready":
+      return "Pickup ready";
+    case "pickup":
+      return "Pickup";
+    default:
+      return "On site";
+  }
+}
+
+export function getMultiDayDayShortLabel(kind: MultiDayDayKind | null): string {
+  switch (kind) {
+    case "dropoff":
+      return "Drop";
+    case "active_work":
+      return "Work";
+    case "waiting":
+      return "Wait";
+    case "curing":
+      return "Cure";
+    case "hold":
+      return "Hold";
+    case "pickup_ready":
+      return "Ready";
+    case "pickup":
+      return "Pickup";
+    default:
+      return "On site";
+  }
+}
+
+export function getMultiDayDayTone(kind: MultiDayDayKind | null): string {
+  switch (kind) {
+    case "dropoff":
+      return "bg-amber-500";
+    case "active_work":
+      return "bg-violet-500";
+    case "waiting":
+      return "bg-slate-500";
+    case "curing":
+      return "bg-emerald-500";
+    case "hold":
+      return "bg-rose-500";
+    case "pickup_ready":
+      return "bg-sky-500";
+    case "pickup":
+      return "bg-cyan-600";
+    default:
+      return "bg-slate-500";
   }
 }

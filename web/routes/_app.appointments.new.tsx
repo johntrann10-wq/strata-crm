@@ -23,6 +23,7 @@ import { formatServiceCategory } from "../lib/serviceCatalog";
 import type { AuthOutletContext } from "./_app";
 import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -219,6 +220,19 @@ function SelectionIndicator({ checked }: { checked: boolean }) {
       {checked ? <Check className="size-3 text-secondary" /> : null}
     </span>
   );
+}
+
+const MULTI_DAY_PHASE_OPTIONS = [
+  { value: "scheduled", label: "Scheduled" },
+  { value: "active_work", label: "Active work" },
+  { value: "waiting", label: "Waiting" },
+  { value: "curing", label: "Curing" },
+  { value: "hold", label: "On hold" },
+  { value: "pickup_ready", label: "Pickup ready" },
+] as const;
+
+function getMultiDayPhaseLabel(value: string) {
+  return MULTI_DAY_PHASE_OPTIONS.find((option) => option.value === value)?.label ?? "Scheduled";
 }
 
 export default function NewAppointmentPage() {
@@ -500,6 +514,24 @@ export default function NewAppointmentPage() {
     if (!startDateTime || effectiveDuration === 0) return null;
     return addMinutes(startDateTime, effectiveDuration);
   }, [startDateTime, effectiveDuration]);
+
+  const dropOffDateTime = useMemo(() => {
+    if (!jobStartDate || !jobStartTime) return null;
+    const parsed = new Date(`${jobStartDate}T${jobStartTime}`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [jobStartDate, jobStartTime]);
+
+  const pickupDateTime = useMemo(() => {
+    if (!expectedCompletionDate || !expectedCompletionTime) return null;
+    const parsed = new Date(`${expectedCompletionDate}T${expectedCompletionTime}`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [expectedCompletionDate, expectedCompletionTime]);
+
+  const pickupReadyDateTime = useMemo(() => {
+    if (!pickupReadyDate || !pickupReadyTime) return null;
+    const parsed = new Date(`${pickupReadyDate}T${pickupReadyTime}`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [pickupReadyDate, pickupReadyTime]);
 
   useEffect(() => {
     if (!selectedDate) return;
@@ -1527,7 +1559,7 @@ export default function NewAppointmentPage() {
                 {/* Date picker */}
                 <div className="space-y-2">
                   <Label>
-                    Date <span className="text-destructive">*</span>
+                    {isMultiDayJob ? "Active Work Date" : "Date"} <span className="text-destructive">*</span>
                   </Label>
                   <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
                     <PopoverTrigger asChild>
@@ -1566,7 +1598,7 @@ export default function NewAppointmentPage() {
                 {/* Start time */}
                 <div className="space-y-2">
                   <Label htmlFor="startTime">
-                    Start Time <span className="text-destructive">*</span>
+                    {isMultiDayJob ? "Work Start" : "Start Time"} <span className="text-destructive">*</span>
                   </Label>
                   <ResponsiveTimeSelect
                     id="startTime"
@@ -1582,7 +1614,7 @@ export default function NewAppointmentPage() {
 
                 {/* Estimated end time */}
                 <div className="space-y-2">
-                  <Label>Estimated End Time</Label>
+                  <Label>{isMultiDayJob ? "Active Work Ends" : "Estimated End Time"}</Label>
                   <div className="relative">
                     <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
@@ -1599,128 +1631,241 @@ export default function NewAppointmentPage() {
                   </div>
                 </div>
 
-                <div className="space-y-2 sm:col-span-2">
-                  <div
-                    className={cn(
-                      "flex items-start gap-3 rounded-lg border p-3 transition-colors",
-                      isMultiDayJob ? "border-primary bg-primary/5" : "border-border"
-                    )}
-                    onClick={() => setIsMultiDayJob((value) => !value)}
-                  >
-                    <SelectionIndicator checked={isMultiDayJob} />
-                    <div>
-                      <Label className="cursor-pointer font-medium">Multi-day / on-site job</Label>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Track the vehicle across multiple days without blocking every hour on the calendar.
-                      </p>
-                    </div>
+                <div className="space-y-3 sm:col-span-2">
+                  <div className="space-y-1">
+                    <Label>Job format</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Choose whether this is a single visit or a vehicle that stays in the shop across multiple days.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex items-start gap-3 rounded-xl border p-3 text-left transition-colors",
+                        !isMultiDayJob ? "border-primary bg-primary/5" : "border-border bg-background"
+                      )}
+                      onClick={() => setIsMultiDayJob(false)}
+                    >
+                      <SelectionIndicator checked={!isMultiDayJob} />
+                      <div>
+                        <p className="font-medium text-foreground">Single-day job</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          One active work window with no extended in-shop stay.
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex items-start gap-3 rounded-xl border p-3 text-left transition-colors",
+                        isMultiDayJob ? "border-primary bg-primary/5" : "border-border bg-background"
+                      )}
+                      onClick={() => setIsMultiDayJob(true)}
+                    >
+                      <SelectionIndicator checked={isMultiDayJob} />
+                      <div>
+                        <p className="font-medium text-foreground">Multi-day job</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          Track drop-off, in-shop stage, and pickup without stretching one appointment across the whole calendar.
+                        </p>
+                      </div>
+                    </button>
                   </div>
                 </div>
 
                 {isMultiDayJob ? (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="job-start-date">Job Span Start</Label>
-                      <Input
-                        id="job-start-date"
-                        type="date"
-                        value={jobStartDate}
-                        onChange={(e) => setJobStartDate(e.target.value)}
-                        className={dateInputClassName}
-                      />
+                  <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/10 p-4 sm:col-span-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Multi-day job timeline</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Drop-off and pickup are the main anchors. The active work window stays tied to the date and time above.
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="shrink-0">
+                        In shop
+                      </Badge>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="job-start-time">Span Start Time</Label>
-                      <ResponsiveTimeSelect
-                        id="job-start-time"
-                        value={jobStartTime}
-                        onChange={setJobStartTime}
-                        options={timeOptions}
-                        placeholder="Select a time"
-                        desktopClassName={timeSelectTriggerClassName}
-                        mobileClassName={mobileTimeSelectClassName}
-                        useNative={isSmallViewport}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="expected-completion-date">Expected Completion</Label>
-                      <Input
-                        id="expected-completion-date"
-                        type="date"
-                        value={expectedCompletionDate}
-                        onChange={(e) => setExpectedCompletionDate(e.target.value)}
-                        className={dateInputClassName}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="expected-completion-time">Completion Time</Label>
-                      <ResponsiveTimeSelect
-                        id="expected-completion-time"
-                        value={expectedCompletionTime}
-                        onChange={setExpectedCompletionTime}
-                        options={timeOptions}
-                        placeholder="Select a time"
-                        desktopClassName={timeSelectTriggerClassName}
-                        mobileClassName={mobileTimeSelectClassName}
-                        useNative={isSmallViewport}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Job Phase</Label>
-                      {isSmallViewport ? (
-                        <div className="relative">
-                          <select
-                            value={jobPhase}
-                            onChange={(event) => setJobPhase(event.target.value)}
-                            className={mobileFormSelectClassName}
-                          >
-                            <option value="scheduled">Scheduled</option>
-                            <option value="active_work">Active work</option>
-                            <option value="waiting">Waiting</option>
-                            <option value="curing">Curing</option>
-                            <option value="hold">Hold</option>
-                            <option value="pickup_ready">Pickup ready</option>
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-3 rounded-xl border border-border/60 bg-background/90 p-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Drop-off</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            When the vehicle first arrives and starts occupying the shop.
+                          </p>
                         </div>
-                      ) : (
-                        <Select value={jobPhase} onValueChange={setJobPhase}>
-                          <SelectTrigger className={timeSelectTriggerClassName}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="scheduled">Scheduled</SelectItem>
-                            <SelectItem value="active_work">Active work</SelectItem>
-                            <SelectItem value="waiting">Waiting</SelectItem>
-                            <SelectItem value="curing">Curing</SelectItem>
-                            <SelectItem value="hold">Hold</SelectItem>
-                            <SelectItem value="pickup_ready">Pickup ready</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pickup-ready-date">Pickup Ready (optional)</Label>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <Input
-                          id="pickup-ready-date"
-                          type="date"
-                          value={pickupReadyDate}
-                          onChange={(e) => setPickupReadyDate(e.target.value)}
-                          className={dateInputClassName}
-                        />
-                        <ResponsiveTimeSelect
-                          value={pickupReadyTime}
-                          onChange={setPickupReadyTime}
-                          options={timeOptions}
-                          placeholder="Select time"
-                          desktopClassName={timeSelectTriggerClassName}
-                          mobileClassName={mobileTimeSelectClassName}
-                          useNative={isSmallViewport}
-                        />
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="job-start-date">Drop-off date</Label>
+                            <Input
+                              id="job-start-date"
+                              type="date"
+                              value={jobStartDate}
+                              onChange={(e) => setJobStartDate(e.target.value)}
+                              className={dateInputClassName}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="job-start-time">Drop-off time</Label>
+                            <ResponsiveTimeSelect
+                              id="job-start-time"
+                              value={jobStartTime}
+                              onChange={setJobStartTime}
+                              options={timeOptions}
+                              placeholder="Select a time"
+                              desktopClassName={timeSelectTriggerClassName}
+                              mobileClassName={mobileTimeSelectClassName}
+                              useNative={isSmallViewport}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 rounded-xl border border-border/60 bg-background/90 p-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Vehicle leaves shop</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Set the planned pickup or handoff time.
+                          </p>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="expected-completion-date">Pickup date</Label>
+                            <Input
+                              id="expected-completion-date"
+                              type="date"
+                              value={expectedCompletionDate}
+                              onChange={(e) => setExpectedCompletionDate(e.target.value)}
+                              className={dateInputClassName}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="expected-completion-time">Pickup time</Label>
+                            <ResponsiveTimeSelect
+                              id="expected-completion-time"
+                              value={expectedCompletionTime}
+                              onChange={setExpectedCompletionTime}
+                              options={timeOptions}
+                              placeholder="Select a time"
+                              desktopClassName={timeSelectTriggerClassName}
+                              mobileClassName={mobileTimeSelectClassName}
+                              useNative={isSmallViewport}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-3 rounded-xl border border-border/60 bg-background/90 p-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Current in-shop stage</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Show whether the vehicle is actively being worked on, waiting, curing, or ready to leave.
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Stage</Label>
+                          {isSmallViewport ? (
+                            <div className="relative">
+                              <select
+                                value={jobPhase}
+                                onChange={(event) => setJobPhase(event.target.value)}
+                                className={mobileFormSelectClassName}
+                              >
+                                {MULTI_DAY_PHASE_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            </div>
+                          ) : (
+                            <Select value={jobPhase} onValueChange={setJobPhase}>
+                              <SelectTrigger className={timeSelectTriggerClassName}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {MULTI_DAY_PHASE_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="pickup-ready-date">Pickup ready date</Label>
+                            <Input
+                              id="pickup-ready-date"
+                              type="date"
+                              value={pickupReadyDate}
+                              onChange={(e) => setPickupReadyDate(e.target.value)}
+                              className={dateInputClassName}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Pickup ready time</Label>
+                            <ResponsiveTimeSelect
+                              value={pickupReadyTime}
+                              onChange={setPickupReadyTime}
+                              options={timeOptions}
+                              placeholder="Select time"
+                              desktopClassName={timeSelectTriggerClassName}
+                              mobileClassName={mobileTimeSelectClassName}
+                              useNative={isSmallViewport}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 rounded-xl border border-dashed border-border/70 bg-background/80 p-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Calendar preview</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            These anchors drive how the job reads across the calendar.
+                          </p>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-background px-3 py-2">
+                            <CalendarIcon className="mt-0.5 h-4 w-4 text-amber-600" />
+                            <div>
+                              <p className="font-medium text-foreground">Drop-off</p>
+                              <p className="text-xs text-muted-foreground">
+                                {dropOffDateTime ? format(dropOffDateTime, "EEE, MMM d 'at' h:mm a") : "Set the arrival date and time."}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-background px-3 py-2">
+                            <Clock className="mt-0.5 h-4 w-4 text-violet-600" />
+                            <div>
+                              <p className="font-medium text-foreground">Active work</p>
+                              <p className="text-xs text-muted-foreground">
+                                {startDateTime
+                                  ? `${format(startDateTime, "EEE, MMM d 'at' h:mm a")}${endDateTime ? ` to ${format(endDateTime, "h:mm a")}` : ""}`
+                                  : "Pick the main labor date and time above."}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-background px-3 py-2">
+                            <Package className="mt-0.5 h-4 w-4 text-sky-600" />
+                            <div>
+                              <p className="font-medium text-foreground">{getMultiDayPhaseLabel(jobPhase)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {pickupDateTime ? `Vehicle leaves ${format(pickupDateTime, "EEE, MMM d 'at' h:mm a")}` : "Set the planned pickup time."}
+                                {pickupReadyDateTime ? ` Pickup ready ${format(pickupReadyDateTime, "EEE, MMM d 'at' h:mm a")}.` : ""}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 ) : null}
 
                 {/* Staff */}

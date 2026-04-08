@@ -11,11 +11,13 @@ import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlo
 import { AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  getJobPhaseLabel,
-  getJobPhaseTone,
   hasLaborOnDay,
   hasPresenceOnDay,
   isMultiDayJob,
+  getMultiDayDayKind,
+  getMultiDayDayLabel,
+  getMultiDayDayShortLabel,
+  getMultiDayDayTone,
 } from "@/lib/calendarJobSpans";
 
 export let activeDragDurationMs = 3600000;
@@ -397,6 +399,7 @@ export function CalendarNav({ title, onPrev, onNext, onToday, onNew }: CalendarN
 
 interface AppointmentBlockProps {
   apt: ApptRecord;
+  dayContext?: Date;
   onClick: () => void;
   draggable?: boolean;
   onDragStart?: (apt: ApptRecord, e: React.DragEvent) => void;
@@ -408,6 +411,7 @@ interface AppointmentBlockProps {
 
 export function AppointmentBlock({
   apt,
+  dayContext,
   onClick,
   draggable: draggableProp,
   onDragStart,
@@ -430,6 +434,8 @@ export function AppointmentBlock({
 
   const style = getStatusStyle(apt.status);
   const isBlock = isCalendarBlockAppointment(apt);
+  const multiDayKind = dayContext ? getMultiDayDayKind(apt, dayContext) : null;
+  const multiDayLabel = getMultiDayDayLabel(multiDayKind);
   const dense = height < 74;
   const constrainedWidth = Boolean(widthCss);
   const narrow = constrainedWidth;
@@ -495,6 +501,12 @@ export function AppointmentBlock({
                 {formatTime(start)}
                 {apt.endTime ? ` - ${formatTime(end)}` : ""}
               </p>
+              {multiDayKind ? (
+                <p className={cn("mt-1 flex items-center gap-1 font-medium text-muted-foreground", dense || narrow ? "text-[8px]" : "text-[10px]")}>
+                  <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", getMultiDayDayTone(multiDayKind))} />
+                  <span className="truncate">{multiDayLabel}</span>
+                </p>
+              ) : null}
             </div>
             <span
               className={cn(
@@ -810,10 +822,19 @@ export function MonthView({
                         {daySpans.slice(0, 2).map((apt) => (
                           <div
                             key={`${apt.id}-span`}
-                            className="flex items-center gap-1 overflow-hidden rounded-full border border-border/60 bg-background/90 px-1.5 py-[2px] text-[8.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground shadow-sm sm:gap-1.5 sm:px-2 sm:py-[3px] sm:text-[9px] sm:tracking-[0.12em]"
+                            className="flex items-center gap-1 overflow-hidden rounded-full border border-border/60 bg-background/90 px-1.5 py-[2px] text-[8.5px] shadow-sm sm:gap-1.5 sm:px-2 sm:py-[3px] sm:text-[9px]"
                           >
-                            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", getJobPhaseTone(apt.jobPhase))} />
-                            <span className="truncate">{apt.title || apt.client?.lastName || "Job"}</span>
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-full px-1 py-0.5 text-[7px] font-semibold uppercase tracking-[0.08em] text-white sm:text-[8px]",
+                                getMultiDayDayTone(getMultiDayDayKind(apt, day))
+                              )}
+                            >
+                              {getMultiDayDayShortLabel(getMultiDayDayKind(apt, day))}
+                            </span>
+                            <span className="truncate font-medium text-foreground">
+                              {apt.title || apt.vehicle?.model || apt.client?.lastName || "Job"}
+                            </span>
                           </div>
                         ))}
                         {daySpans.length > 2 ? (
