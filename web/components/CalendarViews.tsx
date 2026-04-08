@@ -869,10 +869,6 @@ export function MonthView({
               const startCount = selectedMonthStartingCount(dayAppts, day);
               const pickupCount = selectedMonthPickupCount(dayAppts, daySpans, day);
               const onSiteCount = daySpans.length;
-              const isSelectedAppointmentDay = Boolean(
-                selectedAppointmentId &&
-                  [...dayAppts, ...daySpans].some((appointment) => appointment.id === selectedAppointmentId)
-              );
               const hasConflict = !!conflictIds && activeVisibleDayAppointments.some((a) => conflictIds.has(a.id));
               const dayLabel = day.toLocaleDateString("en-US", {
                 weekday: "long",
@@ -892,8 +888,7 @@ export function MonthView({
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
                     isToday && "bg-primary/[0.04]",
-                    isSelected && "bg-primary/[0.03] ring-1 ring-inset ring-primary/30",
-                    isSelectedAppointmentDay && "bg-primary/[0.06]"
+                    isSelected && "bg-primary/[0.03] ring-1 ring-inset ring-primary/30"
                   )}
                   onClick={() => onDayClick(day)}
                   onMouseEnter={(event) => {
