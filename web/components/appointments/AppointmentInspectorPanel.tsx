@@ -295,7 +295,7 @@ export function AppointmentInspectorPanel({
   const hasClient = Boolean(appointment.client?.firstName || appointment.client?.lastName);
   const isInternalAppointment = !hasClient;
   const effectiveCollectionAmount =
-    isInternalAppointment && totalAmount > 0
+    totalAmount > 0
       ? Number(appointment.depositAmount ?? 0) > 0
         ? Number(appointment.depositAmount ?? 0)
         : totalAmount
@@ -479,7 +479,7 @@ export function AppointmentInspectorPanel({
       toast.error("Failed to record payment: " + result.error.message);
       return;
     }
-    toast.success(isInternalAppointment ? "Payment recorded" : "Deposit recorded");
+    toast.success("Payment recorded");
     setPaymentDialogOpen(false);
     await onAppointmentChange?.();
   }
@@ -566,14 +566,14 @@ export function AppointmentInspectorPanel({
   }
 
   async function handleReversePayment() {
-    const confirmed = window.confirm(isInternalAppointment ? "Mark this appointment unpaid again?" : "Reverse this deposit collection?");
+    const confirmed = window.confirm("Mark this appointment unpaid again?");
     if (!confirmed) return;
     const result = await reverseDepositPayment({ id: appointment.id } as any);
     if (result.error) {
       toast.error("Failed to reverse payment: " + result.error.message);
       return;
     }
-    toast.success(isInternalAppointment ? "Payment reversed" : "Deposit reversed");
+    toast.success("Payment reversed");
     await onAppointmentChange?.();
   }
 
@@ -727,7 +727,7 @@ export function AppointmentInspectorPanel({
                       disabled={savingDeposit || recordingPayment || reversingPayment}
                     >
                       {recordingPayment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                      {isInternalAppointment ? "Mark paid" : "Collect deposit"}
+                      Mark paid
                     </Button>
                   ) : null}
                   {appointment.depositPaid ? (
@@ -739,7 +739,7 @@ export function AppointmentInspectorPanel({
                       disabled={savingDeposit || recordingPayment || reversingPayment}
                     >
                       {reversingPayment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                      {isInternalAppointment ? "Mark unpaid" : "Reverse deposit"}
+                      Mark unpaid
                     </Button>
                   ) : null}
                 </div>
@@ -1180,12 +1180,8 @@ export function AppointmentInspectorPanel({
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{isInternalAppointment ? "Record payment" : "Collect deposit"}</DialogTitle>
-            <DialogDescription>
-              {isInternalAppointment
-                ? "Record the collected amount for this internal appointment."
-                : "Record the required deposit for this appointment."}
-            </DialogDescription>
+            <DialogTitle>Mark paid</DialogTitle>
+            <DialogDescription>Record the payment collected for this appointment.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
@@ -1198,7 +1194,7 @@ export function AppointmentInspectorPanel({
                 placeholder="0.00"
               />
               <p className="text-xs text-muted-foreground">
-                Required amount: {formatCurrency(effectiveCollectionAmount)}
+                Payment amount: {formatCurrency(effectiveCollectionAmount)}
               </p>
             </div>
             <div className="space-y-2">
@@ -1234,7 +1230,7 @@ export function AppointmentInspectorPanel({
             </Button>
             <Button onClick={() => void handleRecordPayment()} disabled={recordingPayment}>
               {recordingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isInternalAppointment ? "Mark paid" : "Record deposit"}
+              Mark paid
             </Button>
           </DialogFooter>
         </DialogContent>
