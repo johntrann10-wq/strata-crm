@@ -1081,11 +1081,6 @@ export default function AppointmentDetail() {
       ? "Full-day block"
       : "Timed block"
     : null;
-  const canEditDeposit =
-    !showsPaidStatusInsteadOfDeposit &&
-    appointment.status !== "cancelled" &&
-    appointment.status !== "no-show";
-
   const isActionLoading = updatingStatus || completing || cancelling || deletingAppointment || sendingConfirmation;
   const quoteNeedsFollowUp = !!quote && ["sent", "accepted"].includes(String((quote as any).status ?? "")) && (
     !safeDate((quote as any).followUpSentAt ?? null)
@@ -1147,6 +1142,10 @@ export default function AppointmentDetail() {
         ? depositAmountValue
         : 0;
   const showsPaidStatusInsteadOfDeposit = totalPriceValue > 0 ? hasRecordedPayment && remainingBalanceValue <= 0.009 : appointment.depositPaid === true && depositAmountValue <= 0;
+  const canEditDeposit =
+    !showsPaidStatusInsteadOfDeposit &&
+    appointment.status !== "cancelled" &&
+    appointment.status !== "no-show";
   const clientOptions = ((clientsForEdit as any[]) ?? []) as Array<{
     id: string;
     firstName: string;
