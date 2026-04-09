@@ -78,6 +78,15 @@ function resolveApiBase(): string {
 // Base origin for browser API calls.
 export const API_BASE = resolveApiBase();
 
+function buildApiUrl(path: string, baseOverride?: string): string {
+  if (path.startsWith("http")) return path;
+  return `${baseOverride ?? API_BASE}/api${path}`;
+}
+
+async function performRequest(url: string, init: RequestInit): Promise<Response> {
+  return await fetch(url, init);
+}
+
 export class ApiError extends Error {
   status: number;
   path: string;
@@ -105,7 +114,7 @@ async function request<T = unknown>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
-  const url = path.startsWith("http") ? path : `${API_BASE}/api${path}`;
+  const url = buildApiUrl(path);
   const method = (init.method ?? "GET").toUpperCase();
   const token = getToken();
   const headers: HeadersInit = {
@@ -120,22 +129,46 @@ async function request<T = unknown>(
     (headers as any)["x-business-id"] = currentBusinessId;
   }
   let res: Response;
+  const requestInit: RequestInit = {
+    ...init,
+    headers,
+  };
   try {
-    res = await fetch(url, {
-      ...init,
-      headers,
-    });
+    res = await performRequest(url, requestInit);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Network request failed";
-    recordReliabilityDiagnostic({
-      source: "api.network",
-      severity: "error",
-      message: `Network request failed for ${method} ${path}`,
-      method,
-      path,
-      detail: message,
-    });
-    throw new ApiError(message, 0, path);
+    const canRetrySameOrigin =
+      import.meta.env.PROD &&
+      typeof window !== "undefined" &&
+      API_BASE &&
+      !path.startsWith("http");
+
+    if (canRetrySameOrigin) {
+      try {
+        const fallbackUrl = buildApiUrl(path, "");
+        res = await performRequest(fallbackUrl, requestInit);
+      } catch {
+        recordReliabilityDiagnostic({
+          source: "api.network",
+          severity: "warning",
+          message: `Primary API origin failed for ${method} ${path}; same-origin fallback also failed`,
+          method,
+          path,
+          detail: message,
+        });
+        throw new ApiError(message, 0, path);
+      }
+    } else {
+      recordReliabilityDiagnostic({
+        source: "api.network",
+        severity: "error",
+        message: `Network request failed for ${method} ${path}`,
+        method,
+        path,
+        detail: message,
+      });
+      throw new ApiError(message, 0, path);
+    }
   }
   if (!res.ok) {
     // Special-case 402 for businesses so onboarding is never blocked
