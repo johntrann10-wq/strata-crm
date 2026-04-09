@@ -170,6 +170,21 @@ async function request<T = unknown>(
       throw new ApiError(message, 0, path);
     }
   }
+  if (
+    import.meta.env.PROD &&
+    typeof window !== "undefined" &&
+    API_BASE &&
+    !path.startsWith("http") &&
+    res.status === 404
+  ) {
+    try {
+      const fallbackUrl = buildApiUrl(path, "");
+      const fallbackRes = await performRequest(fallbackUrl, requestInit);
+      res = fallbackRes;
+    } catch {
+      // Keep the original response and let normal error handling below explain it.
+    }
+  }
   if (!res.ok) {
     // Special-case 402 for businesses so onboarding is never blocked
     if (res.status === 402 && path.startsWith("/businesses")) {

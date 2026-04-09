@@ -638,14 +638,20 @@ export default function CalendarPage() {
   }, [currentDate, selectedMonthAppointments]);
   const availableViews = isMobileLayout ? (["day", "month"] as const) : (["day", "month"] as const);
   const selectedAppointment = useMemo(
-    () => appointments.find((appointment) => appointment.id === selectedAppointmentId) ?? null,
-    [appointments, selectedAppointmentId]
+    () =>
+      isAppointmentInspectorOpen
+        ? appointments.find((appointment) => appointment.id === selectedAppointmentId) ?? null
+        : null,
+    [appointments, selectedAppointmentId, isAppointmentInspectorOpen]
   );
 
   useEffect(() => {
-    if (selectedAppointment && selectableDayAgendaItems.some(({ appointment }) => appointment.id === selectedAppointment.id)) return;
-    setSelectedAppointmentId(selectableDayAgendaItems[0]?.appointment.id ?? null);
-  }, [selectableDayAgendaItems, selectedAppointment]);
+    if (!selectedAppointmentId) return;
+    const stillVisible = selectableDayAgendaItems.some(({ appointment }) => appointment.id === selectedAppointmentId);
+    if (stillVisible) return;
+    setSelectedAppointmentId(null);
+    setIsAppointmentInspectorOpen(false);
+  }, [selectableDayAgendaItems, selectedAppointmentId]);
 
   const dayInspectorPanel = (
     <div className="flex min-h-0 flex-col overflow-hidden">
@@ -889,7 +895,13 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <Dialog open={isAppointmentInspectorOpen} onOpenChange={setIsAppointmentInspectorOpen}>
+      <Dialog
+        open={isAppointmentInspectorOpen}
+        onOpenChange={(open) => {
+          setIsAppointmentInspectorOpen(open);
+          if (!open) setSelectedAppointmentId(null);
+        }}
+      >
         <DialogContent className="flex h-[92dvh] max-w-none flex-col overflow-hidden rounded-[1.25rem] p-0 sm:ml-auto sm:mr-4 sm:mt-6 sm:h-[calc(100dvh-3rem)] sm:max-h-[calc(100dvh-3rem)] sm:w-[30rem] sm:max-w-[30rem] sm:rounded-[1.75rem] lg:w-[34rem] lg:max-w-[34rem]">
           <div className="border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 py-4">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Appointment inspector</p>
@@ -898,17 +910,23 @@ export default function CalendarPage() {
             </h2>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            <AppointmentInspectorPanel
-              appointment={selectedAppointment}
-              emptyTitle="Select an appointment"
-              emptyDescription={
-                view === "month"
-                  ? "Choose a job from the month day list or calendar to inspect money, customer, vehicle, timing, and stage."
-                  : "Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
-              }
-              compact={isMobileLayout}
-              onAppointmentChange={() => refetchAppointments()}
-            />
+            {isAppointmentInspectorOpen ? (
+              <AppointmentInspectorPanel
+                appointment={selectedAppointment}
+                emptyTitle="Select an appointment"
+                emptyDescription={
+                  view === "month"
+                    ? "Choose a job from the month day list or calendar to inspect money, customer, vehicle, timing, and stage."
+                    : "Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
+                }
+                compact={isMobileLayout}
+                onAppointmentChange={() => refetchAppointments()}
+                onRequestClose={() => {
+                  setIsAppointmentInspectorOpen(false);
+                  setSelectedAppointmentId(null);
+                }}
+              />
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>

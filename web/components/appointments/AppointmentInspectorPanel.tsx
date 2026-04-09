@@ -160,16 +160,20 @@ export function AppointmentInspectorPanel({
   emptyDescription = "Pick any job to inspect the customer, vehicle, timing, money, and current stage.",
   compact = false,
   onAppointmentChange,
+  onRequestClose,
 }: {
   appointment: AppointmentInspectorRecord | null;
   emptyTitle?: string;
   emptyDescription?: string;
   compact?: boolean;
   onAppointmentChange?: (() => void | Promise<void>) | undefined;
+  onRequestClose?: (() => void) | undefined;
 }) {
   const [{ fetching: updatingLifecycle }, updateAppointmentStatus] = useAction(api.appointment.updateStatus);
   const [{ fetching: updatingPhase }, updateAppointment] = useAction(api.appointment.update);
   const [{ fetching: completingAppointment }, completeAppointment] = useAction(api.appointment.complete);
+  const [{ fetching: cancellingAppointment }, cancelAppointment] = useAction(api.appointment.cancel);
+  const [{ fetching: deletingAppointment }, deleteAppointment] = useAction(api.appointment.delete);
   const [{ data: staffOptionsRaw }] = useFindMany(api.staff, { first: 100 } as any);
   const [{ data: clientOptionsRaw, fetching: clientOptionsFetching }] = useFindMany(api.client, {
     filter: appointment?.businessId ? { businessId: { equals: appointment.businessId } } : { id: { equals: "" } },
@@ -577,6 +581,34 @@ export function AppointmentInspectorPanel({
     await onAppointmentChange?.();
   }
 
+  async function handleCancelAppointment() {
+    const confirmed = window.confirm("Cancel this appointment?");
+    if (!confirmed) return;
+    const result = await cancelAppointment({ id: appointment.id } as any);
+    if (result.error) {
+      toast.error("Failed to cancel appointment: " + result.error.message);
+      return;
+    }
+    toast.success("Appointment cancelled");
+    await onAppointmentChange?.();
+    onRequestClose?.();
+  }
+
+  async function handleDeleteAppointment() {
+    const confirmed = window.confirm(
+      isInternalAppointment ? "Delete this blocked/internal appointment?" : "Delete this appointment?"
+    );
+    if (!confirmed) return;
+    const result = await deleteAppointment({ id: appointment.id } as any);
+    if (result.error) {
+      toast.error("Failed to delete appointment: " + result.error.message);
+      return;
+    }
+    toast.success(isInternalAppointment ? "Block deleted" : "Appointment deleted");
+    await onAppointmentChange?.();
+    onRequestClose?.();
+  }
+
   return (
     <>
       <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
@@ -766,6 +798,34 @@ export function AppointmentInspectorPanel({
                   disabled={updatingPhase || updatingLifecycle || completingAppointment}
                 >
                   Edit details
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Appointment actions</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {appointment.status !== "cancelled" && appointment.status !== "completed" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-xl"
+                    onClick={() => void handleCancelAppointment()}
+                    disabled={cancellingAppointment || deletingAppointment}
+                  >
+                    {cancellingAppointment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                    Cancel appointment
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => void handleDeleteAppointment()}
+                  disabled={cancellingAppointment || deletingAppointment}
+                >
+                  {deletingAppointment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                  {isInternalAppointment ? "Delete block" : "Delete appointment"}
                 </Button>
               </div>
             </div>
