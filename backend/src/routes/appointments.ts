@@ -2,7 +2,7 @@ import express, { Router, Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { appointments, clients, vehicles, staff, locations, quotes, services, appointmentServices, businesses, invoices } from "../db/schema.js";
+import { appointments, clients, vehicles, staff, locations, quotes, services, appointmentServices, businesses, invoices, activityLogs } from "../db/schema.js";
 import { eq, and, or, desc, asc, gte, lte, ilike, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -36,6 +36,43 @@ export function canDeleteAppointmentWithInvoiceStatuses(
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
   return req.businessId;
+}
+
+async function getAppointmentCollectedAmount(appointmentId: string, businessIdValue: string): Promise<number> {
+  const paymentRows = await db
+    .select({
+      action: activityLogs.action,
+      metadata: activityLogs.metadata,
+    })
+    .from(activityLogs)
+    .where(
+      and(
+        eq(activityLogs.businessId, businessIdValue),
+        eq(activityLogs.entityType, "appointment"),
+        eq(activityLogs.entityId, appointmentId),
+        or(
+          eq(activityLogs.action, "appointment.deposit_paid"),
+          eq(activityLogs.action, "appointment.deposit_payment_reversed")
+        )
+      )
+    )
+    .orderBy(asc(activityLogs.createdAt));
+
+  let total = 0;
+  for (const row of paymentRows) {
+    let amount = 0;
+    try {
+      const parsed = row.metadata ? (JSON.parse(row.metadata) as { amount?: number | string | null }) : null;
+      amount = Number(parsed?.amount ?? 0);
+    } catch {
+      amount = 0;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    if (row.action === "appointment.deposit_paid") total += amount;
+    if (row.action === "appointment.deposit_payment_reversed") total -= amount;
+  }
+
+  return Math.max(0, Number(total.toFixed(2)));
 }
 
 async function confirmAppointmentDepositCheckout(params: {
@@ -1925,11 +1962,16 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   const totalPrice = Number(existing.totalPrice ?? 0);
   const isInternalCalendarBlock = isCalendarBlockInternalNotes(existing.internalNotes);
   const isInternalAppointment = isInternalCalendarBlock || !existing.clientId;
+  const collectedAmount = await getAppointmentCollectedAmount(existing.id, bid);
+  const remainingBalance =
+    Number.isFinite(totalPrice) && totalPrice > 0 ? Math.max(0, Number((totalPrice - collectedAmount).toFixed(2))) : 0;
   const effectiveRequiredAmount =
-    Number.isFinite(depositAmount) && depositAmount > 0
-      ? depositAmount
-      : Number.isFinite(totalPrice) && totalPrice > 0
-        ? totalPrice
+    Number.isFinite(totalPrice) && totalPrice > 0
+      ? collectedAmount <= 0 && Number.isFinite(depositAmount) && depositAmount > 0
+        ? Math.min(totalPrice, depositAmount)
+        : remainingBalance
+      : Number.isFinite(depositAmount) && depositAmount > 0
+        ? depositAmount
         : 0;
   if (!Number.isFinite(effectiveRequiredAmount) || effectiveRequiredAmount <= 0) {
     throw new BadRequestError("This appointment does not have a payment amount to record.");
@@ -1945,7 +1987,7 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
     throw new BadRequestError(`Payment must match the ${expectedLabel} (${effectiveRequiredAmount.toFixed(2)}).`);
   }
 
-  if (existing.depositPaid) {
+  if (remainingBalance <= 0 && collectedAmount > 0) {
     res.json(existing);
     return;
   }
@@ -1980,9 +2022,11 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
       paidAt: parsed.data.paidAt ? new Date(parsed.data.paidAt).toISOString() : new Date().toISOString(),
       source: "manual",
       paymentType:
-        Number.isFinite(depositAmount) && depositAmount > 0
-          ? "deposit"
-          : "full",
+        Number.isFinite(totalPrice) && totalPrice > 0 && collectedAmount + parsed.data.amount >= totalPrice - 0.009
+          ? "full"
+          : Number.isFinite(depositAmount) && depositAmount > 0 && collectedAmount <= 0
+            ? "deposit"
+            : "partial",
     },
   });
 
@@ -2097,6 +2141,7 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
       id: appointments.id,
       depositAmount: appointments.depositAmount,
       depositPaid: appointments.depositPaid,
+      totalPrice: appointments.totalPrice,
     })
     .from(appointments)
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
@@ -2108,7 +2153,11 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
     throw new BadRequestError("Payment tracking is unavailable until the latest database update is applied.");
   }
 
-  if (!existing.depositPaid) {
+  const depositAmount = Number(existing.depositAmount ?? 0);
+  const totalPrice = Number(existing.totalPrice ?? 0);
+  const collectedAmount = await getAppointmentCollectedAmount(existing.id, bid);
+
+  if (!existing.depositPaid || collectedAmount <= 0) {
     res.json(existing);
     return;
   }
@@ -2136,8 +2185,14 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
     entityType: "appointment",
     entityId: existing.id,
     metadata: {
-      amount: existing.depositAmount ?? null,
+      amount: collectedAmount,
       source: "manual",
+      paymentType:
+        Number.isFinite(totalPrice) && totalPrice > 0 && collectedAmount >= totalPrice - 0.009
+          ? "full"
+          : Number.isFinite(depositAmount) && depositAmount > 0 && collectedAmount <= depositAmount + 0.009
+            ? "deposit"
+            : "partial",
     },
   });
 

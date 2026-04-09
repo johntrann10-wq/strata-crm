@@ -39,6 +39,11 @@ export type AppointmentInspectorRecord = {
   assignedStaff?: { firstName?: string | null; lastName?: string | null } | null;
 };
 
+type AppointmentPaymentActivity = {
+  action?: string | null;
+  metadata?: string | null;
+};
+
 const LIFECYCLE_STATUS_LABELS: Record<string, string> = {
   scheduled: "Scheduled",
   confirmed: "Confirmed",
@@ -123,23 +128,79 @@ function getCollectedAmount(appointment: AppointmentInspectorRecord): number {
   return total;
 }
 
-function getBalanceDue(appointment: AppointmentInspectorRecord): number {
-  const total = Number(appointment.totalPrice ?? 0);
-  const collected = getCollectedAmount(appointment);
-  return Math.max(0, total - collected);
+function getCollectedAmountFromActivity(
+  appointment: AppointmentInspectorRecord,
+  activityLogs: AppointmentPaymentActivity[]
+): number | null {
+  const relevantLogs = activityLogs.filter(
+    (entry) => entry.action === "appointment.deposit_paid" || entry.action === "appointment.deposit_payment_reversed"
+  );
+  if (relevantLogs.length === 0) return null;
+
+  let total = 0;
+  for (const entry of relevantLogs) {
+    let amount = 0;
+    try {
+      const parsed = entry.metadata ? (JSON.parse(entry.metadata) as { amount?: number | string | null }) : null;
+      amount = Number(parsed?.amount ?? 0);
+    } catch {
+      amount = 0;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    if (entry.action === "appointment.deposit_paid") total += amount;
+    if (entry.action === "appointment.deposit_payment_reversed") total -= amount;
+  }
+
+  const totalPrice = Number(appointment.totalPrice ?? 0);
+  const clamped = Math.max(0, total);
+  return totalPrice > 0 ? Math.min(totalPrice, clamped) : clamped;
 }
 
-function getMoneyStateLabel(appointment: AppointmentInspectorRecord): string {
-  if (appointment.paidAt || (appointment.depositPaid && Number(appointment.depositAmount ?? 0) <= 0)) {
-    return "Paid";
-  }
-  if (appointment.depositPaid && Number(appointment.depositAmount ?? 0) > 0) {
-    return "Deposit collected";
-  }
-  if (Number(appointment.depositAmount ?? 0) > 0) {
-    return "Deposit due";
-  }
-  return "No deposit set";
+function getPaymentSummary(
+  appointment: AppointmentInspectorRecord,
+  activityLogs: AppointmentPaymentActivity[]
+): {
+  collectedAmount: number;
+  balanceDue: number;
+  moneyStateLabel: string;
+  nextCollectionAmount: number;
+  hasAnyPayment: boolean;
+  isPaidInFull: boolean;
+} {
+  const totalAmount = Number(appointment.totalPrice ?? 0);
+  const depositAmount = Number(appointment.depositAmount ?? 0);
+  const activityCollectedAmount = getCollectedAmountFromActivity(appointment, activityLogs);
+  const collectedAmount = activityCollectedAmount ?? getCollectedAmount(appointment);
+  const balanceDue = totalAmount > 0 ? Math.max(0, Number((totalAmount - collectedAmount).toFixed(2))) : 0;
+  const hasAnyPayment = collectedAmount > 0.009 || Boolean(appointment.depositPaid);
+  const isPaidInFull =
+    (totalAmount > 0 && balanceDue <= 0.009 && hasAnyPayment) ||
+    Boolean(appointment.paidAt) ||
+    (appointment.depositPaid && depositAmount <= 0 && totalAmount <= 0);
+  const nextCollectionAmount =
+    totalAmount > 0
+      ? hasAnyPayment
+        ? balanceDue
+        : depositAmount > 0
+          ? Math.min(totalAmount, depositAmount)
+          : totalAmount
+      : depositAmount > 0 && !hasAnyPayment
+        ? depositAmount
+        : 0;
+
+  let moneyStateLabel = "No deposit set";
+  if (isPaidInFull) moneyStateLabel = "Paid in full";
+  else if (hasAnyPayment && balanceDue > 0.009) moneyStateLabel = "Deposit collected";
+  else if (depositAmount > 0) moneyStateLabel = "Deposit due";
+
+  return {
+    collectedAmount,
+    balanceDue,
+    moneyStateLabel,
+    nextCollectionAmount,
+    hasAnyPayment,
+    isPaidInFull,
+  };
 }
 
 function canConfirmAppointment(appointment: AppointmentInspectorRecord): boolean {
@@ -224,6 +285,12 @@ export function AppointmentInspectorPanel({
     first: 100,
     pause: !selectedClientId,
   } as any);
+  const [{ data: paymentActivityRaw }] = useFindMany(api.activityLog, {
+    entityType: "appointment",
+    entityId: appointment?.id,
+    first: 25,
+    pause: !appointment?.id,
+  } as any);
 
   const staffOptions = ((staffOptionsRaw ?? []) as Array<{ id: string; firstName?: string | null; lastName?: string | null }>).map((staff) => ({
     id: staff.id,
@@ -292,18 +359,15 @@ export function AppointmentInspectorPanel({
   }
 
   const lifecycleLabel = getLifecycleLabel(appointment);
-  const moneyStateLabel = getMoneyStateLabel(appointment);
-  const collectedAmount = getCollectedAmount(appointment);
-  const balanceDue = getBalanceDue(appointment);
+  const paymentActivity = ((paymentActivityRaw ?? []) as AppointmentPaymentActivity[]) ?? [];
+  const paymentSummary = getPaymentSummary(appointment, paymentActivity);
+  const moneyStateLabel = paymentSummary.moneyStateLabel;
+  const collectedAmount = paymentSummary.collectedAmount;
+  const balanceDue = paymentSummary.balanceDue;
   const totalAmount = Number(appointment.totalPrice ?? 0);
   const hasClient = Boolean(appointment.client?.firstName || appointment.client?.lastName);
   const isInternalAppointment = !hasClient;
-  const effectiveCollectionAmount =
-    totalAmount > 0
-      ? Number(appointment.depositAmount ?? 0) > 0
-        ? Number(appointment.depositAmount ?? 0)
-        : totalAmount
-      : Number(appointment.depositAmount ?? 0);
+  const effectiveCollectionAmount = paymentSummary.nextCollectionAmount;
   const canManageMoney = appointment.status !== "cancelled" && appointment.status !== "no-show" && totalAmount > 0;
   const appointmentServices = (appointmentServicesRaw ?? []) as Array<{
     id: string;
@@ -483,7 +547,7 @@ export function AppointmentInspectorPanel({
       toast.error("Failed to record payment: " + result.error.message);
       return;
     }
-    toast.success("Payment recorded");
+    toast.success(paymentSummary.isPaidInFull || effectiveCollectionAmount >= balanceDue ? "Appointment paid in full" : "Payment recorded");
     setPaymentDialogOpen(false);
     await onAppointmentChange?.();
   }
@@ -570,14 +634,16 @@ export function AppointmentInspectorPanel({
   }
 
   async function handleReversePayment() {
-    const confirmed = window.confirm("Mark this appointment unpaid again?");
+    const confirmed = window.confirm(
+      paymentSummary.isPaidInFull ? "Reverse the recorded payment for this appointment?" : "Reverse the recorded deposit for this appointment?"
+    );
     if (!confirmed) return;
     const result = await reverseDepositPayment({ id: appointment.id } as any);
     if (result.error) {
       toast.error("Failed to reverse payment: " + result.error.message);
       return;
     }
-    toast.success("Payment reversed");
+    toast.success(paymentSummary.isPaidInFull ? "Payment reversed" : "Deposit reversed");
     await onAppointmentChange?.();
   }
 
@@ -750,7 +816,7 @@ export function AppointmentInspectorPanel({
                       {Number(appointment.depositAmount ?? 0) > 0 ? "Edit deposit" : "Set deposit"}
                     </Button>
                   ) : null}
-                  {!appointment.depositPaid && effectiveCollectionAmount > 0 ? (
+                  {effectiveCollectionAmount > 0.009 ? (
                     <Button
                       size="sm"
                       variant="outline"
@@ -762,7 +828,7 @@ export function AppointmentInspectorPanel({
                       Mark paid
                     </Button>
                   ) : null}
-                  {appointment.depositPaid ? (
+                  {paymentSummary.hasAnyPayment ? (
                     <Button
                       size="sm"
                       variant="outline"
@@ -771,7 +837,7 @@ export function AppointmentInspectorPanel({
                       disabled={savingDeposit || recordingPayment || reversingPayment}
                     >
                       {reversingPayment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                      Mark unpaid
+                      {paymentSummary.isPaidInFull ? "Reverse payment" : "Reverse deposit"}
                     </Button>
                   ) : null}
                 </div>
@@ -1254,7 +1320,7 @@ export function AppointmentInspectorPanel({
                 placeholder="0.00"
               />
               <p className="text-xs text-muted-foreground">
-                Payment amount: {formatCurrency(effectiveCollectionAmount)}
+                Amount due now: {formatCurrency(effectiveCollectionAmount)}
               </p>
             </div>
             <div className="space-y-2">

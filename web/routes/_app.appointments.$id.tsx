@@ -1082,7 +1082,7 @@ export default function AppointmentDetail() {
       : "Timed block"
     : null;
   const canEditDeposit =
-    !appointment.depositPaid &&
+    !showsPaidStatusInsteadOfDeposit &&
     appointment.status !== "cancelled" &&
     appointment.status !== "no-show";
 
@@ -1116,22 +1116,37 @@ export default function AppointmentDetail() {
     appointment.vehicle?.make === "Unspecified" &&
     appointment.vehicle?.model === "Vehicle";
   const missingLinkedRecords = !appointment.client || !appointment.vehicle;
-  const effectiveInternalPaymentAmount =
-    isInternalAppointment && Number(appointment.totalPrice ?? 0) > 0
-      ? Number(appointment.depositAmount ?? 0) > 0
-        ? Number(appointment.depositAmount ?? 0)
-        : Number(appointment.totalPrice ?? 0)
-      : Number(appointment.depositAmount ?? 0);
   const depositAmountValue = Number(appointment.depositAmount ?? 0);
   const totalPriceValue = Number(appointment.totalPrice ?? 0);
-  const showsPaidStatusInsteadOfDeposit =
-    appointment.depositPaid === true &&
-    (
-      depositAmountValue <= 0 ||
-      (isInternalAppointment &&
-        totalPriceValue > 0 &&
-        Math.abs(depositAmountValue - totalPriceValue) < 0.009)
-    );
+  const collectedAmountValue = (((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>).reduce(
+    (sum, record) => {
+      if (record.type !== "appointment.deposit_paid" && record.type !== "appointment.deposit_payment_reversed") return sum;
+      let amount = 0;
+      try {
+        const parsed = record.metadata ? (JSON.parse(record.metadata) as { amount?: number | string | null }) : null;
+        amount = Number(parsed?.amount ?? 0);
+      } catch {
+        amount = 0;
+      }
+      if (!Number.isFinite(amount) || amount <= 0) return sum;
+      return record.type === "appointment.deposit_paid" ? sum + amount : sum - amount;
+    },
+    0
+  ) as number);
+  const normalizedCollectedAmount = Math.max(0, Number(collectedAmountValue.toFixed(2)));
+  const hasRecordedPayment = normalizedCollectedAmount > 0.009 || appointment.depositPaid === true;
+  const remainingBalanceValue = totalPriceValue > 0 ? Math.max(0, Number((totalPriceValue - normalizedCollectedAmount).toFixed(2))) : 0;
+  const effectiveInternalPaymentAmount =
+    totalPriceValue > 0
+      ? hasRecordedPayment
+        ? remainingBalanceValue
+        : depositAmountValue > 0
+          ? Math.min(totalPriceValue, depositAmountValue)
+          : totalPriceValue
+      : depositAmountValue > 0 && !hasRecordedPayment
+        ? depositAmountValue
+        : 0;
+  const showsPaidStatusInsteadOfDeposit = totalPriceValue > 0 ? hasRecordedPayment && remainingBalanceValue <= 0.009 : appointment.depositPaid === true && depositAmountValue <= 0;
   const clientOptions = ((clientsForEdit as any[]) ?? []) as Array<{
     id: string;
     firstName: string;
@@ -1265,7 +1280,7 @@ export default function AppointmentDetail() {
       return;
     }
     if (Math.abs(amount - depositAmount) > 0.009) {
-      toast.error(`Deposit payment must match the required deposit of ${formatCurrency(depositAmount)}.`);
+      toast.error(`Payment must match the amount due of ${formatCurrency(depositAmount)}.`);
       return;
     }
     const [py, pm, pd] = depositPaymentDate.split("-").map(Number);
@@ -1278,12 +1293,12 @@ export default function AppointmentDetail() {
       notes: depositPaymentNotes || undefined,
     });
     if (!result.error) {
-      toast.success(isInternalAppointment ? "Payment recorded" : "Deposit recorded");
+      toast.success(showsPaidStatusInsteadOfDeposit || effectiveInternalPaymentAmount >= remainingBalanceValue ? "Appointment paid in full" : "Payment recorded");
       setRecordDepositOpen(false);
       void refetchAppointment();
       void refetchActivity();
     } else {
-      toast.error("Failed to record deposit: " + result.error.message);
+      toast.error("Failed to record payment: " + result.error.message);
     }
   };
 
@@ -1291,12 +1306,12 @@ export default function AppointmentDetail() {
     if (!appointment?.id) return;
     const result = await runReverseDepositPayment({ id: appointment.id });
     if (!result.error) {
-      toast.success("Deposit payment reversed");
+      toast.success(showsPaidStatusInsteadOfDeposit ? "Payment reversed" : "Deposit reversed");
       setReverseDepositOpen(false);
       void refetchAppointment();
       void refetchActivity();
     } else {
-      toast.error("Failed to reverse deposit: " + result.error.message);
+      toast.error("Failed to reverse payment: " + result.error.message);
     }
   };
 
@@ -1463,7 +1478,7 @@ export default function AppointmentDetail() {
             </Button>
           ) : null}
 
-          {isInternalAppointment && effectiveInternalPaymentAmount > 0 && !appointment.depositPaid ? (
+          {isInternalAppointment && effectiveInternalPaymentAmount > 0 ? (
             <Button variant="outline" size="sm" onClick={handleOpenDepositDialog} disabled={recordingDeposit}>
               {recordingDeposit ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1474,7 +1489,7 @@ export default function AppointmentDetail() {
             </Button>
           ) : null}
 
-          {isInternalAppointment && appointment.depositPaid ? (
+          {isInternalAppointment && hasRecordedPayment ? (
             <Button
               variant="outline"
               size="sm"
@@ -1486,7 +1501,7 @@ export default function AppointmentDetail() {
               ) : (
                 <RotateCcw className="h-4 w-4 mr-2" />
               )}
-              Mark Unpaid
+              Reverse Payment
             </Button>
           ) : null}
 
@@ -1598,21 +1613,23 @@ export default function AppointmentDetail() {
               </Button>
             )}
 
-            {appointment.depositAmount != null && appointment.depositAmount > 0 && !appointment.depositPaid && (
+            {effectiveInternalPaymentAmount > 0 && (
               <>
                 <Button variant="outline" size="sm" onClick={handleOpenDepositDialog}>
                   <DollarSign className="h-4 w-4 mr-2" />
-                  Collect Deposit
+                  {hasRecordedPayment || depositAmountValue <= 0 ? "Collect Payment" : "Collect Deposit"}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleStripeDepositCheckout()}
-                  disabled={creatingStripeDepositSession}
-                >
-                  {creatingStripeDepositSession ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <DollarSign className="h-4 w-4 mr-2" />}
-                  Pay with Stripe
-                </Button>
+                {!hasRecordedPayment && appointment.depositAmount != null && appointment.depositAmount > 0 ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleStripeDepositCheckout()}
+                    disabled={creatingStripeDepositSession}
+                  >
+                    {creatingStripeDepositSession ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <DollarSign className="h-4 w-4 mr-2" />}
+                    Pay with Stripe
+                  </Button>
+                ) : null}
               </>
             )}
           </div>
@@ -1661,25 +1678,25 @@ export default function AppointmentDetail() {
               ) : null}
             </div>
 
-            {isInternalAppointment && effectiveInternalPaymentAmount > 0 ? (
+            {isInternalAppointment && (effectiveInternalPaymentAmount > 0 || hasRecordedPayment) ? (
               <Button
                 variant="outline"
                 className="w-full justify-center"
-                onClick={() => (appointment.depositPaid ? setReverseDepositOpen(true) : handleOpenDepositDialog())}
-                disabled={appointment.depositPaid ? reversingDeposit : recordingDeposit}
+                onClick={() => (hasRecordedPayment && effectiveInternalPaymentAmount <= 0 ? setReverseDepositOpen(true) : handleOpenDepositDialog())}
+                disabled={hasRecordedPayment && effectiveInternalPaymentAmount <= 0 ? reversingDeposit : recordingDeposit}
               >
-                {(appointment.depositPaid ? reversingDeposit : recordingDeposit) ? (
+                {(hasRecordedPayment && effectiveInternalPaymentAmount <= 0 ? reversingDeposit : recordingDeposit) ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : appointment.depositPaid ? (
+                ) : hasRecordedPayment && effectiveInternalPaymentAmount <= 0 ? (
                   <RotateCcw className="h-4 w-4 mr-2" />
                 ) : (
                   <DollarSign className="h-4 w-4 mr-2" />
                 )}
-                {appointment.depositPaid ? "Mark Unpaid" : "Mark Paid"}
+                {hasRecordedPayment && effectiveInternalPaymentAmount <= 0 ? "Reverse Payment" : "Mark Paid"}
               </Button>
             ) : null}
 
-            {!isInternalAppointment && !appointment.depositPaid ? (
+            {!isInternalAppointment && canEditDeposit ? (
               <Button
                 variant="outline"
                 className="w-full justify-center"
@@ -1820,7 +1837,7 @@ export default function AppointmentDetail() {
                     </Link>
                   </Button>
                 ) : null}
-                {appointment.depositAmount != null && appointment.depositAmount > 0 && !appointment.depositPaid ? (
+                {effectiveInternalPaymentAmount > 0 ? (
                   <>
                     <Button
                       variant="outline"
@@ -1831,20 +1848,22 @@ export default function AppointmentDetail() {
                       }}
                     >
                       <DollarSign className="mr-2 h-4 w-4" />
-                      Collect deposit
+                      {hasRecordedPayment || depositAmountValue <= 0 ? "Collect payment" : "Collect deposit"}
                     </Button>
-                    <Button
-                      variant="outline"
-                      className="justify-start"
-                      disabled={creatingStripeDepositSession}
-                      onClick={() => {
-                        setShowMobileActions(false);
-                        void handleStripeDepositCheckout();
-                      }}
-                    >
-                      {creatingStripeDepositSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DollarSign className="mr-2 h-4 w-4" />}
-                      Pay with Stripe
-                    </Button>
+                    {!hasRecordedPayment && appointment.depositAmount != null && appointment.depositAmount > 0 ? (
+                      <Button
+                        variant="outline"
+                        className="justify-start"
+                        disabled={creatingStripeDepositSession}
+                        onClick={() => {
+                          setShowMobileActions(false);
+                          void handleStripeDepositCheckout();
+                        }}
+                      >
+                        {creatingStripeDepositSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DollarSign className="mr-2 h-4 w-4" />}
+                        Pay with Stripe
+                      </Button>
+                    ) : null}
                   </>
                 ) : null}
                 <Button
@@ -1858,7 +1877,7 @@ export default function AppointmentDetail() {
                   <Trash2 className="mr-2 h-4 w-4" />
                   {isInternalAppointment ? "Delete block" : "Delete appointment"}
                 </Button>
-                {appointment.depositPaid ? (
+                {hasRecordedPayment ? (
                   <Button
                     variant="outline"
                     className="justify-start"
@@ -1868,7 +1887,7 @@ export default function AppointmentDetail() {
                     }}
                   >
                     <RotateCcw className="mr-2 h-4 w-4" />
-                    Reverse deposit
+                    {showsPaidStatusInsteadOfDeposit ? "Reverse payment" : "Reverse deposit"}
                   </Button>
                 ) : null}
                 {(VALID_TRANSITIONS[appointment.status] ?? []).map((status) => (
@@ -1919,7 +1938,7 @@ export default function AppointmentDetail() {
         status={appointment.status}
         invoicedAt={(appointment as any).invoicedAt ?? null}
         paidAt={(appointment as any).paidAt ?? null}
-        paymentRecorded={Boolean((appointment as any).paidAt ?? appointment.depositPaid)}
+        paymentRecorded={hasRecordedPayment}
       />
 
       {!isInternalAppointment && (hasPlaceholderClient || hasPlaceholderVehicle || missingLinkedRecords) && (
@@ -2082,9 +2101,13 @@ export default function AppointmentDetail() {
                           {isInternalAppointment ? "Payment" : "Deposit"}: {formatCurrency(appointment.depositAmount)}
                         </p>
                         <p className="text-sm">
-                          {appointment.depositPaid ? (
+                          {hasRecordedPayment ? (
                             <span className="text-green-600 font-medium">
-                              {isInternalAppointment ? "Recorded" : "Collected"}
+                              {showsPaidStatusInsteadOfDeposit
+                                ? "Paid in full"
+                                : isInternalAppointment
+                                  ? "Recorded"
+                                  : "Collected"}
                             </span>
                           ) : (
                             <span className="text-amber-600 font-medium">
@@ -2402,7 +2425,7 @@ export default function AppointmentDetail() {
                 applyAdminFee={appointment.applyAdminFee}
                 totalPrice={appointment.totalPrice}
                 depositAmount={appointment.depositAmount}
-                depositPaid={appointment.depositPaid}
+                depositPaid={hasRecordedPayment}
                 paymentStateOverride={
                   showsPaidStatusInsteadOfDeposit
                     ? {
@@ -2416,33 +2439,32 @@ export default function AppointmentDetail() {
                 }
                 depositActionLabel={
                   effectiveInternalPaymentAmount > 0
-                    ? appointment.depositPaid
-                      ? isInternalAppointment
-                        ? "Payment recorded"
-                        : "Deposit collected"
-                      : isInternalAppointment
+                    ? isInternalAppointment
                         ? "Mark paid"
-                        : "Collect deposit"
+                        : hasRecordedPayment || depositAmountValue <= 0
+                          ? "Collect payment"
+                          : "Collect deposit"
                     : null
                 }
                 onDepositAction={
-                  effectiveInternalPaymentAmount > 0 && !appointment.depositPaid
+                  effectiveInternalPaymentAmount > 0
                     ? handleOpenDepositDialog
                     : null
                 }
                 depositActionDisabled={
                   recordingDeposit ||
-                  effectiveInternalPaymentAmount <= 0 ||
-                  appointment.depositPaid === true
+                  effectiveInternalPaymentAmount <= 0
                 }
                 secondaryDepositActionLabel={
-                  appointment.depositPaid
+                  hasRecordedPayment
                     ? isInternalAppointment
-                      ? "Mark unpaid"
-                      : "Reverse deposit collection"
+                      ? "Reverse payment"
+                      : showsPaidStatusInsteadOfDeposit
+                        ? "Reverse payment"
+                        : "Reverse deposit collection"
                     : null
                 }
-                onSecondaryDepositAction={appointment.depositPaid ? () => setReverseDepositOpen(true) : null}
+                onSecondaryDepositAction={hasRecordedPayment ? () => setReverseDepositOpen(true) : null}
                 secondaryDepositActionDisabled={reversingDeposit}
               />
 
@@ -2487,11 +2509,13 @@ export default function AppointmentDetail() {
       <Dialog open={recordDepositOpen} onOpenChange={setRecordDepositOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{isInternalAppointment ? "Mark Payment" : "Collect Deposit"}</DialogTitle>
+            <DialogTitle>{isInternalAppointment ? "Mark Payment" : hasRecordedPayment || depositAmountValue <= 0 ? "Collect Payment" : "Collect Deposit"}</DialogTitle>
             <DialogDescription>
               {isInternalAppointment
                 ? "Record this internal appointment amount as already settled without creating an invoice."
-                : "Collect the appointment deposit now without changing the rest of the booking."}
+                : hasRecordedPayment || depositAmountValue <= 0
+                  ? "Record the remaining appointment balance without changing the rest of the booking."
+                  : "Collect the appointment deposit now without changing the rest of the booking."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -2507,7 +2531,11 @@ export default function AppointmentDetail() {
                 placeholder="0.00"
               />
               <p className="text-xs text-muted-foreground">
-                {isInternalAppointment ? "Amount to record" : "Deposit to collect"}: {formatCurrency(effectiveInternalPaymentAmount)}
+                {isInternalAppointment
+                  ? "Amount to record"
+                  : hasRecordedPayment || depositAmountValue <= 0
+                    ? "Amount due now"
+                    : "Deposit to collect"}: {formatCurrency(effectiveInternalPaymentAmount)}
               </p>
             </div>
             <div className="space-y-2">
@@ -2537,7 +2565,7 @@ export default function AppointmentDetail() {
                 id="deposit-payment-notes"
                 value={depositPaymentNotes}
                 onChange={(e) => setDepositPaymentNotes(e.target.value)}
-                placeholder="Optional note for the deposit record"
+                placeholder="Optional note for this payment"
                 rows={3}
               />
             </div>
@@ -2548,7 +2576,7 @@ export default function AppointmentDetail() {
             </Button>
             <Button onClick={() => void handleRecordDepositPayment()} disabled={recordingDeposit}>
               {recordingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isInternalAppointment ? "Mark paid" : "Collect Deposit"}
+              {isInternalAppointment ? "Mark paid" : hasRecordedPayment || depositAmountValue <= 0 ? "Collect payment" : "Collect deposit"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2592,11 +2620,15 @@ export default function AppointmentDetail() {
       <AlertDialog open={reverseDepositOpen} onOpenChange={setReverseDepositOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{isInternalAppointment ? "Mark appointment unpaid?" : "Reverse deposit collection?"}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {isInternalAppointment || showsPaidStatusInsteadOfDeposit ? "Reverse payment?" : "Reverse deposit collection?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {isInternalAppointment
                 ? "This will mark the internal appointment amount as unpaid again."
-                : "This will mark the appointment deposit as uncollected again. Use this if the manual deposit record was entered by mistake."}
+                : showsPaidStatusInsteadOfDeposit
+                  ? "This will reverse the recorded appointment payment. Use this if the payment record was entered by mistake."
+                  : "This will mark the appointment deposit as uncollected again. Use this if the manual deposit record was entered by mistake."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
