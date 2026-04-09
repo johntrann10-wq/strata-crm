@@ -171,6 +171,10 @@ function safeDate(value: string | Date | null | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function hasValidPaidAt(value: string | Date | null | undefined): boolean {
+  return safeDate(value) !== null;
+}
+
 function formatFreshness(value: string | Date | null | undefined, label: string): string | null {
   const parsed = safeDate(value);
   return parsed ? `${label} ${parsed.toLocaleDateString()}` : null;
@@ -1124,6 +1128,7 @@ export default function AppointmentDetail() {
   const missingLinkedRecords = !appointment.client || !appointment.vehicle;
   const depositAmountValue = Number(appointment.depositAmount ?? 0);
   const totalPriceValue = Number(appointment.totalPrice ?? 0);
+  const paidInFull = hasValidPaidAt((appointment as any).paidAt ?? null);
   const collectedAmountFromActivity = (((activityLogs ?? []) as Array<{ type?: string | null; action?: string | null; metadata?: string | null }>).reduce(
     (sum, record) => {
       const activityType = String(record.type ?? record.action ?? "");
@@ -1140,15 +1145,13 @@ export default function AppointmentDetail() {
     },
     0
   ) as number);
-  const fallbackCollectedAmount = appointment.paidAt
+  const fallbackCollectedAmount = paidInFull
     ? Math.max(0, totalPriceValue)
-    : appointment.depositPaid === true && depositAmountValue > 0
-      ? Math.min(totalPriceValue, depositAmountValue)
-      : 0;
-  const normalizedCollectedAmount = appointment.paidAt
+    : 0;
+  const normalizedCollectedAmount = paidInFull
     ? Math.max(0, totalPriceValue)
     : Math.max(0, Number((collectedAmountFromActivity > 0 ? collectedAmountFromActivity : fallbackCollectedAmount).toFixed(2)));
-  const hasRecordedPayment = normalizedCollectedAmount > 0.009 || Boolean(appointment.paidAt);
+  const hasRecordedPayment = normalizedCollectedAmount > 0.009 || paidInFull;
   const remainingBalanceValue = totalPriceValue > 0 ? Math.max(0, Number((totalPriceValue - normalizedCollectedAmount).toFixed(2))) : 0;
   const nextPaymentAmount =
     totalPriceValue > 0
@@ -1160,7 +1163,7 @@ export default function AppointmentDetail() {
       : depositAmountValue > 0 && !hasRecordedPayment
         ? depositAmountValue
         : 0;
-  const showsPaidStatusInsteadOfDeposit = totalPriceValue > 0 ? hasRecordedPayment && remainingBalanceValue <= 0.009 : appointment.depositPaid === true && depositAmountValue <= 0;
+  const showsPaidStatusInsteadOfDeposit = totalPriceValue > 0 ? hasRecordedPayment && remainingBalanceValue <= 0.009 : paidInFull;
   const showsCollectPaymentLabel = !isInternalAppointment && hasRecordedPayment;
   const canEditDeposit =
     !showsPaidStatusInsteadOfDeposit &&

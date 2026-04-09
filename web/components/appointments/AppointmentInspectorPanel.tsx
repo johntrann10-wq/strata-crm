@@ -90,6 +90,12 @@ function toMoneyNumber(value: number | string | null | undefined): number {
   return Number.isFinite(normalized) ? normalized : 0;
 }
 
+function hasValidPaidAt(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime());
+}
+
 function toTimeInputValue(date: Date | string | null | undefined): string {
   if (!date) return "";
   const parsed = new Date(date);
@@ -140,10 +146,7 @@ function getLifecycleLabel(appointment: AppointmentInspectorRecord): string {
 
 function getCollectedAmount(appointment: AppointmentInspectorRecord): number {
   const total = Number(appointment.totalPrice ?? 0);
-  const deposit = Number(appointment.depositAmount ?? 0);
-  if (appointment.paidAt) return total;
-  if (!appointment.depositPaid) return 0;
-  if (deposit > 0) return Math.min(total, deposit);
+  if (hasValidPaidAt(appointment.paidAt)) return total;
   return 0;
 }
 
@@ -192,13 +195,14 @@ function getPaymentSummary(
 } {
   const totalAmount = Number(appointment.totalPrice ?? 0);
   const depositAmount = Number(appointment.depositAmount ?? 0);
+  const paidInFull = hasValidPaidAt(appointment.paidAt);
   const activityCollectedAmount = getCollectedAmountFromActivity(appointment, activityLogs);
   const collectedAmount = activityCollectedAmount ?? getCollectedAmount(appointment);
   const balanceDue = totalAmount > 0 ? Math.max(0, Number((totalAmount - collectedAmount).toFixed(2))) : 0;
-  const hasAnyPayment = collectedAmount > 0.009 || Boolean(appointment.paidAt);
+  const hasAnyPayment = collectedAmount > 0.009 || paidInFull;
   const isPaidInFull =
     (totalAmount > 0 && balanceDue <= 0.009 && hasAnyPayment) ||
-    Boolean(appointment.paidAt) ||
+    paidInFull ||
     (appointment.depositPaid && depositAmount <= 0 && totalAmount <= 0);
   const nextCollectionAmount =
     totalAmount > 0
