@@ -144,7 +144,7 @@ function getCollectedAmount(appointment: AppointmentInspectorRecord): number {
   if (appointment.paidAt) return total;
   if (!appointment.depositPaid) return 0;
   if (deposit > 0) return Math.min(total, deposit);
-  return total;
+  return 0;
 }
 
 function getCollectedAmountFromActivity(
@@ -195,7 +195,7 @@ function getPaymentSummary(
   const activityCollectedAmount = getCollectedAmountFromActivity(appointment, activityLogs);
   const collectedAmount = activityCollectedAmount ?? getCollectedAmount(appointment);
   const balanceDue = totalAmount > 0 ? Math.max(0, Number((totalAmount - collectedAmount).toFixed(2))) : 0;
-  const hasAnyPayment = collectedAmount > 0.009 || Boolean(appointment.depositPaid);
+  const hasAnyPayment = collectedAmount > 0.009 || Boolean(appointment.paidAt);
   const isPaidInFull =
     (totalAmount > 0 && balanceDue <= 0.009 && hasAnyPayment) ||
     Boolean(appointment.paidAt) ||

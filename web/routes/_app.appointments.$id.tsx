@@ -1140,10 +1140,15 @@ export default function AppointmentDetail() {
     },
     0
   ) as number);
+  const fallbackCollectedAmount = appointment.paidAt
+    ? Math.max(0, totalPriceValue)
+    : appointment.depositPaid === true && depositAmountValue > 0
+      ? Math.min(totalPriceValue, depositAmountValue)
+      : 0;
   const normalizedCollectedAmount = appointment.paidAt
     ? Math.max(0, totalPriceValue)
-    : Math.max(0, Number(collectedAmountFromActivity.toFixed(2)));
-  const hasRecordedPayment = normalizedCollectedAmount > 0.009 || appointment.depositPaid === true || Boolean(appointment.paidAt);
+    : Math.max(0, Number((collectedAmountFromActivity > 0 ? collectedAmountFromActivity : fallbackCollectedAmount).toFixed(2)));
+  const hasRecordedPayment = normalizedCollectedAmount > 0.009 || Boolean(appointment.paidAt);
   const remainingBalanceValue = totalPriceValue > 0 ? Math.max(0, Number((totalPriceValue - normalizedCollectedAmount).toFixed(2))) : 0;
   const nextPaymentAmount =
     totalPriceValue > 0
