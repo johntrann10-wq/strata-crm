@@ -1965,6 +1965,9 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   const collectedAmount = await getAppointmentCollectedAmount(existing.id, bid);
   const remainingBalance =
     Number.isFinite(totalPrice) && totalPrice > 0 ? Math.max(0, Number((totalPrice - collectedAmount).toFixed(2))) : 0;
+  const nextCollectedAmount = Math.max(0, Number((collectedAmount + parsed.data.amount).toFixed(2)));
+  const willBePaidInFull =
+    Number.isFinite(totalPrice) && totalPrice > 0 ? nextCollectedAmount >= totalPrice - 0.009 : false;
   const effectiveRequiredAmount =
     Number.isFinite(totalPrice) && totalPrice > 0
       ? collectedAmount <= 0 && Number.isFinite(depositAmount) && depositAmount > 0
@@ -1996,6 +1999,7 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
     depositPaid: true,
   };
   if (columns.has("updated_at")) updates.updatedAt = new Date();
+  if (columns.has("paid_at")) updates.paidAt = willBePaidInFull ? (parsed.data.paidAt ? new Date(parsed.data.paidAt) : new Date()) : null;
 
   let updated;
   try {
@@ -2166,6 +2170,7 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
     depositPaid: false,
   };
   if (columns.has("updated_at")) updates.updatedAt = new Date();
+  if (columns.has("paid_at")) updates.paidAt = null;
 
   let updated;
   try {

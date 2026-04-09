@@ -1113,9 +1113,10 @@ export default function AppointmentDetail() {
   const missingLinkedRecords = !appointment.client || !appointment.vehicle;
   const depositAmountValue = Number(appointment.depositAmount ?? 0);
   const totalPriceValue = Number(appointment.totalPrice ?? 0);
-  const collectedAmountValue = (((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>).reduce(
+  const collectedAmountValue = (((activityLogs ?? []) as Array<{ type?: string | null; action?: string | null; metadata?: string | null }>).reduce(
     (sum, record) => {
-      if (record.type !== "appointment.deposit_paid" && record.type !== "appointment.deposit_payment_reversed") return sum;
+      const activityType = String(record.type ?? record.action ?? "");
+      if (activityType !== "appointment.deposit_paid" && activityType !== "appointment.deposit_payment_reversed") return sum;
       let amount = 0;
       try {
         const parsed = record.metadata ? (JSON.parse(record.metadata) as { amount?: number | string | null }) : null;
@@ -1124,7 +1125,7 @@ export default function AppointmentDetail() {
         amount = 0;
       }
       if (!Number.isFinite(amount) || amount <= 0) return sum;
-      return record.type === "appointment.deposit_paid" ? sum + amount : sum - amount;
+      return activityType === "appointment.deposit_paid" ? sum + amount : sum - amount;
     },
     0
   ) as number);

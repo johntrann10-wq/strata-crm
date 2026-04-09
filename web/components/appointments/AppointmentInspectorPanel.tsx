@@ -41,8 +41,13 @@ export type AppointmentInspectorRecord = {
 
 type AppointmentPaymentActivity = {
   action?: string | null;
+  type?: string | null;
   metadata?: string | null;
 };
+
+function getPaymentActivityType(entry: AppointmentPaymentActivity): string {
+  return String(entry.type ?? entry.action ?? "");
+}
 
 const LIFECYCLE_STATUS_LABELS: Record<string, string> = {
   scheduled: "Scheduled",
@@ -133,7 +138,10 @@ function getCollectedAmountFromActivity(
   activityLogs: AppointmentPaymentActivity[]
 ): number | null {
   const relevantLogs = activityLogs.filter(
-    (entry) => entry.action === "appointment.deposit_paid" || entry.action === "appointment.deposit_payment_reversed"
+    (entry) => {
+      const activityType = getPaymentActivityType(entry);
+      return activityType === "appointment.deposit_paid" || activityType === "appointment.deposit_payment_reversed";
+    }
   );
   if (relevantLogs.length === 0) return null;
 
@@ -147,8 +155,9 @@ function getCollectedAmountFromActivity(
       amount = 0;
     }
     if (!Number.isFinite(amount) || amount <= 0) continue;
-    if (entry.action === "appointment.deposit_paid") total += amount;
-    if (entry.action === "appointment.deposit_payment_reversed") total -= amount;
+    const activityType = getPaymentActivityType(entry);
+    if (activityType === "appointment.deposit_paid") total += amount;
+    if (activityType === "appointment.deposit_payment_reversed") total -= amount;
   }
 
   const totalPrice = Number(appointment.totalPrice ?? 0);
