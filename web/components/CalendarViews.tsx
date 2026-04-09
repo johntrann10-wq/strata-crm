@@ -594,8 +594,8 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
     : `${appointments.length} appt${appointments.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="pointer-events-none min-w-0 space-y-1">
-      <div className="grid grid-cols-6 gap-1 sm:grid-cols-8">
+    <div className="pointer-events-none min-w-0 overflow-visible space-y-1">
+      <div className="grid grid-cols-6 gap-1 overflow-visible sm:grid-cols-8">
         {orderedAppointments.map((apt) => {
           const status = getStatusStyle(apt.status);
           return (
@@ -1010,7 +1010,7 @@ export function MonthView({
                           <div className="min-h-0 flex-1" />
                         )}
 
-                        <div className="mt-auto space-y-1 pt-1 sm:pt-2">
+                        <div className="mt-auto overflow-visible space-y-1 pt-1 pb-0.5 sm:pt-2 sm:pb-1">
                           <DayStatusDots appointments={dayDensityItems} />
                         </div>
                     </div>
