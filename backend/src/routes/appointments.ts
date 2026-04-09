@@ -1894,7 +1894,7 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   res.json(updated);
 });
 
-appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const parsed = recordDepositPaymentSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -1915,8 +1915,8 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   if (!existing) throw new NotFoundError("Appointment not found.");
 
   const columns = await getAppointmentColumns();
-  if (!columns.has("deposit_amount") || !columns.has("deposit_paid")) {
-    throw new BadRequestError("Deposit tracking is unavailable until the latest database update is applied.");
+  if (!columns.has("deposit_paid")) {
+    throw new BadRequestError("Payment tracking is unavailable until the latest database update is applied.");
   }
 
   const depositAmount = Number(existing.depositAmount ?? 0);
@@ -1926,15 +1926,21 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   const effectiveRequiredAmount =
     Number.isFinite(depositAmount) && depositAmount > 0
       ? depositAmount
-      : isInternalAppointment && Number.isFinite(totalPrice) && totalPrice > 0
+      : Number.isFinite(totalPrice) && totalPrice > 0
         ? totalPrice
         : 0;
   if (!Number.isFinite(effectiveRequiredAmount) || effectiveRequiredAmount <= 0) {
-    throw new BadRequestError("This appointment does not have a deposit to record.");
+    throw new BadRequestError("This appointment does not have a payment amount to record.");
   }
 
   if (parsed.data.amount !== effectiveRequiredAmount) {
-    throw new BadRequestError(`Deposit payment must match the required deposit amount (${effectiveRequiredAmount.toFixed(2)}).`);
+    const expectedLabel =
+      Number.isFinite(depositAmount) && depositAmount > 0
+        ? "required deposit amount"
+        : isInternalAppointment
+          ? "appointment total"
+          : "remaining appointment amount";
+    throw new BadRequestError(`Payment must match the ${expectedLabel} (${effectiveRequiredAmount.toFixed(2)}).`);
   }
 
   if (existing.depositPaid) {
@@ -1956,7 +1962,7 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
       .returning();
   } catch (error) {
     if (!isAppointmentSchemaDriftError(error)) throw error;
-    throw new BadRequestError("Deposit tracking is unavailable until the latest database update is applied.");
+    throw new BadRequestError("Payment tracking is unavailable until the latest database update is applied.");
   }
 
   await createRequestActivityLog(req, {
@@ -1971,11 +1977,15 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
       referenceNumber: parsed.data.referenceNumber ?? null,
       paidAt: parsed.data.paidAt ? new Date(parsed.data.paidAt).toISOString() : new Date().toISOString(),
       source: "manual",
+      paymentType:
+        Number.isFinite(depositAmount) && depositAmount > 0
+          ? "deposit"
+          : "full",
     },
   });
 
   res.json(updated ?? { ...existing, depositPaid: true });
-});
+}));
 
 appointmentsRouter.post("/:id/create-deposit-payment-session", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
@@ -2078,7 +2088,7 @@ appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requ
   res.json({ confirmed, depositPaid: confirmed });
 }));
 
-appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
     .select({
@@ -2093,7 +2103,7 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
 
   const columns = await getAppointmentColumns();
   if (!columns.has("deposit_paid")) {
-    throw new BadRequestError("Deposit tracking is unavailable until the latest database update is applied.");
+    throw new BadRequestError("Payment tracking is unavailable until the latest database update is applied.");
   }
 
   if (!existing.depositPaid) {
@@ -2115,7 +2125,7 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
       .returning();
   } catch (error) {
     if (!isAppointmentSchemaDriftError(error)) throw error;
-    throw new BadRequestError("Deposit tracking is unavailable until the latest database update is applied.");
+    throw new BadRequestError("Payment tracking is unavailable until the latest database update is applied.");
   }
 
   await createRequestActivityLog(req, {
@@ -2130,7 +2140,7 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
   });
 
   res.json(updated ?? { ...existing, depositPaid: false });
-});
+}));
 
 appointmentsRouter.post("/:id/public-request-change", express.urlencoded({ extended: false }), wrapAsync(async (req: Request, res: Response) => {
   const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
