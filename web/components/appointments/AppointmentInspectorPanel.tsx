@@ -26,6 +26,13 @@ export type AppointmentInspectorRecord = {
   pickupReadyTime?: string | null;
   vehicleOnSite?: boolean | null;
   jobPhase?: string | null;
+  subtotal?: number | string | null;
+  taxRate?: number | string | null;
+  taxAmount?: number | string | null;
+  applyTax?: boolean | null;
+  adminFeeRate?: number | string | null;
+  adminFeeAmount?: number | string | null;
+  applyAdminFee?: boolean | null;
   totalPrice?: number | null;
   depositAmount?: number | null;
   depositPaid?: boolean | null;
@@ -72,8 +79,15 @@ function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
+}
+
+function toMoneyNumber(value: number | string | null | undefined): number {
+  if (value == null || value === "") return 0;
+  const normalized = typeof value === "string" ? Number(value) : value;
+  return Number.isFinite(normalized) ? normalized : 0;
 }
 
 function toTimeInputValue(date: Date | string | null | undefined): string {
@@ -373,6 +387,15 @@ export function AppointmentInspectorPanel({
   const moneyStateLabel = paymentSummary.moneyStateLabel;
   const collectedAmount = paymentSummary.collectedAmount;
   const balanceDue = paymentSummary.balanceDue;
+  const servicesSubtotal = toMoneyNumber(appointment.subtotal);
+  const adminFeeAmount = toMoneyNumber(appointment.adminFeeAmount);
+  const adminFeeRate = toMoneyNumber(appointment.adminFeeRate);
+  const taxAmount = toMoneyNumber(appointment.taxAmount);
+  const taxRate = toMoneyNumber(appointment.taxRate);
+  const showServicesSubtotal = servicesSubtotal > 0;
+  const showAdminFee = appointment.applyAdminFee === true && adminFeeAmount > 0;
+  const showTax = appointment.applyTax === true && taxAmount > 0;
+  const showFinancialBreakdown = showServicesSubtotal || showAdminFee || showTax;
   const totalAmount = Number(appointment.totalPrice ?? 0);
   const hasClient = Boolean(appointment.client?.firstName || appointment.client?.lastName);
   const isInternalAppointment = !hasClient;
@@ -722,6 +745,26 @@ export function AppointmentInspectorPanel({
               <MoneyTile label="Collected" value={collectedAmount > 0 ? formatCurrency(collectedAmount) : "-"} />
               <MoneyTile label="Balance due" value={balanceDue > 0 ? formatCurrency(balanceDue) : totalAmount > 0 ? "Paid" : "-"} />
             </div>
+            {showFinancialBreakdown ? (
+              <div className="mt-3 space-y-2 border-t border-border/50 pt-3 text-xs">
+                {showServicesSubtotal ? (
+                  <MoneyBreakdownRow label="Services subtotal" value={formatCurrency(servicesSubtotal)} />
+                ) : null}
+                {showAdminFee ? (
+                  <MoneyBreakdownRow
+                    label={adminFeeRate > 0 ? `Admin fee (${adminFeeRate}%)` : "Admin fee"}
+                    value={formatCurrency(adminFeeAmount)}
+                  />
+                ) : null}
+                {showTax ? (
+                  <MoneyBreakdownRow
+                    label={taxRate > 0 ? `Tax (${taxRate}%)` : "Tax"}
+                    value={formatCurrency(taxAmount)}
+                  />
+                ) : null}
+                <MoneyBreakdownRow label="Total" value={totalAmount > 0 ? formatCurrency(totalAmount) : "-"} strong />
+              </div>
+            ) : null}
           </div>
           <InspectorRow icon={User} label="Customer" value={getClientName(appointment)} />
           <InspectorRow icon={CarFront} label="Vehicle" value={getVehicleLabel(appointment)} />
@@ -1379,6 +1422,23 @@ function MoneyTile({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-border/60 bg-background/80 px-2.5 py-2">
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
       <p className="mt-1 line-clamp-2 break-words text-sm font-semibold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function MoneyBreakdownRow({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className={cn("text-muted-foreground", strong && "font-semibold text-foreground")}>{label}</span>
+      <span className={cn("text-right text-foreground", strong ? "font-semibold" : "font-medium")}>{value}</span>
     </div>
   );
 }
