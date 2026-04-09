@@ -4,6 +4,7 @@ import { Link, useOutletContext } from "react-router";
 import { CalendarRange, ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -263,6 +264,7 @@ export default function AppointmentsPage() {
   const [activeLocationId, setActiveLocationId] = useState<string>(currentLocationId ?? "all");
   const [activeFilter, setActiveFilter] = useState<ScheduleFilter>("all");
   const [activeTechFilter, setActiveTechFilter] = useState<string>("all");
+  const [inspectedDateKey, setInspectedDateKey] = useState<string | null>(null);
 
   useEffect(() => {
     setActiveLocationId(currentLocationId ?? "all");
@@ -359,6 +361,10 @@ export default function AppointmentsPage() {
     });
     return ids.size;
   }, [weekSnapshots]);
+  const inspectedSnapshot = useMemo(
+    () => weekSnapshots.find((snapshot) => snapshot.date.toISOString() === inspectedDateKey) ?? null,
+    [inspectedDateKey, weekSnapshots]
+  );
   const isInitialLoad = fetching && appointmentsData === undefined;
   const weekLabel = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d")}`;
 
@@ -541,11 +547,21 @@ export default function AppointmentsPage() {
               </div>
               <div className="divide-y divide-border/70">
                 {weekSnapshots.map((snapshot) => (
-                  <WeeklyDaySection key={snapshot.date.toISOString()} snapshot={snapshot} />
+                  <WeeklyDaySection
+                    key={snapshot.date.toISOString()}
+                    snapshot={snapshot}
+                    onOpenDay={() => setInspectedDateKey(snapshot.date.toISOString())}
+                  />
                 ))}
               </div>
             </CardContent>
           </Card>
+
+          <Dialog open={Boolean(inspectedSnapshot)} onOpenChange={(open) => !open && setInspectedDateKey(null)}>
+            <DialogContent className="max-h-[88dvh] max-w-3xl overflow-hidden rounded-[1.5rem] p-0">
+              {inspectedSnapshot ? <ScheduleDayInspector snapshot={inspectedSnapshot} /> : null}
+            </DialogContent>
+          </Dialog>
         </div>
       )}
     </div>
@@ -554,7 +570,7 @@ export default function AppointmentsPage() {
 
 export { RouteErrorBoundary as ErrorBoundary };
 
-function WeeklyDaySection({ snapshot }: { snapshot: DaySnapshot }) {
+function WeeklyDaySection({ snapshot, onOpenDay }: { snapshot: DaySnapshot; onOpenDay: () => void }) {
   const dayRevenue = snapshot.jobs.reduce((sum, appointment) => sum + Number(appointment.totalPrice ?? 0), 0);
   const groups = [
     { label: "Drop-offs", items: snapshot.dropOffs },
@@ -568,7 +584,7 @@ function WeeklyDaySection({ snapshot }: { snapshot: DaySnapshot }) {
       <div className="flex flex-col gap-1 border-b border-border/60 pb-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h4 className="text-sm font-semibold text-foreground sm:text-base">
-            {format(snapshot.date, "EEE")} - {format(snapshot.date, "MMM d")}
+            {format(snapshot.date, "EEEE")} - {format(snapshot.date, "MMM d")}
           </h4>
           <p className="text-xs text-muted-foreground">
             {snapshot.jobs.length} {snapshot.jobs.length === 1 ? "job" : "jobs"}
@@ -591,7 +607,12 @@ function WeeklyDaySection({ snapshot }: { snapshot: DaySnapshot }) {
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{group.label}</div>
               <div className="space-y-2">
                 {group.items.map((appointment) => (
-                  <ScheduleBoardRow key={`${group.label}-${appointment.id}`} appointment={appointment} referenceDate={snapshot.date} />
+                  <ScheduleBoardRow
+                    key={`${group.label}-${appointment.id}`}
+                    appointment={appointment}
+                    referenceDate={snapshot.date}
+                    onOpenDay={onOpenDay}
+                  />
                 ))}
               </div>
             </div>
@@ -605,9 +626,11 @@ function WeeklyDaySection({ snapshot }: { snapshot: DaySnapshot }) {
 function ScheduleBoardRow({
   appointment,
   referenceDate,
+  onOpenDay,
 }: {
   appointment: AppointmentRecord;
   referenceDate: Date;
+  onOpenDay: () => void;
 }) {
   const vehicleLabel = getVehicleLabel(appointment);
   const clientName = getClientName(appointment);
@@ -620,8 +643,9 @@ function ScheduleBoardRow({
   const supportLabel = joinMeta([appointment.location?.name ?? null, appointment.assignedStaffId ? getTechName(appointment) : null]);
 
   return (
-    <Link
-      to={`/appointments/${appointment.id}`}
+    <button
+      type="button"
+      onClick={onOpenDay}
       className="block rounded-xl border border-border/60 bg-white/88 px-3 py-3 transition-colors hover:bg-white"
     >
       <div className="grid gap-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.9fr)_auto] xl:items-start xl:gap-4">
@@ -647,6 +671,69 @@ function ScheduleBoardRow({
           </span>
         </div>
       </div>
-    </Link>
+    </button>
+  );
+}
+
+function ScheduleDayInspector({ snapshot }: { snapshot: DaySnapshot }) {
+  const dayRevenue = snapshot.jobs.reduce((sum, appointment) => sum + Number(appointment.totalPrice ?? 0), 0);
+  const groups = [
+    { label: "Drop-offs", items: snapshot.dropOffs },
+    { label: "Timed work", items: snapshot.timedWork },
+    { label: "In shop", items: snapshot.inShop },
+    { label: "Pickups", items: snapshot.pickups },
+  ].filter((group) => group.items.length > 0);
+
+  return (
+    <>
+      <DialogHeader className="border-b border-border/70 px-5 py-4">
+        <DialogTitle className="text-left">
+          {format(snapshot.date, "EEEE")} - {format(snapshot.date, "MMMM d")}
+        </DialogTitle>
+        <p className="text-sm text-muted-foreground">
+          {snapshot.jobs.length} {snapshot.jobs.length === 1 ? "job" : "jobs"}
+          {dayRevenue > 0 ? ` - ${formatCurrency(dayRevenue)}` : ""}
+        </p>
+      </DialogHeader>
+      <div className="max-h-[calc(88dvh-5.5rem)] space-y-4 overflow-y-auto px-5 py-4">
+        {groups.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No jobs scheduled for this day.</div>
+        ) : (
+          groups.map((group) => (
+            <div key={group.label} className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{group.label}</div>
+              <div className="space-y-2">
+                {group.items.map((appointment) => (
+                  <Link
+                    key={`${group.label}-${appointment.id}`}
+                    to={`/appointments/${appointment.id}`}
+                    className="block rounded-xl border border-border/60 bg-white/88 px-3 py-3 transition-colors hover:bg-white"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="min-w-0 flex-1 break-words text-sm font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
+                        {getAppointmentMoneyLabel(appointment) ? (
+                          <span className="shrink-0 text-xs font-semibold text-foreground">{getAppointmentMoneyLabel(appointment)}</span>
+                        ) : null}
+                      </div>
+                      <p className="break-words text-sm text-muted-foreground">
+                        {joinMeta([getClientName(appointment) || "Internal", getVehicleLabel(appointment) || "No vehicle"])}
+                      </p>
+                      <p className="break-words text-sm text-muted-foreground">{getScheduleTimingLabel(appointment)}</p>
+                      <div className="flex items-center gap-2">
+                        <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
+                        <span className="rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          {isMultiDayJob(appointment) ? getOperationalDayLabel(appointment, snapshot.date) : getJobPhaseLabel(appointment.jobPhase)}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </>
   );
 }
