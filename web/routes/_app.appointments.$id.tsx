@@ -593,9 +593,14 @@ export default function AppointmentDetail() {
     },
   });
   const [{ data: activityLogs, fetching: activityFetching }, refetchActivity] = useFindMany(api.activityLog, {
-    entityType: "appointment",
-    entityId: id,
+    filter: id
+      ? {
+          entityType: { equals: "appointment" },
+          entityId: { equals: id },
+        }
+      : { id: { equals: "" } },
     first: 25,
+    sort: { createdAt: "Descending" },
     pause: !id,
   } as any);
 
