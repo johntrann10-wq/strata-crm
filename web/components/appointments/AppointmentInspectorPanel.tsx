@@ -313,12 +313,8 @@ export function AppointmentInspectorPanel({
     pause: !selectedClientId,
   } as any);
   const [{ data: paymentActivityRaw }] = useFindMany(api.activityLog, {
-    filter: appointment?.id
-      ? {
-          entityType: { equals: "appointment" },
-          entityId: { equals: appointment.id },
-        }
-      : { id: { equals: "" } },
+    entityType: "appointment",
+    entityId: appointment?.id ?? "",
     first: 25,
     sort: { createdAt: "Descending" },
     pause: !appointment?.id,
