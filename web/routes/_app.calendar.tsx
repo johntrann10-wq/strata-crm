@@ -3,7 +3,7 @@ import { useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AlertTriangle, Ban, CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
 import { api } from "../api";
-import { useAction, useFindMany, useGlobalAction } from "../hooks/useApi";
+import { useAction, useFindMany } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { cn } from "@/lib/utils";
 import { AppointmentInspectorPanel } from "@/components/appointments/AppointmentInspectorPanel";
@@ -344,7 +344,6 @@ export default function CalendarPage() {
   const [{ fetching: creatingBlock }, createAppointment] = useAction(api.appointment.create);
   const [{ fetching: updatingBlock }, updateAppointment] = useAction(api.appointment.update);
   const [{ fetching: unblockingBlock }, updateAppointmentStatus] = useAction(api.appointment.updateStatus);
-  const [{ data: monthFinanceMetrics }, runMonthFinanceMetrics] = useGlobalAction(api.getFinanceMetrics);
   const timeOptions = useMemo(() => buildQuarterHourOptions(), []);
   const timeSelectTriggerClassName =
     "h-11 rounded-xl border-input/90 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
@@ -605,7 +604,18 @@ export default function CalendarPage() {
       }),
     [overviewAppointments, selectedMonthRange]
   );
-  const selectedMonthRevenue = monthFinanceMetrics?.revenueThisMonth ?? 0;
+  const selectedMonthRevenue = useMemo(
+    () =>
+      selectedMonthAppointments.reduce((total, appointment) => {
+        const scheduledAt = getJobSpanStart(appointment);
+        const isScheduledThisMonth =
+          scheduledAt.getTime() >= selectedMonthRange.start.getTime() &&
+          scheduledAt.getTime() <= selectedMonthRange.end.getTime();
+        if (!isScheduledThisMonth) return total;
+        return total + Number(appointment.totalPrice ?? 0);
+      }, 0),
+    [selectedMonthAppointments, selectedMonthRange]
+  );
   const busiestMonthDay = useMemo(() => {
     const counts = new Map<string, { date: Date; count: number }>();
     for (const appointment of selectedMonthAppointments) {
@@ -636,14 +646,6 @@ export default function CalendarPage() {
     if (selectedAppointment && selectableDayAgendaItems.some(({ appointment }) => appointment.id === selectedAppointment.id)) return;
     setSelectedAppointmentId(selectableDayAgendaItems[0]?.appointment.id ?? null);
   }, [selectableDayAgendaItems, selectedAppointment]);
-
-  useEffect(() => {
-    if (!businessId) return;
-    void runMonthFinanceMetrics({
-      rangeStart: selectedMonthRange.start.toISOString(),
-      rangeEnd: selectedMonthRange.end.toISOString(),
-    });
-  }, [businessId, runMonthFinanceMetrics, selectedMonthRange]);
 
   const dayInspectorPanel = (
     <div className="flex min-h-0 flex-col overflow-hidden">
