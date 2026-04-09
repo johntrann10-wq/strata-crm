@@ -1,5 +1,11 @@
 {
   "installCommand": "npm install --legacy-peer-deps",
   "buildCommand": "npm run build",
-  "framework": "react-router"
+  "framework": "react-router",
+  "routes": [
+    {
+      "src": "^/api/(.*)$",
+      "dest": "/api/[...path].ts"
+    }
+  ]
 }
