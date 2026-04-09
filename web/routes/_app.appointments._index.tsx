@@ -391,37 +391,37 @@ export default function AppointmentsPage() {
         }
       />
 
-      <section className="space-y-4">
-        <div className="rounded-[1.35rem] border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <section className="space-y-3 sm:space-y-4">
+        <div className="rounded-[1rem] border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-3 shadow-[0_8px_22px_rgba(15,23,42,0.04)] sm:rounded-[1.35rem] sm:p-4 sm:shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+          <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Scheduling</p>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h2 className="text-xl font-semibold tracking-tight text-foreground">{weekLabel}</h2>
-                <span className="text-sm text-muted-foreground">{weekCount} jobs in view</span>
+                <h2 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{weekLabel}</h2>
+                <span className="text-xs text-muted-foreground sm:text-sm">{weekCount} jobs in view</span>
               </div>
             </div>
             <div className="flex items-center gap-2 self-start xl:self-auto">
-              <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 7))}>
+              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg sm:h-9 sm:w-9 sm:rounded-xl" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 7))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button variant="outline" className="h-9 rounded-xl px-3 text-sm" onClick={() => setCurrentDate(new Date())}>
+              <Button variant="outline" className="h-8 rounded-lg px-3 text-sm sm:h-9 sm:rounded-xl" onClick={() => setCurrentDate(new Date())}>
                 This week
               </Button>
-              <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7))}>
+              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg sm:h-9 sm:w-9 sm:rounded-xl" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7))}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-2 lg:grid-cols-[minmax(0,1.25fr)_150px_170px_170px]">
+          <div className="mt-3 grid gap-2 lg:mt-4 lg:grid-cols-[minmax(0,1.25fr)_150px_170px_170px]">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Find a client, vehicle, job, or tech"
-                className="h-10 rounded-xl pl-9"
+                className="h-9 rounded-lg pl-9 sm:h-10 sm:rounded-xl"
               />
             </div>
             <div className="sm:hidden">
@@ -461,7 +461,7 @@ export default function AppointmentsPage() {
               </SelectContent>
             </Select>
             <Select value={activeTechFilter} onValueChange={setActiveTechFilter}>
-              <SelectTrigger className="h-10 rounded-xl">
+              <SelectTrigger className="h-9 rounded-lg sm:h-10 sm:rounded-xl">
                 <SelectValue placeholder="All techs" />
               </SelectTrigger>
               <SelectContent>
@@ -474,7 +474,7 @@ export default function AppointmentsPage() {
               </SelectContent>
             </Select>
             <Select value={activeFilter} onValueChange={(value) => setActiveFilter(value as ScheduleFilter)}>
-              <SelectTrigger className="h-10 rounded-xl">
+              <SelectTrigger className="h-9 rounded-lg sm:h-10 sm:rounded-xl">
                 <SelectValue placeholder="All work" />
               </SelectTrigger>
               <SelectContent>
@@ -534,12 +534,12 @@ export default function AppointmentsPage() {
         </div>
       ) : (
         <div className="mt-4">
-          <Card className="overflow-hidden border-border/70 shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
+          <Card className="overflow-hidden border-border/70 shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
             <CardContent className="p-0">
-              <div className="flex items-center justify-between border-b border-border/70 px-4 py-3 sm:px-5">
+              <div className="flex items-center justify-between border-b border-border/70 px-3 py-2.5 sm:px-5 sm:py-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Weekly board</p>
-                  <h3 className="text-base font-semibold text-foreground">Operational week</h3>
+                  <h3 className="text-sm font-semibold text-foreground sm:text-base">Operational week</h3>
                 </div>
                 <span className="rounded-full border border-border/70 bg-muted/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                   {weekCount} jobs
@@ -558,7 +558,7 @@ export default function AppointmentsPage() {
           </Card>
 
           <Dialog open={Boolean(inspectedSnapshot)} onOpenChange={(open) => !open && setInspectedDateKey(null)}>
-            <DialogContent className="max-h-[88dvh] max-w-3xl overflow-hidden rounded-[1.5rem] p-0">
+            <DialogContent className="max-h-[88dvh] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:rounded-[1.5rem]">
               {inspectedSnapshot ? <ScheduleDayInspector snapshot={inspectedSnapshot} /> : null}
             </DialogContent>
           </Dialog>
@@ -580,13 +580,13 @@ function WeeklyDaySection({ snapshot, onOpenDay }: { snapshot: DaySnapshot; onOp
   ].filter((group) => group.items.length > 0);
 
   return (
-    <section className={cn("px-4 py-4 sm:px-5", isToday(snapshot.date) && "bg-primary/[0.025]")}>
-      <div className="flex flex-col gap-1 border-b border-border/60 pb-3 sm:flex-row sm:items-end sm:justify-between">
+    <section className={cn("px-3 py-3 sm:px-5 sm:py-4", isToday(snapshot.date) && "bg-primary/[0.025]")}>
+      <div className="flex flex-col gap-1 border-b border-border/60 pb-2.5 sm:pb-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h4 className="text-sm font-semibold text-foreground sm:text-base">
             {format(snapshot.date, "EEEE")} - {format(snapshot.date, "MMM d")}
           </h4>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground sm:text-xs">
             {snapshot.jobs.length} {snapshot.jobs.length === 1 ? "job" : "jobs"}
             {dayRevenue > 0 ? ` - ${formatCurrency(dayRevenue)}` : ""}
           </p>
@@ -601,11 +601,11 @@ function WeeklyDaySection({ snapshot, onOpenDay }: { snapshot: DaySnapshot; onOp
       {snapshot.jobs.length === 0 ? (
         <div className="py-4 text-sm text-muted-foreground">No jobs scheduled for this day.</div>
       ) : (
-        <div className="space-y-4 pt-4">
+        <div className="space-y-3 pt-3 sm:space-y-4 sm:pt-4">
           {groups.map((group) => (
-            <div key={group.label} className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{group.label}</div>
-              <div className="space-y-2">
+            <div key={group.label} className="space-y-1.5 sm:space-y-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-[11px]">{group.label}</div>
+              <div className="space-y-1.5 sm:space-y-2">
                 {group.items.map((appointment) => (
                   <ScheduleBoardRow
                     key={`${group.label}-${appointment.id}`}
@@ -646,27 +646,27 @@ function ScheduleBoardRow({
     <button
       type="button"
       onClick={onOpenDay}
-      className="block rounded-xl border border-border/60 bg-white/88 px-3 py-3 transition-colors hover:bg-white"
+      className="block rounded-lg border border-border/60 bg-white/92 px-2.5 py-2.5 text-left transition-colors hover:bg-white sm:rounded-xl sm:px-3 sm:py-3"
     >
-      <div className="grid gap-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.9fr)_auto] xl:items-start xl:gap-4">
+      <div className="grid gap-1.5 sm:gap-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.9fr)_auto] xl:items-start xl:gap-4">
         <div className="min-w-0">
-          <div className="flex min-w-0 flex-wrap items-start gap-2">
-            <p className="min-w-0 flex-1 break-words text-[13px] font-semibold leading-5 text-foreground sm:text-sm">
+          <div className="flex min-w-0 items-start gap-2">
+            <p className="min-w-0 flex-1 break-words text-[12.5px] font-semibold leading-4.5 text-foreground sm:text-sm sm:leading-5">
               {getAppointmentLabel(appointment)}
             </p>
-            {moneyLabel ? <span className="shrink-0 text-[12px] font-semibold text-foreground">{moneyLabel}</span> : null}
+            {moneyLabel ? <span className="shrink-0 text-[11px] font-semibold text-foreground sm:text-[12px]">{moneyLabel}</span> : null}
           </div>
-          <p className="mt-1 break-words text-[12px] text-muted-foreground sm:text-[13px]">{identityLabel}</p>
+          <p className="mt-0.5 break-words text-[11px] text-muted-foreground sm:mt-1 sm:text-[13px]">{identityLabel}</p>
         </div>
 
-        <div className="min-w-0">
-          <p className="break-words text-[12px] text-muted-foreground sm:text-[13px]">{timingLabel}</p>
-          {supportLabel ? <p className="break-words text-[11px] text-muted-foreground">{supportLabel}</p> : null}
+        <div className="min-w-0 space-y-0.5">
+          <p className="break-words text-[11px] text-muted-foreground sm:text-[13px]">{timingLabel}</p>
+          {supportLabel ? <p className="break-words text-[10px] text-muted-foreground sm:text-[11px]">{supportLabel}</p> : null}
         </div>
 
-        <div className="flex min-w-0 items-center gap-2 xl:justify-end">
-          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
-          <span className="max-w-full truncate rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-1.5 xl:justify-end">
+          <span className={cn("h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5", getJobPhaseTone(appointment.jobPhase))} />
+          <span className="max-w-full truncate rounded-full border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2 sm:text-[10px]">
             {stageLabel}
           </span>
         </div>
@@ -686,43 +686,43 @@ function ScheduleDayInspector({ snapshot }: { snapshot: DaySnapshot }) {
 
   return (
     <>
-      <DialogHeader className="border-b border-border/70 px-5 py-4">
+      <DialogHeader className="border-b border-border/70 px-4 py-3 sm:px-5 sm:py-4">
         <DialogTitle className="text-left">
           {format(snapshot.date, "EEEE")} - {format(snapshot.date, "MMMM d")}
         </DialogTitle>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground sm:text-sm">
           {snapshot.jobs.length} {snapshot.jobs.length === 1 ? "job" : "jobs"}
           {dayRevenue > 0 ? ` - ${formatCurrency(dayRevenue)}` : ""}
         </p>
       </DialogHeader>
-      <div className="max-h-[calc(88dvh-5.5rem)] space-y-4 overflow-y-auto px-5 py-4">
+      <div className="max-h-[calc(88dvh-5rem)] space-y-3 overflow-y-auto px-4 py-3 sm:max-h-[calc(88dvh-5.5rem)] sm:space-y-4 sm:px-5 sm:py-4">
         {groups.length === 0 ? (
           <div className="text-sm text-muted-foreground">No jobs scheduled for this day.</div>
         ) : (
           groups.map((group) => (
-            <div key={group.label} className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{group.label}</div>
-              <div className="space-y-2">
+            <div key={group.label} className="space-y-1.5 sm:space-y-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-[11px]">{group.label}</div>
+              <div className="space-y-1.5 sm:space-y-2">
                 {group.items.map((appointment) => (
                   <Link
                     key={`${group.label}-${appointment.id}`}
                     to={`/appointments/${appointment.id}`}
-                    className="block rounded-xl border border-border/60 bg-white/88 px-3 py-3 transition-colors hover:bg-white"
+                    className="block rounded-lg border border-border/60 bg-white/92 px-2.5 py-2.5 transition-colors hover:bg-white sm:rounded-xl sm:px-3 sm:py-3"
                   >
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <div className="flex items-start justify-between gap-3">
-                        <p className="min-w-0 flex-1 break-words text-sm font-semibold text-foreground">{getAppointmentLabel(appointment)}</p>
+                        <p className="min-w-0 flex-1 break-words text-[13px] font-semibold text-foreground sm:text-sm">{getAppointmentLabel(appointment)}</p>
                         {getAppointmentMoneyLabel(appointment) ? (
-                          <span className="shrink-0 text-xs font-semibold text-foreground">{getAppointmentMoneyLabel(appointment)}</span>
+                          <span className="shrink-0 text-[11px] font-semibold text-foreground sm:text-xs">{getAppointmentMoneyLabel(appointment)}</span>
                         ) : null}
                       </div>
-                      <p className="break-words text-sm text-muted-foreground">
+                      <p className="break-words text-[11px] text-muted-foreground sm:text-sm">
                         {joinMeta([getClientName(appointment) || "Internal", getVehicleLabel(appointment) || "No vehicle"])}
                       </p>
-                      <p className="break-words text-sm text-muted-foreground">{getScheduleTimingLabel(appointment)}</p>
-                      <div className="flex items-center gap-2">
-                        <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
-                        <span className="rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      <p className="break-words text-[11px] text-muted-foreground sm:text-sm">{getScheduleTimingLabel(appointment)}</p>
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn("h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5", getJobPhaseTone(appointment.jobPhase))} />
+                        <span className="rounded-full border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2 sm:text-[10px]">
                           {isMultiDayJob(appointment) ? getOperationalDayLabel(appointment, snapshot.date) : getJobPhaseLabel(appointment.jobPhase)}
                         </span>
                       </div>
