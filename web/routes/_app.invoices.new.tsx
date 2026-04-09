@@ -68,6 +68,12 @@ function buildAppointmentInvoiceItems(
   appointmentServices: AppointmentServicePrefillRecord[],
   appointmentTitle: string,
   appointmentTotalPrice: number,
+  options?: {
+    applyTax?: boolean | null;
+    taxRate?: number | string | null;
+    applyAdminFee?: boolean | null;
+    adminFeeRate?: number | string | null;
+  },
 ) {
   const appointmentItems = appointmentServices.map((appointmentService) => ({
     id: crypto.randomUUID(),
@@ -77,10 +83,16 @@ function buildAppointmentInvoiceItems(
   }));
 
   const appointmentSubtotal = appointmentItems.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
+  const adminFeeRate = options?.applyAdminFee ? Number(options?.adminFeeRate ?? 0) : 0;
+  const taxRate = options?.applyTax ? Number(options?.taxRate ?? 0) : 0;
+  const effectiveAdminFee = adminFeeRate > 0 ? appointmentSubtotal * (adminFeeRate / 100) : 0;
+  const taxableSubtotal = appointmentSubtotal + effectiveAdminFee;
+  const effectiveTax = taxRate > 0 ? taxableSubtotal * (taxRate / 100) : 0;
+  const structuredTotal = Number((taxableSubtotal + effectiveTax).toFixed(2));
   const needsAdjustment =
     Number.isFinite(appointmentTotalPrice) &&
     appointmentTotalPrice > 0 &&
-    Math.abs(appointmentTotalPrice - appointmentSubtotal) >= 0.01;
+    Math.abs(appointmentTotalPrice - structuredTotal) >= 0.01;
 
   if (!needsAdjustment) return appointmentItems;
 
@@ -90,7 +102,7 @@ function buildAppointmentInvoiceItems(
       id: crypto.randomUUID(),
       description: `${appointmentTitle || "Appointment"} price adjustment`,
       qty: 1,
-      unitPrice: Number((appointmentTotalPrice - appointmentSubtotal).toFixed(2)),
+      unitPrice: Number((appointmentTotalPrice - structuredTotal).toFixed(2)),
     },
   ];
 }
@@ -344,7 +356,14 @@ export default function NewInvoicePage() {
           buildAppointmentInvoiceItems(
             apptServices as AppointmentServicePrefillRecord[],
             (appointmentRecord as { title?: string | null } | null)?.title || "Appointment",
-            Number((appointmentRecord as { totalPrice?: number | string | null } | null)?.totalPrice ?? 0)
+            Number((appointmentRecord as { totalPrice?: number | string | null } | null)?.totalPrice ?? 0),
+            {
+              applyTax: (appointmentRecord as { applyTax?: boolean | null } | null)?.applyTax ?? false,
+              taxRate: (appointmentRecord as { taxRate?: number | string | null } | null)?.taxRate ?? 0,
+              applyAdminFee: (appointmentRecord as { applyAdminFee?: boolean | null } | null)?.applyAdminFee ?? false,
+              adminFeeRate:
+                (appointmentRecord as { adminFeeRate?: number | string | null } | null)?.adminFeeRate ?? 0,
+            },
           )
         );
       }
