@@ -802,11 +802,25 @@ export function MonthView({
     anchorLeft: number;
     anchorRight: number;
     anchorTop: number;
-    count: number;
-    revenue: number;
-    appointments: ApptRecord[];
   } | null>(null);
   const [hoverPreviewPosition, setHoverPreviewPosition] = useState<{ left: number; top: number } | null>(null);
+  const hoverPreviewData = useMemo(() => {
+    if (!hoverPreview) return null;
+    const previewAppointments = getOverviewCalendarAppointments(
+      historicalAppointments.filter((appointment) => isSameDay(getJobSpanStart(appointment), hoverPreview.date))
+    );
+    const previewDensityItems = uniqueAppointmentsById(previewAppointments);
+    const previewRevenue = previewDensityItems.reduce(
+      (total, appointment) => total + Number(appointment.totalPrice ?? 0),
+      0
+    );
+
+    return {
+      count: previewDensityItems.length,
+      revenue: previewRevenue,
+      appointments: previewDensityItems.slice(0, 4),
+    };
+  }, [historicalAppointments, hoverPreview]);
   const currencyFormatter = useMemo(
     () =>
       new Intl.NumberFormat("en-US", {
@@ -883,9 +897,7 @@ export function MonthView({
               );
               const { dayAppts: activeVisibleDayAppointments } = getCalendarDaySnapshot(visibleAppointments, day);
               const dayAppts = getOverviewCalendarAppointments(historicalDayAppointments);
-              const dayRevenue = dayAppts.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
               const dayDensityItems = uniqueAppointmentsById(dayAppts);
-              const startCount = dayDensityItems.length;
               const hasConflict = !!conflictIds && activeVisibleDayAppointments.some((a) => conflictIds.has(a.id));
               const dayLabel = day.toLocaleDateString("en-US", {
                 weekday: "long",
@@ -918,9 +930,6 @@ export function MonthView({
                       anchorLeft: targetRect.left - containerRect.left,
                       anchorRight: targetRect.right - containerRect.left,
                       anchorTop: targetRect.top - containerRect.top,
-                      count: startCount,
-                      revenue: dayRevenue,
-                      appointments: dayDensityItems.slice(0, 4),
                     });
                   }}
                   onKeyDown={(event) => {
@@ -973,7 +982,7 @@ export function MonthView({
         ))}
       </div>
 
-      {!isMobileLayout && hoverPreview ? (
+      {!isMobileLayout && hoverPreview && hoverPreviewData ? (
         <div
           ref={hoverPreviewRef}
           className="pointer-events-none absolute z-20 w-64 rounded-[1.2rem] border border-border/70 bg-white/97 p-3 shadow-[0_20px_48px_rgba(15,23,42,0.14)] backdrop-blur-sm transition-opacity duration-150"
@@ -990,20 +999,20 @@ export function MonthView({
                 {hoverPreview.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
               </h4>
             </div>
-            {hoverPreview.revenue > 0 ? (
+            {hoverPreviewData.revenue > 0 ? (
               <span className="rounded-full border border-border/70 bg-muted/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground">
-                {currencyFormatter.format(hoverPreview.revenue)}
+                {currencyFormatter.format(hoverPreviewData.revenue)}
               </span>
             ) : null}
           </div>
 
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <CompactSignal label="Starting" value={hoverPreview.count} />
+            <CompactSignal label="Starting" value={hoverPreviewData.count} />
           </div>
 
           <div className="mt-3 space-y-2">
-            {hoverPreview.appointments.length > 0 ? (
-              hoverPreview.appointments.slice(0, 2).map((appointment) => (
+            {hoverPreviewData.appointments.length > 0 ? (
+              hoverPreviewData.appointments.slice(0, 2).map((appointment) => (
                 <div key={appointment.id} className="rounded-xl border border-border/60 bg-muted/[0.12] px-3 py-2">
                   <p className="min-w-0 truncate text-sm font-semibold text-foreground">{apptLabel(appointment)}</p>
                   <p className="mt-1 truncate text-xs text-muted-foreground">
