@@ -594,15 +594,15 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
     : `${appointments.length} appt${appointments.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="pointer-events-none min-w-0 overflow-visible space-y-1">
-      <div className="grid grid-cols-6 gap-1 overflow-visible sm:grid-cols-8">
+    <div className="pointer-events-none min-w-0 overflow-visible space-y-1 pb-0.5 sm:pb-1">
+      <div className="grid min-h-[8px] grid-cols-6 items-center gap-1 overflow-visible sm:min-h-[12px] sm:grid-cols-8">
         {orderedAppointments.map((apt) => {
           const status = getStatusStyle(apt.status);
           return (
             <span
               key={apt.id}
               className={cn(
-                "h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2",
+                "block h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2",
                 isCalendarBlockAppointment(apt) ? "bg-slate-500" : status.accent
               )}
             />
@@ -1010,7 +1010,7 @@ export function MonthView({
                           <div className="min-h-0 flex-1" />
                         )}
 
-                        <div className="mt-auto overflow-visible space-y-1 pt-1 pb-0.5 sm:pt-2 sm:pb-1">
+                        <div className="mt-auto overflow-visible space-y-1 pt-1 pb-1.5 sm:pt-2 sm:pb-2">
                           <DayStatusDots appointments={dayDensityItems} />
                         </div>
                     </div>
