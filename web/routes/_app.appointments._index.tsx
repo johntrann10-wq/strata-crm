@@ -558,7 +558,11 @@ export default function AppointmentsPage() {
           </Card>
 
           <Dialog open={Boolean(inspectedSnapshot)} onOpenChange={(open) => !open && setInspectedDateKey(null)}>
-            <DialogContent className="max-h-[88dvh] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:rounded-[1.5rem]">
+            <DialogContent
+              className="max-h-[88dvh] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:rounded-[1.5rem]"
+              onOpenAutoFocus={(event) => event.preventDefault()}
+              onCloseAutoFocus={(event) => event.preventDefault()}
+            >
               {inspectedSnapshot ? <ScheduleDayInspector snapshot={inspectedSnapshot} /> : null}
             </DialogContent>
           </Dialog>
