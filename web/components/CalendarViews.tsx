@@ -7,6 +7,9 @@ import {
   getOverviewCalendarAppointments,
   getHistoricalCalendarAppointments,
   getVisibleCalendarAppointments,
+  getWorkEnd,
+  getWorkStart,
+  hasLaborOnDay,
 } from "@/lib/calendarJobSpans";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
@@ -622,6 +625,13 @@ function uniqueAppointmentsById(appointments: ApptRecord[]): ApptRecord[] {
   });
 }
 
+function toDayKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function CompactSignal({ label, value }: { label: string; value: number }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-border/65 bg-muted/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -797,6 +807,45 @@ export function MonthView({
   const today = useMemo(() => new Date(), []);
   const visibleAppointments = useMemo(() => getVisibleCalendarAppointments(appointments), [appointments]);
   const historicalAppointments = useMemo(() => getHistoricalCalendarAppointments(appointments), [appointments]);
+  const monthGridLookup = useMemo(() => {
+    const days = grid.flat();
+    const dayKeys = new Set(days.map((day) => toDayKey(day)));
+    const startDayMap = new Map<string, ApptRecord[]>();
+    const revenueMap = new Map<string, number>();
+    const conflictDaySet = new Set<string>();
+
+    getOverviewCalendarAppointments(historicalAppointments).forEach((appointment) => {
+      const startKey = toDayKey(getJobSpanStart(appointment));
+      if (!dayKeys.has(startKey)) return;
+      const list = startDayMap.get(startKey);
+      if (list) list.push(appointment);
+      else startDayMap.set(startKey, [appointment]);
+      revenueMap.set(startKey, (revenueMap.get(startKey) ?? 0) + Number(appointment.totalPrice ?? 0));
+    });
+
+    if (conflictIds?.size) {
+      visibleAppointments.forEach((appointment) => {
+        if (!conflictIds.has(appointment.id)) return;
+        const start = new Date(getWorkStart(appointment));
+        const end = new Date(getWorkEnd(appointment));
+        const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+        while (cursor.getTime() <= last.getTime()) {
+          if (hasLaborOnDay(appointment, cursor)) {
+            const key = toDayKey(cursor);
+            if (dayKeys.has(key)) conflictDaySet.add(key);
+          }
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      });
+    }
+
+    return {
+      startDayMap,
+      revenueMap,
+      conflictDaySet,
+    };
+  }, [grid, historicalAppointments, visibleAppointments, conflictIds]);
   const [hoverPreview, setHoverPreview] = useState<{
     date: Date;
     anchorLeft: number;
@@ -806,21 +855,16 @@ export function MonthView({
   const [hoverPreviewPosition, setHoverPreviewPosition] = useState<{ left: number; top: number } | null>(null);
   const hoverPreviewData = useMemo(() => {
     if (!hoverPreview) return null;
-    const previewAppointments = getOverviewCalendarAppointments(
-      historicalAppointments.filter((appointment) => isSameDay(getJobSpanStart(appointment), hoverPreview.date))
-    );
-    const previewDensityItems = uniqueAppointmentsById(previewAppointments);
-    const previewRevenue = previewDensityItems.reduce(
-      (total, appointment) => total + Number(appointment.totalPrice ?? 0),
-      0
-    );
+    const previewKey = toDayKey(hoverPreview.date);
+    const previewDensityItems = uniqueAppointmentsById(monthGridLookup.startDayMap.get(previewKey) ?? []);
+    const previewRevenue = monthGridLookup.revenueMap.get(previewKey) ?? 0;
 
     return {
       count: previewDensityItems.length,
       revenue: previewRevenue,
       appointments: previewDensityItems.slice(0, 4),
     };
-  }, [historicalAppointments, hoverPreview]);
+  }, [hoverPreview, monthGridLookup]);
   const currencyFormatter = useMemo(
     () =>
       new Intl.NumberFormat("en-US", {
@@ -889,16 +933,12 @@ export function MonthView({
         {grid.map((week, wi) => (
           <div key={wi} className="grid min-h-0 grid-cols-7 border-b border-border/60 last:border-b-0">
             {week.map((day, di) => {
+              const dayKey = toDayKey(day);
               const isCurrentMonth = day.getMonth() === currentDate.getMonth();
               const isToday = isSameDay(day, today);
               const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
-              const historicalDayAppointments = historicalAppointments.filter((appointment) =>
-                isSameDay(getJobSpanStart(appointment), day)
-              );
-              const { dayAppts: activeVisibleDayAppointments } = getCalendarDaySnapshot(visibleAppointments, day);
-              const dayAppts = getOverviewCalendarAppointments(historicalDayAppointments);
-              const dayDensityItems = uniqueAppointmentsById(dayAppts);
-              const hasConflict = !!conflictIds && activeVisibleDayAppointments.some((a) => conflictIds.has(a.id));
+              const dayDensityItems = uniqueAppointmentsById(monthGridLookup.startDayMap.get(dayKey) ?? []);
+              const hasConflict = monthGridLookup.conflictDaySet.has(dayKey);
               const dayLabel = day.toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "long",
