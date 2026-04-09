@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils";
 import {
   getActiveCalendarAppointments,
   getCalendarDaySnapshot,
-  getJobSpanEnd,
   getJobSpanStart,
   getOverviewCalendarAppointments,
   getHistoricalCalendarAppointments,
@@ -13,9 +12,6 @@ import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlo
 import { AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  hasLaborOnDay,
-  hasPresenceOnDay,
-  isMultiDayJob,
   getMultiDayDayKind,
   getMultiDayDayLabel,
   getMultiDayDayShortLabel,
@@ -626,30 +622,6 @@ function uniqueAppointmentsById(appointments: ApptRecord[]): ApptRecord[] {
   });
 }
 
-function DaySignalBadge({
-  count,
-  dotClassName,
-  outlined = false,
-}: {
-  count: number;
-  dotClassName: string;
-  outlined?: boolean;
-}) {
-  if (count <= 0) return null;
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/90 px-1.5 py-0.5 text-[9px] font-semibold text-foreground/80 sm:text-[10px]">
-      <span
-        className={cn(
-          "h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2",
-          outlined ? "border" : "",
-          dotClassName
-        )}
-      />
-      {count > 9 ? "9+" : count}
-    </span>
-  );
-}
-
 function CompactSignal({ label, value }: { label: string; value: number }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-border/65 bg-muted/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -830,9 +802,7 @@ export function MonthView({
     anchorLeft: number;
     anchorRight: number;
     anchorTop: number;
-    starts: number;
-    inShop: number;
-    pickups: number;
+    count: number;
     revenue: number;
     appointments: ApptRecord[];
   } | null>(null);
@@ -908,18 +878,14 @@ export function MonthView({
               const isCurrentMonth = day.getMonth() === currentDate.getMonth();
               const isToday = isSameDay(day, today);
               const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
-              const historicalDayAppointments = historicalAppointments.filter((appointment) => hasLaborOnDay(appointment, day));
-              const historicalDaySpans = historicalAppointments.filter(
-                (appointment) => isMultiDayJob(appointment) && hasPresenceOnDay(appointment, day)
+              const historicalDayAppointments = historicalAppointments.filter((appointment) =>
+                isSameDay(getJobSpanStart(appointment), day)
               );
               const { dayAppts: activeVisibleDayAppointments } = getCalendarDaySnapshot(visibleAppointments, day);
               const dayAppts = getOverviewCalendarAppointments(historicalDayAppointments);
-              const daySpans = historicalDaySpans;
               const dayRevenue = dayAppts.reduce((total, appointment) => total + Number(appointment.totalPrice ?? 0), 0);
-              const dayDensityItems = uniqueAppointmentsById([...dayAppts, ...daySpans]);
-              const startCount = selectedMonthStartingCount(dayAppts, day);
-              const pickupCount = selectedMonthPickupCount(dayAppts, daySpans, day);
-              const onSiteCount = daySpans.length;
+              const dayDensityItems = uniqueAppointmentsById(dayAppts);
+              const startCount = dayDensityItems.length;
               const hasConflict = !!conflictIds && activeVisibleDayAppointments.some((a) => conflictIds.has(a.id));
               const dayLabel = day.toLocaleDateString("en-US", {
                 weekday: "long",
@@ -952,11 +918,9 @@ export function MonthView({
                       anchorLeft: targetRect.left - containerRect.left,
                       anchorRight: targetRect.right - containerRect.left,
                       anchorTop: targetRect.top - containerRect.top,
-                      starts: startCount,
-                      inShop: onSiteCount,
-                      pickups: pickupCount,
+                      count: startCount,
                       revenue: dayRevenue,
-                      appointments: [...dayAppts, ...daySpans].slice(0, 4),
+                      appointments: dayDensityItems.slice(0, 4),
                     });
                   }}
                   onKeyDown={(event) => {
@@ -982,12 +946,6 @@ export function MonthView({
                       </div>
 
                       <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                        <div className="pointer-events-none flex flex-wrap gap-1">
-                          <DaySignalBadge count={startCount} dotClassName="bg-amber-500" />
-                          <DaySignalBadge count={onSiteCount} dotClassName="border-sky-500" outlined />
-                          <DaySignalBadge count={pickupCount} dotClassName="bg-emerald-500" />
-                        </div>
-
                         {!isMobileLayout && dayDensityItems.length > 0 ? (
                           <div className="mt-1 hidden min-h-0 flex-1 space-y-1 overflow-hidden pt-1 sm:block">
                             {dayDensityItems.slice(0, 2).map((appointment) => (
@@ -1040,21 +998,14 @@ export function MonthView({
           </div>
 
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <CompactSignal label="Starts" value={hoverPreview.starts} />
-            <CompactSignal label="In shop" value={hoverPreview.inShop} />
-            <CompactSignal label="Pickups" value={hoverPreview.pickups} />
+            <CompactSignal label="Starting" value={hoverPreview.count} />
           </div>
 
           <div className="mt-3 space-y-2">
             {hoverPreview.appointments.length > 0 ? (
               hoverPreview.appointments.slice(0, 2).map((appointment) => (
                 <div key={appointment.id} className="rounded-xl border border-border/60 bg-muted/[0.12] px-3 py-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="min-w-0 truncate text-sm font-semibold text-foreground">{apptLabel(appointment)}</p>
-                    <span className="shrink-0 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {apptStageLabel(appointment, hoverPreview.date)}
-                    </span>
-                  </div>
+                  <p className="min-w-0 truncate text-sm font-semibold text-foreground">{apptLabel(appointment)}</p>
                   <p className="mt-1 truncate text-xs text-muted-foreground">
                     {apptClientLabel(appointment)} · {apptVehicleLabel(appointment)}
                   </p>
@@ -1062,7 +1013,7 @@ export function MonthView({
               ))
             ) : (
               <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
-                No jobs touching this day.
+                No jobs start on this day.
               </div>
             )}
           </div>
@@ -1070,18 +1021,6 @@ export function MonthView({
       ) : null}
     </div>
   );
-}
-
-function selectedMonthStartingCount(appointments: ApptRecord[], day: Date): number {
-  return appointments.filter((apt) => isSameDay(getJobSpanStart(apt), day)).length;
-}
-
-function selectedMonthPickupCount(appointments: ApptRecord[], spans: ApptRecord[], day: Date): number {
-  const ids = new Set<string>();
-  [...appointments, ...spans].forEach((apt) => {
-    if (isSameDay(getJobSpanEnd(apt), day)) ids.add(apt.id);
-  });
-  return ids.size;
 }
 
 export { WeekView } from "./WeekView";
