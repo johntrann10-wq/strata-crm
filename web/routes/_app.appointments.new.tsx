@@ -1539,12 +1539,11 @@ export default function NewAppointmentPage() {
                       <p className="mt-1 text-lg font-semibold text-foreground">${totalPrice.toFixed(2)}</p>
                     </div>
                   </div>
-                  {!selectedClientId ? (
-                    <div className="mt-4 space-y-3 border-t border-primary/15 pt-4">
+                  <div className="mt-4 space-y-3 border-t border-primary/15 pt-4">
                       <div>
-                        <p className="text-sm font-medium text-foreground">Adjust internal service details</p>
+                        <p className="text-sm font-medium text-foreground">Adjust booked service details</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Internal reminders can override service pricing and timing without changing your catalog.
+                          Override service pricing or planned timing for this appointment without changing your catalog defaults.
                         </p>
                       </div>
                       <div className="grid gap-3">
@@ -1585,7 +1584,6 @@ export default function NewAppointmentPage() {
                         ))}
                       </div>
                     </div>
-                  ) : null}
                 </div>
               )}
             </CardContent>
@@ -2225,10 +2223,21 @@ export default function NewAppointmentPage() {
                     {selectedServiceIds.map((id) => {
                       const s = services.find((sv) => sv.id === id);
                       if (!s) return null;
+                      const linePrice =
+                        servicePriceOverrides[id] != null && servicePriceOverrides[id] !== ""
+                          ? toMoneyNumber(servicePriceOverrides[id])
+                          : toMoneyNumber(s.price);
+                      const lineDuration =
+                        serviceDurationOverrides[id] != null && serviceDurationOverrides[id] !== ""
+                          ? Number(serviceDurationOverrides[id])
+                          : Number(s.durationMinutes ?? 0);
                       return (
                         <div key={id} className="flex justify-between">
-                          <span className="text-muted-foreground">{s.name}</span>
-                          <span>${toMoneyNumber(s.price).toFixed(2)}</span>
+                          <span className="text-muted-foreground">
+                            {s.name}
+                            {lineDuration > 0 ? ` · ${formatDuration(lineDuration)}` : ""}
+                          </span>
+                          <span>${linePrice.toFixed(2)}</span>
                         </div>
                       );
                     })}
