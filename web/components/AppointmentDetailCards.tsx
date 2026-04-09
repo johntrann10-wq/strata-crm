@@ -248,6 +248,9 @@ interface FinancialSummaryCardProps {
   secondaryDepositActionLabel?: string | null;
   onSecondaryDepositAction?: (() => void) | null;
   secondaryDepositActionDisabled?: boolean;
+  pricingActionLabel?: string | null;
+  onPricingAction?: (() => void) | null;
+  pricingActionDisabled?: boolean;
   depositLabels?: {
     rowLabel?: string;
     noun?: string;
@@ -286,6 +289,9 @@ export function FinancialSummaryCard({
   secondaryDepositActionLabel,
   onSecondaryDepositAction,
   secondaryDepositActionDisabled = false,
+  pricingActionLabel,
+  onPricingAction,
+  pricingActionDisabled = false,
   depositLabels,
   paymentStateOverride,
 }: FinancialSummaryCardProps) {
@@ -371,8 +377,15 @@ export function FinancialSummaryCard({
             <span className="font-semibold">{formatCurrency(summaryRemainingBalance)}</span>
           </div>
         ) : null}
-        {(depositActionLabel && onDepositAction) || (secondaryDepositActionLabel && onSecondaryDepositAction) ? (
+        {(pricingActionLabel && onPricingAction) ||
+        (depositActionLabel && onDepositAction) ||
+        (secondaryDepositActionLabel && onSecondaryDepositAction) ? (
           <div className="flex flex-col gap-2 pt-2">
+            {pricingActionLabel && onPricingAction ? (
+              <Button size="sm" variant="outline" className="w-full" onClick={onPricingAction} disabled={pricingActionDisabled}>
+                {pricingActionLabel}
+              </Button>
+            ) : null}
             {depositActionLabel && onDepositAction ? (
               <Button size="sm" className="w-full" onClick={onDepositAction} disabled={depositActionDisabled}>
                 {depositActionLabel}

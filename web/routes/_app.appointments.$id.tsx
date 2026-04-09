@@ -29,6 +29,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -458,6 +459,7 @@ export default function AppointmentDetail() {
   const [recordDepositOpen, setRecordDepositOpen] = useState(false);
   const [reverseDepositOpen, setReverseDepositOpen] = useState(false);
   const [editDepositOpen, setEditDepositOpen] = useState(false);
+  const [editPricingOpen, setEditPricingOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editStartTime, setEditStartTime] = useState("");
@@ -481,6 +483,10 @@ export default function AppointmentDetail() {
   const [depositPaymentDate, setDepositPaymentDate] = useState(new Date().toISOString().split("T")[0]);
   const [depositPaymentNotes, setDepositPaymentNotes] = useState("");
   const [depositAmountDraft, setDepositAmountDraft] = useState("");
+  const [pricingTaxRateDraft, setPricingTaxRateDraft] = useState("0");
+  const [pricingApplyTaxDraft, setPricingApplyTaxDraft] = useState(false);
+  const [pricingAdminFeeRateDraft, setPricingAdminFeeRateDraft] = useState("0");
+  const [pricingApplyAdminFeeDraft, setPricingApplyAdminFeeDraft] = useState(false);
   const [showMobileAppointmentInfo, setShowMobileAppointmentInfo] = useState(false);
   const [showMobileServices, setShowMobileServices] = useState(false);
   const [showMobileNotes, setShowMobileNotes] = useState(false);
@@ -1254,6 +1260,14 @@ export default function AppointmentDetail() {
     setEditDepositOpen(true);
   };
 
+  const handleOpenPricingDialog = () => {
+    setPricingTaxRateDraft(Number(appointment?.taxRate ?? 0).toFixed(2));
+    setPricingApplyTaxDraft(Boolean(appointment?.applyTax) && Number(appointment?.taxRate ?? 0) > 0);
+    setPricingAdminFeeRateDraft(Number(appointment?.adminFeeRate ?? 0).toFixed(2));
+    setPricingApplyAdminFeeDraft(Boolean(appointment?.applyAdminFee) && Number(appointment?.adminFeeRate ?? 0) > 0);
+    setEditPricingOpen(true);
+  };
+
   const handleSaveDepositAmount = async () => {
     if (!appointment?.id) return;
     const nextAmount = depositAmountDraft.trim() === "" ? 0 : Number(depositAmountDraft);
@@ -1275,6 +1289,41 @@ export default function AppointmentDetail() {
     }
     toast.success(nextAmount > 0 ? "Deposit updated" : "Deposit removed");
     setEditDepositOpen(false);
+    void refetchAppointment();
+  };
+
+  const pricingSubtotal = Number(appointment?.subtotal ?? 0);
+  const pricingTaxRateValue = pricingApplyTaxDraft ? Number(pricingTaxRateDraft || 0) : 0;
+  const pricingAdminFeeRateValue = pricingApplyAdminFeeDraft ? Number(pricingAdminFeeRateDraft || 0) : 0;
+  const pricingAdminFeePreview =
+    pricingApplyAdminFeeDraft && pricingAdminFeeRateValue > 0 ? (pricingSubtotal * pricingAdminFeeRateValue) / 100 : 0;
+  const pricingTaxableSubtotal = pricingSubtotal + pricingAdminFeePreview;
+  const pricingTaxPreview = pricingApplyTaxDraft && pricingTaxRateValue > 0 ? (pricingTaxableSubtotal * pricingTaxRateValue) / 100 : 0;
+  const pricingTotalPreview = pricingTaxableSubtotal + pricingTaxPreview;
+
+  const handleSavePricing = async () => {
+    if (!appointment?.id) return;
+    if (!Number.isFinite(pricingTaxRateValue) || pricingTaxRateValue < 0 || pricingTaxRateValue > 100) {
+      toast.error("Enter a valid tax rate between 0 and 100.");
+      return;
+    }
+    if (!Number.isFinite(pricingAdminFeeRateValue) || pricingAdminFeeRateValue < 0 || pricingAdminFeeRateValue > 100) {
+      toast.error("Enter a valid admin fee rate between 0 and 100.");
+      return;
+    }
+    const result = await runUpdate({
+      id: appointment.id,
+      taxRate: pricingApplyTaxDraft ? pricingTaxRateValue : 0,
+      applyTax: pricingApplyTaxDraft && pricingTaxRateValue > 0,
+      adminFeeRate: pricingApplyAdminFeeDraft ? pricingAdminFeeRateValue : 0,
+      applyAdminFee: pricingApplyAdminFeeDraft && pricingAdminFeeRateValue > 0,
+    });
+    if (result.error) {
+      toast.error("Failed to update pricing: " + result.error.message);
+      return;
+    }
+    toast.success("Pricing updated");
+    setEditPricingOpen(false);
     void refetchAppointment();
   };
 
@@ -2474,6 +2523,9 @@ export default function AppointmentDetail() {
                 }
                 onSecondaryDepositAction={hasRecordedPayment ? () => setReverseDepositOpen(true) : null}
                 secondaryDepositActionDisabled={reversingDeposit}
+                pricingActionLabel="Edit pricing"
+                onPricingAction={handleOpenPricingDialog}
+                pricingActionDisabled={updatingNotes}
               />
 
               {canEditDeposit ? (
@@ -2620,6 +2672,122 @@ export default function AppointmentDetail() {
             <Button onClick={() => void handleSaveDepositAmount()} disabled={updatingNotes}>
               {updatingNotes ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save deposit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editPricingOpen} onOpenChange={setEditPricingOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit pricing</DialogTitle>
+            <DialogDescription>
+              Adjust taxes and fees the same way you would on an invoice. Service subtotal comes from the appointment's booked services.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Services subtotal</span>
+                <span className="font-medium">{formatCurrency(pricingSubtotal)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-border/70 bg-background/70 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Apply tax</p>
+                  <p className="text-xs text-muted-foreground">Use a percentage on top of the services subtotal and admin fee.</p>
+                </div>
+                <Switch checked={pricingApplyTaxDraft} onCheckedChange={setPricingApplyTaxDraft} />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="appointment-pricing-tax-rate" className="text-sm text-muted-foreground">
+                  Tax rate
+                </Label>
+                <div className="flex items-center">
+                  <Input
+                    id="appointment-pricing-tax-rate"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={pricingTaxRateDraft}
+                    onChange={(event) => setPricingTaxRateDraft(event.target.value)}
+                    disabled={!pricingApplyTaxDraft}
+                    className="h-8 w-20 rounded-r-none px-2 text-right"
+                  />
+                  <span className="inline-flex h-8 items-center rounded-r-md border border-l-0 border-input bg-muted px-2 text-sm text-muted-foreground">
+                    %
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-border/70 bg-background/70 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Add admin fee</p>
+                  <p className="text-xs text-muted-foreground">Adds an appointment-level admin fee based on the services subtotal.</p>
+                </div>
+                <Switch checked={pricingApplyAdminFeeDraft} onCheckedChange={setPricingApplyAdminFeeDraft} />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="appointment-pricing-admin-fee-rate" className="text-sm text-muted-foreground">
+                  Admin fee
+                </Label>
+                <div className="flex items-center">
+                  <Input
+                    id="appointment-pricing-admin-fee-rate"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={pricingAdminFeeRateDraft}
+                    onChange={(event) => setPricingAdminFeeRateDraft(event.target.value)}
+                    disabled={!pricingApplyAdminFeeDraft}
+                    className="h-8 w-20 rounded-r-none px-2 text-right"
+                  />
+                  <span className="inline-flex h-8 items-center rounded-r-md border border-l-0 border-input bg-muted px-2 text-sm text-muted-foreground">
+                    %
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="font-medium">{formatCurrency(pricingSubtotal)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    Admin fee{pricingApplyAdminFeeDraft && pricingAdminFeeRateValue > 0 ? ` (${pricingAdminFeeRateValue.toFixed(2)}%)` : ""}
+                  </span>
+                  <span className="font-medium">{formatCurrency(pricingAdminFeePreview)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    Tax{pricingApplyTaxDraft && pricingTaxRateValue > 0 ? ` (${pricingTaxRateValue.toFixed(2)}%)` : ""}
+                  </span>
+                  <span className="font-medium">{formatCurrency(pricingTaxPreview)}</span>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between text-base font-semibold">
+                  <span>Total</span>
+                  <span>{formatCurrency(pricingTotalPreview)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditPricingOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSavePricing()} disabled={updatingNotes}>
+              {updatingNotes ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save pricing
             </Button>
           </DialogFooter>
         </DialogContent>
