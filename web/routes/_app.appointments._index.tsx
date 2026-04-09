@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { endOfWeek, format, startOfWeek } from "date-fns";
+import { endOfWeek, format, isToday, startOfWeek } from "date-fns";
 import { Link, useOutletContext } from "react-router";
 import { CalendarRange, ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -126,6 +126,13 @@ function getAppointmentMoneyLabel(appointment: AppointmentRecord): string | null
   return formatCurrency(amount);
 }
 
+function joinMeta(parts: Array<string | null | undefined>): string {
+  return parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(" - ");
+}
+
 function isOperationalAppointment(appointment: AppointmentRecord): boolean {
   return appointment.status !== "cancelled" && appointment.status !== "no-show";
 }
@@ -216,6 +223,11 @@ function buildDaySnapshot(appointments: AppointmentRecord[], date: Date): DaySna
     inShop,
     pickups,
   };
+}
+
+function getScheduleTimingLabel(appointment: AppointmentRecord): string {
+  if (isMultiDayJob(appointment)) return getOperationalTimelineLabel(appointment);
+  return format(new Date(appointment.startTime), "EEE h:mm a");
 }
 
 function MobileFilterSelect({
@@ -340,7 +352,13 @@ export default function AppointmentsPage() {
     });
   }, [activeFilter, filteredRecords, weekDays]);
 
-  const weekCount = useMemo(() => weekSnapshots.reduce((sum, snapshot) => sum + snapshot.jobs.length, 0), [weekSnapshots]);
+  const weekCount = useMemo(() => {
+    const ids = new Set<string>();
+    weekSnapshots.forEach((snapshot) => {
+      snapshot.jobs.forEach((appointment) => ids.add(appointment.id));
+    });
+    return ids.size;
+  }, [weekSnapshots]);
   const isInitialLoad = fetching && appointmentsData === undefined;
   const weekLabel = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d")}`;
 
@@ -510,7 +528,7 @@ export default function AppointmentsPage() {
         </div>
       ) : (
         <div className="mt-4">
-          <Card className="border-border/70 shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
+          <Card className="overflow-hidden border-border/70 shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
             <CardContent className="p-0">
               <div className="flex items-center justify-between border-b border-border/70 px-4 py-3 sm:px-5">
                 <div>
@@ -550,11 +568,11 @@ function WeeklyDaySection({ snapshot }: { snapshot: DaySnapshot }) {
       <div className="flex flex-col gap-1 border-b border-border/60 pb-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h4 className="text-sm font-semibold text-foreground sm:text-base">
-            {format(snapshot.date, "EEE")} · {format(snapshot.date, "MMM d")}
+            {format(snapshot.date, "EEE")} - {format(snapshot.date, "MMM d")}
           </h4>
           <p className="text-xs text-muted-foreground">
             {snapshot.jobs.length} {snapshot.jobs.length === 1 ? "job" : "jobs"}
-            {dayRevenue > 0 ? ` · ${formatCurrency(dayRevenue)}` : ""}
+            {dayRevenue > 0 ? ` - ${formatCurrency(dayRevenue)}` : ""}
           </p>
         </div>
         {isToday(snapshot.date) ? (
@@ -594,12 +612,12 @@ function ScheduleBoardRow({
   const vehicleLabel = getVehicleLabel(appointment);
   const clientName = getClientName(appointment);
   const moneyLabel = getAppointmentMoneyLabel(appointment);
-  const timingLabel = isMultiDayJob(appointment)
-    ? getOperationalTimelineLabel(appointment)
-    : format(new Date(appointment.startTime), "EEE h:mm a");
+  const timingLabel = getScheduleTimingLabel(appointment);
   const stageLabel = isMultiDayJob(appointment)
     ? getOperationalDayLabel(appointment, referenceDate)
     : getJobPhaseLabel(appointment.jobPhase);
+  const identityLabel = joinMeta([clientName || "Internal", vehicleLabel || "No vehicle"]);
+  const supportLabel = joinMeta([appointment.location?.name ?? null, appointment.assignedStaffId ? getTechName(appointment) : null]);
 
   return (
     <Link
@@ -609,26 +627,22 @@ function ScheduleBoardRow({
       <div className="grid gap-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.9fr)_auto] xl:items-start xl:gap-4">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-start gap-2">
-            <p className="min-w-0 flex-1 text-[13px] font-semibold leading-5 text-foreground sm:text-sm">
+            <p className="min-w-0 flex-1 break-words text-[13px] font-semibold leading-5 text-foreground sm:text-sm">
               {getAppointmentLabel(appointment)}
             </p>
             {moneyLabel ? <span className="shrink-0 text-[12px] font-semibold text-foreground">{moneyLabel}</span> : null}
           </div>
-          <p className="mt-1 truncate text-[12px] text-muted-foreground sm:text-[13px]">
-            {[clientName || "Internal", vehicleLabel || "No vehicle"].join(" · ")}
-          </p>
+          <p className="mt-1 break-words text-[12px] text-muted-foreground sm:text-[13px]">{identityLabel}</p>
         </div>
 
         <div className="min-w-0">
-          <p className="truncate text-[12px] text-muted-foreground sm:text-[13px]">{timingLabel}</p>
-          <p className="truncate text-[11px] text-muted-foreground">
-            {[appointment.location?.name, appointment.assignedStaffId ? getTechName(appointment) : null].filter(Boolean).join(" · ")}
-          </p>
+          <p className="break-words text-[12px] text-muted-foreground sm:text-[13px]">{timingLabel}</p>
+          {supportLabel ? <p className="break-words text-[11px] text-muted-foreground">{supportLabel}</p> : null}
         </div>
 
-        <div className="flex items-center gap-2 xl:justify-end">
+        <div className="flex min-w-0 items-center gap-2 xl:justify-end">
           <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
-          <span className="rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="max-w-full truncate rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {stageLabel}
           </span>
         </div>
