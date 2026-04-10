@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { invoices, payments } from "../db/schema.js";
+import { invoices, payments, appointments } from "../db/schema.js";
 import { BadRequestError, NotFoundError } from "./errors.js";
 import { logger } from "./logger.js";
 
@@ -48,10 +48,7 @@ export async function getActiveInvoicePaymentTotal(invoiceId: string, tx: DbExec
     return Number(sumRow?.total ?? 0);
   } catch (error) {
     if (!isPaymentSchemaDriftError(error)) throw error;
-    logger.warn("Payments schema drift detected on total aggregation; falling back to legacy sum", {
-      invoiceId,
-      error,
-    });
+    logger.warn("Payments schema drift detected on total aggregation; falling back to legacy sum", { invoiceId, error });
     const [sumRow] = await tx
       .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
       .from(payments)
@@ -60,80 +57,43 @@ export async function getActiveInvoicePaymentTotal(invoiceId: string, tx: DbExec
   }
 }
 
-export async function recordInvoicePayment(
-  input: RecordInvoicePaymentInput,
-  tx: DbExecutor = db
-) {
-  const [invoice] = await tx
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, input.invoiceId), eq(invoices.businessId, input.businessId)))
-    .limit(1);
+alsync function syncAppointmentPaymentState(invoiceId: string, newInvoiceStatus: string, paidAt: Date | null, tx: DbExecutor): Promise<void> {
+  const [inv] = await tx.select({ appointmentId: invoices.appointmentId }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+  if (!inv?.appointmentId) return;
+  const upd = { updatedAt: new Date() } as any;
+  if (newInvoiceStatus === "paid") { upd.depositPaid = true; upd.paidAt = paidAt ?? new Date(); }
+  else if (newInvoiceStatus === "partial") { upd.depositPaid = true; upd.paidAt = null; }
+  else { upd.depositPaid = false; upd.paidAt = null; }
+  try { await tx.update(appointments).set(upd).where(eq(appointments.id, inv.appointmentId)); }
+  catch (err) { logger.warn("Failed to sync appointment payment state", { invoiceId, error: err }); }
+}
+
+export async function recordInvoicePayment(input: RecordInvoicePaymentInput, tx: DbExecutor = db) {
+  const [invoice] = await tx.select().from(invoices).where(and(eq(invoices.id, input.invoiceId), eq(invoices.businessId, input.businessId))).limit(1);
   if (!invoice) throw new NotFoundError("Invoice not found.");
   if (invoice.status === "void") throw new BadRequestError("Cannot add payment to a void invoice.");
-
   const invoiceTotal = Number(invoice.total ?? 0);
   const paidSoFar = await getActiveInvoicePaymentTotal(input.invoiceId, tx);
   const newTotal = paidSoFar + input.amount;
-  if (newTotal > invoiceTotal) {
-    throw new BadRequestError(
-      `Payment total would exceed invoice total (${invoiceTotal}). Already paid: ${paidSoFar}.`
-    );
-  }
-
+  if (newTotal > invoiceTotal) throw new BadRequestError(`Payment total would exceed invoice total (${invoiceTotal}). Already paid: ${paidSoFar}.`);
   const amount = String(input.amount);
   const paidAt = input.paidAt ?? new Date();
   let payment;
   try {
-    [payment] = await tx
-      .insert(payments)
-      .values({
-        businessId: input.businessId,
-        invoiceId: input.invoiceId,
-        amount,
-        method: input.method,
-        paidAt,
-        idempotencyKey: input.idempotencyKey ?? null,
-        notes: input.notes ?? null,
-        referenceNumber: input.referenceNumber ?? null,
-        stripeCheckoutSessionId: input.stripeCheckoutSessionId ?? null,
-        stripePaymentIntentId: input.stripePaymentIntentId ?? null,
-        stripeChargeId: input.stripeChargeId ?? null,
-      })
-      .returning();
+    [payment] = await tx.insert(payments).values({ businessId: input.businessId, invoiceId: input.invoiceId, amount, method: input.method, paidAt, idempotencyKey: input.idempotencyKey ?? null, notes: input.notes ?? null, referenceNumber: input.referenceNumber ?? null, stripeCheckoutSessionId: input.stripeCheckoutSessionId ?? null, stripePaymentIntentId: input.stripePaymentIntentId ?? null, stripeChargeId: input.stripeChargeId ?? null }).returning();
   } catch (error) {
     if (!isPaymentSchemaDriftError(error)) throw error;
-    logger.warn("Payments schema drift detected on create; falling back to legacy insert", {
-      invoiceId: input.invoiceId,
-      businessId: input.businessId,
-      error,
-    });
-    [payment] = await tx
-      .insert(payments)
-      .values({
-        businessId: input.businessId,
-        invoiceId: input.invoiceId,
-        amount,
-        method: input.method,
-        paidAt,
-        idempotencyKey: input.idempotencyKey ?? null,
-        notes: input.notes ?? null,
-        referenceNumber: input.referenceNumber ?? null,
-      })
-      .returning();
+    logger.warn("Payments schema drift detected on create; falling back to legacy insert", { invoiceId: input.invoiceId, businessId: input.businessId, error });
+    [payment] = await tx.insert(payments).values({ businessId: input.businessId, invoiceId: input.invoiceId, amount, method: input.method, paidAt, idempotencyKey: input.idempotencyKey ?? null, notes: input.notes ?? null, referenceNumber: input.referenceNumber ?? null }).returning();
   }
-
   if (!payment) throw new BadRequestError("Failed to create payment.");
-
   const newStatus = newTotal >= invoiceTotal ? "paid" : "partial";
-  await tx
-    .update(invoices)
-    .set({
-      status: newStatus,
-      paidAt: newTotal >= invoiceTotal ? new Date() : invoice.paidAt,
-      updatedAt: new Date(),
-    })
-    .where(eq(invoices.id, input.invoiceId));
-
+  const newPaidAt = newTotal >= invoiceTotal ? paidAt : invoice.paidAt;
+  await tx.update(invoices).set({ status: newStatus, paidAt: newPaidAt, updatedAt: new Date() }).where(eq(invoices.id, input.invoiceId));
+  await syncAppointmentPaymentState(input.invoiceId, newStatus, newPaidAt ?? null, tx);
   return payment;
+}
+
+export async function syncAppointmentAfterPaymentReversal(invoiceId: string, newInvoiceStatus: string, tx: DbExecutor = db): Promise<void> {
+  await syncAppointmentPaymentState(invoiceId, newInvoiceStatus, null, tx);
 }
