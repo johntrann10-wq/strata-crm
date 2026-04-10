@@ -48,7 +48,10 @@ export async function getActiveInvoicePaymentTotal(invoiceId: string, tx: DbExec
     return Number(sumRow?.total ?? 0);
   } catch (error) {
     if (!isPaymentSchemaDriftError(error)) throw error;
-    logger.warn("Payments schema drift detected on total aggregation; falling back to legacy sum", { invoiceId, error });
+    logger.warn("Payments schema drift detected on total aggregation; falling back to legacy sum", {
+      invoiceId,
+      error,
+    });
     const [sumRow] = await tx
       .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
       .from(payments)
@@ -57,43 +60,154 @@ export async function getActiveInvoicePaymentTotal(invoiceId: string, tx: DbExec
   }
 }
 
-alsync function syncAppointmentPaymentState(invoiceId: string, newInvoiceStatus: string, paidAt: Date | null, tx: DbExecutor): Promise<void> {
-  const [inv] = await tx.select({ appointmentId: invoices.appointmentId }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+/**
+ * Sync appointment payment state after an invoice is fully or partially paid.
+ * - Sets depositPaid = true on the linked appointment whenever any payment is recorded.
+ * - Sets paidAt on the appointment when the invoice is fully paid (status = "paid").
+ * - Clears paidAt when the invoice is reversed back to partial/sent.
+ * This ensures the appointment inspector always reflects the true payment state.
+ */
+async function syncAppointmentPaymentState(
+  invoiceId: string,
+  newInvoiceStatus: string,
+  paidAt: Date | null,
+  tx: DbExecutor
+): Promise<void> {
+  // Find invoice with its linked appointment
+  const [inv] = await tx
+    .select({ appointmentId: invoices.appointmentId })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .limit(1);
+
   if (!inv?.appointmentId) return;
-  const upd = { updatedAt: new Date() } as any;
-  if (newInvoiceStatus === "paid") { upd.depositPaid = true; upd.paidAt = paidAt ?? new Date(); }
-  else if (newInvoiceStatus === "partial") { upd.depositPaid = true; upd.paidAt = null; }
-  else { upd.depositPaid = false; upd.paidAt = null; }
-  try { await tx.update(appointments).set(upd).where(eq(appointments.id, inv.appointmentId)); }
-  catch (err) { logger.warn("Failed to sync appointment payment state", { invoiceId, error: err }); }
+
+  const appointmentUpdates: Record<string, unknown> = {
+    updatedAt: new Date(),
+  };
+
+  if (newInvoiceStatus === "paid") {
+    // Invoice fully paid — mark appointment paid too
+    appointmentUpdates.depositPaid = true;
+    appointmentUpdates.paidAt = paidAt ?? new Date();
+  } else if (newInvoiceStatus === "partial") {
+    // Partial payment — deposit is considered collected, but not fully paid
+    appointmentUpdates.depositPaid = true;
+    appointmentUpdates.paidAt = null;
+  } else {
+    // Reversed/voided — clear payment state
+    appointmentUpdates.depositPaid = false;
+    appointmentUpdates.paidAt = null;
+  }
+
+  try {
+    await tx
+      .update(appointments)
+      .set(appointmentUpdates)
+      .where(eq(appointments.id, inv.appointmentId));
+  } catch (err) {
+    // Non-fatal: log and continue. Payment is already recorded on the invoice.
+    logger.warn("Failed to sync appointment payment state after invoice payment", {
+      invoiceId,
+      appointmentId: inv.appointmentId,
+      newInvoiceStatus,
+      error: err,
+    });
+  }
 }
 
-export async function recordInvoicePayment(input: RecordInvoicePaymentInput, tx: DbExecutor = db) {
-  const [invoice] = await tx.select().from(invoices).where(and(eq(invoices.id, input.invoiceId), eq(invoices.businessId, input.businessId))).limit(1);
+export async function recordInvoicePayment(
+  input: RecordInvoicePaymentInput,
+  tx: DbExecutor = db
+) {
+  const [invoice] = await tx
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, input.invoiceId), eq(invoices.businessId, input.businessId)))
+    .limit(1);
   if (!invoice) throw new NotFoundError("Invoice not found.");
   if (invoice.status === "void") throw new BadRequestError("Cannot add payment to a void invoice.");
+
   const invoiceTotal = Number(invoice.total ?? 0);
   const paidSoFar = await getActiveInvoicePaymentTotal(input.invoiceId, tx);
   const newTotal = paidSoFar + input.amount;
-  if (newTotal > invoiceTotal) throw new BadRequestError(`Payment total would exceed invoice total (${invoiceTotal}). Already paid: ${paidSoFar}.`);
+  if (newTotal > invoiceTotal) {
+    throw new BadRequestError(
+      `Payment total would exceed invoice total (${invoiceTotal}). Already paid: ${paidSoFar}.`
+    );
+  }
+
   const amount = String(input.amount);
   const paidAt = input.paidAt ?? new Date();
   let payment;
   try {
-    [payment] = await tx.insert(payments).values({ businessId: input.businessId, invoiceId: input.invoiceId, amount, method: input.method, paidAt, idempotencyKey: input.idempotencyKey ?? null, notes: input.notes ?? null, referenceNumber: input.referenceNumber ?? null, stripeCheckoutSessionId: input.stripeCheckoutSessionId ?? null, stripePaymentIntentId: input.stripePaymentIntentId ?? null, stripeChargeId: input.stripeChargeId ?? null }).returning();
+    [payment] = await tx
+      .insert(payments)
+      .values({
+        businessId: input.businessId,
+        invoiceId: input.invoiceId,
+        amount,
+        method: input.method,
+        paidAt,
+        idempotencyKey: input.idempotencyKey ?? null,
+        notes: input.notes ?? null,
+        referenceNumber: input.referenceNumber ?? null,
+        stripeCheckoutSessionId: input.stripeCheckoutSessionId ?? null,
+        stripePaymentIntentId: input.stripePaymentIntentId ?? null,
+        stripeChargeId: input.stripeChargeId ?? null,
+      })
+      .returning();
   } catch (error) {
     if (!isPaymentSchemaDriftError(error)) throw error;
-    logger.warn("Payments schema drift detected on create; falling back to legacy insert", { invoiceId: input.invoiceId, businessId: input.businessId, error });
-    [payment] = await tx.insert(payments).values({ businessId: input.businessId, invoiceId: input.invoiceId, amount, method: input.method, paidAt, idempotencyKey: input.idempotencyKey ?? null, notes: input.notes ?? null, referenceNumber: input.referenceNumber ?? null }).returning();
+    logger.warn("Payments schema drift detected on create; falling back to legacy insert", {
+      invoiceId: input.invoiceId,
+      businessId: input.businessId,
+      error,
+    });
+    [payment] = await tx
+      .insert(payments)
+      .values({
+        businessId: input.businessId,
+        invoiceId: input.invoiceId,
+        amount,
+        method: input.method,
+        paidAt,
+        idempotencyKey: input.idempotencyKey ?? null,
+        notes: input.notes ?? null,
+        referenceNumber: input.referenceNumber ?? null,
+      })
+      .returning();
   }
+
   if (!payment) throw new BadRequestError("Failed to create payment.");
+
   const newStatus = newTotal >= invoiceTotal ? "paid" : "partial";
   const newPaidAt = newTotal >= invoiceTotal ? paidAt : invoice.paidAt;
-  await tx.update(invoices).set({ status: newStatus, paidAt: newPaidAt, updatedAt: new Date() }).where(eq(invoices.id, input.invoiceId));
+
+  await tx
+    .update(invoices)
+    .set({
+      status: newStatus,
+      paidAt: newPaidAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(invoices.id, input.invoiceId));
+
+  // Sync payment state back to the linked appointment so the appointment
+  // inspector immediately reflects the invoice payment status.
   await syncAppointmentPaymentState(input.invoiceId, newStatus, newPaidAt ?? null, tx);
+
   return payment;
 }
 
-export async function syncAppointmentAfterPaymentReversal(invoiceId: string, newInvoiceStatus: string, tx: DbExecutor = db): Promise<void> {
+/**
+ * Re-sync appointment payment state after a payment reversal.
+ * Call this after reversing a payment and recomputing the invoice status.
+ */
+export async function syncAppointmentAfterPaymentReversal(
+  invoiceId: string,
+  newInvoiceStatus: string,
+  tx: DbExecutor = db
+): Promise<void> {
   await syncAppointmentPaymentState(invoiceId, newInvoiceStatus, null, tx);
 }
