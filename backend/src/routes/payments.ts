@@ -14,6 +14,7 @@ import {
   getActiveInvoicePaymentTotal,
   isPaymentSchemaDriftError,
   recordInvoicePayment,
+  syncAppointmentAfterPaymentReversal,
 } from "../lib/invoicePayments.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 
@@ -229,6 +230,7 @@ paymentsRouter.post("/:id/reverse", requireAuth, requireTenant, async (req: Requ
     const invTotal = Number(inv.total ?? 0);
     const newStatus = paidNow <= 0 ? "sent" : paidNow >= invTotal ? "paid" : "partial";
     await db.update(invoices).set({ status: newStatus, paidAt: paidNow >= invTotal ? inv.paidAt : null, updatedAt: new Date() }).where(eq(invoices.id, inv.id));
+    await syncAppointmentAfterPaymentReversal(inv.id, newStatus);
   }
   await createRequestActivityLog(req, {
     businessId: bid,
