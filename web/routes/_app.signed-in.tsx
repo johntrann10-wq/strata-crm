@@ -305,10 +305,10 @@ export default function DashboardHomeRoute() {
       {pageError && !snapshot ? (
         <DashboardPageErrorGrid error={safePageError ?? new Error("Dashboard data is temporarily unavailable.")} onRetry={() => void refreshDashboard("force")} />
       ) : (
-        <div className="relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(219,234,254,0.85),_rgba(255,255,255,0.92)_38%,_rgba(241,245,249,0.88)_100%)] p-4 shadow-[0_28px_80px_rgba(15,23,42,0.10)] sm:p-5">
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.55),transparent_34%,rgba(191,219,254,0.12))]" />
-          <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-sky-200/25 blur-3xl" />
-          <div className="pointer-events-none absolute -left-16 bottom-10 h-44 w-44 rounded-full bg-blue-200/20 blur-3xl" />
+        <div className="relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(254,243,199,0.72),_rgba(255,255,255,0.94)_36%,_rgba(248,250,252,0.9)_100%)] p-4 shadow-[0_28px_80px_rgba(15,23,42,0.10)] sm:p-5">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.58),transparent_34%,rgba(251,191,36,0.08))]" />
+          <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-amber-200/20 blur-3xl" />
+          <div className="pointer-events-none absolute -left-16 bottom-10 h-44 w-44 rounded-full bg-orange-200/15 blur-3xl" />
           <div className="relative space-y-4">
           <HomeOverviewKpiStrip snapshot={snapshot} loading={pageLoading} error={snapshot?.widgetErrors?.summary_today ? new Error(snapshot.widgetErrors.summary_today.message) : null} onRetry={() => void refreshDashboard("force")} />
 

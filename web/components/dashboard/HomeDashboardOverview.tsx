@@ -185,7 +185,7 @@ export function HomeOverviewKpiStrip({
                 <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{item.title}</p>
                 <p className={cn("mt-2.5 text-2xl font-semibold tracking-[-0.05em] sm:mt-3 sm:text-3xl", item.tone)}>{item.value}</p>
               </div>
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200/80 bg-slate-50/80 text-slate-600 transition-colors group-hover:border-sky-200 group-hover:bg-sky-50 group-hover:text-sky-700 sm:h-9 sm:w-9">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200/80 bg-slate-50/80 text-slate-600 transition-colors group-hover:border-amber-200 group-hover:bg-amber-50 group-hover:text-amber-700 sm:h-9 sm:w-9">
                 <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </span>
             </div>
@@ -272,7 +272,7 @@ export function HomeWeeklyAppointmentOverviewCard({
       <CardHeader className="border-b border-slate-100/90 pb-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">Operating week</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">Operating week</p>
             <CardTitle className="text-xl tracking-[-0.03em]">Weekly Appointment Overview</CardTitle>
             <CardDescription className="text-slate-500">{formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")}</CardDescription>
           </div>
@@ -337,21 +337,23 @@ export function HomeWeeklyAppointmentOverviewCard({
           />
         ) : (
           <>
-            <div className="hidden overflow-hidden rounded-[1.5rem] border border-slate-200/80 bg-slate-50/75 lg:grid lg:grid-cols-7">
-              {overview.days.map((day) => {
-                const isActive = day.date === activeDay.date;
-                return (
-                  <button
-                    key={day.date}
-                    type="button"
-                    onClick={() => onSelectDate?.(day.date)}
-                    className={cn(
-                      "flex min-h-[430px] flex-col border-r border-slate-200/75 p-0 text-left transition-colors last:border-r-0",
-                      isActive ? "bg-white shadow-[inset_0_0_0_1px_rgba(37,99,235,0.24)]" : "bg-transparent hover:bg-white/70"
-                    )}
-                    aria-pressed={isActive}
-                  >
-                    <div className={cn("border-b border-slate-200/75 px-4 py-3.5", isActive ? "bg-sky-50/60" : "bg-white/55")}>
+            <div className="hidden lg:block">
+              <div className="-mx-1 overflow-x-auto px-1 pb-2">
+                <div className="grid min-w-[1180px] grid-cols-7 overflow-hidden rounded-[1.5rem] border border-slate-200/80 bg-slate-50/75 xl:min-w-0">
+                  {overview.days.map((day) => {
+                    const isActive = day.date === activeDay.date;
+                    return (
+                      <button
+                        key={day.date}
+                        type="button"
+                        onClick={() => onSelectDate?.(day.date)}
+                        className={cn(
+                          "flex min-h-[430px] min-w-0 flex-col border-r border-slate-200/75 p-0 text-left transition-colors last:border-r-0",
+                          isActive ? "bg-white shadow-[inset_0_0_0_1px_rgba(37,99,235,0.24)]" : "bg-transparent hover:bg-white/70"
+                        )}
+                        aria-pressed={isActive}
+                      >
+                    <div className={cn("border-b border-slate-200/75 px-4 py-3.5", isActive ? "bg-amber-50/60" : "bg-white/55")}>
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{day.shortLabel}</p>
@@ -385,51 +387,53 @@ export function HomeWeeklyAppointmentOverviewCard({
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-1 flex-col justify-between px-4 py-4">
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Queued work</p>
-                          {day.capacityUsage != null ? (
-                            <span className="rounded-full border border-slate-200/80 bg-white/80 px-2 py-1 text-[10px] font-semibold text-slate-600">
-                              Assigned {day.capacityUsage}%
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="space-y-2">
-                          {day.previewItems.length === 0 ? (
-                            <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/70 px-2.5 py-3 text-xs text-slate-500">
-                              No jobs queued yet.
+                        <div className="flex flex-1 flex-col justify-between px-4 py-4">
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Queued work</p>
+                              {day.capacityUsage != null ? (
+                                <span className="rounded-full border border-slate-200/80 bg-white/80 px-2 py-1 text-[10px] font-semibold text-slate-600">
+                                  Assigned {day.capacityUsage}%
+                                </span>
+                              ) : null}
                             </div>
-                          ) : (
-                            day.previewItems.slice(0, 3).map((item) => (
-                              <Link
-                                key={item.id}
-                                to={item.url}
-                                onClick={(event) => event.stopPropagation()}
-                                className="block rounded-[1rem] border border-slate-200/80 bg-white/96 px-3 py-3 transition-colors hover:border-sky-200 hover:bg-sky-50/45"
-                              >
-                                <div className="flex items-start justify-between gap-2.5">
-                                  <div className="min-w-0">
-                                    <p className="line-clamp-2 text-[12px] font-semibold leading-4 text-slate-950">{item.title}</p>
-                                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">
-                                      {item.clientName}
-                                      {item.vehicleLabel ? ` · ${item.vehicleLabel}` : ""}
-                                    </p>
-                                  </div>
-                                  <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
-                                    {formatDateLabel(item.startTime, "h:mm a")}
-                                  </span>
+                            <div className="space-y-2">
+                              {day.previewItems.length === 0 ? (
+                                <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/70 px-2.5 py-3 text-xs text-slate-500">
+                                  No jobs queued yet.
                                 </div>
-                              </Link>
-                            ))
-                          )}
+                              ) : (
+                                day.previewItems.slice(0, 3).map((item) => (
+                                  <Link
+                                    key={item.id}
+                                    to={item.url}
+                                    onClick={(event) => event.stopPropagation()}
+                                    className="block rounded-[1rem] border border-slate-200/80 bg-white/96 px-3 py-3 transition-colors hover:border-amber-200 hover:bg-amber-50/45"
+                                  >
+                                    <div className="flex items-start justify-between gap-2.5">
+                                      <div className="min-w-0">
+                                        <p className="line-clamp-2 text-[12px] font-semibold leading-4 text-slate-950">{item.title}</p>
+                                        <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">
+                                          {item.clientName}
+                                          {item.vehicleLabel ? ` · ${item.vehicleLabel}` : ""}
+                                        </p>
+                                      </div>
+                                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
+                                        {formatDateLabel(item.startTime, "h:mm a")}
+                                      </span>
+                                    </div>
+                                  </Link>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                          <div className="pt-2 text-[11px] text-slate-400">{isActive ? "In focus" : "Review below"}</div>
                         </div>
-                      </div>
-                      <div className="pt-2 text-[11px] text-slate-400">{isActive ? "In focus" : "Review below"}</div>
-                    </div>
-                  </button>
-                );
-              })}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             <div className="grid gap-3 lg:hidden">
@@ -440,7 +444,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                     key={day.date}
                     className={cn(
                       "rounded-[1.2rem] border p-3 transition-colors",
-                      isActive ? "border-sky-300 bg-sky-50/60 shadow-sm" : "border-slate-200/75 bg-white/88"
+                      isActive ? "border-amber-300 bg-amber-50/60 shadow-sm" : "border-slate-200/75 bg-white/88"
                     )}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -473,7 +477,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                           <Link
                             key={item.id}
                             to={item.url}
-                            className="block rounded-[1rem] border border-slate-200/80 bg-white/92 px-3 py-2.5 transition-colors hover:border-sky-200 hover:bg-sky-50/45"
+                            className="block rounded-[1rem] border border-slate-200/80 bg-white/92 px-3 py-2.5 transition-colors hover:border-amber-200 hover:bg-amber-50/45"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
@@ -566,7 +570,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                     <Link
                       key={item.id}
                       to={item.url}
-                      className="flex items-start justify-between gap-3 rounded-[1rem] border border-slate-200/80 bg-white/95 px-3 py-3 transition-colors hover:border-sky-200 hover:bg-sky-50/45"
+                      className="flex items-start justify-between gap-3 rounded-[1rem] border border-slate-200/80 bg-white/95 px-3 py-3 transition-colors hover:border-amber-200 hover:bg-amber-50/45"
                     >
                       <div className="min-w-0">
                         <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{formatDateLabel(item.startTime, "h:mm a")}</p>
@@ -665,7 +669,7 @@ export function HomeUpcomingAttentionPanel({
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-700">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700">
                           <CalendarClock className="h-3 w-3" />
                           Upcoming
                         </span>
@@ -888,7 +892,7 @@ export function HomeMonthlyRevenueChartCard({
                                 <div
                                   className={cn(
                                     "w-full rounded-t-[10px] transition-all group-hover:opacity-90",
-                                    mode === "booked" ? "bg-gradient-to-t from-sky-700 to-sky-500" : "bg-gradient-to-t from-emerald-600 to-emerald-400",
+                                    mode === "booked" ? "bg-gradient-to-t from-amber-700 to-orange-400" : "bg-gradient-to-t from-emerald-600 to-emerald-400",
                                     value === 0 ? "bg-slate-200/70" : null
                                   )}
                                   style={{ height: `${barHeight}%` }}
@@ -906,7 +910,7 @@ export function HomeMonthlyRevenueChartCard({
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-slate-500">
                 <span className="inline-flex items-center gap-2">
-                  <span className={cn("h-2.5 w-2.5 rounded-full", mode === "booked" ? "bg-sky-600" : "bg-emerald-500")} />
+                  <span className={cn("h-2.5 w-2.5 rounded-full", mode === "booked" ? "bg-amber-600" : "bg-emerald-500")} />
                   {mode === "booked" ? "Booked work" : "Invoice collections"}
                 </span>
                 {chart.goalAmount != null ? <span>Monthly goal: {formatDashboardCurrency(chart.goalAmount)}</span> : null}
@@ -1094,7 +1098,7 @@ export function HomeBookingsOverviewCard({
                   <Link
                     key={stage.key}
                     to={funnelLinks[stage.key] ?? "/signed-in"}
-                    className="rounded-[1rem] border border-slate-200/80 bg-white/95 px-3 py-3 transition-colors hover:border-sky-200 hover:bg-sky-50/45"
+                    className="rounded-[1rem] border border-slate-200/80 bg-white/95 px-3 py-3 transition-colors hover:border-amber-200 hover:bg-amber-50/45"
                     aria-label={`Open ${stage.label.toLowerCase()} stage`}
                   >
                     <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{stage.label}</p>
@@ -1153,7 +1157,7 @@ export function HomeBottomPanels({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     {item.url ? (
-                      <Link to={item.url} className="font-semibold text-slate-950 hover:text-sky-700">
+                      <Link to={item.url} className="font-semibold text-slate-950 hover:text-amber-700">
                         {item.label}
                       </Link>
                     ) : (
@@ -1180,7 +1184,7 @@ export function HomeBottomPanels({
         ) : (
           <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92">
             {receivablesItems.map((item) => (
-              <Link key={item.id} to={item.ctaUrl} className="block border-b border-slate-200/70 p-3 transition-colors last:border-b-0 hover:bg-sky-50/45">
+              <Link key={item.id} to={item.ctaUrl} className="block border-b border-slate-200/70 p-3 transition-colors last:border-b-0 hover:bg-amber-50/45">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-slate-950">{item.label}</p>
@@ -1205,7 +1209,7 @@ export function HomeBottomPanels({
         ) : (
           <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92">
             {followUpItems.map((item) => (
-              <Link key={item.id} to={item.ctaUrl} className="flex items-start justify-between gap-3 border-b border-slate-200/70 p-3 transition-colors last:border-b-0 hover:bg-sky-50/45">
+              <Link key={item.id} to={item.ctaUrl} className="flex items-start justify-between gap-3 border-b border-slate-200/70 p-3 transition-colors last:border-b-0 hover:bg-amber-50/45">
                 <div>
                   <p className="font-semibold text-slate-950">{item.label}</p>
                   <p className="mt-1 text-sm text-slate-500">{item.reason}</p>

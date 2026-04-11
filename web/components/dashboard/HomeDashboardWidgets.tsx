@@ -166,11 +166,11 @@ export function HomeDashboardTopBar({
 
   return (
     <Card className="overflow-hidden rounded-[1.8rem] border border-slate-200/80 bg-white/78 py-0 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur">
-      <div className="h-1.5 bg-gradient-to-r from-sky-700 via-blue-600 to-cyan-400" />
+      <div className="h-1.5 bg-gradient-to-r from-slate-900 via-amber-600 to-orange-400" />
       <CardContent className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="rounded-full border-sky-200 bg-sky-50/90 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-sky-800">
+            <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50/90 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-amber-800">
               {businessName ?? "Current business"}
             </Badge>
             <Badge variant="outline" className="rounded-full border-slate-200 bg-slate-50/90 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-700">
@@ -582,7 +582,7 @@ export function HomeSignalsStrip({ snapshot, loading }: { snapshot?: HomeDashboa
                 key={nudge.id}
                 className={cn(
                   "rounded-[1rem] border p-3",
-                  nudge.tone === "warning" ? "border-orange-200 bg-orange-50/80" : "border-sky-200 bg-sky-50/80"
+                  nudge.tone === "warning" ? "border-orange-200 bg-orange-50/80" : "border-slate-200 bg-slate-50/80"
                 )}
               >
                 <p className="font-medium text-slate-950">{nudge.label}</p>
