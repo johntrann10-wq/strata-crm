@@ -822,7 +822,7 @@ async function buildAppointmentConfirmationPayload(
     ])
   ).get(appointmentRow.id);
   const depositAmount = Number(appointmentRow.depositAmount ?? 0);
-  const depositSatisfied = finance?.depositSatisfied === true || appointmentRow.depositPaid === true;
+  const depositSatisfied = finance?.depositSatisfied === true;
   const hasDepositDue = Number.isFinite(depositAmount) && depositAmount > 0 && !depositSatisfied;
 
   return {

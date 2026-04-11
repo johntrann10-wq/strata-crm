@@ -251,9 +251,9 @@ function appointmentDepositStillDue(appointment: AppointmentRecord): boolean {
   if (appointment.paidInFull != null && appointment.paidInFull === true) return false;
   const balanceDue = Number(appointment.balanceDue ?? Number.NaN);
   if (Number.isFinite(balanceDue)) {
-    return balanceDue > 0.009 && !appointment.depositPaid;
+    return balanceDue > 0.009;
   }
-  return !appointment.depositPaid;
+  return true;
 }
 
 function isCalendarBlockRecord(internalNotes: string | null | undefined): boolean {
