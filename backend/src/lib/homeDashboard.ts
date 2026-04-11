@@ -2779,15 +2779,14 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     ),
     loadOrFallback(
       "automationStats",
-      {} as Awaited<ReturnType<typeof loadAutomationStats>>,
-      (() => ({
+      {
         remindersSentThisWeek: 0,
         invoiceNudgesSentThisWeek: null,
         reviewRequestsSentThisWeek: 0,
         reactivationMessagesSentThisWeek: 0,
         deliverySuccessRate: null,
         failedAutomationCount: 0,
-      }))(),
+      } as Awaited<ReturnType<typeof loadAutomationStats>>,
       ["automations", "business_health"],
       () => loadAutomationStats(params.businessId, weekStart, weekEnd, tx)
     ),

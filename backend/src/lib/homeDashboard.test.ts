@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { PermissionKey } from "./permissions.js";
 import {
   applyActionQueuePriority,
   buildQuickActions,
@@ -51,7 +52,13 @@ describe("home dashboard domain logic", () => {
   });
 
   it("changes cache key when the dashboard range or team filter changes", () => {
-    const base = {
+    const base: {
+      businessId: string;
+      userId: string;
+      permissions: PermissionKey[];
+      timezone: string;
+      now: Date;
+    } = {
       businessId: "biz-1",
       userId: "user-1",
       permissions: ["dashboard.view"],
@@ -195,7 +202,7 @@ describe("home dashboard domain logic", () => {
   });
 
   it("returns only the quick actions that the current permission set can actually execute", () => {
-    const ownerRawPermissions = [
+    const ownerRawPermissions: PermissionKey[] = [
       "dashboard.view",
       "appointments.read",
       "appointments.write",
@@ -210,7 +217,7 @@ describe("home dashboard domain logic", () => {
       "payments.read",
       "payments.write",
     ];
-    const technicianRawPermissions = [
+    const technicianRawPermissions: PermissionKey[] = [
       "dashboard.view",
       "appointments.read",
       "customers.read",
