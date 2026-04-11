@@ -245,6 +245,7 @@ export type HomeDashboardSnapshot = {
     monthEnd: string;
     totalBookedThisMonth: number;
     totalCollectedThisMonth: number;
+    outstandingInvoiceAmount: number;
     percentToGoal: number | null;
     goalAmount: number | null;
     days: Array<{
@@ -253,6 +254,8 @@ export type HomeDashboardSnapshot = {
       bookedRevenue: number;
       collectedRevenue: number;
       goalPaceRevenue: number | null;
+      bookedUrl: string;
+      collectedUrl: string;
     }>;
   };
   bookingsOverview: {

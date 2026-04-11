@@ -177,6 +177,7 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
       monthEnd: "2026-05-01T06:59:59.999Z",
       totalBookedThisMonth: mode === "empty" ? 0 : 11840,
       totalCollectedThisMonth: role === "technician" ? 0 : mode === "empty" ? 0 : 9320,
+      outstandingInvoiceAmount: role === "technician" ? 0 : mode === "edge" ? 2440 : 920,
       percentToGoal: role === "owner" ? 78 : null,
       goalAmount: role === "owner" ? 15000 : null,
       days: Array.from({ length: 30 }, (_, index) => ({
@@ -185,6 +186,8 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
         bookedRevenue: mode === "empty" ? 0 : [0, 220, 480, 0, 650, 0, 520, 310, 740, 560, 0, 880, 420, 0, 360, 690, 0, 510, 750, 0, 430, 260, 0, 980, 610, 0, 320, 540, 0, 480][index] ?? 0,
         collectedRevenue: role === "technician" || mode === "empty" ? 0 : [0, 0, 250, 0, 300, 0, 420, 0, 500, 0, 0, 610, 0, 0, 290, 0, 0, 440, 0, 0, 380, 0, 0, 730, 0, 0, 260, 0, 0, 420][index] ?? 0,
         goalPaceRevenue: role === "owner" ? (15000 / 30) * (index + 1) : null,
+        bookedUrl: `/calendar?view=day&date=2026-04-${String(index + 1).padStart(2, "0")}`,
+        collectedUrl: `/finances?focusDate=2026-04-${String(index + 1).padStart(2, "0")}`,
       })),
     },
     bookingsOverview: {
@@ -272,6 +275,7 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(main.getByText("Weekly Appointment Overview", { exact: true })).toBeVisible();
     await expect(main.getByText("Upcoming Jobs / Needs Attention", { exact: true })).toBeVisible();
     await expect(main.getByText("Monthly Revenue Chart", { exact: true })).toBeVisible();
+    await expect(main.getByText("Outstanding invoices", { exact: true })).toBeVisible();
     await expect(main.getByText("Bookings Overview", { exact: true })).toBeVisible();
     await expect(main.getByText("Business Feed", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Filter dashboard by team member")).toBeVisible();
@@ -282,6 +286,10 @@ test.describe("Dashboard home (mocked)", () => {
     await page.getByRole("button", { name: /tue/i }).click();
     await expect(page.getByText("Jordan Lee · 2023 Civic Type R")).toBeVisible();
     await expect(page.getByRole("link", { name: /open day in calendar/i })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-07");
+    await page.getByRole("button", { name: /^booked$/i }).click();
+    await expect(page.getByRole("link", { name: "Open booked revenue records for Apr 2", exact: true })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-02");
+    await page.getByRole("button", { name: /^collected$/i }).click();
+    await expect(page.getByRole("link", { name: "Open collected revenue records for Apr 3", exact: true })).toHaveAttribute("href", "/finances?focusDate=2026-04-03");
     if (process.platform === "win32") {
       await expect(page.locator("main")).toHaveScreenshot("dashboard-owner-control-tower.png", {
         animations: "disabled",

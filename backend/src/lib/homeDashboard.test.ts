@@ -347,7 +347,13 @@ describe("home dashboard domain logic", () => {
       directPayments: [{ createdAt: new Date("2026-04-02T18:00:00.000Z"), action: "appointment.deposit_paid", metadata: JSON.stringify({ amount: 150 }) }],
     });
 
-    expect(days[1]).toMatchObject({ dayOfMonth: 2, bookedRevenue: 500, collectedRevenue: 150 });
+    expect(days[1]).toMatchObject({
+      dayOfMonth: 2,
+      bookedRevenue: 500,
+      collectedRevenue: 150,
+      bookedUrl: "/calendar?view=day&date=2026-04-02",
+      collectedUrl: "/finances?focusDate=2026-04-02",
+    });
     expect(days[2]).toMatchObject({ dayOfMonth: 3, bookedRevenue: 300 });
     expect(days[3]).toMatchObject({ dayOfMonth: 4, collectedRevenue: 250 });
   });

@@ -273,6 +273,8 @@ export type HomeDashboardMonthlyRevenueDay = {
   bookedRevenue: number;
   collectedRevenue: number;
   goalPaceRevenue: number | null;
+  bookedUrl: string;
+  collectedUrl: string;
 };
 
 export type HomeDashboardBookingsOverview = {
@@ -376,6 +378,7 @@ export type HomeDashboardSnapshot = {
     monthEnd: string;
     totalBookedThisMonth: number;
     totalCollectedThisMonth: number;
+    outstandingInvoiceAmount: number;
     percentToGoal: number | null;
     goalAmount: number | null;
     days: HomeDashboardMonthlyRevenueDay[];
@@ -1731,6 +1734,8 @@ export function buildMonthlyRevenueChart(params: {
       bookedRevenue: 0,
       collectedRevenue: 0,
       goalPaceRevenue: goalPacePerDay != null ? Number((((index + 1) * goalPacePerDay)).toFixed(2)) : null,
+      bookedUrl: buildAppPath(`/calendar?view=day&date=${encodeURIComponent(getBusinessDateKey(date, params.timezone))}`),
+      collectedUrl: buildAppPath(`/finances?focusDate=${encodeURIComponent(getBusinessDateKey(date, params.timezone))}`),
     };
   });
 
@@ -3693,6 +3698,10 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       totalCollectedThisMonth:
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
           ? Number(currentRevenue.toFixed(2))
+          : 0,
+      outstandingInvoiceAmount:
+        modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
+          ? Number(outstandingInvoiceAmount.toFixed(2))
           : 0,
       percentToGoal: modulePermissions.goals ? goals.percentToGoal : null,
       goalAmount: modulePermissions.goals ? goals.monthlyRevenueGoal : null,
