@@ -339,20 +339,20 @@ export function HomeWeeklyAppointmentOverviewCard({
           <>
             <div className="hidden lg:block">
               <div className="-mx-1 overflow-x-auto px-1 pb-2">
-                <div className="grid min-w-[1540px] grid-cols-7 gap-3 2xl:min-w-0">
+                <div className="grid min-w-[1320px] grid-cols-7 gap-3 2xl:min-w-0">
                   {overview.days.map((day) => {
                     const isActive = day.date === activeDay.date;
                     return (
                       <div
                         key={day.date}
                         className={cn(
-                          "flex min-h-[250px] min-w-0 flex-col overflow-hidden rounded-[1.35rem] border text-left transition-all",
+                          "flex min-h-[208px] min-w-0 flex-col overflow-hidden rounded-[1.25rem] border text-left transition-all",
                           isActive
                             ? "border-amber-300 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]"
                             : "border-slate-200/80 bg-white/88 hover:border-slate-300 hover:bg-white"
                         )}
                       >
-                        <div className={cn("border-b px-4 py-3.5", isActive ? "border-amber-200 bg-amber-50/55" : "border-slate-200/80 bg-slate-50/55")}>
+                        <div className={cn("border-b px-4 py-3", isActive ? "border-amber-200 bg-amber-50/55" : "border-slate-200/80 bg-slate-50/55")}>
                           <div className="flex items-start justify-between gap-3">
                             <button
                               type="button"
@@ -365,8 +365,8 @@ export function HomeWeeklyAppointmentOverviewCard({
                               <p className="mt-1 text-sm font-semibold text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
                             </button>
                             <div className="flex items-center gap-2">
-                              <span className="shrink-0 rounded-full border border-slate-200/80 bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm">
-                                {formatDashboardCompactCurrency(day.bookedValue)}
+                              <span className="shrink-0 rounded-full border border-slate-200/80 bg-white/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-700 shadow-sm">
+                                Booked {formatDashboardCompactCurrency(day.bookedValue)}
                               </span>
                               <Link
                                 to={day.calendarUrl}
@@ -378,7 +378,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                             </div>
                           </div>
                         </div>
-                        <div className="flex flex-1 flex-col justify-between px-4 py-4">
+                        <div className="flex flex-1 flex-col justify-between px-4 py-3.5">
                           <button
                             type="button"
                             onClick={() => onSelectDate?.(day.date)}
@@ -386,41 +386,41 @@ export function HomeWeeklyAppointmentOverviewCard({
                             aria-label={`Focus ${day.label} in weekly overview`}
                             aria-pressed={isActive}
                           >
-                            <div className="flex items-end justify-between gap-3">
+                            <div className="flex items-start justify-between gap-3">
                               <div>
                                 <p className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-slate-950">{day.appointmentCount}</p>
-                                <p className="mt-1 text-[11px] font-medium text-slate-500">{day.appointmentCount === 1 ? "appointment booked" : "appointments booked"}</p>
+                                <p className="mt-1 text-[11px] font-medium text-slate-500">{day.appointmentCount === 1 ? "appointment" : "appointments"}</p>
                               </div>
-                              <span className="rounded-full bg-slate-100/90 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
-                                {day.previewItems.length} queued
-                              </span>
+                              <div className="text-right">
+                                <span className="inline-flex rounded-full bg-slate-100/90 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+                                  Queue {day.previewItems.length}
+                                </span>
+                                {day.capacityUsage != null ? (
+                                  <p className="mt-2 text-[10px] font-medium text-slate-500">{day.capacityUsage}% covered</p>
+                                ) : (
+                                  <p className="mt-2 text-[10px] font-medium text-slate-400">No coverage</p>
+                                )}
+                              </div>
                             </div>
                             <div className="mt-4 grid grid-cols-2 gap-1.5 text-[10px]">
-                              <span className="rounded-full bg-slate-100 px-2 py-1 text-center font-medium text-slate-700">Upcoming {day.statusCounts.upcoming}</span>
+                              <span className="rounded-full bg-slate-100 px-2 py-1 text-center font-medium text-slate-700">Up {day.statusCounts.upcoming}</span>
                               <span className="rounded-full bg-blue-50 px-2 py-1 text-center font-medium text-blue-700">Live {day.statusCounts.inProgress}</span>
                               <span className="rounded-full bg-emerald-50 px-2 py-1 text-center font-medium text-emerald-700">Done {day.statusCounts.completed}</span>
                               <span className="rounded-full bg-rose-50 px-2 py-1 text-center font-medium text-rose-700">Cancel {day.statusCounts.cancelled}</span>
                             </div>
-                            <div className="mt-5 space-y-2">
-                            {day.capacityUsage != null ? (
-                              <div className="flex items-center justify-between rounded-[0.95rem] border border-slate-200/80 bg-slate-50/85 px-3 py-2 text-[11px] text-slate-500">
-                                <span>Assigned coverage</span>
-                                <span className="font-semibold text-slate-700">{day.capacityUsage}%</span>
-                              </div>
-                            ) : (
-                              <div className="rounded-[0.95rem] border border-dashed border-slate-200/80 bg-white/75 px-3 py-2 text-[11px] text-slate-500">
-                                No coverage signal for this day
-                              </div>
-                            )}
-                            <span
-                              className={cn(
-                                "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                                isActive ? "bg-amber-50 text-amber-700" : "bg-slate-100/90 text-slate-500"
-                              )}
-                            >
-                              {isActive ? "Selected for dispatch" : "Click to inspect"}
-                            </span>
-                          </div>
+                            <div className="mt-5 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-400">
+                                {isActive ? "In focus" : "Select day"}
+                              </span>
+                              <span
+                                className={cn(
+                                  "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                                  isActive ? "bg-amber-50 text-amber-700" : "bg-slate-100/90 text-slate-500"
+                                )}
+                              >
+                                {isActive ? "Dispatch ready" : "Inspect"}
+                              </span>
+                            </div>
                           </button>
                         </div>
                       </div>
