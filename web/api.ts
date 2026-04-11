@@ -4,6 +4,7 @@ import {
   getCurrentBusinessId,
   setAuthToken,
 } from "./lib/auth";
+import type { HomeDashboardRange, HomeDashboardSnapshot } from "./lib/homeDashboard";
 import { recordReliabilityDiagnostic } from "./lib/reliabilityDiagnostics";
 
 /** Standard auth payload from sign-in, sign-up, and GET /auth/me. */
@@ -107,6 +108,35 @@ function emitSubscriptionRequired(path: string): void {
   window.dispatchEvent(new CustomEvent("subscription:required", { detail: { path } }));
 }
 
+function shouldInvalidateHomeDashboard(path: string, method: string): boolean {
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase())) return false;
+  return [
+    "/businesses",
+    "/clients",
+    "/appointments",
+    "/quotes",
+    "/invoices",
+    "/payments",
+    "/staff",
+    "/locations",
+    "/actions/runAutomations",
+    "/actions/runIntegrationJobs",
+  ].some((prefix) => path.startsWith(prefix));
+}
+
+function emitHomeDashboardInvalidated(path: string, method: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("dashboard:invalidate", {
+      detail: {
+        path,
+        method,
+        at: new Date().toISOString(),
+      },
+    })
+  );
+}
+
 function getToken() {
   return getAuthToken();
 }
@@ -184,6 +214,9 @@ async function request<T = unknown>(
     } catch {
       // Keep the original response and let normal error handling below explain it.
     }
+  }
+  if (res.ok && shouldInvalidateHomeDashboard(path, method)) {
+    emitHomeDashboardInvalidated(path, method);
   }
   if (!res.ok) {
     // Special-case 402 for businesses so onboarding is never blocked
@@ -955,7 +988,25 @@ export const api = {
         revenue: number;
         shareOfRevenue: number;
       }>;
-    }>("/actions/getGrowthMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
+      }>("/actions/getGrowthMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
+  getHomeDashboard: (params?: { range?: HomeDashboardRange; teamMemberId?: string | null }) =>
+    request<HomeDashboardSnapshot>("/actions/getHomeDashboard", { method: "POST", body: JSON.stringify(params ?? {}) }),
+  updateHomeDashboardPreferences: (params?: {
+    widgetOrder?: string[];
+    hiddenWidgets?: string[];
+    defaultRange?: HomeDashboardRange | null;
+    defaultTeamMemberId?: string | null;
+    dismissQueueItemId?: string | null;
+    clearDismissQueueItemId?: string | null;
+    snoozeQueueItemId?: string | null;
+    snoozeUntil?: string | null;
+    clearSnoozeQueueItemId?: string | null;
+    markSeenAt?: string | null;
+  }) =>
+    request<{ preferences: HomeDashboardSnapshot["preferences"] }>("/actions/updateHomeDashboardPreferences", {
+      method: "POST",
+      body: JSON.stringify(params ?? {}),
+    }),
   getAutomationSummary: (params?: Record<string, unknown>) =>
     request<{
       uncontactedLeads: {

@@ -40,8 +40,55 @@ import { runTwilioIntegrationJob } from "../lib/twilio.js";
 import { runOutboundWebhookIntegrationJob } from "../lib/integrations.js";
 import { parseLeadRecord } from "../lib/leads.js";
 import { getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
+import { getHomeDashboardSnapshot, updateHomeDashboardPreferences } from "../lib/homeDashboard.js";
 
 export const actionsRouter = Router({ mergeParams: true });
+
+const homeDashboardSchema = z.object({
+  range: z.enum(["today", "week", "month"]).optional(),
+  teamMemberId: z.string().uuid().nullable().optional(),
+});
+
+const homeDashboardPreferencesSchema = z.object({
+  widgetOrder: z.array(z.enum([
+    "summary_needs_action",
+    "summary_today",
+    "summary_cash",
+    "summary_conversion",
+    "today_schedule",
+    "action_queue",
+    "quick_actions",
+    "pipeline",
+    "revenue_collections",
+    "recent_activity",
+    "automations",
+    "business_health",
+    "goals",
+  ])).optional(),
+  hiddenWidgets: z.array(z.enum([
+    "summary_needs_action",
+    "summary_today",
+    "summary_cash",
+    "summary_conversion",
+    "today_schedule",
+    "action_queue",
+    "quick_actions",
+    "pipeline",
+    "revenue_collections",
+    "recent_activity",
+    "automations",
+    "business_health",
+    "goals",
+  ])).optional(),
+  defaultRange: z.enum(["today", "week", "month"]).nullable().optional(),
+  defaultTeamMemberId: z.string().uuid().nullable().optional(),
+  dismissQueueItemId: z.string().min(1).nullable().optional(),
+  clearDismissQueueItemId: z.string().min(1).nullable().optional(),
+  snoozeQueueItemId: z.string().min(1).nullable().optional(),
+  snoozeUntil: z.string().datetime().nullable().optional(),
+  clearSnoozeQueueItemId: z.string().min(1).nullable().optional(),
+  markSeenAt: z.string().datetime().nullable().optional(),
+});
 
 type GrowthLeadRecord = {
   id: string;
@@ -780,6 +827,47 @@ actionsRouter.post("/getDashboardStats", requireAuth, requireTenant, async (req:
     repeatCustomerRate: 0,
     weeklyRevenue: [],
   });
+});
+
+actionsRouter.post("/getHomeDashboard", requireAuth, requireTenant, requirePermission("dashboard.view"), async (req: Request, res: Response) => {
+  const parsed = homeDashboardSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid dashboard filters" });
+  }
+  const snapshot = await getHomeDashboardSnapshot({
+    businessId: businessId(req),
+    userId: req.userId ?? null,
+    membershipRole: req.membershipRole ?? null,
+    permissions: req.permissions ?? [],
+    range: parsed.data.range,
+    teamMemberId: parsed.data.teamMemberId ?? null,
+  });
+  res.json(snapshot);
+});
+
+actionsRouter.post("/updateHomeDashboardPreferences", requireAuth, requireTenant, requirePermission("dashboard.view"), async (req: Request, res: Response) => {
+  const parsed = homeDashboardPreferencesSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid dashboard preferences" });
+  }
+  if (!req.userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const preferences = await updateHomeDashboardPreferences({
+    businessId: businessId(req),
+    userId: req.userId,
+    widgetOrder: parsed.data.widgetOrder,
+    hiddenWidgets: parsed.data.hiddenWidgets,
+    defaultRange: parsed.data.defaultRange,
+    defaultTeamMemberId: parsed.data.defaultTeamMemberId,
+    dismissQueueItemId: parsed.data.dismissQueueItemId ?? null,
+    clearDismissQueueItemId: parsed.data.clearDismissQueueItemId ?? null,
+    snoozeQueueItemId: parsed.data.snoozeQueueItemId ?? null,
+    snoozeUntil: parsed.data.snoozeUntil ? new Date(parsed.data.snoozeUntil) : null,
+    clearSnoozeQueueItemId: parsed.data.clearSnoozeQueueItemId ?? null,
+    markSeenAt: parsed.data.markSeenAt ? new Date(parsed.data.markSeenAt) : null,
+  });
+  res.json({ preferences });
 });
 
 actionsRouter.post("/getCapacityInsights", requireAuth, requireTenant, async (req: Request, res: Response) => {

@@ -163,6 +163,8 @@ export const businesses = pgTable("businesses", {
   automationLapsedClientsEnabled: boolean("automation_lapsed_clients_enabled").default(false),
   automationLapsedClientMonths: integer("automation_lapsed_client_months").default(6),
   bookingRequestUrl: text("booking_request_url"),
+  monthlyRevenueGoal: decimal("monthly_revenue_goal", { precision: 12, scale: 2 }),
+  monthlyJobsGoal: integer("monthly_jobs_goal"),
   integrationWebhookEnabled: boolean("integration_webhook_enabled").default(false),
   integrationWebhookUrl: text("integration_webhook_url"),
   integrationWebhookSecret: text("integration_webhook_secret"),
@@ -231,6 +233,25 @@ export const membershipPermissionGrants = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [uniqueIndex("membership_permission_grants_business_user_permission_unique").on(t.businessId, t.userId, t.permission)]
+);
+
+export const dashboardPreferences = pgTable(
+  "dashboard_preferences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id").notNull().references(() => businesses.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    widgetOrder: text("widget_order").default("[]").notNull(),
+    hiddenWidgets: text("hidden_widgets").default("[]").notNull(),
+    defaultRange: text("default_range"),
+    defaultTeamMemberId: uuid("default_team_member_id"),
+    dismissedQueueItems: text("dismissed_queue_items").default("{}").notNull(),
+    snoozedQueueItems: text("snoozed_queue_items").default("{}").notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("dashboard_preferences_business_user_unique").on(t.businessId, t.userId)]
 );
 
 export const clients = pgTable("clients", {

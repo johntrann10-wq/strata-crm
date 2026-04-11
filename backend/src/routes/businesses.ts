@@ -74,6 +74,8 @@ const createSchema = z.object({
   automationLapsedClientsEnabled: z.boolean().optional(),
   automationLapsedClientMonths: z.number().int().min(1).max(36).optional(),
   bookingRequestUrl: z.string().url().nullable().optional(),
+  monthlyRevenueGoal: z.coerce.number().min(0).max(100000000).nullable().optional(),
+  monthlyJobsGoal: z.number().int().min(0).max(100000).nullable().optional(),
   integrationWebhookEnabled: z.boolean().optional(),
   integrationWebhookUrl: z.string().url().nullable().optional(),
   integrationWebhookSecret: z.string().max(255).nullable().optional(),
@@ -235,6 +237,8 @@ function coerceBusinessRecord(
     automationLapsedClientsEnabled: record.automationLapsedClientsEnabled ?? false,
     automationLapsedClientMonths: record.automationLapsedClientMonths ?? 6,
     bookingRequestUrl: record.bookingRequestUrl ?? null,
+    monthlyRevenueGoal: record.monthlyRevenueGoal ?? null,
+    monthlyJobsGoal: record.monthlyJobsGoal ?? null,
     integrationWebhookEnabled: record.integrationWebhookEnabled ?? false,
     integrationWebhookUrl: record.integrationWebhookUrl ?? null,
     integrationWebhookSecret: record.integrationWebhookSecret ?? null,
@@ -324,7 +328,9 @@ async function ensureBusinessAutomationColumns(): Promise<void> {
           ADD COLUMN IF NOT EXISTS notification_appointment_reminder_email_enabled boolean DEFAULT true,
           ADD COLUMN IF NOT EXISTS notification_abandoned_quote_email_enabled boolean DEFAULT true,
           ADD COLUMN IF NOT EXISTS notification_review_request_email_enabled boolean DEFAULT true,
-          ADD COLUMN IF NOT EXISTS notification_lapsed_client_email_enabled boolean DEFAULT true
+          ADD COLUMN IF NOT EXISTS notification_lapsed_client_email_enabled boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS monthly_revenue_goal decimal(12, 2) DEFAULT NULL,
+          ADD COLUMN IF NOT EXISTS monthly_jobs_goal integer DEFAULT NULL
       `);
     })().catch((error) => {
       ensureBusinessAutomationColumnsPromise = null;
@@ -726,6 +732,9 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       automationLapsedClientsEnabled: parsed.data.automationLapsedClientsEnabled ?? false,
       automationLapsedClientMonths: parsed.data.automationLapsedClientMonths ?? 6,
       bookingRequestUrl: parsed.data.bookingRequestUrl ?? null,
+      monthlyRevenueGoal:
+        parsed.data.monthlyRevenueGoal != null ? String(parsed.data.monthlyRevenueGoal) : null,
+      monthlyJobsGoal: parsed.data.monthlyJobsGoal ?? null,
       integrationWebhookEnabled: parsed.data.integrationWebhookEnabled ?? false,
       integrationWebhookUrl: parsed.data.integrationWebhookUrl ?? null,
       integrationWebhookSecret: parsed.data.integrationWebhookSecret ?? null,
@@ -896,6 +905,13 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.bookingRequestUrl !== undefined) {
     updates.bookingRequestUrl = parsed.data.bookingRequestUrl?.trim() || null;
+  }
+  if (parsed.data.monthlyRevenueGoal !== undefined) {
+    updates.monthlyRevenueGoal =
+      parsed.data.monthlyRevenueGoal != null ? String(parsed.data.monthlyRevenueGoal) : null;
+  }
+  if (parsed.data.monthlyJobsGoal !== undefined) {
+    updates.monthlyJobsGoal = parsed.data.monthlyJobsGoal ?? null;
   }
   if (parsed.data.integrationWebhookEnabled !== undefined) {
     updates.integrationWebhookEnabled = parsed.data.integrationWebhookEnabled ?? false;

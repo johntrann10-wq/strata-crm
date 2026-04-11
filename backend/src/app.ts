@@ -38,11 +38,36 @@ import {
 } from "./routes/integrations.js";
 import { billingRouter, handleStripeWebhook } from "./routes/billing.js";
 import { portalRouter } from "./routes/portal.js";
+import { invalidateHomeDashboardCache } from "./lib/homeDashboard.js";
 
 validateEnv();
 
 const app = express();
 app.disable("x-powered-by");
+
+function dashboardMutationInvalidation(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const method = req.method.toUpperCase();
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    next();
+    return;
+  }
+  if (req.baseUrl === "/api/actions" && /^\/get/i.test(req.path)) {
+    next();
+    return;
+  }
+  res.on("finish", () => {
+    if (res.statusCode >= 400) return;
+    const businessId =
+      (typeof req.businessId === "string" && req.businessId) ||
+      (typeof req.headers["x-business-id"] === "string" ? req.headers["x-business-id"] : null);
+    if (!businessId) return;
+    invalidateHomeDashboardCache({
+      businessId,
+      reason: `${method} ${req.baseUrl || req.path}`,
+    });
+  });
+  next();
+}
 
 // CORS: Vercel → Railway (or local Vite → local API). Exact origins only — see `buildCorsAllowedOrigins`.
 // JWT uses `Authorization`; preflight OPTIONS is answered before routes.
@@ -78,25 +103,25 @@ app.use("/api/auth", noStore, authRouter);
 app.use("/api/portal", portalRouter);
 app.use("/api/users", optionalAuth, usersRouter);
 app.use("/api/billing", billingRouter);
-app.use("/api/businesses", optionalAuth, businessesRouter);
-app.use("/api/appointments", optionalAuth, requireSubscription, appointmentsRouter);
-app.use("/api/invoices", optionalAuth, requireSubscription, invoicesRouter);
+app.use("/api/businesses", optionalAuth, dashboardMutationInvalidation, businessesRouter);
+app.use("/api/appointments", optionalAuth, requireSubscription, dashboardMutationInvalidation, appointmentsRouter);
+app.use("/api/invoices", optionalAuth, requireSubscription, dashboardMutationInvalidation, invoicesRouter);
 app.use("/api/invoice-line-items", optionalAuth, requireSubscription, invoiceLineItemsRouter);
 app.use("/api/appointment-services", optionalAuth, requireSubscription, appointmentServicesRouter);
-app.use("/api/payments", optionalAuth, requireSubscription, paymentsRouter);
+app.use("/api/payments", optionalAuth, requireSubscription, dashboardMutationInvalidation, paymentsRouter);
 app.use("/api/expenses", optionalAuth, requireSubscription, expensesRouter);
-app.use("/api/clients", optionalAuth, requireSubscription, clientsRouter);
+app.use("/api/clients", optionalAuth, requireSubscription, dashboardMutationInvalidation, clientsRouter);
 app.use("/api/vehicles", optionalAuth, requireSubscription, vehiclesRouter);
 app.use("/api/vehicle-catalog", optionalAuth, vehicleCatalogRouter);
-app.use("/api/quotes", optionalAuth, requireSubscription, quotesRouter);
+app.use("/api/quotes", optionalAuth, requireSubscription, dashboardMutationInvalidation, quotesRouter);
 app.use("/api/quote-line-items", optionalAuth, requireSubscription, quoteLineItemsRouter);
-app.use("/api/staff", optionalAuth, staffRouter);
-app.use("/api/locations", optionalAuth, locationsRouter);
+app.use("/api/staff", optionalAuth, dashboardMutationInvalidation, staffRouter);
+app.use("/api/locations", optionalAuth, dashboardMutationInvalidation, locationsRouter);
 app.use("/api/services", optionalAuth, servicesRouter);
 app.use("/api/service-categories", optionalAuth, serviceCategoriesRouter);
 app.use("/api/service-addon-links", optionalAuth, serviceAddonLinksRouter);
 app.use("/api/jobs", optionalAuth, requireSubscription, jobsRouter);
-app.use("/api/actions", optionalAuth, actionsRouter);
+app.use("/api/actions", optionalAuth, dashboardMutationInvalidation, actionsRouter);
 app.use("/api/activity-logs", optionalAuth, requireSubscription, activityLogsRouter);
 app.use("/api/notification-logs", optionalAuth, requireSubscription, notificationLogsRouter);
 app.use("/api/integrations", optionalAuth, requireSubscription, integrationsRouter);

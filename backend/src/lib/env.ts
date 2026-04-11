@@ -146,3 +146,9 @@ export function validateEnv(): void {
 export function isCronSecretConfigured(): boolean {
   return !!process.env.CRON_SECRET?.trim();
 }
+
+export function isHomeDashboardEnabled(): boolean {
+  const raw = process.env.STRATA_HOME_DASHBOARD_V2?.trim().toLowerCase();
+  if (!raw) return true;
+  return raw !== "false" && raw !== "0" && raw !== "off";
+}
