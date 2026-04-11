@@ -219,6 +219,14 @@ export function HomeWeeklyAppointmentOverviewCard({
   }
 
   const hasAppointments = overview.days.some((day) => day.appointmentCount > 0);
+  const totalAppointments = overview.days.reduce((sum, day) => sum + day.appointmentCount, 0);
+  const totalBookedValue = overview.days.reduce((sum, day) => sum + day.bookedValue, 0);
+  const busiestDay = overview.days.reduce<(typeof overview.days)[number] | null>((best, day) => {
+    if (!best) return day;
+    if (day.appointmentCount > best.appointmentCount) return day;
+    if (day.appointmentCount === best.appointmentCount && day.bookedValue > best.bookedValue) return day;
+    return best;
+  }, null);
   const activeDay =
     overview.days.find((day) => day.date === selectedDate)
     ?? overview.days.find((day) => day.date === overview.selectedDate)
@@ -242,8 +250,29 @@ export function HomeWeeklyAppointmentOverviewCard({
   return (
     <Card className={dashboardPanelClassName}>
       <CardHeader className="border-b border-slate-100/90 pb-5">
-        <CardTitle className="text-xl tracking-[-0.03em]">Weekly Appointment Overview</CardTitle>
-        <CardDescription className="text-slate-500">{formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")}</CardDescription>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <CardTitle className="text-xl tracking-[-0.03em]">Weekly Appointment Overview</CardTitle>
+            <CardDescription className="text-slate-500">{formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")}</CardDescription>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[360px]">
+            <div className="rounded-[1rem] border border-slate-200/80 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Week load</p>
+              <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{totalAppointments}</p>
+              <p className="text-xs text-slate-500">appointments booked</p>
+            </div>
+            <div className="rounded-[1rem] border border-slate-200/80 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Booked value</p>
+              <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{formatDashboardCompactCurrency(totalBookedValue)}</p>
+              <p className="text-xs text-slate-500">scheduled this week</p>
+            </div>
+            <div className="rounded-[1rem] border border-slate-200/80 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Busiest day</p>
+              <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{busiestDay ? busiestDay.shortLabel : "--"}</p>
+              <p className="text-xs text-slate-500">{busiestDay ? `${busiestDay.appointmentCount} jobs` : "no load yet"}</p>
+            </div>
+          </div>
+        </div>
         <CardAction>
           <div className="flex items-center gap-2">
             <Button
@@ -287,7 +316,7 @@ export function HomeWeeklyAppointmentOverviewCard({
           />
         ) : (
           <>
-            <div className="hidden overflow-hidden rounded-[1.4rem] border border-slate-200/80 bg-slate-50/75 lg:grid lg:grid-cols-7">
+            <div className="hidden overflow-hidden rounded-[1.5rem] border border-slate-200/80 bg-slate-50/75 lg:grid lg:grid-cols-7">
               {overview.days.map((day) => {
                 const isActive = day.date === activeDay.date;
                 return (
@@ -296,12 +325,12 @@ export function HomeWeeklyAppointmentOverviewCard({
                     type="button"
                     onClick={() => onSelectDate?.(day.date)}
                     className={cn(
-                      "flex min-h-[400px] flex-col border-r border-slate-200/75 p-0 text-left transition-colors last:border-r-0",
+                      "flex min-h-[430px] flex-col border-r border-slate-200/75 p-0 text-left transition-colors last:border-r-0",
                       isActive ? "bg-white shadow-[inset_0_0_0_1px_rgba(37,99,235,0.24)]" : "bg-transparent hover:bg-white/70"
                     )}
                     aria-pressed={isActive}
                   >
-                    <div className="border-b border-slate-200/75 px-4 py-3.5">
+                    <div className={cn("border-b border-slate-200/75 px-4 py-3.5", isActive ? "bg-sky-50/60" : "bg-white/55")}>
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{day.shortLabel}</p>
@@ -316,26 +345,36 @@ export function HomeWeeklyAppointmentOverviewCard({
                           <ArrowUpRight className="h-3.5 w-3.5" />
                         </Link>
                       </div>
-                      <div className="mt-3 space-y-1.5">
-                        <p className="text-2xl font-semibold tracking-tight text-slate-950">{day.appointmentCount}</p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
-                          <span>{day.appointmentCount === 1 ? "appointment" : "appointments"}</span>
-                          <span className="text-slate-300">•</span>
-                          <span className="font-semibold text-slate-800">{formatDashboardCompactCurrency(day.bookedValue)} booked</span>
+                      <div className="mt-3 grid gap-2">
+                        <div className="flex items-end justify-between gap-2">
+                          <div>
+                            <p className="text-2xl font-semibold tracking-tight text-slate-950">{day.appointmentCount}</p>
+                            <p className="text-[11px] text-slate-500">{day.appointmentCount === 1 ? "appointment" : "appointments"}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Booked</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900">{formatDashboardCompactCurrency(day.bookedValue)}</p>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-1 flex-col justify-between px-4 py-4">
-                      <div className="space-y-3">
                         <div className="flex flex-wrap gap-1.5 text-[10px]">
                           <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Up {day.statusCounts.upcoming}</span>
                           <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Live {day.statusCounts.inProgress}</span>
                           <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">Done {day.statusCounts.completed}</span>
                           <span className="rounded-full bg-rose-50 px-2 py-1 text-rose-700">Cancel {day.statusCounts.cancelled}</span>
                         </div>
-
+                      </div>
+                    </div>
+                    <div className="flex flex-1 flex-col justify-between px-4 py-4">
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Queued work</p>
+                          {day.capacityUsage != null ? (
+                            <span className="rounded-full border border-slate-200/80 bg-white/80 px-2 py-1 text-[10px] font-semibold text-slate-600">
+                              Assigned {day.capacityUsage}%
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="space-y-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Next jobs</p>
                           {day.previewItems.length === 0 ? (
                             <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/70 px-2.5 py-3 text-xs text-slate-500">
                               No jobs queued yet.
@@ -346,7 +385,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                                 key={item.id}
                                 to={item.url}
                                 onClick={(event) => event.stopPropagation()}
-                                className="block rounded-[1rem] border border-slate-200/80 bg-white/94 px-3 py-3 transition-colors hover:border-sky-200 hover:bg-sky-50/45"
+                                className="block rounded-[1rem] border border-slate-200/80 bg-white/96 px-3 py-3 transition-colors hover:border-sky-200 hover:bg-sky-50/45"
                               >
                                 <div className="flex items-start justify-between gap-2.5">
                                   <div className="min-w-0">
@@ -356,21 +395,16 @@ export function HomeWeeklyAppointmentOverviewCard({
                                       {item.vehicleLabel ? ` · ${item.vehicleLabel}` : ""}
                                     </p>
                                   </div>
-                                  <p className="shrink-0 text-[11px] font-medium text-slate-500">
+                                  <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
                                     {formatDateLabel(item.startTime, "h:mm a")}
-                                  </p>
+                                  </span>
                                 </div>
                               </Link>
                             ))
                           )}
                         </div>
                       </div>
-                      {day.capacityUsage != null ? (
-                        <div className="flex items-center justify-between rounded-[0.95rem] border border-slate-200/75 bg-slate-100/85 px-2.5 py-2 text-[11px] text-slate-500">
-                          <span>Assigned</span>
-                          <span className="font-semibold text-slate-700">{day.capacityUsage}%</span>
-                        </div>
-                      ) : null}
+                      <div className="pt-2 text-[11px] text-slate-400">{isActive ? "Selected day" : "Open details below"}</div>
                     </div>
                   </button>
                 );
@@ -391,8 +425,10 @@ export function HomeWeeklyAppointmentOverviewCard({
                     <div className="flex items-start justify-between gap-3">
                       <button type="button" onClick={() => onSelectDate?.(day.date)} className="min-w-0 text-left" aria-pressed={isActive}>
                         <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{day.label}</p>
-                        <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{day.appointmentCount} {day.appointmentCount === 1 ? "appointment" : "appointments"}</p>
-                        <p className="text-sm font-medium text-slate-700">{formatDashboardCurrency(day.bookedValue)} booked</p>
+                        <div className="mt-1 flex items-end justify-between gap-3">
+                          <p className="text-lg font-semibold tracking-tight text-slate-950">{day.appointmentCount} {day.appointmentCount === 1 ? "appointment" : "appointments"}</p>
+                          <p className="text-sm font-medium text-slate-700">{formatDashboardCurrency(day.bookedValue)}</p>
+                        </div>
                       </button>
                       <Button asChild variant="ghost" size="icon" className="mt-0.5 h-8 w-8 rounded-full">
                         <Link to={day.calendarUrl} aria-label={`Open ${day.label} in calendar`}>
@@ -400,11 +436,11 @@ export function HomeWeeklyAppointmentOverviewCard({
                         </Link>
                       </Button>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
-                      <span>Upcoming {day.statusCounts.upcoming}</span>
-                      <span>In progress {day.statusCounts.inProgress}</span>
-                      <span>Completed {day.statusCounts.completed}</span>
-                      <span>Cancelled {day.statusCounts.cancelled}</span>
+                    <div className="mt-3 flex flex-wrap gap-1.5 text-[10px]">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Up {day.statusCounts.upcoming}</span>
+                      <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Live {day.statusCounts.inProgress}</span>
+                      <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">Done {day.statusCounts.completed}</span>
+                      <span className="rounded-full bg-rose-50 px-2 py-1 text-rose-700">Cancel {day.statusCounts.cancelled}</span>
                     </div>
                     <div className="mt-3 space-y-2">
                       {day.previewItems.length === 0 ? (
@@ -435,7 +471,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                     </div>
                     {day.capacityUsage != null ? (
                       <div className="mt-3 flex items-center justify-between rounded-[0.95rem] border border-slate-200/75 bg-slate-100/85 px-3 py-2 text-[11px] text-slate-500">
-                        <span>Assigned</span>
+                        <span>Assigned coverage</span>
                         <span className="font-semibold text-slate-700">{day.capacityUsage}%</span>
                       </div>
                     ) : null}
@@ -445,7 +481,7 @@ export function HomeWeeklyAppointmentOverviewCard({
             </div>
 
             <div className={cn(dashboardInsetClassName, "p-4")}>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Selected day</p>
                   <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{activeDay.label}, {formatDateLabel(activeDay.date, "MMM d")}</p>
@@ -453,14 +489,30 @@ export function HomeWeeklyAppointmentOverviewCard({
                     {activeDay.appointmentCount} appointments · {formatDashboardCurrency(activeDay.bookedValue)} booked
                   </p>
                 </div>
-                <Button asChild variant="outline" className="rounded-full border-slate-200 bg-white/80">
-                  <Link to={activeDay.calendarUrl}>
-                    Open day in calendar
-                    <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
-                  </Link>
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild variant="outline" className="rounded-full border-slate-200 bg-white/80">
+                    <Link to={activeDay.calendarUrl}>
+                      Open day in calendar
+                      <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
+                  <div className="rounded-full border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-500">
+                    {busiestDay?.date === activeDay.date ? "Highest load this week" : "Review details before dispatch"}
+                  </div>
+                </div>
               </div>
-              <div className="mt-4 space-y-2">
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <div className="rounded-[1rem] border border-slate-200/80 bg-white/90 px-3 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Status mix</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-[0.9rem] bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase tracking-[0.14em] text-slate-500">Upcoming</span><span className="mt-1 block font-semibold text-slate-900">{activeDay.statusCounts.upcoming}</span></div>
+                    <div className="rounded-[0.9rem] bg-blue-50 px-3 py-2"><span className="block text-[10px] uppercase tracking-[0.14em] text-blue-600">In progress</span><span className="mt-1 block font-semibold text-blue-900">{activeDay.statusCounts.inProgress}</span></div>
+                    <div className="rounded-[0.9rem] bg-emerald-50 px-3 py-2"><span className="block text-[10px] uppercase tracking-[0.14em] text-emerald-600">Completed</span><span className="mt-1 block font-semibold text-emerald-900">{activeDay.statusCounts.completed}</span></div>
+                    <div className="rounded-[0.9rem] bg-rose-50 px-3 py-2"><span className="block text-[10px] uppercase tracking-[0.14em] text-rose-600">Cancelled</span><span className="mt-1 block font-semibold text-rose-900">{activeDay.statusCounts.cancelled}</span></div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Day queue</p>
                 {activeDay.previewItems.length === 0 ? (
                     <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/80 px-3 py-4 text-sm text-slate-500">
                     No jobs queued for this day yet.
@@ -488,6 +540,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                     </Link>
                   ))
                 )}
+                </div>
               </div>
             </div>
           </>
