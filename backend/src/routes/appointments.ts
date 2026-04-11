@@ -2159,7 +2159,6 @@ appointmentsRouter.post("/:id/create-deposit-payment-session", requireAuth, requ
       title: appointments.title,
       clientId: appointments.clientId,
       depositAmount: appointments.depositAmount,
-      depositPaid: appointments.depositPaid,
     })
     .from(appointments)
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
@@ -2507,7 +2506,6 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
       notes: appointments.notes,
       totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
-      depositPaid: appointments.depositPaid,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
       clientEmail: clients.email,
@@ -2673,7 +2671,6 @@ appointmentsRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Re
       title: appointments.title,
       clientId: appointments.clientId,
       depositAmount: appointments.depositAmount,
-      depositPaid: appointments.depositPaid,
     })
     .from(appointments)
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, access.businessId)))
