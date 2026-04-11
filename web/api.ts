@@ -989,7 +989,7 @@ export const api = {
         shareOfRevenue: number;
       }>;
       }>("/actions/getGrowthMetrics", { method: "POST", body: JSON.stringify(params ?? {}) }),
-  getHomeDashboard: (params?: { range?: HomeDashboardRange; teamMemberId?: string | null }) =>
+  getHomeDashboard: (params?: { range?: HomeDashboardRange; teamMemberId?: string | null; weekStartDate?: string | null }) =>
     request<HomeDashboardSnapshot>("/actions/getHomeDashboard", { method: "POST", body: JSON.stringify(params ?? {}) }),
   updateHomeDashboardPreferences: (params?: {
     widgetOrder?: string[];

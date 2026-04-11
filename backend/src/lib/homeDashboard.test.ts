@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { PermissionKey } from "./permissions.js";
 import {
   applyActionQueuePriority,
+  buildBookingsOverview,
+  buildMonthlyRevenueChart,
+  buildWeeklyAppointmentOverview,
   buildQuickActions,
   calculateHomeDashboardHealth,
   getDashboardModulePermissions,
@@ -69,9 +72,16 @@ describe("home dashboard domain logic", () => {
     const today = getHomeDashboardCacheKey({ ...base, range: "today", teamMemberId: null });
     const week = getHomeDashboardCacheKey({ ...base, range: "week", teamMemberId: null });
     const team = getHomeDashboardCacheKey({ ...base, range: "today", teamMemberId: "staff-1" });
+    const selectedWeek = getHomeDashboardCacheKey({
+      ...base,
+      range: "today",
+      teamMemberId: null,
+      weekStartDate: "2026-04-13",
+    });
 
     expect(today).not.toBe(week);
     expect(today).not.toBe(team);
+    expect(today).not.toBe(selectedWeek);
   });
 
   it("returns business and user cache tags for easy invalidation", () => {
@@ -238,6 +248,141 @@ describe("home dashboard domain logic", () => {
       "send_reminder",
     ]);
     expect(buildQuickActions(technicianPermissions, [...technicianRawPermissions]).map((action) => action.key)).toEqual([]);
+  });
+
+  it("builds a weekly appointment overview grouped by business day", () => {
+    const days = buildWeeklyAppointmentOverview({
+      weekStart: new Date("2026-04-06T07:00:00.000Z"),
+      timezone: "America/Los_Angeles",
+      staffCount: 4,
+      rows: [
+        {
+          id: "appt-1",
+          title: "Coating",
+          status: "scheduled",
+          jobPhase: null,
+          startTime: new Date("2026-04-07T16:00:00.000Z"),
+          endTime: new Date("2026-04-07T18:00:00.000Z"),
+          jobStartTime: null,
+          expectedCompletionTime: null,
+          pickupReadyTime: null,
+          vehicleOnSite: false,
+          totalPrice: "800",
+          depositAmount: "200",
+          clientId: null,
+          clientFirstName: null,
+          clientLastName: null,
+          vehicleId: null,
+          vehicleYear: null,
+          vehicleMake: null,
+          vehicleModel: null,
+          assignedStaffId: "staff-1",
+          staffFirstName: null,
+          staffLastName: null,
+          locationId: null,
+          locationName: null,
+          createdAt: new Date("2026-04-05T16:00:00.000Z"),
+          completedAt: null,
+        },
+        {
+          id: "appt-2",
+          title: "Wash",
+          status: "completed",
+          jobPhase: null,
+          startTime: new Date("2026-04-07T20:00:00.000Z"),
+          endTime: new Date("2026-04-07T21:00:00.000Z"),
+          jobStartTime: null,
+          expectedCompletionTime: null,
+          pickupReadyTime: null,
+          vehicleOnSite: false,
+          totalPrice: "200",
+          depositAmount: null,
+          clientId: null,
+          clientFirstName: null,
+          clientLastName: null,
+          vehicleId: null,
+          vehicleYear: null,
+          vehicleMake: null,
+          vehicleModel: null,
+          assignedStaffId: "staff-2",
+          staffFirstName: null,
+          staffLastName: null,
+          locationId: null,
+          locationName: null,
+          createdAt: new Date("2026-04-05T18:00:00.000Z"),
+          completedAt: new Date("2026-04-07T22:00:00.000Z"),
+        },
+      ],
+    });
+
+    expect(days).toHaveLength(7);
+    expect(days[0]?.shortLabel).toBe("Mon");
+    expect(days[1]).toMatchObject({
+      appointmentCount: 2,
+      bookedValue: 1000,
+      statusCounts: {
+        upcoming: 1,
+        inProgress: 0,
+        completed: 1,
+        cancelled: 0,
+      },
+      capacityUsage: 50,
+    });
+    expect(days[1]?.previewItems[0]).toMatchObject({
+      id: "appt-1",
+      title: "Coating",
+      url: "/appointments/appt-1",
+    });
+  });
+
+  it("builds monthly revenue bars from booked and collected activity", () => {
+    const days = buildMonthlyRevenueChart({
+      monthStart: new Date("2026-04-01T07:00:00.000Z"),
+      monthEnd: new Date("2026-04-30T06:59:59.999Z"),
+      timezone: "America/Los_Angeles",
+      monthlyRevenueGoal: 10000,
+      bookedAppointments: [{ createdAt: new Date("2026-04-02T16:00:00.000Z"), totalPrice: "500" }],
+      standaloneInvoices: [{ createdAt: new Date("2026-04-03T16:00:00.000Z"), total: "300" }],
+      invoicePayments: [{ paidAt: new Date("2026-04-04T16:00:00.000Z"), amount: "250" }],
+      directPayments: [{ createdAt: new Date("2026-04-02T18:00:00.000Z"), action: "appointment.deposit_paid", metadata: JSON.stringify({ amount: 150 }) }],
+    });
+
+    expect(days[1]).toMatchObject({ dayOfMonth: 2, bookedRevenue: 500, collectedRevenue: 150 });
+    expect(days[2]).toMatchObject({ dayOfMonth: 3, bookedRevenue: 300 });
+    expect(days[3]).toMatchObject({ dayOfMonth: 4, collectedRevenue: 250 });
+  });
+
+  it("builds the bookings overview from appointments, quotes, pipeline, and deposit pressure", () => {
+    const overview = buildBookingsOverview({
+      todayStart: new Date("2026-04-10T07:00:00.000Z"),
+      todayEnd: new Date("2026-04-11T06:59:59.999Z"),
+      weekStart: new Date("2026-04-06T07:00:00.000Z"),
+      weekEnd: new Date("2026-04-13T06:59:59.999Z"),
+      monthAppointments: [
+        { id: "1", status: "scheduled", totalPrice: "500", createdAt: new Date("2026-04-10T16:00:00.000Z"), completedAt: null },
+        { id: "2", status: "completed", totalPrice: "250", createdAt: new Date("2026-04-08T16:00:00.000Z"), completedAt: new Date("2026-04-09T16:00:00.000Z") },
+      ],
+      quoteRows: [
+        { status: "sent", sentAt: new Date("2026-04-09T16:00:00.000Z"), total: "400" },
+        { status: "accepted", sentAt: new Date("2026-04-08T16:00:00.000Z"), total: "600" },
+      ],
+      pipelineStages: [{ key: "booked", label: "Booked", count: 2, value: 750 }],
+      depositsCollectedAmount: 300,
+      depositsDueAmount: 150,
+      depositsDueCount: 1,
+    });
+
+    expect(overview).toMatchObject({
+      bookingsToday: 1,
+      bookingsThisWeek: 2,
+      bookingsThisMonth: 2,
+      quotesSent: 2,
+      quotesAccepted: 1,
+      averageTicketValue: 375,
+      depositsCollectedAmount: 300,
+      depositsDueAmount: 150,
+      depositsDueCount: 1,
+    });
   });
 
   it("computes transparent health scores from only the permitted factors", () => {

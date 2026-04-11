@@ -47,6 +47,7 @@ export const actionsRouter = Router({ mergeParams: true });
 const homeDashboardSchema = z.object({
   range: z.enum(["today", "week", "month"]).optional(),
   teamMemberId: z.string().uuid().nullable().optional(),
+  weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 });
 
 const homeDashboardPreferencesSchema = z.object({
@@ -841,6 +842,7 @@ actionsRouter.post("/getHomeDashboard", requireAuth, requireTenant, requirePermi
     permissions: req.permissions ?? [],
     range: parsed.data.range,
     teamMemberId: parsed.data.teamMemberId ?? null,
+    weekStartDate: parsed.data.weekStartDate ?? null,
   });
   return res.json(snapshot);
 });

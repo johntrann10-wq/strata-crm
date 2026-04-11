@@ -31,7 +31,7 @@ import { buildVehicleDisplayName } from "./vehicleFormatting.js";
 type DbExecutor = typeof db;
 
 const DEFAULT_TIMEZONE = "America/New_York";
-const WEEK_START_DAY = 0;
+const WEEK_START_DAY = 1;
 const MAX_RECENT_ACTIVITY = 20;
 const MAX_ACTION_QUEUE_ITEMS = 18;
 const HOME_DASHBOARD_CACHE_TTL_MS = 30_000;
@@ -243,6 +243,53 @@ export type HomeDashboardGoals = {
   currentJobs: number;
 };
 
+export type HomeDashboardWeeklyOverviewDay = {
+  date: string;
+  label: string;
+  shortLabel: string;
+  appointmentCount: number;
+  bookedValue: number;
+  statusCounts: {
+    upcoming: number;
+    inProgress: number;
+    completed: number;
+    cancelled: number;
+  };
+  capacityUsage: number | null;
+  calendarUrl: string;
+  previewItems: Array<{
+    id: string;
+    title: string;
+    clientName: string;
+    vehicleLabel: string;
+    startTime: string;
+    url: string;
+  }>;
+};
+
+export type HomeDashboardMonthlyRevenueDay = {
+  date: string;
+  dayOfMonth: number;
+  bookedRevenue: number;
+  collectedRevenue: number;
+  goalPaceRevenue: number | null;
+};
+
+export type HomeDashboardBookingsOverview = {
+  allowed: boolean;
+  bookingsToday: number;
+  bookingsThisWeek: number;
+  bookingsThisMonth: number;
+  quotesSent: number;
+  quotesAccepted: number;
+  quoteToBookConversionRate: number | null;
+  averageTicketValue: number | null;
+  depositsCollectedAmount: number;
+  depositsDueAmount: number;
+  depositsDueCount: number;
+  funnel: HomeDashboardPipelineStage[];
+};
+
 export type HomeDashboardPreferences = {
   widgetOrder: HomeDashboardWidgetKey[];
   hiddenWidgets: HomeDashboardWidgetKey[];
@@ -316,6 +363,24 @@ export type HomeDashboardSnapshot = {
     allowed: boolean;
     stages: HomeDashboardPipelineStage[];
   };
+  weeklyOverview: {
+    allowed: boolean;
+    weekStart: string;
+    weekEnd: string;
+    selectedDate: string | null;
+    days: HomeDashboardWeeklyOverviewDay[];
+  };
+  monthlyRevenueChart: {
+    allowed: boolean;
+    monthStart: string;
+    monthEnd: string;
+    totalBookedThisMonth: number;
+    totalCollectedThisMonth: number;
+    percentToGoal: number | null;
+    goalAmount: number | null;
+    days: HomeDashboardMonthlyRevenueDay[];
+  };
+  bookingsOverview: HomeDashboardBookingsOverview;
   revenueCollections: {
     allowed: boolean;
     bookedRevenueThisWeek: number;
@@ -365,7 +430,7 @@ export type HomeDashboardSnapshot = {
   };
   goals: HomeDashboardGoals;
   definitions: {
-    weekStartsOn: "sunday";
+    weekStartsOn: "monday";
     uncontactedLead: string;
     quoteFollowUp: string;
     depositDue: string;
@@ -374,6 +439,9 @@ export type HomeDashboardSnapshot = {
     todayJobs: string;
     cashCollectedToday: string;
     bookedRevenueThisWeek: string;
+    weeklyOverview: string;
+    monthlyRevenueChart: string;
+    bookingsOverview: string;
   };
 };
 
@@ -384,6 +452,7 @@ type HomeDashboardParams = {
   permissions?: PermissionKey[] | null;
   range?: HomeDashboardRange;
   teamMemberId?: string | null;
+  weekStartDate?: string | null;
   now?: Date;
   tx?: DbExecutor;
   skipCache?: boolean;
@@ -636,6 +705,39 @@ function isSameBusinessDay(value: Date | null | undefined, reference: Date, time
   return getBusinessDateKey(value, timezone) === getBusinessDateKey(reference, timezone);
 }
 
+function getBusinessWeekDays(weekStart: Date, timezone: string) {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = addBusinessDays(weekStart, timezone, index);
+    return {
+      date,
+      key: getBusinessDateKey(date, timezone),
+      label: new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "long" }).format(date),
+      shortLabel: new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(date),
+    };
+  });
+}
+
+function parseBusinessDateInput(value: string | null | undefined, timezone: string) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return zonedDateTimeToUtc(timezone, year, month, day, 0, 0, 0, 0);
+}
+
+function getAppointmentOverviewStatus(status: string | null | undefined) {
+  switch ((status ?? "").toLowerCase()) {
+    case "completed":
+      return "completed";
+    case "in_progress":
+      return "inProgress";
+    case "cancelled":
+    case "no-show":
+      return "cancelled";
+    default:
+      return "upcoming";
+  }
+}
+
 export function getDashboardModulePermissions(permissions: PermissionKey[] = []): DashboardModulePermissions {
   const has = (permission: PermissionKey) => permissions.includes(permission);
   return {
@@ -868,6 +970,7 @@ export function getHomeDashboardCacheKey(input: {
   timezone: string;
   range?: HomeDashboardRange;
   teamMemberId?: string | null;
+  weekStartDate?: string | null;
   preferencesVersion?: string | null;
   now: Date;
 }) {
@@ -875,9 +978,10 @@ export function getHomeDashboardCacheKey(input: {
   const permissionsKey = (input.permissions ?? []).slice().sort().join(",");
   const rangeKey = input.range ?? "today";
   const teamKey = input.teamMemberId ?? "all";
+  const weekKey = input.weekStartDate ?? "current";
   const prefsKey = input.preferencesVersion ?? "no-prefs";
   const hash = createHash("sha1")
-    .update(`${input.businessId}:${input.userId ?? "anonymous"}:${permissionsKey}:${dayKey}:${rangeKey}:${teamKey}:${prefsKey}`)
+    .update(`${input.businessId}:${input.userId ?? "anonymous"}:${permissionsKey}:${dayKey}:${rangeKey}:${teamKey}:${weekKey}:${prefsKey}`)
     .digest("hex")
     .slice(0, 16);
   return `home-dashboard:${input.businessId}:${hash}`;
@@ -1532,6 +1636,177 @@ function buildPipelineStages(params: {
   ] as HomeDashboardPipelineStage[];
 }
 
+export function buildWeeklyAppointmentOverview(params: {
+  rows: AppointmentDashboardRow[];
+  weekStart: Date;
+  timezone: string;
+  staffCount: number | null | undefined;
+}) {
+  const weekDays = getBusinessWeekDays(params.weekStart, params.timezone);
+  const buckets = new Map(
+    weekDays.map((day) => [
+      day.key,
+      {
+        date: day.key,
+        label: day.label,
+        shortLabel: day.shortLabel,
+        appointmentCount: 0,
+        bookedValue: 0,
+        statusCounts: {
+          upcoming: 0,
+          inProgress: 0,
+          completed: 0,
+          cancelled: 0,
+        },
+        assignedStaffIds: new Set<string>(),
+        previewItems: [] as HomeDashboardWeeklyOverviewDay["previewItems"],
+      },
+    ])
+  );
+
+  for (const row of params.rows) {
+    const primaryStart = getAppointmentPrimaryStart(row);
+    const bucket = buckets.get(getBusinessDateKey(primaryStart, params.timezone));
+    if (!bucket) continue;
+    bucket.appointmentCount += 1;
+    bucket.bookedValue += toMoneyNumber(row.totalPrice);
+    bucket.statusCounts[getAppointmentOverviewStatus(row.status)] += 1;
+    if (row.assignedStaffId) bucket.assignedStaffIds.add(row.assignedStaffId);
+    if (bucket.previewItems.length < 4) {
+      bucket.previewItems.push({
+        id: row.id,
+        title: row.title?.trim() || "Appointment",
+        clientName: formatPersonName(row.clientFirstName, row.clientLastName),
+        vehicleLabel: buildVehicleDisplayName({
+          year: row.vehicleYear,
+          make: row.vehicleMake,
+          model: row.vehicleModel,
+        }),
+        startTime: row.startTime.toISOString(),
+        url: buildAppPath(`/appointments/${row.id}`),
+      });
+    }
+  }
+
+  return weekDays.map((day) => {
+    const bucket = buckets.get(day.key)!;
+    const capacityUsage =
+      params.staffCount && params.staffCount > 0
+        ? Math.max(0, Math.min(100, Math.round((bucket.assignedStaffIds.size / params.staffCount) * 100)))
+        : null;
+    return {
+      date: bucket.date,
+      label: bucket.label,
+      shortLabel: bucket.shortLabel,
+      appointmentCount: bucket.appointmentCount,
+      bookedValue: Number(bucket.bookedValue.toFixed(2)),
+      statusCounts: bucket.statusCounts,
+      capacityUsage,
+      calendarUrl: `/calendar?view=day&date=${encodeURIComponent(bucket.date)}`,
+      previewItems: bucket.previewItems,
+    } satisfies HomeDashboardWeeklyOverviewDay;
+  });
+}
+
+export function buildMonthlyRevenueChart(params: {
+  monthStart: Date;
+  monthEnd: Date;
+  timezone: string;
+  bookedAppointments: Array<Pick<AppointmentDashboardRow, "createdAt" | "totalPrice">>;
+  standaloneInvoices: Array<Pick<InvoiceSnapshotRow, "createdAt" | "total">>;
+  invoicePayments: Array<{ paidAt: Date; amount: MoneyLike }>;
+  directPayments: Array<{ createdAt: Date; action: string; metadata: string | null }>;
+  monthlyRevenueGoal: number | null;
+}) {
+  const monthStartParts = getTimeZoneParts(params.monthStart, params.timezone);
+  const totalDays = getTimeZoneParts(params.monthEnd, params.timezone).day;
+  const goalPacePerDay =
+    params.monthlyRevenueGoal && params.monthlyRevenueGoal > 0 ? params.monthlyRevenueGoal / Math.max(totalDays, 1) : null;
+
+  const days = Array.from({ length: totalDays }, (_, index) => {
+    const date = zonedDateTimeToUtc(params.timezone, monthStartParts.year, monthStartParts.month, index + 1, 0, 0, 0, 0);
+    return {
+      date: getBusinessDateKey(date, params.timezone),
+      dayOfMonth: index + 1,
+      bookedRevenue: 0,
+      collectedRevenue: 0,
+      goalPaceRevenue: goalPacePerDay != null ? Number((((index + 1) * goalPacePerDay)).toFixed(2)) : null,
+    };
+  });
+
+  const indexByDate = new Map(days.map((day, index) => [day.date, index]));
+  const addBooked = (date: Date, amount: MoneyLike) => {
+    const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
+    if (index == null) return;
+    days[index]!.bookedRevenue += toMoneyNumber(amount);
+  };
+  const addCollected = (date: Date, amount: number) => {
+    const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
+    if (index == null) return;
+    days[index]!.collectedRevenue += amount;
+  };
+
+  for (const row of params.bookedAppointments) addBooked(row.createdAt, row.totalPrice);
+  for (const row of params.standaloneInvoices) addBooked(row.createdAt, row.total);
+  for (const row of params.invoicePayments) addCollected(row.paidAt, toMoneyNumber(row.amount));
+  for (const row of params.directPayments) {
+    const metadata = safeParseMetadata(row.metadata);
+    const amount = toMoneyNumber(metadata.amount as MoneyLike);
+    if (amount <= 0) continue;
+    addCollected(row.createdAt, row.action === "appointment.deposit_payment_reversed" ? -amount : amount);
+  }
+
+  return days.map((day) => ({
+    ...day,
+    bookedRevenue: Number(day.bookedRevenue.toFixed(2)),
+    collectedRevenue: Number(day.collectedRevenue.toFixed(2)),
+  })) as HomeDashboardMonthlyRevenueDay[];
+}
+
+export function buildBookingsOverview(params: {
+  todayStart: Date;
+  todayEnd: Date;
+  weekStart: Date;
+  weekEnd: Date;
+  monthAppointments: Array<Pick<AppointmentDashboardRow, "id" | "status" | "totalPrice" | "createdAt" | "completedAt">>;
+  quoteRows: Array<{ status: string; sentAt: Date | null; total: MoneyLike }>;
+  pipelineStages: HomeDashboardPipelineStage[];
+  depositsCollectedAmount: number;
+  depositsDueAmount: number;
+  depositsDueCount: number;
+}) {
+  const bookingsToday = params.monthAppointments.filter((row) => row.createdAt >= params.todayStart && row.createdAt <= params.todayEnd).length;
+  const bookingsThisWeek = params.monthAppointments.filter((row) => row.createdAt >= params.weekStart && row.createdAt <= params.weekEnd).length;
+  const bookingsThisMonth = params.monthAppointments.length;
+  const quotesSent = params.quoteRows.filter((row) => row.status === "sent" || row.sentAt != null).length;
+  const quotesAccepted = params.quoteRows.filter((row) => row.status === "accepted").length;
+  const quoteToBookConversionRate = quotesSent > 0 ? Math.round((bookingsThisMonth / Math.max(quotesSent, 1)) * 100) : null;
+  const averageTicketValue =
+    bookingsThisMonth > 0
+      ? Number(
+          (
+            params.monthAppointments.reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0) /
+            Math.max(bookingsThisMonth, 1)
+          ).toFixed(2)
+        )
+      : null;
+
+  return {
+    allowed: true,
+    bookingsToday,
+    bookingsThisWeek,
+    bookingsThisMonth,
+    quotesSent,
+    quotesAccepted,
+    quoteToBookConversionRate,
+    averageTicketValue,
+    depositsCollectedAmount: Number(params.depositsCollectedAmount.toFixed(2)),
+    depositsDueAmount: Number(params.depositsDueAmount.toFixed(2)),
+    depositsDueCount: params.depositsDueCount,
+    funnel: params.pipelineStages,
+  } satisfies HomeDashboardBookingsOverview;
+}
+
 function buildRecentActivityEvents(params: {
   rows: Array<{
     id: string;
@@ -1949,6 +2224,58 @@ async function loadTodayAppointments(
       and(
         eq(appointments.businessId, businessId),
         sql`${appointments.status} not in ('cancelled', 'no-show')`,
+        sql`coalesce(${appointments.jobStartTime}, ${appointments.startTime}) <= ${windowEnd}`,
+        sql`coalesce(${appointments.pickupReadyTime}, ${appointments.expectedCompletionTime}, ${appointments.endTime}, ${appointments.startTime}) >= ${windowStart}`,
+        teamMemberId ? eq(appointments.assignedStaffId, teamMemberId) : undefined
+      )
+    )
+    .orderBy(asc(appointments.startTime));
+}
+
+async function loadWeeklyOverviewAppointments(
+  businessId: string,
+  windowStart: Date,
+  windowEnd: Date,
+  teamMemberId: string | null | undefined,
+  tx: DbExecutor
+): Promise<AppointmentDashboardRow[]> {
+  return tx
+    .select({
+      id: appointments.id,
+      title: appointments.title,
+      status: appointments.status,
+      jobPhase: appointments.jobPhase,
+      startTime: appointments.startTime,
+      endTime: appointments.endTime,
+      jobStartTime: appointments.jobStartTime,
+      expectedCompletionTime: appointments.expectedCompletionTime,
+      pickupReadyTime: appointments.pickupReadyTime,
+      vehicleOnSite: appointments.vehicleOnSite,
+      totalPrice: appointments.totalPrice,
+      depositAmount: appointments.depositAmount,
+      clientId: clients.id,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      vehicleId: vehicles.id,
+      vehicleYear: vehicles.year,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
+      assignedStaffId: staff.id,
+      staffFirstName: staff.firstName,
+      staffLastName: staff.lastName,
+      locationId: locations.id,
+      locationName: locations.name,
+      createdAt: appointments.createdAt,
+      completedAt: appointments.completedAt,
+    })
+    .from(appointments)
+    .leftJoin(clients, eq(appointments.clientId, clients.id))
+    .leftJoin(vehicles, eq(appointments.vehicleId, vehicles.id))
+    .leftJoin(staff, eq(appointments.assignedStaffId, staff.id))
+    .leftJoin(locations, eq(appointments.locationId, locations.id))
+    .where(
+      and(
+        eq(appointments.businessId, businessId),
         sql`coalesce(${appointments.jobStartTime}, ${appointments.startTime}) <= ${windowEnd}`,
         sql`coalesce(${appointments.pickupReadyTime}, ${appointments.expectedCompletionTime}, ${appointments.endTime}, ${appointments.startTime}) >= ${windowStart}`,
         teamMemberId ? eq(appointments.assignedStaffId, teamMemberId) : undefined
@@ -2407,6 +2734,56 @@ async function sumDirectAppointmentPaymentsInRange(
   }, 0);
 }
 
+async function loadInvoicePaymentRowsInRange(
+  businessId: string,
+  start: Date,
+  end: Date,
+  tx: DbExecutor
+) {
+  return tx
+    .select({
+      paidAt: payments.paidAt,
+      amount: payments.amount,
+    })
+    .from(payments)
+    .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+    .where(
+      and(
+        eq(invoices.businessId, businessId),
+        isNull(payments.reversedAt),
+        gte(payments.paidAt, start),
+        lte(payments.paidAt, end),
+        sql`${invoices.status} != 'void'`
+      )
+    )
+    .orderBy(asc(payments.paidAt));
+}
+
+async function loadDirectAppointmentPaymentRowsInRange(
+  businessId: string,
+  start: Date,
+  end: Date,
+  tx: DbExecutor
+) {
+  return tx
+    .select({
+      createdAt: activityLogs.createdAt,
+      action: activityLogs.action,
+      metadata: activityLogs.metadata,
+    })
+    .from(activityLogs)
+    .where(
+      and(
+        eq(activityLogs.businessId, businessId),
+        eq(activityLogs.entityType, "appointment"),
+        gte(activityLogs.createdAt, start),
+        lte(activityLogs.createdAt, end),
+        sql`${activityLogs.action} in ('appointment.deposit_paid', 'appointment.deposit_payment_reversed')`
+      )
+    )
+    .orderBy(asc(activityLogs.createdAt));
+}
+
 function buildActionQueue(params: {
   context: ActionQueueContext;
   leadRows: LeadRow[];
@@ -2612,6 +2989,17 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
   const timezone = business.timezone ?? DEFAULT_TIMEZONE;
   const timeOfDay = getDashboardTimeOfDay(now, timezone);
   const effectiveLayout = mergeWidgetPreferences(params.membershipRole ?? null, timeOfDay, preferences);
+  const requestedWeekDate = parseBusinessDateInput(params.weekStartDate ?? null, timezone);
+  const selectedWeekStart = startOfBusinessWeek(requestedWeekDate ?? now, timezone);
+  const selectedWeekEnd = endOfBusinessWeek(selectedWeekStart, timezone);
+  const selectedBusinessDateKey = getBusinessDateKey(
+    requestedWeekDate && requestedWeekDate >= selectedWeekStart && requestedWeekDate <= selectedWeekEnd
+      ? requestedWeekDate
+      : now >= selectedWeekStart && now <= selectedWeekEnd
+        ? now
+        : selectedWeekStart,
+    timezone
+  );
   const cacheKey = getHomeDashboardCacheKey({
     businessId: params.businessId,
     userId: params.userId ?? null,
@@ -2619,6 +3007,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     timezone,
     range: selectedRange,
     teamMemberId: selectedTeamMemberId,
+    weekStartDate: getBusinessDateKey(selectedWeekStart, timezone),
     preferencesVersion: preferences.updatedAt,
     now,
   });
@@ -2716,6 +3105,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
 
   const [
     todayAppointments,
+    weekOverviewAppointments,
     invoiceRows,
     leadRows,
     quoteRows,
@@ -2734,6 +3124,12 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       [] as AppointmentDashboardRow[],
       ["summary_today", "today_schedule", "action_queue", "business_health"],
       () => loadTodayAppointments(params.businessId, scheduleWindowStart, scheduleWindowEnd, selectedTeamMemberId, tx)
+    ),
+    loadOrFallback(
+      "weekOverviewAppointments",
+      [] as AppointmentDashboardRow[],
+      ["today_schedule"],
+      () => loadWeeklyOverviewAppointments(params.businessId, selectedWeekStart, selectedWeekEnd, selectedTeamMemberId, tx)
     ),
     loadOrFallback(
       "invoiceSnapshots",
@@ -2891,6 +3287,8 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     directCollectedThisWeek,
     invoiceCollectedThisMonth,
     directCollectedThisMonth,
+    invoicePaymentRowsThisMonth,
+    directPaymentRowsThisMonth,
   ] = await Promise.all([
     loadOrFallback("invoiceCollectedToday", 0, ["summary_cash", "revenue_collections", "goals"], () =>
       sumInvoicePaymentsInRange(params.businessId, todayStart, todayEnd, tx)
@@ -2909,6 +3307,18 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     ),
     loadOrFallback("directCollectedThisMonth", 0, ["summary_cash", "revenue_collections", "goals"], () =>
       sumDirectAppointmentPaymentsInRange(params.businessId, monthStart, monthEnd, tx)
+    ),
+    loadOrFallback(
+      "invoicePaymentRowsThisMonth",
+      [] as Awaited<ReturnType<typeof loadInvoicePaymentRowsInRange>>,
+      ["revenue_collections"],
+      () => loadInvoicePaymentRowsInRange(params.businessId, monthStart, monthEnd, tx)
+    ),
+    loadOrFallback(
+      "directPaymentRowsThisMonth",
+      [] as Awaited<ReturnType<typeof loadDirectAppointmentPaymentRowsInRange>>,
+      ["revenue_collections"],
+      () => loadDirectAppointmentPaymentRowsInRange(params.businessId, monthStart, monthEnd, tx)
     ),
   ]);
   const collectedToday = invoiceCollectedToday + directCollectedToday;
@@ -2971,6 +3381,39 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     })
   );
 
+  const weeklyOverviewDays = buildOrFallback(
+    "weeklyOverviewDays",
+    [] as HomeDashboardWeeklyOverviewDay[],
+    ["today_schedule"],
+    () =>
+      buildWeeklyAppointmentOverview({
+        rows: weekOverviewAppointments,
+        weekStart: selectedWeekStart,
+        timezone,
+        staffCount: business.staffCount,
+      })
+  );
+
+  const monthStandaloneInvoices = invoiceRows.filter(
+    (row) => !row.appointmentId && row.createdAt >= monthStart && row.createdAt <= monthEnd
+  );
+  const monthlyRevenueDays = buildOrFallback(
+    "monthlyRevenueDays",
+    [] as HomeDashboardMonthlyRevenueDay[],
+    ["revenue_collections", "goals"],
+    () =>
+      buildMonthlyRevenueChart({
+        monthStart,
+        monthEnd,
+        timezone,
+        bookedAppointments: monthAppointments,
+        standaloneInvoices: monthStandaloneInvoices,
+        invoicePayments: invoicePaymentRowsThisMonth,
+        directPayments: directPaymentRowsThisMonth,
+        monthlyRevenueGoal: toMoneyNumber(business.monthlyRevenueGoal),
+      })
+  );
+
   const recentActivityItems = buildOrFallback(
     "recentActivityItems",
     [] as HomeDashboardRecentActivityEvent[],
@@ -3029,6 +3472,41 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     depositsDueAmount: modulePermissions.revenueCollections ? Number(depositsDueAmount.toFixed(2)) : 0,
     depositsDueCount: modulePermissions.revenueCollections ? depositsDueRows.length : 0,
   };
+
+  const bookingsOverview = buildOrFallback(
+    "bookingsOverview",
+    {
+      allowed: false,
+      bookingsToday: 0,
+      bookingsThisWeek: 0,
+      bookingsThisMonth: 0,
+      quotesSent: 0,
+      quotesAccepted: 0,
+      quoteToBookConversionRate: null,
+      averageTicketValue: null,
+      depositsCollectedAmount: 0,
+      depositsDueAmount: 0,
+      depositsDueCount: 0,
+      funnel: [],
+    } as HomeDashboardBookingsOverview,
+    ["summary_today", "summary_conversion", "summary_cash", "pipeline", "revenue_collections"],
+    () =>
+      ({
+        ...buildBookingsOverview({
+          todayStart,
+          todayEnd,
+          weekStart,
+          weekEnd,
+          monthAppointments,
+          quoteRows,
+          pipelineStages,
+          depositsCollectedAmount: directCollectedThisMonth,
+          depositsDueAmount,
+          depositsDueCount: depositsDueRows.length,
+        }),
+        allowed: modulePermissions.today || modulePermissions.pipeline || modulePermissions.revenueCollections || modulePermissions.conversion,
+      }) as HomeDashboardBookingsOverview
+  );
 
   const sinceLastChecked = buildOrFallback(
     "sinceLastChecked",
@@ -3192,6 +3670,44 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       allowed: modulePermissions.pipeline,
       stages: modulePermissions.pipeline ? pipelineStages : [],
     },
+    weeklyOverview: {
+      allowed: modulePermissions.todaySchedule,
+      weekStart: selectedWeekStart.toISOString(),
+      weekEnd: selectedWeekEnd.toISOString(),
+      selectedDate: selectedBusinessDateKey,
+      days: modulePermissions.todaySchedule ? weeklyOverviewDays : [],
+    },
+    monthlyRevenueChart: {
+      allowed: modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash,
+      monthStart: monthStart.toISOString(),
+      monthEnd: monthEnd.toISOString(),
+      totalBookedThisMonth:
+        modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
+          ? Number(
+              (
+                monthAppointments.reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0) +
+                monthStandaloneInvoices.reduce((sum, row) => sum + toMoneyNumber(row.total), 0)
+              ).toFixed(2)
+            )
+          : 0,
+      totalCollectedThisMonth:
+        modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
+          ? Number(currentRevenue.toFixed(2))
+          : 0,
+      percentToGoal: modulePermissions.goals ? goals.percentToGoal : null,
+      goalAmount: modulePermissions.goals ? goals.monthlyRevenueGoal : null,
+      days:
+        modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
+          ? monthlyRevenueDays
+          : [],
+    },
+    bookingsOverview: {
+      ...bookingsOverview,
+      allowed:
+        bookingsOverview.allowed &&
+        (modulePermissions.today || modulePermissions.pipeline || modulePermissions.revenueCollections || modulePermissions.conversion),
+      funnel: modulePermissions.pipeline ? bookingsOverview.funnel : [],
+    },
     revenueCollections,
     recentActivity: {
       allowed: modulePermissions.recentActivity,
@@ -3217,7 +3733,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     },
     goals,
     definitions: {
-      weekStartsOn: "sunday",
+      weekStartsOn: "monday",
       uncontactedLead: `Lead record with status "new", no first-contact timestamp, and created more than ${uncontactedLeadHours} hour(s) ago.`,
       quoteFollowUp: `Sent quote without a follow-up timestamp after the business abandoned-quote delay (${quoteFollowUpHours} hour(s)).`,
       depositDue: "Appointment starting in the next 48 hours with a required deposit that is not yet satisfied.",
@@ -3227,6 +3743,12 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       cashCollectedToday: "Successful invoice payments today plus direct appointment payments logged today, net of reversals.",
       bookedRevenueThisWeek:
         "Appointment value created this week plus standalone invoice value created this week, excluding void invoices to avoid double-counting linked work.",
+      weeklyOverview:
+        "Weekly appointment overview buckets appointments by their operational start day within the selected Monday-through-Sunday business week and summarizes status, booked value, assigned-capacity usage, and next jobs for each day.",
+      monthlyRevenueChart:
+        "Monthly revenue chart groups booked revenue by booking creation day and collected revenue by payment day within the current business month.",
+      bookingsOverview:
+        "Bookings overview combines booking counts, quotes, ticket value, and deposit pressure from real appointments, quotes, and finance records.",
     },
   };
   if (!params.skipCache) {

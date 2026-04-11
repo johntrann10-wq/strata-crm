@@ -1,34 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Link, Navigate, useOutletContext, useSearchParams } from "react-router";
 import { formatDistanceToNowStrict } from "date-fns";
-import { AlertCircle, CalendarPlus, RefreshCw, Settings2 } from "lucide-react";
+import { AlertCircle, CalendarPlus, RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import {
-  HomeActionQueueCard,
-  HomeAutomationsCard,
-  HomeBusinessHealthCard,
   DashboardPageErrorGrid,
   HomeDashboardTopBar,
-  HomeGoalsCard,
-  HomePipelineCard,
-  HomeQuickActionsCard,
-  HomeRecentActivityCard,
-  HomeRevenueCollectionsCard,
-  HomeSignalsStrip,
-  HomeSummaryCards,
-  HomeTodayScheduleCard,
 } from "@/components/dashboard/HomeDashboardWidgets";
+import {
+  HomeBookingsOverviewCard,
+  HomeBottomPanels,
+  HomeCompactQuickActions,
+  HomeMonthlyRevenueChartCard,
+  HomeOverviewKpiStrip,
+  HomeUpcomingAttentionPanel,
+  HomeWeeklyAppointmentOverviewCard,
+} from "@/components/dashboard/HomeDashboardOverview";
 import { PageHeader } from "../components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAction, useFindMany } from "../hooks/useApi";
-import type { HomeDashboardRange, HomeDashboardSnapshot, HomeDashboardWidgetKey } from "@/lib/homeDashboard";
+import type { HomeDashboardRange, HomeDashboardSnapshot } from "@/lib/homeDashboard";
 import type { AuthOutletContext } from "./_app";
 import { getPreferredAuthorizedAppPath } from "@/lib/permissionRouting";
 import { recordReliabilityDiagnostic } from "@/lib/reliabilityDiagnostics";
-import { cn } from "@/lib/utils";
 
 type StaffRecord = {
   id: string;
@@ -38,15 +34,12 @@ type StaffRecord = {
 };
 
 const RANGE_VALUES: HomeDashboardRange[] = ["today", "week", "month"];
-const SUMMARY_WIDGETS: HomeDashboardWidgetKey[] = [
-  "summary_needs_action",
-  "summary_today",
-  "summary_cash",
-  "summary_conversion",
-];
-
 function isValidRange(value: string | null): value is HomeDashboardRange {
   return RANGE_VALUES.includes(value as HomeDashboardRange);
+}
+
+function isValidDateKey(value: string | null) {
+  return !!value && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function formatStaffName(staff: StaffRecord) {
@@ -70,39 +63,6 @@ function getRoleLabel(role: string | null | undefined) {
   }
 }
 
-function getWidgetLabel(widget: HomeDashboardWidgetKey) {
-  switch (widget) {
-    case "summary_needs_action":
-      return "Needs Action";
-    case "summary_today":
-      return "Today";
-    case "summary_cash":
-      return "Cash";
-    case "summary_conversion":
-      return "Conversion";
-    case "today_schedule":
-      return "Today Schedule";
-    case "action_queue":
-      return "Action Queue";
-    case "quick_actions":
-      return "Quick Actions";
-    case "pipeline":
-      return "Pipeline";
-    case "revenue_collections":
-      return "Revenue + Collections";
-    case "recent_activity":
-      return "Recent Activity";
-    case "automations":
-      return "Automations";
-    case "business_health":
-      return "Business Health";
-    case "goals":
-      return "Goals";
-    default:
-      return widget;
-  }
-}
-
 export default function DashboardHomeRoute() {
   const outletContext = useOutletContext<AuthOutletContext>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -111,6 +71,8 @@ export default function DashboardHomeRoute() {
   const range = isValidRange(searchParams.get("range")) ? searchParams.get("range") : "today";
   const canFilterTeam = outletContext.permissions.has("team.read");
   const teamMemberId = canFilterTeam ? searchParams.get("team") ?? "all" : "all";
+  const weekStartDate = isValidDateKey(searchParams.get("weekStart")) ? searchParams.get("weekStart") : null;
+  const selectedWeekDay = isValidDateKey(searchParams.get("day")) ? searchParams.get("day") : null;
 
   const [{ data: staffData, fetching: staffFetching }] = useFindMany(api.staff, {
     pause: !canFilterTeam,
@@ -136,11 +98,6 @@ export default function DashboardHomeRoute() {
   const [{ data, fetching, error }, runDashboard] = useAction(api.getHomeDashboard);
   const [, runPreferenceUpdate] = useAction(api.updateHomeDashboardPreferences);
   const snapshot = (data ?? null) as HomeDashboardSnapshot | null;
-  const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [draftWidgetOrder, setDraftWidgetOrder] = useState<HomeDashboardWidgetKey[]>([]);
-  const [draftHiddenWidgets, setDraftHiddenWidgets] = useState<HomeDashboardWidgetKey[]>([]);
-  const [draftDefaultRange, setDraftDefaultRange] = useState<HomeDashboardRange>("today");
-  const [draftDefaultTeam, setDraftDefaultTeam] = useState("all");
   const lastMarkedSeenRef = useRef<string | null>(null);
   const lastRefreshRef = useRef(0);
 
@@ -153,20 +110,13 @@ export default function DashboardHomeRoute() {
     return runDashboard({
       range,
       teamMemberId: teamMemberId === "all" ? null : teamMemberId,
+      weekStartDate,
     });
-  }, [range, runDashboard, teamMemberId]);
+  }, [range, runDashboard, teamMemberId, weekStartDate]);
 
   useEffect(() => {
     void refreshDashboard("force");
   }, [refreshDashboard]);
-
-  useEffect(() => {
-    if (!snapshot) return;
-    setDraftWidgetOrder(snapshot.preferences.widgetOrder);
-    setDraftHiddenWidgets(snapshot.preferences.hiddenWidgets as HomeDashboardWidgetKey[]);
-    setDraftDefaultRange(snapshot.preferences.defaultRange ?? snapshot.filters.range);
-    setDraftDefaultTeam(snapshot.preferences.defaultTeamMemberId ?? "all");
-  }, [snapshot]);
 
   useEffect(() => {
     if (!snapshot?.generatedAt || lastMarkedSeenRef.current === snapshot.generatedAt) return;
@@ -206,6 +156,37 @@ export default function DashboardHomeRoute() {
     [canFilterTeam, searchParams, setSearchParams]
   );
 
+  const setWeekStart = useCallback(
+    (nextWeekStart: string | null, nextDay?: string | null) => {
+      const next = new URLSearchParams(searchParams);
+      if (nextWeekStart) {
+        next.set("weekStart", nextWeekStart);
+      } else {
+        next.delete("weekStart");
+      }
+      if (nextDay) {
+        next.set("day", nextDay);
+      } else {
+        next.delete("day");
+      }
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+
+  const setSelectedWeekDay = useCallback(
+    (nextDay: string | null) => {
+      const next = new URLSearchParams(searchParams);
+      if (nextDay) {
+        next.set("day", nextDay);
+      } else {
+        next.delete("day");
+      }
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+
   const updateQueueItem = useCallback(
     async (payload: Parameters<typeof api.updateHomeDashboardPreferences>[0]) => {
       await runPreferenceUpdate(payload);
@@ -213,17 +194,6 @@ export default function DashboardHomeRoute() {
     },
     [refreshDashboard, runPreferenceUpdate]
   );
-
-  const saveCustomization = useCallback(async () => {
-    await runPreferenceUpdate({
-      widgetOrder: draftWidgetOrder,
-      hiddenWidgets: draftHiddenWidgets,
-      defaultRange: draftDefaultRange,
-      defaultTeamMemberId: canFilterTeam && draftDefaultTeam !== "all" ? draftDefaultTeam : null,
-    });
-    setCustomizeOpen(false);
-    await refreshDashboard("force");
-  }, [canFilterTeam, draftDefaultRange, draftDefaultTeam, draftHiddenWidgets, draftWidgetOrder, refreshDashboard, runPreferenceUpdate]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -253,20 +223,6 @@ export default function DashboardHomeRoute() {
     return () => window.clearInterval(interval);
   }, [refreshDashboard, snapshot?.featureFlags.homeDashboardV2]);
 
-  const visibleSummaryWidgets = useMemo(() => {
-    const hidden = new Set(snapshot?.preferences.hiddenWidgets ?? []);
-    return (snapshot?.preferences.widgetOrder ?? []).filter(
-      (widget): widget is HomeDashboardWidgetKey => SUMMARY_WIDGETS.includes(widget as HomeDashboardWidgetKey) && !hidden.has(widget)
-    );
-  }, [snapshot?.preferences.hiddenWidgets, snapshot?.preferences.widgetOrder]);
-
-  const visibleMainWidgets = useMemo(() => {
-    const hidden = new Set(snapshot?.preferences.hiddenWidgets ?? []);
-    return (snapshot?.preferences.widgetOrder ?? []).filter(
-      (widget): widget is HomeDashboardWidgetKey => !SUMMARY_WIDGETS.includes(widget as HomeDashboardWidgetKey) && !hidden.has(widget)
-    );
-  }, [snapshot?.preferences.hiddenWidgets, snapshot?.preferences.widgetOrder]);
-
   const lastUpdatedLabel = useMemo(() => {
     if (!snapshot?.generatedAt) return "Waiting on first snapshot";
     return formatDistanceToNowStrict(new Date(snapshot.generatedAt), { addSuffix: true });
@@ -277,45 +233,10 @@ export default function DashboardHomeRoute() {
   const safePageError = pageError ? new Error("Dashboard data is temporarily unavailable.") : null;
   const pageLoading = fetching && !snapshot;
   const staleSnapshotWarning = !pageLoading && pageError && snapshot;
-  const widgetErrorFor = useCallback(
-    (widget: HomeDashboardWidgetKey) => {
-      const message = snapshot?.widgetErrors?.[widget]?.message;
-      return message ? new Error(message) : null;
-    },
-    [snapshot?.widgetErrors]
-  );
 
   if (!canViewDashboard) {
     return <Navigate to={getPreferredAuthorizedAppPath(outletContext.permissions, outletContext.enabledModules)} replace />;
   }
-
-  const mainWidgetMap: Record<HomeDashboardWidgetKey, ReactNode> = {
-    summary_needs_action: <HomeSummaryCards snapshot={snapshot} range={range} loading={pageLoading} />,
-    summary_today: <HomeSummaryCards snapshot={snapshot} range={range} loading={pageLoading} />,
-    summary_cash: <HomeSummaryCards snapshot={snapshot} range={range} loading={pageLoading} />,
-    summary_conversion: <HomeSummaryCards snapshot={snapshot} range={range} loading={pageLoading} />,
-    today_schedule: <HomeTodayScheduleCard snapshot={snapshot} range={range} loading={pageLoading} />,
-    action_queue: (
-      <HomeActionQueueCard
-        snapshot={snapshot}
-        loading={pageLoading}
-        onDismiss={(itemId) => void updateQueueItem({ dismissQueueItemId: itemId })}
-        onSnooze={(itemId) =>
-          void updateQueueItem({
-            snoozeQueueItemId: itemId,
-            snoozeUntil: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-          })
-        }
-      />
-    ),
-    quick_actions: <HomeQuickActionsCard snapshot={snapshot} loading={pageLoading || staffFetching} />,
-    pipeline: <HomePipelineCard snapshot={snapshot} loading={pageLoading} />,
-    revenue_collections: <HomeRevenueCollectionsCard snapshot={snapshot} loading={pageLoading} />,
-    recent_activity: <HomeRecentActivityCard snapshot={snapshot} loading={pageLoading} />,
-    automations: <HomeAutomationsCard snapshot={snapshot} loading={pageLoading} />,
-    business_health: <HomeBusinessHealthCard snapshot={snapshot} loading={pageLoading} />,
-    goals: <HomeGoalsCard snapshot={snapshot} loading={pageLoading} canEdit={outletContext.permissions.has("settings.write")} />,
-  };
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -347,21 +268,8 @@ export default function DashboardHomeRoute() {
         canFilterTeam={canFilterTeam}
         lastUpdatedLabel={lastUpdatedLabel}
         refreshing={fetching && !!snapshot}
-        secondaryAction={
-          featureEnabled ? (
-            <Button type="button" variant="outline" className="rounded-2xl" onClick={() => setCustomizeOpen(true)}>
-              <Settings2 className="mr-2 h-4 w-4" />
-              Customize
-            </Button>
-          ) : (
-            <Badge variant="outline" className="rounded-full bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              Stable dashboard mode
-            </Badge>
-          )
-        }
+        secondaryAction={featureEnabled ? null : <Badge variant="outline" className="rounded-full bg-slate-50 px-3 py-2 text-xs text-slate-600">Stable dashboard mode</Badge>}
       />
-
-      {featureEnabled ? <HomeSignalsStrip snapshot={snapshot} loading={pageLoading} /> : null}
 
       {staleSnapshotWarning ? (
         <div className="flex flex-col gap-3 rounded-[1.2rem] border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
@@ -383,175 +291,77 @@ export default function DashboardHomeRoute() {
         <DashboardPageErrorGrid error={safePageError ?? new Error("Dashboard data is temporarily unavailable.")} onRetry={() => void refreshDashboard("force")} />
       ) : (
         <div className="space-y-4">
-          {visibleSummaryWidgets.length > 0 ? (
-            <HomeSummaryCards
-              snapshot={snapshot}
-              range={range}
-              visibleKeys={visibleSummaryWidgets}
-              loading={pageLoading}
-              onRetry={() => void refreshDashboard("force")}
-            />
-          ) : null}
+          <HomeOverviewKpiStrip snapshot={snapshot} loading={pageLoading} error={snapshot?.widgetErrors?.summary_today ? new Error(snapshot.widgetErrors.summary_today.message) : null} onRetry={() => void refreshDashboard("force")} />
 
           <div className="grid gap-4 xl:grid-cols-12">
-            {visibleMainWidgets.map((widget) => (
-              <div
-                key={widget}
-                className={cn(
-                  "col-span-12",
-                  widget === "today_schedule" && "xl:col-span-8",
-                  widget === "action_queue" && "xl:col-span-4",
-                  (widget === "quick_actions" || widget === "pipeline" || widget === "revenue_collections") && "xl:col-span-4",
-                  (widget === "recent_activity" || widget === "automations" || widget === "business_health" || widget === "goals") && "md:col-span-6 xl:col-span-4"
-                )}
-              >
-                {widget === "today_schedule" ? (
-                  <HomeTodayScheduleCard snapshot={snapshot} range={range} loading={pageLoading} error={widgetErrorFor("today_schedule")} onRetry={() => void refreshDashboard("force")} />
-                ) : widget === "action_queue" ? (
-                  <HomeActionQueueCard
+            <div className="xl:col-span-8">
+              <HomeWeeklyAppointmentOverviewCard
+                snapshot={snapshot}
+                loading={pageLoading}
+                error={snapshot?.widgetErrors?.today_schedule ? new Error(snapshot.widgetErrors.today_schedule.message) : null}
+                onRetry={() => void refreshDashboard("force")}
+                selectedDate={selectedWeekDay}
+                onSelectDate={setSelectedWeekDay}
+                onChangeWeek={setWeekStart}
+              />
+            </div>
+            <div className="xl:col-span-4">
+              <HomeUpcomingAttentionPanel
+                snapshot={snapshot}
+                loading={pageLoading}
+                error={snapshot?.widgetErrors?.action_queue ? new Error(snapshot.widgetErrors.action_queue.message) : null}
+                onRetry={() => void refreshDashboard("force")}
+                onDismiss={(itemId) => void updateQueueItem({ dismissQueueItemId: itemId })}
+                onSnooze={(itemId) =>
+                  void updateQueueItem({
+                    snoozeQueueItemId: itemId,
+                    snoozeUntil: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          {pageLoading || snapshot?.monthlyRevenueChart.allowed || snapshot?.bookingsOverview.allowed ? (
+            <div className="grid gap-4 xl:grid-cols-12">
+              {pageLoading || snapshot?.monthlyRevenueChart.allowed ? (
+                <div className="xl:col-span-8">
+                  <HomeMonthlyRevenueChartCard
                     snapshot={snapshot}
                     loading={pageLoading}
-                    error={widgetErrorFor("action_queue")}
+                    error={snapshot?.widgetErrors?.revenue_collections ? new Error(snapshot.widgetErrors.revenue_collections.message) : null}
                     onRetry={() => void refreshDashboard("force")}
-                    onDismiss={(itemId) => void updateQueueItem({ dismissQueueItemId: itemId })}
-                    onSnooze={(itemId) =>
-                      void updateQueueItem({
-                        snoozeQueueItemId: itemId,
-                        snoozeUntil: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-                      })
-                    }
                   />
-                ) : widget === "quick_actions" ? (
-                  <HomeQuickActionsCard snapshot={snapshot} loading={pageLoading || staffFetching} error={widgetErrorFor("quick_actions")} onRetry={() => void refreshDashboard("force")} />
-                ) : widget === "pipeline" ? (
-                  <HomePipelineCard snapshot={snapshot} loading={pageLoading} error={widgetErrorFor("pipeline")} onRetry={() => void refreshDashboard("force")} />
-                ) : widget === "revenue_collections" ? (
-                  <HomeRevenueCollectionsCard snapshot={snapshot} loading={pageLoading} error={widgetErrorFor("revenue_collections")} onRetry={() => void refreshDashboard("force")} />
-                ) : widget === "recent_activity" ? (
-                  <HomeRecentActivityCard snapshot={snapshot} loading={pageLoading} error={widgetErrorFor("recent_activity")} onRetry={() => void refreshDashboard("force")} />
-                ) : widget === "automations" ? (
-                  <HomeAutomationsCard snapshot={snapshot} loading={pageLoading} error={widgetErrorFor("automations")} onRetry={() => void refreshDashboard("force")} />
-                ) : widget === "business_health" ? (
-                  <HomeBusinessHealthCard snapshot={snapshot} loading={pageLoading} error={widgetErrorFor("business_health")} onRetry={() => void refreshDashboard("force")} />
-                ) : widget === "goals" ? (
-                  <HomeGoalsCard snapshot={snapshot} loading={pageLoading} error={widgetErrorFor("goals")} onRetry={() => void refreshDashboard("force")} canEdit={outletContext.permissions.has("settings.write")} />
-                ) : (
-                  mainWidgetMap[widget]
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <Dialog open={featureEnabled && customizeOpen} onOpenChange={setCustomizeOpen}>
-        <DialogContent className="max-w-[calc(100vw-1.5rem)] rounded-[1.5rem] p-0 sm:max-w-2xl">
-          <DialogHeader className="border-b border-border/70 px-5 py-4">
-            <DialogTitle>Customize dashboard</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-5 px-5 py-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-2 text-sm">
-                <span className="font-medium text-foreground">Default date filter</span>
-                <select
-                  className="w-full rounded-xl border border-border/70 bg-white px-3 py-2"
-                  value={draftDefaultRange}
-                  onChange={(event) => setDraftDefaultRange(event.target.value as HomeDashboardRange)}
-                >
-                  <option value="today">Today</option>
-                  <option value="week">This week</option>
-                  <option value="month">This month</option>
-                </select>
-              </label>
-              {canFilterTeam ? (
-                <label className="space-y-2 text-sm">
-                  <span className="font-medium text-foreground">Default team filter</span>
-                  <select
-                    className="w-full rounded-xl border border-border/70 bg-white px-3 py-2"
-                    value={draftDefaultTeam}
-                    onChange={(event) => setDraftDefaultTeam(event.target.value)}
-                  >
-                    <option value="all">All team members</option>
-                    {staffOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                </div>
+              ) : null}
+              {pageLoading || snapshot?.bookingsOverview.allowed ? (
+                <div className="xl:col-span-4">
+                  <HomeBookingsOverviewCard
+                    snapshot={snapshot}
+                    loading={pageLoading}
+                    error={snapshot?.widgetErrors?.pipeline ? new Error(snapshot.widgetErrors.pipeline.message) : null}
+                    onRetry={() => void refreshDashboard("force")}
+                  />
+                </div>
               ) : null}
             </div>
+          ) : null}
 
-            <div className="space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Visible widgets and order</h3>
-                <p className="text-sm text-muted-foreground">Hide cards you never use and move the important ones up.</p>
-              </div>
-              <div className="space-y-2">
-                {draftWidgetOrder.map((widget, index) => {
-                  const hidden = draftHiddenWidgets.includes(widget);
-                  return (
-                    <div key={widget} className="flex items-center justify-between gap-3 rounded-[1rem] border border-border/70 bg-white/80 px-3 py-3">
-                      <label className="flex min-w-0 flex-1 items-center gap-3 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={!hidden}
-                          onChange={() =>
-                            setDraftHiddenWidgets((current) =>
-                              hidden ? current.filter((item) => item !== widget) : [...current, widget]
-                            )
-                          }
-                        />
-                        <span className="font-medium text-foreground">{getWidgetLabel(widget)}</span>
-                      </label>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={index === 0}
-                          onClick={() =>
-                            setDraftWidgetOrder((current) => {
-                              const next = [...current];
-                              [next[index - 1], next[index]] = [next[index], next[index - 1]];
-                              return next;
-                            })
-                          }
-                        >
-                          Up
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={index === draftWidgetOrder.length - 1}
-                          onClick={() =>
-                            setDraftWidgetOrder((current) => {
-                              const next = [...current];
-                              [next[index + 1], next[index]] = [next[index], next[index + 1]];
-                              return next;
-                            })
-                          }
-                        >
-                          Down
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 border-t border-border/70 px-5 py-4">
-            <Button type="button" variant="outline" onClick={() => setCustomizeOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={() => void saveCustomization()}>
-              Save preferences
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          <HomeBottomPanels
+            snapshot={snapshot}
+            loading={pageLoading}
+            error={snapshot?.widgetErrors?.recent_activity ? new Error(snapshot.widgetErrors.recent_activity.message) : null}
+            onRetry={() => void refreshDashboard("force")}
+          />
+
+          <HomeCompactQuickActions
+            snapshot={snapshot}
+            loading={pageLoading || staffFetching}
+            error={snapshot?.widgetErrors?.quick_actions ? new Error(snapshot.widgetErrors.quick_actions.message) : null}
+            onRetry={() => void refreshDashboard("force")}
+          />
+        </div>
+      )}
     </div>
   );
 }

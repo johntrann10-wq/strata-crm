@@ -156,6 +156,51 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
     actionQueue: { allowed: true, items: visibleQueue },
     quickActions: quickActions(role),
     pipeline: { allowed: modulePermissions.pipeline, stages: mode === "empty" || !modulePermissions.pipeline ? [] : [{ key: "new_leads", label: "New leads", count: mode === "edge" ? 3 : 2, value: null }, { key: "quoted", label: "Quoted", count: 4, value: 2780 }, { key: "booked", label: "Booked", count: 6, value: 4830 }, { key: "completed", label: "Completed", count: 3, value: 1895 }, { key: "paid", label: "Paid", count: 9, value: 6420 }] },
+    weeklyOverview: {
+      allowed: true,
+      weekStart: "2026-04-06T07:00:00.000Z",
+      weekEnd: "2026-04-13T06:59:59.999Z",
+      selectedDate: "2026-04-10",
+      days: [
+        { date: "2026-04-06", label: "Monday", shortLabel: "Mon", appointmentCount: 1, bookedValue: 420, statusCounts: { upcoming: 1, inProgress: 0, completed: 0, cancelled: 0 }, capacityUsage: 50, calendarUrl: "/calendar?view=day&date=2026-04-06", previewItems: [{ id: "appt-m1", title: "Wash and seal", clientName: "Maya Chen", vehicleLabel: "2021 BMW X5", startTime: "2026-04-06T16:00:00.000Z", url: "/appointments/appt-m1" }] },
+        { date: "2026-04-07", label: "Tuesday", shortLabel: "Tue", appointmentCount: 2, bookedValue: 890, statusCounts: { upcoming: 1, inProgress: 1, completed: 0, cancelled: 0 }, capacityUsage: 50, calendarUrl: "/calendar?view=day&date=2026-04-07", previewItems: [{ id: "appt-t1", title: "Tint package", clientName: "Jordan Lee", vehicleLabel: "2023 Civic Type R", startTime: "2026-04-07T17:00:00.000Z", url: "/appointments/appt-t1" }, { id: "appt-t2", title: "Interior detail", clientName: "Chris Parker", vehicleLabel: "2020 Tahoe", startTime: "2026-04-07T20:30:00.000Z", url: "/appointments/appt-t2" }] },
+        { date: "2026-04-08", label: "Wednesday", shortLabel: "Wed", appointmentCount: 3, bookedValue: 1260, statusCounts: { upcoming: 2, inProgress: 0, completed: 1, cancelled: 0 }, capacityUsage: 100, calendarUrl: "/calendar?view=day&date=2026-04-08", previewItems: [{ id: "appt-w1", title: "PPF front clip", clientName: "Amir Patel", vehicleLabel: "2024 Rivian R1T", startTime: "2026-04-08T16:30:00.000Z", url: "/appointments/appt-w1" }] },
+        { date: "2026-04-09", label: "Thursday", shortLabel: "Thu", appointmentCount: 2, bookedValue: 760, statusCounts: { upcoming: 1, inProgress: 0, completed: 1, cancelled: 0 }, capacityUsage: 50, calendarUrl: "/calendar?view=day&date=2026-04-09", previewItems: [{ id: "appt-th1", title: "Maintenance wash", clientName: "Dana Brooks", vehicleLabel: "2022 Wrangler", startTime: "2026-04-09T18:00:00.000Z", url: "/appointments/appt-th1" }] },
+        { date: "2026-04-10", label: "Friday", shortLabel: "Fri", appointmentCount: mode === "empty" ? 0 : 4, bookedValue: mode === "empty" ? 0 : 1480, statusCounts: { upcoming: mode === "empty" ? 0 : 2, inProgress: mode === "empty" ? 0 : 1, completed: mode === "empty" ? 0 : 1, cancelled: 0 }, capacityUsage: mode === "empty" ? 0 : 100, calendarUrl: "/calendar?view=day&date=2026-04-10", previewItems: mode === "empty" ? [] : [{ id: "appt-1", title: "5-Year Ceramic Coating", clientName: "Jacob Wheelihan", vehicleLabel: "2022 Tesla Model Y", startTime: "2026-04-10T16:00:00.000Z", url: "/appointments/appt-1" }, { id: "appt-2", title: "Correction detail", clientName: "Mia Porter", vehicleLabel: "2021 Ford F-150", startTime: "2026-04-10T19:30:00.000Z", url: "/appointments/appt-2" }] },
+        { date: "2026-04-11", label: "Saturday", shortLabel: "Sat", appointmentCount: mode === "empty" ? 0 : 2, bookedValue: mode === "empty" ? 0 : 980, statusCounts: { upcoming: mode === "empty" ? 0 : 2, inProgress: 0, completed: 0, cancelled: 0 }, capacityUsage: mode === "empty" ? 0 : 50, calendarUrl: "/calendar?view=day&date=2026-04-11", previewItems: mode === "empty" ? [] : [{ id: "appt-s1", title: "Gloss enhancement", clientName: "Taylor Moss", vehicleLabel: "2023 4Runner", startTime: "2026-04-11T17:00:00.000Z", url: "/appointments/appt-s1" }] },
+        { date: "2026-04-12", label: "Sunday", shortLabel: "Sun", appointmentCount: mode === "empty" ? 0 : 1, bookedValue: mode === "empty" ? 0 : 350, statusCounts: { upcoming: mode === "empty" ? 0 : 1, inProgress: 0, completed: 0, cancelled: 0 }, capacityUsage: mode === "empty" ? 0 : 25, calendarUrl: "/calendar?view=day&date=2026-04-12", previewItems: mode === "empty" ? [] : [{ id: "appt-su1", title: "Wash club drop-in", clientName: "Noah Rivera", vehicleLabel: "2020 Tacoma", startTime: "2026-04-12T18:00:00.000Z", url: "/appointments/appt-su1" }] },
+      ],
+    },
+    monthlyRevenueChart: {
+      allowed: role !== "technician",
+      monthStart: "2026-04-01T07:00:00.000Z",
+      monthEnd: "2026-05-01T06:59:59.999Z",
+      totalBookedThisMonth: mode === "empty" ? 0 : 11840,
+      totalCollectedThisMonth: role === "technician" ? 0 : mode === "empty" ? 0 : 9320,
+      percentToGoal: role === "owner" ? 78 : null,
+      goalAmount: role === "owner" ? 15000 : null,
+      days: Array.from({ length: 30 }, (_, index) => ({
+        date: `2026-04-${String(index + 1).padStart(2, "0")}`,
+        dayOfMonth: index + 1,
+        bookedRevenue: mode === "empty" ? 0 : [0, 220, 480, 0, 650, 0, 520, 310, 740, 560, 0, 880, 420, 0, 360, 690, 0, 510, 750, 0, 430, 260, 0, 980, 610, 0, 320, 540, 0, 480][index] ?? 0,
+        collectedRevenue: role === "technician" || mode === "empty" ? 0 : [0, 0, 250, 0, 300, 0, 420, 0, 500, 0, 0, 610, 0, 0, 290, 0, 0, 440, 0, 0, 380, 0, 0, 730, 0, 0, 260, 0, 0, 420][index] ?? 0,
+        goalPaceRevenue: role === "owner" ? (15000 / 30) * (index + 1) : null,
+      })),
+    },
+    bookingsOverview: {
+      allowed: role !== "technician",
+      bookingsToday: mode === "empty" ? 0 : 4,
+      bookingsThisWeek: mode === "empty" ? 0 : 15,
+      bookingsThisMonth: mode === "empty" ? 0 : 38,
+      quotesSent: mode === "empty" ? 0 : 12,
+      quotesAccepted: mode === "empty" ? 0 : 7,
+      quoteToBookConversionRate: mode === "empty" ? null : 58,
+      averageTicketValue: mode === "empty" ? null : 612,
+      depositsCollectedAmount: mode === "empty" ? 0 : 1860,
+      depositsDueAmount: role === "technician" ? 0 : mode === "edge" ? 350 : 200,
+      depositsDueCount: role === "technician" ? 0 : mode === "edge" ? 2 : 1,
+      funnel: mode === "empty" || role === "technician" ? [] : [{ key: "new_leads", label: "New leads", count: mode === "edge" ? 3 : 2, value: null }, { key: "quoted", label: "Quoted", count: 4, value: 2780 }, { key: "booked", label: "Booked", count: 6, value: 4830 }, { key: "completed", label: "Completed", count: 3, value: 1895 }, { key: "paid", label: "Paid", count: 9, value: 6420 }],
+    },
     revenueCollections: { allowed: modulePermissions.revenueCollections, bookedRevenueThisWeek: modulePermissions.revenueCollections ? 4230 : 0, collectedThisWeek: modulePermissions.revenueCollections ? 2180 : 0, collectedToday: modulePermissions.revenueCollections ? 980 : 0, outstandingInvoiceAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 2440 : 920) : 0, overdueInvoiceAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 1840 : 0) : 0, depositsDueAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 350 : 200) : 0, depositsDueCount: modulePermissions.revenueCollections ? (mode === "edge" ? 2 : 1) : 0 },
     recentActivity: { allowed: true, items: mode === "empty" ? [] : [{ id: "activity-1", type: "appointment_created", label: "New ceramic coating booked", detail: "Jacob Wheelihan · 2022 Tesla Model Y", occurredAt: "2026-04-10T15:30:00.000Z", entityType: "appointment", entityId: "appt-1", url: "/appointments/appt-1" }, { id: "activity-2", type: "payment_received", label: "Payment received on invoice 1022", detail: "Collected $715.85", occurredAt: "2026-04-10T14:00:00.000Z", entityType: "invoice", entityId: "inv-1022", url: "/invoices/inv-1022" }] },
     automations: { allowed: modulePermissions.automations, remindersSentThisWeek: modulePermissions.automations ? 12 : 0, invoiceNudgesSentThisWeek: modulePermissions.automations ? 4 : null, reviewRequestsSentThisWeek: modulePermissions.automations ? 6 : 0, reactivationMessagesSentThisWeek: modulePermissions.automations ? 2 : 0, deliverySuccessRate: modulePermissions.automations ? 96 : null, failedAutomationCount: modulePermissions.automations ? (mode === "edge" ? 1 : 0) : 0 },
@@ -164,7 +209,7 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
     sinceLastChecked: { allowed: true, since: "2026-04-10T12:00:00.000Z", newLeads: mode === "empty" ? 0 : 3, newBookings: mode === "empty" ? 0 : 2, paymentsReceived: mode === "empty" ? 0 : 1, newIssues: mode === "edge" ? 2 : 0, resolvedIssues: mode === "empty" ? 0 : 1 },
     businessHealth: { allowed: modulePermissions.businessHealth, score: modulePermissions.businessHealth ? (mode === "edge" ? 68 : 89) : null, factors: modulePermissions.businessHealth ? [{ key: "overdue_invoices", label: "Overdue invoices", score: mode === "edge" ? 42 : 88, weight: 0.25, detail: "Older unpaid invoices are slowing cash collection.", issueCount: mode === "edge" ? 3 : 0 }, { key: "missing_deposits", label: "Missing deposits", score: mode === "edge" ? 55 : 94, weight: 0.2, detail: "Upcoming appointments still need deposit collection.", issueCount: mode === "edge" ? 2 : 1 }, { key: "lead_response", label: "Lead response", score: mode === "edge" ? 63 : 91, weight: 0.2, detail: "A few leads are drifting past the first-touch SLA.", issueCount: mode === "edge" ? 3 : 0 }] : [], topIssues: modulePermissions.businessHealth ? [{ label: "Clean up overdue invoices first", detail: "It is the fastest path to reduce cash pressure today.", url: "/invoices" }] : [] },
     goals: { allowed: modulePermissions.goals, monthlyRevenueGoal: modulePermissions.goals ? 15000 : null, currentRevenue: modulePermissions.goals ? 11700 : 0, percentToGoal: modulePermissions.goals ? 78 : null, projectedMonthEnd: modulePermissions.goals ? 16200 : null, monthlyJobsGoal: modulePermissions.goals ? 24 : null, currentJobs: modulePermissions.goals ? 19 : 0 },
-    definitions: { weekStartsOn: "sunday", uncontactedLead: "Lead created more than 15 minutes ago with no first response.", quoteFollowUp: "Sent quote older than 24 hours without acceptance or decline.", depositDue: "Appointment in the next 48 hours with required deposit unpaid.", overdueInvoice: "Unpaid invoice past due date.", completedMissingInvoice: "Completed appointment without a linked invoice.", todayJobs: "Appointments that start today or overlap today.", cashCollectedToday: "Successful payments created today.", bookedRevenueThisWeek: "Value of newly booked appointments and standalone invoices this week." },
+    definitions: { weekStartsOn: "monday", uncontactedLead: "Lead created more than 15 minutes ago with no first response.", quoteFollowUp: "Sent quote older than 24 hours without acceptance or decline.", depositDue: "Appointment in the next 48 hours with required deposit unpaid.", overdueInvoice: "Unpaid invoice past due date.", completedMissingInvoice: "Completed appointment without a linked invoice.", todayJobs: "Appointments that start today or overlap today.", cashCollectedToday: "Successful payments created today.", bookedRevenueThisWeek: "Value of newly booked appointments and standalone invoices this week." },
   };
 }
 
@@ -222,19 +267,21 @@ test.describe("Dashboard home (mocked)", () => {
     await mockDashboard(page, { role: "owner", mode: "normal" });
     await page.goto("/signed-in");
     const main = page.locator("main");
-    await expect(main.getByText("Needs Action", { exact: true })).toBeVisible();
     await expect(main.getByRole("heading", { name: /^dashboard$/i })).toBeVisible();
-    await expect(main.getByText("Today Schedule", { exact: true })).toBeVisible();
-    await expect(main.getByText("Action Queue", { exact: true })).toBeVisible();
-    await expect(main.getByText("Revenue + Collections", { exact: true })).toBeVisible();
-    await expect(main.getByText("Automations", { exact: true })).toBeVisible();
-    await expect(main.getByText("Goals", { exact: true })).toBeVisible();
+    await expect(main.getByText("Bookings today", { exact: true })).toBeVisible();
+    await expect(main.getByText("Weekly Appointment Overview", { exact: true })).toBeVisible();
+    await expect(main.getByText("Upcoming Jobs / Needs Attention", { exact: true })).toBeVisible();
+    await expect(main.getByText("Monthly Revenue Chart", { exact: true })).toBeVisible();
+    await expect(main.getByText("Bookings Overview", { exact: true })).toBeVisible();
+    await expect(main.getByText("Business Feed", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Filter dashboard by team member")).toBeVisible();
     await page.getByRole("button", { name: /this week/i }).click();
     await expect(page).toHaveURL(/range=week/);
-    await expect(main.getByText("This Week", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: /new appointment/i }).first()).toHaveAttribute("href", "/appointments/new");
-    await expect(page.getByRole("link", { name: /open appointment/i }).first()).toHaveAttribute("href", "/appointments/appt-1");
+    await expect(page.getByRole("link", { name: /open day view/i }).first()).toHaveAttribute("href", "/calendar?view=day&date=2026-04-10");
+    await page.getByRole("button", { name: /tue/i }).click();
+    await expect(page.getByText("Jordan Lee · 2023 Civic Type R")).toBeVisible();
+    await expect(page.getByRole("link", { name: /open day in calendar/i })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-07");
     if (process.platform === "win32") {
       await expect(page.locator("main")).toHaveScreenshot("dashboard-owner-control-tower.png", {
         animations: "disabled",
@@ -247,10 +294,10 @@ test.describe("Dashboard home (mocked)", () => {
     await mockDashboard(page, { role: "manager", mode: "normal" });
     await page.goto("/signed-in");
     await expect(page.getByText("Manager view")).toBeVisible();
-    await expect(page.getByText("Today Schedule", { exact: true })).toBeVisible();
-    await expect(page.getByText("Action Queue", { exact: true })).toBeVisible();
+    await expect(page.getByText("Weekly Appointment Overview", { exact: true })).toBeVisible();
+    await expect(page.getByText("Upcoming Jobs / Needs Attention", { exact: true })).toBeVisible();
+    await expect(page.getByText("Monthly Revenue Chart", { exact: true })).toBeVisible();
     await expect(page.getByText("Goals", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /customize/i })).toBeVisible();
   });
 
   test.describe("mobile technician view", () => {
@@ -262,40 +309,35 @@ test.describe("Dashboard home (mocked)", () => {
       const main = page.locator("main");
       await expect(page.getByText("Technician view")).toBeVisible();
       await expect(page.getByLabel("Filter dashboard by team member")).toHaveCount(0);
-      await expect(main.getByText("Today Schedule", { exact: true })).toBeVisible();
-      await expect(main.getByText("Action Queue", { exact: true })).toBeVisible();
-      await expect(main.getByText("Quick Actions", { exact: true })).toBeVisible();
-      await expect(main.getByText("Automations", { exact: true })).toHaveCount(0);
-      await expect(main.getByText("No quick actions available")).toBeVisible();
+      await expect(main.getByText("Weekly Appointment Overview", { exact: true })).toBeVisible();
+      await expect(main.getByText("Upcoming Jobs / Needs Attention", { exact: true })).toBeVisible();
+      await expect(main.getByText("Monthly Revenue Chart", { exact: true })).toHaveCount(0);
+      await expect(main.getByText("Quick Actions", { exact: true })).toHaveCount(0);
     });
   });
 
   test("renders useful empty states for a fresh business", async ({ page }) => {
     await mockDashboard(page, { role: "owner", mode: "empty" });
     await page.goto("/signed-in");
-    await expect(page.getByText("Nothing scheduled in this view")).toBeVisible();
-    await expect(page.getByText("No urgent queue items")).toBeVisible();
-    await expect(page.getByText("No pipeline data yet")).toBeVisible();
+    await expect(page.getByText("No upcoming jobs in this view")).toBeVisible();
+    await expect(page.getByText("No urgent action items right now.")).toBeVisible();
     await expect(page.getByText("No activity yet")).toBeVisible();
-    await expect(page.getByText("Set a monthly goal")).toBeVisible();
+    await page.getByRole("button", { name: /unpaid invoices \/ deposits due/i }).click();
+    await expect(page.getByText("No overdue balances or deposit misses")).toBeVisible();
   });
 
   test("handles edge-case pressure, last-seen changes, and queue mutations with a refetch", async ({ page }) => {
     const state = await mockDashboard(page, { role: "owner", mode: "edge" });
     await page.goto("/signed-in");
-    const queueCard = page.locator("#action-queue");
-    await expect(queueCard.getByText("Collect invoice 1024")).toBeVisible();
-    await expect(queueCard.getByText("$1,840 at risk")).toBeVisible();
-    await expect(page.getByText("Since you last checked")).toBeVisible();
-    await expect(page.getByText("Strata sent 12 reminders this week")).toBeVisible();
-    await expect(page.getByText("Connect Stripe for faster deposit collection")).toBeVisible();
+    await expect(page.getByText("Collect invoice 1024")).toBeVisible();
+    await expect(page.getByText("$1,840 at risk")).toBeVisible();
     const beforeDismiss = state.snapshotCalls;
-    await queueCard.getByRole("button", { name: /^dismiss$/i }).first().click();
-    await expect(queueCard.getByText("Collect invoice 1024")).toHaveCount(0);
+    await page.getByRole("button", { name: /^dismiss$/i }).first().click();
+    await expect(page.getByText("Collect invoice 1024")).toHaveCount(0);
     expect(state.snapshotCalls).toBeGreaterThan(beforeDismiss);
     const beforeSnooze = state.snapshotCalls;
-    await queueCard.getByRole("button", { name: /^snooze$/i }).first().click();
-    await expect(queueCard.getByText("Collect Jacob's deposit")).toHaveCount(0);
+    await page.getByRole("button", { name: /^snooze$/i }).first().click();
+    await expect(page.getByText("Collect Jacob's deposit")).toHaveCount(0);
     expect(state.snapshotCalls).toBeGreaterThan(beforeSnooze);
   });
 
@@ -304,8 +346,8 @@ test.describe("Dashboard home (mocked)", () => {
     await page.goto("/signed-in");
     await expect(page.getByText("Quick actions are temporarily unavailable.")).toBeVisible();
     await expect(page.getByText("Needs retry")).toBeVisible();
-    await expect(page.getByText("Today Schedule", { exact: true })).toBeVisible();
-    await expect(page.getByText("Action Queue", { exact: true })).toBeVisible();
+    await expect(page.getByText("Weekly Appointment Overview", { exact: true })).toBeVisible();
+    await expect(page.getByText("Upcoming Jobs / Needs Attention", { exact: true })).toBeVisible();
   });
 
   test("respects the dashboard feature flag rollback path", async ({ page }) => {

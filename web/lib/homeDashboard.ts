@@ -210,6 +210,70 @@ export type HomeDashboardSnapshot = {
       value: number | null;
     }>;
   };
+  weeklyOverview: {
+    allowed: boolean;
+    weekStart: string;
+    weekEnd: string;
+    selectedDate: string | null;
+    days: Array<{
+      date: string;
+      label: string;
+      shortLabel: string;
+      appointmentCount: number;
+      bookedValue: number;
+      statusCounts: {
+        upcoming: number;
+        inProgress: number;
+        completed: number;
+        cancelled: number;
+      };
+      capacityUsage: number | null;
+      calendarUrl: string;
+      previewItems: Array<{
+        id: string;
+        title: string;
+        clientName: string;
+        vehicleLabel: string;
+        startTime: string;
+        url: string;
+      }>;
+    }>;
+  };
+  monthlyRevenueChart: {
+    allowed: boolean;
+    monthStart: string;
+    monthEnd: string;
+    totalBookedThisMonth: number;
+    totalCollectedThisMonth: number;
+    percentToGoal: number | null;
+    goalAmount: number | null;
+    days: Array<{
+      date: string;
+      dayOfMonth: number;
+      bookedRevenue: number;
+      collectedRevenue: number;
+      goalPaceRevenue: number | null;
+    }>;
+  };
+  bookingsOverview: {
+    allowed: boolean;
+    bookingsToday: number;
+    bookingsThisWeek: number;
+    bookingsThisMonth: number;
+    quotesSent: number;
+    quotesAccepted: number;
+    quoteToBookConversionRate: number | null;
+    averageTicketValue: number | null;
+    depositsCollectedAmount: number;
+    depositsDueAmount: number;
+    depositsDueCount: number;
+    funnel: Array<{
+      key: "new_leads" | "quoted" | "booked" | "completed" | "paid";
+      label: string;
+      count: number;
+      value: number | null;
+    }>;
+  };
   revenueCollections: {
     allowed: boolean;
     bookedRevenueThisWeek: number;
