@@ -2543,24 +2543,24 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
     ).get(appointment.id);
 
   let finance = await readFinance();
-  let depositPaid = finance?.depositSatisfied === true;
+  let depositSatisfied = finance?.depositSatisfied === true;
   const stripePaymentQuery = typeof req.query.stripePayment === "string" ? req.query.stripePayment : null;
   const checkoutSessionId = typeof req.query.session_id === "string" ? req.query.session_id.trim() : "";
   if (
     stripePaymentQuery === "success" &&
-    !depositPaid &&
+    !depositSatisfied &&
     checkoutSessionId &&
     appointment.stripeConnectAccountId
   ) {
     try {
-      depositPaid = await confirmAppointmentDepositCheckout({
+      const confirmed = await confirmAppointmentDepositCheckout({
         appointmentId: appointment.id,
         businessId: access.businessId,
         sessionId: checkoutSessionId,
         connectedAccountId: appointment.stripeConnectAccountId,
       });
       finance = await readFinance();
-      depositPaid = finance?.depositSatisfied === true || depositPaid;
+      depositSatisfied = finance?.depositSatisfied === true || confirmed;
     } catch (error) {
       logger.error("Failed to confirm Stripe appointment deposit from public return", {
         appointmentId: appointment.id,
@@ -2583,7 +2583,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
   if (
     Number.isFinite(depositAmount) &&
     depositAmount > 0 &&
-    !(finance?.depositSatisfied === true || depositPaid)
+    !depositSatisfied
   ) {
     publicPaymentUrl = buildPublicDocumentUrl(
       `/api/appointments/${appointment.id}/public-pay?token=${encodeURIComponent(token)}`
