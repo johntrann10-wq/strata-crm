@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { invoices, payments, appointments } from "../db/schema.js";
-import { getAppointmentFinanceSummaryMap } from "./appointmentFinance.js";
+import { getAppointmentFinanceMirrorUpdates, getAppointmentFinanceSummaryMap } from "./appointmentFinance.js";
 import { BadRequestError, NotFoundError } from "./errors.js";
 import { logger } from "./logger.js";
 
@@ -111,13 +111,12 @@ async function syncAppointmentPaymentState(
     )
   ).get(appointment.id);
 
-  const appointmentUpdates: Record<string, unknown> = {
-    updatedAt: new Date(),
-    paidAt: finance?.paidInFull ? paidAt ?? new Date() : null,
-  };
-  if (Number(appointment.depositAmount ?? 0) > 0) {
-    appointmentUpdates.depositPaid = finance?.depositSatisfied === true;
-  }
+  const appointmentUpdates = getAppointmentFinanceMirrorUpdates({
+    depositAmount: appointment.depositAmount,
+    finance,
+    paidAtWhenPaid: paidAt ?? new Date(),
+    includeUpdatedAt: true,
+  });
 
   try {
     await tx

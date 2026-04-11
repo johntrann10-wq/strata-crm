@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateAppointmentFinanceSummary } from "./appointmentFinance.js";
+import { calculateAppointmentFinanceSummary, getAppointmentFinanceMirrorUpdates } from "./appointmentFinance.js";
 
 describe("appointment finance summary", () => {
   it("keeps fresh appointments unpaid when no payment exists", () => {
@@ -117,5 +117,51 @@ describe("appointment finance summary", () => {
     expect(beforeBoundary.balanceDue).toBe(800.01);
     expect(exactDeposit.depositSatisfied).toBe(true);
     expect(exactDeposit.balanceDue).toBe(800);
+  });
+
+  it("builds compatibility mirror updates without touching deposit state for no-deposit jobs", () => {
+    const finance = calculateAppointmentFinanceSummary({
+      id: "apt-mirror-no-deposit",
+      totalPrice: 715.85,
+      depositAmount: 0,
+      directCollectedAmount: 0,
+      invoiceCollectedAmount: 715.85,
+      invoiceCarryoverAmount: 0,
+      paidAt: null,
+    });
+
+    const updates = getAppointmentFinanceMirrorUpdates({
+      depositAmount: 0,
+      finance,
+      paidAtWhenPaid: new Date("2026-04-10T18:00:00.000Z"),
+      includeUpdatedAt: true,
+    });
+
+    expect(updates.paidAt).toEqual(new Date("2026-04-10T18:00:00.000Z"));
+    expect("depositPaid" in updates).toBe(false);
+    expect(updates.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("builds compatibility mirror updates for satisfied deposit-required jobs", () => {
+    const finance = calculateAppointmentFinanceSummary({
+      id: "apt-mirror-deposit",
+      totalPrice: 1000,
+      depositAmount: 200,
+      directCollectedAmount: 200,
+      invoiceCollectedAmount: 0,
+      invoiceCarryoverAmount: 0,
+      paidAt: null,
+    });
+
+    const updates = getAppointmentFinanceMirrorUpdates({
+      depositAmount: 200,
+      finance,
+      paidAtWhenPaid: null,
+      includeUpdatedAt: false,
+    });
+
+    expect(updates.paidAt).toBeNull();
+    expect(updates.depositPaid).toBe(true);
+    expect("updatedAt" in updates).toBe(false);
   });
 });

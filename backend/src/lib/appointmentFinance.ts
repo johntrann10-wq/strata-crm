@@ -22,6 +22,29 @@ export type AppointmentFinanceSummary = {
   invoiceCarryoverAmount: number;
 };
 
+export function getAppointmentFinanceMirrorUpdates(params: {
+  depositAmount?: number | string | null;
+  finance?: AppointmentFinanceSummary | null;
+  paidAtWhenPaid?: Date | null;
+  includeUpdatedAt?: boolean;
+}) {
+  const depositAmount = Math.max(0, toMoneyNumber(params.depositAmount));
+  const finance = params.finance ?? null;
+  const updates: Record<string, unknown> = {};
+
+  if (params.includeUpdatedAt) {
+    updates.updatedAt = new Date();
+  }
+
+  updates.paidAt = finance?.paidInFull ? params.paidAtWhenPaid ?? new Date() : null;
+
+  if (depositAmount > 0 && finance?.depositSatisfied === true) {
+    updates.depositPaid = true;
+  }
+
+  return updates;
+}
+
 function toMoneyNumber(value: number | string | null | undefined): number {
   if (value == null || value === "") return 0;
   const normalized = typeof value === "string" ? Number(value) : value;

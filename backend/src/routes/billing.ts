@@ -27,7 +27,7 @@ import { wrapAsync } from "../lib/asyncHandler.js";
 import { isStripeConfigured } from "../lib/env.js";
 import { withIdempotency } from "../lib/idempotency.js";
 import { createActivityLog } from "../lib/activity.js";
-import { getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
+import { getAppointmentFinanceMirrorUpdates, getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 import { recordInvoicePayment } from "../lib/invoicePayments.js";
 import { requireTenant } from "../middleware/tenant.js";
 
@@ -594,10 +594,12 @@ export async function handleStripeWebhook(
                       tx
                     )
                   ).get(appointment.id);
-                  const updates: Record<string, unknown> = {
-                    updatedAt: new Date(),
-                  };
-                  if (nextFinance?.depositSatisfied === true) updates.depositPaid = true;
+                  const updates = getAppointmentFinanceMirrorUpdates({
+                    depositAmount: appointment.depositAmount,
+                    finance: nextFinance,
+                    paidAtWhenPaid: null,
+                    includeUpdatedAt: true,
+                  });
                   const [updated] = await tx
                     .update(appointments)
                     .set(updates as Partial<typeof appointments.$inferInsert>)

@@ -22,7 +22,7 @@ import { createAppointmentDepositCheckoutSession, retrieveCheckoutSession, retri
 import { renderAppointmentHtml } from "../lib/appointmentTemplate.js";
 import { scheduleGoogleCalendarAppointmentSync } from "../lib/googleCalendar.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
-import { calculateAppointmentFinanceSummary, getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
+import { calculateAppointmentFinanceSummary, getAppointmentFinanceMirrorUpdates, getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
@@ -163,10 +163,14 @@ async function confirmAppointmentDepositCheckout(params: {
 
   const [updated] = await db
     .update(appointments)
-    .set({
-      ...(nextFinance?.depositSatisfied === true ? { depositPaid: true } : {}),
-      updatedAt: new Date(),
-    })
+    .set(
+      getAppointmentFinanceMirrorUpdates({
+        depositAmount: appointment.depositAmount,
+        finance: nextFinance,
+        paidAtWhenPaid: null,
+        includeUpdatedAt: true,
+      })
+    )
     .where(and(eq(appointments.id, params.appointmentId), eq(appointments.businessId, params.businessId)))
     .returning({
       id: appointments.id,
