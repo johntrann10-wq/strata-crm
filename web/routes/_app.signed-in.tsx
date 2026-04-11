@@ -138,6 +138,8 @@ export default function DashboardHomeRoute() {
     (nextRange: HomeDashboardRange) => {
       const next = new URLSearchParams(searchParams);
       next.set("range", nextRange);
+      next.delete("weekStart");
+      next.delete("day");
       setSearchParams(next, { replace: true });
     },
     [searchParams, setSearchParams]
@@ -308,6 +310,7 @@ export default function DashboardHomeRoute() {
             <div className="xl:col-span-4">
               <HomeUpcomingAttentionPanel
                 snapshot={snapshot}
+                range={range}
                 loading={pageLoading}
                 error={snapshot?.widgetErrors?.action_queue ? new Error(snapshot.widgetErrors.action_queue.message) : null}
                 onRetry={() => void refreshDashboard("force")}

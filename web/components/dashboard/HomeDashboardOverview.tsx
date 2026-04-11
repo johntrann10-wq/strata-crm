@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Link } from "react-router";
 import { format, formatDistanceToNowStrict, parseISO } from "date-fns";
 import {
@@ -191,10 +191,13 @@ export function HomeWeeklyAppointmentOverviewCard({
   onChangeWeek,
 }: {
   snapshot?: HomeDashboardSnapshot | null;
+  loading?: boolean;
+  error?: Error | null;
+  onRetry?: () => void;
   selectedDate?: string | null;
   onSelectDate?: (date: string | null) => void;
   onChangeWeek?: (weekStartDate: string | null, selectedDate?: string | null) => void;
-} & WidgetStateProps) {
+}) {
   if (loading) return <CardLoadingShell title="Weekly Appointment Overview" rows={7} />;
   if (error) return <WidgetErrorState title="Weekly Appointment Overview" error={error} onRetry={onRetry} />;
 
@@ -213,10 +216,10 @@ export function HomeWeeklyAppointmentOverviewCard({
   }
 
   const hasAppointments = overview.days.some((day) => day.appointmentCount > 0);
-  const maxCount = Math.max(...overview.days.map((day) => day.appointmentCount), 1);
   const activeDay =
     overview.days.find((day) => day.date === selectedDate)
     ?? overview.days.find((day) => day.date === overview.selectedDate)
+    ?? overview.days.find((day) => day.appointmentCount > 0)
     ?? overview.days[0]
     ?? null;
 
@@ -238,7 +241,7 @@ export function HomeWeeklyAppointmentOverviewCard({
       <CardHeader>
         <CardTitle>Weekly Appointment Overview</CardTitle>
         <CardDescription>
-          {formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")} � appointment load, booked value, status mix, and day-by-day capacity for the selected week.
+          {formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")} · a Monday-through-Sunday board of booked work, next jobs, and day-by-day schedule pressure.
         </CardDescription>
         <CardAction>
           <div className="flex items-center gap-2">
@@ -286,62 +289,83 @@ export function HomeWeeklyAppointmentOverviewCard({
             <div className="hidden overflow-hidden rounded-[1.3rem] border border-border/70 bg-white/90 lg:grid lg:grid-cols-7">
               {overview.days.map((day) => {
                 const isActive = day.date === activeDay.date;
-                const loadPercent = Math.max(8, Math.round((day.appointmentCount / maxCount) * 100));
                 return (
                   <button
                     key={day.date}
                     type="button"
                     onClick={() => onSelectDate?.(day.date)}
                     className={cn(
-                      "flex min-h-[240px] flex-col justify-between border-r border-border/60 p-4 text-left transition-colors last:border-r-0",
+                      "flex min-h-[320px] flex-col border-r border-border/60 p-0 text-left transition-colors last:border-r-0",
                       isActive ? "bg-orange-50/70 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.35)]" : "bg-white/80 hover:bg-slate-50/90"
                     )}
                     aria-pressed={isActive}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{day.shortLabel}</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
+                    <div className="border-b border-border/60 px-4 py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{day.shortLabel}</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
+                        </div>
+                        <Link
+                          to={day.calendarUrl}
+                          className="rounded-full p-1 text-muted-foreground hover:bg-white hover:text-slate-950"
+                          aria-label={`Open ${day.label} in calendar`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                        </Link>
                       </div>
-                      <Link
-                        to={day.calendarUrl}
-                        className="rounded-full p-1 text-muted-foreground hover:bg-white hover:text-slate-950"
-                        aria-label={`Open ${day.label} in calendar`}
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                      </Link>
-                    </div>
-                    <div className="mt-5 space-y-4">
-                      <div className="space-y-1">
-                        <p className="text-3xl font-semibold tracking-tight text-slate-950">{day.appointmentCount}</p>
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">appointments</p>
+                      <div className="mt-3 flex items-end justify-between gap-2">
+                        <div>
+                          <p className="text-2xl font-semibold tracking-tight text-slate-950">{day.appointmentCount}</p>
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">appointments</p>
+                        </div>
                         <p className="text-sm font-medium text-slate-950">{formatDashboardCompactCurrency(day.bookedValue)}</p>
                       </div>
-                      <div className="flex flex-wrap gap-1.5 text-[10px]">
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Up {day.statusCounts.upcoming}</span>
-                        <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Live {day.statusCounts.inProgress}</span>
-                        <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">Done {day.statusCounts.completed}</span>
-                        <span className="rounded-full bg-rose-50 px-2 py-1 text-rose-700">Cancel {day.statusCounts.cancelled}</span>
-                      </div>
                     </div>
-                    <div className="mt-5 space-y-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                          <span>Daily load</span>
-                          <span>{loadPercent}%</span>
+                    <div className="flex flex-1 flex-col justify-between px-4 py-4">
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap gap-1.5 text-[10px]">
+                          <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Up {day.statusCounts.upcoming}</span>
+                          <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Live {day.statusCounts.inProgress}</span>
+                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">Done {day.statusCounts.completed}</span>
+                          <span className="rounded-full bg-rose-50 px-2 py-1 text-rose-700">Cancel {day.statusCounts.cancelled}</span>
                         </div>
-                        <div className="h-2 rounded-full bg-slate-100">
-                          <div className="h-2 rounded-full bg-slate-900" style={{ width: `${loadPercent}%` }} />
+
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Next jobs</p>
+                          {day.previewItems.length === 0 ? (
+                            <div className="rounded-[0.95rem] border border-dashed border-border/70 bg-white/75 px-2.5 py-3 text-xs text-muted-foreground">
+                              No jobs queued yet.
+                            </div>
+                          ) : (
+                            day.previewItems.map((item) => (
+                              <Link
+                                key={item.id}
+                                to={item.url}
+                                onClick={(event) => event.stopPropagation()}
+                                className="block rounded-[0.95rem] border border-border/70 bg-white/88 px-2.5 py-2.5 transition-colors hover:border-orange-200 hover:bg-orange-50/50"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-[12px] font-semibold text-slate-950">{item.title}</p>
+                                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                      {item.clientName} · {item.vehicleLabel}
+                                    </p>
+                                  </div>
+                                  <p className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                                    {formatDateLabel(item.startTime, "h:mm a")}
+                                  </p>
+                                </div>
+                              </Link>
+                            ))
+                          )}
                         </div>
                       </div>
                       {day.capacityUsage != null ? (
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span>Capacity</span>
-                            <span>{day.capacityUsage}%</span>
-                          </div>
-                          <Progress className="h-2 bg-slate-200" value={day.capacityUsage} />
+                        <div className="flex items-center justify-between rounded-[0.9rem] border border-border/70 bg-slate-50/80 px-2.5 py-2 text-[11px] text-muted-foreground">
+                          <span>Assigned capacity</span>
+                          <span className="font-semibold text-slate-700">{day.capacityUsage}%</span>
                         </div>
                       ) : null}
                     </div>
@@ -379,13 +403,37 @@ export function HomeWeeklyAppointmentOverviewCard({
                       <span>Completed {day.statusCounts.completed}</span>
                       <span>Cancelled {day.statusCounts.cancelled}</span>
                     </div>
-                    {day.capacityUsage != null ? (
-                      <div className="mt-3 space-y-1">
-                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                          <span>Capacity</span>
-                          <span>{day.capacityUsage}%</span>
+                    <div className="mt-3 space-y-2">
+                      {day.previewItems.length === 0 ? (
+                        <div className="rounded-[0.95rem] border border-dashed border-border/70 bg-white/75 px-3 py-3 text-xs text-muted-foreground">
+                          No jobs queued yet.
                         </div>
-                        <Progress className="h-2 bg-slate-200" value={day.capacityUsage} />
+                      ) : (
+                        day.previewItems.slice(0, 3).map((item) => (
+                          <Link
+                            key={item.id}
+                            to={item.url}
+                            className="block rounded-[0.95rem] border border-border/70 bg-white/88 px-3 py-2.5 transition-colors hover:border-orange-200 hover:bg-orange-50/50"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-[12px] font-semibold text-slate-950">{item.title}</p>
+                                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                  {item.clientName} · {item.vehicleLabel}
+                                </p>
+                              </div>
+                              <p className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                                {formatDateLabel(item.startTime, "h:mm a")}
+                              </p>
+                            </div>
+                          </Link>
+                        ))
+                      )}
+                    </div>
+                    {day.capacityUsage != null ? (
+                      <div className="mt-3 flex items-center justify-between rounded-[0.9rem] border border-border/70 bg-slate-50/80 px-3 py-2 text-[11px] text-muted-foreground">
+                        <span>Assigned capacity</span>
+                        <span className="font-semibold text-slate-700">{day.capacityUsage}%</span>
                       </div>
                     ) : null}
                   </div>
@@ -445,9 +493,9 @@ export function HomeWeeklyAppointmentOverviewCard({
     </Card>
   );
 }
-
 export function HomeUpcomingAttentionPanel({
   snapshot,
+  range,
   loading,
   error,
   onRetry,
@@ -455,6 +503,7 @@ export function HomeUpcomingAttentionPanel({
   onSnooze,
 }: {
   snapshot?: HomeDashboardSnapshot | null;
+  range: HomeDashboardRange;
   onDismiss?: (itemId: string) => void;
   onSnooze?: (itemId: string) => void;
 } & WidgetStateProps) {
@@ -463,18 +512,20 @@ export function HomeUpcomingAttentionPanel({
 
   const scheduleItems = snapshot?.todaySchedule.items.slice(0, 4) ?? [];
   const queueItems = snapshot?.actionQueue.items.slice(0, 5) ?? [];
+  const rangeLabel = range === "today" ? "today" : range === "week" ? "this week" : "this month";
+  const upcomingHeading = range === "today" ? "Today’s queue" : range === "week" ? "This week" : "This month";
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Upcoming Jobs / Needs Attention</CardTitle>
-        <CardDescription>The next jobs coming in and the revenue-pressure items that need action.</CardDescription>
+        <CardDescription>The next jobs in {rangeLabel} and the revenue-pressure items that need action first.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             <CalendarClock className="h-3.5 w-3.5" />
-            Upcoming jobs
+            {upcomingHeading}
           </div>
           {scheduleItems.length === 0 ? (
             <p className="rounded-[1rem] border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">No upcoming jobs in this view.</p>
@@ -587,7 +638,7 @@ export function HomeMonthlyRevenueChartCard({
       <CardHeader>
         <CardTitle>Monthly Revenue Chart</CardTitle>
         <CardDescription>
-          {formatDateLabel(chart.monthStart, "MMMM yyyy")} � booked revenue by scheduled work day and collected revenue by payment day.
+          {formatDateLabel(chart.monthStart, "MMMM yyyy")} · booked revenue by scheduled work day and collected revenue by payment day.
         </CardDescription>
         <CardAction>
           <div className="inline-flex rounded-2xl border border-border/70 bg-slate-50/80 p-1">
@@ -1019,5 +1070,6 @@ export function HomeCompactQuickActions({
     </Card>
   );
 }
+
 
 

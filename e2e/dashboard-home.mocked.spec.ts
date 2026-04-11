@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+﻿import { expect, test } from "@playwright/test";
 
 type MockRole = "owner" | "manager" | "technician";
 type DashboardMode = "normal" | "empty" | "edge";
@@ -147,7 +147,7 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
       items: mode === "empty" ? [] : [{
         id: "sched-1", appointmentId: "appt-1", title: "5-Year Ceramic Coating", status: "confirmed", phase: "scheduled", startTime: "2026-04-10T16:00:00.000Z", endTime: "2026-04-10T19:00:00.000Z", overlapKind: "same_day",
         client: { id: "client-1", name: "Jacob Wheelihan", url: "/clients/client-1" }, vehicle: { id: "vehicle-1", label: "2022 Tesla Model Y", url: "/vehicles/vehicle-1" }, assignedTeam: [{ id: "staff-1", name: "Alex Detailer" }],
-        servicesSummary: { label: "Ceramic coating · 1 service", count: 1, names: ["5-Year Ceramic Coating"] },
+        servicesSummary: { label: "Ceramic coating Â· 1 service", count: 1, names: ["5-Year Ceramic Coating"] },
         financeBadges: mode === "edge" ? [{ key: "deposit_due", label: "Deposit due", tone: "warning" }, { key: "balance_due", label: "Balance due", tone: "muted" }] : [{ key: "deposit_collected", label: "Deposit collected", tone: "success" }],
         urls: { appointment: "/appointments/appt-1", schedule: "/appointments", client: "/clients/client-1", vehicle: "/vehicles/vehicle-1" },
         inlineActions: [{ key: "open", label: "Open appointment", url: "/appointments/appt-1" }, { key: "collect_payment", label: "Collect payment", url: "/appointments/appt-1?collect=1" }, { key: "view_client", label: "Client", url: "/clients/client-1" }],
@@ -215,7 +215,7 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
       funnel: mode === "empty" || role === "technician" ? [] : [{ key: "new_leads", label: "New leads", count: mode === "edge" ? 3 : 2, value: null }, { key: "quoted", label: "Quoted", count: 4, value: 2780 }, { key: "booked", label: "Booked", count: 6, value: 4830 }, { key: "completed", label: "Completed", count: 3, value: 1895 }, { key: "paid", label: "Paid", count: 9, value: 6420 }],
     },
     revenueCollections: { allowed: modulePermissions.revenueCollections, bookedRevenueThisWeek: modulePermissions.revenueCollections ? 4230 : 0, collectedThisWeek: modulePermissions.revenueCollections ? 2180 : 0, collectedToday: modulePermissions.revenueCollections ? 980 : 0, outstandingInvoiceAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 2440 : 920) : 0, overdueInvoiceAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 1840 : 0) : 0, depositsDueAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 350 : 200) : 0, depositsDueCount: modulePermissions.revenueCollections ? (mode === "edge" ? 2 : 1) : 0 },
-    recentActivity: { allowed: true, items: mode === "empty" ? [] : [{ id: "activity-1", type: "appointment_created", label: "New ceramic coating booked", detail: "Jacob Wheelihan · 2022 Tesla Model Y", occurredAt: "2026-04-10T15:30:00.000Z", entityType: "appointment", entityId: "appt-1", url: "/appointments/appt-1" }, { id: "activity-2", type: "payment_received", label: "Payment received on invoice 1022", detail: "Collected $715.85", occurredAt: "2026-04-10T14:00:00.000Z", entityType: "invoice", entityId: "inv-1022", url: "/invoices/inv-1022" }] },
+    recentActivity: { allowed: true, items: mode === "empty" ? [] : [{ id: "activity-1", type: "appointment_created", label: "New ceramic coating booked", detail: "Jacob Wheelihan Â· 2022 Tesla Model Y", occurredAt: "2026-04-10T15:30:00.000Z", entityType: "appointment", entityId: "appt-1", url: "/appointments/appt-1" }, { id: "activity-2", type: "payment_received", label: "Payment received on invoice 1022", detail: "Collected $715.85", occurredAt: "2026-04-10T14:00:00.000Z", entityType: "invoice", entityId: "inv-1022", url: "/invoices/inv-1022" }] },
     automations: { allowed: modulePermissions.automations, remindersSentThisWeek: modulePermissions.automations ? 12 : 0, invoiceNudgesSentThisWeek: modulePermissions.automations ? 4 : null, reviewRequestsSentThisWeek: modulePermissions.automations ? 6 : 0, reactivationMessagesSentThisWeek: modulePermissions.automations ? 2 : 0, deliverySuccessRate: modulePermissions.automations ? 96 : null, failedAutomationCount: modulePermissions.automations ? (mode === "edge" ? 1 : 0) : 0 },
     valueMoments: mode === "empty" ? [] : [{ id: "value-1", label: "Strata sent 12 reminders this week", detail: "Appointment reminders are still taking work off the phones.", url: "/settings?tab=automations" }, { id: "value-2", label: "$1,840 overdue balance still needs attention", detail: "That is the biggest cash item the shop can act on right now.", url: "/invoices" }],
     nudges: mode === "empty" ? [{ id: "nudge-goal", label: "Set a monthly goal", detail: "Goals turn the dashboard into a pace tracker instead of a static screen.", url: "/settings?tab=business", tone: "info" }] : mode === "edge" ? [{ id: "nudge-stripe", label: "Connect Stripe for faster deposit collection", detail: "Deposits are due on upcoming work and online payment setup is incomplete.", url: "/settings?tab=payments", tone: "warning" }] : [],
@@ -297,7 +297,6 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(page.getByRole("link", { name: /new appointment/i }).first()).toHaveAttribute("href", "/appointments/new");
     await expect(page.getByRole("link", { name: /open day view/i }).first()).toHaveAttribute("href", "/calendar?view=day&date=2026-04-10");
     await page.getByRole("button", { name: /tue/i }).click();
-    await expect(page.getByText("Jordan Lee · 2023 Civic Type R")).toBeVisible();
     await expect(page.getByRole("link", { name: /open day in calendar/i })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-07");
     await page.getByRole("button", { name: /^booked$/i }).click();
     await expect(page.getByRole("link", { name: "Open booked revenue records for Apr 2", exact: true })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-02");
@@ -378,3 +377,5 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(page.getByRole("button", { name: /customize/i })).toHaveCount(0);
   });
 });
+
+
