@@ -139,7 +139,7 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
     summaryCards: {
       needsAction: { allowed: true, total: visibleQueue.length, breakdown },
       today: { allowed: true, jobs: mode === "empty" ? 0 : 4, dropoffs: mode === "empty" ? 0 : 2, pickups: mode === "empty" ? 0 : 1, inShop: mode === "empty" ? 0 : 2 },
-      cash: { allowed: modulePermissions.cash, collectedToday: modulePermissions.cash ? (mode === "edge" ? 420 : 980) : 0, outstandingInvoiceAmount: modulePermissions.cash ? (mode === "edge" ? 2440 : 920) : 0, overdueInvoiceAmount: modulePermissions.cash ? (mode === "edge" ? 1840 : 0) : 0, depositsDueAmount: modulePermissions.cash ? (mode === "edge" ? 350 : 200) : 0 },
+      cash: { allowed: modulePermissions.cash, collectedToday: modulePermissions.cash ? (mode === "empty" ? 0 : mode === "edge" ? 420 : 980) : 0, outstandingInvoiceAmount: modulePermissions.cash ? (mode === "empty" ? 0 : mode === "edge" ? 2440 : 920) : 0, overdueInvoiceAmount: modulePermissions.cash ? (mode === "edge" ? 1840 : 0) : 0, depositsDueAmount: modulePermissions.cash ? (mode === "empty" ? 0 : mode === "edge" ? 350 : 200) : 0 },
       conversion: { allowed: modulePermissions.conversion, newLeads: mode === "empty" ? 0 : mode === "edge" ? 5 : 3, quoted: mode === "empty" ? 0 : 4, booked: mode === "empty" ? 0 : 3, conversionRate: mode === "empty" ? null : 60 },
     },
     todaySchedule: {
@@ -147,7 +147,7 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
       items: mode === "empty" ? [] : [{
         id: "sched-1", appointmentId: "appt-1", title: "5-Year Ceramic Coating", status: "confirmed", phase: "scheduled", startTime: "2026-04-10T16:00:00.000Z", endTime: "2026-04-10T19:00:00.000Z", overlapKind: "same_day",
         client: { id: "client-1", name: "Jacob Wheelihan", url: "/clients/client-1" }, vehicle: { id: "vehicle-1", label: "2022 Tesla Model Y", url: "/vehicles/vehicle-1" }, assignedTeam: [{ id: "staff-1", name: "Alex Detailer" }],
-        servicesSummary: { label: "Ceramic coating Â· 1 service", count: 1, names: ["5-Year Ceramic Coating"] },
+        servicesSummary: { label: "Ceramic coating · 1 service", count: 1, names: ["5-Year Ceramic Coating"] },
         financeBadges: mode === "edge" ? [{ key: "deposit_due", label: "Deposit due", tone: "warning" }, { key: "balance_due", label: "Balance due", tone: "muted" }] : [{ key: "deposit_collected", label: "Deposit collected", tone: "success" }],
         urls: { appointment: "/appointments/appt-1", schedule: "/appointments", client: "/clients/client-1", vehicle: "/vehicles/vehicle-1" },
         inlineActions: [{ key: "open", label: "Open appointment", url: "/appointments/appt-1" }, { key: "collect_payment", label: "Collect payment", url: "/appointments/appt-1?collect=1" }, { key: "view_client", label: "Client", url: "/clients/client-1" }],
@@ -171,15 +171,15 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
         { date: "2026-04-12", label: "Sunday", shortLabel: "Sun", appointmentCount: mode === "empty" ? 0 : 1, bookedValue: mode === "empty" ? 0 : 350, statusCounts: { upcoming: mode === "empty" ? 0 : 1, inProgress: 0, completed: 0, cancelled: 0 }, capacityUsage: mode === "empty" ? 0 : 25, calendarUrl: "/calendar?view=day&date=2026-04-12", previewItems: mode === "empty" ? [] : [{ id: "appt-su1", title: "Wash club drop-in", clientName: "Noah Rivera", vehicleLabel: "2020 Tacoma", startTime: "2026-04-12T18:00:00.000Z", url: "/appointments/appt-su1" }] },
       ],
     },
-    monthlyRevenueChart: {
+      monthlyRevenueChart: {
       allowed: role !== "technician",
       monthStart: "2026-04-01T07:00:00.000Z",
       monthEnd: "2026-05-01T06:59:59.999Z",
       totalBookedThisMonth: mode === "empty" ? 0 : 11840,
       totalCollectedThisMonth: role === "technician" ? 0 : mode === "empty" ? 0 : 9320,
       outstandingInvoiceAmount: role === "technician" ? 0 : mode === "edge" ? 2440 : 920,
-      percentToGoal: role === "owner" ? 78 : null,
-      goalAmount: role === "owner" ? 15000 : null,
+      percentToGoal: role === "owner" && mode !== "empty" ? 78 : null,
+      goalAmount: role === "owner" && mode !== "empty" ? 15000 : null,
       days: Array.from({ length: 30 }, (_, index) => ({
         date: `2026-04-${String(index + 1).padStart(2, "0")}`,
         dayOfMonth: index + 1,
@@ -200,8 +200,8 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
       quoteToBookConversionRate: mode === "empty" ? null : 58,
       averageTicketValue: mode === "empty" ? null : 612,
       depositsCollectedAmount: mode === "empty" ? 0 : 1860,
-      depositsDueAmount: role === "technician" ? 0 : mode === "edge" ? 350 : 200,
-      depositsDueCount: role === "technician" ? 0 : mode === "edge" ? 2 : 1,
+      depositsDueAmount: role === "technician" ? 0 : mode === "empty" ? 0 : mode === "edge" ? 350 : 200,
+      depositsDueCount: role === "technician" ? 0 : mode === "empty" ? 0 : mode === "edge" ? 2 : 1,
       links: {
         bookingsThisWeek: "/calendar?view=week&date=2026-04-06",
         bookingsThisMonth: "/calendar?view=month&date=2026-04-01",
@@ -214,14 +214,14 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
       },
       funnel: mode === "empty" || role === "technician" ? [] : [{ key: "new_leads", label: "New leads", count: mode === "edge" ? 3 : 2, value: null }, { key: "quoted", label: "Quoted", count: 4, value: 2780 }, { key: "booked", label: "Booked", count: 6, value: 4830 }, { key: "completed", label: "Completed", count: 3, value: 1895 }, { key: "paid", label: "Paid", count: 9, value: 6420 }],
     },
-    revenueCollections: { allowed: modulePermissions.revenueCollections, bookedRevenueThisWeek: modulePermissions.revenueCollections ? 4230 : 0, collectedThisWeek: modulePermissions.revenueCollections ? 2180 : 0, collectedToday: modulePermissions.revenueCollections ? 980 : 0, outstandingInvoiceAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 2440 : 920) : 0, overdueInvoiceAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 1840 : 0) : 0, depositsDueAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 350 : 200) : 0, depositsDueCount: modulePermissions.revenueCollections ? (mode === "edge" ? 2 : 1) : 0 },
-    recentActivity: { allowed: true, items: mode === "empty" ? [] : [{ id: "activity-1", type: "appointment_created", label: "New ceramic coating booked", detail: "Jacob Wheelihan Â· 2022 Tesla Model Y", occurredAt: "2026-04-10T15:30:00.000Z", entityType: "appointment", entityId: "appt-1", url: "/appointments/appt-1" }, { id: "activity-2", type: "payment_received", label: "Payment received on invoice 1022", detail: "Collected $715.85", occurredAt: "2026-04-10T14:00:00.000Z", entityType: "invoice", entityId: "inv-1022", url: "/invoices/inv-1022" }] },
+    revenueCollections: { allowed: modulePermissions.revenueCollections, bookedRevenueThisWeek: modulePermissions.revenueCollections ? (mode === "empty" ? 0 : 4230) : 0, collectedThisWeek: modulePermissions.revenueCollections ? (mode === "empty" ? 0 : 2180) : 0, collectedToday: modulePermissions.revenueCollections ? (mode === "empty" ? 0 : 980) : 0, outstandingInvoiceAmount: modulePermissions.revenueCollections ? (mode === "empty" ? 0 : mode === "edge" ? 2440 : 920) : 0, overdueInvoiceAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 1840 : 0) : 0, depositsDueAmount: modulePermissions.revenueCollections ? (mode === "empty" ? 0 : mode === "edge" ? 350 : 200) : 0, depositsDueCount: modulePermissions.revenueCollections ? (mode === "empty" ? 0 : mode === "edge" ? 2 : 1) : 0 },
+    recentActivity: { allowed: true, items: mode === "empty" ? [] : [{ id: "activity-1", type: "appointment_created", label: "New ceramic coating booked", detail: "Jacob Wheelihan · 2022 Tesla Model Y", occurredAt: "2026-04-10T15:30:00.000Z", entityType: "appointment", entityId: "appt-1", url: "/appointments/appt-1" }, { id: "activity-2", type: "payment_received", label: "Payment received on invoice 1022", detail: "Collected $715.85", occurredAt: "2026-04-10T14:00:00.000Z", entityType: "invoice", entityId: "inv-1022", url: "/invoices/inv-1022" }] },
     automations: { allowed: modulePermissions.automations, remindersSentThisWeek: modulePermissions.automations ? 12 : 0, invoiceNudgesSentThisWeek: modulePermissions.automations ? 4 : null, reviewRequestsSentThisWeek: modulePermissions.automations ? 6 : 0, reactivationMessagesSentThisWeek: modulePermissions.automations ? 2 : 0, deliverySuccessRate: modulePermissions.automations ? 96 : null, failedAutomationCount: modulePermissions.automations ? (mode === "edge" ? 1 : 0) : 0 },
     valueMoments: mode === "empty" ? [] : [{ id: "value-1", label: "Strata sent 12 reminders this week", detail: "Appointment reminders are still taking work off the phones.", url: "/settings?tab=automations" }, { id: "value-2", label: "$1,840 overdue balance still needs attention", detail: "That is the biggest cash item the shop can act on right now.", url: "/invoices" }],
     nudges: mode === "empty" ? [{ id: "nudge-goal", label: "Set a monthly goal", detail: "Goals turn the dashboard into a pace tracker instead of a static screen.", url: "/settings?tab=business", tone: "info" }] : mode === "edge" ? [{ id: "nudge-stripe", label: "Connect Stripe for faster deposit collection", detail: "Deposits are due on upcoming work and online payment setup is incomplete.", url: "/settings?tab=payments", tone: "warning" }] : [],
     sinceLastChecked: { allowed: true, since: "2026-04-10T12:00:00.000Z", newLeads: mode === "empty" ? 0 : 3, newBookings: mode === "empty" ? 0 : 2, paymentsReceived: mode === "empty" ? 0 : 1, newIssues: mode === "edge" ? 2 : 0, resolvedIssues: mode === "empty" ? 0 : 1 },
     businessHealth: { allowed: modulePermissions.businessHealth, score: modulePermissions.businessHealth ? (mode === "edge" ? 68 : 89) : null, factors: modulePermissions.businessHealth ? [{ key: "overdue_invoices", label: "Overdue invoices", score: mode === "edge" ? 42 : 88, weight: 0.25, detail: "Older unpaid invoices are slowing cash collection.", issueCount: mode === "edge" ? 3 : 0 }, { key: "missing_deposits", label: "Missing deposits", score: mode === "edge" ? 55 : 94, weight: 0.2, detail: "Upcoming appointments still need deposit collection.", issueCount: mode === "edge" ? 2 : 1 }, { key: "lead_response", label: "Lead response", score: mode === "edge" ? 63 : 91, weight: 0.2, detail: "A few leads are drifting past the first-touch SLA.", issueCount: mode === "edge" ? 3 : 0 }] : [], topIssues: modulePermissions.businessHealth ? [{ label: "Clean up overdue invoices first", detail: "It is the fastest path to reduce cash pressure today.", url: "/invoices" }] : [] },
-    goals: { allowed: modulePermissions.goals, monthlyRevenueGoal: modulePermissions.goals ? 15000 : null, currentRevenue: modulePermissions.goals ? 11700 : 0, percentToGoal: modulePermissions.goals ? 78 : null, projectedMonthEnd: modulePermissions.goals ? 16200 : null, monthlyJobsGoal: modulePermissions.goals ? 24 : null, currentJobs: modulePermissions.goals ? 19 : 0 },
+    goals: { allowed: modulePermissions.goals, monthlyRevenueGoal: modulePermissions.goals && mode !== "empty" ? 15000 : null, currentRevenue: modulePermissions.goals && mode !== "empty" ? 11700 : 0, percentToGoal: modulePermissions.goals && mode !== "empty" ? 78 : null, projectedMonthEnd: modulePermissions.goals && mode !== "empty" ? 16200 : null, monthlyJobsGoal: modulePermissions.goals && mode !== "empty" ? 24 : null, currentJobs: modulePermissions.goals && mode !== "empty" ? 19 : 0 },
     definitions: { weekStartsOn: "monday", uncontactedLead: "Lead created more than 15 minutes ago with no first response.", quoteFollowUp: "Sent quote older than 24 hours without acceptance or decline.", depositDue: "Appointment in the next 48 hours with required deposit unpaid.", overdueInvoice: "Unpaid invoice past due date.", completedMissingInvoice: "Completed appointment without a linked invoice.", todayJobs: "Appointments that start today or overlap today.", cashCollectedToday: "Successful payments created today.", bookedRevenueThisWeek: "Value of newly booked appointments and standalone invoices this week." },
   };
 }
@@ -287,7 +287,9 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(main.getByText("Monthly Revenue Chart", { exact: true })).toBeVisible();
     await expect(main.getByText("Outstanding invoices", { exact: true })).toBeVisible();
     await expect(main.getByText("Bookings Overview", { exact: true })).toBeVisible();
-    await expect(main.getByText("Business Feed", { exact: true })).toBeVisible();
+    await expect(main.getByText("Recent Activity", { exact: true })).toBeVisible();
+    await expect(main.getByText("Unpaid Invoices / Deposits Due", { exact: true })).toBeVisible();
+    await expect(main.getByText("Lead / Quote follow-up", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Open bookings this week details", exact: true })).toHaveAttribute("href", "/calendar?view=week&date=2026-04-06");
     await expect(page.getByRole("link", { name: "Open quotes sent details", exact: true })).toHaveAttribute("href", "/quotes?tab=followup");
     await expect(page.getByRole("link", { name: "Open deposits due details", exact: true })).toHaveAttribute("href", "/calendar?view=week&date=2026-04-06");
@@ -300,7 +302,7 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(page.getByRole("link", { name: /open day in calendar/i })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-07");
     await page.getByRole("button", { name: /^booked$/i }).click();
     await expect(page.getByRole("link", { name: "Open booked revenue records for Apr 2", exact: true })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-02");
-    await page.getByRole("button", { name: /^collected$/i }).click();
+    await page.getByRole("button", { name: /^cash$/i }).click();
     await expect(page.getByRole("link", { name: "Open collected revenue records for Apr 3", exact: true })).toHaveAttribute("href", "/finances?focusDate=2026-04-03");
     if (process.platform === "win32") {
       await expect(page.locator("main")).toHaveScreenshot("dashboard-owner-control-tower.png", {
@@ -341,13 +343,17 @@ test.describe("Dashboard home (mocked)", () => {
     await page.goto("/signed-in");
     await expect(page.getByText("No upcoming jobs in this view")).toBeVisible();
     await expect(page.getByText("No urgent action items right now.")).toBeVisible();
-    await expect(page.getByText("Business Feed", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Monthly Revenue Chart", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Bookings Overview", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Recent Activity", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Unpaid Invoices / Deposits Due", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Lead / Quote follow-up", { exact: true })).toHaveCount(0);
   });
 
   test("handles edge-case pressure, last-seen changes, and queue mutations with a refetch", async ({ page }) => {
     const state = await mockDashboard(page, { role: "owner", mode: "edge" });
     await page.goto("/signed-in");
-    await expect(page.getByText("Collect invoice 1024")).toBeVisible();
+    await expect(page.getByText("Collect invoice 1024").first()).toBeVisible();
     await expect(page.getByText("$1,840 at risk")).toBeVisible();
     const beforeDismiss = state.snapshotCalls;
     await page.getByRole("button", { name: /^dismiss$/i }).first().click();
@@ -377,7 +383,7 @@ test.describe("Dashboard home (mocked)", () => {
     await page.goto("/signed-in");
     await expect(page.getByText("Monthly Revenue Chart", { exact: true })).toBeVisible();
     await expect(page.getByText("Booked this month", { exact: true })).toBeVisible();
-    await expect(page.getByText("Revenue is grouped by business day. Tap a bar to drill into that date.")).toBeVisible();
+    await expect(page.getByText("Booked work is grouped by scheduled day. Invoice collections are grouped by payment day. Tap a bar to drill into that date.")).toBeVisible();
   });
 
   test("respects the dashboard feature flag rollback path", async ({ page }) => {

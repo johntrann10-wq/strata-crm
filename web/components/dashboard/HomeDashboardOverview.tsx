@@ -34,6 +34,12 @@ type WidgetStateProps = {
   onRetry?: () => void;
 };
 
+const dashboardPanelClassName =
+  "rounded-[1.75rem] border border-slate-200/80 bg-white/92 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur";
+
+const dashboardInsetClassName =
+  "rounded-[1.15rem] border border-slate-200/75 bg-slate-50/80";
+
 function parseDate(value: string | null | undefined) {
   if (!value) return null;
   const parsed = parseISO(value);
@@ -61,7 +67,7 @@ function shiftDateKey(value: string, days: number) {
 
 function WidgetErrorState({ title, error, onRetry }: { title: string; error?: Error | null; onRetry?: () => void }) {
   return (
-    <Card className="min-h-[220px]">
+    <Card className={cn(dashboardPanelClassName, "min-h-[220px]")}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>This section is temporarily unavailable.</CardDescription>
@@ -84,7 +90,7 @@ function WidgetErrorState({ title, error, onRetry }: { title: string; error?: Er
 
 function CardLoadingShell({ title, rows = 4, compact = false }: { title: string; rows?: number; compact?: boolean }) {
   return (
-    <Card className={cn(compact ? "min-h-[140px]" : "min-h-[220px]")}>
+    <Card className={cn(dashboardPanelClassName, compact ? "min-h-[140px]" : "min-h-[220px]")}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
@@ -154,14 +160,14 @@ export function HomeOverviewKpiStrip({
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {items.map((item) => (
-        <Card key={item.key} className="gap-2 py-4">
+        <Card key={item.key} className={cn(dashboardPanelClassName, "gap-2 py-4")}>
           <CardHeader className="pb-2">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <CardDescription className="text-[11px] uppercase tracking-[0.16em]">{item.title}</CardDescription>
-                <CardTitle className="mt-2 text-3xl tracking-[-0.04em]">{item.value}</CardTitle>
+                <CardDescription className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{item.title}</CardDescription>
+                <CardTitle className="mt-3 text-3xl tracking-[-0.05em] text-slate-950">{item.value}</CardTitle>
               </div>
-              <Button asChild variant="ghost" size="sm" className="rounded-full text-xs">
+              <Button asChild variant="ghost" size="sm" className="rounded-full border border-slate-200/80 bg-slate-50/80 text-xs text-slate-700 hover:bg-slate-100">
                 <Link to={item.href}>
                   Open
                   <ArrowRight className="ml-1 h-3.5 w-3.5" />
@@ -170,7 +176,7 @@ export function HomeOverviewKpiStrip({
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <p className="text-sm text-muted-foreground">{item.context}</p>
+            <p className="text-sm text-slate-500">{item.context}</p>
           </CardContent>
         </Card>
       ))}
@@ -201,7 +207,7 @@ export function HomeWeeklyAppointmentOverviewCard({
   const overview = snapshot?.weeklyOverview;
   if (!overview?.allowed) {
     return (
-      <Card>
+      <Card className={dashboardPanelClassName}>
         <CardHeader>
           <CardTitle>Weekly Appointment Overview</CardTitle>
         </CardHeader>
@@ -222,7 +228,7 @@ export function HomeWeeklyAppointmentOverviewCard({
 
   if (!activeDay) {
     return (
-      <Card>
+      <Card className={dashboardPanelClassName}>
         <CardHeader>
           <CardTitle>Weekly Appointment Overview</CardTitle>
         </CardHeader>
@@ -234,16 +240,16 @@ export function HomeWeeklyAppointmentOverviewCard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Weekly Appointment Overview</CardTitle>
-        <CardDescription>{formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")}</CardDescription>
+    <Card className={dashboardPanelClassName}>
+      <CardHeader className="border-b border-slate-100/90 pb-5">
+        <CardTitle className="text-xl tracking-[-0.03em]">Weekly Appointment Overview</CardTitle>
+        <CardDescription className="text-slate-500">{formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")}</CardDescription>
         <CardAction>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="icon"
-              className="h-9 w-9 rounded-full"
+              className="h-9 w-9 rounded-full border-slate-200 bg-slate-50/80"
               onClick={() => onChangeWeek?.(shiftDateKey(overview.days[0]?.date ?? activeDay.date, -7), shiftDateKey(activeDay.date, -7))}
               aria-label="Previous week"
             >
@@ -252,13 +258,13 @@ export function HomeWeeklyAppointmentOverviewCard({
             <Button
               variant="outline"
               size="icon"
-              className="h-9 w-9 rounded-full"
+              className="h-9 w-9 rounded-full border-slate-200 bg-slate-50/80"
               onClick={() => onChangeWeek?.(shiftDateKey(overview.days[0]?.date ?? activeDay.date, 7), shiftDateKey(activeDay.date, 7))}
               aria-label="Next week"
             >
               <ArrowRight className="h-4 w-4" />
             </Button>
-            <Button asChild variant="outline" size="sm" className="rounded-full">
+            <Button asChild variant="outline" size="sm" className="rounded-full border-slate-200 bg-slate-50/80">
               <Link to={activeDay.calendarUrl}>
                 Open day view
                 <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
@@ -281,7 +287,7 @@ export function HomeWeeklyAppointmentOverviewCard({
           />
         ) : (
           <>
-            <div className="hidden overflow-hidden rounded-[1.3rem] border border-border/70 bg-white/90 lg:grid lg:grid-cols-7">
+            <div className="hidden overflow-hidden rounded-[1.4rem] border border-slate-200/80 bg-slate-50/75 lg:grid lg:grid-cols-7">
               {overview.days.map((day) => {
                 const isActive = day.date === activeDay.date;
                 return (
@@ -290,20 +296,20 @@ export function HomeWeeklyAppointmentOverviewCard({
                     type="button"
                     onClick={() => onSelectDate?.(day.date)}
                     className={cn(
-                      "flex min-h-[380px] flex-col border-r border-border/60 p-0 text-left transition-colors last:border-r-0",
-                      isActive ? "bg-orange-50/70 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.35)]" : "bg-white/80 hover:bg-slate-50/90"
+                      "flex min-h-[400px] flex-col border-r border-slate-200/75 p-0 text-left transition-colors last:border-r-0",
+                      isActive ? "bg-white shadow-[inset_0_0_0_1px_rgba(37,99,235,0.24)]" : "bg-transparent hover:bg-white/70"
                     )}
                     aria-pressed={isActive}
                   >
-                    <div className="border-b border-border/60 px-4 py-3">
+                    <div className="border-b border-slate-200/75 px-4 py-3.5">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{day.shortLabel}</p>
+                          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{day.shortLabel}</p>
                           <p className="mt-1 text-sm font-semibold text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
                         </div>
                         <Link
                           to={day.calendarUrl}
-                          className="rounded-full p-1 text-muted-foreground hover:bg-white hover:text-slate-950"
+                          className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-950"
                           aria-label={`Open ${day.label} in calendar`}
                           onClick={(event) => event.stopPropagation()}
                         >
@@ -312,7 +318,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                       </div>
                       <div className="mt-3 space-y-1.5">
                         <p className="text-2xl font-semibold tracking-tight text-slate-950">{day.appointmentCount}</p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
                           <span>{day.appointmentCount === 1 ? "appointment" : "appointments"}</span>
                           <span className="text-slate-300">•</span>
                           <span className="font-semibold text-slate-800">{formatDashboardCompactCurrency(day.bookedValue)} booked</span>
@@ -329,9 +335,9 @@ export function HomeWeeklyAppointmentOverviewCard({
                         </div>
 
                         <div className="space-y-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Next jobs</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Next jobs</p>
                           {day.previewItems.length === 0 ? (
-                            <div className="rounded-[0.95rem] border border-dashed border-border/70 bg-white/75 px-2.5 py-3 text-xs text-muted-foreground">
+                            <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/70 px-2.5 py-3 text-xs text-slate-500">
                               No jobs queued yet.
                             </div>
                           ) : (
@@ -340,17 +346,17 @@ export function HomeWeeklyAppointmentOverviewCard({
                                 key={item.id}
                                 to={item.url}
                                 onClick={(event) => event.stopPropagation()}
-                                className="block rounded-[0.95rem] border border-border/70 bg-white/88 px-3 py-3 transition-colors hover:border-orange-200 hover:bg-orange-50/50"
+                                className="block rounded-[1rem] border border-slate-200/80 bg-white/94 px-3 py-3 transition-colors hover:border-sky-200 hover:bg-sky-50/45"
                               >
                                 <div className="flex items-start justify-between gap-2.5">
                                   <div className="min-w-0">
                                     <p className="line-clamp-2 text-[12px] font-semibold leading-4 text-slate-950">{item.title}</p>
-                                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">
                                       {item.clientName}
                                       {item.vehicleLabel ? ` · ${item.vehicleLabel}` : ""}
                                     </p>
                                   </div>
-                                  <p className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                                  <p className="shrink-0 text-[11px] font-medium text-slate-500">
                                     {formatDateLabel(item.startTime, "h:mm a")}
                                   </p>
                                 </div>
@@ -360,7 +366,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                         </div>
                       </div>
                       {day.capacityUsage != null ? (
-                        <div className="flex items-center justify-between rounded-[0.9rem] border border-border/70 bg-slate-50/80 px-2.5 py-2 text-[11px] text-muted-foreground">
+                        <div className="flex items-center justify-between rounded-[0.95rem] border border-slate-200/75 bg-slate-100/85 px-2.5 py-2 text-[11px] text-slate-500">
                           <span>Assigned</span>
                           <span className="font-semibold text-slate-700">{day.capacityUsage}%</span>
                         </div>
@@ -378,13 +384,13 @@ export function HomeWeeklyAppointmentOverviewCard({
                   <div
                     key={day.date}
                     className={cn(
-                      "rounded-[1.1rem] border p-3 transition-colors",
-                      isActive ? "border-orange-300 bg-orange-50/70 shadow-sm" : "border-border/70 bg-white/80"
+                      "rounded-[1.2rem] border p-3 transition-colors",
+                      isActive ? "border-sky-300 bg-sky-50/60 shadow-sm" : "border-slate-200/75 bg-white/88"
                     )}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <button type="button" onClick={() => onSelectDate?.(day.date)} className="min-w-0 text-left" aria-pressed={isActive}>
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{day.label}</p>
+                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{day.label}</p>
                         <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{day.appointmentCount} {day.appointmentCount === 1 ? "appointment" : "appointments"}</p>
                         <p className="text-sm font-medium text-slate-700">{formatDashboardCurrency(day.bookedValue)} booked</p>
                       </button>
@@ -394,7 +400,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                         </Link>
                       </Button>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
                       <span>Upcoming {day.statusCounts.upcoming}</span>
                       <span>In progress {day.statusCounts.inProgress}</span>
                       <span>Completed {day.statusCounts.completed}</span>
@@ -402,7 +408,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                     </div>
                     <div className="mt-3 space-y-2">
                       {day.previewItems.length === 0 ? (
-                        <div className="rounded-[0.95rem] border border-dashed border-border/70 bg-white/75 px-3 py-3 text-xs text-muted-foreground">
+                        <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/75 px-3 py-3 text-xs text-slate-500">
                           No jobs queued yet.
                         </div>
                       ) : (
@@ -410,16 +416,16 @@ export function HomeWeeklyAppointmentOverviewCard({
                           <Link
                             key={item.id}
                             to={item.url}
-                            className="block rounded-[0.95rem] border border-border/70 bg-white/88 px-3 py-2.5 transition-colors hover:border-orange-200 hover:bg-orange-50/50"
+                            className="block rounded-[1rem] border border-slate-200/80 bg-white/92 px-3 py-2.5 transition-colors hover:border-sky-200 hover:bg-sky-50/45"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <p className="truncate text-[12px] font-semibold text-slate-950">{item.title}</p>
-                                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                <p className="mt-0.5 truncate text-[11px] text-slate-500">
                                   {item.clientName} · {item.vehicleLabel}
                                 </p>
                               </div>
-                              <p className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                              <p className="shrink-0 text-[11px] font-medium text-slate-500">
                                 {formatDateLabel(item.startTime, "h:mm a")}
                               </p>
                             </div>
@@ -428,7 +434,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                       )}
                     </div>
                     {day.capacityUsage != null ? (
-                      <div className="mt-3 flex items-center justify-between rounded-[0.9rem] border border-border/70 bg-slate-50/80 px-3 py-2 text-[11px] text-muted-foreground">
+                      <div className="mt-3 flex items-center justify-between rounded-[0.95rem] border border-slate-200/75 bg-slate-100/85 px-3 py-2 text-[11px] text-slate-500">
                         <span>Assigned</span>
                         <span className="font-semibold text-slate-700">{day.capacityUsage}%</span>
                       </div>
@@ -438,16 +444,16 @@ export function HomeWeeklyAppointmentOverviewCard({
               })}
             </div>
 
-            <div className="rounded-[1.2rem] border border-border/70 bg-slate-50/90 p-4">
+            <div className={cn(dashboardInsetClassName, "p-4")}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Selected day</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Selected day</p>
                   <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{activeDay.label}, {formatDateLabel(activeDay.date, "MMM d")}</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-slate-500">
                     {activeDay.appointmentCount} appointments · {formatDashboardCurrency(activeDay.bookedValue)} booked
                   </p>
                 </div>
-                <Button asChild variant="outline" className="rounded-full">
+                <Button asChild variant="outline" className="rounded-full border-slate-200 bg-white/80">
                   <Link to={activeDay.calendarUrl}>
                     Open day in calendar
                     <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
@@ -456,7 +462,7 @@ export function HomeWeeklyAppointmentOverviewCard({
               </div>
               <div className="mt-4 space-y-2">
                 {activeDay.previewItems.length === 0 ? (
-                  <div className="rounded-[1rem] border border-dashed border-border/70 bg-white/80 px-3 py-4 text-sm text-muted-foreground">
+                    <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/80 px-3 py-4 text-sm text-slate-500">
                     No jobs queued for this day yet.
                   </div>
                 ) : (
@@ -464,16 +470,16 @@ export function HomeWeeklyAppointmentOverviewCard({
                     <Link
                       key={item.id}
                       to={item.url}
-                      className="flex items-start justify-between gap-3 rounded-[1rem] border border-border/70 bg-white/90 px-3 py-3 transition-colors hover:border-orange-200 hover:bg-orange-50/50"
+                      className="flex items-start justify-between gap-3 rounded-[1rem] border border-slate-200/80 bg-white/95 px-3 py-3 transition-colors hover:border-sky-200 hover:bg-sky-50/45"
                     >
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-950">{item.title}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="mt-1 text-sm text-slate-500">
                           {item.clientName} · {item.vehicleLabel}
                         </p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{formatDateLabel(item.startTime, "h:mm a")}</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{formatDateLabel(item.startTime, "h:mm a")}</p>
                         <span className="mt-1 inline-flex items-center text-xs font-medium text-slate-700">
                           Open
                           <ArrowRight className="ml-1 h-3.5 w-3.5" />
@@ -513,47 +519,47 @@ export function HomeUpcomingAttentionPanel({
   const upcomingHeading = range === "today" ? "Today’s queue" : range === "week" ? "This week" : "This month";
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Upcoming Jobs / Needs Attention</CardTitle>
-        <CardDescription>The next jobs in {rangeLabel} and the revenue-pressure items that need action first.</CardDescription>
+    <Card className={dashboardPanelClassName}>
+      <CardHeader className="border-b border-slate-100/90 pb-5">
+        <CardTitle className="text-xl tracking-[-0.03em]">Upcoming Jobs / Needs Attention</CardTitle>
+        <CardDescription className="text-slate-500">The next jobs in {rangeLabel} and the revenue-pressure items that need action first.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        <div className={cn(dashboardInsetClassName, "space-y-3 p-3.5")}>
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
             <CalendarClock className="h-3.5 w-3.5" />
             {upcomingHeading}
           </div>
           {scheduleItems.length === 0 ? (
-            <p className="rounded-[1rem] border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">No upcoming jobs in this view.</p>
+            <p className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/85 px-3 py-4 text-sm text-slate-500">No upcoming jobs in this view.</p>
           ) : (
             scheduleItems.map((item) => (
-              <Link key={item.id} to={item.urls.appointment} className="block rounded-[1rem] border border-border/70 bg-white/80 p-3 transition-colors hover:border-orange-200 hover:bg-orange-50/60">
+              <Link key={item.id} to={item.urls.appointment} className="block rounded-[1rem] border border-slate-200/80 bg-white/96 p-3 transition-colors hover:border-sky-200 hover:bg-sky-50/45">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-slate-950">{item.title}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-1 text-sm text-slate-500">
                       {item.client.name} · {item.vehicle.label}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">{formatDateLabel(item.startTime, "EEE h:mm a")}</p>
+                    <p className="mt-1 text-xs text-slate-500">{formatDateLabel(item.startTime, "EEE h:mm a")}</p>
                   </div>
-                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
                 </div>
               </Link>
             ))
           )}
         </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        <div className={cn(dashboardInsetClassName, "space-y-3 p-3.5")}>
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
             <AlertCircle className="h-3.5 w-3.5" />
             Needs attention
           </div>
           {queueItems.length === 0 ? (
-            <div className="rounded-[1rem] border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">No urgent action items right now.</div>
+            <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/85 px-3 py-4 text-sm text-slate-500">No urgent action items right now.</div>
           ) : (
             queueItems.map((item) => (
-              <div key={item.id} className="rounded-[1rem] border border-border/70 bg-white/80 p-3">
+              <div key={item.id} className="rounded-[1rem] border border-slate-200/80 bg-white/96 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -569,24 +575,24 @@ export function HomeUpcomingAttentionPanel({
                       >
                         {item.urgency}
                       </span>
-                      {item.amountAtRisk != null ? <Badge variant="outline">{formatDashboardCurrency(item.amountAtRisk)} at risk</Badge> : null}
+                      {item.amountAtRisk != null ? <Badge variant="outline" className="border-slate-200 bg-slate-50">{formatDashboardCurrency(item.amountAtRisk)} at risk</Badge> : null}
                     </div>
                     <p className="mt-2 font-semibold text-slate-950">{item.label}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{item.reason}</p>
+                    <p className="mt-1 text-sm text-slate-500">{item.reason}</p>
                   </div>
-                  <Button asChild size="sm" className="rounded-full">
+                  <Button asChild size="sm" className="rounded-full bg-slate-950 text-white hover:bg-slate-800">
                     <Link to={item.ctaUrl}>{item.ctaLabel}</Link>
                   </Button>
                 </div>
                 {(item.supportsSnooze || item.supportsDismiss) && (onSnooze || onDismiss) ? (
                   <div className="mt-2 flex gap-2">
                     {item.supportsSnooze && onSnooze ? (
-                      <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full text-xs" onClick={() => onSnooze(item.id)}>
+                      <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full border border-slate-200 bg-slate-50/80 text-xs text-slate-700" onClick={() => onSnooze(item.id)}>
                         Snooze
                       </Button>
                     ) : null}
                     {item.supportsDismiss && onDismiss ? (
-                      <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full text-xs" onClick={() => onDismiss(item.id)}>
+                      <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full border border-slate-200 bg-slate-50/80 text-xs text-slate-700" onClick={() => onDismiss(item.id)}>
                         Dismiss
                       </Button>
                     ) : null}
@@ -631,14 +637,14 @@ export function HomeMonthlyRevenueChartCard({
   const showGoalPace = mode === "booked" && chart.goalAmount != null && chart.days.some((day) => day.goalPaceRevenue != null);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Monthly Revenue Chart</CardTitle>
+      <Card className={dashboardPanelClassName}>
+      <CardHeader className="border-b border-slate-100/90 pb-5">
+        <CardTitle className="text-xl tracking-[-0.03em]">Monthly Revenue Chart</CardTitle>
         <CardDescription>
           {formatDateLabel(chart.monthStart, "MMMM yyyy")} · booked work by scheduled day and cash received by payment day.
         </CardDescription>
         <CardAction>
-          <div className="inline-flex rounded-2xl border border-border/70 bg-slate-50/80 p-1">
+          <div className="inline-flex rounded-2xl border border-slate-200/80 bg-slate-50/80 p-1">
             {([
               { key: "booked", label: "booked" },
               { key: "collected", label: "cash" },
@@ -649,7 +655,7 @@ export function HomeMonthlyRevenueChartCard({
                 onClick={() => setMode(option.key)}
                 className={cn(
                   "rounded-xl px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em]",
-                  mode === option.key ? "bg-white text-foreground shadow-sm" : "text-muted-foreground"
+                  mode === option.key ? "bg-white text-foreground shadow-sm" : "text-slate-500"
                 )}
                 aria-pressed={mode === option.key}
               >
@@ -661,25 +667,25 @@ export function HomeMonthlyRevenueChartCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-[1rem] border border-border/70 bg-white/80 p-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Booked this month</p>
+          <div className={cn(dashboardInsetClassName, "p-3")}>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Booked this month</p>
             <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{formatDashboardCurrency(chart.totalBookedThisMonth)}</p>
           </div>
-          <div className="rounded-[1rem] border border-border/70 bg-white/80 p-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Invoices collected this month</p>
+          <div className={cn(dashboardInsetClassName, "p-3")}>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Invoices collected this month</p>
             <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{formatDashboardCurrency(chart.totalCollectedThisMonth)}</p>
           </div>
-          <div className="rounded-[1rem] border border-border/70 bg-white/80 p-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Outstanding invoices</p>
+          <div className={cn(dashboardInsetClassName, "p-3")}>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Outstanding invoices</p>
             <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{formatDashboardCurrency(chart.outstandingInvoiceAmount)}</p>
           </div>
-          <div className="rounded-[1rem] border border-border/70 bg-white/80 p-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Percent to goal</p>
+          <div className={cn(dashboardInsetClassName, "p-3")}>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Percent to goal</p>
             <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{chart.percentToGoal == null ? "--" : `${chart.percentToGoal}%`}</p>
           </div>
         </div>
 
-        <div className="rounded-[1.2rem] border border-border/70 bg-white/80 p-4">
+        <div className={cn(dashboardInsetClassName, "p-4")}>
           {!hasAnyRevenue ? (
             <EmptyState
               icon={BarChart3}
@@ -688,13 +694,13 @@ export function HomeMonthlyRevenueChartCard({
             />
           ) : (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
                 <span>Booked work is grouped by scheduled day. Invoice collections are grouped by payment day. Tap a bar to drill into that date.</span>
                 {showGoalPace ? <span>Goal pace is shown as a guide for booked revenue.</span> : null}
               </div>
-              <div className="mt-4 rounded-[1rem] border border-border/60 bg-slate-50/70 p-3 sm:p-4">
+              <div className="mt-4 rounded-[1.1rem] border border-slate-200/70 bg-white/92 p-3 sm:p-4">
                 <div className="grid gap-3 sm:grid-cols-[auto,1fr] sm:items-end">
-                  <div className="hidden h-64 flex-col justify-between text-[10px] text-muted-foreground sm:flex">
+                  <div className="hidden h-64 flex-col justify-between text-[10px] text-slate-500 sm:flex">
                     <span>{formatDashboardCompactCurrency(maxValue)}</span>
                     <span>{formatDashboardCompactCurrency(maxValue / 2)}</span>
                     <span>$0</span>
@@ -733,15 +739,15 @@ export function HomeMonthlyRevenueChartCard({
                                 ) : null}
                                 <div
                                   className={cn(
-                                    "w-full rounded-t-[10px] transition-all group-hover:opacity-85",
-                                    mode === "booked" ? "bg-[var(--color-chart-1)]" : "bg-[var(--color-chart-2)]",
+                                    "w-full rounded-t-[10px] transition-all group-hover:opacity-90",
+                                    mode === "booked" ? "bg-gradient-to-t from-sky-700 to-sky-500" : "bg-gradient-to-t from-emerald-600 to-emerald-400",
                                     value === 0 ? "bg-slate-200/70" : null
                                   )}
                                   style={{ height: `${barHeight}%` }}
                                   aria-label={`${mode} revenue for day ${day.dayOfMonth}: ${formatDashboardCurrency(value)}`}
                                 />
                               </div>
-                              <div className="h-4 text-[10px] text-muted-foreground">{showTick ? day.dayOfMonth : ""}</div>
+                              <div className="h-4 text-[10px] text-slate-500">{showTick ? day.dayOfMonth : ""}</div>
                             </Link>
                           );
                         })}
@@ -750,9 +756,9 @@ export function HomeMonthlyRevenueChartCard({
                   </div>
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-slate-500">
                 <span className="inline-flex items-center gap-2">
-                  <span className={cn("h-2.5 w-2.5 rounded-full", mode === "booked" ? "bg-[var(--color-chart-1)]" : "bg-[var(--color-chart-2)]")} />
+                  <span className={cn("h-2.5 w-2.5 rounded-full", mode === "booked" ? "bg-sky-600" : "bg-emerald-500")} />
                   {mode === "booked" ? "Booked work" : "Invoice collections"}
                 </span>
                 {chart.goalAmount != null ? <span>Monthly goal: {formatDashboardCurrency(chart.goalAmount)}</span> : null}
@@ -845,10 +851,10 @@ export function HomeBookingsOverviewCard({
   ];
 
   return (
-    <Card>
+      <Card className={dashboardPanelClassName}>
       <CardHeader>
         <CardTitle>Bookings Overview</CardTitle>
-        <CardDescription>Booking volume, quote conversion, and deposit pressure in one quick business read.</CardDescription>
+        <CardDescription className="text-slate-500">Booking volume, quote conversion, and deposit pressure in one quick business read.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {isEmpty ? (
@@ -859,29 +865,33 @@ export function HomeBookingsOverviewCard({
           />
         ) : (
           <>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="overflow-hidden rounded-[1.1rem] border border-slate-200/80 bg-slate-50/75">
               {stats.map((stat) => (
                 <Link
                   key={stat.label}
                   to={stat.href}
-                  className="rounded-[1rem] border border-border/70 bg-white/80 px-3 py-3 transition-colors hover:border-orange-200 hover:bg-orange-50/60"
+                  className="flex items-start justify-between gap-4 border-b border-slate-200/75 px-4 py-3 transition-colors last:border-b-0 hover:bg-white/90"
                   aria-label={`Open ${stat.label.toLowerCase()} details`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{stat.label}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{stat.detail}</p>
-                    </div>
-                    <p className="shrink-0 text-lg font-semibold tracking-tight text-slate-950">{stat.value}</p>
+                  <div className="min-w-0">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{stat.label}</p>
+                    <p className="mt-1 text-sm text-slate-500">{stat.detail}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-lg font-semibold tracking-tight text-slate-950">{stat.value}</p>
+                    <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                      Open
+                      <ArrowUpRight className="h-3 w-3" />
+                    </span>
                   </div>
                 </Link>
               ))}
             </div>
-            <div className="rounded-[1rem] border border-border/70 bg-white/80 p-4">
+            <div className={cn(dashboardInsetClassName, "p-4")}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Deposit coverage</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Upcoming deposit requirements already covered vs still due.</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Deposit coverage</p>
+                  <p className="mt-1 text-sm text-slate-500">Upcoming deposit requirements already covered vs still due.</p>
                 </div>
                 {depositCoveragePercent != null ? <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{depositCoveragePercent}% covered</div> : null}
               </div>
@@ -904,21 +914,29 @@ export function HomeBookingsOverviewCard({
               </div>
             </div>
             {bookings.funnel.length > 0 ? (
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="rounded-[1.05rem] border border-slate-200/80 bg-slate-50/75 px-3 py-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Flow</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Lead to paid, using the live business pipeline.</p>
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                 {bookings.funnel.map((stage) => (
                   <Link
                     key={stage.key}
                     to={funnelLinks[stage.key] ?? "/signed-in"}
-                    className="rounded-[1rem] border border-border/70 bg-slate-50/80 px-3 py-3 transition-colors hover:border-orange-200 hover:bg-orange-50/60"
+                    className="rounded-[1rem] border border-slate-200/80 bg-white/95 px-3 py-3 transition-colors hover:border-sky-200 hover:bg-sky-50/45"
                     aria-label={`Open ${stage.label.toLowerCase()} stage`}
                   >
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{stage.label}</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{stage.label}</p>
                     <div className="mt-2 flex items-end justify-between gap-3">
                       <p className="text-xl font-semibold tracking-tight text-slate-950">{stage.count}</p>
-                      <p className="text-[11px] text-muted-foreground">{stage.value != null ? formatDashboardCompactCurrency(stage.value) : "count only"}</p>
+                      <p className="text-[11px] text-slate-500">{stage.value != null ? formatDashboardCompactCurrency(stage.value) : "count only"}</p>
                     </div>
                   </Link>
                 ))}
+                </div>
               </div>
             ) : null}
           </>
@@ -936,7 +954,6 @@ export function HomeBottomPanels({
   error,
   onRetry,
 }: { snapshot?: HomeDashboardSnapshot | null } & WidgetStateProps) {
-  const [tab, setTab] = useState<BottomPanelTab>("activity");
   if (loading) return <CardLoadingShell title="Business Feed" rows={5} />;
   if (error) return <WidgetErrorState title="Business Feed" error={error} onRetry={onRetry} />;
 
@@ -944,102 +961,114 @@ export function HomeBottomPanels({
   const receivablesItems = (snapshot?.actionQueue.items ?? []).filter((item) => item.type === "overdue_invoice" || item.type === "deposit_due");
   const followUpItems = (snapshot?.actionQueue.items ?? []).filter((item) => item.type === "uncontacted_lead" || item.type === "quote_follow_up");
 
-  const tabMeta: Array<{ key: BottomPanelTab; label: string; icon: typeof History; count: number }> = [
-    { key: "activity", label: "Recent Activity", icon: History, count: activityItems.length },
-    { key: "receivables", label: "Unpaid Invoices / Deposits Due", icon: CircleDollarSign, count: receivablesItems.length },
-    { key: "follow_up", label: "Lead / Quote follow-up", icon: Inbox, count: followUpItems.length },
-  ];
-  const availableTabs = tabMeta.filter((item) => item.count > 0);
-  const activeTab = availableTabs.some((item) => item.key === tab) ? tab : availableTabs[0]?.key ?? "activity";
+  const panels: Array<{
+    key: BottomPanelTab;
+    title: string;
+    description: string;
+    icon: typeof History;
+    count: number;
+    content: ReactNode;
+  }> = [
+    {
+      key: "activity",
+      title: "Recent Activity",
+      description: "Meaningful business events from today.",
+      icon: History,
+      count: activityItems.length,
+      content:
+        activityItems.length === 0 ? (
+          <EmptyState icon={History} title="No activity yet" description="Appointments, payments, and quote changes will show here as the business runs." />
+        ) : (
+          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92">
+            {activityItems.map((item) => (
+              <div key={item.id} className="border-b border-slate-200/70 p-3 last:border-b-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    {item.url ? (
+                      <Link to={item.url} className="font-semibold text-slate-950 hover:text-sky-700">
+                        {item.label}
+                      </Link>
+                    ) : (
+                      <p className="font-semibold text-slate-950">{item.label}</p>
+                    )}
+                    {item.detail ? <p className="mt-1 text-sm text-slate-500">{item.detail}</p> : null}
+                  </div>
+                  <span className="text-xs text-slate-500">{formatRelativeTime(item.occurredAt)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ),
+    },
+    {
+      key: "receivables",
+      title: "Unpaid Invoices / Deposits Due",
+      description: "Money that needs follow-up soon.",
+      icon: CircleDollarSign,
+      count: receivablesItems.length,
+      content:
+        receivablesItems.length === 0 ? (
+          <EmptyState icon={Landmark} title="No overdue balances or deposit misses" description="Overdue invoices and missing deposits will surface here when they need attention." />
+        ) : (
+          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92">
+            {receivablesItems.map((item) => (
+              <Link key={item.id} to={item.ctaUrl} className="block border-b border-slate-200/70 p-3 transition-colors last:border-b-0 hover:bg-sky-50/45">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-950">{item.label}</p>
+                    <p className="mt-1 text-sm text-slate-500">{item.reason}</p>
+                  </div>
+                  {item.amountAtRisk != null ? <Badge variant="outline">{formatDashboardCurrency(item.amountAtRisk)}</Badge> : null}
+                </div>
+              </Link>
+            ))}
+          </div>
+        ),
+    },
+    {
+      key: "follow_up",
+      title: "Lead / Quote follow-up",
+      description: "Sales work that still needs a response.",
+      icon: Inbox,
+      count: followUpItems.length,
+      content:
+        followUpItems.length === 0 ? (
+          <EmptyState icon={ClipboardList} title="No lead or quote follow-up gaps" description="Leads and quote follow-ups are under control right now." />
+        ) : (
+          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92">
+            {followUpItems.map((item) => (
+              <Link key={item.id} to={item.ctaUrl} className="flex items-start justify-between gap-3 border-b border-slate-200/70 p-3 transition-colors last:border-b-0 hover:bg-sky-50/45">
+                <div>
+                  <p className="font-semibold text-slate-950">{item.label}</p>
+                  <p className="mt-1 text-sm text-slate-500">{item.reason}</p>
+                </div>
+                <ArrowRight className="mt-1 h-4 w-4 text-slate-400" />
+              </Link>
+            ))}
+          </div>
+        ),
+    },
+  ].filter((panel) => panel.count > 0);
 
-  if (availableTabs.length === 0) {
+  if (panels.length === 0) {
     return null;
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Business Feed</CardTitle>
-        <CardDescription>Recent business changes, money follow-up, and sales follow-up without extra dashboard clutter.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-2 md:grid-cols-3">
-          {availableTabs.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setTab(item.key)}
-              className={cn(
-                "flex items-center justify-center gap-2 rounded-[1rem] border px-3 py-2.5 text-sm font-medium transition-colors",
-                activeTab === item.key ? "border-slate-900 bg-slate-900 text-white" : "border-border/70 bg-white text-foreground"
-              )}
-              aria-pressed={activeTab === item.key}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === "activity" ? (
-          activityItems.length === 0 ? (
-            <EmptyState icon={History} title="No activity yet" description="Appointments, payments, and quote changes will show here as the business runs." />
-          ) : (
-            <div className="overflow-hidden rounded-[1rem] border border-border/70 bg-white/80">
-              {activityItems.map((item) => (
-                <div key={item.id} className="border-b border-border/60 p-3 last:border-b-0">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      {item.url ? (
-                        <Link to={item.url} className="font-semibold text-slate-950 hover:text-orange-700">
-                          {item.label}
-                        </Link>
-                      ) : (
-                        <p className="font-semibold text-slate-950">{item.label}</p>
-                      )}
-                      {item.detail ? <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p> : null}
-                    </div>
-                    <span className="text-xs text-muted-foreground">{formatRelativeTime(item.occurredAt)}</span>
-                  </div>
-                </div>
-              ))}
+    <div className="grid gap-4 xl:grid-cols-3">
+      {panels.map((panel) => (
+        <Card key={panel.key} className={dashboardPanelClassName}>
+          <CardHeader>
+            <div className="flex items-center gap-2 text-slate-500">
+              <panel.icon className="h-4 w-4" />
+              <CardTitle className="text-lg tracking-[-0.02em]">{panel.title}</CardTitle>
             </div>
-          )
-        ) : activeTab === "receivables" ? (
-          receivablesItems.length === 0 ? (
-            <EmptyState icon={Landmark} title="No overdue balances or deposit misses" description="Overdue invoices and missing deposits will surface here when they need attention." />
-          ) : (
-            <div className="overflow-hidden rounded-[1rem] border border-border/70 bg-white/80">
-              {receivablesItems.map((item) => (
-                <Link key={item.id} to={item.ctaUrl} className="block border-b border-border/60 p-3 transition-colors last:border-b-0 hover:bg-orange-50/60">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-950">{item.label}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{item.reason}</p>
-                    </div>
-                    {item.amountAtRisk != null ? <Badge variant="outline">{formatDashboardCurrency(item.amountAtRisk)}</Badge> : null}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )
-        ) : followUpItems.length === 0 ? (
-          <EmptyState icon={ClipboardList} title="No lead or quote follow-up gaps" description="Leads and quote follow-ups are under control right now." />
-        ) : (
-          <div className="overflow-hidden rounded-[1rem] border border-border/70 bg-white/80">
-            {followUpItems.map((item) => (
-              <Link key={item.id} to={item.ctaUrl} className="flex items-start justify-between gap-3 border-b border-border/60 p-3 transition-colors last:border-b-0 hover:bg-orange-50/60">
-                <div>
-                  <p className="font-semibold text-slate-950">{item.label}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{item.reason}</p>
-                </div>
-                <ArrowRight className="mt-1 h-4 w-4 text-muted-foreground" />
-              </Link>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+            <CardDescription className="text-slate-500">{panel.description}</CardDescription>
+          </CardHeader>
+          <CardContent>{panel.content}</CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }
 
@@ -1058,10 +1087,10 @@ export function HomeCompactQuickActions({
   if (actions.length === 0) return null;
 
   return (
-    <Card>
+    <Card className={dashboardPanelClassName}>
       <CardHeader>
         <CardTitle>Quick Actions</CardTitle>
-        <CardDescription>Small secondary shortcuts for the work that still needs a fast path.</CardDescription>
+        <CardDescription className="text-slate-500">Small secondary shortcuts for the work that still needs a fast path.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
         {actions.map((action) => (

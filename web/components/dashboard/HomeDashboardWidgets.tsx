@@ -165,18 +165,19 @@ export function HomeDashboardTopBar({
   ];
 
   return (
-    <Card className="gap-4 border-white/70 bg-white/84 py-4">
-      <CardContent className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <Card className="overflow-hidden rounded-[1.8rem] border border-slate-200/80 bg-white/78 py-0 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur">
+      <div className="h-1.5 bg-gradient-to-r from-sky-700 via-blue-600 to-cyan-400" />
+      <CardContent className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="rounded-full bg-slate-50/90 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-600">
+            <Badge variant="outline" className="rounded-full border-sky-200 bg-sky-50/90 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-sky-800">
               {businessName ?? "Current business"}
             </Badge>
-            <Badge variant="outline" className="rounded-full bg-orange-50/90 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-orange-700">
+            <Badge variant="outline" className="rounded-full border-slate-200 bg-slate-50/90 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-700">
               {roleLabel}
             </Badge>
           </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-sm text-slate-500">
             <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
             <span>{refreshing ? "Refreshing..." : `Last updated ${lastUpdatedLabel}`}</span>
           </div>
@@ -184,7 +185,7 @@ export function HomeDashboardTopBar({
 
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           {secondaryAction}
-          <div className="inline-flex rounded-2xl border border-border/70 bg-slate-50/80 p-1">
+          <div className="inline-flex rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1">
             {rangeOptions.map((option) => (
               <button
                 key={option.value}
@@ -192,7 +193,7 @@ export function HomeDashboardTopBar({
                 onClick={() => onRangeChange(option.value)}
                 className={cn(
                   "rounded-xl px-3 py-2 text-sm font-medium transition-colors",
-                  range === option.value ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  range === option.value ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-foreground"
                 )}
                 aria-pressed={range === option.value}
               >
@@ -202,7 +203,7 @@ export function HomeDashboardTopBar({
           </div>
 
           {canFilterTeam ? (
-            <label className="inline-flex min-w-[210px] items-center gap-2 rounded-2xl border border-border/70 bg-white px-3 py-2 text-sm text-muted-foreground">
+            <label className="inline-flex min-w-[210px] items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-500">
               <UserRound className="h-4 w-4" />
               <span className="sr-only">Filter dashboard by team member</span>
               <select
@@ -531,7 +532,7 @@ export function HomeSignalsStrip({ snapshot, loading }: { snapshot?: HomeDashboa
         <CardHeader>
           <CardTitle>Since you last checked</CardTitle>
           <CardDescription>
-            {sinceLastChecked?.allowed && sinceLastChecked.since ? `Changes since ${formatRelativeTime(sinceLastChecked.since)}` : "Weâ€™ll start tracking this after your first visit."}
+            {sinceLastChecked?.allowed && sinceLastChecked.since ? `Changes since ${formatRelativeTime(sinceLastChecked.since)}` : "We'll start tracking this after your first visit."}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -728,7 +729,7 @@ export function HomeRevenueCollectionsCard({
     <Card>
       <CardHeader>
         <CardTitle>Revenue + Collections</CardTitle>
-        <CardDescription>The money picture that matters for todayâ€™s operation.</CardDescription>
+        <CardDescription>The money picture that matters for today's operation.</CardDescription>
         <CardAction>
           <Button asChild variant="outline" size="sm">
             <Link to="/finances">Open finances</Link>

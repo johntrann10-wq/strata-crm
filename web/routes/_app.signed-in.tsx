@@ -235,6 +235,24 @@ export default function DashboardHomeRoute() {
   const safePageError = pageError ? new Error("Dashboard data is temporarily unavailable.") : null;
   const pageLoading = fetching && !snapshot;
   const staleSnapshotWarning = !pageLoading && pageError && snapshot;
+  const hasMeaningfulMonthlyRevenue =
+    !!snapshot?.monthlyRevenueChart.allowed &&
+    (
+      snapshot.monthlyRevenueChart.totalBookedThisMonth > 0
+      || snapshot.monthlyRevenueChart.totalCollectedThisMonth > 0
+    );
+  const hasMeaningfulBookingsOverview =
+    !!snapshot?.bookingsOverview.allowed &&
+    (
+      snapshot.bookingsOverview.bookingsToday > 0
+      || snapshot.bookingsOverview.bookingsThisWeek > 0
+      || snapshot.bookingsOverview.bookingsThisMonth > 0
+      || snapshot.bookingsOverview.quotesSent > 0
+      || snapshot.bookingsOverview.quotesAccepted > 0
+      || snapshot.bookingsOverview.depositsCollectedAmount > 0
+      || snapshot.bookingsOverview.depositsDueAmount > 0
+      || snapshot.bookingsOverview.funnel.length > 0
+    );
 
   if (!canViewDashboard) {
     return <Navigate to={getPreferredAuthorizedAppPath(outletContext.permissions, outletContext.enabledModules)} replace />;
@@ -244,11 +262,6 @@ export default function DashboardHomeRoute() {
     <div className="space-y-4 sm:space-y-5">
       <PageHeader
         title="Dashboard"
-        badge={
-          <Badge variant="outline" className="rounded-full bg-white/80 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-            {outletContext.businessName ?? "Workspace"}
-          </Badge>
-        }
         right={
           <Button asChild className="min-h-[44px] rounded-xl bg-slate-950 text-white hover:bg-slate-800">
             <Link to="/appointments/new">
@@ -292,7 +305,11 @@ export default function DashboardHomeRoute() {
       {pageError && !snapshot ? (
         <DashboardPageErrorGrid error={safePageError ?? new Error("Dashboard data is temporarily unavailable.")} onRetry={() => void refreshDashboard("force")} />
       ) : (
-        <div className="space-y-4">
+        <div className="relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(219,234,254,0.85),_rgba(255,255,255,0.92)_38%,_rgba(241,245,249,0.88)_100%)] p-4 shadow-[0_28px_80px_rgba(15,23,42,0.10)] sm:p-5">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.55),transparent_34%,rgba(191,219,254,0.12))]" />
+          <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-sky-200/25 blur-3xl" />
+          <div className="pointer-events-none absolute -left-16 bottom-10 h-44 w-44 rounded-full bg-blue-200/20 blur-3xl" />
+          <div className="relative space-y-4">
           <HomeOverviewKpiStrip snapshot={snapshot} loading={pageLoading} error={snapshot?.widgetErrors?.summary_today ? new Error(snapshot.widgetErrors.summary_today.message) : null} onRetry={() => void refreshDashboard("force")} />
 
           <div className="grid gap-4 xl:grid-cols-12">
@@ -325,9 +342,9 @@ export default function DashboardHomeRoute() {
             </div>
           </div>
 
-          {pageLoading || snapshot?.monthlyRevenueChart.allowed || snapshot?.bookingsOverview.allowed ? (
+          {pageLoading || hasMeaningfulMonthlyRevenue || hasMeaningfulBookingsOverview ? (
             <div className="grid gap-4 xl:grid-cols-12">
-              {pageLoading || snapshot?.monthlyRevenueChart.allowed ? (
+              {pageLoading || hasMeaningfulMonthlyRevenue ? (
                 <div className="xl:col-span-8">
                   <HomeMonthlyRevenueChartCard
                     snapshot={snapshot}
@@ -337,7 +354,7 @@ export default function DashboardHomeRoute() {
                   />
                 </div>
               ) : null}
-              {pageLoading || snapshot?.bookingsOverview.allowed ? (
+              {pageLoading || hasMeaningfulBookingsOverview ? (
                 <div className="xl:col-span-4">
                   <HomeBookingsOverviewCard
                     snapshot={snapshot}
@@ -363,6 +380,7 @@ export default function DashboardHomeRoute() {
             error={snapshot?.widgetErrors?.quick_actions ? new Error(snapshot.widgetErrors.quick_actions.message) : null}
             onRetry={() => void refreshDashboard("force")}
           />
+          </div>
         </div>
       )}
     </div>
