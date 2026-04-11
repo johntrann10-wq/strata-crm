@@ -3207,7 +3207,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     loadOrFallback(
       "monthRevenueAppointments",
       [] as Awaited<ReturnType<typeof loadMonthAppointmentsForRevenue>>,
-      ["revenue_collections", "goals", "cash"],
+      ["revenue_collections", "goals", "summary_cash"],
       () => loadMonthAppointmentsForRevenue(params.businessId, monthStart, monthEnd, tx)
     ),
     loadOrFallback(
