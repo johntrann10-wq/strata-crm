@@ -102,6 +102,13 @@ function hasValidPaidAt(value: string | null | undefined): boolean {
   return !Number.isNaN(parsed.getTime());
 }
 
+function hasBackendFinanceField(
+  appointment: AppointmentInspectorRecord,
+  field: "collectedAmount" | "balanceDue" | "paidInFull" | "depositSatisfied"
+): boolean {
+  return Object.prototype.hasOwnProperty.call(appointment, field) && appointment[field] != null;
+}
+
 function toTimeInputValue(date: Date | string | null | undefined): string {
   if (!date) return "";
   const parsed = new Date(date);
@@ -152,7 +159,9 @@ function getLifecycleLabel(appointment: AppointmentInspectorRecord): string {
 
 function getCollectedAmount(appointment: AppointmentInspectorRecord): number {
   const backendCollectedAmount = Number(appointment.collectedAmount ?? 0);
-  if (Number.isFinite(backendCollectedAmount) && backendCollectedAmount > 0) return backendCollectedAmount;
+  if (hasBackendFinanceField(appointment, "collectedAmount")) {
+    return Number.isFinite(backendCollectedAmount) ? Math.max(0, Number(backendCollectedAmount.toFixed(2))) : 0;
+  }
   const total = Number(appointment.totalPrice ?? 0);
   if (hasValidPaidAt(appointment.paidAt)) return total;
   if (appointment.invoiceStatus === "paid" || hasValidPaidAt(appointment.invoicePaidAt ?? null)) return total;
@@ -209,17 +218,23 @@ function getPaymentSummary(
   } {
     const totalAmount = Number(appointment.totalPrice ?? 0);
     const depositAmount = Number(appointment.depositAmount ?? 0);
+    const hasBackendCollectedAmount = hasBackendFinanceField(appointment, "collectedAmount");
+    const hasBackendBalanceDue = hasBackendFinanceField(appointment, "balanceDue");
+    const hasBackendPaidInFull = hasBackendFinanceField(appointment, "paidInFull");
+    const hasBackendDepositSatisfied = hasBackendFinanceField(appointment, "depositSatisfied");
     const backendPaidInFull = appointment.paidInFull === true;
     const backendBalanceDue = Number(appointment.balanceDue ?? Number.NaN);
     const paidInFull =
-      backendPaidInFull ||
-      hasValidPaidAt(appointment.paidAt) ||
-      appointment.invoiceStatus === "paid" ||
-      hasValidPaidAt(appointment.invoicePaidAt ?? null);
-  const activityCollectedAmount = getCollectedAmountFromActivity(appointment, activityLogs);
-  const collectedAmount = getCollectedAmount(appointment) || activityCollectedAmount || 0;
+      hasBackendPaidInFull
+        ? backendPaidInFull
+        : backendPaidInFull ||
+          hasValidPaidAt(appointment.paidAt) ||
+          appointment.invoiceStatus === "paid" ||
+          hasValidPaidAt(appointment.invoicePaidAt ?? null);
+  const activityCollectedAmount = hasBackendCollectedAmount ? null : getCollectedAmountFromActivity(appointment, activityLogs);
+  const collectedAmount = hasBackendCollectedAmount ? getCollectedAmount(appointment) : getCollectedAmount(appointment) || activityCollectedAmount || 0;
   const balanceDue =
-    Number.isFinite(backendBalanceDue) && backendBalanceDue >= 0
+    hasBackendBalanceDue && Number.isFinite(backendBalanceDue) && backendBalanceDue >= 0
       ? backendBalanceDue
       : totalAmount > 0
         ? Math.max(0, Number((totalAmount - collectedAmount).toFixed(2)))
@@ -242,7 +257,14 @@ function getPaymentSummary(
 
   let moneyStateLabel = "No deposit set";
   if (isPaidInFull) moneyStateLabel = "Paid in full";
-  else if (hasAnyPayment && balanceDue > 0.009) moneyStateLabel = "Deposit collected";
+  else if (
+    hasAnyPayment &&
+    balanceDue > 0.009 &&
+    ((hasBackendDepositSatisfied && appointment.depositSatisfied === true) || (!hasBackendDepositSatisfied && depositAmount > 0))
+  ) {
+    moneyStateLabel = "Deposit collected";
+  }
+  else if (hasAnyPayment && balanceDue > 0.009) moneyStateLabel = "Payment recorded";
   else if (depositAmount > 0) moneyStateLabel = "Deposit due";
 
   return {

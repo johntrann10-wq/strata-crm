@@ -175,6 +175,13 @@ function hasValidPaidAt(value: string | Date | null | undefined): boolean {
   return safeDate(value) !== null;
 }
 
+function hasBackendFinanceField(
+  appointment: Record<string, unknown>,
+  field: "collectedAmount" | "balanceDue" | "paidInFull" | "depositSatisfied"
+): boolean {
+  return Object.prototype.hasOwnProperty.call(appointment, field) && appointment[field] != null;
+}
+
 function formatFreshness(value: string | Date | null | undefined, label: string): string | null {
   const parsed = safeDate(value);
   return parsed ? `${label} ${parsed.toLocaleDateString()}` : null;
@@ -1133,37 +1140,46 @@ export default function AppointmentDetail() {
     const backendCollectedAmount = Number((appointment as any).collectedAmount ?? 0);
     const backendBalanceDue = Number((appointment as any).balanceDue ?? Number.NaN);
     const backendPaidInFull = (appointment as any).paidInFull === true;
+    const backendDepositSatisfied = (appointment as any).depositSatisfied === true;
+    const hasBackendCollectedAmount = hasBackendFinanceField(appointment as Record<string, unknown>, "collectedAmount");
+    const hasBackendBalanceDue = hasBackendFinanceField(appointment as Record<string, unknown>, "balanceDue");
+    const hasBackendPaidState = hasBackendFinanceField(appointment as Record<string, unknown>, "paidInFull");
+    const hasBackendDepositState = hasBackendFinanceField(appointment as Record<string, unknown>, "depositSatisfied");
     const paidInFull =
-      backendPaidInFull ||
-      hasValidPaidAt((appointment as any).paidAt ?? null) ||
-      invoiceStatus === "paid" ||
-      hasValidPaidAt(invoicePaidAt);
-    const collectedAmountFromActivity = (((activityLogs ?? []) as Array<{ type?: string | null; action?: string | null; metadata?: string | null }>).reduce(
-      (sum, record) => {
-        const activityType = String(record.type ?? record.action ?? "");
-      if (activityType !== "appointment.deposit_paid" && activityType !== "appointment.deposit_payment_reversed") return sum;
-      let amount = 0;
-      try {
-        const parsed = record.metadata ? (JSON.parse(record.metadata) as { amount?: number | string | null }) : null;
-        amount = Number(parsed?.amount ?? 0);
-      } catch {
-        amount = 0;
-      }
-      if (!Number.isFinite(amount) || amount <= 0) return sum;
-      return activityType === "appointment.deposit_paid" ? sum + amount : sum - amount;
-      },
-      0
-    ) as number);
+      hasBackendPaidState
+        ? backendPaidInFull
+        : backendPaidInFull ||
+          hasValidPaidAt((appointment as any).paidAt ?? null) ||
+          invoiceStatus === "paid" ||
+          hasValidPaidAt(invoicePaidAt);
+    const collectedAmountFromActivity = hasBackendCollectedAmount
+      ? 0
+      : (((activityLogs ?? []) as Array<{ type?: string | null; action?: string | null; metadata?: string | null }>).reduce(
+          (sum, record) => {
+            const activityType = String(record.type ?? record.action ?? "");
+            if (activityType !== "appointment.deposit_paid" && activityType !== "appointment.deposit_payment_reversed") return sum;
+            let amount = 0;
+            try {
+              const parsed = record.metadata ? (JSON.parse(record.metadata) as { amount?: number | string | null }) : null;
+              amount = Number(parsed?.amount ?? 0);
+            } catch {
+              amount = 0;
+            }
+            if (!Number.isFinite(amount) || amount <= 0) return sum;
+            return activityType === "appointment.deposit_paid" ? sum + amount : sum - amount;
+          },
+          0
+        ) as number);
     const fallbackCollectedAmount = paidInFull ? Math.max(0, totalPriceValue) : 0;
     const normalizedCollectedAmount =
-      Number.isFinite(backendCollectedAmount) && backendCollectedAmount > 0
+      hasBackendCollectedAmount && Number.isFinite(backendCollectedAmount)
         ? Math.max(0, Number(backendCollectedAmount.toFixed(2)))
         : paidInFull
           ? Math.max(0, totalPriceValue)
           : Math.max(0, Number((collectedAmountFromActivity > 0 ? collectedAmountFromActivity : fallbackCollectedAmount).toFixed(2)));
   const hasRecordedPayment = normalizedCollectedAmount > 0.009 || paidInFull;
   const remainingBalanceValue =
-    Number.isFinite(backendBalanceDue) && backendBalanceDue >= 0
+    hasBackendBalanceDue && Number.isFinite(backendBalanceDue) && backendBalanceDue >= 0
       ? Math.max(0, Number(backendBalanceDue.toFixed(2)))
       : totalPriceValue > 0
         ? Math.max(0, Number((totalPriceValue - normalizedCollectedAmount).toFixed(2)))
@@ -1178,6 +1194,10 @@ export default function AppointmentDetail() {
       : depositAmountValue > 0 && !hasRecordedPayment
         ? depositAmountValue
         : 0;
+  const showsDepositCollectedState =
+    hasRecordedPayment &&
+    remainingBalanceValue > 0.009 &&
+    (hasBackendDepositState ? backendDepositSatisfied : depositAmountValue > 0);
   const showsPaidStatusInsteadOfDeposit = totalPriceValue > 0 ? hasRecordedPayment && remainingBalanceValue <= 0.009 : paidInFull;
   const showsCollectPaymentLabel = !isInternalAppointment && hasRecordedPayment;
   const canEditDeposit =
