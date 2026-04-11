@@ -23,7 +23,6 @@ type AppointmentTemplateData = {
   serviceSummary?: string | null;
   totalPrice?: string | number | null;
   depositAmount?: string | number | null;
-  depositPaid?: boolean | null;
   collectedAmount?: string | number | null;
   balanceDue?: string | number | null;
   paidInFull?: boolean | null;
@@ -77,11 +76,19 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
   const hasDeposit = Number.isFinite(depositAmount) && depositAmount > 0;
   const backendCollectedAmount = Number.parseFloat(String(data.collectedAmount ?? 0));
   const backendBalanceDue = Number.parseFloat(String(data.balanceDue ?? 0));
+  const hasBackendCollectedAmount = data.collectedAmount != null;
+  const hasBackendBalanceDue = data.balanceDue != null;
+  const hasBackendPaidInFull = data.paidInFull != null;
+  const hasBackendDepositSatisfied = data.depositSatisfied != null;
+  const hasBackendFinance =
+    hasBackendCollectedAmount || hasBackendBalanceDue || hasBackendPaidInFull || hasBackendDepositSatisfied;
   const paidInFull = data.paidInFull === true;
-  const depositPaid = data.depositSatisfied === true || data.depositPaid === true;
+  const depositPaid = data.depositSatisfied === true;
   const collectedAmount = Number.isFinite(backendCollectedAmount)
     ? Math.max(0, backendCollectedAmount)
-    : hasDeposit && depositPaid
+    : hasBackendFinance
+      ? 0
+      : hasDeposit && depositPaid
       ? Math.min(totalPrice, depositAmount)
       : paidInFull
         ? Math.max(0, totalPrice)
@@ -89,6 +96,8 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
   const remainingBalance =
     Number.isFinite(backendBalanceDue) && backendBalanceDue >= 0
       ? backendBalanceDue
+      : hasBackendFinance
+        ? Math.max(0, totalPrice)
       : hasTotal
         ? Math.max(totalPrice - collectedAmount, 0)
         : 0;

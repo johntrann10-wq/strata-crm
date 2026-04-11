@@ -2538,7 +2538,10 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
       serviceRows.length > 0 ? serviceRows.map((service) => service.name).join(", ") : "Appointment confirmed",
     totalPrice: appointment.totalPrice,
     depositAmount: appointment.depositAmount,
-    depositPaid,
+    collectedAmount: finance?.collectedAmount ?? 0,
+    balanceDue: finance?.balanceDue ?? Math.max(0, Number(appointment.totalPrice ?? 0)),
+    paidInFull: finance?.paidInFull ?? false,
+    depositSatisfied: finance?.depositSatisfied ?? false,
     publicPaymentUrl,
     portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(token)}`),
     publicRequestChangeUrl: buildPublicDocumentUrl(
@@ -2550,7 +2553,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
         ? (req.query.changeRequest as "sent" | "recorded")
         : null,
     stripePaymentState:
-      stripePaymentQuery === "success" && depositPaid
+      stripePaymentQuery === "success" && finance?.depositSatisfied === true
         ? "success"
         : stripePaymentQuery === "cancelled"
           ? "cancelled"
