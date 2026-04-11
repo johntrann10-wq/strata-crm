@@ -54,7 +54,7 @@ describe("home dashboard domain logic", () => {
     const base = {
       businessId: "biz-1",
       userId: "user-1",
-      permissions: ["dashboard.view"] as const,
+      permissions: ["dashboard.view"],
       timezone: "America/Los_Angeles",
       now: new Date("2026-04-10T16:00:00.000Z"),
     };
@@ -209,7 +209,7 @@ describe("home dashboard domain logic", () => {
       "invoices.write",
       "payments.read",
       "payments.write",
-    ] as const;
+    ];
     const technicianRawPermissions = [
       "dashboard.view",
       "appointments.read",
@@ -217,7 +217,7 @@ describe("home dashboard domain logic", () => {
       "vehicles.read",
       "quotes.read",
       "invoices.read",
-    ] as const;
+    ];
     const ownerPermissions = getDashboardModulePermissions([...ownerRawPermissions]);
     const technicianPermissions = getDashboardModulePermissions([...technicianRawPermissions]);
 

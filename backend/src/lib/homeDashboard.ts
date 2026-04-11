@@ -942,7 +942,7 @@ export function invalidateHomeDashboardCache(input: { businessId: string; userId
   }
   logger.info("Home dashboard cache invalidated", {
     businessId: input.businessId,
-    userId: input.userId ?? null,
+    userId: input.userId ?? undefined,
     reason: input.reason ?? "unspecified",
     entriesRemoved: keysToDelete.size,
   });
@@ -1239,7 +1239,7 @@ function buildSinceLastChecked(params: {
 
 function buildValueMoments(params: {
   actionQueueItems: HomeDashboardActionQueueItem[];
-  automations: HomeDashboardAutomationSummary;
+  automations: Awaited<ReturnType<typeof loadAutomationStats>>;
   goals: { percentToGoal: number | null };
   revenueCollections: HomeDashboardSnapshot["revenueCollections"];
 }) {
@@ -2627,7 +2627,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     if (cachedSnapshot) {
       logger.info("Home dashboard cache hit", {
         businessId: params.businessId,
-        userId: params.userId ?? null,
+        userId: params.userId ?? undefined,
         cacheKey,
       });
       return {
@@ -2645,7 +2645,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
   }
   logger.info("Home dashboard cache miss", {
     businessId: params.businessId,
-    userId: params.userId ?? null,
+    userId: params.userId ?? undefined,
     cacheKey,
   });
   const todayStart = startOfBusinessDay(now, timezone);
@@ -2685,7 +2685,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       const message = error instanceof Error ? error.message : String(error);
       logger.warn("Home dashboard widget degraded", {
         businessId: params.businessId,
-        userId: params.userId ?? null,
+        userId: params.userId ?? undefined,
         widget: widgets.join(","),
         timingLabel,
         error: message,
@@ -2702,7 +2702,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       const message = error instanceof Error ? error.message : String(error);
       logger.warn("Home dashboard derived widget degraded", {
         businessId: params.businessId,
-        userId: params.userId ?? null,
+        userId: params.userId ?? undefined,
         widget: widgets.join(","),
         timingLabel,
         error: message,
@@ -2761,7 +2761,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     ),
     loadOrFallback(
       "completedMissingInvoiceRows",
-      [] as AppointmentDashboardRow[],
+      [] as Awaited<ReturnType<typeof loadCompletedAppointmentsMissingInvoice>>,
       ["action_queue", "business_health"],
       () => loadCompletedAppointmentsMissingInvoice(params.businessId, selectedTeamMemberId, tx)
     ),
@@ -2779,14 +2779,15 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     ),
     loadOrFallback(
       "automationStats",
-      {
+      {} as Awaited<ReturnType<typeof loadAutomationStats>>,
+      (() => ({
         remindersSentThisWeek: 0,
         invoiceNudgesSentThisWeek: null,
         reviewRequestsSentThisWeek: 0,
         reactivationMessagesSentThisWeek: 0,
         deliverySuccessRate: null,
         failedAutomationCount: 0,
-      },
+      }))(),
       ["automations", "business_health"],
       () => loadAutomationStats(params.businessId, weekStart, weekEnd, tx)
     ),
@@ -2798,7 +2799,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     ),
     loadOrFallback(
       "upcomingDepositRows",
-      [] as AppointmentDashboardRow[],
+      [] as Awaited<ReturnType<typeof loadUpcomingDepositCandidates>>,
       ["summary_cash", "action_queue", "revenue_collections", "business_health"],
       () => loadUpcomingDepositCandidates(params.businessId, now, next48Hours, selectedTeamMemberId, tx)
     ),
@@ -3238,7 +3239,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
   }
   logger.info("Home dashboard snapshot generated", {
     businessId: params.businessId,
-    userId: params.userId ?? null,
+    userId: params.userId ?? undefined,
     cacheKey,
     degraded: snapshot.degraded,
     widgetErrorCount: Object.keys(widgetErrors).length,

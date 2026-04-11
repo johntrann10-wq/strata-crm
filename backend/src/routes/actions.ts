@@ -842,7 +842,7 @@ actionsRouter.post("/getHomeDashboard", requireAuth, requireTenant, requirePermi
     range: parsed.data.range,
     teamMemberId: parsed.data.teamMemberId ?? null,
   });
-  res.json(snapshot);
+  return res.json(snapshot);
 });
 
 actionsRouter.post("/updateHomeDashboardPreferences", requireAuth, requireTenant, requirePermission("dashboard.view"), async (req: Request, res: Response) => {
@@ -867,7 +867,7 @@ actionsRouter.post("/updateHomeDashboardPreferences", requireAuth, requireTenant
     clearSnoozeQueueItemId: parsed.data.clearSnoozeQueueItemId ?? null,
     markSeenAt: parsed.data.markSeenAt ? new Date(parsed.data.markSeenAt) : null,
   });
-  res.json({ preferences });
+  return res.json({ preferences });
 });
 
 actionsRouter.post("/getCapacityInsights", requireAuth, requireTenant, async (req: Request, res: Response) => {
