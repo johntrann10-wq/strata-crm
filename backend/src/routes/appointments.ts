@@ -2027,7 +2027,6 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
       id: appointments.id,
       clientId: appointments.clientId,
       depositAmount: appointments.depositAmount,
-      depositPaid: appointments.depositPaid,
       totalPrice: appointments.totalPrice,
       internalNotes: appointments.internalNotes,
       updatedAt: appointments.updatedAt,
@@ -2146,7 +2145,7 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   });
 
   res.json({
-    ...(updated ?? { ...existing, depositPaid: updates.depositPaid === true }),
+    ...(updated ?? existing),
     depositSatisfied: responseFinance.depositSatisfied,
   });
 }));
@@ -2234,7 +2233,6 @@ appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requ
     .select({
       id: appointments.id,
       depositAmount: appointments.depositAmount,
-      depositPaid: appointments.depositPaid,
     })
     .from(appointments)
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
@@ -2293,7 +2291,6 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
     .select({
       id: appointments.id,
       depositAmount: appointments.depositAmount,
-      depositPaid: appointments.depositPaid,
       totalPrice: appointments.totalPrice,
     })
     .from(appointments)
@@ -2374,7 +2371,7 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
   });
 
   res.json({
-    ...(updated ?? { ...existing, depositPaid: false }),
+    ...(updated ?? existing),
     depositSatisfied: postReverseSummary.depositSatisfied,
   });
 }));
