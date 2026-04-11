@@ -709,7 +709,7 @@ export default function CalendarPage() {
                   {selectedDayAgendaItems.length}
                 </span>
               </div>
-              <div className="h-full space-y-2 overflow-y-auto pr-1 [overscroll-behavior:contain]">
+              <div className="h-full space-y-2 overflow-y-auto pr-1">
                 {selectedDayAgendaItems.map(({ appointment, kind }) => (
                   <AgendaPreviewRow
                     key={`${appointment.id}-${kind}-${view}`}
