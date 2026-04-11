@@ -170,10 +170,9 @@ async function confirmAppointmentDepositCheckout(params: {
     .where(and(eq(appointments.id, params.appointmentId), eq(appointments.businessId, params.businessId)))
     .returning({
       id: appointments.id,
-      depositPaid: appointments.depositPaid,
     });
 
-  if (!(nextFinance?.depositSatisfied === true) || !updated?.depositPaid) {
+  if (!(nextFinance?.depositSatisfied === true) || !updated?.id) {
     logger.warn("Stripe appointment deposit return could not persist deposit state", {
       sessionId,
       appointmentId: params.appointmentId,
