@@ -288,8 +288,6 @@ function getStandaloneAppointmentCollectedAmountSql() {
           coalesce(${appointments.depositAmount}, '0')::numeric,
           coalesce(${appointments.totalPrice}, '0')::numeric
         )
-      when ${appointments.depositPaid} = true
-        then coalesce(${appointments.totalPrice}, '0')::numeric
       else 0
     end,
     0

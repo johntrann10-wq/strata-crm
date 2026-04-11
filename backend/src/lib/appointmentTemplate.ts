@@ -24,6 +24,10 @@ type AppointmentTemplateData = {
   totalPrice?: string | number | null;
   depositAmount?: string | number | null;
   depositPaid?: boolean | null;
+  collectedAmount?: string | number | null;
+  balanceDue?: string | number | null;
+  paidInFull?: boolean | null;
+  depositSatisfied?: boolean | null;
   publicPaymentUrl?: string | null;
   publicRequestChangeUrl?: string | null;
   portalUrl?: string | null;
@@ -71,8 +75,23 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
   const depositAmount = Number.parseFloat(String(data.depositAmount ?? 0));
   const hasTotal = Number.isFinite(totalPrice) && totalPrice > 0;
   const hasDeposit = Number.isFinite(depositAmount) && depositAmount > 0;
-  const depositPaid = data.depositPaid === true;
-  const remainingBalance = hasTotal ? Math.max(totalPrice - (hasDeposit ? depositAmount : 0), 0) : 0;
+  const backendCollectedAmount = Number.parseFloat(String(data.collectedAmount ?? 0));
+  const backendBalanceDue = Number.parseFloat(String(data.balanceDue ?? 0));
+  const paidInFull = data.paidInFull === true;
+  const depositPaid = data.depositSatisfied === true || data.depositPaid === true;
+  const collectedAmount = Number.isFinite(backendCollectedAmount)
+    ? Math.max(0, backendCollectedAmount)
+    : hasDeposit && depositPaid
+      ? Math.min(totalPrice, depositAmount)
+      : paidInFull
+        ? Math.max(0, totalPrice)
+        : 0;
+  const remainingBalance =
+    Number.isFinite(backendBalanceDue) && backendBalanceDue >= 0
+      ? backendBalanceDue
+      : hasTotal
+        ? Math.max(totalPrice - collectedAmount, 0)
+        : 0;
   const serviceItems = (data.serviceSummary ?? "Appointment details confirmed")
     .split(",")
     .map((item) => item.trim())
@@ -98,10 +117,12 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
   const summaryAmount = hasTotal ? formatCurrency(totalPrice) : hasDeposit ? formatCurrency(depositAmount) : formatCurrency(0);
   const summaryDetail = hasTotal
     ? hasDeposit
-      ? depositPaid
+      ? depositPaid || paidInFull
         ? `${formatCurrency(depositAmount)} deposit collected`
         : `${formatCurrency(depositAmount)} deposit due`
-      : "No deposit required"
+      : paidInFull
+        ? "Paid in full"
+        : "No deposit required"
     : depositStatus;
   const depositPanel = hasDeposit
     ? `<div class="meta-row"><span>Deposit required</span><span>${formatCurrency(depositAmount)}</span></div>
@@ -216,7 +237,7 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
                 ${hasDeposit ? `<div class="pricing-row"><span>Deposit due today</span><span>${formatCurrency(depositAmount)}</span></div>` : ""}
                 ${hasTotal ? `<div class="pricing-row remaining"><span>Remaining balance due</span><span>${formatCurrency(remainingBalance)}</span></div>` : ""}
               </div>
-              ${hasDeposit && !depositPaid && publicPaymentUrl ? `<a class="cta" href="${escapeHtml(publicPaymentUrl)}">Pay ${formatCurrency(depositAmount)} with Stripe</a><div class="cta-note">Secure checkout powered by Stripe.</div>` : hasDeposit && !depositPaid ? `<div class="cta-note">Deposit payment will appear here as soon as online payments are available.</div>` : ""}
+              ${hasDeposit && !(depositPaid || paidInFull) && publicPaymentUrl ? `<a class="cta" href="${escapeHtml(publicPaymentUrl)}">Pay ${formatCurrency(depositAmount)} with Stripe</a><div class="cta-note">Secure checkout powered by Stripe.</div>` : hasDeposit && !(depositPaid || paidInFull) ? `<div class="cta-note">Deposit payment will appear here as soon as online payments are available.</div>` : ""}
             </section>
           </section>
           <section class="summary">
