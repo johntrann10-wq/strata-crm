@@ -1124,7 +1124,16 @@ export default function AppointmentDetail() {
   const missingLinkedRecords = !appointment.client || !appointment.vehicle;
   const depositAmountValue = Number(appointment.depositAmount ?? 0);
   const totalPriceValue = Number(appointment.totalPrice ?? 0);
-  const paidInFull = hasValidPaidAt((appointment as any).paidAt ?? null);
+  const invoiceStatus = String((invoice as any)?.status ?? "");
+  const invoicePaidAt = (invoice as any)?.lastPaidAt ?? null;
+  const paidInFull =
+    hasValidPaidAt((appointment as any).paidAt ?? null) ||
+    invoiceStatus === "paid" ||
+    hasValidPaidAt(invoicePaidAt);
+  const depositCollected =
+    (appointment as any).depositPaid === true ||
+    invoiceStatus === "paid" ||
+    invoiceStatus === "partial";
   const collectedAmountFromActivity = (((activityLogs ?? []) as Array<{ type?: string | null; action?: string | null; metadata?: string | null }>).reduce(
     (sum, record) => {
       const activityType = String(record.type ?? record.action ?? "");
@@ -1143,7 +1152,9 @@ export default function AppointmentDetail() {
   ) as number);
   const fallbackCollectedAmount = paidInFull
     ? Math.max(0, totalPriceValue)
-    : 0;
+    : depositCollected && depositAmountValue > 0
+      ? Math.min(totalPriceValue, depositAmountValue)
+      : 0;
   const normalizedCollectedAmount = paidInFull
     ? Math.max(0, totalPriceValue)
     : Math.max(0, Number((collectedAmountFromActivity > 0 ? collectedAmountFromActivity : fallbackCollectedAmount).toFixed(2)));
