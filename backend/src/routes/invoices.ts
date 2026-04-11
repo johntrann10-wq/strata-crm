@@ -1065,7 +1065,6 @@ invoicesRouter.post(
         clientId: string;
         vehicleId: string | null;
         depositAmount: string | null;
-        depositPaid: boolean | null;
         totalPrice: string | null;
         updatedAt: Date | null;
       }
@@ -1094,7 +1093,6 @@ invoicesRouter.post(
         clientId: appointments.clientId,
         vehicleId: appointments.vehicleId,
         depositAmount: appointments.depositAmount,
-        depositPaid: appointments.depositPaid,
         totalPrice: appointments.totalPrice,
         updatedAt: appointments.updatedAt,
       })
@@ -1108,7 +1106,6 @@ invoicesRouter.post(
       clientId: apt.clientId,
       vehicleId: apt.vehicleId,
       depositAmount: apt.depositAmount,
-      depositPaid: apt.depositPaid,
       totalPrice: apt.totalPrice,
       updatedAt: apt.updatedAt,
     };
