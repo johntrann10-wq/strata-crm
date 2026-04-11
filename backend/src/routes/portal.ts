@@ -11,6 +11,7 @@ import {
 } from "../db/schema.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { BadRequestError, NotFoundError } from "../lib/errors.js";
+import { getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 import { getActiveInvoicePaymentTotal } from "../lib/invoicePayments.js";
 import {
   buildPublicAppUrl,
@@ -276,6 +277,16 @@ portalRouter.get(
       .orderBy(asc(appointments.startTime))
       .limit(6);
 
+    const upcomingAppointmentFinance = await getAppointmentFinanceSummaryMap(
+      access.businessId,
+      upcomingAppointments.map((appointment) => ({
+        id: appointment.id,
+        totalPrice: appointment.totalPrice,
+        depositAmount: appointment.depositAmount,
+        paidAt: null,
+      }))
+    );
+
     const recentAppointments = await db
       .select({
         id: appointments.id,
@@ -353,7 +364,9 @@ portalRouter.get(
                 )
               : null,
         })),
-        upcomingAppointments: upcomingAppointments.map((appointment) => ({
+        upcomingAppointments: upcomingAppointments.map((appointment) => {
+          const finance = upcomingAppointmentFinance.get(appointment.id);
+          return {
           id: appointment.id,
           title: formatDocumentTitle("appointment", appointment),
           status: appointment.status,
@@ -361,6 +374,9 @@ portalRouter.get(
           totalPrice: Number(appointment.totalPrice ?? 0),
           depositAmount: Number(appointment.depositAmount ?? 0),
           depositPaid: appointment.depositPaid === true,
+          balanceDue: finance?.balanceDue ?? Math.max(0, Number(appointment.totalPrice ?? 0)),
+          paidInFull: finance?.paidInFull ?? false,
+          depositSatisfied: finance?.depositSatisfied ?? false,
           vehicleLabel:
             [appointment.vehicleYear, appointment.vehicleMake, appointment.vehicleModel].filter(Boolean).join(" ") || null,
           url: buildDocumentUrl({
@@ -369,7 +385,7 @@ portalRouter.get(
             businessId: access.businessId,
           }),
           payUrl:
-            stripeReady && Number(appointment.depositAmount ?? 0) > 0 && appointment.depositPaid !== true
+            stripeReady && Number(appointment.depositAmount ?? 0) > 0 && finance?.depositSatisfied !== true
               ? buildPublicDocumentUrl(
                   `/api/appointments/${appointment.id}/public-pay?token=${encodeURIComponent(
                     createPublicDocumentToken({
@@ -380,7 +396,8 @@ portalRouter.get(
                   )}`
                 )
               : null,
-        })),
+          };
+        }),
         recentAppointments: recentAppointments.map((appointment) => ({
           id: appointment.id,
           title: formatDocumentTitle("appointment", appointment),

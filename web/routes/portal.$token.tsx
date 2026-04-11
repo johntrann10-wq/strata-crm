@@ -55,6 +55,9 @@ type PortalSummary = {
       totalPrice: number;
       depositAmount: number;
       depositPaid: boolean;
+      balanceDue?: number | null;
+      paidInFull?: boolean | null;
+      depositSatisfied?: boolean | null;
       vehicleLabel: string | null;
       url: string;
       payUrl: string | null;
@@ -362,10 +365,18 @@ export default function PortalTokenRoute() {
                               <ResourceBadge status={appointment.status} />
                               {appointment.depositAmount > 0 ? (
                                 <p className="text-sm text-slate-700">
-                                  {appointment.depositPaid ? "Deposit paid" : `${formatCurrency(appointment.depositAmount)} deposit due`}
+                                  {appointment.depositSatisfied === true || appointment.paidInFull === true
+                                    ? "Deposit paid"
+                                    : `${formatCurrency(appointment.depositAmount)} deposit due`}
                                 </p>
                               ) : (
-                                <p className="text-sm text-slate-700">{formatCurrency(appointment.totalPrice)}</p>
+                                <p className="text-sm text-slate-700">
+                                  {appointment.paidInFull === true
+                                    ? "Paid in full"
+                                    : appointment.balanceDue != null
+                                      ? `${formatCurrency(appointment.balanceDue)} due`
+                                      : formatCurrency(appointment.totalPrice)}
+                                </p>
                               )}
                             </div>
                           </div>

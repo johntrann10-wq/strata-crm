@@ -49,6 +49,10 @@ type AppointmentRecord = {
   totalPrice?: number | string | null;
   depositAmount?: number | string | null;
   depositPaid?: boolean | null;
+  collectedAmount?: number | string | null;
+  balanceDue?: number | string | null;
+  paidInFull?: boolean | null;
+  depositSatisfied?: boolean | null;
   internalNotes?: string | null;
   client: { firstName?: string | null; lastName?: string | null } | null;
   vehicle: { make?: string | null; model?: string | null; year?: number | null } | null;
@@ -238,6 +242,18 @@ function invoiceBalance(invoice: InvoiceRecord): number {
       ? Number(invoice.remainingBalance)
       : Number(invoice.total ?? 0);
   return Number.isFinite(raw) ? raw : 0;
+}
+
+function appointmentDepositStillDue(appointment: AppointmentRecord): boolean {
+  const deposit = Number(appointment.depositAmount ?? 0);
+  if (!Number.isFinite(deposit) || deposit <= 0) return false;
+  if (appointment.depositSatisfied != null) return appointment.depositSatisfied !== true;
+  if (appointment.paidInFull != null && appointment.paidInFull === true) return false;
+  const balanceDue = Number(appointment.balanceDue ?? Number.NaN);
+  if (Number.isFinite(balanceDue)) {
+    return balanceDue > 0.009 && !appointment.depositPaid;
+  }
+  return !appointment.depositPaid;
 }
 
 function isCalendarBlockRecord(internalNotes: string | null | undefined): boolean {
@@ -524,10 +540,7 @@ function SignedInDashboard({
   );
   const depositsAwaitingPayment = useMemo(
     () =>
-      todayAppointments.filter((appointment) => {
-        const deposit = Number(appointment.depositAmount ?? 0);
-        return Number.isFinite(deposit) && deposit > 0 && !appointment.depositPaid;
-      }),
+      todayAppointments.filter((appointment) => appointmentDepositStillDue(appointment)),
     [todayAppointments]
   );
   const depositDueValue = useMemo(
