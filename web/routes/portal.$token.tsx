@@ -54,7 +54,6 @@ type PortalSummary = {
       startTime: string | null;
       totalPrice: number;
       depositAmount: number;
-      depositPaid: boolean;
       balanceDue?: number | null;
       paidInFull?: boolean | null;
       depositSatisfied?: boolean | null;
