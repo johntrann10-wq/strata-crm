@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 import { CarFront, CircleDollarSign, Clock3, ExternalLink, Loader2, MapPin, Plus, Trash2, User, Wrench } from "lucide-react";
 import { api } from "@/api";
-import { useAction, useFindMany } from "@/hooks/useApi";
+import { useAction, useFindMany, useFindFirst } from "@/hooks/useApi";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -37,6 +37,8 @@ export type AppointmentInspectorRecord = {
   depositAmount?: number | null;
   depositPaid?: boolean | null;
   paidAt?: string | null;
+  invoiceStatus?: string | null;
+  invoicePaidAt?: string | null;
   assignedStaffId?: string | null;
   notes?: string | null;
   internalNotes?: string | null;
@@ -147,6 +149,12 @@ function getLifecycleLabel(appointment: AppointmentInspectorRecord): string {
 function getCollectedAmount(appointment: AppointmentInspectorRecord): number {
   const total = Number(appointment.totalPrice ?? 0);
   if (hasValidPaidAt(appointment.paidAt)) return total;
+  if (appointment.invoiceStatus === "paid" || hasValidPaidAt(appointment.invoicePaidAt ?? null)) return total;
+  if (appointment.depositPaid === true) {
+    const depositAmount = Number(appointment.depositAmount ?? 0);
+    if (depositAmount > 0) return Math.min(total, depositAmount);
+    if (total > 0) return total;
+  }
   return 0;
 }
 
@@ -195,7 +203,9 @@ function getPaymentSummary(
 } {
   const totalAmount = Number(appointment.totalPrice ?? 0);
   const depositAmount = Number(appointment.depositAmount ?? 0);
-  const paidInFull = hasValidPaidAt(appointment.paidAt);
+  const paidInFull = hasValidPaidAt(appointment.paidAt) ||
+    appointment.invoiceStatus === "paid" ||
+    hasValidPaidAt(appointment.invoicePaidAt ?? null);
   const activityCollectedAmount = getCollectedAmountFromActivity(appointment, activityLogs);
   const collectedAmount = activityCollectedAmount ?? getCollectedAmount(appointment);
   const balanceDue = totalAmount > 0 ? Math.max(0, Number((totalAmount - collectedAmount).toFixed(2))) : 0;
@@ -320,6 +330,18 @@ export function AppointmentInspectorPanel({
     pause: !appointment?.id,
   } as any);
 
+  const [{ data: linkedInvoice }] = useFindFirst(api.invoice, {
+    live: true,
+    filter: { appointmentId: { equals: appointment?.id ?? "" } },
+    select: { id: true, status: true, paidAt: true },
+    pause: !appointment?.id,
+  } as any);
+  const resolvedInvoiceStatus = (linkedInvoice as any)?.status ?? appointment?.invoiceStatus ?? null;
+  const resolvedInvoicePaidAt = (linkedInvoice as any)?.paidAt ?? appointment?.invoicePaidAt ?? null;
+  const appointmentWithInvoice: AppointmentInspectorRecord = appointment
+    ? { ...appointment, invoiceStatus: resolvedInvoiceStatus, invoicePaidAt: resolvedInvoicePaidAt }
+    : appointment;
+
   const staffOptions = ((staffOptionsRaw ?? []) as Array<{ id: string; firstName?: string | null; lastName?: string | null }>).map((staff) => ({
     id: staff.id,
     label: [staff.firstName, staff.lastName].filter(Boolean).join(" ").trim() || "Unnamed staff",
@@ -388,7 +410,7 @@ export function AppointmentInspectorPanel({
 
   const lifecycleLabel = getLifecycleLabel(appointment);
   const paymentActivity = ((paymentActivityRaw ?? []) as AppointmentPaymentActivity[]) ?? [];
-  const paymentSummary = getPaymentSummary(appointment, paymentActivity);
+  const paymentSummary = getPaymentSummary(appointmentWithInvoice ?? appointment, paymentActivity);
   const moneyStateLabel = paymentSummary.moneyStateLabel;
   const collectedAmount = paymentSummary.collectedAmount;
   const balanceDue = paymentSummary.balanceDue;
