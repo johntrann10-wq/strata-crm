@@ -238,7 +238,7 @@ export function HomeWeeklyAppointmentOverviewCard({
       <CardHeader>
         <CardTitle>Weekly Appointment Overview</CardTitle>
         <CardDescription>
-          {formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")} Â· appointments, booked value, status mix, and day-by-day workload for the selected week.
+          {formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")} · appointment load, booked value, status mix, and day-by-day capacity for the selected week.
         </CardDescription>
         <CardAction>
           <div className="flex items-center gap-2">
@@ -283,49 +283,57 @@ export function HomeWeeklyAppointmentOverviewCard({
           />
         ) : (
           <>
-            <div className="hidden gap-3 lg:grid lg:grid-cols-7">
+            <div className="hidden overflow-hidden rounded-[1.3rem] border border-border/70 bg-white/90 lg:grid lg:grid-cols-7">
               {overview.days.map((day) => {
                 const isActive = day.date === activeDay.date;
+                const loadPercent = Math.max(8, Math.round((day.appointmentCount / maxCount) * 100));
                 return (
-                  <div
+                  <button
                     key={day.date}
+                    type="button"
+                    onClick={() => onSelectDate?.(day.date)}
                     className={cn(
-                      "rounded-[1.2rem] border p-3 transition-colors",
-                      isActive ? "border-orange-300 bg-orange-50/70 shadow-sm" : "border-border/70 bg-white/80"
+                      "flex min-h-[240px] flex-col justify-between border-r border-border/60 p-4 text-left transition-colors last:border-r-0",
+                      isActive ? "bg-orange-50/70 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.35)]" : "bg-white/80 hover:bg-slate-50/90"
                     )}
+                    aria-pressed={isActive}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onSelectDate?.(day.date)}
-                        className="text-left"
-                        aria-pressed={isActive}
-                      >
+                      <div>
                         <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{day.shortLabel}</p>
                         <p className="mt-1 text-sm font-semibold text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
-                      </button>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-950">{day.appointmentCount}</span>
-                        <Link to={day.calendarUrl} className="rounded-full p-1 text-muted-foreground hover:bg-white hover:text-slate-950" aria-label={`Open ${day.label} in calendar`}>
-                          <ArrowUpRight className="h-3.5 w-3.5" />
-                        </Link>
+                      </div>
+                      <Link
+                        to={day.calendarUrl}
+                        className="rounded-full p-1 text-muted-foreground hover:bg-white hover:text-slate-950"
+                        aria-label={`Open ${day.label} in calendar`}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
+                    <div className="mt-5 space-y-4">
+                      <div className="space-y-1">
+                        <p className="text-3xl font-semibold tracking-tight text-slate-950">{day.appointmentCount}</p>
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">appointments</p>
+                        <p className="text-sm font-medium text-slate-950">{formatDashboardCompactCurrency(day.bookedValue)}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 text-[10px]">
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Up {day.statusCounts.upcoming}</span>
+                        <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Live {day.statusCounts.inProgress}</span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">Done {day.statusCounts.completed}</span>
+                        <span className="rounded-full bg-rose-50 px-2 py-1 text-rose-700">Cancel {day.statusCounts.cancelled}</span>
                       </div>
                     </div>
-                    <button type="button" onClick={() => onSelectDate?.(day.date)} className="mt-4 block w-full text-left">
-                      <div className="h-24 rounded-2xl bg-slate-100/80 p-2">
-                        <div
-                          className="mx-auto mt-auto w-full rounded-xl bg-slate-900 transition-all"
-                          style={{ height: `${Math.max(10, Math.round((day.appointmentCount / maxCount) * 100))}%` }}
-                        />
-                      </div>
-                    </button>
-                    <div className="mt-3 space-y-2">
-                      <p className="text-sm font-medium text-slate-950">{formatDashboardCompactCurrency(day.bookedValue)}</p>
-                      <div className="grid grid-cols-2 gap-1 text-[11px] text-muted-foreground">
-                        <span>Upcoming {day.statusCounts.upcoming}</span>
-                        <span>In progress {day.statusCounts.inProgress}</span>
-                        <span>Done {day.statusCounts.completed}</span>
-                        <span>Cancelled {day.statusCounts.cancelled}</span>
+                    <div className="mt-5 space-y-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                          <span>Daily load</span>
+                          <span>{loadPercent}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-100">
+                          <div className="h-2 rounded-full bg-slate-900" style={{ width: `${loadPercent}%` }} />
+                        </div>
                       </div>
                       {day.capacityUsage != null ? (
                         <div className="space-y-1">
@@ -337,7 +345,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                         </div>
                       ) : null}
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -579,7 +587,7 @@ export function HomeMonthlyRevenueChartCard({
       <CardHeader>
         <CardTitle>Monthly Revenue Chart</CardTitle>
         <CardDescription>
-          {formatDateLabel(chart.monthStart, "MMMM yyyy")} Â· booked vs collected revenue by day from live business activity.
+          {formatDateLabel(chart.monthStart, "MMMM yyyy")} · booked revenue by scheduled work day and collected revenue by payment day.
         </CardDescription>
         <CardAction>
           <div className="inline-flex rounded-2xl border border-border/70 bg-slate-50/80 p-1">
@@ -629,52 +637,74 @@ export function HomeMonthlyRevenueChartCard({
             />
           ) : (
             <>
-              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                <span>Tap a bar to drill into that day.</span>
-                {showGoalPace ? <span>Goal pace shown as a marker line.</span> : null}
+              <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span>Revenue is grouped by business day. Tap a bar to drill into that date.</span>
+                {showGoalPace ? <span>Goal pace is shown as a guide for booked revenue.</span> : null}
               </div>
-              <div className="mt-3 flex h-72 items-end gap-2 overflow-x-auto pb-2">
-                {chart.days.map((day) => {
-                  const value = mode === "booked" ? day.bookedRevenue : day.collectedRevenue;
-                  const barHeight = Math.max(8, Math.round((value / maxValue) * 100));
-                  const goalPaceHeight =
-                    showGoalPace && day.goalPaceRevenue != null
-                      ? Math.max(6, Math.min(100, Math.round((day.goalPaceRevenue / maxValue) * 100)))
-                      : null;
-                  const targetUrl = mode === "booked" ? day.bookedUrl : day.collectedUrl;
-                  return (
-                    <Link
-                      key={day.date}
-                      to={targetUrl}
-                      className="group flex min-w-[24px] flex-1 flex-col items-center justify-end gap-2"
-                      aria-label={`Open ${mode} revenue records for ${formatDateLabel(day.date, "MMM d")}`}
-                    >
-                      <div className="text-[10px] text-muted-foreground">{value > 0 ? formatDashboardCompactCurrency(value) : ""}</div>
-                      <div className="relative flex h-56 w-full items-end rounded-full bg-slate-100 px-1">
-                        {goalPaceHeight != null ? (
-                          <div
-                            className="pointer-events-none absolute inset-x-1 border-t border-dashed border-slate-400/70"
-                            style={{ bottom: `${goalPaceHeight}%` }}
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                        <div
-                          className={cn(
-                            "w-full rounded-full transition-all group-hover:opacity-85",
-                            mode === "booked" ? "bg-[var(--color-chart-1)]" : "bg-[var(--color-chart-2)]"
-                          )}
-                          style={{ height: `${barHeight}%` }}
-                          aria-label={`${mode} revenue for day ${day.dayOfMonth}: ${formatDashboardCurrency(value)}`}
-                        />
+              <div className="mt-4 rounded-[1rem] border border-border/60 bg-slate-50/70 p-3 sm:p-4">
+                <div className="grid gap-3 sm:grid-cols-[auto,1fr] sm:items-end">
+                  <div className="hidden h-64 flex-col justify-between text-[10px] text-muted-foreground sm:flex">
+                    <span>{formatDashboardCompactCurrency(maxValue)}</span>
+                    <span>{formatDashboardCompactCurrency(maxValue / 2)}</span>
+                    <span>$0</span>
+                  </div>
+                  <div className="min-w-0 overflow-x-auto pb-1">
+                    <div className="relative min-w-[680px]">
+                      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
+                        <div className="border-t border-dashed border-slate-300/90" />
+                        <div className="border-t border-dashed border-slate-200/90" />
+                        <div className="border-t border-dashed border-slate-300/90" />
                       </div>
-                      <div className="text-[10px] text-muted-foreground">{day.dayOfMonth}</div>
-                    </Link>
-                  );
-                })}
+                      <div className="relative flex h-64 items-end gap-1.5">
+                        {chart.days.map((day) => {
+                          const value = mode === "booked" ? day.bookedRevenue : day.collectedRevenue;
+                          const barHeight = value > 0 ? Math.max(6, Math.round((value / maxValue) * 100)) : 0;
+                          const goalPaceHeight =
+                            showGoalPace && day.goalPaceRevenue != null
+                              ? Math.max(4, Math.min(100, Math.round((day.goalPaceRevenue / maxValue) * 100)))
+                              : null;
+                          const targetUrl = mode === "booked" ? day.bookedUrl : day.collectedUrl;
+                          const showTick = day.dayOfMonth === 1 || day.dayOfMonth === chart.days.length || day.dayOfMonth % 5 === 0;
+                          return (
+                            <Link
+                              key={day.date}
+                              to={targetUrl}
+                              className="group flex min-w-[18px] flex-1 flex-col items-center justify-end gap-2"
+                              aria-label={`Open ${mode} revenue records for ${formatDateLabel(day.date, "MMM d")}`}
+                            >
+                              <div className="relative flex h-56 w-full items-end rounded-t-[10px]">
+                                {goalPaceHeight != null ? (
+                                  <div
+                                    className="pointer-events-none absolute inset-x-0 border-t border-dashed border-slate-400/70"
+                                    style={{ bottom: `${goalPaceHeight}%` }}
+                                    aria-hidden="true"
+                                  />
+                                ) : null}
+                                <div
+                                  className={cn(
+                                    "w-full rounded-t-[10px] transition-all group-hover:opacity-85",
+                                    mode === "booked" ? "bg-[var(--color-chart-1)]" : "bg-[var(--color-chart-2)]",
+                                    value === 0 ? "bg-slate-200/70" : null
+                                  )}
+                                  style={{ height: `${barHeight}%` }}
+                                  aria-label={`${mode} revenue for day ${day.dayOfMonth}: ${formatDashboardCurrency(value)}`}
+                                />
+                              </div>
+                              <div className="h-4 text-[10px] text-muted-foreground">{showTick ? day.dayOfMonth : ""}</div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-2">
+                  <span className={cn("h-2.5 w-2.5 rounded-full", mode === "booked" ? "bg-[var(--color-chart-1)]" : "bg-[var(--color-chart-2)]")} />
+                  {mode === "booked" ? "Booked revenue" : "Collected revenue"}
+                </span>
                 {chart.goalAmount != null ? <span>Monthly goal: {formatDashboardCurrency(chart.goalAmount)}</span> : null}
-                <span>Mode: {mode === "booked" ? "Booked revenue" : "Collected revenue"}</span>
               </div>
             </>
           )}
@@ -683,7 +713,6 @@ export function HomeMonthlyRevenueChartCard({
     </Card>
   );
 }
-
 export function HomeBookingsOverviewCard({
   snapshot,
   loading,
@@ -990,3 +1019,5 @@ export function HomeCompactQuickActions({
     </Card>
   );
 }
+
+

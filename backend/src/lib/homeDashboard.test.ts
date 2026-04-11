@@ -341,8 +341,8 @@ describe("home dashboard domain logic", () => {
       monthEnd: new Date("2026-04-30T06:59:59.999Z"),
       timezone: "America/Los_Angeles",
       monthlyRevenueGoal: 10000,
-      bookedAppointments: [{ createdAt: new Date("2026-04-02T16:00:00.000Z"), totalPrice: "500" }],
-      standaloneInvoices: [{ createdAt: new Date("2026-04-03T16:00:00.000Z"), total: "300" }],
+      bookedAppointments: [{ bookedAt: new Date("2026-04-02T16:00:00.000Z"), totalPrice: "500" }],
+      standaloneInvoices: [{ bookedAt: new Date("2026-04-03T16:00:00.000Z"), total: "300" }],
       invoicePayments: [{ paidAt: new Date("2026-04-04T16:00:00.000Z"), amount: "250" }],
       directPayments: [{ createdAt: new Date("2026-04-02T18:00:00.000Z"), action: "appointment.deposit_paid", metadata: JSON.stringify({ amount: 150 }) }],
     });

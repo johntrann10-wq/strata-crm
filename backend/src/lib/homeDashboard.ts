@@ -1725,8 +1725,8 @@ export function buildMonthlyRevenueChart(params: {
   monthStart: Date;
   monthEnd: Date;
   timezone: string;
-  bookedAppointments: Array<Pick<AppointmentDashboardRow, "createdAt" | "totalPrice">>;
-  standaloneInvoices: Array<Pick<InvoiceSnapshotRow, "createdAt" | "total">>;
+  bookedAppointments: Array<{ bookedAt: Date; totalPrice: MoneyLike }>;
+  standaloneInvoices: Array<{ bookedAt: Date; total: MoneyLike }>;
   invoicePayments: Array<{ paidAt: Date; amount: MoneyLike }>;
   directPayments: Array<{ createdAt: Date; action: string; metadata: string | null }>;
   monthlyRevenueGoal: number | null;
@@ -1761,8 +1761,8 @@ export function buildMonthlyRevenueChart(params: {
     days[index]!.collectedRevenue += amount;
   };
 
-  for (const row of params.bookedAppointments) addBooked(row.createdAt, row.totalPrice);
-  for (const row of params.standaloneInvoices) addBooked(row.createdAt, row.total);
+  for (const row of params.bookedAppointments) addBooked(row.bookedAt, row.totalPrice);
+  for (const row of params.standaloneInvoices) addBooked(row.bookedAt, row.total);
   for (const row of params.invoicePayments) addCollected(row.paidAt, toMoneyNumber(row.amount));
   for (const row of params.directPayments) {
     const metadata = safeParseMetadata(row.metadata);
@@ -2491,6 +2491,23 @@ async function loadMonthAppointmentsForPipeline(
     .orderBy(desc(appointments.createdAt));
 }
 
+async function loadMonthAppointmentsForRevenue(
+  businessId: string,
+  monthStart: Date,
+  monthEnd: Date,
+  tx: DbExecutor
+): Promise<Array<{ bookedAt: Date; totalPrice: MoneyLike }>> {
+  const bookedAt = sql<Date>`coalesce(${appointments.jobStartTime}, ${appointments.startTime})`;
+  return tx
+    .select({
+      bookedAt: bookedAt.as("booked_at"),
+      totalPrice: appointments.totalPrice,
+    })
+    .from(appointments)
+    .where(and(eq(appointments.businessId, businessId), gte(bookedAt, monthStart), lte(bookedAt, monthEnd)))
+    .orderBy(asc(bookedAt));
+}
+
 async function loadReviewRequestReadyRows(
   business: DashboardBusinessConfig,
   cutoff: Date,
@@ -3141,6 +3158,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     leadRows,
     quoteRows,
     monthAppointments,
+    monthRevenueAppointments,
     completedMissingInvoiceRows,
     recentActivityRows,
     inviteRows,
@@ -3185,6 +3203,12 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       [] as AppointmentDashboardRow[],
       ["pipeline", "goals"],
       () => loadMonthAppointmentsForPipeline(params.businessId, monthStart, monthEnd, tx)
+    ),
+    loadOrFallback(
+      "monthRevenueAppointments",
+      [] as Awaited<ReturnType<typeof loadMonthAppointmentsForRevenue>>,
+      ["revenue_collections", "goals", "cash"],
+      () => loadMonthAppointmentsForRevenue(params.businessId, monthStart, monthEnd, tx)
     ),
     loadOrFallback(
       "completedMissingInvoiceRows",
@@ -3437,8 +3461,8 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
         monthStart,
         monthEnd,
         timezone,
-        bookedAppointments: monthAppointments,
-        standaloneInvoices: monthStandaloneInvoices,
+        bookedAppointments: monthRevenueAppointments,
+        standaloneInvoices: monthStandaloneInvoices.map((row) => ({ bookedAt: row.createdAt, total: row.total })),
         invoicePayments: invoicePaymentRowsThisMonth,
         directPayments: directPaymentRowsThisMonth,
         monthlyRevenueGoal: toMoneyNumber(business.monthlyRevenueGoal),
@@ -3728,7 +3752,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
           ? Number(
               (
-                monthAppointments.reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0) +
+                monthRevenueAppointments.reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0) +
                 monthStandaloneInvoices.reduce((sum, row) => sum + toMoneyNumber(row.total), 0)
               ).toFixed(2)
             )
@@ -3793,7 +3817,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       weeklyOverview:
         "Weekly appointment overview buckets appointments by their operational start day within the selected Monday-through-Sunday business week and summarizes status, booked value, assigned-capacity usage, and next jobs for each day.",
       monthlyRevenueChart:
-        "Monthly revenue chart groups booked revenue by booking creation day and collected revenue by payment day within the current business month.",
+        "Monthly revenue chart groups booked revenue by the appointment's operational start day (or standalone invoice creation day) and collected revenue by payment day within the current business month.",
       bookingsOverview:
         "Bookings overview combines booking counts, quotes, ticket value, and deposit pressure from real appointments, quotes, and finance records.",
     },
