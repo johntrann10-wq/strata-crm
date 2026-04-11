@@ -202,6 +202,16 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
       depositsCollectedAmount: mode === "empty" ? 0 : 1860,
       depositsDueAmount: role === "technician" ? 0 : mode === "edge" ? 350 : 200,
       depositsDueCount: role === "technician" ? 0 : mode === "edge" ? 2 : 1,
+      links: {
+        bookingsThisWeek: "/calendar?view=week&date=2026-04-06",
+        bookingsThisMonth: "/calendar?view=month&date=2026-04-01",
+        quotesSent: "/quotes?tab=followup",
+        quotesAccepted: "/quotes?tab=accepted",
+        quoteToBookConversionRate: "/quotes?tab=accepted",
+        averageTicketValue: "/calendar?view=month&date=2026-04-01",
+        depositsCollected: "/finances",
+        depositsDue: "/calendar?view=week&date=2026-04-06",
+      },
       funnel: mode === "empty" || role === "technician" ? [] : [{ key: "new_leads", label: "New leads", count: mode === "edge" ? 3 : 2, value: null }, { key: "quoted", label: "Quoted", count: 4, value: 2780 }, { key: "booked", label: "Booked", count: 6, value: 4830 }, { key: "completed", label: "Completed", count: 3, value: 1895 }, { key: "paid", label: "Paid", count: 9, value: 6420 }],
     },
     revenueCollections: { allowed: modulePermissions.revenueCollections, bookedRevenueThisWeek: modulePermissions.revenueCollections ? 4230 : 0, collectedThisWeek: modulePermissions.revenueCollections ? 2180 : 0, collectedToday: modulePermissions.revenueCollections ? 980 : 0, outstandingInvoiceAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 2440 : 920) : 0, overdueInvoiceAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 1840 : 0) : 0, depositsDueAmount: modulePermissions.revenueCollections ? (mode === "edge" ? 350 : 200) : 0, depositsDueCount: modulePermissions.revenueCollections ? (mode === "edge" ? 2 : 1) : 0 },
@@ -278,6 +288,9 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(main.getByText("Outstanding invoices", { exact: true })).toBeVisible();
     await expect(main.getByText("Bookings Overview", { exact: true })).toBeVisible();
     await expect(main.getByText("Business Feed", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open bookings this week details", exact: true })).toHaveAttribute("href", "/calendar?view=week&date=2026-04-06");
+    await expect(page.getByRole("link", { name: "Open quotes sent details", exact: true })).toHaveAttribute("href", "/quotes?tab=followup");
+    await expect(page.getByRole("link", { name: "Open deposits due details", exact: true })).toHaveAttribute("href", "/calendar?view=week&date=2026-04-06");
     await expect(page.getByLabel("Filter dashboard by team member")).toBeVisible();
     await page.getByRole("button", { name: /this week/i }).click();
     await expect(page).toHaveURL(/range=week/);

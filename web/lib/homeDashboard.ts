@@ -270,6 +270,16 @@ export type HomeDashboardSnapshot = {
     depositsCollectedAmount: number;
     depositsDueAmount: number;
     depositsDueCount: number;
+    links: {
+      bookingsThisWeek: string;
+      bookingsThisMonth: string;
+      quotesSent: string;
+      quotesAccepted: string;
+      quoteToBookConversionRate: string;
+      averageTicketValue: string;
+      depositsCollected: string;
+      depositsDue: string;
+    };
     funnel: Array<{
       key: "new_leads" | "quoted" | "booked" | "completed" | "paid";
       label: string;

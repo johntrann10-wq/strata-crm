@@ -707,53 +707,143 @@ export function HomeBookingsOverviewCard({
     );
   }
 
+  const isEmpty =
+    bookings.bookingsThisWeek === 0 &&
+    bookings.bookingsThisMonth === 0 &&
+    bookings.quotesSent === 0 &&
+    bookings.quotesAccepted === 0 &&
+    bookings.depositsCollectedAmount === 0 &&
+    bookings.depositsDueAmount === 0 &&
+    bookings.funnel.length === 0;
+  const funnelLinks: Record<string, string> = {
+    new_leads: "/leads",
+    quoted: "/quotes?tab=followup",
+    booked: bookings.links.bookingsThisWeek,
+    completed: "/jobs",
+    paid: "/invoices?tab=paid",
+  };
+  const depositCoverageBase = bookings.depositsCollectedAmount + bookings.depositsDueAmount;
+  const depositCoveragePercent =
+    depositCoverageBase > 0 ? Math.max(0, Math.min(100, Math.round((bookings.depositsCollectedAmount / depositCoverageBase) * 100))) : null;
   const stats = [
-    { label: "This week", value: `${bookings.bookingsThisWeek}` },
-    { label: "This month", value: `${bookings.bookingsThisMonth}` },
-    { label: "Quotes sent", value: `${bookings.quotesSent}` },
-    { label: "Quotes accepted", value: `${bookings.quotesAccepted}` },
-    { label: "Quote → book", value: bookings.quoteToBookConversionRate == null ? "--" : `${bookings.quoteToBookConversionRate}%` },
-    { label: "Avg ticket", value: bookings.averageTicketValue == null ? "--" : formatDashboardCurrency(bookings.averageTicketValue) },
+    {
+      label: "Bookings this week",
+      value: `${bookings.bookingsThisWeek}`,
+      href: bookings.links.bookingsThisWeek,
+      detail: bookings.bookingsToday > 0 ? `${bookings.bookingsToday} booked today` : "View this week's calendar",
+    },
+    {
+      label: "Bookings this month",
+      value: `${bookings.bookingsThisMonth}`,
+      href: bookings.links.bookingsThisMonth,
+      detail: "Open month view",
+    },
+    {
+      label: "Quotes sent",
+      value: `${bookings.quotesSent}`,
+      href: bookings.links.quotesSent,
+      detail: "Quotes waiting on response",
+    },
+    {
+      label: "Quotes accepted",
+      value: `${bookings.quotesAccepted}`,
+      href: bookings.links.quotesAccepted,
+      detail: "Accepted quotes ready to book",
+    },
+    {
+      label: "Quote to book",
+      value: bookings.quoteToBookConversionRate == null ? "--" : `${bookings.quoteToBookConversionRate}%`,
+      href: bookings.links.quoteToBookConversionRate,
+      detail: "Quoted stage to booked stage",
+    },
+    {
+      label: "Avg ticket",
+      value: bookings.averageTicketValue == null ? "--" : formatDashboardCurrency(bookings.averageTicketValue),
+      href: bookings.links.averageTicketValue,
+      detail: "Average booked value this month",
+    },
   ];
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Bookings Overview</CardTitle>
-        <CardDescription>Booking volume, quote performance, and deposit pressure in one place.</CardDescription>
+        <CardDescription>Booking volume, quote performance, and deposit pressure in one compact performance read.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-2 sm:grid-cols-2">
-          {stats.map((stat) => (
-            <div key={stat.label} className="rounded-[1rem] border border-border/70 bg-white/80 p-3">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{stat.label}</p>
-              <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{stat.value}</p>
+        {isEmpty ? (
+          <EmptyState
+            icon={TrendingUp}
+            title="No booking performance data yet"
+            description="Quotes, booked work, and deposit activity will show up here as soon as the shop gets moving."
+          />
+        ) : (
+          <>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {stats.map((stat) => (
+                <Link
+                  key={stat.label}
+                  to={stat.href}
+                  className="rounded-[1rem] border border-border/70 bg-white/80 p-3 transition-colors hover:border-orange-200 hover:bg-orange-50/60"
+                  aria-label={`Open ${stat.label.toLowerCase()} details`}
+                >
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{stat.label}</p>
+                  <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{stat.value}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{stat.detail}</p>
+                </Link>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="rounded-[1rem] border border-border/70 bg-white/80 p-3">
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">Deposits collected</span>
-            <span className="font-semibold text-emerald-700">{formatDashboardCurrency(bookings.depositsCollectedAmount)}</span>
-          </div>
-          <div className="mt-2 flex items-center justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">Deposits due</span>
-            <span className="font-semibold text-orange-700">
-              {formatDashboardCurrency(bookings.depositsDueAmount)} · {bookings.depositsDueCount}
-            </span>
-          </div>
-        </div>
-        <div className="grid gap-2">
-          {bookings.funnel.map((stage) => (
-            <div key={stage.key} className="flex items-center justify-between rounded-[1rem] border border-border/70 bg-white/80 px-3 py-2.5">
-              <span className="text-sm font-medium text-slate-950">{stage.label}</span>
-              <div className="text-right">
-                <p className="text-sm font-semibold text-slate-950">{stage.count}</p>
-                <p className="text-[11px] text-muted-foreground">{stage.value != null ? formatDashboardCompactCurrency(stage.value) : "count only"}</p>
+            <div className="rounded-[1rem] border border-border/70 bg-white/80 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Deposit coverage</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Collected deposits vs deposit pressure on upcoming booked work.</p>
+                </div>
+                {depositCoveragePercent != null ? (
+                  <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{depositCoveragePercent}% covered</div>
+                ) : null}
+              </div>
+              {depositCoveragePercent != null ? <Progress className="mt-3 h-2" value={depositCoveragePercent} /> : null}
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <Link
+                  to={bookings.links.depositsCollected}
+                  className="rounded-[0.95rem] border border-emerald-200/80 bg-emerald-50/70 p-3 transition-colors hover:bg-emerald-50"
+                  aria-label="Open deposits collected details"
+                >
+                  <p className="text-xs uppercase tracking-[0.16em] text-emerald-700/80">Deposits collected</p>
+                  <p className="mt-2 text-lg font-semibold tracking-tight text-emerald-800">{formatDashboardCurrency(bookings.depositsCollectedAmount)}</p>
+                </Link>
+                <Link
+                  to={bookings.links.depositsDue}
+                  className="rounded-[0.95rem] border border-orange-200/80 bg-orange-50/70 p-3 transition-colors hover:bg-orange-50"
+                  aria-label="Open deposits due details"
+                >
+                  <p className="text-xs uppercase tracking-[0.16em] text-orange-700/80">Deposits due</p>
+                  <p className="mt-2 text-lg font-semibold tracking-tight text-orange-800">{formatDashboardCurrency(bookings.depositsDueAmount)}</p>
+                  <p className="mt-1 text-xs text-orange-700/80">{bookings.depositsDueCount} appointment{bookings.depositsDueCount === 1 ? "" : "s"} need deposits</p>
+                </Link>
               </div>
             </div>
-          ))}
-        </div>
+            {bookings.funnel.length > 0 ? (
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                {bookings.funnel.map((stage) => (
+                  <Link
+                    key={stage.key}
+                    to={funnelLinks[stage.key] ?? "/signed-in"}
+                    className="rounded-[1rem] border border-border/70 bg-white/80 px-3 py-3 transition-colors hover:border-orange-200 hover:bg-orange-50/60"
+                    aria-label={`Open ${stage.label.toLowerCase()} stage`}
+                  >
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{stage.label}</p>
+                    <div className="mt-2 flex items-end justify-between gap-3">
+                      <p className="text-xl font-semibold tracking-tight text-slate-950">{stage.count}</p>
+                      <p className="text-[11px] text-muted-foreground">{stage.value != null ? formatDashboardCompactCurrency(stage.value) : "count only"}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </>
+        )}
       </CardContent>
     </Card>
   );

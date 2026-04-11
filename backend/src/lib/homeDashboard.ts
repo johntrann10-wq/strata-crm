@@ -289,6 +289,16 @@ export type HomeDashboardBookingsOverview = {
   depositsCollectedAmount: number;
   depositsDueAmount: number;
   depositsDueCount: number;
+  links: {
+    bookingsThisWeek: string;
+    bookingsThisMonth: string;
+    quotesSent: string;
+    quotesAccepted: string;
+    quoteToBookConversionRate: string;
+    averageTicketValue: string;
+    depositsCollected: string;
+    depositsDue: string;
+  };
   funnel: HomeDashboardPipelineStage[];
 };
 
@@ -1773,6 +1783,8 @@ export function buildBookingsOverview(params: {
   todayEnd: Date;
   weekStart: Date;
   weekEnd: Date;
+  monthStart: Date;
+  timezone: string;
   monthAppointments: Array<Pick<AppointmentDashboardRow, "id" | "status" | "totalPrice" | "createdAt" | "completedAt">>;
   quoteRows: Array<{ status: string; sentAt: Date | null; total: MoneyLike }>;
   pipelineStages: HomeDashboardPipelineStage[];
@@ -1785,7 +1797,9 @@ export function buildBookingsOverview(params: {
   const bookingsThisMonth = params.monthAppointments.length;
   const quotesSent = params.quoteRows.filter((row) => row.status === "sent" || row.sentAt != null).length;
   const quotesAccepted = params.quoteRows.filter((row) => row.status === "accepted").length;
-  const quoteToBookConversionRate = quotesSent > 0 ? Math.round((bookingsThisMonth / Math.max(quotesSent, 1)) * 100) : null;
+  const quotedStage = params.pipelineStages.find((stage) => stage.key === "quoted")?.count ?? quotesSent;
+  const bookedStage = params.pipelineStages.find((stage) => stage.key === "booked")?.count ?? bookingsThisMonth;
+  const quoteToBookConversionRate = quotedStage > 0 ? Math.round((bookedStage / Math.max(quotedStage, 1)) * 100) : null;
   const averageTicketValue =
     bookingsThisMonth > 0
       ? Number(
@@ -1795,6 +1809,8 @@ export function buildBookingsOverview(params: {
           ).toFixed(2)
         )
       : null;
+  const weekDateKey = getBusinessDateKey(params.weekStart, params.timezone);
+  const monthDateKey = getBusinessDateKey(params.monthStart, params.timezone);
 
   return {
     allowed: true,
@@ -1808,6 +1824,16 @@ export function buildBookingsOverview(params: {
     depositsCollectedAmount: Number(params.depositsCollectedAmount.toFixed(2)),
     depositsDueAmount: Number(params.depositsDueAmount.toFixed(2)),
     depositsDueCount: params.depositsDueCount,
+    links: {
+      bookingsThisWeek: buildAppPath(`/calendar?view=week&date=${encodeURIComponent(weekDateKey)}`),
+      bookingsThisMonth: buildAppPath(`/calendar?view=month&date=${encodeURIComponent(monthDateKey)}`),
+      quotesSent: buildAppPath("/quotes?tab=followup"),
+      quotesAccepted: buildAppPath("/quotes?tab=accepted"),
+      quoteToBookConversionRate: buildAppPath("/quotes?tab=accepted"),
+      averageTicketValue: buildAppPath(`/calendar?view=month&date=${encodeURIComponent(monthDateKey)}`),
+      depositsCollected: buildAppPath("/finances"),
+      depositsDue: buildAppPath(`/calendar?view=week&date=${encodeURIComponent(weekDateKey)}`),
+    },
     funnel: params.pipelineStages,
   } satisfies HomeDashboardBookingsOverview;
 }
@@ -3492,6 +3518,16 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       depositsCollectedAmount: 0,
       depositsDueAmount: 0,
       depositsDueCount: 0,
+      links: {
+        bookingsThisWeek: "/calendar",
+        bookingsThisMonth: "/calendar",
+        quotesSent: "/quotes",
+        quotesAccepted: "/quotes",
+        quoteToBookConversionRate: "/quotes",
+        averageTicketValue: "/calendar",
+        depositsCollected: "/finances",
+        depositsDue: "/calendar",
+      },
       funnel: [],
     } as HomeDashboardBookingsOverview,
     ["summary_today", "summary_conversion", "summary_cash", "pipeline", "revenue_collections"],
@@ -3502,6 +3538,8 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
           todayEnd,
           weekStart,
           weekEnd,
+          monthStart,
+          timezone,
           monthAppointments,
           quoteRows,
           pipelineStages,

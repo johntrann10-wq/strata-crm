@@ -364,6 +364,8 @@ describe("home dashboard domain logic", () => {
       todayEnd: new Date("2026-04-11T06:59:59.999Z"),
       weekStart: new Date("2026-04-06T07:00:00.000Z"),
       weekEnd: new Date("2026-04-13T06:59:59.999Z"),
+      monthStart: new Date("2026-04-01T07:00:00.000Z"),
+      timezone: "America/Los_Angeles",
       monthAppointments: [
         { id: "1", status: "scheduled", totalPrice: "500", createdAt: new Date("2026-04-10T16:00:00.000Z"), completedAt: null },
         { id: "2", status: "completed", totalPrice: "250", createdAt: new Date("2026-04-08T16:00:00.000Z"), completedAt: new Date("2026-04-09T16:00:00.000Z") },
@@ -372,7 +374,10 @@ describe("home dashboard domain logic", () => {
         { status: "sent", sentAt: new Date("2026-04-09T16:00:00.000Z"), total: "400" },
         { status: "accepted", sentAt: new Date("2026-04-08T16:00:00.000Z"), total: "600" },
       ],
-      pipelineStages: [{ key: "booked", label: "Booked", count: 2, value: 750 }],
+      pipelineStages: [
+        { key: "quoted", label: "Quoted", count: 4, value: 1000 },
+        { key: "booked", label: "Booked", count: 2, value: 750 },
+      ],
       depositsCollectedAmount: 300,
       depositsDueAmount: 150,
       depositsDueCount: 1,
@@ -384,10 +389,21 @@ describe("home dashboard domain logic", () => {
       bookingsThisMonth: 2,
       quotesSent: 2,
       quotesAccepted: 1,
+      quoteToBookConversionRate: 50,
       averageTicketValue: 375,
       depositsCollectedAmount: 300,
       depositsDueAmount: 150,
       depositsDueCount: 1,
+      links: {
+        bookingsThisWeek: "/calendar?view=week&date=2026-04-06",
+        bookingsThisMonth: "/calendar?view=month&date=2026-04-01",
+        quotesSent: "/quotes?tab=followup",
+        quotesAccepted: "/quotes?tab=accepted",
+        quoteToBookConversionRate: "/quotes?tab=accepted",
+        averageTicketValue: "/calendar?view=month&date=2026-04-01",
+        depositsCollected: "/finances",
+        depositsDue: "/calendar?view=week&date=2026-04-06",
+      },
     });
   });
 
