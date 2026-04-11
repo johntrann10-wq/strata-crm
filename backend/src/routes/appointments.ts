@@ -554,7 +554,6 @@ const createSchema = z.object({
   assignedStaffId: z.string().uuid().optional(),
   locationId: z.string().uuid().optional(),
   depositAmount: z.coerce.number().min(0).optional(),
-  depositPaid: z.boolean().optional(),
   taxRate: z.coerce.number().min(0).max(100).optional(),
   applyTax: z.boolean().optional(),
   adminFeeRate: z.coerce.number().min(0).max(100).optional(),
@@ -1565,7 +1564,6 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       : 0;
   const initialDepositSatisfied =
     !effectiveClientId &&
-    parsed.data.depositPaid === true &&
     requestedDepositAmount > 0 &&
     requestedDepositAmount >= Number(baseFinance.totalPrice) - 0.009;
 
