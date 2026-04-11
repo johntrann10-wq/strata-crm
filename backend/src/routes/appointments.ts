@@ -589,7 +589,6 @@ const updateSchema = z
     assignedStaffId: z.string().uuid().optional(),
     locationId: z.string().uuid().optional(),
     depositAmount: z.coerce.number().min(0).optional(),
-    depositPaid: z.boolean().optional(),
     totalPrice: z.coerce.number().min(0).optional(),
     taxRate: z.coerce.number().min(0).max(100).optional(),
     applyTax: z.boolean().optional(),
@@ -1975,7 +1974,6 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   }
   if (parsed.data.totalPrice !== undefined) updates.totalPrice = String(parsed.data.totalPrice);
   if (parsed.data.depositAmount != null) updates.depositAmount = String(parsed.data.depositAmount);
-  if (parsed.data.depositPaid !== undefined && !nextClientId) updates.depositPaid = parsed.data.depositPaid;
   if (parsed.data.taxRate !== undefined) updates.taxRate = String(parsed.data.taxRate ?? 0);
   if (parsed.data.applyTax !== undefined) updates.applyTax = parsed.data.applyTax;
   if (parsed.data.adminFeeRate !== undefined) updates.adminFeeRate = String(parsed.data.adminFeeRate ?? 0);
