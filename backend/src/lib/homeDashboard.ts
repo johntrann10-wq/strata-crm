@@ -1752,7 +1752,6 @@ export function buildMonthlyRevenueChart(params: {
   bookedAppointments: Array<{ bookedAt: Date; totalPrice: MoneyLike }>;
   standaloneInvoices: Array<{ bookedAt: Date; total: MoneyLike }>;
   invoicePayments: Array<{ paidAt: Date; amount: MoneyLike }>;
-  directPayments: Array<{ createdAt: Date; action: string; metadata: string | null }>;
   monthlyRevenueGoal: number | null;
 }) {
   const monthStartParts = getTimeZoneParts(params.monthStart, params.timezone);
@@ -1788,12 +1787,6 @@ export function buildMonthlyRevenueChart(params: {
   for (const row of params.bookedAppointments) addBooked(row.bookedAt, row.totalPrice);
   for (const row of params.standaloneInvoices) addBooked(row.bookedAt, row.total);
   for (const row of params.invoicePayments) addCollected(row.paidAt, toMoneyNumber(row.amount));
-  for (const row of params.directPayments) {
-    const metadata = safeParseMetadata(row.metadata);
-    const amount = toMoneyNumber(metadata.amount as MoneyLike);
-    if (amount <= 0) continue;
-    addCollected(row.createdAt, row.action === "appointment.deposit_payment_reversed" ? -amount : amount);
-  }
 
   return days.map((day) => ({
     ...day,
@@ -3403,6 +3396,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
   const collectedToday = invoiceCollectedToday + directCollectedToday;
   const collectedThisWeek = invoiceCollectedThisWeek + directCollectedThisWeek;
   const collectedRevenueThisMonth = invoiceCollectedThisMonth + directCollectedThisMonth;
+  const collectedInvoiceRevenueThisMonth = invoiceCollectedThisMonth;
 
   const parsedLeads = leadRows.map((row) => ({ row, lead: parseLeadRecord(row.notes) }));
   const activeLeadRows = parsedLeads.filter(({ lead }) => lead.isLead);
@@ -3485,7 +3479,6 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
         bookedAppointments: monthRevenueAppointments,
         standaloneInvoices: monthStandaloneInvoices.map((row) => ({ bookedAt: row.createdAt, total: row.total })),
         invoicePayments: invoicePaymentRowsThisMonth,
-        directPayments: directPaymentRowsThisMonth,
         monthlyRevenueGoal: toMoneyNumber(business.monthlyRevenueGoal),
       })
   );
@@ -3777,7 +3770,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
           : 0,
       totalCollectedThisMonth:
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
-          ? Number(collectedRevenueThisMonth.toFixed(2))
+          ? Number(collectedInvoiceRevenueThisMonth.toFixed(2))
           : 0,
       outstandingInvoiceAmount:
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash

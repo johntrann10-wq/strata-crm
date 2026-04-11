@@ -345,13 +345,12 @@ describe("home dashboard domain logic", () => {
       bookedAppointments: [{ bookedAt: new Date("2026-04-02T16:00:00.000Z"), totalPrice: "500" }],
       standaloneInvoices: [{ bookedAt: new Date("2026-04-03T16:00:00.000Z"), total: "300" }],
       invoicePayments: [{ paidAt: new Date("2026-04-04T16:00:00.000Z"), amount: "250" }],
-      directPayments: [{ createdAt: new Date("2026-04-02T18:00:00.000Z"), action: "appointment.deposit_paid", metadata: JSON.stringify({ amount: 150 }) }],
     });
 
     expect(days[1]).toMatchObject({
       dayOfMonth: 2,
       bookedRevenue: 500,
-      collectedRevenue: 150,
+      collectedRevenue: 0,
       bookedUrl: "/calendar?view=day&date=2026-04-02",
       collectedUrl: "/finances?focusDate=2026-04-02",
     });

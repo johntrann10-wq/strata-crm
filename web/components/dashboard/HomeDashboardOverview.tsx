@@ -635,22 +635,25 @@ export function HomeMonthlyRevenueChartCard({
       <CardHeader>
         <CardTitle>Monthly Revenue Chart</CardTitle>
         <CardDescription>
-          {formatDateLabel(chart.monthStart, "MMMM yyyy")} · booked revenue by scheduled work day and collected revenue by payment day.
+          {formatDateLabel(chart.monthStart, "MMMM yyyy")} · booked work by scheduled day and cash received by payment day.
         </CardDescription>
         <CardAction>
           <div className="inline-flex rounded-2xl border border-border/70 bg-slate-50/80 p-1">
-            {(["booked", "collected"] as const).map((option) => (
+            {([
+              { key: "booked", label: "booked" },
+              { key: "collected", label: "cash" },
+            ] as const).map((option) => (
               <button
-                key={option}
+                key={option.key}
                 type="button"
-                onClick={() => setMode(option)}
+                onClick={() => setMode(option.key)}
                 className={cn(
                   "rounded-xl px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em]",
-                  mode === option ? "bg-white text-foreground shadow-sm" : "text-muted-foreground"
+                  mode === option.key ? "bg-white text-foreground shadow-sm" : "text-muted-foreground"
                 )}
-                aria-pressed={mode === option}
+                aria-pressed={mode === option.key}
               >
-                {option}
+                {option.label}
               </button>
             ))}
           </div>
@@ -663,7 +666,7 @@ export function HomeMonthlyRevenueChartCard({
             <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{formatDashboardCurrency(chart.totalBookedThisMonth)}</p>
           </div>
           <div className="rounded-[1rem] border border-border/70 bg-white/80 p-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Collected this month</p>
+            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Invoices collected this month</p>
             <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{formatDashboardCurrency(chart.totalCollectedThisMonth)}</p>
           </div>
           <div className="rounded-[1rem] border border-border/70 bg-white/80 p-3">
@@ -681,12 +684,12 @@ export function HomeMonthlyRevenueChartCard({
             <EmptyState
               icon={BarChart3}
               title="No revenue activity this month yet"
-              description="Booked and collected revenue will start drawing here as appointments, invoices, and payments land."
+              description="Booked work and invoice collections will start drawing here as appointments, invoices, and payments land."
             />
           ) : (
             <>
               <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-                <span>Revenue is grouped by business day. Tap a bar to drill into that date.</span>
+                <span>Booked work is grouped by scheduled day. Invoice collections are grouped by payment day. Tap a bar to drill into that date.</span>
                 {showGoalPace ? <span>Goal pace is shown as a guide for booked revenue.</span> : null}
               </div>
               <div className="mt-4 rounded-[1rem] border border-border/60 bg-slate-50/70 p-3 sm:p-4">
@@ -750,7 +753,7 @@ export function HomeMonthlyRevenueChartCard({
               <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                 <span className="inline-flex items-center gap-2">
                   <span className={cn("h-2.5 w-2.5 rounded-full", mode === "booked" ? "bg-[var(--color-chart-1)]" : "bg-[var(--color-chart-2)]")} />
-                  {mode === "booked" ? "Booked revenue" : "Collected revenue"}
+                  {mode === "booked" ? "Booked work" : "Invoice collections"}
                 </span>
                 {chart.goalAmount != null ? <span>Monthly goal: {formatDashboardCurrency(chart.goalAmount)}</span> : null}
               </div>
