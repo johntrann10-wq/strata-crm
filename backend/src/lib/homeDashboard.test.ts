@@ -7,6 +7,7 @@ import {
   buildMonthlyRevenueChart,
   buildWeeklyAppointmentOverview,
   buildQuickActions,
+  calculateUpcomingDepositCoverage,
   calculateBookedRevenueTotals,
   calculateHomeDashboardHealth,
   getDashboardModulePermissions,
@@ -359,6 +360,46 @@ describe("home dashboard domain logic", () => {
     expect(days[3]).toMatchObject({ dayOfMonth: 4, collectedRevenue: 250 });
   });
 
+  it("calculates deposit coverage from upcoming deposit-backed appointments only", () => {
+    const amount = calculateUpcomingDepositCoverage({
+      rows: [
+        { id: "covered", depositAmount: "250" },
+        { id: "due", depositAmount: "300" },
+        { id: "no-deposit", depositAmount: "0" },
+      ],
+      financeByAppointmentId: new Map([
+        [
+          "covered",
+          {
+            collectedAmount: 250,
+            balanceDue: 500,
+            paidInFull: false,
+            depositSatisfied: true,
+            hasAnyPayment: true,
+            directCollectedAmount: 250,
+            invoiceCollectedAmount: 0,
+            invoiceCarryoverAmount: 0,
+          },
+        ],
+        [
+          "due",
+          {
+            collectedAmount: 0,
+            balanceDue: 900,
+            paidInFull: false,
+            depositSatisfied: false,
+            hasAnyPayment: false,
+            directCollectedAmount: 0,
+            invoiceCollectedAmount: 0,
+            invoiceCarryoverAmount: 0,
+          },
+        ],
+      ]),
+    });
+
+    expect(amount).toBe(250);
+  });
+
   it("calculates booked weekly revenue from booked dates instead of the visible schedule slice", () => {
     const totals = calculateBookedRevenueTotals({
       weekStart: new Date("2026-04-06T07:00:00.000Z"),
@@ -433,6 +474,22 @@ describe("home dashboard domain logic", () => {
     const items = buildActionQueue({
       context: {
         now: new Date("2026-04-10T18:00:00.000Z"),
+        business: {
+          id: "biz-1",
+          name: "Strata Test",
+          timezone: "America/Los_Angeles",
+          stripeConnectAccountId: null,
+          stripeConnectChargesEnabled: false,
+          automationReviewRequestsEnabled: false,
+          reviewRequestUrl: null,
+          staffCount: 1,
+          monthlyRevenueGoal: null,
+          monthlyJobsGoal: null,
+        },
+        timezone: "America/Los_Angeles",
+        role: "owner",
+        timeOfDay: "midday",
+        next48Hours: new Date("2026-04-12T18:00:00.000Z"),
         permissions: {
           today: true,
           cash: true,
@@ -455,6 +512,8 @@ describe("home dashboard domain logic", () => {
         },
         uncontactedCutoff: new Date("2026-04-10T17:45:00.000Z"),
         quoteFollowUpCutoff: new Date("2026-04-09T18:00:00.000Z"),
+        reviewCutoff: new Date("2026-04-09T18:00:00.000Z"),
+        lapsedCutoff: new Date("2025-10-10T18:00:00.000Z"),
       },
       leadRows: [],
       quoteRows: [],

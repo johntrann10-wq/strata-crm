@@ -881,7 +881,7 @@ export function HomeBookingsOverviewCard({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Deposit coverage</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Collected deposits against upcoming deposit pressure.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Upcoming deposit requirements already covered vs still due.</p>
                 </div>
                 {depositCoveragePercent != null ? <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{depositCoveragePercent}% covered</div> : null}
               </div>
@@ -889,8 +889,8 @@ export function HomeBookingsOverviewCard({
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <Link to={bookings.links.depositsCollected} className="flex items-center justify-between gap-3 rounded-[0.95rem] bg-emerald-50/70 px-3 py-3 transition-colors hover:bg-emerald-50" aria-label="Open deposits collected details">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-emerald-700/80">Deposits collected</p>
-                    <p className="mt-1 text-xs text-emerald-700/80">Captured on booked work</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-emerald-700/80">Deposits covered</p>
+                    <p className="mt-1 text-xs text-emerald-700/80">Upcoming deposit-backed jobs already covered</p>
                   </div>
                   <p className="text-lg font-semibold tracking-tight text-emerald-800">{formatDashboardCurrency(bookings.depositsCollectedAmount)}</p>
                 </Link>

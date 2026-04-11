@@ -1795,6 +1795,23 @@ export function buildMonthlyRevenueChart(params: {
   })) as HomeDashboardMonthlyRevenueDay[];
 }
 
+export function calculateUpcomingDepositCoverage(params: {
+  rows: Array<{ id: string; depositAmount: MoneyLike }>;
+  financeByAppointmentId: Map<string, AppointmentFinanceSummary>;
+}) {
+  return Number(
+    params.rows
+      .reduce((sum, row) => {
+        const depositAmount = Math.max(0, toMoneyNumber(row.depositAmount));
+        if (depositAmount <= 0) return sum;
+        const finance = params.financeByAppointmentId.get(row.id);
+        if (!finance || finance.depositSatisfied !== true) return sum;
+        return sum + depositAmount;
+      }, 0)
+      .toFixed(2)
+  );
+}
+
 export function buildBookingsOverview(params: {
   todayStart: Date;
   todayEnd: Date;
@@ -3354,6 +3371,10 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     return depositAmount > 0 && finance?.depositSatisfied !== true;
   });
   const depositsDueAmount = depositsDueRows.reduce((sum, row) => sum + toMoneyNumber(row.depositAmount), 0);
+  const depositsCoveredAmount = calculateUpcomingDepositCoverage({
+    rows: upcomingDepositRows,
+    financeByAppointmentId: upcomingDepositFinance,
+  });
 
   const [
     invoiceCollectedToday,
@@ -3586,7 +3607,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
           monthAppointments,
           quoteRows,
           pipelineStages,
-          depositsCollectedAmount: directCollectedThisMonth,
+          depositsCollectedAmount: depositsCoveredAmount,
           depositsDueAmount,
           depositsDueCount: depositsDueRows.length,
         }),
