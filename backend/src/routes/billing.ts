@@ -27,6 +27,7 @@ import { wrapAsync } from "../lib/asyncHandler.js";
 import { isStripeConfigured } from "../lib/env.js";
 import { withIdempotency } from "../lib/idempotency.js";
 import { createActivityLog } from "../lib/activity.js";
+import { getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 import { recordInvoicePayment } from "../lib/invoicePayments.js";
 import { requireTenant } from "../middleware/tenant.js";
 
@@ -536,8 +537,10 @@ export async function handleStripeWebhook(
                   const [appointment] = await tx
                     .select({
                       id: appointments.id,
+                      totalPrice: appointments.totalPrice,
                       depositAmount: appointments.depositAmount,
                       depositPaid: appointments.depositPaid,
+                      paidAt: appointments.paidAt,
                     })
                     .from(appointments)
                     .where(eq(appointments.id, appointmentId))
@@ -545,11 +548,56 @@ export async function handleStripeWebhook(
                   if (!appointment) {
                     throw new Error("Appointment not found for Stripe deposit.");
                   }
-                  if (appointment.depositPaid) {
+                  const existingFinance = (
+                    await getAppointmentFinanceSummaryMap(
+                      businessId,
+                      [
+                        {
+                          id: appointment.id,
+                          totalPrice: appointment.totalPrice,
+                          depositAmount: appointment.depositAmount,
+                          paidAt: appointment.paidAt,
+                        },
+                      ],
+                      tx
+                    )
+                  ).get(appointment.id);
+                  if (existingFinance?.depositSatisfied === true) {
                     return appointment;
                   }
+
+                  await createActivityLog({
+                    businessId,
+                    action: "appointment.deposit_paid",
+                    entityType: "appointment",
+                    entityId: appointmentId,
+                    metadata: {
+                      amount: sessionAmountTotal / 100,
+                      source: "stripe_checkout",
+                      stripeCheckoutSessionId: session.id,
+                      stripePaymentIntentId:
+                        typeof session.payment_intent === "string"
+                          ? session.payment_intent
+                          : session.payment_intent?.id ?? null,
+                    },
+                  });
+
+                  const nextFinance = (
+                    await getAppointmentFinanceSummaryMap(
+                      businessId,
+                      [
+                        {
+                          id: appointment.id,
+                          totalPrice: appointment.totalPrice,
+                          depositAmount: appointment.depositAmount,
+                          paidAt: appointment.paidAt,
+                        },
+                      ],
+                      tx
+                    )
+                  ).get(appointment.id);
                   const updates: Record<string, unknown> = {
-                    depositPaid: true,
+                    depositPaid: nextFinance?.depositSatisfied === true,
                     updatedAt: new Date(),
                   };
                   const [updated] = await tx
@@ -558,26 +606,14 @@ export async function handleStripeWebhook(
                     .where(eq(appointments.id, appointmentId))
                     .returning({
                       id: appointments.id,
+                      totalPrice: appointments.totalPrice,
                       depositAmount: appointments.depositAmount,
+                      depositPaid: appointments.depositPaid,
+                      paidAt: appointments.paidAt,
                     });
                   return updated ?? appointment;
                 })
             );
-            await createActivityLog({
-              businessId,
-              action: "appointment.deposit_paid",
-              entityType: "appointment",
-              entityId: appointmentId,
-              metadata: {
-                amount: sessionAmountTotal / 100,
-                source: "stripe_checkout",
-                stripeCheckoutSessionId: session.id,
-                stripePaymentIntentId:
-                  typeof session.payment_intent === "string"
-                    ? session.payment_intent
-                    : session.payment_intent?.id ?? null,
-              },
-            });
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             if (!message.toLowerCase().includes("duplicate request")) {
