@@ -79,3 +79,5 @@ Use this checklist before considering appointment finance fully hardened for pro
 - Run `npm --prefix backend run audit:appointment-finance`.
 - Review any flagged appointments before making live data corrections.
 - Confirm there are no no-deposit appointments with legacy `deposit_paid = true`.
+- If cleanup is needed, run `npm --prefix backend run repair:appointment-finance` first in dry-run mode and inspect the proposed changes.
+- Only use `npx tsx backend/scripts/repair-appointment-finance.ts --apply` after reviewing the dry-run output and confirming the repairs are safe for production data.
