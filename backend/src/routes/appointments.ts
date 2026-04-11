@@ -670,6 +670,7 @@ async function buildAppointmentConfirmationPayload(
         locationName: string | null;
         locationAddress: string | null;
         locationTimezone: string | null;
+        totalPrice: string | null;
         depositAmount: string | null;
         depositPaid: boolean | null;
       }
@@ -695,6 +696,7 @@ async function buildAppointmentConfirmationPayload(
         locationName: locations.name,
         locationAddress: locations.address,
         locationTimezone: locations.timezone,
+        totalPrice: appointments.totalPrice,
         depositAmount: appointments.depositAmount,
         depositPaid: appointments.depositPaid,
       })
@@ -732,6 +734,7 @@ async function buildAppointmentConfirmationPayload(
           locationName: locations.name,
           locationAddress: locations.address,
           locationTimezone: sql<string | null>`null`,
+          totalPrice: appointments.totalPrice,
           depositAmount: appointments.depositAmount,
           depositPaid: appointments.depositPaid,
         })
@@ -768,6 +771,7 @@ async function buildAppointmentConfirmationPayload(
           locationName: sql<string | null>`null`,
           locationAddress: sql<string | null>`null`,
           locationTimezone: sql<string | null>`null`,
+          totalPrice: appointments.totalPrice,
           depositAmount: appointments.depositAmount,
           depositPaid: appointments.depositPaid,
         })
@@ -807,8 +811,19 @@ async function buildAppointmentConfirmationPayload(
   const publicAppointmentUrl = buildPublicDocumentUrl(
     `/api/appointments/${appointmentRow.id}/public-html?token=${encodeURIComponent(publicToken)}`
   );
+  const finance = (
+    await getAppointmentFinanceSummaryMap(bid, [
+      {
+        id: appointmentRow.id,
+        totalPrice: appointmentRow.totalPrice,
+        depositAmount: appointmentRow.depositAmount,
+        paidAt: null,
+      },
+    ])
+  ).get(appointmentRow.id);
   const depositAmount = Number(appointmentRow.depositAmount ?? 0);
-  const hasDepositDue = Number.isFinite(depositAmount) && depositAmount > 0 && !appointmentRow.depositPaid;
+  const depositSatisfied = finance?.depositSatisfied === true || appointmentRow.depositPaid === true;
+  const hasDepositDue = Number.isFinite(depositAmount) && depositAmount > 0 && !depositSatisfied;
 
   return {
     appointmentId: appointmentRow.id,
@@ -844,7 +859,7 @@ async function buildAppointmentConfirmationPayload(
     confirmationActionLabel: hasDepositDue ? "View appointment and pay deposit" : "View appointment",
     paymentStatus: hasDepositDue
       ? `A deposit of $${depositAmount.toFixed(2)} is still due for this appointment.`
-      : appointmentRow.depositPaid
+      : depositSatisfied
         ? "Deposit already collected."
         : "No deposit is required for this appointment.",
     message: overrides?.message?.trim() || null,
@@ -1494,7 +1509,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
           assignedStaffId: parsed.data.assignedStaffId ?? null,
           locationId: parsed.data.locationId ?? null,
           depositAmount: parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0",
-          depositPaid: parsed.data.depositPaid ?? false,
+          depositPaid: effectiveClientId ? false : parsed.data.depositPaid ?? false,
           subtotal: String(baseFinance.subtotal),
           taxRate: String(baseFinance.taxRate),
           taxAmount: String(baseFinance.taxAmount),
@@ -1529,7 +1544,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       if (columns.has("assigned_staff_id")) fallbackValues.assignedStaffId = parsed.data.assignedStaffId ?? null;
       if (columns.has("location_id")) fallbackValues.locationId = parsed.data.locationId ?? null;
       if (columns.has("deposit_amount")) fallbackValues.depositAmount = parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0";
-      if (columns.has("deposit_paid")) fallbackValues.depositPaid = parsed.data.depositPaid ?? false;
+      if (columns.has("deposit_paid")) fallbackValues.depositPaid = effectiveClientId ? false : parsed.data.depositPaid ?? false;
       if (columns.has("subtotal")) fallbackValues.subtotal = String(baseFinance.subtotal);
       if (columns.has("tax_rate")) fallbackValues.taxRate = String(baseFinance.taxRate);
       if (columns.has("tax_amount")) fallbackValues.taxAmount = String(baseFinance.taxAmount);
@@ -1883,7 +1898,7 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   }
   if (parsed.data.totalPrice !== undefined) updates.totalPrice = String(parsed.data.totalPrice);
   if (parsed.data.depositAmount != null) updates.depositAmount = String(parsed.data.depositAmount);
-  if (parsed.data.depositPaid !== undefined) updates.depositPaid = parsed.data.depositPaid;
+  if (parsed.data.depositPaid !== undefined && !nextClientId) updates.depositPaid = parsed.data.depositPaid;
   if (parsed.data.taxRate !== undefined) updates.taxRate = String(parsed.data.taxRate ?? 0);
   if (parsed.data.applyTax !== undefined) updates.applyTax = parsed.data.applyTax;
   if (parsed.data.adminFeeRate !== undefined) updates.adminFeeRate = String(parsed.data.adminFeeRate ?? 0);
