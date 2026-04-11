@@ -1559,6 +1559,15 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       (Boolean(businessFinanceDefaults?.defaultAdminFeeEnabled) &&
         Number(businessFinanceDefaults?.defaultAdminFee ?? 0) > 0),
   });
+  const requestedDepositAmount =
+    parsed.data.depositAmount != null && Number.isFinite(parsed.data.depositAmount)
+      ? Number(parsed.data.depositAmount)
+      : 0;
+  const initialDepositSatisfied =
+    !effectiveClientId &&
+    parsed.data.depositPaid === true &&
+    requestedDepositAmount > 0 &&
+    requestedDepositAmount >= Number(baseFinance.totalPrice) - 0.009;
 
   const createdAt = new Date();
   const appointmentId = randomUUID();
@@ -1585,7 +1594,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
           assignedStaffId: parsed.data.assignedStaffId ?? null,
           locationId: parsed.data.locationId ?? null,
           depositAmount: parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0",
-          depositPaid: effectiveClientId ? false : parsed.data.depositPaid ?? false,
+          depositPaid: initialDepositSatisfied,
           subtotal: String(baseFinance.subtotal),
           taxRate: String(baseFinance.taxRate),
           taxAmount: String(baseFinance.taxAmount),
@@ -1620,7 +1629,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       if (columns.has("assigned_staff_id")) fallbackValues.assignedStaffId = parsed.data.assignedStaffId ?? null;
       if (columns.has("location_id")) fallbackValues.locationId = parsed.data.locationId ?? null;
       if (columns.has("deposit_amount")) fallbackValues.depositAmount = parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0";
-      if (columns.has("deposit_paid")) fallbackValues.depositPaid = effectiveClientId ? false : parsed.data.depositPaid ?? false;
+      if (columns.has("deposit_paid")) fallbackValues.depositPaid = initialDepositSatisfied;
       if (columns.has("subtotal")) fallbackValues.subtotal = String(baseFinance.subtotal);
       if (columns.has("tax_rate")) fallbackValues.taxRate = String(baseFinance.taxRate);
       if (columns.has("tax_amount")) fallbackValues.taxAmount = String(baseFinance.taxAmount);
