@@ -168,7 +168,6 @@ function getCollectedAmount(appointment: AppointmentInspectorRecord): number {
   if (appointment.depositPaid === true) {
     const depositAmount = Number(appointment.depositAmount ?? 0);
     if (depositAmount > 0) return Math.min(total, depositAmount);
-    if (total > 0) return total;
   }
   return 0;
 }
@@ -242,8 +241,7 @@ function getPaymentSummary(
   const hasAnyPayment = collectedAmount > 0.009 || paidInFull;
   const isPaidInFull =
     (totalAmount > 0 && balanceDue <= 0.009 && hasAnyPayment) ||
-    paidInFull ||
-    (appointment.depositPaid && depositAmount <= 0 && totalAmount <= 0);
+    paidInFull;
   const nextCollectionAmount =
     totalAmount > 0
       ? hasAnyPayment

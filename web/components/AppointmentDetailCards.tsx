@@ -332,7 +332,9 @@ export function FinancialSummaryCard({
       : summaryStateLabel.toLowerCase().includes("due") || summaryStateLabel.toLowerCase().includes("required")
         ? "bg-amber-100 text-amber-800 border-amber-200"
         : "bg-slate-100 text-slate-700 border-slate-200"
-    : depositPaid
+    : summaryStateLabel.toLowerCase().includes("paid") ||
+        summaryStateLabel.toLowerCase().includes("collected") ||
+        summaryStateLabel.toLowerCase().includes("recorded")
       ? "bg-green-100 text-green-800 border-green-200"
       : depositSummary.hasDeposit
         ? "bg-amber-100 text-amber-800 border-amber-200"
