@@ -11,7 +11,6 @@ export function toMoneyNumber(value: number | string | null | undefined): number
 export function getDepositSummary(params: {
   totalPrice?: number | string | null;
   depositAmount?: number | string | null;
-  depositPaid?: boolean | null;
   collectedAmount?: number | string | null;
   balanceDue?: number | string | null;
   paidInFull?: boolean | null;

@@ -2525,7 +2525,6 @@ export default function AppointmentDetail() {
                 applyAdminFee={appointment.applyAdminFee}
                 totalPrice={appointment.totalPrice}
                 depositAmount={appointment.depositAmount}
-                depositPaid={Boolean((appointment as any).depositPaid)}
                 collectedAmount={normalizedCollectedAmount}
                 balanceDue={remainingBalanceValue}
                 paidInFull={showsPaidStatusInsteadOfDeposit}

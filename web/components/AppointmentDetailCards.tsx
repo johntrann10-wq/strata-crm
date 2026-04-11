@@ -241,7 +241,6 @@ interface FinancialSummaryCardProps {
   applyAdminFee?: boolean | null;
   totalPrice?: number | null;
   depositAmount?: number | null;
-  depositPaid?: boolean | null;
   collectedAmount?: number | null;
   balanceDue?: number | null;
   paidInFull?: boolean | null;
@@ -286,7 +285,6 @@ export function FinancialSummaryCard({
   applyAdminFee,
   totalPrice,
   depositAmount,
-  depositPaid,
   collectedAmount,
   balanceDue,
   paidInFull,
@@ -306,7 +304,6 @@ export function FinancialSummaryCard({
   const depositSummary = getDepositSummary({
     totalPrice,
     depositAmount,
-    depositPaid,
     collectedAmount,
     balanceDue,
     paidInFull,
