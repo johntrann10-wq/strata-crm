@@ -284,8 +284,8 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(main.getByText("Bookings today", { exact: true })).toBeVisible();
     await expect(main.getByText("Weekly Appointment Overview", { exact: true })).toBeVisible();
     await expect(main.getByText("Upcoming Jobs / Needs Attention", { exact: true })).toBeVisible();
-    await expect(main.getByText("Monthly Revenue Chart", { exact: true })).toBeVisible();
-    await expect(main.getByText("Outstanding invoices", { exact: true })).toBeVisible();
+    await expect(main.getByText("Monthly Revenue", { exact: true })).toBeVisible();
+    await expect(main.getByText("Open revenue", { exact: true })).toBeVisible();
     await expect(main.getByText("Bookings Overview", { exact: true })).toBeVisible();
     await expect(main.getByText("Recent Activity", { exact: true })).toBeVisible();
     await expect(main.getByText("Unpaid Invoices / Deposits Due", { exact: true })).toBeVisible();
@@ -318,7 +318,7 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(page.getByText("Manager view")).toBeVisible();
     await expect(page.getByText("Weekly Appointment Overview", { exact: true })).toBeVisible();
     await expect(page.getByText("Upcoming Jobs / Needs Attention", { exact: true })).toBeVisible();
-    await expect(page.getByText("Monthly Revenue Chart", { exact: true })).toBeVisible();
+    await expect(page.getByText("Monthly Revenue", { exact: true })).toBeVisible();
     await expect(page.getByText("Goals", { exact: true })).toHaveCount(0);
   });
 
@@ -333,17 +333,34 @@ test.describe("Dashboard home (mocked)", () => {
       await expect(page.getByLabel("Filter dashboard by team member")).toHaveCount(0);
       await expect(main.getByText("Weekly Appointment Overview", { exact: true })).toBeVisible();
       await expect(main.getByText("Upcoming Jobs / Needs Attention", { exact: true })).toBeVisible();
-      await expect(main.getByText("Monthly Revenue Chart", { exact: true })).toHaveCount(0);
-      await expect(main.getByText("Quick Actions", { exact: true })).toHaveCount(0);
+      await expect(main.getByText("Monthly Revenue", { exact: true })).toHaveCount(0);
+      await expect(main.getByText("Shortcuts", { exact: true })).toHaveCount(0);
+    });
+  });
+
+  test.describe("mobile owner view", () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test("keeps the full dashboard usable without horizontal page overflow", async ({ page }) => {
+      await mockDashboard(page, { role: "owner", mode: "normal" });
+      await page.goto("/signed-in");
+      await expect(page.getByRole("heading", { name: /^dashboard$/i })).toBeVisible();
+      await expect(page.getByRole("button", { name: /today/i })).toBeVisible();
+      await expect(page.getByLabel("Filter dashboard by team member")).toBeVisible();
+      await expect(page.getByText("Weekly Appointment Overview", { exact: true })).toBeVisible();
+      await expect(page.getByText("Monthly Revenue", { exact: true })).toBeVisible();
+      await expect(page.getByText("Shortcuts", { exact: true })).toBeVisible();
+
+      const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 4);
+      expect(hasHorizontalOverflow).toBe(false);
     });
   });
 
   test("renders useful empty states for a fresh business", async ({ page }) => {
     await mockDashboard(page, { role: "owner", mode: "empty" });
     await page.goto("/signed-in");
-    await expect(page.getByText("No upcoming jobs in this view")).toBeVisible();
-    await expect(page.getByText("No urgent action items right now.")).toBeVisible();
-    await expect(page.getByText("Monthly Revenue Chart", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("No upcoming jobs or urgent action items in this view.")).toBeVisible();
+    await expect(page.getByText("Monthly Revenue", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Bookings Overview", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Recent Activity", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Unpaid Invoices / Deposits Due", { exact: true })).toHaveCount(0);
@@ -381,9 +398,9 @@ test.describe("Dashboard home (mocked)", () => {
       widgetErrors: { revenue_collections: { message: "Revenue collections are temporarily unavailable.", retryable: true } },
     });
     await page.goto("/signed-in");
-    await expect(page.getByText("Monthly Revenue Chart", { exact: true })).toBeVisible();
-    await expect(page.getByText("Booked this month", { exact: true })).toBeVisible();
-    await expect(page.getByText("Booked work is grouped by scheduled day. Invoice collections are grouped by payment day. Tap a bar to drill into that date.")).toBeVisible();
+    await expect(page.getByText("Monthly Revenue", { exact: true })).toBeVisible();
+    await expect(page.getByText("Open revenue", { exact: true })).toBeVisible();
+    await expect(page.getByText("Booked work is grouped by scheduled day. Tap a bar to drill into that date.")).toBeVisible();
   });
 
   test("respects the dashboard feature flag rollback path", async ({ page }) => {

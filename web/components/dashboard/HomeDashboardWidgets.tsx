@@ -183,16 +183,16 @@ export function HomeDashboardTopBar({
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto">
           {secondaryAction}
-          <div className="inline-flex rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1">
+          <div className="grid w-full grid-cols-3 rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 sm:w-auto sm:inline-flex">
             {rangeOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => onRangeChange(option.value)}
                 className={cn(
-                  "rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                  "min-h-[42px] rounded-xl px-2.5 py-2 text-center text-sm font-medium transition-colors sm:px-3",
                   range === option.value ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-foreground"
                 )}
                 aria-pressed={range === option.value}
@@ -203,7 +203,7 @@ export function HomeDashboardTopBar({
           </div>
 
           {canFilterTeam ? (
-            <label className="inline-flex min-w-[210px] items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-500">
+            <label className="inline-flex w-full items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-500 sm:min-w-[210px] sm:w-auto">
               <UserRound className="h-4 w-4" />
               <span className="sr-only">Filter dashboard by team member</span>
               <select
@@ -614,20 +614,20 @@ export function HomeQuickActionsCard({
   error,
   onRetry,
 }: { snapshot?: HomeDashboardSnapshot | null } & WidgetStateProps) {
-  if (loading) return <CardLoadingShell title="Quick Actions" rows={4} compact />;
-  if (error) return <WidgetErrorState title="Quick Actions" error={error} onRetry={onRetry} />;
+  if (loading) return <CardLoadingShell title="Shortcuts" rows={4} compact />;
+  if (error) return <WidgetErrorState title="Shortcuts" error={error} onRetry={onRetry} />;
 
   const actions = snapshot?.quickActions ?? [];
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Quick Actions</CardTitle>
-        <CardDescription>Fast paths for the work people repeat all day.</CardDescription>
+        <CardTitle>Shortcuts</CardTitle>
+        <CardDescription>Secondary entry points for common admin work.</CardDescription>
       </CardHeader>
       <CardContent>
         {actions.length === 0 ? (
-          <EmptyState icon={Zap} title="No quick actions available" description="This role does not have creation actions on the dashboard right now." />
+          <EmptyState icon={Zap} title="No shortcuts available" description="This role does not have creation actions on the dashboard right now." />
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
             {actions.map((action) => (
@@ -1019,7 +1019,7 @@ export function DashboardPageErrorGrid({ error, onRetry }: { error: Error; onRet
         <WidgetErrorState title="Action Queue" error={error} onRetry={onRetry} />
       </div>
       <div className="grid gap-3 xl:grid-cols-3">
-        <WidgetErrorState title="Quick Actions" error={error} onRetry={onRetry} />
+        <WidgetErrorState title="Shortcuts" error={error} onRetry={onRetry} />
         <WidgetErrorState title="Pipeline" error={error} onRetry={onRetry} />
         <WidgetErrorState title="Revenue + Collections" error={error} onRetry={onRetry} />
       </div>
