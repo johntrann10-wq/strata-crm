@@ -24,8 +24,9 @@ export type AppointmentFinanceSummary = {
 
 export function getAppointmentFinanceMirrorUpdates(params: {
   depositAmount?: number | string | null;
-  finance?: AppointmentFinanceSummary | null;
+  finance?: Pick<AppointmentFinanceSummary, "depositSatisfied" | "paidInFull"> | null;
   paidAtWhenPaid?: Date | null;
+  includePaidAt?: boolean;
   includeUpdatedAt?: boolean;
 }) {
   const depositAmount = Math.max(0, toMoneyNumber(params.depositAmount));
@@ -36,7 +37,9 @@ export function getAppointmentFinanceMirrorUpdates(params: {
     updates.updatedAt = new Date();
   }
 
-  updates.paidAt = finance?.paidInFull ? params.paidAtWhenPaid ?? new Date() : null;
+  if (params.includePaidAt !== false) {
+    updates.paidAt = finance?.paidInFull ? params.paidAtWhenPaid ?? new Date() : null;
+  }
 
   if (depositAmount > 0 && finance?.depositSatisfied === true) {
     updates.depositPaid = true;

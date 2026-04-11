@@ -83,12 +83,12 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
   const hasBackendFinance =
     hasBackendCollectedAmount || hasBackendBalanceDue || hasBackendPaidInFull || hasBackendDepositSatisfied;
   const paidInFull = data.paidInFull === true;
-  const depositPaid = data.depositSatisfied === true;
+  const depositSatisfied = data.depositSatisfied === true;
   const collectedAmount = Number.isFinite(backendCollectedAmount)
     ? Math.max(0, backendCollectedAmount)
     : hasBackendFinance
       ? 0
-      : hasDeposit && depositPaid
+      : hasDeposit && depositSatisfied
       ? Math.min(totalPrice, depositAmount)
       : paidInFull
         ? Math.max(0, totalPrice)
@@ -118,7 +118,7 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
         ? `<div class="banner banner-muted">Your change request was recorded. The shop can review it from the appointment activity feed even if email alerts are unavailable right now.</div>`
         : "";
   const depositStatus = hasDeposit
-    ? depositPaid
+    ? depositSatisfied
       ? "Deposit collected"
       : `${formatCurrency(depositAmount)} due before the appointment`
     : "No deposit required";
@@ -126,7 +126,7 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
   const summaryAmount = hasTotal ? formatCurrency(totalPrice) : hasDeposit ? formatCurrency(depositAmount) : formatCurrency(0);
   const summaryDetail = hasTotal
     ? hasDeposit
-      ? depositPaid || paidInFull
+      ? depositSatisfied || paidInFull
         ? `${formatCurrency(depositAmount)} deposit collected`
         : `${formatCurrency(depositAmount)} deposit due`
       : paidInFull
@@ -246,7 +246,7 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
                 ${hasDeposit ? `<div class="pricing-row"><span>Deposit due today</span><span>${formatCurrency(depositAmount)}</span></div>` : ""}
                 ${hasTotal ? `<div class="pricing-row remaining"><span>Remaining balance due</span><span>${formatCurrency(remainingBalance)}</span></div>` : ""}
               </div>
-              ${hasDeposit && !(depositPaid || paidInFull) && publicPaymentUrl ? `<a class="cta" href="${escapeHtml(publicPaymentUrl)}">Pay ${formatCurrency(depositAmount)} with Stripe</a><div class="cta-note">Secure checkout powered by Stripe.</div>` : hasDeposit && !(depositPaid || paidInFull) ? `<div class="cta-note">Deposit payment will appear here as soon as online payments are available.</div>` : ""}
+              ${hasDeposit && !(depositSatisfied || paidInFull) && publicPaymentUrl ? `<a class="cta" href="${escapeHtml(publicPaymentUrl)}">Pay ${formatCurrency(depositAmount)} with Stripe</a><div class="cta-note">Secure checkout powered by Stripe.</div>` : hasDeposit && !(depositSatisfied || paidInFull) ? `<div class="cta-note">Deposit payment will appear here as soon as online payments are available.</div>` : ""}
             </section>
           </section>
           <section class="summary">

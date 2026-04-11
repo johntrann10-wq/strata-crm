@@ -164,4 +164,19 @@ describe("appointment finance summary", () => {
     expect(updates.depositPaid).toBe(true);
     expect("updatedAt" in updates).toBe(false);
   });
+
+  it("can skip paidAt when only create-time deposit mirroring is needed", () => {
+    const updates = getAppointmentFinanceMirrorUpdates({
+      depositAmount: 200,
+      finance: {
+        depositSatisfied: true,
+        paidInFull: false,
+      },
+      includePaidAt: false,
+      includeUpdatedAt: false,
+    });
+
+    expect(updates.depositPaid).toBe(true);
+    expect("paidAt" in updates).toBe(false);
+  });
 });
