@@ -341,9 +341,7 @@ test.describe("Dashboard home (mocked)", () => {
     await page.goto("/signed-in");
     await expect(page.getByText("No upcoming jobs in this view")).toBeVisible();
     await expect(page.getByText("No urgent action items right now.")).toBeVisible();
-    await expect(page.getByText("No activity yet")).toBeVisible();
-    await page.getByRole("button", { name: /unpaid invoices \/ deposits due/i }).click();
-    await expect(page.getByText("No overdue balances or deposit misses")).toBeVisible();
+    await expect(page.getByText("Business Feed", { exact: true })).toHaveCount(0);
   });
 
   test("handles edge-case pressure, last-seen changes, and queue mutations with a refetch", async ({ page }) => {

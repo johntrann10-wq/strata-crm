@@ -139,10 +139,7 @@ export function HomeOverviewKpiStrip({
       key: "revenue_month",
       title: "Revenue this month",
       value: formatDashboardCompactCurrency(snapshot?.monthlyRevenueChart.totalBookedThisMonth ?? 0),
-      context:
-        goals?.percentToGoal != null
-          ? `${goals.percentToGoal}% to goal`
-          : `${bookings?.bookingsThisMonth ?? 0} booked this month`,
+      context: goals?.percentToGoal != null ? `${goals.percentToGoal}% to goal` : "Booked revenue month to date",
       href: "/calendar",
     },
     {
@@ -848,7 +845,7 @@ export function HomeBookingsOverviewCard({
     <Card>
       <CardHeader>
         <CardTitle>Bookings Overview</CardTitle>
-        <CardDescription>Booking volume, quote performance, and deposit pressure in one compact performance read.</CardDescription>
+        <CardDescription>Booking volume, quote conversion, and deposit pressure in one quick business read.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {isEmpty ? (
@@ -859,17 +856,21 @@ export function HomeBookingsOverviewCard({
           />
         ) : (
           <>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-2">
               {stats.map((stat) => (
                 <Link
                   key={stat.label}
                   to={stat.href}
-                  className="rounded-[1rem] border border-border/70 bg-white/80 p-3 transition-colors hover:border-orange-200 hover:bg-orange-50/60"
+                  className="rounded-[1rem] border border-border/70 bg-white/80 px-3 py-3 transition-colors hover:border-orange-200 hover:bg-orange-50/60"
                   aria-label={`Open ${stat.label.toLowerCase()} details`}
                 >
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{stat.label}</p>
-                  <p className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{stat.value}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{stat.detail}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{stat.label}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{stat.detail}</p>
+                    </div>
+                    <p className="shrink-0 text-lg font-semibold tracking-tight text-slate-950">{stat.value}</p>
+                  </div>
                 </Link>
               ))}
             </div>
@@ -877,30 +878,25 @@ export function HomeBookingsOverviewCard({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Deposit coverage</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Collected deposits vs deposit pressure on upcoming booked work.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Collected deposits against upcoming deposit pressure.</p>
                 </div>
-                {depositCoveragePercent != null ? (
-                  <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{depositCoveragePercent}% covered</div>
-                ) : null}
+                {depositCoveragePercent != null ? <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{depositCoveragePercent}% covered</div> : null}
               </div>
               {depositCoveragePercent != null ? <Progress className="mt-3 h-2" value={depositCoveragePercent} /> : null}
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <Link
-                  to={bookings.links.depositsCollected}
-                  className="rounded-[0.95rem] border border-emerald-200/80 bg-emerald-50/70 p-3 transition-colors hover:bg-emerald-50"
-                  aria-label="Open deposits collected details"
-                >
-                  <p className="text-xs uppercase tracking-[0.16em] text-emerald-700/80">Deposits collected</p>
-                  <p className="mt-2 text-lg font-semibold tracking-tight text-emerald-800">{formatDashboardCurrency(bookings.depositsCollectedAmount)}</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Link to={bookings.links.depositsCollected} className="flex items-center justify-between gap-3 rounded-[0.95rem] bg-emerald-50/70 px-3 py-3 transition-colors hover:bg-emerald-50" aria-label="Open deposits collected details">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.16em] text-emerald-700/80">Deposits collected</p>
+                    <p className="mt-1 text-xs text-emerald-700/80">Captured on booked work</p>
+                  </div>
+                  <p className="text-lg font-semibold tracking-tight text-emerald-800">{formatDashboardCurrency(bookings.depositsCollectedAmount)}</p>
                 </Link>
-                <Link
-                  to={bookings.links.depositsDue}
-                  className="rounded-[0.95rem] border border-orange-200/80 bg-orange-50/70 p-3 transition-colors hover:bg-orange-50"
-                  aria-label="Open deposits due details"
-                >
-                  <p className="text-xs uppercase tracking-[0.16em] text-orange-700/80">Deposits due</p>
-                  <p className="mt-2 text-lg font-semibold tracking-tight text-orange-800">{formatDashboardCurrency(bookings.depositsDueAmount)}</p>
-                  <p className="mt-1 text-xs text-orange-700/80">{bookings.depositsDueCount} appointment{bookings.depositsDueCount === 1 ? "" : "s"} need deposits</p>
+                <Link to={bookings.links.depositsDue} className="flex items-center justify-between gap-3 rounded-[0.95rem] bg-orange-50/70 px-3 py-3 transition-colors hover:bg-orange-50" aria-label="Open deposits due details">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.16em] text-orange-700/80">Deposits due</p>
+                    <p className="mt-1 text-xs text-orange-700/80">{bookings.depositsDueCount} appointment{bookings.depositsDueCount === 1 ? "" : "s"} need deposits</p>
+                  </div>
+                  <p className="text-lg font-semibold tracking-tight text-orange-800">{formatDashboardCurrency(bookings.depositsDueAmount)}</p>
                 </Link>
               </div>
             </div>
@@ -910,7 +906,7 @@ export function HomeBookingsOverviewCard({
                   <Link
                     key={stage.key}
                     to={funnelLinks[stage.key] ?? "/signed-in"}
-                    className="rounded-[1rem] border border-border/70 bg-white/80 px-3 py-3 transition-colors hover:border-orange-200 hover:bg-orange-50/60"
+                    className="rounded-[1rem] border border-border/70 bg-slate-50/80 px-3 py-3 transition-colors hover:border-orange-200 hover:bg-orange-50/60"
                     aria-label={`Open ${stage.label.toLowerCase()} stage`}
                   >
                     <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{stage.label}</p>
@@ -945,30 +941,36 @@ export function HomeBottomPanels({
   const receivablesItems = (snapshot?.actionQueue.items ?? []).filter((item) => item.type === "overdue_invoice" || item.type === "deposit_due");
   const followUpItems = (snapshot?.actionQueue.items ?? []).filter((item) => item.type === "uncontacted_lead" || item.type === "quote_follow_up");
 
-  const tabMeta: Array<{ key: BottomPanelTab; label: string; icon: typeof History }> = [
-    { key: "activity", label: "Recent Activity", icon: History },
-    { key: "receivables", label: "Unpaid Invoices / Deposits Due", icon: CircleDollarSign },
-    { key: "follow_up", label: "Lead / Quote follow-up", icon: Inbox },
+  const tabMeta: Array<{ key: BottomPanelTab; label: string; icon: typeof History; count: number }> = [
+    { key: "activity", label: "Recent Activity", icon: History, count: activityItems.length },
+    { key: "receivables", label: "Unpaid Invoices / Deposits Due", icon: CircleDollarSign, count: receivablesItems.length },
+    { key: "follow_up", label: "Lead / Quote follow-up", icon: Inbox, count: followUpItems.length },
   ];
+  const availableTabs = tabMeta.filter((item) => item.count > 0);
+  const activeTab = availableTabs.some((item) => item.key === tab) ? tab : availableTabs[0]?.key ?? "activity";
+
+  if (availableTabs.length === 0) {
+    return null;
+  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Business Feed</CardTitle>
-        <CardDescription>Compact panels for activity, receivables, and follow-up work.</CardDescription>
+        <CardDescription>Recent business changes, money follow-up, and sales follow-up without extra dashboard clutter.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-2 md:grid-cols-3">
-          {tabMeta.map((item) => (
+          {availableTabs.map((item) => (
             <button
               key={item.key}
               type="button"
               onClick={() => setTab(item.key)}
               className={cn(
                 "flex items-center justify-center gap-2 rounded-[1rem] border px-3 py-2.5 text-sm font-medium transition-colors",
-                tab === item.key ? "border-slate-900 bg-slate-900 text-white" : "border-border/70 bg-white text-foreground"
+                activeTab === item.key ? "border-slate-900 bg-slate-900 text-white" : "border-border/70 bg-white text-foreground"
               )}
-              aria-pressed={tab === item.key}
+              aria-pressed={activeTab === item.key}
             >
               <item.icon className="h-4 w-4" />
               {item.label}
@@ -976,13 +978,13 @@ export function HomeBottomPanels({
           ))}
         </div>
 
-        {tab === "activity" ? (
+        {activeTab === "activity" ? (
           activityItems.length === 0 ? (
             <EmptyState icon={History} title="No activity yet" description="Appointments, payments, and quote changes will show here as the business runs." />
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="overflow-hidden rounded-[1rem] border border-border/70 bg-white/80">
               {activityItems.map((item) => (
-                <div key={item.id} className="rounded-[1rem] border border-border/70 bg-white/80 p-3">
+                <div key={item.id} className="border-b border-border/60 p-3 last:border-b-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       {item.url ? (
@@ -1000,13 +1002,13 @@ export function HomeBottomPanels({
               ))}
             </div>
           )
-        ) : tab === "receivables" ? (
+        ) : activeTab === "receivables" ? (
           receivablesItems.length === 0 ? (
             <EmptyState icon={Landmark} title="No overdue balances or deposit misses" description="Overdue invoices and missing deposits will surface here when they need attention." />
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="overflow-hidden rounded-[1rem] border border-border/70 bg-white/80">
               {receivablesItems.map((item) => (
-                <Link key={item.id} to={item.ctaUrl} className="rounded-[1rem] border border-border/70 bg-white/80 p-3 transition-colors hover:border-orange-200 hover:bg-orange-50/60">
+                <Link key={item.id} to={item.ctaUrl} className="block border-b border-border/60 p-3 transition-colors last:border-b-0 hover:bg-orange-50/60">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold text-slate-950">{item.label}</p>
@@ -1021,16 +1023,14 @@ export function HomeBottomPanels({
         ) : followUpItems.length === 0 ? (
           <EmptyState icon={ClipboardList} title="No lead or quote follow-up gaps" description="Leads and quote follow-ups are under control right now." />
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="overflow-hidden rounded-[1rem] border border-border/70 bg-white/80">
             {followUpItems.map((item) => (
-              <Link key={item.id} to={item.ctaUrl} className="rounded-[1rem] border border-border/70 bg-white/80 p-3 transition-colors hover:border-orange-200 hover:bg-orange-50/60">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-950">{item.label}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{item.reason}</p>
-                  </div>
-                  <ArrowRight className="mt-1 h-4 w-4 text-muted-foreground" />
+              <Link key={item.id} to={item.ctaUrl} className="flex items-start justify-between gap-3 border-b border-border/60 p-3 transition-colors last:border-b-0 hover:bg-orange-50/60">
+                <div>
+                  <p className="font-semibold text-slate-950">{item.label}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{item.reason}</p>
                 </div>
+                <ArrowRight className="mt-1 h-4 w-4 text-muted-foreground" />
               </Link>
             ))}
           </div>
