@@ -978,7 +978,7 @@ export function HomeGoalsCard({
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Current</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Booked so far</p>
                   <p className="mt-2 text-lg font-semibold text-slate-950">{formatDashboardCurrency(goals.currentRevenue)}</p>
                 </div>
               </div>

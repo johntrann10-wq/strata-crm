@@ -138,12 +138,12 @@ export function HomeOverviewKpiStrip({
     {
       key: "revenue_month",
       title: "Revenue this month",
-      value: formatDashboardCompactCurrency(snapshot?.monthlyRevenueChart.totalCollectedThisMonth ?? goals?.currentRevenue ?? 0),
+      value: formatDashboardCompactCurrency(snapshot?.monthlyRevenueChart.totalBookedThisMonth ?? 0),
       context:
         goals?.percentToGoal != null
-          ? `${goals.percentToGoal}% to goal`
-          : `${formatDashboardCompactCurrency(snapshot?.monthlyRevenueChart.totalBookedThisMonth ?? 0)} booked`,
-      href: "/finances",
+          ? `${goals.percentToGoal}% to goal · ${formatDashboardCompactCurrency(snapshot?.monthlyRevenueChart.totalCollectedThisMonth ?? 0)} collected`
+          : `${formatDashboardCompactCurrency(snapshot?.monthlyRevenueChart.totalCollectedThisMonth ?? 0)} collected`,
+      href: "/calendar",
     },
     {
       key: "overdue_balance",
@@ -610,7 +610,7 @@ export function HomeMonthlyRevenueChartCard({
   error,
   onRetry,
 }: { snapshot?: HomeDashboardSnapshot | null } & WidgetStateProps) {
-  const [mode, setMode] = useState<"booked" | "collected">("collected");
+  const [mode, setMode] = useState<"booked" | "collected">("booked");
   if (loading) return <CardLoadingShell title="Monthly Revenue Chart" rows={6} />;
   if (error) return <WidgetErrorState title="Monthly Revenue Chart" error={error} onRetry={onRetry} />;
 

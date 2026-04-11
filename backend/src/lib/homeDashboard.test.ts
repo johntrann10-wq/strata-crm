@@ -6,6 +6,7 @@ import {
   buildMonthlyRevenueChart,
   buildWeeklyAppointmentOverview,
   buildQuickActions,
+  calculateBookedRevenueTotals,
   calculateHomeDashboardHealth,
   getDashboardModulePermissions,
   getDashboardTimeOfDay,
@@ -356,6 +357,27 @@ describe("home dashboard domain logic", () => {
     });
     expect(days[2]).toMatchObject({ dayOfMonth: 3, bookedRevenue: 300 });
     expect(days[3]).toMatchObject({ dayOfMonth: 4, collectedRevenue: 250 });
+  });
+
+  it("calculates booked weekly revenue from booked dates instead of the visible schedule slice", () => {
+    const totals = calculateBookedRevenueTotals({
+      weekStart: new Date("2026-04-06T07:00:00.000Z"),
+      weekEnd: new Date("2026-04-13T06:59:59.999Z"),
+      bookedAppointments: [
+        { bookedAt: new Date("2026-04-07T16:00:00.000Z"), totalPrice: "500" },
+        { bookedAt: new Date("2026-04-11T18:00:00.000Z"), totalPrice: "350" },
+        { bookedAt: new Date("2026-04-14T18:00:00.000Z"), totalPrice: "900" },
+      ],
+      standaloneInvoices: [
+        { bookedAt: new Date("2026-04-10T12:00:00.000Z"), total: "200" },
+        { bookedAt: new Date("2026-04-14T12:00:00.000Z"), total: "400" },
+      ],
+    });
+
+    expect(totals).toEqual({
+      bookedRevenueThisWeek: 1050,
+      bookedRevenueThisMonth: 2350,
+    });
   });
 
   it("builds the bookings overview from appointments, quotes, pipeline, and deposit pressure", () => {

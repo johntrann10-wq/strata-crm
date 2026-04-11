@@ -1390,7 +1390,7 @@ function buildValueMoments(params: {
     messages.push({
       id: "goal-progress",
       label: `You're ${Math.round(params.goals.percentToGoal)}% to monthly goal`,
-      detail: "Current collections are pacing against the configured business target.",
+      detail: "Booked revenue this month is pacing against the configured business target.",
       url: "/settings?tab=business",
     });
   }
@@ -1403,6 +1403,30 @@ function formatMoneyPlain(value: number) {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+export function calculateBookedRevenueTotals(params: {
+  weekStart: Date;
+  weekEnd: Date;
+  bookedAppointments: Array<{ bookedAt: Date; totalPrice: MoneyLike }>;
+  standaloneInvoices: Array<{ bookedAt: Date; total: MoneyLike }>;
+}) {
+  const bookedRevenueThisWeek =
+    params.bookedAppointments
+      .filter((row) => row.bookedAt >= params.weekStart && row.bookedAt <= params.weekEnd)
+      .reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0) +
+    params.standaloneInvoices
+      .filter((row) => row.bookedAt >= params.weekStart && row.bookedAt <= params.weekEnd)
+      .reduce((sum, row) => sum + toMoneyNumber(row.total), 0);
+
+  const bookedRevenueThisMonth =
+    params.bookedAppointments.reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0) +
+    params.standaloneInvoices.reduce((sum, row) => sum + toMoneyNumber(row.total), 0);
+
+  return {
+    bookedRevenueThisWeek: Number(bookedRevenueThisWeek.toFixed(2)),
+    bookedRevenueThisMonth: Number(bookedRevenueThisMonth.toFixed(2)),
+  };
 }
 
 function buildContextualNudges(params: {
@@ -3378,16 +3402,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
   ]);
   const collectedToday = invoiceCollectedToday + directCollectedToday;
   const collectedThisWeek = invoiceCollectedThisWeek + directCollectedThisWeek;
-  const currentRevenue = invoiceCollectedThisMonth + directCollectedThisMonth;
-
-  const standaloneInvoiceIds = new Set(invoiceRows.filter((row) => !row.appointmentId).map((row) => row.id));
-  const bookedRevenueThisWeek =
-    todayAppointments
-      .filter((row) => row.createdAt >= weekStart && row.createdAt <= weekEnd)
-      .reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0) +
-    invoiceRows
-      .filter((row) => standaloneInvoiceIds.has(row.id) && row.createdAt >= weekStart && row.createdAt <= weekEnd)
-      .reduce((sum, row) => sum + toMoneyNumber(row.total), 0);
+  const collectedRevenueThisMonth = invoiceCollectedThisMonth + directCollectedThisMonth;
 
   const parsedLeads = leadRows.map((row) => ({ row, lead: parseLeadRecord(row.notes) }));
   const activeLeadRows = parsedLeads.filter(({ lead }) => lead.isLead);
@@ -3452,6 +3467,12 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
   const monthStandaloneInvoices = invoiceRows.filter(
     (row) => !row.appointmentId && row.createdAt >= monthStart && row.createdAt <= monthEnd
   );
+  const { bookedRevenueThisWeek, bookedRevenueThisMonth } = calculateBookedRevenueTotals({
+    weekStart,
+    weekEnd,
+    bookedAppointments: monthRevenueAppointments,
+    standaloneInvoices: monthStandaloneInvoices.map((row) => ({ bookedAt: row.createdAt, total: row.total })),
+  });
   const monthlyRevenueDays = buildOrFallback(
     "monthlyRevenueDays",
     [] as HomeDashboardMonthlyRevenueDay[],
@@ -3502,15 +3523,17 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
   const daysInMonth = getTimeZoneParts(monthEnd, timezone).day;
   const dayOfMonth = getTimeZoneParts(now, timezone).day;
   const projectedMonthEnd =
-    currentRevenue > 0 && dayOfMonth > 0 ? Number(((currentRevenue / dayOfMonth) * daysInMonth).toFixed(2)) : null;
+    bookedRevenueThisMonth > 0 && dayOfMonth > 0
+      ? Number(((bookedRevenueThisMonth / dayOfMonth) * daysInMonth).toFixed(2))
+      : null;
 
   const goals: HomeDashboardGoals = {
     allowed: modulePermissions.goals,
     monthlyRevenueGoal: modulePermissions.goals && monthlyRevenueGoal > 0 ? Number(monthlyRevenueGoal.toFixed(2)) : null,
-    currentRevenue: modulePermissions.goals ? Number(currentRevenue.toFixed(2)) : 0,
+    currentRevenue: modulePermissions.goals ? bookedRevenueThisMonth : 0,
     percentToGoal:
       modulePermissions.goals && monthlyRevenueGoal > 0
-        ? Math.min(100, Math.round((currentRevenue / monthlyRevenueGoal) * 100))
+        ? Math.min(100, Math.round((bookedRevenueThisMonth / monthlyRevenueGoal) * 100))
         : null,
     projectedMonthEnd: modulePermissions.goals ? projectedMonthEnd : null,
     monthlyJobsGoal: modulePermissions.goals ? business.monthlyJobsGoal ?? null : null,
@@ -3519,7 +3542,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
 
   const revenueCollections: HomeDashboardSnapshot["revenueCollections"] = {
     allowed: modulePermissions.revenueCollections,
-    bookedRevenueThisWeek: modulePermissions.revenueCollections ? Number(bookedRevenueThisWeek.toFixed(2)) : 0,
+    bookedRevenueThisWeek: modulePermissions.revenueCollections ? bookedRevenueThisWeek : 0,
     collectedThisWeek: modulePermissions.revenueCollections ? Number(collectedThisWeek.toFixed(2)) : 0,
     collectedToday: modulePermissions.revenueCollections ? Number(collectedToday.toFixed(2)) : 0,
     outstandingInvoiceAmount: modulePermissions.revenueCollections ? Number(outstandingInvoiceAmount.toFixed(2)) : 0,
@@ -3750,16 +3773,11 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       monthEnd: monthEnd.toISOString(),
       totalBookedThisMonth:
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
-          ? Number(
-              (
-                monthRevenueAppointments.reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0) +
-                monthStandaloneInvoices.reduce((sum, row) => sum + toMoneyNumber(row.total), 0)
-              ).toFixed(2)
-            )
+          ? bookedRevenueThisMonth
           : 0,
       totalCollectedThisMonth:
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
-          ? Number(currentRevenue.toFixed(2))
+          ? Number(collectedRevenueThisMonth.toFixed(2))
           : 0,
       outstandingInvoiceAmount:
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
@@ -3813,7 +3831,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       todayJobs: "Appointments whose effective job span overlaps the current business day.",
       cashCollectedToday: "Successful invoice payments today plus direct appointment payments logged today, net of reversals.",
       bookedRevenueThisWeek:
-        "Appointment value created this week plus standalone invoice value created this week, excluding void invoices to avoid double-counting linked work.",
+        "Appointment value scheduled within the current business week plus standalone invoice value created this week, excluding void invoices to avoid double-counting linked work.",
       weeklyOverview:
         "Weekly appointment overview buckets appointments by their operational start day within the selected Monday-through-Sunday business week and summarizes status, booked value, assigned-capacity usage, and next jobs for each day.",
       monthlyRevenueChart:
