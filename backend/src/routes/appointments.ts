@@ -2262,7 +2262,7 @@ appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requ
   ).get(appointment.id);
 
   if (finance?.depositSatisfied === true) {
-    res.json({ confirmed: true, depositSatisfied: true, depositPaid: true });
+    res.json({ confirmed: true, depositSatisfied: true });
     return;
   }
 
@@ -2293,7 +2293,6 @@ appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requ
   res.json({
     confirmed,
     depositSatisfied: postConfirmFinance?.depositSatisfied === true,
-    depositPaid: confirmed || postConfirmFinance?.depositSatisfied === true,
   });
 }));
 

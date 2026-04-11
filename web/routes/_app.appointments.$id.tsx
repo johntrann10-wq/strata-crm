@@ -706,7 +706,7 @@ export default function AppointmentDetail() {
         try {
           const result = await runConfirmStripeDeposit({ id, sessionId });
           if (cancelled) return;
-          if (result?.confirmed || result?.depositSatisfied === true || result?.depositPaid === true) {
+          if (result?.confirmed || result?.depositSatisfied === true) {
             toast.success("Stripe deposit received.");
           } else {
             toast.message("Stripe checkout completed. Deposit status is still syncing.");

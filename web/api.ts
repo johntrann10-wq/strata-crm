@@ -418,7 +418,7 @@ export const api = {
           body: JSON.stringify(params),
         }),
       confirmStripeDepositSession: (params: Record<string, unknown>) =>
-        request<{ confirmed: boolean; depositSatisfied?: boolean; depositPaid?: boolean }>(
+        request<{ confirmed: boolean; depositSatisfied?: boolean }>(
           "/appointments/" + (params?.id ?? "") + "/confirm-stripe-deposit-session",
           {
             method: "POST",
