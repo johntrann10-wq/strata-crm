@@ -339,67 +339,81 @@ export function HomeWeeklyAppointmentOverviewCard({
           <>
             <div className="hidden lg:block">
               <div className="-mx-1 overflow-x-auto px-1 pb-2">
-                <div className="grid min-w-[1180px] grid-cols-7 overflow-hidden rounded-[1.5rem] border border-slate-200/80 bg-slate-50/75 xl:min-w-0">
+                <div className="grid min-w-[1610px] grid-cols-7 overflow-hidden rounded-[1.5rem] border border-slate-200/80 bg-slate-50/75 2xl:min-w-0">
                   {overview.days.map((day) => {
                     const isActive = day.date === activeDay.date;
                     return (
-                      <button
+                      <div
                         key={day.date}
-                        type="button"
-                        onClick={() => onSelectDate?.(day.date)}
                         className={cn(
-                          "flex min-h-[430px] min-w-0 flex-col border-r border-slate-200/75 p-0 text-left transition-colors last:border-r-0",
-                          isActive ? "bg-white shadow-[inset_0_0_0_1px_rgba(37,99,235,0.24)]" : "bg-transparent hover:bg-white/70"
+                          "flex min-h-[420px] min-w-0 flex-col border-r border-slate-200/75 p-0 text-left transition-colors last:border-r-0",
+                          isActive ? "bg-white shadow-[inset_0_0_0_1px_rgba(217,119,6,0.24)]" : "bg-transparent hover:bg-white/70"
                         )}
-                        aria-pressed={isActive}
                       >
-                    <div className={cn("border-b border-slate-200/75 px-4 py-3.5", isActive ? "bg-amber-50/60" : "bg-white/55")}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{day.shortLabel}</p>
-                          <p className="mt-1 text-sm font-semibold text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
-                        </div>
-                        <Link
-                          to={day.calendarUrl}
-                          className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-950"
-                          aria-label={`Open ${day.label} in calendar`}
-                          onClick={(event) => event.stopPropagation()}
+                    <div className={cn("border-b border-slate-200/75 px-4.5 py-3.5", isActive ? "bg-amber-50/60" : "bg-white/55")}>
+                      <div className="flex items-start justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onSelectDate?.(day.date)}
+                          className="min-w-0 flex-1 rounded-[1rem] text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-amber-300/70"
+                          aria-label={`Focus ${day.label} in weekly overview`}
+                          aria-pressed={isActive}
                         >
-                          <ArrowUpRight className="h-3.5 w-3.5" />
-                        </Link>
-                      </div>
-                      <div className="mt-3 grid gap-2">
-                        <div className="flex items-end justify-between gap-2">
                           <div>
-                            <p className="text-2xl font-semibold tracking-tight text-slate-950">{day.appointmentCount}</p>
-                            <p className="text-[11px] text-slate-500">{day.appointmentCount === 1 ? "appointment" : "appointments"}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Booked</p>
-                            <p className="mt-1 text-sm font-semibold text-slate-900">{formatDashboardCompactCurrency(day.bookedValue)}</p>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 text-[10px]">
-                          <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Up {day.statusCounts.upcoming}</span>
-                          <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Live {day.statusCounts.inProgress}</span>
-                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">Done {day.statusCounts.completed}</span>
-                          <span className="rounded-full bg-rose-50 px-2 py-1 text-rose-700">Cancel {day.statusCounts.cancelled}</span>
-                        </div>
-                      </div>
-                    </div>
-                        <div className="flex flex-1 flex-col justify-between px-4 py-4">
-                          <div className="space-y-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Queued work</p>
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{day.shortLabel}</p>
+                                <p className="mt-1 text-sm font-semibold text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
+                              </div>
+                              <span className="shrink-0 rounded-full border border-slate-200/80 bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm">
+                                {formatDashboardCompactCurrency(day.bookedValue)}
+                              </span>
+                            </div>
+                            <div className="mt-3 flex items-end justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-[30px] font-semibold leading-none tracking-[-0.04em] text-slate-950">{day.appointmentCount}</p>
+                                <p className="mt-1 text-[11px] font-medium text-slate-500">{day.appointmentCount === 1 ? "appointment booked" : "appointments booked"}</p>
+                              </div>
                               {day.capacityUsage != null ? (
-                                <span className="rounded-full border border-slate-200/80 bg-white/80 px-2 py-1 text-[10px] font-semibold text-slate-600">
+                                <span className="shrink-0 rounded-full border border-slate-200/80 bg-slate-50/90 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
                                   Assigned {day.capacityUsage}%
                                 </span>
                               ) : null}
                             </div>
-                            <div className="space-y-2">
+                            <div className="mt-3 grid grid-cols-2 gap-1.5 text-[10px]">
+                              <span className="rounded-full bg-slate-100 px-2 py-1 text-center font-medium text-slate-700">Upcoming {day.statusCounts.upcoming}</span>
+                              <span className="rounded-full bg-blue-50 px-2 py-1 text-center font-medium text-blue-700">Live {day.statusCounts.inProgress}</span>
+                              <span className="rounded-full bg-emerald-50 px-2 py-1 text-center font-medium text-emerald-700">Done {day.statusCounts.completed}</span>
+                              <span className="rounded-full bg-rose-50 px-2 py-1 text-center font-medium text-rose-700">Cancel {day.statusCounts.cancelled}</span>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-slate-500">
+                              <span className="font-medium">{isActive ? "Selected for dispatch" : "Click to inspect"}</span>
+                              <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-slate-500">
+                                {day.previewItems.length} queued
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                        <Link
+                          to={day.calendarUrl}
+                          className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-950"
+                          aria-label={`Open ${day.label} in calendar`}
+                        >
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
+                    </div>
+                        <div className="flex flex-1 flex-col justify-between px-3.5 py-3.5">
+                          <div className="rounded-[1.15rem] border border-slate-200/80 bg-white/78 p-3.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Queued work</p>
+                              <span className="rounded-full bg-slate-100/90 px-2 py-1 text-[10px] font-medium text-slate-500">
+                                {day.previewItems.length} item{day.previewItems.length === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                            <div className="mt-3 space-y-2">
                               {day.previewItems.length === 0 ? (
-                                <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/70 px-2.5 py-3 text-xs text-slate-500">
+                                <div className="rounded-[0.95rem] border border-dashed border-slate-200/80 bg-white/80 px-3 py-4 text-xs leading-5 text-slate-500">
                                   No jobs queued yet.
                                 </div>
                               ) : (
@@ -407,10 +421,12 @@ export function HomeWeeklyAppointmentOverviewCard({
                                   <Link
                                     key={item.id}
                                     to={item.url}
-                                    onClick={(event) => event.stopPropagation()}
                                     className="block rounded-[1rem] border border-slate-200/80 bg-white/96 px-3 py-3 transition-colors hover:border-amber-200 hover:bg-amber-50/45"
                                   >
-                                    <div className="flex items-start justify-between gap-2.5">
+                                    <div className="grid grid-cols-[auto,1fr] gap-2.5">
+                                      <span className="mt-0.5 shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+                                        {formatDateLabel(item.startTime, "h:mm a")}
+                                      </span>
                                       <div className="min-w-0">
                                         <p className="line-clamp-2 text-[12px] font-semibold leading-4 text-slate-950">{item.title}</p>
                                         <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">
@@ -418,18 +434,22 @@ export function HomeWeeklyAppointmentOverviewCard({
                                           {item.vehicleLabel ? ` · ${item.vehicleLabel}` : ""}
                                         </p>
                                       </div>
-                                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
-                                        {formatDateLabel(item.startTime, "h:mm a")}
-                                      </span>
                                     </div>
                                   </Link>
                                 ))
                               )}
                             </div>
                           </div>
-                          <div className="pt-2 text-[11px] text-slate-400">{isActive ? "In focus" : "Review below"}</div>
+                          <div className="px-1 pt-3">
+                            <span className={cn(
+                              "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                              isActive ? "bg-amber-50 text-amber-700" : "bg-slate-100/90 text-slate-500"
+                            )}>
+                              {isActive ? "In focus" : "Review below"}
+                            </span>
+                          </div>
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -449,6 +469,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <button type="button" onClick={() => onSelectDate?.(day.date)} className="min-w-0 text-left" aria-pressed={isActive}>
+                        <span className="sr-only">{`Focus ${day.label} in weekly overview`}</span>
                         <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{day.label}</p>
                         <div className="mt-1 flex items-end justify-between gap-3">
                           <p className="text-lg font-semibold tracking-tight text-slate-950">{day.appointmentCount} {day.appointmentCount === 1 ? "appointment" : "appointments"}</p>
@@ -506,88 +527,105 @@ export function HomeWeeklyAppointmentOverviewCard({
               })}
             </div>
 
-            <div className={cn(dashboardInsetClassName, "p-4")}>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Dispatch board</p>
-                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{activeDay.label}, {formatDateLabel(activeDay.date, "MMM d")}</p>
-                  <p className="text-sm text-slate-500">
-                    {activeDay.appointmentCount} appointments · {formatDashboardCurrency(activeDay.bookedValue)} booked
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                  <Button asChild variant="outline" className="min-h-[42px] w-full rounded-full border-slate-200 bg-white/80 sm:w-auto">
-                    <Link to={activeDay.calendarUrl}>
-                      Open day in calendar
-                      <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
-                    </Link>
-                  </Button>
-                  <div className="rounded-full border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-500">
-                    {busiestDay?.date === activeDay.date ? "Highest load this week" : "Review details before dispatch"}
+            <div className={cn(dashboardInsetClassName, "overflow-hidden p-0")}>
+              <div className="border-b border-slate-200/80 px-4 py-4 sm:px-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-1.5">
+                    <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Dispatch board</p>
+                    <p className="text-xl font-semibold tracking-[-0.03em] text-slate-950">{activeDay.label}, {formatDateLabel(activeDay.date, "MMM d")}</p>
+                    <p className="text-sm text-slate-500">
+                      {activeDay.appointmentCount} appointments scheduled with {formatDashboardCurrency(activeDay.bookedValue)} booked for the day
+                    </p>
                   </div>
-                  {activeDay.capacityUsage != null ? (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <Button asChild variant="outline" className="min-h-[42px] w-full rounded-full border-slate-200 bg-white/80 sm:w-auto">
+                      <Link to={activeDay.calendarUrl}>
+                        Open day in calendar
+                        <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
                     <div className="rounded-full border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-500">
-                      Assigned coverage {activeDay.capacityUsage}%
+                      {busiestDay?.date === activeDay.date ? "Highest load this week" : "Review details before dispatch"}
                     </div>
-                  ) : null}
-                </div>
-              </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                <div className="rounded-[0.95rem] border border-slate-200/80 bg-white/90 px-3 py-2.5">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Upcoming</p>
-                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{activeDay.statusCounts.upcoming}</p>
-                </div>
-                <div className="rounded-[0.95rem] border border-slate-200/80 bg-white/90 px-3 py-2.5">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Live</p>
-                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{activeDay.statusCounts.inProgress}</p>
-                </div>
-                <div className="rounded-[0.95rem] border border-slate-200/80 bg-white/90 px-3 py-2.5">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Done</p>
-                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{activeDay.statusCounts.completed}</p>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                <div className="rounded-[1rem] border border-slate-200/80 bg-white/90 px-3 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Status mix</p>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                    <div className="rounded-[0.9rem] bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase tracking-[0.14em] text-slate-500">Upcoming</span><span className="mt-1 block font-semibold text-slate-900">{activeDay.statusCounts.upcoming}</span></div>
-                    <div className="rounded-[0.9rem] bg-blue-50 px-3 py-2"><span className="block text-[10px] uppercase tracking-[0.14em] text-blue-600">In progress</span><span className="mt-1 block font-semibold text-blue-900">{activeDay.statusCounts.inProgress}</span></div>
-                    <div className="rounded-[0.9rem] bg-emerald-50 px-3 py-2"><span className="block text-[10px] uppercase tracking-[0.14em] text-emerald-600">Completed</span><span className="mt-1 block font-semibold text-emerald-900">{activeDay.statusCounts.completed}</span></div>
-                    <div className="rounded-[0.9rem] bg-rose-50 px-3 py-2"><span className="block text-[10px] uppercase tracking-[0.14em] text-rose-600">Cancelled</span><span className="mt-1 block font-semibold text-rose-900">{activeDay.statusCounts.cancelled}</span></div>
+                    {activeDay.capacityUsage != null ? (
+                      <div className="rounded-full border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-500">
+                        Assigned coverage {activeDay.capacityUsage}%
+                      </div>
+                    ) : null}
                   </div>
                 </div>
-                <div className="space-y-2">
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-[1rem] border border-slate-200/80 bg-white/90 px-3.5 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Upcoming</p>
+                    <p className="mt-1 text-xl font-semibold tracking-tight text-slate-950">{activeDay.statusCounts.upcoming}</p>
+                    <p className="text-[11px] text-slate-500">still waiting to start</p>
+                  </div>
+                  <div className="rounded-[1rem] border border-slate-200/80 bg-white/90 px-3.5 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Live</p>
+                    <p className="mt-1 text-xl font-semibold tracking-tight text-slate-950">{activeDay.statusCounts.inProgress}</p>
+                    <p className="text-[11px] text-slate-500">currently in the bay</p>
+                  </div>
+                  <div className="rounded-[1rem] border border-slate-200/80 bg-white/90 px-3.5 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Done</p>
+                    <p className="mt-1 text-xl font-semibold tracking-tight text-slate-950">{activeDay.statusCounts.completed}</p>
+                    <p className="text-[11px] text-slate-500">wrapped for the day</p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-0 lg:grid-cols-[0.95fr_1.35fr]">
+                <div className="border-b border-slate-200/80 px-4 py-4 lg:border-b-0 lg:border-r sm:px-5">
+                  <div className="rounded-[1rem] border border-slate-200/80 bg-white/90 px-3.5 py-3.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Status mix</p>
+                      <span className="text-[11px] text-slate-400">Day health</span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <div className="rounded-[0.9rem] bg-slate-50 px-3 py-2.5"><span className="block text-[10px] uppercase tracking-[0.14em] text-slate-500">Upcoming</span><span className="mt-1 block font-semibold text-slate-900">{activeDay.statusCounts.upcoming}</span></div>
+                      <div className="rounded-[0.9rem] bg-blue-50 px-3 py-2.5"><span className="block text-[10px] uppercase tracking-[0.14em] text-blue-600">In progress</span><span className="mt-1 block font-semibold text-blue-900">{activeDay.statusCounts.inProgress}</span></div>
+                      <div className="rounded-[0.9rem] bg-emerald-50 px-3 py-2.5"><span className="block text-[10px] uppercase tracking-[0.14em] text-emerald-600">Completed</span><span className="mt-1 block font-semibold text-emerald-900">{activeDay.statusCounts.completed}</span></div>
+                      <div className="rounded-[0.9rem] bg-rose-50 px-3 py-2.5"><span className="block text-[10px] uppercase tracking-[0.14em] text-rose-600">Cancelled</span><span className="mt-1 block font-semibold text-rose-900">{activeDay.statusCounts.cancelled}</span></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-4 py-4 sm:px-5">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Day queue</p>
-                    <p className="text-[11px] text-slate-500">{activeDay.previewItems.length} scheduled stop{activeDay.previewItems.length === 1 ? "" : "s"}</p>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Day queue</p>
+                      <p className="mt-1 text-sm text-slate-500">{activeDay.previewItems.length} scheduled stop{activeDay.previewItems.length === 1 ? "" : "s"} ready for review</p>
+                    </div>
                   </div>
-                {activeDay.previewItems.length === 0 ? (
+                  <div className="mt-3 space-y-2.5">
+                  {activeDay.previewItems.length === 0 ? (
                     <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/80 px-3 py-4 text-sm text-slate-500">
-                    No jobs queued for this day yet.
+                      No jobs queued for this day yet.
+                    </div>
+                  ) : (
+                    activeDay.previewItems.map((item) => (
+                      <Link
+                        key={item.id}
+                        to={item.url}
+                        className="flex items-start gap-3 rounded-[1rem] border border-slate-200/80 bg-white/95 px-3.5 py-3 transition-colors hover:border-amber-200 hover:bg-amber-50/45"
+                      >
+                        <div className="shrink-0 rounded-[0.95rem] border border-slate-200/80 bg-slate-50 px-2.5 py-2 text-center">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Start</p>
+                          <p className="mt-1 text-[11px] font-semibold text-slate-700">{formatDateLabel(item.startTime, "h:mm a")}</p>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-slate-950">{item.title}</p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {item.clientName} · {item.vehicleLabel}
+                          </p>
+                        </div>
+                        <div className="shrink-0 self-center text-right">
+                          <span className="inline-flex items-center text-xs font-medium text-slate-700">
+                            Open
+                            <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                          </span>
+                        </div>
+                      </Link>
+                    ))
+                  )}
                   </div>
-                ) : (
-                  activeDay.previewItems.map((item) => (
-                    <Link
-                      key={item.id}
-                      to={item.url}
-                      className="flex items-start justify-between gap-3 rounded-[1rem] border border-slate-200/80 bg-white/95 px-3 py-3 transition-colors hover:border-amber-200 hover:bg-amber-50/45"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{formatDateLabel(item.startTime, "h:mm a")}</p>
-                        <p className="font-semibold text-slate-950">{item.title}</p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          {item.clientName} · {item.vehicleLabel}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <span className="mt-1 inline-flex items-center text-xs font-medium text-slate-700">
-                          Open
-                          <ArrowRight className="ml-1 h-3.5 w-3.5" />
-                        </span>
-                      </div>
-                    </Link>
-                  ))
-                )}
                 </div>
               </div>
             </div>
@@ -628,35 +666,51 @@ export function HomeUpcomingAttentionPanel({
         <CardDescription className="text-slate-500">The next jobs in {rangeLabel} and the revenue-pressure items that need action first.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className={cn(dashboardInsetClassName, "p-3")}>
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          <div className={cn(dashboardInsetClassName, "p-3.5")}>
             <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Upcoming</p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{scheduleCount}</p>
+            <div className="mt-1 flex items-end justify-between gap-3">
+              <p className="text-2xl font-semibold tracking-tight text-slate-950">{scheduleCount}</p>
+              <CalendarClock className="h-4 w-4 text-slate-300" />
+            </div>
             <p className="text-xs text-slate-500">jobs in the current {rangeLabel} view</p>
           </div>
-          <div className={cn(dashboardInsetClassName, "p-3")}>
+          <div className={cn(dashboardInsetClassName, "p-3.5")}>
             <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Needs action</p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{queueCount}</p>
+            <div className="mt-1 flex items-end justify-between gap-3">
+              <p className="text-2xl font-semibold tracking-tight text-slate-950">{queueCount}</p>
+              <ClipboardList className="h-4 w-4 text-slate-300" />
+            </div>
             <p className="text-xs text-slate-500">priority items waiting on the team</p>
           </div>
-          <div className={cn(dashboardInsetClassName, "p-3")}>
+          <div className={cn(dashboardInsetClassName, "p-3.5")}>
             <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">At risk</p>
-            <p className={cn("mt-1 text-2xl font-semibold tracking-tight", priorityMoneyAtRisk > 0 ? "text-amber-700" : "text-slate-950")}>
-              {formatDashboardCompactCurrency(priorityMoneyAtRisk)}
-            </p>
+            <div className="mt-1 flex items-end justify-between gap-3">
+              <p className={cn("text-2xl font-semibold tracking-tight", priorityMoneyAtRisk > 0 ? "text-amber-700" : "text-slate-950")}>
+                {formatDashboardCompactCurrency(priorityMoneyAtRisk)}
+              </p>
+              <CircleDollarSign className={cn("h-4 w-4", priorityMoneyAtRisk > 0 ? "text-amber-300" : "text-slate-300")} />
+            </div>
             <p className="text-xs text-slate-500">urgent money tied to the queue</p>
           </div>
         </div>
 
         <div className={cn(dashboardInsetClassName, "overflow-hidden")}>
-          <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              <ClipboardList className="h-3.5 w-3.5" />
-              Operating queue
+          <div className="border-b border-slate-200/80 px-4 py-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  Operating queue
+                </div>
+                <p className="mt-1 text-xs text-slate-500">Upcoming work first, then items blocking cash or follow-up.</p>
+              </div>
+              <span className="shrink-0 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-1 text-[11px] text-slate-500">
+                {scheduleCount + queueCount} items
+              </span>
             </div>
-            <span className="text-xs text-slate-500">Upcoming work first, then items blocking cash or follow-up.</span>
           </div>
-          <div className="divide-y divide-slate-200/75">
+          <div className="divide-y divide-slate-200/75 xl:max-h-[535px] xl:overflow-y-auto">
             {scheduleItems.length === 0 && queueItems.length === 0 ? (
               <div className="px-4 py-6 text-sm text-slate-500">No upcoming jobs or urgent action items in this view.</div>
             ) : (
@@ -665,15 +719,19 @@ export function HomeUpcomingAttentionPanel({
                   <Link
                     key={item.id}
                     to={item.urls.appointment}
-                    className="flex items-start justify-between gap-3 px-4 py-3 transition-colors hover:bg-white/70"
+                    className="flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-white/70"
                   >
-                    <div className="min-w-0">
+                    <div className="shrink-0 rounded-[0.95rem] border border-amber-200/80 bg-amber-50/80 px-2.5 py-2 text-center">
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-amber-700">Next</p>
+                      <p className="mt-1 text-[11px] font-semibold text-amber-900">{formatDateLabel(item.startTime, "h:mm a")}</p>
+                    </div>
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700">
                           <CalendarClock className="h-3 w-3" />
                           Upcoming
                         </span>
-                        <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500">{formatDateLabel(item.startTime, "EEE h:mm a")}</span>
+                        <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500">{formatDateLabel(item.startTime, "EEE")}</span>
                       </div>
                       <p className="mt-2 font-semibold text-slate-950">{item.title}</p>
                       <p className="mt-1 text-sm text-slate-500">
@@ -684,8 +742,9 @@ export function HomeUpcomingAttentionPanel({
                   </Link>
                 ))}
                 {queueItems.map((item) => (
-                  <div key={item.id} className="px-4 py-3">
-                    <div className="flex items-start justify-between gap-3">
+                  <div key={item.id} className="px-4 py-3.5">
+                    <div className="rounded-[1rem] border border-slate-200/80 bg-white/88 px-3.5 py-3">
+                      <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span
@@ -714,7 +773,7 @@ export function HomeUpcomingAttentionPanel({
                       </Button>
                     </div>
                     {(item.supportsSnooze || item.supportsDismiss) && (onSnooze || onDismiss) ? (
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-3 flex gap-2">
                         {item.supportsSnooze && onSnooze ? (
                           <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full border border-slate-200 bg-slate-50/80 text-xs text-slate-700" onClick={() => onSnooze(item.id)}>
                             Snooze
@@ -727,6 +786,7 @@ export function HomeUpcomingAttentionPanel({
                         ) : null}
                       </div>
                     ) : null}
+                    </div>
                   </div>
                 ))}
               </>
@@ -827,9 +887,9 @@ export function HomeMonthlyRevenueChartCard({
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
           {summaryItems.map((item) => (
-            <div key={item.label} className={cn(dashboardInsetClassName, "p-3")}>
+            <div key={item.label} className={cn(dashboardInsetClassName, "p-3.5")}>
               <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
               <p className={cn("mt-1 text-2xl font-semibold tracking-tight", item.tone)}>{item.value}</p>
               <p className="mt-1 text-xs text-slate-500">{item.hint}</p>
@@ -837,20 +897,25 @@ export function HomeMonthlyRevenueChartCard({
           ))}
         </div>
 
-        <div className={cn(dashboardInsetClassName, "p-4")}>
+        <div className={cn(dashboardInsetClassName, "overflow-hidden p-0")}>
           {!hasAnyRevenue ? (
-            <EmptyState
-              icon={BarChart3}
-              title="No revenue activity this month yet"
-              description="Booked work and invoice collections will start drawing here as appointments, invoices, and payments land."
-            />
+            <div className="p-4">
+              <EmptyState
+                icon={BarChart3}
+                title="No revenue activity this month yet"
+                description="Booked work and invoice collections will start drawing here as appointments, invoices, and payments land."
+              />
+            </div>
           ) : (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-                <span>{mode === "booked" ? "Booked work is grouped by scheduled day." : "Invoice cash is grouped by payment day."} Tap a bar to drill into that date.</span>
-                {showGoalPace ? <span>Goal pace line is shown as a guide for booked revenue.</span> : null}
+              <div className="border-b border-slate-200/80 px-4 py-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+                  <span>{mode === "booked" ? "Booked work is grouped by scheduled day." : "Invoice cash is grouped by payment day."} Tap a bar to drill into that date.</span>
+                  {showGoalPace ? <span>Goal pace line is shown as a guide for booked revenue.</span> : null}
+                </div>
               </div>
-              <div className="mt-4 rounded-[1.1rem] border border-slate-200/70 bg-white/92 p-3 sm:p-4">
+              <div className="px-4 py-4">
+              <div className="rounded-[1.1rem] border border-slate-200/70 bg-white/92 p-3 sm:p-4">
                 <div className="grid gap-3 sm:grid-cols-[auto,1fr] sm:items-end">
                   <div className="hidden h-64 flex-col justify-between text-[10px] text-slate-500 sm:flex">
                     <span>{formatDashboardCompactCurrency(maxValue)}</span>
@@ -914,6 +979,7 @@ export function HomeMonthlyRevenueChartCard({
                   {mode === "booked" ? "Booked work" : "Invoice collections"}
                 </span>
                 {chart.goalAmount != null ? <span>Monthly goal: {formatDashboardCurrency(chart.goalAmount)}</span> : null}
+              </div>
               </div>
             </>
           )}
@@ -1017,20 +1083,20 @@ export function HomeBookingsOverviewCard({
           />
         ) : (
           <>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <Link to={bookings.links.bookingsThisWeek} className={cn(dashboardInsetClassName, "block p-3 transition-colors hover:bg-white/92")}>
+            <div className="grid gap-2.5 sm:grid-cols-3">
+              <Link to={bookings.links.bookingsThisWeek} className={cn(dashboardInsetClassName, "block p-3.5 transition-colors hover:bg-white/92")}>
                 <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Weekly pace</p>
                 <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{bookings.bookingsThisWeek}</p>
                 <p className="text-xs text-slate-500">bookings in the current week</p>
               </Link>
-              <Link to={bookings.links.quoteToBookConversionRate} className={cn(dashboardInsetClassName, "block p-3 transition-colors hover:bg-white/92")}>
+              <Link to={bookings.links.quoteToBookConversionRate} className={cn(dashboardInsetClassName, "block p-3.5 transition-colors hover:bg-white/92")}>
                 <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Conversion</p>
                 <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">
                   {bookings.quoteToBookConversionRate == null ? "--" : `${bookings.quoteToBookConversionRate}%`}
                 </p>
                 <p className="text-xs text-slate-500">quoted stage to booked stage</p>
               </Link>
-              <Link to={bookings.links.averageTicketValue} className={cn(dashboardInsetClassName, "block p-3 transition-colors hover:bg-white/92")}>
+              <Link to={bookings.links.averageTicketValue} className={cn(dashboardInsetClassName, "block p-3.5 transition-colors hover:bg-white/92")}>
                 <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Avg ticket</p>
                 <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">
                   {bookings.averageTicketValue == null ? "--" : formatDashboardCompactCurrency(bookings.averageTicketValue)}
@@ -1044,7 +1110,7 @@ export function HomeBookingsOverviewCard({
                 <Link
                   key={stat.label}
                   to={stat.href}
-                  className="block p-3 transition-colors hover:bg-white/92"
+                  className="block p-3.5 transition-colors hover:bg-white/92"
                   aria-label={`Open ${stat.label.toLowerCase()} details`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -1144,28 +1210,31 @@ export function HomeBottomPanels({
     {
       key: "activity",
       title: "Recent Activity",
-      description: "Meaningful business events from today.",
+      description: "Meaningful business events from the live shop day.",
       icon: History,
       count: activityItems.length,
       content:
         activityItems.length === 0 ? (
           <EmptyState icon={History} title="No activity yet" description="Appointments, payments, and quote changes will show here as the business runs." />
         ) : (
-          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92">
+          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92 xl:max-h-[360px] xl:overflow-y-auto">
             {activityItems.map((item) => (
-              <div key={item.id} className="border-b border-slate-200/70 p-3 last:border-b-0">
+              <div key={item.id} className="border-b border-slate-200/70 p-3.5 last:border-b-0">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Live event</p>
                     {item.url ? (
-                      <Link to={item.url} className="font-semibold text-slate-950 hover:text-amber-700">
+                      <Link to={item.url} className="mt-1 block font-semibold text-slate-950 hover:text-amber-700">
                         {item.label}
                       </Link>
                     ) : (
-                      <p className="font-semibold text-slate-950">{item.label}</p>
+                      <p className="mt-1 font-semibold text-slate-950">{item.label}</p>
                     )}
                     {item.detail ? <p className="mt-1 text-sm text-slate-500">{item.detail}</p> : null}
                   </div>
-                  <span className="text-xs text-slate-500">{formatRelativeTime(item.occurredAt)}</span>
+                  <span className="rounded-full bg-slate-100/80 px-2 py-1 text-[11px] font-medium text-slate-500">
+                    {formatRelativeTime(item.occurredAt)}
+                  </span>
                 </div>
               </div>
             ))}
@@ -1175,22 +1244,29 @@ export function HomeBottomPanels({
     {
       key: "receivables",
       title: "Unpaid Invoices / Deposits Due",
-      description: "Money that needs follow-up soon.",
+      description: "Money risk and missing deposits that need follow-up.",
       icon: CircleDollarSign,
       count: receivablesItems.length,
       content:
         receivablesItems.length === 0 ? (
           <EmptyState icon={Landmark} title="No overdue balances or deposit misses" description="Overdue invoices and missing deposits will surface here when they need attention." />
         ) : (
-          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92">
+          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92 xl:max-h-[360px] xl:overflow-y-auto">
             {receivablesItems.map((item) => (
-              <Link key={item.id} to={item.ctaUrl} className="block border-b border-slate-200/70 p-3 transition-colors last:border-b-0 hover:bg-amber-50/45">
+              <Link key={item.id} to={item.ctaUrl} className="block border-b border-slate-200/70 p-3.5 transition-colors last:border-b-0 hover:bg-amber-50/45">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      {item.type === "overdue_invoice" ? "Invoice risk" : "Deposit miss"}
+                    </p>
                     <p className="font-semibold text-slate-950">{item.label}</p>
                     <p className="mt-1 text-sm text-slate-500">{item.reason}</p>
                   </div>
-                  {item.amountAtRisk != null ? <Badge variant="outline" className="shrink-0">{formatDashboardCurrency(item.amountAtRisk)}</Badge> : null}
+                  {item.amountAtRisk != null ? (
+                    <Badge variant="outline" className="shrink-0 border-orange-200 bg-orange-50/80 font-semibold text-orange-700">
+                      {formatDashboardCurrency(item.amountAtRisk)}
+                    </Badge>
+                  ) : null}
                 </div>
               </Link>
             ))}
@@ -1200,17 +1276,20 @@ export function HomeBottomPanels({
     {
       key: "follow_up",
       title: "Lead / Quote follow-up",
-      description: "Sales work that still needs a response.",
+      description: "Sales follow-up that still needs a response.",
       icon: Inbox,
       count: followUpItems.length,
       content:
         followUpItems.length === 0 ? (
           <EmptyState icon={ClipboardList} title="No lead or quote follow-up gaps" description="Leads and quote follow-ups are under control right now." />
         ) : (
-          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92">
+          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92 xl:max-h-[360px] xl:overflow-y-auto">
             {followUpItems.map((item) => (
-              <Link key={item.id} to={item.ctaUrl} className="flex items-start justify-between gap-3 border-b border-slate-200/70 p-3 transition-colors last:border-b-0 hover:bg-amber-50/45">
-                <div>
+              <Link key={item.id} to={item.ctaUrl} className="flex items-start justify-between gap-3 border-b border-slate-200/70 p-3.5 transition-colors last:border-b-0 hover:bg-amber-50/45">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    {item.type === "quote_follow_up" ? "Quote follow-up" : "Lead response"}
+                  </p>
                   <p className="font-semibold text-slate-950">{item.label}</p>
                   <p className="mt-1 text-sm text-slate-500">{item.reason}</p>
                 </div>
@@ -1242,7 +1321,7 @@ export function HomeBottomPanels({
             </div>
             <CardDescription className="text-slate-500">{panel.description}</CardDescription>
           </CardHeader>
-          <CardContent>{panel.content}</CardContent>
+          <CardContent className="p-4">{panel.content}</CardContent>
         </Card>
       ))}
     </div>
@@ -1264,12 +1343,21 @@ export function HomeCompactQuickActions({
   if (actions.length === 0) return null;
 
   return (
-    <Card className={cn(dashboardPanelClassName, "border-dashed border-slate-200/80 bg-white/75")}>
+    <Card className={cn(dashboardPanelClassName, "border-dashed border-slate-200/80 bg-gradient-to-r from-white/88 via-white/78 to-slate-50/78")}>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base tracking-[-0.02em] text-slate-800">Shortcuts</CardTitle>
-        <CardDescription className="text-slate-500">Secondary entry points for common admin work.</CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-base tracking-[-0.02em] text-slate-800">Shortcuts</CardTitle>
+            <CardDescription className="text-slate-500">Secondary entry points for common admin work.</CardDescription>
+          </div>
+          <span className="rounded-full border border-slate-200/80 bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+            {actions.length} actions
+          </span>
+        </div>
       </CardHeader>
-      <CardContent className="grid gap-2 sm:flex sm:flex-wrap">
+      <CardContent className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <p className="text-sm text-slate-500">Keep the dashboard focused on the week. Use shortcuts for quick admin tasks, not primary navigation.</p>
+        <div className="grid gap-2 sm:flex sm:flex-wrap lg:justify-end">
         {actions.map((action) => (
           <Button
             key={action.key}
@@ -1285,6 +1373,7 @@ export function HomeCompactQuickActions({
             <Link to={action.url}>{action.label}</Link>
           </Button>
         ))}
+        </div>
       </CardContent>
     </Card>
   );

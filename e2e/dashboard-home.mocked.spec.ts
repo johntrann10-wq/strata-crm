@@ -298,7 +298,7 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(page).toHaveURL(/range=week/);
     await expect(page.getByRole("link", { name: /new appointment/i }).first()).toHaveAttribute("href", "/appointments/new");
     await expect(page.getByRole("link", { name: /open day view/i }).first()).toHaveAttribute("href", "/calendar?view=day&date=2026-04-10");
-    await page.getByRole("button", { name: /tue/i }).click();
+    await page.getByRole("button", { name: "Focus Tuesday in weekly overview" }).click();
     await expect(page.getByRole("link", { name: /open day in calendar/i })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-07");
     await page.getByRole("button", { name: /^booked$/i }).click();
     await expect(page.getByRole("link", { name: "Open booked revenue records for Apr 2", exact: true })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-02");
