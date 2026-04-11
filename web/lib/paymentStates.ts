@@ -33,7 +33,6 @@ export function getDepositSummary(params: {
   const backendBalanceDue = Math.max(0, toMoneyNumber(params.balanceDue));
   const paidInFull = params.paidInFull === true;
   const depositSatisfied = params.depositSatisfied === true;
-  const depositPaid = params.depositPaid === true;
   const hasDeposit = depositAmount > 0;
   const hasBackendFinance =
     params.collectedAmount != null ||
@@ -42,9 +41,7 @@ export function getDepositSummary(params: {
     params.depositSatisfied != null;
   const remainingBalance = hasBackendFinance
     ? backendBalanceDue
-    : hasDeposit && depositPaid
-      ? Math.max(0, totalPrice - depositAmount)
-      : totalPrice;
+    : totalPrice;
   const labels = params.labels ?? {};
   const noun = labels.noun ?? "deposit";
   const nounLabel = `${noun[0]?.toUpperCase() ?? "D"}${noun.slice(1)}`;
@@ -62,7 +59,7 @@ export function getDepositSummary(params: {
     };
   }
 
-  if ((hasBackendFinance && depositSatisfied) || (!hasBackendFinance && depositPaid)) {
+  if (hasBackendFinance && depositSatisfied) {
     return {
       hasDeposit: true,
       depositAmount,

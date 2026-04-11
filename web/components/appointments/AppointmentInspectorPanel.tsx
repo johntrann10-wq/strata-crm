@@ -165,10 +165,6 @@ function getCollectedAmount(appointment: AppointmentInspectorRecord): number {
   const total = Number(appointment.totalPrice ?? 0);
   if (hasValidPaidAt(appointment.paidAt)) return total;
   if (appointment.invoiceStatus === "paid" || hasValidPaidAt(appointment.invoicePaidAt ?? null)) return total;
-  if (appointment.depositPaid === true) {
-    const depositAmount = Number(appointment.depositAmount ?? 0);
-    if (depositAmount > 0) return Math.min(total, depositAmount);
-  }
   return 0;
 }
 
