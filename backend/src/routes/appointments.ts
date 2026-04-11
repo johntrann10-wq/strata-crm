@@ -84,10 +84,87 @@ async function confirmAppointmentDepositCheckout(params: {
     return false;
   }
 
+  const [appointment] = await db
+    .select({
+      id: appointments.id,
+      totalPrice: appointments.totalPrice,
+      depositAmount: appointments.depositAmount,
+    })
+    .from(appointments)
+    .where(and(eq(appointments.id, params.appointmentId), eq(appointments.businessId, params.businessId)))
+    .limit(1);
+
+  if (!appointment) {
+    logger.warn("Stripe appointment deposit return could not find appointment", {
+      sessionId,
+      appointmentId: params.appointmentId,
+      businessId: params.businessId,
+    });
+    return false;
+  }
+
+  const existingFinance = (
+    await getAppointmentFinanceSummaryMap(params.businessId, [
+      {
+        id: appointment.id,
+        totalPrice: appointment.totalPrice,
+        depositAmount: appointment.depositAmount,
+        paidAt: null,
+      },
+    ])
+  ).get(appointment.id);
+
+  if (existingFinance?.depositSatisfied === true) {
+    return true;
+  }
+
+  const [existingStripeLog] = await db
+    .select({ id: activityLogs.id })
+    .from(activityLogs)
+    .where(
+      and(
+        eq(activityLogs.businessId, params.businessId),
+        eq(activityLogs.entityType, "appointment"),
+        eq(activityLogs.entityId, params.appointmentId),
+        eq(activityLogs.action, "appointment.deposit_paid"),
+        ilike(activityLogs.metadata, `%${sessionId}%`)
+      )
+    )
+    .limit(1);
+
+  if (!existingStripeLog) {
+    await createActivityLog({
+      businessId: params.businessId,
+      action: "appointment.deposit_paid",
+      entityType: "appointment",
+      entityId: params.appointmentId,
+      metadata: {
+        amount: session.amount_total != null ? session.amount_total / 100 : null,
+        source: "stripe_checkout",
+        stripeCheckoutSessionId: session.id,
+        stripePaymentIntentId:
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : session.payment_intent?.id ?? null,
+      },
+    });
+  }
+
+  const nextFinance = (
+    await getAppointmentFinanceSummaryMap(params.businessId, [
+      {
+        id: appointment.id,
+        totalPrice: appointment.totalPrice,
+        depositAmount: appointment.depositAmount,
+        paidAt: null,
+      },
+    ])
+  ).get(appointment.id);
+
   const [updated] = await db
     .update(appointments)
     .set({
-      depositPaid: true,
+      depositPaid: nextFinance?.depositSatisfied === true,
       updatedAt: new Date(),
     })
     .where(and(eq(appointments.id, params.appointmentId), eq(appointments.businessId, params.businessId)))
@@ -96,7 +173,7 @@ async function confirmAppointmentDepositCheckout(params: {
       depositPaid: appointments.depositPaid,
     });
 
-  if (!updated?.depositPaid) {
+  if (!(nextFinance?.depositSatisfied === true) || !updated?.depositPaid) {
     logger.warn("Stripe appointment deposit return could not persist deposit state", {
       sessionId,
       appointmentId: params.appointmentId,
