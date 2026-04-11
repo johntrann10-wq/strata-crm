@@ -2011,7 +2011,10 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   }
 
   if (remainingBalance <= 0 && collectedAmount > 0) {
-    res.json(existing);
+    res.json({
+      ...existing,
+      depositSatisfied: finance?.depositSatisfied === true,
+    });
     return;
   }
 
@@ -2058,7 +2061,20 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
     },
   });
 
-  res.json(updated ?? { ...existing, depositPaid: updates.depositPaid === true });
+  const responseFinance = calculateAppointmentFinanceSummary({
+    id: existing.id,
+    totalPrice: existing.totalPrice,
+    depositAmount: existing.depositAmount,
+    paidAt: updates.paidAt instanceof Date ? updates.paidAt : null,
+    directCollectedAmount: nextCollectedAmount,
+    invoiceCollectedAmount: finance?.invoiceCollectedAmount ?? 0,
+    invoiceCarryoverAmount: finance?.invoiceCarryoverAmount ?? 0,
+  });
+
+  res.json({
+    ...(updated ?? { ...existing, depositPaid: updates.depositPaid === true }),
+    depositSatisfied: responseFinance.depositSatisfied,
+  });
 }));
 
 appointmentsRouter.post("/:id/create-deposit-payment-session", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
@@ -2164,7 +2180,7 @@ appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requ
   ).get(appointment.id);
 
   if (finance?.depositSatisfied === true) {
-    res.json({ confirmed: true, depositPaid: true });
+    res.json({ confirmed: true, depositSatisfied: true, depositPaid: true });
     return;
   }
 
@@ -2194,6 +2210,7 @@ appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requ
 
   res.json({
     confirmed,
+    depositSatisfied: postConfirmFinance?.depositSatisfied === true,
     depositPaid: confirmed || postConfirmFinance?.depositSatisfied === true,
   });
 }));
@@ -2233,7 +2250,10 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
   const collectedAmount = finance?.collectedAmount ?? 0;
 
   if (directCollectedAmount <= 0) {
-    res.json(existing);
+    res.json({
+      ...existing,
+      depositSatisfied: finance?.depositSatisfied === true,
+    });
     return;
   }
 
@@ -2281,7 +2301,10 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
     },
   });
 
-  res.json(updated ?? { ...existing, depositPaid: false });
+  res.json({
+    ...(updated ?? { ...existing, depositPaid: false }),
+    depositSatisfied: postReverseSummary.depositSatisfied,
+  });
 }));
 
 appointmentsRouter.post("/:id/public-request-change", express.urlencoded({ extended: false }), wrapAsync(async (req: Request, res: Response) => {
