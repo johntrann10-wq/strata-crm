@@ -19,20 +19,9 @@ import { createInvoicePaymentCheckoutSession, retrieveConnectAccount } from "../
 import { createActivityLog } from "../lib/activity.js";
 import { getActiveInvoicePaymentTotal, isPaymentSchemaDriftError, recordInvoicePayment } from "../lib/invoicePayments.js";
 import { enqueueQuickBooksInvoiceSync } from "../lib/quickbooks.js";
+import { getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 
 export const invoicesRouter = Router({ mergeParams: true });
-
-function getAppointmentInvoiceCarryoverAmount(appointment: {
-  depositPaid?: boolean | null;
-  depositAmount?: string | number | null;
-  totalPrice?: string | number | null;
-}) {
-  if (appointment.depositPaid !== true) return 0;
-  const depositAmount = Number(appointment.depositAmount ?? 0);
-  if (Number.isFinite(depositAmount) && depositAmount > 0) return depositAmount;
-  const totalPrice = Number(appointment.totalPrice ?? 0);
-  return Number.isFinite(totalPrice) && totalPrice > 0 ? totalPrice : 0;
-}
 
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
@@ -1078,6 +1067,7 @@ invoicesRouter.post(
         depositAmount: string | null;
         depositPaid: boolean | null;
         totalPrice: string | null;
+        paidAt: Date | null;
         updatedAt: Date | null;
       }
     | undefined;
@@ -1107,6 +1097,7 @@ invoicesRouter.post(
         depositAmount: appointments.depositAmount,
         depositPaid: appointments.depositPaid,
         totalPrice: appointments.totalPrice,
+        paidAt: appointments.paidAt,
         updatedAt: appointments.updatedAt,
       })
       .from(appointments)
@@ -1121,6 +1112,7 @@ invoicesRouter.post(
       depositAmount: apt.depositAmount,
       depositPaid: apt.depositPaid,
       totalPrice: apt.totalPrice,
+      paidAt: apt.paidAt,
       updatedAt: apt.updatedAt,
     };
   }
@@ -1163,7 +1155,19 @@ invoicesRouter.post(
   const taxAmount = (subtotal * taxRate) / 100;
   const total = Math.max(0, subtotal + taxAmount - discountAmount);
   const appointmentPaymentCarryoverAmount = appointment
-    ? Math.min(total, getAppointmentInvoiceCarryoverAmount(appointment))
+    ? Math.min(
+        total,
+        (
+          await getAppointmentFinanceSummaryMap(bid, [
+            {
+              id: appointment.id,
+              totalPrice: appointment.totalPrice,
+              depositAmount: appointment.depositAmount,
+              paidAt: appointment.paidAt,
+            },
+          ])
+        ).get(appointment.id)?.collectedAmount ?? 0
+      )
     : 0;
   const items = lineItems.map((li) => {
     const lineTotal = li.quantity * li.unitPrice;

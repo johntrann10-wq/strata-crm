@@ -22,6 +22,7 @@ import { createAppointmentDepositCheckoutSession, retrieveCheckoutSession, retri
 import { renderAppointmentHtml } from "../lib/appointmentTemplate.js";
 import { scheduleGoogleCalendarAppointmentSync } from "../lib/googleCalendar.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
+import { calculateAppointmentFinanceSummary, getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
@@ -36,43 +37,6 @@ export function canDeleteAppointmentWithInvoiceStatuses(
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
   return req.businessId;
-}
-
-async function getAppointmentCollectedAmount(appointmentId: string, businessIdValue: string): Promise<number> {
-  const paymentRows = await db
-    .select({
-      action: activityLogs.action,
-      metadata: activityLogs.metadata,
-    })
-    .from(activityLogs)
-    .where(
-      and(
-        eq(activityLogs.businessId, businessIdValue),
-        eq(activityLogs.entityType, "appointment"),
-        eq(activityLogs.entityId, appointmentId),
-        or(
-          eq(activityLogs.action, "appointment.deposit_paid"),
-          eq(activityLogs.action, "appointment.deposit_payment_reversed")
-        )
-      )
-    )
-    .orderBy(asc(activityLogs.createdAt));
-
-  let total = 0;
-  for (const row of paymentRows) {
-    let amount = 0;
-    try {
-      const parsed = row.metadata ? (JSON.parse(row.metadata) as { amount?: number | string | null }) : null;
-      amount = Number(parsed?.amount ?? 0);
-    } catch {
-      amount = 0;
-    }
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-    if (row.action === "appointment.deposit_paid") total += amount;
-    if (row.action === "appointment.deposit_payment_reversed") total -= amount;
-  }
-
-  return Math.max(0, Number(total.toFixed(2)));
 }
 
 async function confirmAppointmentDepositCheckout(params: {
@@ -1101,6 +1065,7 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
       totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
       depositPaid: appointments.depositPaid,
+      paidAt: appointments.paidAt,
       notes: appointments.notes,
       internalNotes: appointments.internalNotes,
       cancelledAt: appointments.cancelledAt,
@@ -1125,7 +1090,19 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
     .orderBy(sortAsc ? asc(appointments.startTime) : desc(appointments.startTime))
     .limit(first);
 
-  const records = list.map((row) => ({
+  const financeMap = await getAppointmentFinanceSummaryMap(
+    bid,
+    list.map((row) => ({
+      id: row.id,
+      totalPrice: row.totalPrice,
+      depositAmount: row.depositAmount,
+      paidAt: null,
+    }))
+  );
+
+  const records = list.map((row) => {
+    const finance = financeMap.get(row.id);
+    return ({
     id: row.id,
     businessId: row.businessId,
     clientId: row.clientId,
@@ -1150,7 +1127,12 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
     applyAdminFee: row.applyAdminFee,
     totalPrice: row.totalPrice,
     depositAmount: row.depositAmount,
-    depositPaid: row.depositPaid,
+      depositPaid: row.depositPaid,
+      paidAt: row.paidAt,
+      collectedAmount: finance?.collectedAmount ?? 0,
+    balanceDue: finance?.balanceDue ?? Math.max(0, Number(row.totalPrice ?? 0)),
+    paidInFull: finance?.paidInFull ?? false,
+    depositSatisfied: finance?.depositSatisfied ?? false,
     notes: row.notes,
     internalNotes: row.internalNotes,
     cancelledAt: row.cancelledAt,
@@ -1177,7 +1159,7 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
         ? { id: row.assignedStaffId, firstName: row.staffFirstName, lastName: row.staffLastName }
         : null,
     location: row.locationName != null ? { name: row.locationName } : null,
-  }));
+  })});
   res.json({ records });
 });
 
@@ -1221,6 +1203,7 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
       totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
       depositPaid: appointments.depositPaid,
+      paidAt: appointments.paidAt,
       notes: appointments.notes,
       internalNotes: appointments.internalNotes,
       cancelledAt: appointments.cancelledAt,
@@ -1236,6 +1219,17 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
     .limit(1);
 
   if (!row) throw new NotFoundError("Appointment not found.");
+
+  const finance = (
+    await getAppointmentFinanceSummaryMap(bid, [
+      {
+        id: row.id,
+        totalPrice: row.totalPrice,
+        depositAmount: row.depositAmount,
+        paidAt: null,
+      },
+    ])
+  ).get(row.id);
 
   res.json({
     // Keep flat columns for existing clients
@@ -1263,6 +1257,11 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
     totalPrice: row.totalPrice,
     depositAmount: row.depositAmount,
     depositPaid: row.depositPaid,
+    paidAt: row.paidAt,
+    collectedAmount: finance?.collectedAmount ?? 0,
+    balanceDue: finance?.balanceDue ?? Math.max(0, Number(row.totalPrice ?? 0)),
+    paidInFull: finance?.paidInFull ?? false,
+    depositSatisfied: finance?.depositSatisfied ?? false,
     notes: row.notes,
     internalNotes: row.internalNotes,
     cancelledAt: row.cancelledAt,
@@ -1945,6 +1944,7 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
       depositAmount: appointments.depositAmount,
       depositPaid: appointments.depositPaid,
       totalPrice: appointments.totalPrice,
+      paidAt: appointments.paidAt,
       internalNotes: appointments.internalNotes,
       updatedAt: appointments.updatedAt,
     })
@@ -1962,7 +1962,17 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   const totalPrice = Number(existing.totalPrice ?? 0);
   const isInternalCalendarBlock = isCalendarBlockInternalNotes(existing.internalNotes);
   const isInternalAppointment = isInternalCalendarBlock || !existing.clientId;
-  const collectedAmount = await getAppointmentCollectedAmount(existing.id, bid);
+  const finance = (
+    await getAppointmentFinanceSummaryMap(bid, [
+      {
+        id: existing.id,
+        totalPrice: existing.totalPrice,
+        depositAmount: existing.depositAmount,
+        paidAt: existing.paidAt,
+      },
+    ])
+  ).get(existing.id);
+  const collectedAmount = finance?.collectedAmount ?? 0;
   const remainingBalance =
     Number.isFinite(totalPrice) && totalPrice > 0 ? Math.max(0, Number((totalPrice - collectedAmount).toFixed(2))) : 0;
   const nextCollectedAmount = Math.max(0, Number((collectedAmount + parsed.data.amount).toFixed(2)));
@@ -1995,8 +2005,12 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
     return;
   }
 
+  const requiredDepositAmount =
+    Number.isFinite(depositAmount) && depositAmount > 0
+      ? Math.min(Number.isFinite(totalPrice) && totalPrice > 0 ? totalPrice : depositAmount, depositAmount)
+      : 0;
   const updates: Record<string, unknown> = {
-    depositPaid: true,
+    depositPaid: requiredDepositAmount > 0 ? nextCollectedAmount >= requiredDepositAmount - 0.009 : false,
   };
   if (columns.has("updated_at")) updates.updatedAt = new Date();
   if (columns.has("paid_at")) updates.paidAt = willBePaidInFull ? (parsed.data.paidAt ? new Date(parsed.data.paidAt) : new Date()) : null;
@@ -2146,6 +2160,7 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
       depositAmount: appointments.depositAmount,
       depositPaid: appointments.depositPaid,
       totalPrice: appointments.totalPrice,
+      paidAt: appointments.paidAt,
     })
     .from(appointments)
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
@@ -2159,18 +2174,38 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
 
   const depositAmount = Number(existing.depositAmount ?? 0);
   const totalPrice = Number(existing.totalPrice ?? 0);
-  const collectedAmount = await getAppointmentCollectedAmount(existing.id, bid);
+  const finance = (
+    await getAppointmentFinanceSummaryMap(bid, [
+      {
+        id: existing.id,
+        totalPrice: existing.totalPrice,
+        depositAmount: existing.depositAmount,
+        paidAt: existing.paidAt,
+      },
+    ])
+  ).get(existing.id);
+  const directCollectedAmount = finance?.directCollectedAmount ?? 0;
+  const collectedAmount = finance?.collectedAmount ?? 0;
 
-  if (!existing.depositPaid || collectedAmount <= 0) {
+  if (directCollectedAmount <= 0) {
     res.json(existing);
     return;
   }
 
+  const postReverseSummary = calculateAppointmentFinanceSummary({
+    id: existing.id,
+    totalPrice: existing.totalPrice,
+    depositAmount: existing.depositAmount,
+    paidAt: null,
+    directCollectedAmount: 0,
+    invoiceCollectedAmount: finance?.invoiceCollectedAmount ?? 0,
+    invoiceCarryoverAmount: finance?.invoiceCarryoverAmount ?? 0,
+  });
   const updates: Record<string, unknown> = {
-    depositPaid: false,
+    depositPaid: postReverseSummary.depositSatisfied,
   };
   if (columns.has("updated_at")) updates.updatedAt = new Date();
-  if (columns.has("paid_at")) updates.paidAt = null;
+  if (columns.has("paid_at")) updates.paidAt = postReverseSummary.paidInFull ? new Date() : null;
 
   let updated;
   try {
@@ -2193,9 +2228,9 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
       amount: collectedAmount,
       source: "manual",
       paymentType:
-        Number.isFinite(totalPrice) && totalPrice > 0 && collectedAmount >= totalPrice - 0.009
+        Number.isFinite(totalPrice) && totalPrice > 0 && directCollectedAmount >= totalPrice - 0.009
           ? "full"
-          : Number.isFinite(depositAmount) && depositAmount > 0 && collectedAmount <= depositAmount + 0.009
+          : Number.isFinite(depositAmount) && depositAmount > 0 && directCollectedAmount <= depositAmount + 0.009
             ? "deposit"
             : "partial",
     },

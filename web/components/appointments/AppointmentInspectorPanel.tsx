@@ -39,6 +39,10 @@ export type AppointmentInspectorRecord = {
   paidAt?: string | null;
   invoiceStatus?: string | null;
   invoicePaidAt?: string | null;
+  collectedAmount?: number | null;
+  balanceDue?: number | null;
+  paidInFull?: boolean | null;
+  depositSatisfied?: boolean | null;
   assignedStaffId?: string | null;
   notes?: string | null;
   internalNotes?: string | null;
@@ -147,6 +151,8 @@ function getLifecycleLabel(appointment: AppointmentInspectorRecord): string {
 }
 
 function getCollectedAmount(appointment: AppointmentInspectorRecord): number {
+  const backendCollectedAmount = Number(appointment.collectedAmount ?? 0);
+  if (Number.isFinite(backendCollectedAmount) && backendCollectedAmount > 0) return backendCollectedAmount;
   const total = Number(appointment.totalPrice ?? 0);
   if (hasValidPaidAt(appointment.paidAt)) return total;
   if (appointment.invoiceStatus === "paid" || hasValidPaidAt(appointment.invoicePaidAt ?? null)) return total;
@@ -200,15 +206,24 @@ function getPaymentSummary(
   nextCollectionAmount: number;
   hasAnyPayment: boolean;
   isPaidInFull: boolean;
-} {
-  const totalAmount = Number(appointment.totalPrice ?? 0);
-  const depositAmount = Number(appointment.depositAmount ?? 0);
-  const paidInFull = hasValidPaidAt(appointment.paidAt) ||
-    appointment.invoiceStatus === "paid" ||
-    hasValidPaidAt(appointment.invoicePaidAt ?? null);
+  } {
+    const totalAmount = Number(appointment.totalPrice ?? 0);
+    const depositAmount = Number(appointment.depositAmount ?? 0);
+    const backendPaidInFull = appointment.paidInFull === true;
+    const backendBalanceDue = Number(appointment.balanceDue ?? Number.NaN);
+    const paidInFull =
+      backendPaidInFull ||
+      hasValidPaidAt(appointment.paidAt) ||
+      appointment.invoiceStatus === "paid" ||
+      hasValidPaidAt(appointment.invoicePaidAt ?? null);
   const activityCollectedAmount = getCollectedAmountFromActivity(appointment, activityLogs);
-  const collectedAmount = activityCollectedAmount ?? getCollectedAmount(appointment);
-  const balanceDue = totalAmount > 0 ? Math.max(0, Number((totalAmount - collectedAmount).toFixed(2))) : 0;
+  const collectedAmount = getCollectedAmount(appointment) || activityCollectedAmount || 0;
+  const balanceDue =
+    Number.isFinite(backendBalanceDue) && backendBalanceDue >= 0
+      ? backendBalanceDue
+      : totalAmount > 0
+        ? Math.max(0, Number((totalAmount - collectedAmount).toFixed(2)))
+        : 0;
   const hasAnyPayment = collectedAmount > 0.009 || paidInFull;
   const isPaidInFull =
     (totalAmount > 0 && balanceDue <= 0.009 && hasAnyPayment) ||
