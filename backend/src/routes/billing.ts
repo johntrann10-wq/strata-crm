@@ -595,9 +595,9 @@ export async function handleStripeWebhook(
                     )
                   ).get(appointment.id);
                   const updates: Record<string, unknown> = {
-                    depositPaid: nextFinance?.depositSatisfied === true,
                     updatedAt: new Date(),
                   };
+                  if (nextFinance?.depositSatisfied === true) updates.depositPaid = true;
                   const [updated] = await tx
                     .update(appointments)
                     .set(updates as Partial<typeof appointments.$inferInsert>)

@@ -164,7 +164,7 @@ async function confirmAppointmentDepositCheckout(params: {
   const [updated] = await db
     .update(appointments)
     .set({
-      depositPaid: nextFinance?.depositSatisfied === true,
+      ...(nextFinance?.depositSatisfied === true ? { depositPaid: true } : {}),
       updatedAt: new Date(),
     })
     .where(and(eq(appointments.id, params.appointmentId), eq(appointments.businessId, params.businessId)))
