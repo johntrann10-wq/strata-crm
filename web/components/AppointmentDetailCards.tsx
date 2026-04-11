@@ -242,6 +242,10 @@ interface FinancialSummaryCardProps {
   totalPrice?: number | null;
   depositAmount?: number | null;
   depositPaid?: boolean | null;
+  collectedAmount?: number | null;
+  balanceDue?: number | null;
+  paidInFull?: boolean | null;
+  depositSatisfied?: boolean | null;
   depositActionLabel?: string | null;
   onDepositAction?: (() => void) | null;
   depositActionDisabled?: boolean;
@@ -283,6 +287,10 @@ export function FinancialSummaryCard({
   totalPrice,
   depositAmount,
   depositPaid,
+  collectedAmount,
+  balanceDue,
+  paidInFull,
+  depositSatisfied,
   depositActionLabel,
   onDepositAction,
   depositActionDisabled = false,
@@ -299,6 +307,10 @@ export function FinancialSummaryCard({
     totalPrice,
     depositAmount,
     depositPaid,
+    collectedAmount,
+    balanceDue,
+    paidInFull,
+    depositSatisfied,
     labels: depositLabels,
   });
   const summaryRowLabel = paymentStateOverride?.rowLabel ?? depositLabels?.rowLabel ?? "Deposit";

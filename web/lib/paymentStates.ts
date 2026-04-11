@@ -12,6 +12,10 @@ export function getDepositSummary(params: {
   totalPrice?: number | string | null;
   depositAmount?: number | string | null;
   depositPaid?: boolean | null;
+  collectedAmount?: number | string | null;
+  balanceDue?: number | string | null;
+  paidInFull?: boolean | null;
+  depositSatisfied?: boolean | null;
   labels?: {
     noun?: string;
     collectedStateLabel?: string;
@@ -25,9 +29,22 @@ export function getDepositSummary(params: {
 }) {
   const totalPrice = toMoneyNumber(params.totalPrice);
   const depositAmount = toMoneyNumber(params.depositAmount);
+  const collectedAmount = Math.max(0, toMoneyNumber(params.collectedAmount));
+  const backendBalanceDue = Math.max(0, toMoneyNumber(params.balanceDue));
+  const paidInFull = params.paidInFull === true;
+  const depositSatisfied = params.depositSatisfied === true;
   const depositPaid = params.depositPaid === true;
   const hasDeposit = depositAmount > 0;
-  const remainingBalance = hasDeposit && depositPaid ? Math.max(0, totalPrice - depositAmount) : totalPrice;
+  const hasBackendFinance =
+    params.collectedAmount != null ||
+    params.balanceDue != null ||
+    params.paidInFull != null ||
+    params.depositSatisfied != null;
+  const remainingBalance = hasBackendFinance
+    ? backendBalanceDue
+    : hasDeposit && depositPaid
+      ? Math.max(0, totalPrice - depositAmount)
+      : totalPrice;
   const labels = params.labels ?? {};
   const noun = labels.noun ?? "deposit";
   const nounLabel = `${noun[0]?.toUpperCase() ?? "D"}${noun.slice(1)}`;
@@ -45,7 +62,7 @@ export function getDepositSummary(params: {
     };
   }
 
-  if (depositPaid) {
+  if ((hasBackendFinance && depositSatisfied) || (!hasBackendFinance && depositPaid)) {
     return {
       hasDeposit: true,
       depositAmount,
@@ -56,6 +73,16 @@ export function getDepositSummary(params: {
         (remainingBalance > 0
           ? `${formatCurrency(depositAmount)} collected. ${formatCurrency(remainingBalance)} remains for invoicing.`
           : `${formatCurrency(depositAmount)} collected and no balance remains.`),
+    };
+  }
+
+  if (hasBackendFinance && paidInFull) {
+    return {
+      hasDeposit,
+      depositAmount,
+      remainingBalance: 0,
+      stateLabel: "Paid in full",
+      detail: collectedAmount > 0 ? `${formatCurrency(collectedAmount)} has been collected for this appointment.` : "No balance remains on this appointment.",
     };
   }
 

@@ -2525,7 +2525,11 @@ export default function AppointmentDetail() {
                 applyAdminFee={appointment.applyAdminFee}
                 totalPrice={appointment.totalPrice}
                 depositAmount={appointment.depositAmount}
-                depositPaid={hasRecordedPayment}
+                depositPaid={Boolean((appointment as any).depositPaid)}
+                collectedAmount={normalizedCollectedAmount}
+                balanceDue={remainingBalanceValue}
+                paidInFull={showsPaidStatusInsteadOfDeposit}
+                depositSatisfied={hasBackendDepositState ? backendDepositSatisfied : depositAmountValue > 0 && hasRecordedPayment}
                 paymentStateOverride={
                   showsPaidStatusInsteadOfDeposit
                     ? {
