@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ResponsiveTimeSelect, buildQuarterHourOptions, toDateInputValue } from "@/components/appointments/SchedulingControls";
 import { cn } from "@/lib/utils";
 import { getJobPhaseLabel, getOperationalDayLabel, getOperationalTimelineLabel, isMultiDayJob } from "@/lib/calendarJobSpans";
+import { hasBackendFinanceField, resolveAppointmentFinanceState } from "@/lib/appointmentFinanceState";
 
 export type AppointmentInspectorRecord = {
   id: string;
@@ -57,10 +58,6 @@ type AppointmentPaymentActivity = {
   metadata?: string | null;
 };
 
-function getPaymentActivityType(entry: AppointmentPaymentActivity): string {
-  return String(entry.type ?? entry.action ?? "");
-}
-
 const LIFECYCLE_STATUS_LABELS: Record<string, string> = {
   scheduled: "Scheduled",
   confirmed: "Confirmed",
@@ -93,19 +90,6 @@ function toMoneyNumber(value: number | string | null | undefined): number {
   if (value == null || value === "") return 0;
   const normalized = typeof value === "string" ? Number(value) : value;
   return Number.isFinite(normalized) ? normalized : 0;
-}
-
-function hasValidPaidAt(value: string | null | undefined): boolean {
-  if (!value) return false;
-  const parsed = new Date(value);
-  return !Number.isNaN(parsed.getTime());
-}
-
-function hasBackendFinanceField(
-  appointment: AppointmentInspectorRecord,
-  field: "collectedAmount" | "balanceDue" | "paidInFull" | "depositSatisfied"
-): boolean {
-  return Object.prototype.hasOwnProperty.call(appointment, field) && appointment[field] != null;
 }
 
 function toTimeInputValue(date: Date | string | null | undefined): string {
@@ -156,49 +140,6 @@ function getLifecycleLabel(appointment: AppointmentInspectorRecord): string {
   return LIFECYCLE_STATUS_LABELS[String(appointment.status ?? "")] ?? "Scheduled";
 }
 
-function getCollectedAmount(appointment: AppointmentInspectorRecord): number {
-  const backendCollectedAmount = Number(appointment.collectedAmount ?? 0);
-  if (hasBackendFinanceField(appointment, "collectedAmount")) {
-    return Number.isFinite(backendCollectedAmount) ? Math.max(0, Number(backendCollectedAmount.toFixed(2))) : 0;
-  }
-  const total = Number(appointment.totalPrice ?? 0);
-  if (hasValidPaidAt(appointment.paidAt)) return total;
-  if (appointment.invoiceStatus === "paid" || hasValidPaidAt(appointment.invoicePaidAt ?? null)) return total;
-  return 0;
-}
-
-function getCollectedAmountFromActivity(
-  appointment: AppointmentInspectorRecord,
-  activityLogs: AppointmentPaymentActivity[]
-): number | null {
-  const relevantLogs = activityLogs.filter(
-    (entry) => {
-      const activityType = getPaymentActivityType(entry);
-      return activityType === "appointment.deposit_paid" || activityType === "appointment.deposit_payment_reversed";
-    }
-  );
-  if (relevantLogs.length === 0) return null;
-
-  let total = 0;
-  for (const entry of relevantLogs) {
-    let amount = 0;
-    try {
-      const parsed = entry.metadata ? (JSON.parse(entry.metadata) as { amount?: number | string | null }) : null;
-      amount = Number(parsed?.amount ?? 0);
-    } catch {
-      amount = 0;
-    }
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-    const activityType = getPaymentActivityType(entry);
-    if (activityType === "appointment.deposit_paid") total += amount;
-    if (activityType === "appointment.deposit_payment_reversed") total -= amount;
-  }
-
-  const totalPrice = Number(appointment.totalPrice ?? 0);
-  const clamped = Math.max(0, total);
-  return totalPrice > 0 ? Math.min(totalPrice, clamped) : clamped;
-}
-
 function getPaymentSummary(
   appointment: AppointmentInspectorRecord,
   activityLogs: AppointmentPaymentActivity[]
@@ -210,50 +151,23 @@ function getPaymentSummary(
   hasAnyPayment: boolean;
   isPaidInFull: boolean;
   } {
-    const totalAmount = Number(appointment.totalPrice ?? 0);
-    const depositAmount = Number(appointment.depositAmount ?? 0);
-    const hasBackendCollectedAmount = hasBackendFinanceField(appointment, "collectedAmount");
-    const hasBackendBalanceDue = hasBackendFinanceField(appointment, "balanceDue");
-    const hasBackendPaidInFull = hasBackendFinanceField(appointment, "paidInFull");
-    const hasBackendDepositSatisfied = hasBackendFinanceField(appointment, "depositSatisfied");
-    const backendPaidInFull = appointment.paidInFull === true;
-    const backendBalanceDue = Number(appointment.balanceDue ?? Number.NaN);
-    const paidInFull =
-      hasBackendPaidInFull
-        ? backendPaidInFull
-        : backendPaidInFull ||
-          hasValidPaidAt(appointment.paidAt) ||
-          appointment.invoiceStatus === "paid" ||
-          hasValidPaidAt(appointment.invoicePaidAt ?? null);
-  const activityCollectedAmount = hasBackendCollectedAmount ? null : getCollectedAmountFromActivity(appointment, activityLogs);
-  const collectedAmount = hasBackendCollectedAmount ? getCollectedAmount(appointment) : getCollectedAmount(appointment) || activityCollectedAmount || 0;
-  const balanceDue =
-    hasBackendBalanceDue && Number.isFinite(backendBalanceDue) && backendBalanceDue >= 0
-      ? backendBalanceDue
-      : totalAmount > 0
-        ? Math.max(0, Number((totalAmount - collectedAmount).toFixed(2)))
-        : 0;
-  const hasAnyPayment = collectedAmount > 0.009 || paidInFull;
-  const isPaidInFull =
-    (totalAmount > 0 && balanceDue <= 0.009 && hasAnyPayment) ||
-    paidInFull;
-  const nextCollectionAmount =
-    totalAmount > 0
-      ? hasAnyPayment
-        ? balanceDue
-        : depositAmount > 0
-          ? Math.min(totalAmount, depositAmount)
-          : totalAmount
-      : depositAmount > 0 && !hasAnyPayment
-        ? depositAmount
-        : 0;
+  const {
+    depositAmount,
+    collectedAmount,
+    balanceDue,
+    hasAnyPayment,
+    isPaidInFull,
+    nextCollectionAmount,
+    hasBackendDepositSatisfied,
+    depositSatisfied,
+  } = resolveAppointmentFinanceState(appointment, activityLogs);
 
   let moneyStateLabel = "No deposit set";
   if (isPaidInFull) moneyStateLabel = "Paid in full";
   else if (
     hasAnyPayment &&
     balanceDue > 0.009 &&
-    ((hasBackendDepositSatisfied && appointment.depositSatisfied === true) || (!hasBackendDepositSatisfied && depositAmount > 0))
+    ((hasBackendDepositSatisfied && depositSatisfied) || (!hasBackendDepositSatisfied && depositAmount > 0))
   ) {
     moneyStateLabel = "Deposit collected";
   }

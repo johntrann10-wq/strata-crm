@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
+import { hasBackendFinanceField, resolveAppointmentFinanceState } from "@/lib/appointmentFinanceState";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
 import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/RelatedRecordsPanel";
@@ -169,17 +170,6 @@ function safeDate(value: string | Date | null | undefined): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function hasValidPaidAt(value: string | Date | null | undefined): boolean {
-  return safeDate(value) !== null;
-}
-
-function hasBackendFinanceField(
-  appointment: Record<string, unknown>,
-  field: "collectedAmount" | "balanceDue" | "paidInFull" | "depositSatisfied"
-): boolean {
-  return Object.prototype.hasOwnProperty.call(appointment, field) && appointment[field] != null;
 }
 
 function formatFreshness(value: string | Date | null | undefined, label: string): string | null {
@@ -1134,70 +1124,23 @@ export default function AppointmentDetail() {
     const missingLinkedRecords = !appointment.client || !appointment.vehicle;
     const depositAmountValue = Number(appointment.depositAmount ?? 0);
     const totalPriceValue = Number(appointment.totalPrice ?? 0);
-    const invoiceStatus = String((invoice as any)?.status ?? "");
-    const invoicePaidAt = (invoice as any)?.lastPaidAt ?? null;
-    const backendCollectedAmount = Number((appointment as any).collectedAmount ?? 0);
-    const backendBalanceDue = Number((appointment as any).balanceDue ?? Number.NaN);
-    const backendPaidInFull = (appointment as any).paidInFull === true;
-    const backendDepositSatisfied = (appointment as any).depositSatisfied === true;
-    const hasBackendCollectedAmount = hasBackendFinanceField(appointment as Record<string, unknown>, "collectedAmount");
-    const hasBackendBalanceDue = hasBackendFinanceField(appointment as Record<string, unknown>, "balanceDue");
-    const hasBackendPaidState = hasBackendFinanceField(appointment as Record<string, unknown>, "paidInFull");
-    const hasBackendDepositState = hasBackendFinanceField(appointment as Record<string, unknown>, "depositSatisfied");
-    const paidInFull =
-      hasBackendPaidState
-        ? backendPaidInFull
-        : backendPaidInFull ||
-          hasValidPaidAt((appointment as any).paidAt ?? null) ||
-          invoiceStatus === "paid" ||
-          hasValidPaidAt(invoicePaidAt);
-    const collectedAmountFromActivity = hasBackendCollectedAmount
-      ? 0
-      : (((activityLogs ?? []) as Array<{ type?: string | null; action?: string | null; metadata?: string | null }>).reduce(
-          (sum, record) => {
-            const activityType = String(record.type ?? record.action ?? "");
-            if (activityType !== "appointment.deposit_paid" && activityType !== "appointment.deposit_payment_reversed") return sum;
-            let amount = 0;
-            try {
-              const parsed = record.metadata ? (JSON.parse(record.metadata) as { amount?: number | string | null }) : null;
-              amount = Number(parsed?.amount ?? 0);
-            } catch {
-              amount = 0;
-            }
-            if (!Number.isFinite(amount) || amount <= 0) return sum;
-            return activityType === "appointment.deposit_paid" ? sum + amount : sum - amount;
-          },
-          0
-        ) as number);
-    const fallbackCollectedAmount = paidInFull ? Math.max(0, totalPriceValue) : 0;
-    const normalizedCollectedAmount =
-      hasBackendCollectedAmount && Number.isFinite(backendCollectedAmount)
-        ? Math.max(0, Number(backendCollectedAmount.toFixed(2)))
-        : paidInFull
-          ? Math.max(0, totalPriceValue)
-          : Math.max(0, Number((collectedAmountFromActivity > 0 ? collectedAmountFromActivity : fallbackCollectedAmount).toFixed(2)));
-  const hasRecordedPayment = normalizedCollectedAmount > 0.009 || paidInFull;
-  const remainingBalanceValue =
-    hasBackendBalanceDue && Number.isFinite(backendBalanceDue) && backendBalanceDue >= 0
-      ? Math.max(0, Number(backendBalanceDue.toFixed(2)))
-      : totalPriceValue > 0
-        ? Math.max(0, Number((totalPriceValue - normalizedCollectedAmount).toFixed(2)))
-        : 0;
-  const nextPaymentAmount =
-    totalPriceValue > 0
-      ? hasRecordedPayment
-        ? remainingBalanceValue
-        : depositAmountValue > 0
-          ? Math.min(totalPriceValue, depositAmountValue)
-          : totalPriceValue
-      : depositAmountValue > 0 && !hasRecordedPayment
-        ? depositAmountValue
-        : 0;
+    const financeState = resolveAppointmentFinanceState(
+      {
+        ...(appointment as Record<string, unknown>),
+        invoiceStatus: String((invoice as any)?.status ?? ""),
+        invoicePaidAt: (invoice as any)?.lastPaidAt ?? null,
+      },
+      ((activityLogs ?? []) as Array<{ type?: string | null; action?: string | null; metadata?: string | null }>)
+    );
+    const normalizedCollectedAmount = financeState.collectedAmount;
+  const hasRecordedPayment = financeState.hasAnyPayment;
+  const remainingBalanceValue = financeState.balanceDue;
+  const nextPaymentAmount = financeState.nextCollectionAmount;
   const showsDepositCollectedState =
     hasRecordedPayment &&
     remainingBalanceValue > 0.009 &&
-    (hasBackendDepositState ? backendDepositSatisfied : depositAmountValue > 0);
-  const showsPaidStatusInsteadOfDeposit = totalPriceValue > 0 ? hasRecordedPayment && remainingBalanceValue <= 0.009 : paidInFull;
+    financeState.depositSatisfied;
+  const showsPaidStatusInsteadOfDeposit = totalPriceValue > 0 ? financeState.isPaidInFull : financeState.paidInFull;
   const showsCollectPaymentLabel = !isInternalAppointment && hasRecordedPayment;
   const canEditDeposit =
     !showsPaidStatusInsteadOfDeposit &&
@@ -2527,7 +2470,7 @@ export default function AppointmentDetail() {
                 collectedAmount={normalizedCollectedAmount}
                 balanceDue={remainingBalanceValue}
                 paidInFull={showsPaidStatusInsteadOfDeposit}
-                depositSatisfied={hasBackendDepositState ? backendDepositSatisfied : depositAmountValue > 0 && hasRecordedPayment}
+                depositSatisfied={financeState.depositSatisfied}
                 paymentStateOverride={
                   showsPaidStatusInsteadOfDeposit
                     ? {
