@@ -902,11 +902,13 @@ export default function NewAppointmentPage() {
             }))
           : undefined;
       const effectiveInternalPaid = !selectedClientId && markInternalAsPaid && totalPrice > 0;
+      const parsedDepositAmount = depositAmount.trim() !== "" ? Number(depositAmount) : NaN;
       const effectiveDepositAmount = effectiveInternalPaid
         ? totalPrice
-        : depositAmount
-          ? Number(depositAmount)
+        : Number.isFinite(parsedDepositAmount) && parsedDepositAmount > 0
+          ? parsedDepositAmount
           : undefined;
+      const effectiveDepositPaid = effectiveInternalPaid ? true : undefined;
       const result = await createAppointment({
         clientId: selectedClientId ?? undefined,
         vehicleId: selectedVehicleId ?? undefined,
@@ -921,7 +923,7 @@ export default function NewAppointmentPage() {
         assignedStaffId: selectedStaffId ?? undefined,
         locationId: selectedLocationId ?? undefined,
         depositAmount: effectiveDepositAmount,
-        depositPaid: effectiveInternalPaid ? true : undefined,
+        depositPaid: effectiveDepositPaid,
         taxRate: parseFloat(taxRate) || 0,
         applyTax,
         adminFeeRate: parseFloat(adminFeeRate) || 0,
