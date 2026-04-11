@@ -2058,7 +2058,7 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
     },
   });
 
-  res.json(updated ?? { ...existing, depositPaid: true });
+  res.json(updated ?? { ...existing, depositPaid: updates.depositPaid === true });
 }));
 
 appointmentsRouter.post("/:id/create-deposit-payment-session", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
@@ -2090,7 +2090,7 @@ appointmentsRouter.post("/:id/create-deposit-payment-session", requireAuth, requ
   if (!Number.isFinite(depositAmount) || depositAmount <= 0) {
     throw new BadRequestError("This appointment does not have a deposit to collect.");
   }
-  if (finance?.depositSatisfied === true || appointment.depositPaid) {
+  if (finance?.depositSatisfied === true) {
     throw new BadRequestError("This appointment deposit has already been collected.");
   }
 
@@ -2163,7 +2163,7 @@ appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requ
     ])
   ).get(appointment.id);
 
-  if (finance?.depositSatisfied === true || appointment.depositPaid) {
+  if (finance?.depositSatisfied === true) {
     res.json({ confirmed: true, depositPaid: true });
     return;
   }
@@ -2181,7 +2181,21 @@ appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requ
     connectedAccountId: business?.stripeConnectAccountId ?? null,
   });
 
-  res.json({ confirmed, depositPaid: confirmed });
+  const postConfirmFinance = (
+    await getAppointmentFinanceSummaryMap(bid, [
+      {
+        id: appointment.id,
+        totalPrice: null,
+        depositAmount: appointment.depositAmount,
+        paidAt: null,
+      },
+    ])
+  ).get(appointment.id);
+
+  res.json({
+    confirmed,
+    depositPaid: confirmed || postConfirmFinance?.depositSatisfied === true,
+  });
 }));
 
 appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
@@ -2439,7 +2453,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
     ).get(appointment.id);
 
   let finance = await readFinance();
-  let depositPaid = finance?.depositSatisfied === true || !!appointment.depositPaid;
+  let depositPaid = finance?.depositSatisfied === true;
   const stripePaymentQuery = typeof req.query.stripePayment === "string" ? req.query.stripePayment : null;
   const checkoutSessionId = typeof req.query.session_id === "string" ? req.query.session_id.trim() : "";
   if (
@@ -2581,7 +2595,7 @@ appointmentsRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Re
   if (!Number.isFinite(depositAmount) || depositAmount <= 0) {
     throw new BadRequestError("This appointment does not have a deposit to collect.");
   }
-  if (finance?.depositSatisfied === true || appointment.depositPaid) {
+  if (finance?.depositSatisfied === true) {
     throw new BadRequestError("This appointment deposit has already been collected.");
   }
 

@@ -62,11 +62,9 @@ export async function getActiveInvoicePaymentTotal(invoiceId: string, tx: DbExec
 }
 
 /**
- * Sync appointment payment state after an invoice is fully or partially paid.
- * - Sets depositPaid = true on the linked appointment whenever any payment is recorded.
- * - Sets paidAt on the appointment when the invoice is fully paid (status = "paid").
- * - Clears paidAt when the invoice is reversed back to partial/sent.
- * This ensures the appointment inspector always reflects the true payment state.
+ * Sync appointment payment state after invoice payment changes.
+ * `depositPaid` remains a compatibility field only and should mirror whether the
+ * required deposit has actually been satisfied according to the computed finance summary.
  */
 async function syncAppointmentPaymentState(
   invoiceId: string,
@@ -118,20 +116,6 @@ async function syncAppointmentPaymentState(
     depositPaid: finance?.depositSatisfied === true,
     paidAt: finance?.paidInFull ? paidAt ?? new Date() : null,
   };
-
-  if (newInvoiceStatus === "__legacy_disabled__") {
-    // Invoice fully paid — mark appointment paid too
-    appointmentUpdates.depositPaid = true;
-    appointmentUpdates.paidAt = paidAt ?? new Date();
-  } else if (newInvoiceStatus === "partial") {
-    // Partial payment — deposit is considered collected, but not fully paid
-    appointmentUpdates.depositPaid = true;
-    appointmentUpdates.paidAt = null;
-  } else {
-    // Reversed/voided — clear payment state
-    appointmentUpdates.depositPaid = false;
-    appointmentUpdates.paidAt = null;
-  }
 
   try {
     await tx
