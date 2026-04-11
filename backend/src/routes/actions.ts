@@ -39,6 +39,7 @@ import { runGoogleCalendarIntegrationJob } from "../lib/googleCalendar.js";
 import { runTwilioIntegrationJob } from "../lib/twilio.js";
 import { runOutboundWebhookIntegrationJob } from "../lib/integrations.js";
 import { parseLeadRecord } from "../lib/leads.js";
+import { getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 
 export const actionsRouter = Router({ mergeParams: true });
 
@@ -279,27 +280,32 @@ function businessId(req: Request): string {
   return req.businessId;
 }
 
-function getStandaloneAppointmentCollectedAmountSql() {
-  return sql`greatest(
-    case
-      when ${appointments.depositPaid} = true
-        and coalesce(${appointments.depositAmount}, '0')::numeric > 0
-        then least(
-          coalesce(${appointments.depositAmount}, '0')::numeric,
-          coalesce(${appointments.totalPrice}, '0')::numeric
-        )
-      else 0
-    end,
-    0
-  )`;
-}
-
-function getStandaloneAppointmentAwaitingAmountSql() {
-  const collectedAmount = getStandaloneAppointmentCollectedAmountSql();
-  return sql`greatest(
-    coalesce(${appointments.totalPrice}, '0')::numeric - ${collectedAmount},
-    0
-  )`;
+async function listStandaloneAppointmentsForFinance(
+  bid: string,
+  extraWhere?: ReturnType<typeof and>
+) {
+  return db
+    .select({
+      id: appointments.id,
+      totalPrice: appointments.totalPrice,
+      depositAmount: appointments.depositAmount,
+      updatedAt: appointments.updatedAt,
+    })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.businessId, bid),
+        sql`${appointments.status} not in ('cancelled', 'no-show')`,
+        sql`not exists (
+          select 1
+          from ${invoices}
+          where ${invoices.businessId} = ${bid}
+            and ${invoices.appointmentId} = ${appointments.id}
+            and ${invoices.status} != 'void'
+        )`,
+        extraWhere
+      )
+    );
 }
 
 export function getCronExecutionGate(providedSecret: string | undefined) {
@@ -411,49 +417,43 @@ async function getStandaloneAppointmentRevenueTotal(
   start: Date,
   end: Date
 ) {
-  const collectedAmount = getStandaloneAppointmentCollectedAmountSql();
-  const [row] = await db
-    .select({ total: sql<string>`coalesce(sum(${collectedAmount}), 0)` })
-    .from(appointments)
-    .where(
-      and(
-        eq(appointments.businessId, bid),
-        sql`${appointments.status} not in ('cancelled', 'no-show')`,
-        sql`${collectedAmount} > 0`,
-        sql`${appointments.startTime} <= ${end}`,
-        sql`coalesce(${appointments.endTime}, ${appointments.startTime}) >= ${start}`,
-        sql`not exists (
-          select 1
-          from ${invoices}
-          where ${invoices.businessId} = ${bid}
-            and ${invoices.appointmentId} = ${appointments.id}
-            and ${invoices.status} != 'void'
-        )`
-      )
-    );
-  return Number(row?.total ?? 0);
+  const standaloneAppointments = await listStandaloneAppointmentsForFinance(
+    bid,
+    and(
+      sql`${appointments.startTime} <= ${end}`,
+      sql`coalesce(${appointments.endTime}, ${appointments.startTime}) >= ${start}`
+    )
+  );
+  const financeByAppointment = await getAppointmentFinanceSummaryMap(
+    bid,
+    standaloneAppointments.map((appointment) => ({
+      id: appointment.id,
+      totalPrice: appointment.totalPrice,
+      depositAmount: appointment.depositAmount,
+      paidAt: null,
+    }))
+  );
+  return standaloneAppointments.reduce((sum, appointment) => {
+    const collectedAmount = financeByAppointment.get(appointment.id)?.collectedAmount ?? 0;
+    return sum + collectedAmount;
+  }, 0);
 }
 
 async function getStandaloneAppointmentAwaitingCollectionTotal(bid: string) {
-  const awaitingAmount = getStandaloneAppointmentAwaitingAmountSql();
-  const [row] = await db
-    .select({ total: sql<string>`coalesce(sum(${awaitingAmount}), 0)` })
-    .from(appointments)
-    .where(
-      and(
-        eq(appointments.businessId, bid),
-        sql`${appointments.status} not in ('cancelled', 'no-show')`,
-        sql`${awaitingAmount} > 0`,
-        sql`not exists (
-          select 1
-          from ${invoices}
-          where ${invoices.businessId} = ${bid}
-            and ${invoices.appointmentId} = ${appointments.id}
-            and ${invoices.status} != 'void'
-        )`
-      )
-    );
-  return Number(row?.total ?? 0);
+  const standaloneAppointments = await listStandaloneAppointmentsForFinance(bid);
+  const financeByAppointment = await getAppointmentFinanceSummaryMap(
+    bid,
+    standaloneAppointments.map((appointment) => ({
+      id: appointment.id,
+      totalPrice: appointment.totalPrice,
+      depositAmount: appointment.depositAmount,
+      paidAt: null,
+    }))
+  );
+  return standaloneAppointments.reduce((sum, appointment) => {
+    const balanceDue = financeByAppointment.get(appointment.id)?.balanceDue ?? Math.max(0, Number(appointment.totalPrice ?? 0));
+    return sum + balanceDue;
+  }, 0);
 }
 
 function startOfDay(date: Date) {
@@ -568,27 +568,23 @@ async function getStandaloneAppointmentCollectedRevenueByUpdatedAt(
   start: Date,
   end: Date
 ) {
-  const collectedAmount = getStandaloneAppointmentCollectedAmountSql();
-  const [row] = await db
-    .select({ total: sql<string>`coalesce(sum(${collectedAmount}), 0)` })
-    .from(appointments)
-    .where(
-      and(
-        eq(appointments.businessId, bid),
-        sql`${appointments.status} not in ('cancelled', 'no-show')`,
-        sql`${collectedAmount} > 0`,
-        gte(appointments.updatedAt, start),
-        lte(appointments.updatedAt, end),
-        sql`not exists (
-          select 1
-          from ${invoices}
-          where ${invoices.businessId} = ${bid}
-            and ${invoices.appointmentId} = ${appointments.id}
-            and ${invoices.status} != 'void'
-        )`
-      )
-    );
-  return Number(row?.total ?? 0);
+  const standaloneAppointments = await listStandaloneAppointmentsForFinance(
+    bid,
+    and(gte(appointments.updatedAt, start), lte(appointments.updatedAt, end))
+  );
+  const financeByAppointment = await getAppointmentFinanceSummaryMap(
+    bid,
+    standaloneAppointments.map((appointment) => ({
+      id: appointment.id,
+      totalPrice: appointment.totalPrice,
+      depositAmount: appointment.depositAmount,
+      paidAt: null,
+    }))
+  );
+  return standaloneAppointments.reduce((sum, appointment) => {
+    const collectedAmount = financeByAppointment.get(appointment.id)?.collectedAmount ?? 0;
+    return sum + collectedAmount;
+  }, 0);
 }
 
 async function getIssuedInvoiceRevenueByCreatedAt(
