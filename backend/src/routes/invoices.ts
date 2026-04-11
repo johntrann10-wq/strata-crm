@@ -1067,7 +1067,6 @@ invoicesRouter.post(
         depositAmount: string | null;
         depositPaid: boolean | null;
         totalPrice: string | null;
-        paidAt: Date | null;
         updatedAt: Date | null;
       }
     | undefined;
@@ -1097,7 +1096,6 @@ invoicesRouter.post(
         depositAmount: appointments.depositAmount,
         depositPaid: appointments.depositPaid,
         totalPrice: appointments.totalPrice,
-        paidAt: appointments.paidAt,
         updatedAt: appointments.updatedAt,
       })
       .from(appointments)
@@ -1112,7 +1110,6 @@ invoicesRouter.post(
       depositAmount: apt.depositAmount,
       depositPaid: apt.depositPaid,
       totalPrice: apt.totalPrice,
-      paidAt: apt.paidAt,
       updatedAt: apt.updatedAt,
     };
   }
@@ -1163,7 +1160,7 @@ invoicesRouter.post(
               id: appointment.id,
               totalPrice: appointment.totalPrice,
               depositAmount: appointment.depositAmount,
-              paidAt: appointment.paidAt,
+              paidAt: null,
             },
           ])
         ).get(appointment.id)?.collectedAmount ?? 0
