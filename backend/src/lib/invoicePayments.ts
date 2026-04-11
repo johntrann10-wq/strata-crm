@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { invoices, payments, appointments } from "../db/schema.js";
+import { getAppointmentFinanceSummaryMap } from "./appointmentFinance.js";
 import { BadRequestError, NotFoundError } from "./errors.js";
 import { logger } from "./logger.js";
 
@@ -75,18 +76,50 @@ async function syncAppointmentPaymentState(
 ): Promise<void> {
   // Find invoice with its linked appointment
   const [inv] = await tx
-    .select({ appointmentId: invoices.appointmentId })
+    .select({
+      appointmentId: invoices.appointmentId,
+      businessId: invoices.businessId,
+    })
     .from(invoices)
     .where(eq(invoices.id, invoiceId))
     .limit(1);
 
   if (!inv?.appointmentId) return;
 
+  const [appointment] = await tx
+    .select({
+      id: appointments.id,
+      totalPrice: appointments.totalPrice,
+      depositAmount: appointments.depositAmount,
+    })
+    .from(appointments)
+    .where(eq(appointments.id, inv.appointmentId))
+    .limit(1);
+
+  if (!appointment) return;
+
+  const finance = (
+    await getAppointmentFinanceSummaryMap(
+      inv.businessId,
+      [
+        {
+          id: appointment.id,
+          totalPrice: appointment.totalPrice,
+          depositAmount: appointment.depositAmount,
+          paidAt: null,
+        },
+      ],
+      tx
+    )
+  ).get(appointment.id);
+
   const appointmentUpdates: Record<string, unknown> = {
     updatedAt: new Date(),
+    depositPaid: finance?.depositSatisfied === true,
+    paidAt: finance?.paidInFull ? paidAt ?? new Date() : null,
   };
 
-  if (newInvoiceStatus === "paid") {
+  if (newInvoiceStatus === "__legacy_disabled__") {
     // Invoice fully paid — mark appointment paid too
     appointmentUpdates.depositPaid = true;
     appointmentUpdates.paidAt = paidAt ?? new Date();
