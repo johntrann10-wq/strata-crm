@@ -1583,7 +1583,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
           assignedStaffId: parsed.data.assignedStaffId ?? null,
           locationId: parsed.data.locationId ?? null,
           depositAmount: parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0",
-          depositPaid: initialDepositSatisfied,
+          ...(initialDepositSatisfied ? { depositPaid: true } : {}),
           subtotal: String(baseFinance.subtotal),
           taxRate: String(baseFinance.taxRate),
           taxAmount: String(baseFinance.taxAmount),
@@ -1618,7 +1618,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
       if (columns.has("assigned_staff_id")) fallbackValues.assignedStaffId = parsed.data.assignedStaffId ?? null;
       if (columns.has("location_id")) fallbackValues.locationId = parsed.data.locationId ?? null;
       if (columns.has("deposit_amount")) fallbackValues.depositAmount = parsed.data.depositAmount != null ? String(parsed.data.depositAmount) : "0";
-      if (columns.has("deposit_paid")) fallbackValues.depositPaid = initialDepositSatisfied;
+      if (columns.has("deposit_paid") && initialDepositSatisfied) fallbackValues.depositPaid = true;
       if (columns.has("subtotal")) fallbackValues.subtotal = String(baseFinance.subtotal);
       if (columns.has("tax_rate")) fallbackValues.taxRate = String(baseFinance.taxRate);
       if (columns.has("tax_amount")) fallbackValues.taxAmount = String(baseFinance.taxAmount);
