@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PermissionKey } from "./permissions.js";
 import {
   applyActionQueuePriority,
+  buildActionQueue,
   buildBookingsOverview,
   buildMonthlyRevenueChart,
   buildWeeklyAppointmentOverview,
@@ -426,6 +427,67 @@ describe("home dashboard domain logic", () => {
         depositsDue: "/calendar?view=week&date=2026-04-06",
       },
     });
+  });
+
+  it("excludes internal completed jobs from the missing invoice queue", () => {
+    const items = buildActionQueue({
+      context: {
+        now: new Date("2026-04-10T18:00:00.000Z"),
+        permissions: {
+          today: true,
+          cash: true,
+          conversion: true,
+          todaySchedule: true,
+          actionQueue: true,
+          pipeline: true,
+          revenueCollections: true,
+          recentActivity: true,
+          automations: true,
+          businessHealth: true,
+          goals: true,
+          teamVisibility: true,
+          clientVisibility: true,
+          vehicleVisibility: true,
+          quoteVisibility: true,
+          invoiceVisibility: true,
+          paymentVisibility: true,
+          settingsVisibility: true,
+        },
+        uncontactedCutoff: new Date("2026-04-10T17:45:00.000Z"),
+        quoteFollowUpCutoff: new Date("2026-04-09T18:00:00.000Z"),
+      },
+      leadRows: [],
+      quoteRows: [],
+      upcomingDepositRows: [],
+      upcomingDepositFinance: new Map(),
+      overdueInvoices: [],
+      completedMissingInvoiceRows: [
+        {
+          id: "internal-job",
+          title: "Internal cleanup",
+          completedAt: new Date("2026-04-10T15:00:00.000Z"),
+          totalPrice: "1940",
+          clientId: null,
+          clientFirstName: null,
+          clientLastName: null,
+        },
+        {
+          id: "customer-job",
+          title: "Detail",
+          completedAt: new Date("2026-04-10T16:00:00.000Z"),
+          totalPrice: "450",
+          clientId: "client-1",
+          clientFirstName: "Alex",
+          clientLastName: "Driver",
+        },
+      ],
+      reviewRequestReadyRows: [],
+      reactivationRows: [],
+      systemIssueCounts: { notificationFailures: 0, integrationFailures: 0 },
+    });
+
+    expect(items.filter((item) => item.type === "completed_missing_invoice")).toHaveLength(1);
+    expect(items.find((item) => item.type === "completed_missing_invoice")?.id).toBe("completed:customer-job");
   });
 
   it("computes transparent health scores from only the permitted factors", () => {

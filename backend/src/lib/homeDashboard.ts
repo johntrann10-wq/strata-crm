@@ -2465,6 +2465,7 @@ async function loadCompletedAppointmentsMissingInvoice(
       title: appointments.title,
       completedAt: appointments.completedAt,
       totalPrice: appointments.totalPrice,
+      clientId: appointments.clientId,
       assignedStaffId: appointments.assignedStaffId,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
@@ -2475,6 +2476,7 @@ async function loadCompletedAppointmentsMissingInvoice(
       and(
         eq(appointments.businessId, businessId),
         eq(appointments.status, "completed"),
+        sql`${appointments.clientId} is not null`,
         teamMemberId ? eq(appointments.assignedStaffId, teamMemberId) : undefined,
         sql`not exists (
           select 1
@@ -2849,14 +2851,14 @@ async function loadDirectAppointmentPaymentRowsInRange(
     .orderBy(asc(activityLogs.createdAt));
 }
 
-function buildActionQueue(params: {
+export function buildActionQueue(params: {
   context: ActionQueueContext;
   leadRows: LeadRow[];
   quoteRows: Array<{ id: string; clientId: string | null; status: string; total: MoneyLike; sentAt: Date | null; followUpSentAt: Date | null; clientFirstName: string | null; clientLastName: string | null }>;
   upcomingDepositRows: Array<{ id: string; title: string | null; startTime: Date; totalPrice: MoneyLike; depositAmount: MoneyLike; clientFirstName: string | null; clientLastName: string | null }>;
   upcomingDepositFinance: Map<string, AppointmentFinanceSummary>;
   overdueInvoices: InvoiceSnapshotRow[];
-  completedMissingInvoiceRows: Array<{ id: string; title: string | null; completedAt: Date | null; totalPrice: MoneyLike; clientFirstName: string | null; clientLastName: string | null }>;
+  completedMissingInvoiceRows: Array<{ id: string; title: string | null; completedAt: Date | null; totalPrice: MoneyLike; clientId: string | null; clientFirstName: string | null; clientLastName: string | null }>;
   reviewRequestReadyRows: Array<{ id: string; title: string | null; completedAt: Date | null; clientFirstName: string | null; clientLastName: string | null; clientId: string | null }>;
   reactivationRows: Array<{ id: string; firstName: string | null; lastName: string | null; lastVisit: Date | null }>;
   systemIssueCounts: { notificationFailures: number; integrationFailures: number };
@@ -2954,6 +2956,7 @@ function buildActionQueue(params: {
 
   if (params.context.permissions.invoiceVisibility && params.context.permissions.todaySchedule) {
     for (const row of params.completedMissingInvoiceRows) {
+      if (!row.clientId) continue;
       items.push({
         id: `completed:${row.id}`,
         type: "completed_missing_invoice",
