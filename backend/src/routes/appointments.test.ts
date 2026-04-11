@@ -53,6 +53,19 @@ describe("appointments route logic", () => {
     expect(result.success).toBe(true);
   });
 
+  it("createSchema strips legacy depositPaid input instead of accepting it as finance state", () => {
+    const result = createSchema.safeParse({
+      clientId: "550e8400-e29b-41d4-a716-446655440000",
+      vehicleId: "660e8400-e29b-41d4-a716-446655440001",
+      startTime: "2025-03-20T10:00:00.000Z",
+      depositPaid: true,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect("depositPaid" in result.data).toBe(false);
+    }
+  });
+
   it("updateStatus accepts only valid statuses", () => {
     expect(appointmentStatusSchema.safeParse("scheduled").success).toBe(true);
     expect(appointmentStatusSchema.safeParse("completed").success).toBe(true);
@@ -73,6 +86,13 @@ describe("appointments route logic", () => {
     const result = updateSchema.safeParse({
       clientId: "550e8400-e29b-41d4-a716-446655440000",
       vehicleId: "660e8400-e29b-41d4-a716-446655440001",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("updateSchema rejects legacy depositPaid input", () => {
+    const result = updateSchema.safeParse({
+      depositPaid: true,
     });
     expect(result.success).toBe(false);
   });
