@@ -540,7 +540,6 @@ export async function handleStripeWebhook(
                       totalPrice: appointments.totalPrice,
                       depositAmount: appointments.depositAmount,
                       depositPaid: appointments.depositPaid,
-                      paidAt: appointments.paidAt,
                     })
                     .from(appointments)
                     .where(eq(appointments.id, appointmentId))
@@ -556,7 +555,7 @@ export async function handleStripeWebhook(
                           id: appointment.id,
                           totalPrice: appointment.totalPrice,
                           depositAmount: appointment.depositAmount,
-                          paidAt: appointment.paidAt,
+                          paidAt: null,
                         },
                       ],
                       tx
@@ -590,7 +589,7 @@ export async function handleStripeWebhook(
                           id: appointment.id,
                           totalPrice: appointment.totalPrice,
                           depositAmount: appointment.depositAmount,
-                          paidAt: appointment.paidAt,
+                          paidAt: null,
                         },
                       ],
                       tx
@@ -609,7 +608,6 @@ export async function handleStripeWebhook(
                       totalPrice: appointments.totalPrice,
                       depositAmount: appointments.depositAmount,
                       depositPaid: appointments.depositPaid,
-                      paidAt: appointments.paidAt,
                     });
                   return updated ?? appointment;
                 })
