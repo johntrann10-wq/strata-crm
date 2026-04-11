@@ -332,7 +332,7 @@ export default function DashboardHomeRoute() {
                   <HomeMonthlyRevenueChartCard
                     snapshot={snapshot}
                     loading={pageLoading}
-                    error={snapshot?.widgetErrors?.revenue_collections ? new Error(snapshot.widgetErrors.revenue_collections.message) : null}
+                    error={null}
                     onRetry={() => void refreshDashboard("force")}
                   />
                 </div>

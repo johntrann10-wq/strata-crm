@@ -370,6 +370,18 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(page.getByText("Upcoming Jobs / Needs Attention", { exact: true })).toBeVisible();
   });
 
+  test("keeps the monthly revenue chart visible when cash metrics degrade", async ({ page }) => {
+    await mockDashboard(page, {
+      role: "owner",
+      mode: "normal",
+      widgetErrors: { revenue_collections: { message: "Revenue collections are temporarily unavailable.", retryable: true } },
+    });
+    await page.goto("/signed-in");
+    await expect(page.getByText("Monthly Revenue Chart", { exact: true })).toBeVisible();
+    await expect(page.getByText("Booked this month", { exact: true })).toBeVisible();
+    await expect(page.getByText("Revenue is grouped by business day. Tap a bar to drill into that date.")).toBeVisible();
+  });
+
   test("respects the dashboard feature flag rollback path", async ({ page }) => {
     await mockDashboard(page, { role: "owner", mode: "normal", featureEnabled: false });
     await page.goto("/signed-in");

@@ -141,8 +141,8 @@ export function HomeOverviewKpiStrip({
       value: formatDashboardCompactCurrency(snapshot?.monthlyRevenueChart.totalBookedThisMonth ?? 0),
       context:
         goals?.percentToGoal != null
-          ? `${goals.percentToGoal}% to goal · ${formatDashboardCompactCurrency(snapshot?.monthlyRevenueChart.totalCollectedThisMonth ?? 0)} collected`
-          : `${formatDashboardCompactCurrency(snapshot?.monthlyRevenueChart.totalCollectedThisMonth ?? 0)} collected`,
+          ? `${goals.percentToGoal}% to goal`
+          : `${bookings?.bookingsThisMonth ?? 0} booked this month`,
       href: "/calendar",
     },
     {
@@ -240,9 +240,7 @@ export function HomeWeeklyAppointmentOverviewCard({
     <Card>
       <CardHeader>
         <CardTitle>Weekly Appointment Overview</CardTitle>
-        <CardDescription>
-          {formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")} · a Monday-through-Sunday board of booked work, next jobs, and day-by-day schedule pressure.
-        </CardDescription>
+        <CardDescription>{formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")}</CardDescription>
         <CardAction>
           <div className="flex items-center gap-2">
             <Button
@@ -295,7 +293,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                     type="button"
                     onClick={() => onSelectDate?.(day.date)}
                     className={cn(
-                      "flex min-h-[320px] flex-col border-r border-border/60 p-0 text-left transition-colors last:border-r-0",
+                      "flex min-h-[380px] flex-col border-r border-border/60 p-0 text-left transition-colors last:border-r-0",
                       isActive ? "bg-orange-50/70 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.35)]" : "bg-white/80 hover:bg-slate-50/90"
                     )}
                     aria-pressed={isActive}
@@ -315,12 +313,13 @@ export function HomeWeeklyAppointmentOverviewCard({
                           <ArrowUpRight className="h-3.5 w-3.5" />
                         </Link>
                       </div>
-                      <div className="mt-3 flex items-end justify-between gap-2">
-                        <div>
-                          <p className="text-2xl font-semibold tracking-tight text-slate-950">{day.appointmentCount}</p>
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">appointments</p>
+                      <div className="mt-3 space-y-1.5">
+                        <p className="text-2xl font-semibold tracking-tight text-slate-950">{day.appointmentCount}</p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                          <span>{day.appointmentCount === 1 ? "appointment" : "appointments"}</span>
+                          <span className="text-slate-300">•</span>
+                          <span className="font-semibold text-slate-800">{formatDashboardCompactCurrency(day.bookedValue)} booked</span>
                         </div>
-                        <p className="text-sm font-medium text-slate-950">{formatDashboardCompactCurrency(day.bookedValue)}</p>
                       </div>
                     </div>
                     <div className="flex flex-1 flex-col justify-between px-4 py-4">
@@ -339,18 +338,19 @@ export function HomeWeeklyAppointmentOverviewCard({
                               No jobs queued yet.
                             </div>
                           ) : (
-                            day.previewItems.map((item) => (
+                            day.previewItems.slice(0, 3).map((item) => (
                               <Link
                                 key={item.id}
                                 to={item.url}
                                 onClick={(event) => event.stopPropagation()}
-                                className="block rounded-[0.95rem] border border-border/70 bg-white/88 px-2.5 py-2.5 transition-colors hover:border-orange-200 hover:bg-orange-50/50"
+                                className="block rounded-[0.95rem] border border-border/70 bg-white/88 px-3 py-3 transition-colors hover:border-orange-200 hover:bg-orange-50/50"
                               >
-                                <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start justify-between gap-2.5">
                                   <div className="min-w-0">
-                                    <p className="truncate text-[12px] font-semibold text-slate-950">{item.title}</p>
-                                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                                      {item.clientName} · {item.vehicleLabel}
+                                    <p className="line-clamp-2 text-[12px] font-semibold leading-4 text-slate-950">{item.title}</p>
+                                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                                      {item.clientName}
+                                      {item.vehicleLabel ? ` · ${item.vehicleLabel}` : ""}
                                     </p>
                                   </div>
                                   <p className="shrink-0 text-[11px] font-medium text-muted-foreground">
@@ -364,7 +364,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                       </div>
                       {day.capacityUsage != null ? (
                         <div className="flex items-center justify-between rounded-[0.9rem] border border-border/70 bg-slate-50/80 px-2.5 py-2 text-[11px] text-muted-foreground">
-                          <span>Assigned capacity</span>
+                          <span>Assigned</span>
                           <span className="font-semibold text-slate-700">{day.capacityUsage}%</span>
                         </div>
                       ) : null}
@@ -388,8 +388,8 @@ export function HomeWeeklyAppointmentOverviewCard({
                     <div className="flex items-start justify-between gap-3">
                       <button type="button" onClick={() => onSelectDate?.(day.date)} className="min-w-0 text-left" aria-pressed={isActive}>
                         <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{day.label}</p>
-                        <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{day.appointmentCount} bookings</p>
-                        <p className="text-sm text-muted-foreground">{formatDashboardCurrency(day.bookedValue)}</p>
+                        <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{day.appointmentCount} {day.appointmentCount === 1 ? "appointment" : "appointments"}</p>
+                        <p className="text-sm font-medium text-slate-700">{formatDashboardCurrency(day.bookedValue)} booked</p>
                       </button>
                       <Button asChild variant="ghost" size="icon" className="mt-0.5 h-8 w-8 rounded-full">
                         <Link to={day.calendarUrl} aria-label={`Open ${day.label} in calendar`}>
@@ -432,7 +432,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                     </div>
                     {day.capacityUsage != null ? (
                       <div className="mt-3 flex items-center justify-between rounded-[0.9rem] border border-border/70 bg-slate-50/80 px-3 py-2 text-[11px] text-muted-foreground">
-                        <span>Assigned capacity</span>
+                        <span>Assigned</span>
                         <span className="font-semibold text-slate-700">{day.capacityUsage}%</span>
                       </div>
                     ) : null}
