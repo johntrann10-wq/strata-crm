@@ -113,9 +113,11 @@ async function syncAppointmentPaymentState(
 
   const appointmentUpdates: Record<string, unknown> = {
     updatedAt: new Date(),
-    depositPaid: finance?.depositSatisfied === true,
     paidAt: finance?.paidInFull ? paidAt ?? new Date() : null,
   };
+  if (Number(appointment.depositAmount ?? 0) > 0) {
+    appointmentUpdates.depositPaid = finance?.depositSatisfied === true;
+  }
 
   try {
     await tx

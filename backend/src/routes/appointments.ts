@@ -2094,9 +2094,10 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
     Number.isFinite(depositAmount) && depositAmount > 0
       ? Math.min(Number.isFinite(totalPrice) && totalPrice > 0 ? totalPrice : depositAmount, depositAmount)
       : 0;
-  const updates: Record<string, unknown> = {
-    depositPaid: requiredDepositAmount > 0 ? nextCollectedAmount >= requiredDepositAmount - 0.009 : false,
-  };
+  const updates: Record<string, unknown> = {};
+  if (requiredDepositAmount > 0) {
+    updates.depositPaid = nextCollectedAmount >= requiredDepositAmount - 0.009;
+  }
   if (columns.has("updated_at")) updates.updatedAt = new Date();
   if (columns.has("paid_at")) updates.paidAt = willBePaidInFull ? (parsed.data.paidAt ? new Date(parsed.data.paidAt) : new Date()) : null;
 
@@ -2334,9 +2335,10 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
     invoiceCollectedAmount: finance?.invoiceCollectedAmount ?? 0,
     invoiceCarryoverAmount: finance?.invoiceCarryoverAmount ?? 0,
   });
-  const updates: Record<string, unknown> = {
-    depositPaid: postReverseSummary.depositSatisfied,
-  };
+  const updates: Record<string, unknown> = {};
+  if (Number.isFinite(depositAmount) && depositAmount > 0) {
+    updates.depositPaid = postReverseSummary.depositSatisfied;
+  }
   if (columns.has("updated_at")) updates.updatedAt = new Date();
   if (columns.has("paid_at")) updates.paidAt = postReverseSummary.paidInFull ? new Date() : null;
 
