@@ -276,7 +276,6 @@ export default function CalendarPage() {
       applyAdminFee: true,
       totalPrice: true,
       depositAmount: true,
-      depositPaid: true,
       paidAt: true,
       collectedAmount: true,
       balanceDue: true,

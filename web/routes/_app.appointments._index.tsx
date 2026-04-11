@@ -62,7 +62,6 @@ type AppointmentRecord = {
   jobPhase?: string | null;
   totalPrice?: number | null;
   depositAmount?: number | null;
-  depositPaid?: boolean | null;
   paidAt?: string | null;
   assignedStaffId?: string | null;
   notes?: string | null;
@@ -314,7 +313,6 @@ export default function AppointmentsPage() {
       applyAdminFee: true,
       totalPrice: true,
       depositAmount: true,
-      depositPaid: true,
       paidAt: true,
       collectedAmount: true,
       balanceDue: true,

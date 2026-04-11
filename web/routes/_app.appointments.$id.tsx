@@ -543,7 +543,6 @@ export default function AppointmentDetail() {
         applyAdminFee: true,
         totalPrice: true,
         depositAmount: true,
-        depositPaid: true,
         collectedAmount: true,
         balanceDue: true,
         paidInFull: true,
@@ -707,7 +706,7 @@ export default function AppointmentDetail() {
         try {
           const result = await runConfirmStripeDeposit({ id, sessionId });
           if (cancelled) return;
-          if (result?.confirmed || result?.depositPaid) {
+          if (result?.confirmed || result?.depositSatisfied === true || result?.depositPaid === true) {
             toast.success("Stripe deposit received.");
           } else {
             toast.message("Stripe checkout completed. Deposit status is still syncing.");

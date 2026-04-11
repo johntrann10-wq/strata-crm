@@ -48,7 +48,6 @@ type AppointmentRecord = {
   endTime?: string | null;
   totalPrice?: number | string | null;
   depositAmount?: number | string | null;
-  depositPaid?: boolean | null;
   collectedAmount?: number | string | null;
   balanceDue?: number | string | null;
   paidInFull?: boolean | null;

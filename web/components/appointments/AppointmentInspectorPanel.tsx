@@ -35,7 +35,6 @@ export type AppointmentInspectorRecord = {
   applyAdminFee?: boolean | null;
   totalPrice?: number | null;
   depositAmount?: number | null;
-  depositPaid?: boolean | null;
   paidAt?: string | null;
   invoiceStatus?: string | null;
   invoicePaidAt?: string | null;
