@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link } from "react-router";
-import { ChevronLeft, LayoutDashboard } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
 interface PageHeaderProps {
   title: ReactNode;
@@ -28,23 +28,12 @@ export function PageHeader({ title, subtitle, right, actions, loading, backTo, b
             Back
           </Link>
         )}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            <LayoutDashboard className="h-3.5 w-3.5" />
-            Workspace
-          </span>
-          {badge && badge}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <h1 className="text-balance text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-[31px]">
             {title}
           </h1>
+          {badge && !subtitle ? badge : null}
         </div>
-        {subtitle ? (
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            {subtitle}
-          </p>
-        ) : null}
       </div>
       {(right ?? actions) && (
         <div className="relative flex w-full shrink-0 flex-col gap-2 sm:flex-row lg:w-auto lg:justify-end xl:shrink-0">
