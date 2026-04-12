@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Link } from "react-router";
 import { ChevronLeft } from "lucide-react";
+import { StrataMark } from "@/components/brand/StrataLogo";
 
 interface PageHeaderProps {
   title: ReactNode;
@@ -18,6 +19,7 @@ function renderTitleBadge(title: ReactNode, badge?: ReactNode) {
 
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+      <StrataMark className="h-4 w-4" />
       {title}
     </span>
   );
@@ -43,9 +45,11 @@ export function PageHeader({ title, subtitle, right, actions, loading, backTo, b
         )}
         <div className="flex flex-col gap-2">
           {titleBadge}
-          <h1 className="text-balance text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-[31px]">
-            {title}
-          </h1>
+          {!titleBadge ? (
+            <h1 className="text-balance text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-[31px]">
+              {title}
+            </h1>
+          ) : null}
         </div>
       </div>
       {(right ?? actions) && (
