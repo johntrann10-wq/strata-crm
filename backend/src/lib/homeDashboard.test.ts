@@ -374,7 +374,11 @@ describe("home dashboard domain logic", () => {
       monthlyRevenueGoal: 10000,
       bookedAppointments: [{ bookedAt: new Date("2026-04-02T16:00:00.000Z"), totalPrice: "500" }],
       standaloneInvoices: [{ bookedAt: new Date("2026-04-03T16:00:00.000Z"), total: "300" }],
-      invoicePayments: [{ paidAt: new Date("2026-04-04T16:00:00.000Z"), amount: "250" }],
+      collectedPayments: [
+        { paidAt: new Date("2026-04-04T16:00:00.000Z"), amount: 250 },
+        { paidAt: new Date("2026-04-04T18:00:00.000Z"), amount: 75 },
+        { paidAt: new Date("2026-04-04T19:00:00.000Z"), amount: -25 },
+      ],
       expenseRows: [{ expenseDate: new Date("2026-04-05T16:00:00.000Z"), amount: "125" }],
     });
 
@@ -389,7 +393,7 @@ describe("home dashboard domain logic", () => {
       expenseUrl: "/finances?focusDate=2026-04-02",
     });
     expect(days[2]).toMatchObject({ dayOfMonth: 3, bookedRevenue: 300 });
-    expect(days[3]).toMatchObject({ dayOfMonth: 4, collectedRevenue: 250 });
+    expect(days[3]).toMatchObject({ dayOfMonth: 4, collectedRevenue: 300 });
     expect(days[4]).toMatchObject({ dayOfMonth: 5, expenseAmount: 125, netAmount: -125 });
   });
 

@@ -1765,7 +1765,7 @@ export function buildMonthlyRevenueChart(params: {
   timezone: string;
   bookedAppointments: Array<{ bookedAt: Date; totalPrice: MoneyLike }>;
   standaloneInvoices: Array<{ bookedAt: Date; total: MoneyLike }>;
-  invoicePayments: Array<{ paidAt: Date; amount: MoneyLike }>;
+  collectedPayments: Array<{ paidAt: Date; amount: number }>;
   expenseRows: Array<{ expenseDate: Date; amount: MoneyLike }>;
   monthlyRevenueGoal: number | null;
 }) {
@@ -1810,7 +1810,7 @@ export function buildMonthlyRevenueChart(params: {
 
   for (const row of params.bookedAppointments) addBooked(row.bookedAt, row.totalPrice);
   for (const row of params.standaloneInvoices) addBooked(row.bookedAt, row.total);
-  for (const row of params.invoicePayments) addCollected(row.paidAt, toMoneyNumber(row.amount));
+  for (const row of params.collectedPayments) addCollected(row.paidAt, row.amount);
   for (const row of params.expenseRows) addExpense(row.expenseDate, row.amount);
 
   return days.map((day) => {
@@ -2881,7 +2881,7 @@ async function loadDirectAppointmentPaymentRowsInRange(
   end: Date,
   tx: DbExecutor
 ) {
-  return tx
+  const rows = await tx
     .select({
       createdAt: activityLogs.createdAt,
       action: activityLogs.action,
@@ -2898,6 +2898,15 @@ async function loadDirectAppointmentPaymentRowsInRange(
       )
     )
     .orderBy(asc(activityLogs.createdAt));
+
+  return rows.map((row) => {
+    const metadata = safeParseMetadata(row.metadata);
+    const amount = toMoneyNumber(metadata.amount as MoneyLike);
+    return {
+      paidAt: row.createdAt,
+      amount: row.action === "appointment.deposit_payment_reversed" ? -amount : amount,
+    };
+  });
 }
 
 async function loadExpenseRowsInRange(
@@ -3481,9 +3490,8 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
   const collectedToday = invoiceCollectedToday + directCollectedToday;
   const collectedThisWeek = invoiceCollectedThisWeek + directCollectedThisWeek;
   const collectedRevenueThisMonth = invoiceCollectedThisMonth + directCollectedThisMonth;
-  const collectedInvoiceRevenueThisMonth = invoiceCollectedThisMonth;
   const totalExpensesThisMonth = expenseRowsThisMonth.reduce((sum, row) => sum + toMoneyNumber(row.amount), 0);
-  const netRevenueThisMonth = collectedInvoiceRevenueThisMonth - totalExpensesThisMonth;
+  const netRevenueThisMonth = collectedRevenueThisMonth - totalExpensesThisMonth;
 
   const parsedLeads = leadRows.map((row) => ({ row, lead: parseLeadRecord(row.notes) }));
   const activeLeadRows = parsedLeads.filter(({ lead }) => lead.isLead);
@@ -3565,7 +3573,10 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
         timezone,
         bookedAppointments: monthRevenueAppointments,
         standaloneInvoices: monthStandaloneInvoices.map((row) => ({ bookedAt: row.createdAt, total: row.total })),
-        invoicePayments: invoicePaymentRowsThisMonth,
+        collectedPayments: [
+          ...invoicePaymentRowsThisMonth.map((row) => ({ paidAt: row.paidAt, amount: toMoneyNumber(row.amount) })),
+          ...directPaymentRowsThisMonth,
+        ],
         expenseRows: expenseRowsThisMonth,
         monthlyRevenueGoal: toMoneyNumber(business.monthlyRevenueGoal),
       })
@@ -3858,7 +3869,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
           : 0,
       totalCollectedThisMonth:
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
-          ? Number(collectedInvoiceRevenueThisMonth.toFixed(2))
+          ? Number(collectedRevenueThisMonth.toFixed(2))
           : 0,
       totalExpensesThisMonth:
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
