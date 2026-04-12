@@ -13,6 +13,7 @@ import { wrapAsync } from "../lib/asyncHandler.js";
 import { BadRequestError, NotFoundError } from "../lib/errors.js";
 import { getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 import { getActiveInvoicePaymentTotal } from "../lib/invoicePayments.js";
+import { calculateAppointmentFinanceTotals } from "../lib/revenueTotals.js";
 import {
   buildPublicAppUrl,
   buildPublicDocumentUrl,
@@ -24,6 +25,51 @@ import {
 import { retrieveConnectAccount } from "../lib/stripe.js";
 
 export const portalRouter = express.Router();
+
+function toMoneyNumber(value: number | string | null | undefined): number {
+  if (value == null || value === "") return 0;
+  const normalized = typeof value === "string" ? Number(value) : value;
+  return Number.isFinite(normalized) ? normalized : 0;
+}
+
+function getDisplayedAppointmentPortalAmount(row: {
+  subtotal?: number | string | null;
+  taxRate?: number | string | null;
+  taxAmount?: number | string | null;
+  applyTax?: boolean | null;
+  adminFeeRate?: number | string | null;
+  adminFeeAmount?: number | string | null;
+  applyAdminFee?: boolean | null;
+  totalPrice?: number | string | null;
+}): number {
+  const subtotal = Math.max(0, toMoneyNumber(row.subtotal));
+  const storedTotal = Math.max(0, toMoneyNumber(row.totalPrice));
+  if (subtotal <= 0) return storedTotal;
+
+  const computed = calculateAppointmentFinanceTotals({
+    subtotal,
+    taxRate: toMoneyNumber(row.taxRate),
+    applyTax: Boolean(row.applyTax),
+    adminFeeRate: toMoneyNumber(row.adminFeeRate),
+    applyAdminFee: Boolean(row.applyAdminFee),
+  });
+
+  const adminFeeAmount =
+    row.applyAdminFee === true
+      ? row.adminFeeAmount != null
+        ? Math.max(0, toMoneyNumber(row.adminFeeAmount))
+        : computed.adminFeeAmount
+      : 0;
+  const taxableSubtotal = subtotal + adminFeeAmount;
+  const taxAmount =
+    row.applyTax === true
+      ? row.taxAmount != null
+        ? Math.max(0, toMoneyNumber(row.taxAmount))
+        : taxableSubtotal * (toMoneyNumber(row.taxRate) / 100)
+      : 0;
+
+  return Math.max(0, Number((subtotal + adminFeeAmount + taxAmount).toFixed(2)));
+}
 
 type PortalReferenceDocument = {
   kind: PublicDocumentKind;
@@ -257,6 +303,13 @@ portalRouter.get(
         title: appointments.title,
         status: appointments.status,
         startTime: appointments.startTime,
+        subtotal: appointments.subtotal,
+        taxRate: appointments.taxRate,
+        taxAmount: appointments.taxAmount,
+        applyTax: appointments.applyTax,
+        adminFeeRate: appointments.adminFeeRate,
+        adminFeeAmount: appointments.adminFeeAmount,
+        applyAdminFee: appointments.applyAdminFee,
         totalPrice: appointments.totalPrice,
         depositAmount: appointments.depositAmount,
         vehicleYear: vehicles.year,
@@ -280,7 +333,7 @@ portalRouter.get(
       access.businessId,
       upcomingAppointments.map((appointment) => ({
         id: appointment.id,
-        totalPrice: appointment.totalPrice,
+        totalPrice: getDisplayedAppointmentPortalAmount(appointment),
         depositAmount: appointment.depositAmount,
         paidAt: null,
       }))
@@ -292,6 +345,13 @@ portalRouter.get(
         title: appointments.title,
         status: appointments.status,
         startTime: appointments.startTime,
+        subtotal: appointments.subtotal,
+        taxRate: appointments.taxRate,
+        taxAmount: appointments.taxAmount,
+        applyTax: appointments.applyTax,
+        adminFeeRate: appointments.adminFeeRate,
+        adminFeeAmount: appointments.adminFeeAmount,
+        applyAdminFee: appointments.applyAdminFee,
         totalPrice: appointments.totalPrice,
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
@@ -365,14 +425,15 @@ portalRouter.get(
         })),
         upcomingAppointments: upcomingAppointments.map((appointment) => {
           const finance = upcomingAppointmentFinance.get(appointment.id);
+          const displayedTotalPrice = getDisplayedAppointmentPortalAmount(appointment);
           return {
           id: appointment.id,
           title: formatDocumentTitle("appointment", appointment),
           status: appointment.status,
           startTime: appointment.startTime,
-          totalPrice: Number(appointment.totalPrice ?? 0),
+          totalPrice: displayedTotalPrice,
           depositAmount: Number(appointment.depositAmount ?? 0),
-          balanceDue: finance?.balanceDue ?? Math.max(0, Number(appointment.totalPrice ?? 0)),
+          balanceDue: finance?.balanceDue ?? Math.max(0, displayedTotalPrice),
           paidInFull: finance?.paidInFull ?? false,
           depositSatisfied: finance?.depositSatisfied ?? false,
           vehicleLabel:
@@ -401,7 +462,7 @@ portalRouter.get(
           title: formatDocumentTitle("appointment", appointment),
           status: appointment.status,
           startTime: appointment.startTime,
-          totalPrice: Number(appointment.totalPrice ?? 0),
+          totalPrice: getDisplayedAppointmentPortalAmount(appointment),
           vehicleLabel:
             [appointment.vehicleYear, appointment.vehicleMake, appointment.vehicleModel].filter(Boolean).join(" ") || null,
           url: buildDocumentUrl({
