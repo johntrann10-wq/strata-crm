@@ -987,13 +987,12 @@ export function MonthView({
               });
 
               return (
-                <div
+                <button
                   key={di}
-                  role="button"
-                  tabIndex={0}
+                  type="button"
                   aria-label={`Open ${dayLabel}`}
                   className={cn(
-                    "group relative flex h-full min-h-0 touch-manipulation select-none flex-col border-r border-border/60 px-1 py-1 text-left transition-colors last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-1.5 xl:px-2.5 xl:py-2",
+                    "group relative flex h-full min-h-0 touch-manipulation select-none appearance-none flex-col border-r border-border/60 bg-transparent px-1 py-1 text-left transition-colors last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-1.5 xl:px-2.5 xl:py-2",
                     "hover:bg-muted/25",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
@@ -1013,15 +1012,9 @@ export function MonthView({
                       anchorTop: targetRect.top - containerRect.top,
                     });
                   }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onDayClick(day);
-                    }
-                  }}
                 >
-                    <div className="flex h-full min-h-0 flex-col">
-                      <div className="flex items-start justify-between gap-1 sm:items-center sm:gap-2">
+                  <div className="flex h-full min-h-0 flex-col">
+                    <div className="flex items-start justify-between gap-1 sm:items-center sm:gap-2">
                       <span
                         className={cn(
                           "inline-flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold sm:h-8 sm:w-8 sm:text-sm",
@@ -1033,30 +1026,30 @@ export function MonthView({
                       <div className="flex min-w-0 flex-col items-end gap-1">
                         {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
                       </div>
-                      </div>
+                    </div>
 
-                      <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                        {!isMobileLayout && dayDensityItems.length > 0 ? (
-                          <div className="mt-1 hidden min-h-0 flex-1 space-y-1 overflow-hidden pt-1 sm:block">
-                            {dayDensityItems.slice(0, 2).map((appointment) => (
-                              <div
-                                key={`${appointment.id}-${day.toISOString()}-label`}
-                                className="truncate rounded-md bg-muted/[0.16] px-1.5 py-0.5 text-[10px] font-medium text-foreground/85"
-                              >
-                                {apptLabel(appointment)}
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="min-h-0 flex-1" />
-                        )}
-
-                        <div className="mt-auto overflow-visible space-y-1 pt-1.5 pb-2 sm:pt-2 sm:pb-2.5">
-                          <DayStatusDots appointments={dayDensityItems} />
+                    <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
+                      {!isMobileLayout && dayDensityItems.length > 0 ? (
+                        <div className="mt-1 hidden min-h-0 flex-1 space-y-1 overflow-hidden pt-1 sm:block">
+                          {dayDensityItems.slice(0, 2).map((appointment) => (
+                            <div
+                              key={`${appointment.id}-${day.toISOString()}-label`}
+                              className="truncate rounded-md bg-muted/[0.16] px-1.5 py-0.5 text-[10px] font-medium text-foreground/85"
+                            >
+                              {apptLabel(appointment)}
+                            </div>
+                          ))}
                         </div>
+                      ) : (
+                        <div className="min-h-0 flex-1" />
+                      )}
+
+                      <div className="mt-auto overflow-visible space-y-1 pt-1.5 pb-2 sm:pt-2 sm:pb-2.5">
+                        <DayStatusDots appointments={dayDensityItems} />
+                      </div>
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
