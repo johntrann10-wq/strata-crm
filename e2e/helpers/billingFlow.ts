@@ -137,6 +137,13 @@ type AppointmentRecord = {
   internalNotes: string | null;
   isMobile: boolean;
   mobileAddress: string | null;
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  applyTax: boolean;
+  adminFeeRate: number;
+  adminFeeAmount: number;
+  applyAdminFee: boolean;
   totalPrice: number;
   depositAmount: number | null;
   depositPaid: boolean;
@@ -439,6 +446,26 @@ function buildAppointmentRecord(id: string, payload: Record<string, any>): Appoi
   const durationMinutes = Number(payload.totalDuration ?? payload.durationMinutes ?? 180) || 180;
   const endTime = new Date(new Date(startTime).getTime() + durationMinutes * 60_000).toISOString();
   const vehicleRecord = payload.vehicleId ? vehicle : null;
+  const subtotal = currency(Number(payload.subtotal ?? payload.totalPrice ?? 0) || 0);
+  const applyAdminFee = Boolean(payload.applyAdminFee ?? false);
+  const adminFeeRate = applyAdminFee ? Number(payload.adminFeeRate ?? 0) || 0 : 0;
+  const adminFeeAmount = applyAdminFee
+    ? currency(
+        payload.adminFeeAmount != null
+          ? Number(payload.adminFeeAmount) || 0
+          : (subtotal * adminFeeRate) / 100
+      )
+    : 0;
+  const taxableSubtotal = subtotal + adminFeeAmount;
+  const applyTax = Boolean(payload.applyTax ?? false);
+  const taxRate = applyTax ? Number(payload.taxRate ?? 0) || 0 : 0;
+  const taxAmount = applyTax
+    ? currency(
+        payload.taxAmount != null
+          ? Number(payload.taxAmount) || 0
+          : (taxableSubtotal * taxRate) / 100
+      )
+    : 0;
   const title =
     payload.title ??
     (payload.serviceIds?.length
@@ -467,6 +494,13 @@ function buildAppointmentRecord(id: string, payload: Record<string, any>): Appoi
     internalNotes: payload.internalNotes ? String(payload.internalNotes) : null,
     isMobile: Boolean(payload.isMobile ?? false),
     mobileAddress: payload.mobileAddress ? String(payload.mobileAddress) : null,
+    subtotal,
+    taxRate,
+    taxAmount,
+    applyTax,
+    adminFeeRate,
+    adminFeeAmount,
+    applyAdminFee,
     totalPrice: currency(Number(payload.totalPrice ?? 0) || 0),
     depositAmount: payload.depositAmount != null ? Number(payload.depositAmount) : null,
     depositPaid: Boolean(payload.depositPaid ?? false),
@@ -495,12 +529,28 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
     depositAmount: 120,
     status: "scheduled",
   });
+  const computedAmountAppointment = buildAppointmentRecord("appointment-computed-amount-1", {
+    clientId: client.id,
+    vehicleId: vehicle.id,
+    title: "Coating recalculation check",
+    startTime: "2026-04-12T16:00:00.000Z",
+    subtotal: 100,
+    adminFeeRate: 10,
+    adminFeeAmount: 10,
+    applyAdminFee: true,
+    taxRate: 10,
+    taxAmount: 11,
+    applyTax: true,
+    totalPrice: 999,
+    depositAmount: 0,
+    status: "scheduled",
+  });
 
   const state: BillingMockState = {
     quotes: [],
     invoices: [],
     payments: [],
-    appointments: [seededAppointment],
+    appointments: [seededAppointment, computedAmountAppointment],
     activityLogs: [],
   };
 

@@ -442,4 +442,29 @@ test.describe("Billing regression", () => {
       await expect(page.getByText(/^void$/i).first()).toBeVisible();
     });
   });
+
+  test("appointment detail shows computed finance totals instead of stale stored totals", async ({ page }) => {
+    test.setTimeout(120000);
+    const computedAmountAppointmentPath = "/appointments/appointment-computed-amount-1";
+
+    await mockBillingFlowApp(page);
+    await signIn(page);
+    await page.goto(computedAmountAppointmentPath);
+    await expect(page.getByText(/coating recalculation check/i)).toBeVisible();
+
+    await test.step("Summary surfaces show the computed appointment amount", async () => {
+      await expect(page.getByText("$121.00", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("$999.00", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Total Price")).toBeVisible();
+      await expect(page.getByText("Remaining balance")).toBeVisible();
+    });
+
+    await test.step("Computed amount survives reload and deposit editing flows", async () => {
+      await page.goto(computedAmountAppointmentPath);
+      await expect(page.getByText("$121.00", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("$999.00", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Total Price")).toBeVisible();
+      await expect(page.getByText("Remaining balance")).toBeVisible();
+    });
+  });
 });

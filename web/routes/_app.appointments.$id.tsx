@@ -1149,6 +1149,7 @@ export default function AppointmentDetail() {
     const financeState = resolveAppointmentFinanceState(
       {
         ...(appointment as Record<string, unknown>),
+        totalPrice: totalPriceValue,
         invoiceStatus: String((invoice as any)?.status ?? ""),
         invoicePaidAt: (invoice as any)?.lastPaidAt ?? null,
       },
@@ -1282,7 +1283,7 @@ export default function AppointmentDetail() {
       toast.error("Enter a valid deposit amount.");
       return;
     }
-    if (appointment.totalPrice != null && appointment.totalPrice > 0 && nextAmount > Number(appointment.totalPrice)) {
+    if (totalPriceValue > 0 && nextAmount > totalPriceValue) {
       toast.error("Deposit cannot be greater than the appointment total.");
       return;
     }
@@ -2490,7 +2491,7 @@ export default function AppointmentDetail() {
                 adminFeeRate={appointment.adminFeeRate}
                 adminFeeAmount={appointment.adminFeeAmount}
                 applyAdminFee={appointment.applyAdminFee}
-                totalPrice={appointment.totalPrice}
+                totalPrice={totalPriceValue}
                 depositAmount={appointment.depositAmount}
                 collectedAmount={normalizedCollectedAmount}
                 balanceDue={remainingBalanceValue}
