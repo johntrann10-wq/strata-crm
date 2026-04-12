@@ -110,6 +110,7 @@ type InvoiceRecord = {
 
 type ActivityLogRecord = {
   id: string;
+  type: string;
   action: string;
   entityType: string;
   entityId: string;
@@ -247,6 +248,33 @@ function currency(value: number): number {
   return Number(value.toFixed(2));
 }
 
+function getAppointmentCollectedAmount(state: BillingMockState, appointmentId: string): number {
+  return currency(
+    state.activityLogs
+      .filter((entry) => entry.entityType === "appointment" && entry.entityId === appointmentId)
+      .reduce((sum, entry) => {
+        const parsed = JSON.parse(entry.metadata) as { amount?: number | string | null };
+        const entryAmount = currency(Number(parsed.amount ?? 0) || 0);
+        if (entry.action === "appointment.deposit_paid") return sum + entryAmount;
+        if (entry.action === "appointment.deposit_payment_reversed") return sum - entryAmount;
+        return sum;
+      }, 0)
+  );
+}
+
+function pushActivityLog(
+  state: BillingMockState,
+  entry: Omit<ActivityLogRecord, "id" | "createdAt">
+): ActivityLogRecord {
+  const record: ActivityLogRecord = {
+    id: `activity-${state.activityLogs.length + 1}`,
+    createdAt: new Date().toISOString(),
+    ...entry,
+  };
+  state.activityLogs.push(record);
+  return record;
+}
+
 function buildQuoteRecord(id: string, payload: Record<string, any>): QuoteRecord {
   const lineItems = Array.isArray(payload.lineItems)
     ? payload.lineItems.map((item: Record<string, any>, index: number) => ({
@@ -329,6 +357,39 @@ function buildInvoiceRecord(id: string, payload: Record<string, any>): InvoiceRe
     client,
     lineItems,
     payments: [],
+  };
+}
+
+function serializeInvoiceRecord(state: BillingMockState, invoice: InvoiceRecord) {
+  const appointment = invoice.appointmentId
+    ? state.appointments.find((entry) => entry.id === invoice.appointmentId) ?? null
+    : null;
+  const quote = invoice.quoteId
+    ? state.quotes.find((entry) => entry.id === invoice.quoteId) ?? null
+    : null;
+
+  return {
+    ...invoice,
+    appointment: appointment
+      ? {
+          id: appointment.id,
+          startTime: appointment.startTime,
+          vehicle: appointment.vehicle
+            ? {
+                year: appointment.vehicle.year,
+                make: appointment.vehicle.make,
+                model: appointment.vehicle.model,
+              }
+            : null,
+        }
+      : null,
+    quote: quote
+      ? {
+          id: quote.id,
+          status: quote.status,
+          total: quote.total,
+        }
+      : null,
   };
 }
 
@@ -653,6 +714,16 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
       if (found) {
         found.status = "sent";
         found.sentAt = new Date().toISOString();
+        pushActivityLog(state, {
+          type: "quote.sent",
+          action: "quote.sent",
+          entityType: "quote",
+          entityId: quoteId,
+          metadata: toJson({
+            deliveryStatus: "emailed",
+            recipient: found.client?.email ?? null,
+          }),
+        });
       }
       await route.fulfill({
         status: 200,
@@ -723,24 +794,14 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
       const createdAt = new Date().toISOString();
       const methodLabel = String(payload.method ?? "cash");
       const notes = payload.notes ? String(payload.notes) : null;
-      const existingCollected = currency(
-        state.activityLogs
-          .filter((entry) => entry.entityType === "appointment" && entry.entityId === appointmentId)
-          .reduce((sum, entry) => {
-            const parsed = JSON.parse(entry.metadata) as { amount?: number | string | null };
-            const entryAmount = currency(Number(parsed.amount ?? 0) || 0);
-            if (entry.action === "appointment.deposit_paid") return sum + entryAmount;
-            if (entry.action === "appointment.deposit_payment_reversed") return sum - entryAmount;
-            return sum;
-          }, 0)
-      );
+      const existingCollected = getAppointmentCollectedAmount(state, appointmentId);
       const nextCollected = currency(existingCollected + amount);
       if (nextCollected >= currency(appointment.totalPrice)) {
         appointment.paidAt = paidAt;
       }
 
-      state.activityLogs.push({
-        id: `activity-${state.activityLogs.length + 1}`,
+      pushActivityLog(state, {
+        type: "appointment.deposit_paid",
         action: "appointment.deposit_paid",
         entityType: "appointment",
         entityId: appointmentId,
@@ -752,7 +813,6 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
           paymentType: appointment.depositAmount && appointment.depositAmount > 0 ? "deposit" : "payment",
           paidAt,
         }),
-        createdAt,
       });
 
       await route.fulfill({
@@ -781,28 +841,25 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
         return;
       }
 
-      const relevantLogs = state.activityLogs.filter(
-        (entry) =>
-          entry.entityType === "appointment" &&
-          entry.entityId === appointmentId &&
-          entry.action === "appointment.deposit_paid"
-      );
-      const lastPayment = relevantLogs.at(-1);
-      const lastAmount = lastPayment
-        ? currency(Number((JSON.parse(lastPayment.metadata) as { amount?: number | string | null }).amount ?? 0) || 0)
-        : currency(Number(appointment.depositAmount ?? 0) || 0);
+      const collectedAmount = getAppointmentCollectedAmount(state, appointmentId);
+      const reverseAmount =
+        collectedAmount > 0 ? collectedAmount : currency(Number(appointment.depositAmount ?? 0) || 0);
 
-      state.activityLogs.push({
-        id: `activity-${state.activityLogs.length + 1}`,
+      pushActivityLog(state, {
+        type: "appointment.deposit_payment_reversed",
         action: "appointment.deposit_payment_reversed",
         entityType: "appointment",
         entityId: appointmentId,
         metadata: toJson({
-          amount: lastAmount,
+          amount: reverseAmount,
           source: "manual",
-          paymentType: appointment.depositAmount && appointment.depositAmount > 0 ? "deposit" : "payment",
+          paymentType:
+            reverseAmount >= currency(appointment.totalPrice) && appointment.totalPrice > 0
+              ? "full"
+              : appointment.depositAmount && appointment.depositAmount > 0 && reverseAmount <= currency(Number(appointment.depositAmount))
+                ? "deposit"
+                : "partial",
         }),
-        createdAt: new Date().toISOString(),
       });
       appointment.paidAt = null;
 
@@ -812,7 +869,7 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
         body: toJson({
           success: true,
           appointmentId,
-          amount: lastAmount,
+          amount: reverseAmount,
         }),
       });
       return;
@@ -856,7 +913,7 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
         if (quoteId && invoice.quoteId !== quoteId) return false;
         if (clientId && invoice.clientId !== clientId) return false;
         return true;
-      });
+      }).map((invoice) => serializeInvoiceRecord(state, invoice));
       await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records }) });
       return;
     }
@@ -865,7 +922,17 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
       const payload = parseBody(route);
       const created = buildInvoiceRecord(`invoice-${state.invoices.length + 1}`, payload);
       state.invoices.push(created);
-      await route.fulfill({ status: 201, contentType: "application/json", body: toJson(created) });
+      if (created.appointmentId) {
+        const appointment = state.appointments.find((entry) => entry.id === created.appointmentId);
+        if (appointment) {
+          appointment.invoicedAt = new Date().toISOString();
+        }
+      }
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: toJson(serializeInvoiceRecord(state, created)),
+      });
       return;
     }
 
@@ -884,7 +951,7 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
       await route.fulfill({
         status: found ? 200 : 404,
         contentType: "application/json",
-        body: toJson(found ?? { message: "Invoice not found" }),
+        body: toJson(found ? serializeInvoiceRecord(state, found) : { message: "Invoice not found" }),
       });
       return;
     }
@@ -895,11 +962,55 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
       if (found) {
         found.status = "sent";
         found.lastSentAt = new Date().toISOString();
+        pushActivityLog(state, {
+          type: "invoice.sent",
+          action: "invoice.sent",
+          entityType: "invoice",
+          entityId: invoiceId,
+          metadata: toJson({
+            deliveryStatus: "emailed",
+            recipient: found.client?.email ?? null,
+          }),
+        });
       }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: toJson({ deliveryStatus: "emailed", id: invoiceId }),
+      });
+      return;
+    }
+
+    if (path.match(/^\/invoices\/[^/]+\/void$/) && method === "POST") {
+      const invoiceId = path.split("/")[2];
+      const found = state.invoices.find((invoice) => invoice.id === invoiceId);
+      if (!found) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: toJson({ message: "Invoice not found" }),
+        });
+        return;
+      }
+
+      found.status = "void";
+      found.paidAt = null;
+      found.lastPaidAt = null;
+      pushActivityLog(state, {
+        type: "invoice.voided",
+        action: "invoice.voided",
+        entityType: "invoice",
+        entityId: invoiceId,
+        metadata: toJson({
+          invoiceNumber: found.invoiceNumber,
+          status: "void",
+        }),
+      });
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson(found),
       });
       return;
     }
@@ -930,6 +1041,53 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
         }
       }
       await route.fulfill({ status: 201, contentType: "application/json", body: toJson(payment) });
+      return;
+    }
+
+    if (path.match(/^\/payments\/[^/]+\/reverse$/) && method === "POST") {
+      const paymentId = path.split("/")[2];
+      const payment = state.payments.find((entry) => entry.id === paymentId);
+      if (!payment) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: toJson({ message: "Payment not found" }),
+        });
+        return;
+      }
+
+      if (!payment.reversedAt) {
+        payment.reversedAt = new Date().toISOString();
+      }
+
+      const invoice = state.invoices.find((entry) => entry.payments.some((candidate) => candidate.id === paymentId));
+      if (invoice) {
+        invoice.payments = invoice.payments.map((entry) => (entry.id === paymentId ? payment : entry));
+        const totalPaid = paidTotal(invoice);
+        if (totalPaid >= invoice.total) {
+          invoice.status = "paid";
+        } else if (totalPaid > 0) {
+          invoice.status = "partial";
+          invoice.paidAt = null;
+        } else {
+          invoice.status = invoice.lastSentAt ? "sent" : "draft";
+          invoice.paidAt = null;
+          invoice.lastPaidAt = null;
+        }
+        pushActivityLog(state, {
+          type: "payment.reversed",
+          action: "payment.reversed",
+          entityType: "invoice",
+          entityId: invoice.id,
+          metadata: toJson({
+            paymentId: payment.id,
+            amount: payment.amount,
+            method: payment.method,
+          }),
+        });
+      }
+
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson(payment) });
       return;
     }
 
