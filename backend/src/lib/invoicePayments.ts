@@ -21,6 +21,8 @@ type RecordInvoicePaymentInput = {
   stripeChargeId?: string | null;
 };
 
+let cachedPaymentColumns: Set<string> | null = null;
+
 export function isPaymentSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const cause = "cause" in error ? (error as { cause?: unknown }).cause : error;
@@ -38,6 +40,48 @@ export function isPaymentSchemaDriftError(error: unknown): boolean {
     message.includes('column "stripe_payment_intent_id" does not exist') ||
     message.includes('column "stripe_charge_id" does not exist')
   );
+}
+
+async function getPaymentColumns(): Promise<Set<string>> {
+  if (cachedPaymentColumns) return cachedPaymentColumns;
+  const result = await db.execute(sql`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'payments'
+  `);
+  const rows = (result as { rows?: Array<{ column_name?: string }> }).rows ?? [];
+  cachedPaymentColumns = new Set(
+    rows.map((row) => row?.column_name).filter((value): value is string => typeof value === "string")
+  );
+  return cachedPaymentColumns;
+}
+
+export function buildLegacyPaymentInsertValues(
+  paymentColumns: Set<string>,
+  input: RecordInvoicePaymentInput,
+  amount: string,
+  paidAt: Date
+): Record<string, unknown> {
+  const legacyValues: Record<string, unknown> = {
+    businessId: input.businessId,
+    invoiceId: input.invoiceId,
+    amount,
+    method: input.method,
+    paidAt,
+  };
+  if (paymentColumns.has("idempotency_key")) legacyValues.idempotencyKey = input.idempotencyKey ?? null;
+  if (paymentColumns.has("notes")) legacyValues.notes = input.notes ?? null;
+  if (paymentColumns.has("reference_number")) legacyValues.referenceNumber = input.referenceNumber ?? null;
+  if (paymentColumns.has("stripe_checkout_session_id")) {
+    legacyValues.stripeCheckoutSessionId = input.stripeCheckoutSessionId ?? null;
+  }
+  if (paymentColumns.has("stripe_payment_intent_id")) {
+    legacyValues.stripePaymentIntentId = input.stripePaymentIntentId ?? null;
+  }
+  if (paymentColumns.has("stripe_charge_id")) {
+    legacyValues.stripeChargeId = input.stripeChargeId ?? null;
+  }
+  return legacyValues;
 }
 
 export async function getActiveInvoicePaymentTotal(invoiceId: string, tx: DbExecutor = db) {
@@ -182,18 +226,11 @@ export async function recordInvoicePayment(
       businessId: input.businessId,
       error,
     });
+    const paymentColumns = await getPaymentColumns();
+    const legacyValues = buildLegacyPaymentInsertValues(paymentColumns, input, amount, paidAt);
     [payment] = await tx
       .insert(payments)
-      .values({
-        businessId: input.businessId,
-        invoiceId: input.invoiceId,
-        amount,
-        method: input.method,
-        paidAt,
-        idempotencyKey: input.idempotencyKey ?? null,
-        notes: input.notes ?? null,
-        referenceNumber: input.referenceNumber ?? null,
-      })
+      .values(legacyValues)
       .returning();
   }
 
