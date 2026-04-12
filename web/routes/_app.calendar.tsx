@@ -815,7 +815,7 @@ export default function CalendarPage() {
         <div className="grid h-full min-h-0 gap-3 grid-cols-1">
           <div
             className={cn(
-              "min-h-0 rounded-[1.3rem] border border-border/60 bg-white/72",
+              "flex h-full min-h-0 flex-col rounded-[1.3rem] border border-border/60 bg-white/72",
               isMobileLayout ? "min-h-[18.5rem] p-2.5" : "min-h-[22rem] p-3 xl:min-h-[25rem]"
             )}
           >
@@ -830,8 +830,8 @@ export default function CalendarPage() {
             {selectedDayAgendaItems.length > 0 ? (
               <div
                 className={cn(
-                  "h-full space-y-2 overflow-y-auto pr-1",
-                  isMobileLayout ? "min-h-[14.5rem]" : "min-h-[17.5rem] xl:min-h-[20rem]"
+                  "min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 pb-2",
+                  isMobileLayout ? "pt-0.5" : "pt-0.5"
                 )}
               >
                 {selectedDayAgendaItems.map(({ appointment, kind }) => (
