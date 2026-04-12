@@ -286,6 +286,38 @@ export default function NewInvoicePage() {
 
   const [, createInvoice] = useAction(api.invoice.create);
 
+  async function recoverCreatedAppointmentInvoice(params: {
+    appointmentId: string;
+    clientId: string;
+  }): Promise<string | null> {
+    try {
+      const matches = await api.invoice.findMany({
+        filter: {
+          appointmentId: { equals: params.appointmentId },
+          clientId: { equals: params.clientId },
+        },
+        sort: { createdAt: "Descending" },
+        first: 1,
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      } as any);
+      const latest = Array.isArray(matches) ? (matches[0] as { id?: string; createdAt?: string | null } | undefined) : undefined;
+      if (!latest?.id) return null;
+
+      const createdAt = latest.createdAt ? new Date(latest.createdAt) : null;
+      if (createdAt && !Number.isNaN(createdAt.getTime())) {
+        const ageMs = Date.now() - createdAt.getTime();
+        if (ageMs > 2 * 60 * 1000) return null;
+      }
+
+      return latest.id;
+    } catch {
+      return null;
+    }
+  }
+
   // Form state
   const [clientComboOpen, setClientComboOpen] = useState(false);
   const [dueDate, setDueDate] = useState(() => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
@@ -557,6 +589,18 @@ export default function NewInvoicePage() {
       });
 
       if (invoiceResult.error) {
+        if (appointmentIdParam) {
+          const recoveredInvoiceId = await recoverCreatedAppointmentInvoice({
+            appointmentId: appointmentIdParam,
+            clientId: effectiveClientId,
+          });
+          if (recoveredInvoiceId) {
+            toast.warning("Invoice was created, but the appointment workflow lost the response. Opening the invoice now.");
+            navigate(`/invoices/${recoveredInvoiceId}?from=${encodeURIComponent(returnTo)}`);
+            setSubmitting(false);
+            return;
+          }
+        }
         toast.error(invoiceResult.error.message ?? "Failed to create invoice");
         setSubmitting(false);
         return;
@@ -586,6 +630,17 @@ export default function NewInvoicePage() {
       }
       navigate(`/invoices/${newInvoiceId}?from=${encodeURIComponent(returnTo)}`);
     } catch (err: unknown) {
+      if (appointmentIdParam) {
+        const recoveredInvoiceId = await recoverCreatedAppointmentInvoice({
+          appointmentId: appointmentIdParam,
+          clientId: effectiveClientId,
+        });
+        if (recoveredInvoiceId) {
+          toast.warning("Invoice was created, but the appointment workflow lost the response. Opening the invoice now.");
+          navigate(`/invoices/${recoveredInvoiceId}?from=${encodeURIComponent(returnTo)}`);
+          return;
+        }
+      }
       toast.error(err instanceof Error ? err.message : "Failed to create invoice");
     } finally {
       setSubmitting(false);
