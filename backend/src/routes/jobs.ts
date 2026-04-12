@@ -15,6 +15,7 @@ import {
   vehicles,
 } from "../db/schema.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
+import { calculateAppointmentFinanceTotals } from "../lib/revenueTotals.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -37,6 +38,51 @@ function isSchemaDriftError(error: unknown): boolean {
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
   return req.businessId;
+}
+
+function toMoneyNumber(value: number | string | null | undefined): number {
+  if (value == null || value === "") return 0;
+  const normalized = typeof value === "string" ? Number(value) : value;
+  return Number.isFinite(normalized) ? normalized : 0;
+}
+
+function getDisplayedJobAmount(row: {
+  subtotal?: number | string | null;
+  taxRate?: number | string | null;
+  taxAmount?: number | string | null;
+  applyTax?: boolean | null;
+  adminFeeRate?: number | string | null;
+  adminFeeAmount?: number | string | null;
+  applyAdminFee?: boolean | null;
+  totalPrice?: number | string | null;
+}): number {
+  const subtotal = Math.max(0, toMoneyNumber(row.subtotal));
+  const storedTotal = Math.max(0, toMoneyNumber(row.totalPrice));
+  if (subtotal <= 0) return storedTotal;
+
+  const computed = calculateAppointmentFinanceTotals({
+    subtotal,
+    taxRate: toMoneyNumber(row.taxRate),
+    applyTax: Boolean(row.applyTax),
+    adminFeeRate: toMoneyNumber(row.adminFeeRate),
+    applyAdminFee: Boolean(row.applyAdminFee),
+  });
+
+  const adminFeeAmount =
+    row.applyAdminFee === true
+      ? row.adminFeeAmount != null
+        ? Math.max(0, toMoneyNumber(row.adminFeeAmount))
+        : computed.adminFeeAmount
+      : 0;
+  const taxableSubtotal = subtotal + adminFeeAmount;
+  const taxAmount =
+    row.applyTax === true
+      ? row.taxAmount != null
+        ? Math.max(0, toMoneyNumber(row.taxAmount))
+        : taxableSubtotal * (toMoneyNumber(row.taxRate) / 100)
+      : 0;
+
+  return Math.max(0, Number((subtotal + adminFeeAmount + taxAmount).toFixed(2)));
 }
 
 const statusSchema = z.enum(["scheduled", "confirmed", "in_progress", "completed", "cancelled", "no-show"]);
@@ -103,6 +149,13 @@ jobsRouter.get("/", requireAuth, requireTenant, requirePermission("jobs.read"), 
       title: appointments.title,
       startTime: appointments.startTime,
       endTime: appointments.endTime,
+      subtotal: appointments.subtotal,
+      taxRate: appointments.taxRate,
+      taxAmount: appointments.taxAmount,
+      applyTax: appointments.applyTax,
+      adminFeeRate: appointments.adminFeeRate,
+      adminFeeAmount: appointments.adminFeeAmount,
+      applyAdminFee: appointments.applyAdminFee,
       totalPrice: appointments.totalPrice,
       notes: appointments.notes,
       internalNotes: appointments.internalNotes,
@@ -145,7 +198,7 @@ jobsRouter.get("/", requireAuth, requireTenant, requirePermission("jobs.read"), 
       title: row.title,
       scheduledStart: row.startTime,
       scheduledEnd: row.endTime,
-      totalPrice: row.totalPrice,
+      totalPrice: getDisplayedJobAmount(row),
       notes: row.notes,
       internalNotes: row.internalNotes,
       completedAt: row.completedAt,
@@ -175,6 +228,13 @@ jobsRouter.get("/:id", requireAuth, requireTenant, requirePermission("jobs.read"
       title: appointments.title,
       startTime: appointments.startTime,
       endTime: appointments.endTime,
+      subtotal: appointments.subtotal,
+      taxRate: appointments.taxRate,
+      taxAmount: appointments.taxAmount,
+      applyTax: appointments.applyTax,
+      adminFeeRate: appointments.adminFeeRate,
+      adminFeeAmount: appointments.adminFeeAmount,
+      applyAdminFee: appointments.applyAdminFee,
       totalPrice: appointments.totalPrice,
       notes: appointments.notes,
       internalNotes: appointments.internalNotes,
@@ -281,7 +341,7 @@ jobsRouter.get("/:id", requireAuth, requireTenant, requirePermission("jobs.read"
     title: job.title,
     scheduledStart: job.startTime,
     scheduledEnd: job.endTime,
-    totalPrice: job.totalPrice,
+    totalPrice: getDisplayedJobAmount(job),
     notes: job.notes,
     internalNotes: job.internalNotes,
     completedAt: job.completedAt,

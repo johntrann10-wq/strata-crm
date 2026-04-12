@@ -41,6 +41,7 @@ import { runOutboundWebhookIntegrationJob } from "../lib/integrations.js";
 import { parseLeadRecord } from "../lib/leads.js";
 import { getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 import { getHomeDashboardSnapshot, updateHomeDashboardPreferences } from "../lib/homeDashboard.js";
+import { calculateAppointmentFinanceTotals } from "../lib/revenueTotals.js";
 
 export const actionsRouter = Router({ mergeParams: true });
 
@@ -328,6 +329,51 @@ function businessId(req: Request): string {
   return req.businessId;
 }
 
+function toMoneyNumber(value: number | string | null | undefined): number {
+  if (value == null || value === "") return 0;
+  const normalized = typeof value === "string" ? Number(value) : value;
+  return Number.isFinite(normalized) ? normalized : 0;
+}
+
+function getDisplayedStandaloneAppointmentAmount(row: {
+  subtotal?: number | string | null;
+  taxRate?: number | string | null;
+  taxAmount?: number | string | null;
+  applyTax?: boolean | null;
+  adminFeeRate?: number | string | null;
+  adminFeeAmount?: number | string | null;
+  applyAdminFee?: boolean | null;
+  totalPrice?: number | string | null;
+}): number {
+  const subtotal = Math.max(0, toMoneyNumber(row.subtotal));
+  const storedTotal = Math.max(0, toMoneyNumber(row.totalPrice));
+  if (subtotal <= 0) return storedTotal;
+
+  const computed = calculateAppointmentFinanceTotals({
+    subtotal,
+    taxRate: toMoneyNumber(row.taxRate),
+    applyTax: Boolean(row.applyTax),
+    adminFeeRate: toMoneyNumber(row.adminFeeRate),
+    applyAdminFee: Boolean(row.applyAdminFee),
+  });
+
+  const adminFeeAmount =
+    row.applyAdminFee === true
+      ? row.adminFeeAmount != null
+        ? Math.max(0, toMoneyNumber(row.adminFeeAmount))
+        : computed.adminFeeAmount
+      : 0;
+  const taxableSubtotal = subtotal + adminFeeAmount;
+  const taxAmount =
+    row.applyTax === true
+      ? row.taxAmount != null
+        ? Math.max(0, toMoneyNumber(row.taxAmount))
+        : taxableSubtotal * (toMoneyNumber(row.taxRate) / 100)
+      : 0;
+
+  return Math.max(0, Number((subtotal + adminFeeAmount + taxAmount).toFixed(2)));
+}
+
 async function listStandaloneAppointmentsForFinance(
   bid: string,
   extraWhere?: ReturnType<typeof and>
@@ -335,6 +381,13 @@ async function listStandaloneAppointmentsForFinance(
   return db
     .select({
       id: appointments.id,
+      subtotal: appointments.subtotal,
+      taxRate: appointments.taxRate,
+      taxAmount: appointments.taxAmount,
+      applyTax: appointments.applyTax,
+      adminFeeRate: appointments.adminFeeRate,
+      adminFeeAmount: appointments.adminFeeAmount,
+      applyAdminFee: appointments.applyAdminFee,
       totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
       updatedAt: appointments.updatedAt,
@@ -476,7 +529,7 @@ async function getStandaloneAppointmentRevenueTotal(
     bid,
     standaloneAppointments.map((appointment) => ({
       id: appointment.id,
-      totalPrice: appointment.totalPrice,
+      totalPrice: getDisplayedStandaloneAppointmentAmount(appointment),
       depositAmount: appointment.depositAmount,
       paidAt: null,
     }))
@@ -493,13 +546,14 @@ async function getStandaloneAppointmentAwaitingCollectionTotal(bid: string) {
     bid,
     standaloneAppointments.map((appointment) => ({
       id: appointment.id,
-      totalPrice: appointment.totalPrice,
+      totalPrice: getDisplayedStandaloneAppointmentAmount(appointment),
       depositAmount: appointment.depositAmount,
       paidAt: null,
     }))
   );
   return standaloneAppointments.reduce((sum, appointment) => {
-    const balanceDue = financeByAppointment.get(appointment.id)?.balanceDue ?? Math.max(0, Number(appointment.totalPrice ?? 0));
+    const balanceDue =
+      financeByAppointment.get(appointment.id)?.balanceDue ?? Math.max(0, getDisplayedStandaloneAppointmentAmount(appointment));
     return sum + balanceDue;
   }, 0);
 }
@@ -624,7 +678,7 @@ async function getStandaloneAppointmentCollectedRevenueByUpdatedAt(
     bid,
     standaloneAppointments.map((appointment) => ({
       id: appointment.id,
-      totalPrice: appointment.totalPrice,
+      totalPrice: getDisplayedStandaloneAppointmentAmount(appointment),
       depositAmount: appointment.depositAmount,
       paidAt: null,
     }))
