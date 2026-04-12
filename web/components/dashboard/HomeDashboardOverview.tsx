@@ -825,7 +825,7 @@ export function HomeMonthlyRevenueChartCard({
       label: "Cash received",
       value: formatDashboardCompactCurrency(chart.totalCollectedThisMonth),
       tone: "text-slate-950",
-      hint: "invoice cash received",
+      hint: "cash collected this month",
     },
     {
       label: "Expenses",

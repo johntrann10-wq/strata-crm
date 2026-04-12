@@ -92,6 +92,23 @@ describe("appointment finance summary", () => {
     expect(summary.paidInFull).toBe(false);
   });
 
+  it("does not let malformed carryover rows turn a small deposit into full payment", () => {
+    const summary = calculateAppointmentFinanceSummary({
+      id: "apt-legacy-carryover",
+      totalPrice: 175,
+      depositAmount: 20,
+      directCollectedAmount: 20,
+      invoiceCollectedAmount: 175,
+      invoiceCarryoverAmount: 175,
+      paidAt: null,
+    });
+
+    expect(summary.collectedAmount).toBe(20);
+    expect(summary.balanceDue).toBe(155);
+    expect(summary.depositSatisfied).toBe(true);
+    expect(summary.paidInFull).toBe(false);
+  });
+
   it("requires the real deposit amount before marking a deposit as satisfied", () => {
     const beforeBoundary = calculateAppointmentFinanceSummary({
       id: "apt-deposit-boundary-before",

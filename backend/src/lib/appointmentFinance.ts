@@ -60,10 +60,27 @@ export function hasValidPaidAtValue(value: Date | string | null | undefined): bo
   return !Number.isNaN(parsed.getTime());
 }
 
-function isCarryoverPaymentRow(row: { notes?: string | null; idempotencyKey?: string | null }) {
+function isCarryoverPaymentRow(row: {
+  notes?: string | null;
+  idempotencyKey?: string | null;
+  method?: string | null;
+  referenceNumber?: string | null;
+  appointmentId?: string | null;
+}) {
+  const notes = String(row.notes ?? "").trim().toLowerCase();
+  if (notes === "carried over from appointment payment state." || notes.includes("appointment payment state")) {
+    return true;
+  }
+
+  if (String(row.idempotencyKey ?? "").startsWith("appointment-payment-carryover:")) {
+    return true;
+  }
+
   return (
-    String(row.notes ?? "").trim() === "Carried over from appointment payment state." ||
-    String(row.idempotencyKey ?? "").startsWith("appointment-payment-carryover:")
+    row.method === "other" &&
+    Boolean(row.appointmentId) &&
+    Boolean(row.referenceNumber) &&
+    row.referenceNumber === row.appointmentId
   );
 }
 
@@ -78,7 +95,7 @@ export function calculateAppointmentFinanceSummary(input: AppointmentFinanceInpu
   const invoiceCollectedAmount = Math.max(0, toMoneyNumber(input.invoiceCollectedAmount));
   const invoiceCarryoverAmount = Math.max(0, toMoneyNumber(input.invoiceCarryoverAmount));
 
-  let collectedAmount = invoiceCollectedAmount + Math.max(0, directCollectedAmount - invoiceCarryoverAmount);
+  let collectedAmount = directCollectedAmount + Math.max(0, invoiceCollectedAmount - invoiceCarryoverAmount);
   if (invoiceCollectedAmount <= 0.009) {
     collectedAmount = directCollectedAmount;
   }
@@ -158,6 +175,8 @@ export async function getAppointmentFinanceSummaryMap(
       amount: payments.amount,
       notes: payments.notes,
       idempotencyKey: payments.idempotencyKey,
+      method: payments.method,
+      referenceNumber: payments.referenceNumber,
     })
     .from(invoices)
     .leftJoin(
@@ -182,6 +201,8 @@ export async function getAppointmentFinanceSummaryMap(
     amount?: string | number | null;
     notes?: string | null;
     idempotencyKey?: string | null;
+    method?: string | null;
+    referenceNumber?: string | null;
   }>) {
     if (!row.appointmentId) continue;
     const amount = toMoneyNumber(row.amount);

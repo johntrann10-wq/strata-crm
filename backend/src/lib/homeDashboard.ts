@@ -660,10 +660,27 @@ function getActivityLogEffectivePaidAt(metadata: string | null | undefined, fall
   return fallback;
 }
 
-function isCarryoverPaymentRow(row: { notes?: string | null; idempotencyKey?: string | null }) {
+function isCarryoverPaymentRow(row: {
+  notes?: string | null;
+  idempotencyKey?: string | null;
+  method?: string | null;
+  referenceNumber?: string | null;
+  appointmentId?: string | null;
+}) {
+  const notes = String(row.notes ?? "").trim().toLowerCase();
+  if (notes === "carried over from appointment payment state." || notes.includes("appointment payment state")) {
+    return true;
+  }
+
+  if (String(row.idempotencyKey ?? "").startsWith("appointment-payment-carryover:")) {
+    return true;
+  }
+
   return (
-    String(row.notes ?? "").trim() === "Carried over from appointment payment state." ||
-    String(row.idempotencyKey ?? "").startsWith("appointment-payment-carryover:")
+    row.method === "other" &&
+    Boolean(row.appointmentId) &&
+    Boolean(row.referenceNumber) &&
+    row.referenceNumber === row.appointmentId
   );
 }
 
@@ -2729,6 +2746,7 @@ async function loadMonthAppointmentsForRevenue(
   tx: DbExecutor
 ): Promise<
   Array<{
+    id: string;
     bookedAt: Date;
     subtotal: MoneyLike;
     taxRate: MoneyLike;
@@ -2738,11 +2756,13 @@ async function loadMonthAppointmentsForRevenue(
     adminFeeAmount: MoneyLike;
     applyAdminFee: boolean | null;
     totalPrice: MoneyLike;
+    depositAmount: MoneyLike;
   }>
 > {
   const bookedAt = sql<Date>`coalesce(${appointments.jobStartTime}, ${appointments.startTime})`;
   return tx
     .select({
+      id: appointments.id,
       bookedAt: bookedAt.as("booked_at"),
       subtotal: appointments.subtotal,
       taxRate: appointments.taxRate,
@@ -2752,6 +2772,7 @@ async function loadMonthAppointmentsForRevenue(
       adminFeeAmount: appointments.adminFeeAmount,
       applyAdminFee: appointments.applyAdminFee,
       totalPrice: appointments.totalPrice,
+      depositAmount: appointments.depositAmount,
     })
     .from(appointments)
     .where(and(eq(appointments.businessId, businessId), gte(bookedAt, monthStart), lte(bookedAt, monthEnd)))
@@ -2991,6 +3012,9 @@ async function sumInvoicePaymentsInRange(
       amount: payments.amount,
       notes: payments.notes,
       idempotencyKey: payments.idempotencyKey,
+      method: payments.method,
+      referenceNumber: payments.referenceNumber,
+      appointmentId: invoices.appointmentId,
     })
     .from(payments)
     .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
@@ -3052,6 +3076,9 @@ async function loadInvoicePaymentRowsInRange(
       amount: payments.amount,
       notes: payments.notes,
       idempotencyKey: payments.idempotencyKey,
+      method: payments.method,
+      referenceNumber: payments.referenceNumber,
+      appointmentId: invoices.appointmentId,
     })
     .from(payments)
     .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
@@ -3636,8 +3663,35 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     })
   );
 
+  const monthStandaloneInvoices = invoiceRows.filter(
+    (row) => !row.appointmentId && row.createdAt >= monthStart && row.createdAt <= monthEnd
+  );
   const overdueInvoices = invoiceRows.filter((row) => normalizeInvoiceStatus(row, todayStart) === "overdue");
   const outstandingInvoiceAmount = invoiceRows.reduce((sum, row) => {
+    const balance = Math.max(0, toMoneyNumber(row.total) - toMoneyNumber(row.totalPaid));
+    return sum + balance;
+  }, 0);
+  const monthRevenueFinanceMap = await loadOrFallback(
+    "monthRevenueFinanceMap",
+    new Map<string, AppointmentFinanceSummary>(),
+    ["summary_cash", "revenue_collections", "goals"],
+    () =>
+      getAppointmentFinanceSummaryMap(
+        params.businessId,
+        monthRevenueAppointments.map((row) => ({
+          id: row.id,
+          totalPrice: getDashboardAppointmentAmount(row),
+          depositAmount: row.depositAmount,
+          paidAt: null,
+        })),
+        tx
+      )
+  );
+  const outstandingAppointmentRevenueAmount = monthRevenueAppointments.reduce((sum, row) => {
+    const finance = monthRevenueFinanceMap.get(row.id);
+    return sum + Math.max(0, finance?.balanceDue ?? 0);
+  }, 0);
+  const outstandingOpenRevenueAmount = outstandingAppointmentRevenueAmount + monthStandaloneInvoices.reduce((sum, row) => {
     const balance = Math.max(0, toMoneyNumber(row.total) - toMoneyNumber(row.totalPaid));
     return sum + balance;
   }, 0);
@@ -3771,9 +3825,6 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       })
   );
 
-  const monthStandaloneInvoices = invoiceRows.filter(
-    (row) => !row.appointmentId && row.createdAt >= monthStart && row.createdAt <= monthEnd
-  );
   const { bookedRevenueThisWeek, bookedRevenueThisMonth } = calculateBookedRevenueTotals({
     weekStart,
     weekEnd,
@@ -3855,7 +3906,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     bookedRevenueThisWeek: modulePermissions.revenueCollections ? bookedRevenueThisWeek : 0,
     collectedThisWeek: modulePermissions.revenueCollections ? Number(collectedThisWeek.toFixed(2)) : 0,
     collectedToday: modulePermissions.revenueCollections ? Number(collectedToday.toFixed(2)) : 0,
-    outstandingInvoiceAmount: modulePermissions.revenueCollections ? Number(outstandingInvoiceAmount.toFixed(2)) : 0,
+    outstandingInvoiceAmount: modulePermissions.revenueCollections ? Number(outstandingOpenRevenueAmount.toFixed(2)) : 0,
     overdueInvoiceAmount: modulePermissions.revenueCollections ? Number(overdueInvoiceAmount.toFixed(2)) : 0,
     depositsDueAmount: modulePermissions.revenueCollections ? Number(depositsDueAmount.toFixed(2)) : 0,
     depositsDueCount: modulePermissions.revenueCollections ? depositsDueRows.length : 0,
@@ -4034,7 +4085,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       cash: {
         allowed: modulePermissions.cash,
         collectedToday: modulePermissions.cash ? Number(collectedToday.toFixed(2)) : 0,
-        outstandingInvoiceAmount: modulePermissions.cash ? Number(outstandingInvoiceAmount.toFixed(2)) : 0,
+        outstandingInvoiceAmount: modulePermissions.cash ? Number(outstandingOpenRevenueAmount.toFixed(2)) : 0,
         overdueInvoiceAmount: modulePermissions.cash ? Number(overdueInvoiceAmount.toFixed(2)) : 0,
         depositsDueAmount: modulePermissions.cash ? Number(depositsDueAmount.toFixed(2)) : 0,
       },
@@ -4099,7 +4150,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
           : 0,
       outstandingInvoiceAmount:
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
-          ? Number(outstandingInvoiceAmount.toFixed(2))
+          ? Number(outstandingOpenRevenueAmount.toFixed(2))
           : 0,
       percentToGoal: modulePermissions.goals ? goals.percentToGoal : null,
       goalAmount: modulePermissions.goals ? goals.monthlyRevenueGoal : null,

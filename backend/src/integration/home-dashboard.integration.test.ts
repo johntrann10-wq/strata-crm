@@ -159,6 +159,63 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
     return appointmentId;
   }
 
+  async function createWorkspaceContext(label: string) {
+    if (!app) throw new Error("Backend app failed to load.");
+
+    const workspaceEmail = `${label}-${Date.now()}@example.com`;
+    const signUpRes = await request(app).post("/api/auth/sign-up").send({
+      email: workspaceEmail,
+      password,
+      firstName: "Revenue",
+      lastName: "Owner",
+    });
+    expect(signUpRes.status).toBe(201);
+
+    const workspaceToken = signUpRes.body.data.token as string;
+    const workspaceUserId = signUpRes.body.data.id as string;
+
+    const businessRes = await request(app).post("/api/businesses").set("Authorization", `Bearer ${workspaceToken}`).send({
+      name: `${label} Business`,
+      type: "detail_shop",
+      staffCount: 1,
+      operatingHours: "Mon-Fri 09:00-17:00",
+      monthlyRevenueGoal: 5000,
+      monthlyJobsGoal: 8,
+    });
+    expect(businessRes.status).toBe(201);
+    const workspaceBusinessId = businessRes.body.id as string;
+
+    const onboardingRes = await request(app)
+      .post(`/api/businesses/${encodeURIComponent(workspaceBusinessId)}/completeOnboarding`)
+      .set("Authorization", `Bearer ${workspaceToken}`)
+      .send({});
+    expect(onboardingRes.status).toBe(200);
+
+    const clientRes = await request(app).post("/api/clients").set("Authorization", `Bearer ${workspaceToken}`).send({
+      firstName: "Trial",
+      lastName: "Client",
+      email: `client-${label}-${Date.now()}@example.com`,
+    });
+    expect(clientRes.status).toBe(201);
+    const workspaceClientId = clientRes.body.id as string;
+
+    const vehicleRes = await request(app).post("/api/vehicles").set("Authorization", `Bearer ${workspaceToken}`).send({
+      clientId: workspaceClientId,
+      year: 2023,
+      make: "Porsche",
+      model: "Macan",
+    });
+    expect(vehicleRes.status).toBe(201);
+
+    return {
+      token: workspaceToken,
+      userId: workspaceUserId,
+      businessId: workspaceBusinessId,
+      clientId: workspaceClientId,
+      vehicleId: vehicleRes.body.id as string,
+    };
+  }
+
   it("returns an empty but usable owner snapshot for a fresh business", async () => {
     const snapshot = await getHomeDashboardSnapshot({
       businessId,
@@ -218,5 +275,55 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
     expect(snapshot.goals.allowed).toBe(false);
     expect(snapshot.modulePermissions.teamVisibility).toBe(false);
     expect(snapshot.quickActions).toEqual([]);
+  });
+
+  it("shows honest monthly revenue for a partial-deposit appointment without an invoice", async () => {
+    const workspace = await createWorkspaceContext("dashboard-monthly-revenue");
+
+    const appointmentRes = await request(app!)
+      .post("/api/appointments")
+      .set("Authorization", `Bearer ${workspace.token}`)
+      .send({
+        clientId: workspace.clientId,
+        vehicleId: workspace.vehicleId,
+        startTime: "2026-04-12T17:00:00.000Z",
+        endTime: "2026-04-12T19:00:00.000Z",
+        title: "Full Detail",
+        depositAmount: 20,
+      });
+    expect(appointmentRes.status).toBe(201);
+
+    const appointmentId = appointmentRes.body.id as string;
+
+    const updateRes = await request(app!)
+      .patch(`/api/appointments/${encodeURIComponent(appointmentId)}`)
+      .set("Authorization", `Bearer ${workspace.token}`)
+      .send({ totalPrice: 175 });
+    expect(updateRes.status).toBe(200);
+
+    const depositRes = await request(app!)
+      .post(`/api/appointments/${encodeURIComponent(appointmentId)}/recordDepositPayment`)
+      .set("Authorization", `Bearer ${workspace.token}`)
+      .send({
+        amount: 20,
+        method: "cash",
+        paidAt: "2026-04-12T19:00:00.000Z",
+      });
+    expect(depositRes.status).toBe(200);
+
+    const snapshot = await getHomeDashboardSnapshot({
+      businessId: workspace.businessId,
+      userId: workspace.userId,
+      membershipRole: "owner",
+      permissions: Array.from(getDefaultPermissionsForRole("owner")),
+      range: "month",
+      now,
+      skipCache: true,
+    });
+
+    expect(snapshot.monthlyRevenueChart.totalBookedThisMonth).toBe(175);
+    expect(snapshot.monthlyRevenueChart.totalCollectedThisMonth).toBe(20);
+    expect(snapshot.monthlyRevenueChart.netThisMonth).toBe(20);
+    expect(snapshot.monthlyRevenueChart.outstandingInvoiceAmount).toBe(155);
   });
 });
