@@ -244,6 +244,13 @@ export type ApptRecord = {
   vehicleOnSite?: boolean | null;
   jobPhase?: string | null;
   status: string;
+  subtotal?: number | null;
+  taxRate?: number | null;
+  taxAmount?: number | null;
+  applyTax?: boolean | null;
+  adminFeeRate?: number | null;
+  adminFeeAmount?: number | null;
+  applyAdminFee?: boolean | null;
   totalPrice?: number | null;
   isMobile?: boolean | null;
   assignedStaffId?: string | null;
@@ -353,8 +360,42 @@ export function apptVehicleLabel(apt: ApptRecord): string {
   return [apt.vehicle.year, apt.vehicle.make, apt.vehicle.model].filter(Boolean).join(" ").trim() || "Vehicle";
 }
 
+function toMoneyNumber(value: number | string | null | undefined): number {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return numeric;
+}
+
+export function getCalendarAppointmentAmount(apt: ApptRecord): number {
+  const subtotal = Math.max(0, toMoneyNumber(apt.subtotal));
+  const storedTotal = Math.max(0, toMoneyNumber(apt.totalPrice));
+  const applyAdminFee = apt.applyAdminFee === true;
+  const applyTax = apt.applyTax === true;
+  const adminFeeAmount =
+    applyAdminFee
+      ? (
+          apt.adminFeeAmount != null
+            ? Math.max(0, toMoneyNumber(apt.adminFeeAmount))
+            : (subtotal * Math.max(0, toMoneyNumber(apt.adminFeeRate))) / 100
+        )
+      : 0;
+  const taxableSubtotal = subtotal + adminFeeAmount;
+  const taxAmount =
+    applyTax
+      ? (
+          apt.taxAmount != null
+            ? Math.max(0, toMoneyNumber(apt.taxAmount))
+            : (taxableSubtotal * Math.max(0, toMoneyNumber(apt.taxRate))) / 100
+        )
+      : 0;
+  const computedTotal = Math.max(0, Number((taxableSubtotal + taxAmount).toFixed(2)));
+
+  if (computedTotal > 0) return computedTotal;
+  return storedTotal;
+}
+
 export function apptMoneyLabel(apt: ApptRecord): string | null {
-  const amount = Number(apt.totalPrice ?? 0);
+  const amount = getCalendarAppointmentAmount(apt);
   if (amount <= 0) return null;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -820,7 +861,7 @@ export function MonthView({
       const list = startDayMap.get(startKey);
       if (list) list.push(appointment);
       else startDayMap.set(startKey, [appointment]);
-      revenueMap.set(startKey, (revenueMap.get(startKey) ?? 0) + Number(appointment.totalPrice ?? 0));
+      revenueMap.set(startKey, (revenueMap.get(startKey) ?? 0) + getCalendarAppointmentAmount(appointment));
     });
 
     if (conflictIds?.size) {

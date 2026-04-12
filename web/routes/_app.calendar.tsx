@@ -18,6 +18,7 @@ import {
   DayView,
   MonthView,
   detectConflicts,
+  getCalendarAppointmentAmount,
   getHeaderTitle,
   getViewRange,
   navigateDate,
@@ -87,6 +88,7 @@ function AgendaPreviewRow({
   currentDate: Date;
   onClick: () => void;
 }) {
+  const appointmentAmount = getCalendarAppointmentAmount(appointment);
   return (
     <button
       type="button"
@@ -98,7 +100,7 @@ function AgendaPreviewRow({
     >
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-foreground">
-          {[getCalendarAppointmentLabel(appointment), Number(appointment.totalPrice ?? 0) > 0 ? formatCurrency(Number(appointment.totalPrice ?? 0)) : null]
+          {[getCalendarAppointmentLabel(appointment), appointmentAmount > 0 ? formatCurrency(appointmentAmount) : null]
             .filter(Boolean)
             .join(" • ")}
         </p>
@@ -149,6 +151,12 @@ function parseDateInput(value: string): Date {
   return new Date(year, (month || 1) - 1, day || 1);
 }
 
+function parseOptionalDateInput(value: string | null): Date | null {
+  if (!value) return null;
+  const parsed = parseDateInput(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function combineDateAndTime(dateValue: string, timeValue: string): Date {
   const [hours, minutes] = timeValue.split(":").map(Number);
   const date = parseDateInput(dateValue);
@@ -181,12 +189,13 @@ export default function CalendarPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedView = searchParams.get("view");
+  const requestedDate = parseOptionalDateInput(searchParams.get("date"));
   const initialView =
     requestedView === "month" || requestedView === "day"
       ? requestedView
       : null;
 
-  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [currentDate, setCurrentDate] = useState(() => requestedDate ?? new Date());
   const [view, setView] = useState<"month" | "day">(initialView ?? "month");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [conflictDismissed, setConflictDismissed] = useState(false);
@@ -225,10 +234,18 @@ export default function CalendarPage() {
       setSearchParams(next, { replace: true });
       return;
     }
-    if (next.get("view") === view) return;
+    const dateValue = toLocalDateString(currentDate);
+    if (next.get("view") === view && next.get("date") === dateValue) return;
     next.set("view", view);
+    next.set("date", dateValue);
     setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams, view]);
+  }, [currentDate, searchParams, setSearchParams, view]);
+
+  useEffect(() => {
+    if (!requestedDate) return;
+    if (toLocalDateString(currentDate) === toLocalDateString(requestedDate)) return;
+    setCurrentDate(requestedDate);
+  }, [currentDate, requestedDate]);
 
   const { start: viewStart, end: viewEnd } = useMemo(
     () => getViewRange(currentDate, view),
@@ -592,7 +609,7 @@ export default function CalendarPage() {
   const selectedDayRevenue = useMemo(
     () =>
       getOverviewCalendarAppointments(selectedDayAppointments).reduce(
-        (total, appointment) => total + Number(appointment.totalPrice ?? 0),
+        (total, appointment) => total + getCalendarAppointmentAmount(appointment),
         0
       ),
     [selectedDayAppointments]
@@ -623,7 +640,7 @@ export default function CalendarPage() {
           scheduledAt.getTime() >= selectedMonthRange.start.getTime() &&
           scheduledAt.getTime() <= selectedMonthRange.end.getTime();
         if (!isScheduledThisMonth) return total;
-        return total + Number(appointment.totalPrice ?? 0);
+        return total + getCalendarAppointmentAmount(appointment);
       }, 0),
     [selectedMonthAppointments, selectedMonthRange]
   );
