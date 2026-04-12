@@ -257,6 +257,7 @@ async function getInvoiceLineItemColumns(): Promise<Set<string>> {
 async function insertLegacyInvoiceLineItem(
   executor: any,
   data: {
+    id?: string;
     invoiceId: string;
     description: string;
     quantity: string;
@@ -267,6 +268,7 @@ async function insertLegacyInvoiceLineItem(
   const columns = await getInvoiceLineItemColumns();
   const now = new Date();
   const insertData: Record<string, unknown> = {};
+  if (data.id && columns.has("id")) insertData.id = data.id;
   if (columns.has("invoice_id")) insertData.invoiceId = data.invoiceId;
   if (columns.has("description")) insertData.description = data.description;
   if (columns.has("quantity")) insertData.quantity = data.quantity;
@@ -1191,8 +1193,39 @@ invoicesRouter.post(
       ? new Date(parsed.data.dueDate)
       : null;
 
+  async function cleanupPartialInvoice(executor: any, invoiceId: string) {
+    try {
+      await executor.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId));
+    } catch (error) {
+      logger.warn("Failed to clean up partial invoice line items", {
+        businessId: bid,
+        invoiceId,
+        error,
+      });
+    }
+    try {
+      await executor.delete(payments).where(eq(payments.invoiceId, invoiceId));
+    } catch (error) {
+      logger.warn("Failed to clean up partial invoice payments", {
+        businessId: bid,
+        invoiceId,
+        error,
+      });
+    }
+    try {
+      await executor.delete(invoices).where(eq(invoices.id, invoiceId));
+    } catch (error) {
+      logger.warn("Failed to clean up partial invoice record", {
+        businessId: bid,
+        invoiceId,
+        error,
+      });
+    }
+  }
+
   async function createInvoiceWithExecutor(
-      executor: any
+      executor: any,
+      options?: { cleanupOnFailure?: boolean }
     ) {
     const b = await getNextInvoiceNumberWithFallback(executor, bid);
     if (!b) throw new NotFoundError("Business not found.");
@@ -1230,16 +1263,37 @@ invoicesRouter.post(
           updatedAt: Date;
         }
         | null = null;
+      let invoiceRowPersisted = false;
       const now = new Date();
       const invoiceColumns = await getInvoiceColumns();
       const canUseModernInvoiceInsert = hasRequiredColumns(invoiceColumns, MODERN_INVOICE_CREATE_COLUMNS);
       let invoiceNumber = initialInvoiceNumber;
-      for (let attempt = 0; attempt < 25 && !created; attempt += 1) {
-        try {
-          if (canUseModernInvoiceInsert) {
-            await executor
-              .insert(invoices)
-              .values({
+      try {
+        for (let attempt = 0; attempt < 25 && !created; attempt += 1) {
+          try {
+            if (canUseModernInvoiceInsert) {
+              await executor
+                .insert(invoices)
+                .values({
+                  id: invoiceId,
+                  businessId: bid,
+                  clientId: data.clientId,
+                  appointmentId: data.appointmentId ?? null,
+                  invoiceNumber,
+                  status: initialStatus,
+                  subtotal: String(subtotal),
+                  taxRate: String(taxRate),
+                  taxAmount: String(taxAmount),
+                  discountAmount: String(discountAmount),
+                  total: String(total),
+                  notes: data.notes ?? null,
+                  dueDate,
+                  createdAt: now,
+                  updatedAt: now,
+                })
+                .returning({ id: invoices.id });
+              invoiceRowPersisted = true;
+              created = {
                 id: invoiceId,
                 businessId: bid,
                 clientId: data.clientId,
@@ -1251,31 +1305,42 @@ invoicesRouter.post(
                 taxAmount: String(taxAmount),
                 discountAmount: String(discountAmount),
                 total: String(total),
-                notes: data.notes ?? null,
                 dueDate,
+                paidAt: null,
+                notes: data.notes ?? null,
                 createdAt: now,
                 updatedAt: now,
-              })
-              .returning({ id: invoices.id });
-            created = {
-              id: invoiceId,
-              businessId: bid,
-              clientId: data.clientId,
-              appointmentId: data.appointmentId ?? null,
-              invoiceNumber,
-              status: initialStatus,
-              subtotal: String(subtotal),
-              taxRate: String(taxRate),
-              taxAmount: String(taxAmount),
-              discountAmount: String(discountAmount),
-              total: String(total),
-              dueDate,
-              paidAt: null,
-              notes: data.notes ?? null,
-              createdAt: now,
-              updatedAt: now,
-            };
-          } else {
+              };
+            } else {
+              try {
+                created = await insertLegacyInvoice(executor, bid, invoiceId, {
+                  clientId: data.clientId,
+                  appointmentId: data.appointmentId ?? null,
+                  invoiceNumber,
+                  status: initialStatus,
+                  subtotal,
+                  taxRate,
+                  taxAmount,
+                  discountAmount,
+                  total,
+                  notes: data.notes ?? null,
+                  dueDate,
+                });
+                invoiceRowPersisted = true;
+              } catch (error) {
+                if (isInvoiceNumberConflictError(error)) {
+                  invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
+                  continue;
+                }
+                throw error;
+              }
+            }
+          } catch (error) {
+            if (isInvoiceNumberConflictError(error)) {
+              invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
+              continue;
+            }
+            if (!isInvoiceSchemaDriftError(error)) throw error;
             try {
               created = await insertLegacyInvoice(executor, bid, invoiceId, {
                 clientId: data.clientId,
@@ -1290,48 +1355,21 @@ invoicesRouter.post(
                 notes: data.notes ?? null,
                 dueDate,
               });
-            } catch (error) {
-              if (isInvoiceNumberConflictError(error)) {
+              invoiceRowPersisted = true;
+            } catch (fallbackError) {
+              if (isInvoiceNumberConflictError(fallbackError)) {
                 invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
                 continue;
               }
-              throw error;
+              throw fallbackError;
             }
-          }
-        } catch (error) {
-          if (isInvoiceNumberConflictError(error)) {
-            invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
-            continue;
-          }
-          if (!isInvoiceSchemaDriftError(error)) throw error;
-          try {
-            created = await insertLegacyInvoice(executor, bid, invoiceId, {
-              clientId: data.clientId,
-              appointmentId: data.appointmentId ?? null,
-              invoiceNumber,
-              status: initialStatus,
-              subtotal,
-              taxRate,
-              taxAmount,
-              discountAmount,
-              total,
-              notes: data.notes ?? null,
-              dueDate,
-            });
-          } catch (fallbackError) {
-            if (isInvoiceNumberConflictError(fallbackError)) {
-              invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
-              continue;
-            }
-            throw fallbackError;
           }
         }
-      }
-      if (!created) throw new BadRequestError("Failed to create invoice.");
-      try {
-        const createdNumberMatch = /^INV-(\d+)$/.exec(created.invoiceNumber);
-        const nextCounterValue =
-          createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : initialNumericInvoiceNumber + 1;
+        if (!created) throw new BadRequestError("Failed to create invoice.");
+        try {
+          const createdNumberMatch = /^INV-(\d+)$/.exec(created.invoiceNumber);
+          const nextCounterValue =
+            createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : initialNumericInvoiceNumber + 1;
         await executor
           .update(businesses)
           .set({ nextInvoiceNumber: nextCounterValue, updatedAt: new Date() })
@@ -1351,22 +1389,34 @@ invoicesRouter.post(
           businessId: bid,
         });
       }
-    }
-      for (const it of items) {
-        const invoiceLineItemColumns = await getInvoiceLineItemColumns();
-        const canUseModernLineItemInsert = hasRequiredColumns(invoiceLineItemColumns, MODERN_INVOICE_LINE_ITEM_COLUMNS);
-        if (canUseModernLineItemInsert) {
-          try {
-            await executor.insert(invoiceLineItems).values({
-              invoiceId: created.id,
-              description: it.description,
-              quantity: it.quantity,
-              unitPrice: it.unitPrice,
-              total: it.total,
-            });
-          } catch (error) {
-            if (!isInvoiceSchemaDriftError(error)) throw error;
+        }
+        for (const it of items) {
+          const invoiceLineItemColumns = await getInvoiceLineItemColumns();
+          const canUseModernLineItemInsert = hasRequiredColumns(invoiceLineItemColumns, MODERN_INVOICE_LINE_ITEM_COLUMNS);
+          if (canUseModernLineItemInsert) {
+            try {
+              await executor.insert(invoiceLineItems).values({
+                id: randomUUID(),
+                invoiceId: created.id,
+                description: it.description,
+                quantity: it.quantity,
+                unitPrice: it.unitPrice,
+                total: it.total,
+              });
+            } catch (error) {
+              if (!isInvoiceSchemaDriftError(error)) throw error;
+              await insertLegacyInvoiceLineItem(executor, {
+                id: randomUUID(),
+                invoiceId: created.id,
+                description: it.description,
+                quantity: it.quantity,
+                unitPrice: it.unitPrice,
+                total: it.total,
+              });
+            }
+          } else {
             await insertLegacyInvoiceLineItem(executor, {
+              id: randomUUID(),
               invoiceId: created.id,
               description: it.description,
               quantity: it.quantity,
@@ -1374,37 +1424,34 @@ invoicesRouter.post(
               total: it.total,
             });
           }
-        } else {
-          await insertLegacyInvoiceLineItem(executor, {
-            invoiceId: created.id,
-            description: it.description,
-          quantity: it.quantity,
-          unitPrice: it.unitPrice,
-          total: it.total,
-        });
+        }
+        if (appointmentPaymentCarryoverAmount > 0) {
+          await recordInvoicePayment(
+            {
+              businessId: bid,
+              invoiceId: created.id,
+              amount: appointmentPaymentCarryoverAmount,
+              method: "other",
+              paidAt: appointment?.updatedAt ?? now,
+              notes: "Carried over from appointment payment state.",
+              referenceNumber: appointment?.id ?? null,
+              idempotencyKey: `appointment-payment-carryover:${created.id}`,
+            },
+            executor
+          );
+          created = {
+            ...created,
+            status: appointmentPaymentCarryoverAmount >= total ? "paid" : "partial",
+            paidAt: appointmentPaymentCarryoverAmount >= total ? (appointment?.updatedAt ?? now) : null,
+          };
+        }
+        return created;
+      } catch (error) {
+        if (options?.cleanupOnFailure && invoiceRowPersisted) {
+          await cleanupPartialInvoice(executor, invoiceId);
+        }
+        throw error;
       }
-    }
-    if (appointmentPaymentCarryoverAmount > 0) {
-      await recordInvoicePayment(
-        {
-          businessId: bid,
-          invoiceId: created.id,
-          amount: appointmentPaymentCarryoverAmount,
-          method: "other",
-          paidAt: appointment?.updatedAt ?? now,
-          notes: "Carried over from appointment payment state.",
-          referenceNumber: appointment?.id ?? null,
-          idempotencyKey: `appointment-payment-carryover:${created.id}`,
-        },
-        executor
-      );
-      created = {
-        ...created,
-        status: appointmentPaymentCarryoverAmount >= total ? "paid" : "partial",
-        paidAt: appointmentPaymentCarryoverAmount >= total ? (appointment?.updatedAt ?? now) : null,
-      };
-    }
-    return created;
   }
 
   let inv;
@@ -1416,7 +1463,7 @@ invoicesRouter.post(
       clientId: data.clientId,
       error,
     });
-    inv = await createInvoiceWithExecutor(db);
+    inv = await createInvoiceWithExecutor(db, { cleanupOnFailure: true });
   }
 
   logger.info("Invoice created", { invoiceId: inv.id, businessId: bid });

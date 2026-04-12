@@ -286,6 +286,25 @@ export default function NewInvoicePage() {
 
   const [, createInvoice] = useAction(api.invoice.create);
 
+  async function finalizeRecoveredInvoiceFlow(invoiceId: string, mode: "draft" | "sent") {
+    if (mode === "sent") {
+      try {
+        const sendResult = await api.invoice.sendToClient({ id: invoiceId });
+        const deliveryStatus = (sendResult as { deliveryStatus?: string } | null)?.deliveryStatus;
+        if (deliveryStatus === "emailed") {
+          toast.success("Invoice created and emailed");
+        } else {
+          toast.warning("Invoice was created, but delivery state was unclear.");
+        }
+      } catch (sendError) {
+        toast.error(`Invoice created, but ${getTransactionalEmailErrorMessage(sendError, "invoice")}`);
+      }
+    } else {
+      toast.success("Invoice created successfully");
+    }
+    navigate(`/invoices/${invoiceId}?from=${encodeURIComponent(returnTo)}`);
+  }
+
   async function recoverCreatedAppointmentInvoice(params: {
     appointmentId: string;
     clientId: string;
@@ -595,8 +614,8 @@ export default function NewInvoicePage() {
             clientId: effectiveClientId,
           });
           if (recoveredInvoiceId) {
-            toast.warning("Invoice was created, but the appointment workflow lost the response. Opening the invoice now.");
-            navigate(`/invoices/${recoveredInvoiceId}?from=${encodeURIComponent(returnTo)}`);
+            toast.warning("Invoice was created, but the appointment workflow lost the response. Finishing the workflow now.");
+            await finalizeRecoveredInvoiceFlow(recoveredInvoiceId, mode);
             setSubmitting(false);
             return;
           }
@@ -614,20 +633,10 @@ export default function NewInvoicePage() {
       }
 
       if (mode === "sent") {
-        try {
-          const sendResult = await api.invoice.sendToClient({ id: newInvoiceId });
-          const deliveryStatus = (sendResult as { deliveryStatus?: string } | null)?.deliveryStatus;
-          if (deliveryStatus === "emailed") {
-            toast.success("Invoice created and emailed");
-          } else {
-            toast.warning("Invoice created, but delivery state was unclear.");
-          }
-        } catch (sendError) {
-          toast.error(`Invoice created, but ${getTransactionalEmailErrorMessage(sendError, "invoice")}`);
-        }
-      } else {
-        toast.success("Invoice created successfully");
+        await finalizeRecoveredInvoiceFlow(newInvoiceId, mode);
+        return;
       }
+      toast.success("Invoice created successfully");
       navigate(`/invoices/${newInvoiceId}?from=${encodeURIComponent(returnTo)}`);
     } catch (err: unknown) {
       if (appointmentIdParam) {
@@ -636,8 +645,8 @@ export default function NewInvoicePage() {
           clientId: effectiveClientId,
         });
         if (recoveredInvoiceId) {
-          toast.warning("Invoice was created, but the appointment workflow lost the response. Opening the invoice now.");
-          navigate(`/invoices/${recoveredInvoiceId}?from=${encodeURIComponent(returnTo)}`);
+          toast.warning("Invoice was created, but the appointment workflow lost the response. Finishing the workflow now.");
+          await finalizeRecoveredInvoiceFlow(recoveredInvoiceId, mode);
           return;
         }
       }
