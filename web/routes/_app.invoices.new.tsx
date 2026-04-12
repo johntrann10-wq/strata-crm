@@ -27,6 +27,7 @@ import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { PageHeader } from "../components/shared/PageHeader";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
+import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 
 interface LineItem {
   id: string;
@@ -213,9 +214,12 @@ export default function NewInvoicePage() {
     select: {
       id: true,
       title: true,
+      subtotal: true,
+      taxAmount: true,
       totalPrice: true,
       taxRate: true,
       applyTax: true,
+      adminFeeAmount: true,
       adminFeeRate: true,
       applyAdminFee: true,
       client: {
@@ -376,7 +380,7 @@ export default function NewInvoicePage() {
           buildAppointmentInvoiceItems(
             apptServices as AppointmentServicePrefillRecord[],
             (appointmentRecord as { title?: string | null } | null)?.title || "Appointment",
-            Number((appointmentRecord as { totalPrice?: number | string | null } | null)?.totalPrice ?? 0),
+            getDisplayedAppointmentAmount((appointmentRecord as Record<string, unknown> | null) ?? {}),
             {
               applyTax: (appointmentRecord as { applyTax?: boolean | null } | null)?.applyTax ?? false,
               taxRate: (appointmentRecord as { taxRate?: number | string | null } | null)?.taxRate ?? 0,

@@ -926,22 +926,31 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
     }
 
     if (path === "/appointment-services" && method === "GET") {
-      const appointmentId = url.searchParams.get("appointmentId");
+      const filterParam = url.searchParams.get("filter");
+      const parsedFilter =
+        filterParam != null && filterParam !== ""
+          ? (JSON.parse(filterParam) as { appointmentId?: { equals?: string } })
+          : null;
+      const appointmentId = parsedFilter?.appointmentId?.equals ?? url.searchParams.get("appointmentId");
       const appointment = state.appointments.find((entry) => entry.id === appointmentId);
       const serviceIds = appointment?.quoteId
         ? state.quotes
             .find((quote) => quote.id === appointment.quoteId)
             ?.lineItems.edges.map((edge) => serviceCatalog.find((service) => service.name === edge.node.description)?.id)
             .filter(Boolean) as string[] | undefined
-        : [];
+        : appointmentId === "appointment-computed-amount-1"
+          ? ["svc-1"]
+          : [];
       const records: AppointmentServiceRecord[] = (serviceIds ?? []).map((serviceId, index) => {
         const service = serviceCatalog.find((entry) => entry.id === serviceId)!;
+        const unitPrice =
+          appointmentId === "appointment-computed-amount-1" ? appointment?.subtotal ?? service.price : service.price;
         return {
           id: `appointment-service-${index + 1}`,
           appointmentId: appointmentId ?? "",
           serviceId,
           quantity: 1,
-          unitPrice: service.price,
+          unitPrice,
           service: {
             id: service.id,
             name: service.name,

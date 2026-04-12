@@ -468,6 +468,28 @@ test.describe("Billing regression", () => {
     });
   });
 
+  test("invoice creation stays aligned with computed appointment totals", async ({ page }) => {
+    test.setTimeout(120000);
+    const invoiceFromAppointmentPath = "/invoices/new?appointmentId=appointment-computed-amount-1";
+
+    await mockBillingFlowApp(page);
+    await signIn(page);
+    await page.goto(invoiceFromAppointmentPath);
+    await expect(page.getByRole("heading", { name: /new invoice/i })).toBeVisible();
+    await expect(page.getByText(/creating invoice linked to appointment/i).first()).toBeVisible();
+
+    await test.step("Invoice prefill uses the computed appointment amount", async () => {
+      await expect(page.getByText("$121.00", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("$999.00", { exact: true })).toHaveCount(0);
+    });
+
+    await test.step("Computed invoice prefill survives reload", async () => {
+      await page.goto(invoiceFromAppointmentPath);
+      await expect(page.getByText("$121.00", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("$999.00", { exact: true })).toHaveCount(0);
+    });
+  });
+
   test("client detail totals stay aligned with computed appointment amounts", async ({ page }) => {
     test.setTimeout(120000);
     const clientPath = "/clients/client-1";
