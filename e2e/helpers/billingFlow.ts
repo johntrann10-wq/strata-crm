@@ -108,6 +108,15 @@ type InvoiceRecord = {
   payments: PaymentRecord[];
 };
 
+type ActivityLogRecord = {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  metadata: string;
+  createdAt: string;
+};
+
 type AppointmentRecord = {
   id: string;
   clientId: string;
@@ -163,6 +172,7 @@ type BillingMockState = {
   invoices: InvoiceRecord[];
   payments: PaymentRecord[];
   appointments: AppointmentRecord[];
+  activityLogs: ActivityLogRecord[];
 };
 
 const BUSINESS_ID = "biz-billing";
@@ -221,6 +231,8 @@ const serviceCatalog: ServiceRecord[] = [
     createdAt: "2026-03-01T17:00:00.000Z",
   },
 ];
+
+const seededAppointmentStart = "2026-04-11T16:00:00.000Z";
 
 function toJson(body: unknown) {
   return JSON.stringify(body);
@@ -413,11 +425,22 @@ function buildAppointmentRecord(id: string, payload: Record<string, any>): Appoi
 }
 
 export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> {
+  const seededAppointment = buildAppointmentRecord("appointment-seeded-1", {
+    clientId: client.id,
+    vehicleId: vehicle.id,
+    title: "Paint correction follow-up",
+    startTime: seededAppointmentStart,
+    totalPrice: 480,
+    depositAmount: 120,
+    status: "scheduled",
+  });
+
   const state: BillingMockState = {
     quotes: [],
     invoices: [],
     payments: [],
-    appointments: [],
+    appointments: [seededAppointment],
+    activityLogs: [],
   };
 
   await page.route("**/api/auth/sign-in", async (route) => {
@@ -682,6 +705,119 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
       return;
     }
 
+    if (path.match(/^\/appointments\/[^/]+\/recordDepositPayment$/) && method === "POST") {
+      const appointmentId = path.split("/")[2];
+      const appointment = state.appointments.find((entry) => entry.id === appointmentId);
+      if (!appointment) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: toJson({ message: "Appointment not found" }),
+        });
+        return;
+      }
+
+      const payload = parseBody(route);
+      const amount = currency(Number(payload.amount ?? 0) || 0);
+      const paidAt = String(payload.paidAt ?? new Date().toISOString());
+      const createdAt = new Date().toISOString();
+      const methodLabel = String(payload.method ?? "cash");
+      const notes = payload.notes ? String(payload.notes) : null;
+      const existingCollected = currency(
+        state.activityLogs
+          .filter((entry) => entry.entityType === "appointment" && entry.entityId === appointmentId)
+          .reduce((sum, entry) => {
+            const parsed = JSON.parse(entry.metadata) as { amount?: number | string | null };
+            const entryAmount = currency(Number(parsed.amount ?? 0) || 0);
+            if (entry.action === "appointment.deposit_paid") return sum + entryAmount;
+            if (entry.action === "appointment.deposit_payment_reversed") return sum - entryAmount;
+            return sum;
+          }, 0)
+      );
+      const nextCollected = currency(existingCollected + amount);
+      if (nextCollected >= currency(appointment.totalPrice)) {
+        appointment.paidAt = paidAt;
+      }
+
+      state.activityLogs.push({
+        id: `activity-${state.activityLogs.length + 1}`,
+        action: "appointment.deposit_paid",
+        entityType: "appointment",
+        entityId: appointmentId,
+        metadata: toJson({
+          amount,
+          method: methodLabel,
+          notes,
+          source: "manual",
+          paymentType: appointment.depositAmount && appointment.depositAmount > 0 ? "deposit" : "payment",
+          paidAt,
+        }),
+        createdAt,
+      });
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson({
+          success: true,
+          appointmentId,
+          amount,
+          paidAt,
+          method: methodLabel,
+        }),
+      });
+      return;
+    }
+
+    if (path.match(/^\/appointments\/[^/]+\/reverseDepositPayment$/) && method === "POST") {
+      const appointmentId = path.split("/")[2];
+      const appointment = state.appointments.find((entry) => entry.id === appointmentId);
+      if (!appointment) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: toJson({ message: "Appointment not found" }),
+        });
+        return;
+      }
+
+      const relevantLogs = state.activityLogs.filter(
+        (entry) =>
+          entry.entityType === "appointment" &&
+          entry.entityId === appointmentId &&
+          entry.action === "appointment.deposit_paid"
+      );
+      const lastPayment = relevantLogs.at(-1);
+      const lastAmount = lastPayment
+        ? currency(Number((JSON.parse(lastPayment.metadata) as { amount?: number | string | null }).amount ?? 0) || 0)
+        : currency(Number(appointment.depositAmount ?? 0) || 0);
+
+      state.activityLogs.push({
+        id: `activity-${state.activityLogs.length + 1}`,
+        action: "appointment.deposit_payment_reversed",
+        entityType: "appointment",
+        entityId: appointmentId,
+        metadata: toJson({
+          amount: lastAmount,
+          source: "manual",
+          paymentType: appointment.depositAmount && appointment.depositAmount > 0 ? "deposit" : "payment",
+        }),
+        createdAt: new Date().toISOString(),
+      });
+      appointment.paidAt = null;
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson({
+          success: true,
+          appointmentId,
+          amount: lastAmount,
+        }),
+      });
+      return;
+    }
+
     if (path === "/appointment-services" && method === "GET") {
       const appointmentId = url.searchParams.get("appointmentId");
       const appointment = state.appointments.find((entry) => entry.id === appointmentId);
@@ -803,7 +939,14 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
     }
 
     if (path === "/activity-logs") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records: [] }) });
+      const entityType = url.searchParams.get("entityType");
+      const entityId = url.searchParams.get("entityId");
+      const records = state.activityLogs.filter((entry) => {
+        if (entityType && entry.entityType !== entityType) return false;
+        if (entityId && entry.entityId !== entityId) return false;
+        return true;
+      });
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records }) });
       return;
     }
 

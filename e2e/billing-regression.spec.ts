@@ -163,4 +163,58 @@ test.describe("Billing regression", () => {
       expect(state.invoices.find((invoice) => invoice.id === invoiceId)?.status).toBe("paid");
     });
   });
+
+  test("appointment deposit flows persist cleanly across reloads", async ({ page }) => {
+    test.setTimeout(120000);
+
+    const state = await mockBillingFlowApp(page);
+    await signIn(page);
+    await page.goto("/appointments/appointment-seeded-1");
+    await expect(page.getByText(/paint correction follow-up/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /^collect deposit$/i }).first()).toBeVisible();
+
+    await test.step("Invalid deposit date fails honestly without writing money", async () => {
+      await page.getByRole("button", { name: /^collect deposit$/i }).first().click();
+      await expect(page.getByRole("heading", { name: /^collect deposit$/i })).toBeVisible();
+      await page.getByLabel(/^paid on$/i).fill("");
+      await page.getByRole("button", { name: /^collect deposit$/i }).last().click();
+      await expect(page.getByText(/enter a valid payment date/i)).toBeVisible();
+      expect(state.activityLogs).toHaveLength(0);
+    });
+
+    await test.step("Recording and reversing a deposit survives reloads", async () => {
+      const recordResponsePromise = page.waitForResponse((response) =>
+        response.url().includes("/recordDepositPayment") && response.request().method() === "POST"
+      );
+      await page.getByLabel(/^paid on$/i).fill("2026-04-11");
+      await page.getByLabel(/^amount$/i).fill("120");
+      await page.getByRole("button", { name: /^collect deposit$/i }).last().click();
+      await recordResponsePromise;
+
+      await expect(page.getByText(/payment recorded/i)).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /^reverse deposit(?: collection)?$/i }).first()
+      ).toBeVisible();
+      expect(state.activityLogs.filter((entry) => entry.action === "appointment.deposit_paid")).toHaveLength(1);
+
+      await page.reload();
+      await expect(
+        page.getByRole("button", { name: /^reverse deposit(?: collection)?$/i }).first()
+      ).toBeVisible();
+
+      const reverseResponsePromise = page.waitForResponse((response) =>
+        response.url().includes("/reverseDepositPayment") && response.request().method() === "POST"
+      );
+      await page.getByRole("button", { name: /^reverse deposit(?: collection)?$/i }).first().click();
+      await page.getByRole("button", { name: /^reverse deposit$/i }).last().click();
+      await reverseResponsePromise;
+
+      await expect(page.getByText(/deposit reversed/i)).toBeVisible();
+      await expect(page.getByRole("button", { name: /^collect deposit$/i }).first()).toBeVisible();
+      expect(state.activityLogs.filter((entry) => entry.action === "appointment.deposit_payment_reversed")).toHaveLength(1);
+
+      await page.reload();
+      await expect(page.getByRole("button", { name: /^collect deposit$/i }).first()).toBeVisible();
+    });
+  });
 });
