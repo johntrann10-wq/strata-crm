@@ -813,7 +813,12 @@ export default function CalendarPage() {
       </div>
       <div className="mt-3 min-h-0 flex-1">
         <div className="grid h-full min-h-0 gap-3 grid-cols-1">
-          <div className={cn("min-h-0 rounded-[1.3rem] border border-border/60 bg-white/72", isMobileLayout ? "p-2.5" : "p-3")}>
+          <div
+            className={cn(
+              "min-h-0 rounded-[1.3rem] border border-border/60 bg-white/72",
+              isMobileLayout ? "p-2.5" : "min-h-[22rem] p-3 xl:min-h-[25rem]"
+            )}
+          >
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 {view === "month" ? "Selected date" : "Today plan"}
@@ -823,7 +828,7 @@ export default function CalendarPage() {
               </span>
             </div>
             {selectedDayAgendaItems.length > 0 ? (
-              <div className="h-full space-y-2 overflow-y-auto pr-1">
+              <div className={cn("h-full space-y-2 overflow-y-auto pr-1", !isMobileLayout && "min-h-[17.5rem] xl:min-h-[20rem]")}>
                 {selectedDayAgendaItems.map(({ appointment, kind }) => (
                   <AgendaPreviewRow
                     key={`${appointment.id}-${kind}-${view}`}
@@ -1008,7 +1013,7 @@ export default function CalendarPage() {
             <div
               className={cn(
                 "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
-                isMobileLayout ? "h-[18rem] min-h-[18rem] p-3" : "flex-1"
+                isMobileLayout ? "h-[18rem] min-h-[18rem] p-3" : "min-h-[24rem] flex-1 xl:min-h-[28rem]"
               )}
             >
               {dayInspectorPanel}
