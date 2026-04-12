@@ -344,7 +344,7 @@ export function HomeWeeklyAppointmentOverviewCard({
           <>
             <div className="hidden lg:block">
               <div className="-mx-1 overflow-x-auto px-1 pb-2">
-                <div className="grid min-w-[1320px] grid-cols-7 gap-3 2xl:min-w-0">
+                <div className="grid min-w-[1470px] grid-cols-7 gap-3 2xl:min-w-0">
                   {overview.days.map((day) => {
                     const isActive = day.date === activeDay.date;
                     return (
@@ -357,8 +357,8 @@ export function HomeWeeklyAppointmentOverviewCard({
                             : "border-slate-200/80 bg-white/88 hover:border-slate-300 hover:bg-white"
                         )}
                       >
-                        <div className={cn("border-b px-4 py-3", isActive ? "border-amber-200 bg-amber-50/55" : "border-slate-200/80 bg-slate-50/55")}>
-                          <div className="flex items-start justify-between gap-3">
+                        <div className={cn("border-b px-4 py-3.5", isActive ? "border-amber-200 bg-amber-50/55" : "border-slate-200/80 bg-slate-50/55")}>
+                          <div className="flex items-start justify-between gap-2">
                             <button
                               type="button"
                               onClick={() => onSelectDate?.(day.date)}
@@ -367,21 +367,18 @@ export function HomeWeeklyAppointmentOverviewCard({
                               aria-pressed={isActive}
                             >
                               <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{day.shortLabel}</p>
-                              <p className="mt-1 text-sm font-semibold text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
+                              <p className="mt-1 text-base font-semibold tracking-tight text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
+                              <p className="mt-2 text-[12px] font-medium text-slate-600">
+                                {formatDashboardCompactCurrency(day.bookedValue)} booked
+                              </p>
                             </button>
-                            <div className="flex items-start gap-2">
-                              <div className="pt-0.5 text-right">
-                                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Booked</p>
-                                <p className="mt-1 text-xs font-semibold text-slate-700">{formatDashboardCompactCurrency(day.bookedValue)}</p>
-                              </div>
-                              <Link
-                                to={day.calendarUrl}
-                                className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-950"
-                                aria-label={`Open ${day.label} in calendar`}
-                              >
-                                <ArrowUpRight className="h-3.5 w-3.5" />
-                              </Link>
-                            </div>
+                            <Link
+                              to={day.calendarUrl}
+                              className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-950"
+                              aria-label={`Open ${day.label} in calendar`}
+                            >
+                              <ArrowUpRight className="h-3.5 w-3.5" />
+                            </Link>
                           </div>
                         </div>
                         <div className="flex flex-1 flex-col justify-between px-4 py-3.5">
@@ -395,12 +392,12 @@ export function HomeWeeklyAppointmentOverviewCard({
                             <div>
                               <p className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-slate-950">{day.appointmentCount}</p>
                               <p className="mt-1 text-[11px] font-medium text-slate-500">{day.appointmentCount === 1 ? "appointment" : "appointments"}</p>
-                              <p className="mt-3 text-[11px] text-slate-500">
-                                Queue {day.previewItems.length}
-                                {day.capacityUsage != null ? ` · ${day.capacityUsage}% covered` : " · no coverage"}
+                              <p className="mt-3 text-[11px] text-slate-500">{day.previewItems.length} in queue</p>
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                {day.capacityUsage != null ? `${day.capacityUsage}% covered` : "No coverage signal"}
                               </p>
                             </div>
-                            <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                            <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
                               <span className="font-medium text-slate-600">Up {day.statusCounts.upcoming}</span>
                               <span className="font-medium text-blue-700">Live {day.statusCounts.inProgress}</span>
                               <span className="font-medium text-emerald-700">Done {day.statusCounts.completed}</span>
