@@ -84,6 +84,22 @@ function isCarryoverPaymentRow(row: {
   );
 }
 
+function isPaymentSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const cause = "cause" in error ? (error as { cause?: unknown }).cause : error;
+  if (!cause || typeof cause !== "object") return false;
+  const code = "code" in cause ? String((cause as { code?: unknown }).code ?? "") : "";
+  const message = "message" in cause ? String((cause as { message?: unknown }).message ?? "") : "";
+  return (
+    code === "42P01" ||
+    code === "42703" ||
+    message.includes('relation "payments" does not exist') ||
+    message.includes('column "reversed_at" does not exist') ||
+    message.includes('column "notes" does not exist') ||
+    message.includes('column "reference_number" does not exist')
+  );
+}
+
 export function calculateAppointmentFinanceSummary(input: AppointmentFinanceInput & {
   directCollectedAmount?: number;
   invoiceCollectedAmount?: number;
@@ -169,41 +185,62 @@ export async function getAppointmentFinanceSummaryMap(
     );
   }
 
-  const invoicePaymentRows = await tx
-    .select({
-      appointmentId: invoices.appointmentId,
-      amount: payments.amount,
-      notes: payments.notes,
-      idempotencyKey: payments.idempotencyKey,
-      method: payments.method,
-      referenceNumber: payments.referenceNumber,
-    })
-    .from(invoices)
-    .leftJoin(
-      payments,
-      and(
-        eq(payments.invoiceId, invoices.id),
-        sql`${payments.reversedAt} is null`
-      )
-    )
-    .where(
-      and(
-        eq(invoices.businessId, businessId),
-        inArray(invoices.appointmentId, appointmentIds),
-        sql`${invoices.status} <> 'void'`
-      )
-    );
-
-  const invoiceCollectedByAppointment = new Map<string, number>();
-  const invoiceCarryoverByAppointment = new Map<string, number>();
-  for (const row of invoicePaymentRows as Array<{
+  let invoicePaymentRows: Array<{
     appointmentId: string | null;
     amount?: string | number | null;
     notes?: string | null;
     idempotencyKey?: string | null;
     method?: string | null;
     referenceNumber?: string | null;
-  }>) {
+  }>;
+  try {
+    invoicePaymentRows = await tx
+      .select({
+        appointmentId: invoices.appointmentId,
+        amount: payments.amount,
+        notes: payments.notes,
+        idempotencyKey: payments.idempotencyKey,
+        method: payments.method,
+        referenceNumber: payments.referenceNumber,
+      })
+      .from(invoices)
+      .leftJoin(
+        payments,
+        and(
+          eq(payments.invoiceId, invoices.id),
+          sql`${payments.reversedAt} is null`
+        )
+      )
+      .where(
+        and(
+          eq(invoices.businessId, businessId),
+          inArray(invoices.appointmentId, appointmentIds),
+          sql`${invoices.status} <> 'void'`
+        )
+      );
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    invoicePaymentRows = await tx
+      .select({
+        appointmentId: invoices.appointmentId,
+        amount: payments.amount,
+        idempotencyKey: payments.idempotencyKey,
+        method: payments.method,
+      })
+      .from(invoices)
+      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+      .where(
+        and(
+          eq(invoices.businessId, businessId),
+          inArray(invoices.appointmentId, appointmentIds),
+          sql`${invoices.status} <> 'void'`
+        )
+      );
+  }
+
+  const invoiceCollectedByAppointment = new Map<string, number>();
+  const invoiceCarryoverByAppointment = new Map<string, number>();
+  for (const row of invoicePaymentRows) {
     if (!row.appointmentId) continue;
     const amount = toMoneyNumber(row.amount);
     if (amount <= 0) continue;
