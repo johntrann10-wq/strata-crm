@@ -11,7 +11,6 @@ import {
   Gauge,
   Layers,
   ShieldCheck,
-  Sparkles,
   Users,
   Wrench,
 } from "lucide-react";
@@ -388,11 +387,6 @@ export default function LandingPage() {
 
         <div className="relative z-10 mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,360px)] lg:items-start">
           <div className="space-y-7">
-              <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/88 px-3.5 py-1.5 text-sm font-medium text-orange-700 shadow-sm">
-                <Sparkles className="h-4 w-4" />
-                Strata CRM for automotive shops and mobile detailers
-              </div>
-
             <div className="space-y-4">
               <h1 className="max-w-4xl text-balance text-4xl font-extrabold tracking-tight text-gray-950 sm:text-5xl lg:text-6xl">
                 Automotive service software for scheduling, customer records, and billing in one clear daily flow.
@@ -816,14 +810,14 @@ export default function LandingPage() {
             {productProof.map((item) => (
               <div
                 key={item.eyebrow}
-                className="rounded-[26px] border border-orange-100 bg-[linear-gradient(180deg,#ffffff_0%,#fff8f3_100%)] p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]"
+                className="rounded-[26px] border border-gray-200 bg-white p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)]"
               >
                 <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">{item.eyebrow}</p>
                 <h3 className="mt-3 text-xl font-semibold tracking-tight text-gray-950">{item.title}</h3>
                 <p className="mt-3 text-sm leading-6 text-gray-600">{item.description}</p>
                 <div className="mt-5 space-y-2.5">
                   {item.bullets.map((bullet) => (
-                    <div key={bullet} className="flex items-start gap-2.5 rounded-2xl border border-orange-100/80 bg-white/85 px-3.5 py-3">
+                    <div key={bullet} className="flex items-start gap-2.5 rounded-2xl border border-gray-200 bg-gray-50 px-3.5 py-3">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-500" />
                       <p className="text-sm leading-6 text-gray-700">{bullet}</p>
                     </div>
