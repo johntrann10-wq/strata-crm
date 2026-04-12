@@ -239,7 +239,7 @@ export default function CalendarPage() {
     const next = new URLSearchParams(searchParams);
     if (next.get("view") === "week") {
       next.set("view", "month");
-      setSearchParams(next, { replace: true });
+      setSearchParams(next, { replace: true, preventScrollReset: true });
       return;
     }
     const dateValue = toLocalDateString(view === "month" ? selectedDate : currentDate);
@@ -247,7 +247,7 @@ export default function CalendarPage() {
     lastInternalUrlSyncRef.current = { view, date: dateValue };
     next.set("view", view);
     next.set("date", dateValue);
-    setSearchParams(next, { replace: true });
+    setSearchParams(next, { replace: true, preventScrollReset: true });
   }, [currentDate, searchParams, selectedDate, setSearchParams, view]);
 
   useEffect(() => {
@@ -816,7 +816,7 @@ export default function CalendarPage() {
           <div
             className={cn(
               "min-h-0 rounded-[1.3rem] border border-border/60 bg-white/72",
-              isMobileLayout ? "p-2.5" : "min-h-[22rem] p-3 xl:min-h-[25rem]"
+              isMobileLayout ? "min-h-[18.5rem] p-2.5" : "min-h-[22rem] p-3 xl:min-h-[25rem]"
             )}
           >
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -828,7 +828,12 @@ export default function CalendarPage() {
               </span>
             </div>
             {selectedDayAgendaItems.length > 0 ? (
-              <div className={cn("h-full space-y-2 overflow-y-auto pr-1", !isMobileLayout && "min-h-[17.5rem] xl:min-h-[20rem]")}>
+              <div
+                className={cn(
+                  "h-full space-y-2 overflow-y-auto pr-1",
+                  isMobileLayout ? "min-h-[14.5rem]" : "min-h-[17.5rem] xl:min-h-[20rem]"
+                )}
+              >
                 {selectedDayAgendaItems.map(({ appointment, kind }) => (
                   <AgendaPreviewRow
                     key={`${appointment.id}-${kind}-${view}`}
@@ -1013,7 +1018,7 @@ export default function CalendarPage() {
             <div
               className={cn(
                 "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
-                isMobileLayout ? "h-[18rem] min-h-[18rem] p-3" : "min-h-[24rem] flex-1 xl:min-h-[28rem]"
+                isMobileLayout ? "h-[24rem] min-h-[24rem] p-3" : "min-h-[24rem] flex-1 xl:min-h-[28rem]"
               )}
             >
               {dayInspectorPanel}
