@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
@@ -250,12 +251,13 @@ function getAppointmentDisplayState(
   isInternalCalendarBlock: boolean,
   blockCoverageLabel: string | null,
 ) {
+  const displayedAmount = getDisplayedAppointmentAmount(appointment);
   const appointmentClientName = getAppointmentDetailClientName(appointment);
   const appointmentVehicleLabel = getAppointmentDetailVehicleLabel(appointment);
   const appointmentLocationLabel = appointment.isMobile ? appointment.mobileAddress || "Mobile service" : "In-shop service";
   const appointmentValueLabel =
-    appointment.totalPrice != null && appointment.totalPrice > 0
-      ? formatCurrency(appointment.totalPrice)
+    displayedAmount > 0
+      ? formatCurrency(displayedAmount)
       : appointmentServicesLength > 0
         ? `${appointmentServicesLength} booked service${appointmentServicesLength === 1 ? "" : "s"}`
         : "No pricing attached yet";
@@ -1143,7 +1145,7 @@ export default function AppointmentDetail() {
       appointment.vehicle?.model === "Vehicle";
     const missingLinkedRecords = !appointment.client || !appointment.vehicle;
     const depositAmountValue = Number(appointment.depositAmount ?? 0);
-    const totalPriceValue = Number(appointment.totalPrice ?? 0);
+    const totalPriceValue = getDisplayedAppointmentAmount(appointment);
     const financeState = resolveAppointmentFinanceState(
       {
         ...(appointment as Record<string, unknown>),
@@ -1403,7 +1405,7 @@ export default function AppointmentDetail() {
       void handleStatusChange("in_progress");
     } else if (action === "complete") {
       const hasServices = appointmentServices && appointmentServices.length > 0;
-      const hasTotalPrice = appointment?.totalPrice != null && appointment.totalPrice > 0;
+      const hasTotalPrice = getDisplayedAppointmentAmount(appointment ?? {}) > 0;
       if (!hasServices && !hasTotalPrice) {
         setShowCompleteWarningDialog(true);
       } else {
@@ -1592,7 +1594,7 @@ export default function AppointmentDetail() {
               className="border-green-500 text-green-700 hover:bg-green-50"
               onClick={() => {
                 const hasServices = appointmentServices && appointmentServices.length > 0;
-                const hasTotalPrice = appointment.totalPrice != null && appointment.totalPrice > 0;
+                const hasTotalPrice = getDisplayedAppointmentAmount(appointment) > 0;
                 if (!hasServices && !hasTotalPrice) {
                   setShowCompleteWarningDialog(true);
                 } else {
@@ -1789,13 +1791,13 @@ export default function AppointmentDetail() {
 
             {canQuickCompleteAppointment ? (
               <Button
-                className="w-full"
-                onClick={() => {
-                  const hasServices = appointmentServices && appointmentServices.length > 0;
-                  const hasTotalPrice = appointment.totalPrice != null && appointment.totalPrice > 0;
-                  if (!hasServices && !hasTotalPrice) {
-                    setShowCompleteWarningDialog(true);
-                  } else {
+              className="w-full"
+              onClick={() => {
+                const hasServices = appointmentServices && appointmentServices.length > 0;
+                const hasTotalPrice = getDisplayedAppointmentAmount(appointment) > 0;
+                if (!hasServices && !hasTotalPrice) {
+                  setShowCompleteWarningDialog(true);
+                } else {
                     void handleComplete();
                   }
                 }}
@@ -2672,7 +2674,7 @@ export default function AppointmentDetail() {
                 placeholder="0.00"
               />
               <p className="text-xs text-muted-foreground">
-                Appointment total: {formatCurrency(Number(appointment?.totalPrice ?? 0))}
+                Appointment total: {formatCurrency(getDisplayedAppointmentAmount(appointment ?? {}))}
               </p>
             </div>
           </div>

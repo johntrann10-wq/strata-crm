@@ -5,6 +5,7 @@ import {
   buildActionQueue,
   buildBookingsOverview,
   buildMonthlyRevenueChart,
+  buildPipelineStages,
   buildWeeklyAppointmentOverview,
   buildQuickActions,
   calculateUpcomingDepositCoverage,
@@ -270,6 +271,13 @@ describe("home dashboard domain logic", () => {
           expectedCompletionTime: null,
           pickupReadyTime: null,
           vehicleOnSite: false,
+          subtotal: "700",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "0",
+          adminFeeAmount: "0",
+          applyAdminFee: false,
           totalPrice: "800",
           depositAmount: "200",
           clientId: null,
@@ -298,6 +306,13 @@ describe("home dashboard domain logic", () => {
           expectedCompletionTime: null,
           pickupReadyTime: null,
           vehicleOnSite: false,
+          subtotal: "200",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "0",
+          adminFeeAmount: "0",
+          applyAdminFee: false,
           totalPrice: "200",
           depositAmount: null,
           clientId: null,
@@ -326,6 +341,13 @@ describe("home dashboard domain logic", () => {
           expectedCompletionTime: null,
           pickupReadyTime: null,
           vehicleOnSite: false,
+          subtotal: "999",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "0",
+          adminFeeAmount: "0",
+          applyAdminFee: false,
           totalPrice: "999",
           depositAmount: null,
           clientId: null,
@@ -350,7 +372,7 @@ describe("home dashboard domain logic", () => {
     expect(days[0]?.shortLabel).toBe("Mon");
     expect(days[1]).toMatchObject({
       appointmentCount: 3,
-      bookedValue: 1000,
+      bookedValue: 900,
       statusCounts: {
         upcoming: 1,
         inProgress: 0,
@@ -372,7 +394,19 @@ describe("home dashboard domain logic", () => {
       monthEnd: new Date("2026-04-30T06:59:59.999Z"),
       timezone: "America/Los_Angeles",
       monthlyRevenueGoal: 10000,
-      bookedAppointments: [{ bookedAt: new Date("2026-04-02T16:00:00.000Z"), totalPrice: "500" }],
+      bookedAppointments: [
+        {
+          bookedAt: new Date("2026-04-02T16:00:00.000Z"),
+          subtotal: "500",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "0",
+          adminFeeAmount: "0",
+          applyAdminFee: false,
+          totalPrice: "500",
+        },
+      ],
       standaloneInvoices: [{ bookedAt: new Date("2026-04-03T16:00:00.000Z"), total: "300" }],
       collectedPayments: [
         { paidAt: new Date("2026-04-04T16:00:00.000Z"), amount: 250 },
@@ -395,6 +429,53 @@ describe("home dashboard domain logic", () => {
     expect(days[2]).toMatchObject({ dayOfMonth: 3, bookedRevenue: 300 });
     expect(days[3]).toMatchObject({ dayOfMonth: 4, collectedRevenue: 300 });
     expect(days[4]).toMatchObject({ dayOfMonth: 5, expenseAmount: 125, netAmount: -125 });
+  });
+
+  it("prefers computed appointment finance totals over stale dashboard totalPrice values", () => {
+    const days = buildWeeklyAppointmentOverview({
+      weekStart: new Date("2026-04-06T07:00:00.000Z"),
+      timezone: "America/Los_Angeles",
+      staffCount: 2,
+      rows: [
+        {
+          id: "appt-computed",
+          title: "Computed finance job",
+          status: "scheduled",
+          jobPhase: null,
+          startTime: new Date("2026-04-07T16:00:00.000Z"),
+          endTime: new Date("2026-04-07T18:00:00.000Z"),
+          jobStartTime: null,
+          expectedCompletionTime: null,
+          pickupReadyTime: null,
+          vehicleOnSite: false,
+          subtotal: "100",
+          taxRate: "10",
+          taxAmount: "11",
+          applyTax: true,
+          adminFeeRate: "10",
+          adminFeeAmount: "10",
+          applyAdminFee: true,
+          totalPrice: "999",
+          depositAmount: null,
+          clientId: null,
+          clientFirstName: null,
+          clientLastName: null,
+          vehicleId: null,
+          vehicleYear: null,
+          vehicleMake: null,
+          vehicleModel: null,
+          assignedStaffId: "staff-1",
+          staffFirstName: null,
+          staffLastName: null,
+          locationId: null,
+          locationName: null,
+          createdAt: new Date("2026-04-05T16:00:00.000Z"),
+          completedAt: null,
+        },
+      ],
+    });
+
+    expect(days[1]?.bookedValue).toBe(121);
   });
 
   it("calculates deposit coverage from upcoming deposit-backed appointments only", () => {
@@ -467,8 +548,34 @@ describe("home dashboard domain logic", () => {
       monthStart: new Date("2026-04-01T07:00:00.000Z"),
       timezone: "America/Los_Angeles",
       monthAppointments: [
-        { id: "1", status: "scheduled", totalPrice: "500", createdAt: new Date("2026-04-10T16:00:00.000Z"), completedAt: null },
-        { id: "2", status: "completed", totalPrice: "250", createdAt: new Date("2026-04-08T16:00:00.000Z"), completedAt: new Date("2026-04-09T16:00:00.000Z") },
+        {
+          id: "1",
+          status: "scheduled",
+          subtotal: "500",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "0",
+          adminFeeAmount: "0",
+          applyAdminFee: false,
+          totalPrice: "500",
+          createdAt: new Date("2026-04-10T16:00:00.000Z"),
+          completedAt: null,
+        },
+        {
+          id: "2",
+          status: "completed",
+          subtotal: "250",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "0",
+          adminFeeAmount: "0",
+          applyAdminFee: false,
+          totalPrice: "250",
+          createdAt: new Date("2026-04-08T16:00:00.000Z"),
+          completedAt: new Date("2026-04-09T16:00:00.000Z"),
+        },
       ],
       quoteRows: [
         { status: "sent", sentAt: new Date("2026-04-09T16:00:00.000Z"), total: "400" },
@@ -505,6 +612,91 @@ describe("home dashboard domain logic", () => {
         depositsDue: "/calendar?view=week&date=2026-04-06",
       },
     });
+  });
+
+  it("prefers computed finance totals for booked and completed pipeline values", () => {
+    const stages = buildPipelineStages({
+      leadRows: [],
+      quoteRows: [],
+      appointmentRows: [
+        {
+          status: "scheduled",
+          completedAt: null,
+          subtotal: "100",
+          taxRate: "10",
+          taxAmount: "11",
+          applyTax: true,
+          adminFeeRate: "10",
+          adminFeeAmount: "10",
+          applyAdminFee: true,
+          totalPrice: "999",
+        },
+        {
+          status: "completed",
+          completedAt: new Date("2026-04-10T18:00:00.000Z"),
+          subtotal: "200",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "10",
+          adminFeeAmount: "20",
+          applyAdminFee: true,
+          totalPrice: "888",
+        },
+      ],
+      invoiceRows: [],
+    });
+
+    expect(stages.find((stage) => stage.key === "booked")?.value).toBe(121);
+    expect(stages.find((stage) => stage.key === "completed")?.value).toBe(220);
+  });
+
+  it("prefers computed finance totals for dashboard average ticket value", () => {
+    const overview = buildBookingsOverview({
+      todayStart: new Date("2026-04-10T07:00:00.000Z"),
+      todayEnd: new Date("2026-04-11T06:59:59.999Z"),
+      weekStart: new Date("2026-04-06T07:00:00.000Z"),
+      weekEnd: new Date("2026-04-13T06:59:59.999Z"),
+      monthStart: new Date("2026-04-01T07:00:00.000Z"),
+      timezone: "America/Los_Angeles",
+      monthAppointments: [
+        {
+          id: "1",
+          status: "scheduled",
+          subtotal: "100",
+          taxRate: "10",
+          taxAmount: "11",
+          applyTax: true,
+          adminFeeRate: "10",
+          adminFeeAmount: "10",
+          applyAdminFee: true,
+          totalPrice: "999",
+          createdAt: new Date("2026-04-10T16:00:00.000Z"),
+          completedAt: null,
+        },
+        {
+          id: "2",
+          status: "completed",
+          subtotal: "200",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "10",
+          adminFeeAmount: "20",
+          applyAdminFee: true,
+          totalPrice: "888",
+          createdAt: new Date("2026-04-08T16:00:00.000Z"),
+          completedAt: new Date("2026-04-09T16:00:00.000Z"),
+        },
+      ],
+      quoteRows: [],
+      pipelineStages: [],
+      depositsCollectedAmount: 0,
+      depositsDueAmount: 0,
+      depositsDueCount: 0,
+    });
+
+    expect(overview.averageTicketValue).toBe(170.5);
   });
 
   it("excludes internal completed jobs from the missing invoice queue", () => {
@@ -570,6 +762,13 @@ describe("home dashboard domain logic", () => {
           id: "internal-job",
           title: "Internal cleanup",
           completedAt: new Date("2026-04-10T15:00:00.000Z"),
+          subtotal: "1500",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "0",
+          adminFeeAmount: "0",
+          applyAdminFee: false,
           totalPrice: "1940",
           clientId: null,
           clientFirstName: null,
@@ -579,6 +778,13 @@ describe("home dashboard domain logic", () => {
           id: "customer-job",
           title: "Detail",
           completedAt: new Date("2026-04-10T16:00:00.000Z"),
+          subtotal: "400",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "10",
+          adminFeeAmount: "40",
+          applyAdminFee: true,
           totalPrice: "450",
           clientId: "client-1",
           clientFirstName: "Alex",
@@ -592,6 +798,7 @@ describe("home dashboard domain logic", () => {
 
     expect(items.filter((item) => item.type === "completed_missing_invoice")).toHaveLength(1);
     expect(items.find((item) => item.type === "completed_missing_invoice")?.id).toBe("completed:customer-job");
+    expect(items.find((item) => item.type === "completed_missing_invoice")?.amountAtRisk).toBe(440);
   });
 
   it("computes transparent health scores from only the permitted factors", () => {

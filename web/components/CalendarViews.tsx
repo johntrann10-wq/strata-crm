@@ -12,6 +12,7 @@ import {
   hasLaborOnDay,
 } from "@/lib/calendarJobSpans";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
+import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -367,31 +368,7 @@ function toMoneyNumber(value: number | string | null | undefined): number {
 }
 
 export function getCalendarAppointmentAmount(apt: ApptRecord): number {
-  const subtotal = Math.max(0, toMoneyNumber(apt.subtotal));
-  const storedTotal = Math.max(0, toMoneyNumber(apt.totalPrice));
-  const applyAdminFee = apt.applyAdminFee === true;
-  const applyTax = apt.applyTax === true;
-  const adminFeeAmount =
-    applyAdminFee
-      ? (
-          apt.adminFeeAmount != null
-            ? Math.max(0, toMoneyNumber(apt.adminFeeAmount))
-            : (subtotal * Math.max(0, toMoneyNumber(apt.adminFeeRate))) / 100
-        )
-      : 0;
-  const taxableSubtotal = subtotal + adminFeeAmount;
-  const taxAmount =
-    applyTax
-      ? (
-          apt.taxAmount != null
-            ? Math.max(0, toMoneyNumber(apt.taxAmount))
-            : (taxableSubtotal * Math.max(0, toMoneyNumber(apt.taxRate))) / 100
-        )
-      : 0;
-  const computedTotal = Math.max(0, Number((taxableSubtotal + taxAmount).toFixed(2)));
-
-  if (computedTotal > 0) return computedTotal;
-  return storedTotal;
+  return getDisplayedAppointmentAmount(apt);
 }
 
 export function getCalendarDayRevenue(appointments: ApptRecord[], date: Date): number {

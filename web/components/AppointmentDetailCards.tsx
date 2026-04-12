@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { getDepositSummary } from "@/lib/paymentStates";
 import {
   User,
@@ -301,8 +302,18 @@ export function FinancialSummaryCard({
   depositLabels,
   paymentStateOverride,
 }: FinancialSummaryCardProps) {
-  const depositSummary = getDepositSummary({
+  const displayedTotalPrice = getDisplayedAppointmentAmount({
+    subtotal,
+    taxRate,
+    taxAmount,
+    applyTax,
+    adminFeeRate,
+    adminFeeAmount,
+    applyAdminFee,
     totalPrice,
+  });
+  const depositSummary = getDepositSummary({
+    totalPrice: displayedTotalPrice,
     depositAmount,
     collectedAmount,
     balanceDue,
@@ -320,7 +331,7 @@ export function FinancialSummaryCard({
   const showBalanceDue =
     paymentStateOverride?.showRemainingBalance !== undefined
       ? paymentStateOverride.showRemainingBalance
-      : totalPrice != null && depositSummary.remainingBalance > 0;
+      : displayedTotalPrice > 0 && depositSummary.remainingBalance > 0;
   const summaryBadgeTone = paymentStateOverride
     ? summaryStateLabel.toLowerCase().includes("paid") ||
       summaryStateLabel.toLowerCase().includes("collected") ||
@@ -371,7 +382,7 @@ export function FinancialSummaryCard({
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Total Price</span>
           <span className="font-medium">
-            {totalPrice != null ? formatCurrency(totalPrice) : "-"}
+            {displayedTotalPrice > 0 ? formatCurrency(displayedTotalPrice) : "-"}
           </span>
         </div>
         <div className="flex items-center justify-between text-sm">

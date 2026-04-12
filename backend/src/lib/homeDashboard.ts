@@ -27,6 +27,7 @@ import { isHomeDashboardEnabled } from "./env.js";
 import { parseLeadRecord } from "./leads.js";
 import { logger } from "./logger.js";
 import type { MembershipRole, PermissionKey } from "./permissions.js";
+import { calculateAppointmentFinanceTotals } from "./revenueTotals.js";
 import { buildVehicleDisplayName } from "./vehicleFormatting.js";
 
 type DbExecutor = typeof db;
@@ -519,6 +520,13 @@ type AppointmentDashboardRow = {
   expectedCompletionTime: Date | null;
   pickupReadyTime: Date | null;
   vehicleOnSite: boolean | null;
+  subtotal: MoneyLike;
+  taxRate: MoneyLike;
+  taxAmount: MoneyLike;
+  applyTax: boolean | null;
+  adminFeeRate: MoneyLike;
+  adminFeeAmount: MoneyLike;
+  applyAdminFee: boolean | null;
   totalPrice: MoneyLike;
   depositAmount: MoneyLike;
   clientId: string | null;
@@ -589,6 +597,48 @@ function toMoneyNumber(value: MoneyLike): number {
   if (value == null || value === "") return 0;
   const parsed = typeof value === "string" ? Number(value) : value;
   return Number.isFinite(parsed) ? Number(parsed) : 0;
+}
+
+function getDashboardAppointmentAmount(
+  row: Pick<
+    AppointmentDashboardRow,
+    | "subtotal"
+    | "taxRate"
+    | "taxAmount"
+    | "applyTax"
+    | "adminFeeRate"
+    | "adminFeeAmount"
+    | "applyAdminFee"
+    | "totalPrice"
+  >
+): number {
+  const subtotal = Math.max(0, toMoneyNumber(row.subtotal));
+  const storedTotal = Math.max(0, toMoneyNumber(row.totalPrice));
+  const computed = calculateAppointmentFinanceTotals({
+    subtotal,
+    taxRate: toMoneyNumber(row.taxRate),
+    applyTax: row.applyTax === true,
+    adminFeeRate: toMoneyNumber(row.adminFeeRate),
+    applyAdminFee: row.applyAdminFee === true,
+  });
+
+  const adminFeeAmount =
+    row.applyAdminFee === true
+      ? row.adminFeeAmount != null
+        ? Math.max(0, toMoneyNumber(row.adminFeeAmount))
+        : computed.adminFeeAmount
+      : 0;
+  const taxableSubtotal = subtotal + adminFeeAmount;
+  const taxAmount =
+    row.applyTax === true
+      ? row.taxAmount != null
+        ? Math.max(0, toMoneyNumber(row.taxAmount))
+        : Number(((taxableSubtotal * Math.max(0, toMoneyNumber(row.taxRate))) / 100).toFixed(2))
+      : 0;
+  const computedTotal = Math.max(0, Number((taxableSubtotal + taxAmount).toFixed(2)));
+
+  if (computedTotal > 0) return computedTotal;
+  return storedTotal;
 }
 
 function safeParseMetadata(metadata: string | null | undefined): Record<string, unknown> {
@@ -1437,19 +1487,29 @@ function formatMoneyPlain(value: number) {
 export function calculateBookedRevenueTotals(params: {
   weekStart: Date;
   weekEnd: Date;
-  bookedAppointments: Array<{ bookedAt: Date; totalPrice: MoneyLike }>;
+  bookedAppointments: Array<{
+    bookedAt: Date;
+    subtotal: MoneyLike;
+    taxRate: MoneyLike;
+    taxAmount: MoneyLike;
+    applyTax: boolean | null;
+    adminFeeRate: MoneyLike;
+    adminFeeAmount: MoneyLike;
+    applyAdminFee: boolean | null;
+    totalPrice: MoneyLike;
+  }>;
   standaloneInvoices: Array<{ bookedAt: Date; total: MoneyLike }>;
 }) {
   const bookedRevenueThisWeek =
     params.bookedAppointments
       .filter((row) => row.bookedAt >= params.weekStart && row.bookedAt <= params.weekEnd)
-      .reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0) +
+      .reduce((sum, row) => sum + getDashboardAppointmentAmount(row), 0) +
     params.standaloneInvoices
       .filter((row) => row.bookedAt >= params.weekStart && row.bookedAt <= params.weekEnd)
       .reduce((sum, row) => sum + toMoneyNumber(row.total), 0);
 
   const bookedRevenueThisMonth =
-    params.bookedAppointments.reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0) +
+    params.bookedAppointments.reduce((sum, row) => sum + getDashboardAppointmentAmount(row), 0) +
     params.standaloneInvoices.reduce((sum, row) => sum + toMoneyNumber(row.total), 0);
 
   return {
@@ -1560,7 +1620,7 @@ function buildTodayScheduleItems(params: {
       const servicesList = params.serviceNamesByAppointmentId.get(row.id) ?? [];
       const finance = params.financeMap.get(row.id);
       const depositAmount = toMoneyNumber(row.depositAmount);
-      const balanceDue = finance?.balanceDue ?? Math.max(0, toMoneyNumber(row.totalPrice));
+      const balanceDue = finance?.balanceDue ?? Math.max(0, getDashboardAppointmentAmount(row));
       const badges: HomeDashboardTodayScheduleItem["financeBadges"] = [];
       if (depositAmount > 0 && finance?.depositSatisfied !== true) {
         badges.push({ key: "deposit_due", label: "Deposit due", tone: "warning" });
@@ -1660,10 +1720,24 @@ function normalizeInvoiceStatus(invoice: InvoiceSnapshotRow, referenceDate: Date
   return "sent";
 }
 
-function buildPipelineStages(params: {
+export function buildPipelineStages(params: {
   leadRows: LeadRow[];
   quoteRows: Array<{ status: string; total: MoneyLike }>;
-  appointmentRows: Array<Pick<AppointmentDashboardRow, "status" | "totalPrice" | "completedAt">>;
+  appointmentRows: Array<
+    Pick<
+      AppointmentDashboardRow,
+      | "status"
+      | "completedAt"
+      | "subtotal"
+      | "taxRate"
+      | "taxAmount"
+      | "applyTax"
+      | "adminFeeRate"
+      | "adminFeeAmount"
+      | "applyAdminFee"
+      | "totalPrice"
+    >
+  >;
   invoiceRows: InvoiceSnapshotRow[];
 }) {
   const parsedLeads = params.leadRows.map((row) => ({ row, lead: parseLeadRecord(row.notes) }));
@@ -1685,13 +1759,13 @@ function buildPipelineStages(params: {
       key: "booked",
       label: "Booked",
       count: bookedRows.length,
-      value: bookedRows.reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0),
+      value: bookedRows.reduce((sum, row) => sum + getDashboardAppointmentAmount(row), 0),
     },
     {
       key: "completed",
       label: "Completed",
       count: completedRows.length,
-      value: completedRows.reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0),
+      value: completedRows.reduce((sum, row) => sum + getDashboardAppointmentAmount(row), 0),
     },
     {
       key: "paid",
@@ -1736,7 +1810,7 @@ export function buildWeeklyAppointmentOverview(params: {
     if (!bucket) continue;
     bucket.appointmentCount += 1;
     if (isCalendarRevenueEligibleStatus(row.status)) {
-      bucket.bookedValue += toMoneyNumber(row.totalPrice);
+      bucket.bookedValue += getDashboardAppointmentAmount(row);
     }
     bucket.statusCounts[getAppointmentOverviewStatus(row.status)] += 1;
     if (row.assignedStaffId) bucket.assignedStaffIds.add(row.assignedStaffId);
@@ -1780,7 +1854,17 @@ export function buildMonthlyRevenueChart(params: {
   monthStart: Date;
   monthEnd: Date;
   timezone: string;
-  bookedAppointments: Array<{ bookedAt: Date; totalPrice: MoneyLike }>;
+  bookedAppointments: Array<{
+    bookedAt: Date;
+    subtotal: MoneyLike;
+    taxRate: MoneyLike;
+    taxAmount: MoneyLike;
+    applyTax: boolean | null;
+    adminFeeRate: MoneyLike;
+    adminFeeAmount: MoneyLike;
+    applyAdminFee: boolean | null;
+    totalPrice: MoneyLike;
+  }>;
   standaloneInvoices: Array<{ bookedAt: Date; total: MoneyLike }>;
   collectedPayments: Array<{ paidAt: Date; amount: number }>;
   expenseRows: Array<{ expenseDate: Date; amount: MoneyLike }>;
@@ -1825,7 +1909,7 @@ export function buildMonthlyRevenueChart(params: {
     days[index]!.expenseAmount += toMoneyNumber(amount);
   };
 
-  for (const row of params.bookedAppointments) addBooked(row.bookedAt, row.totalPrice);
+  for (const row of params.bookedAppointments) addBooked(row.bookedAt, getDashboardAppointmentAmount(row));
   for (const row of params.standaloneInvoices) addBooked(row.bookedAt, row.total);
   for (const row of params.collectedPayments) addCollected(row.paidAt, row.amount);
   for (const row of params.expenseRows) addExpense(row.expenseDate, row.amount);
@@ -1868,7 +1952,23 @@ export function buildBookingsOverview(params: {
   weekEnd: Date;
   monthStart: Date;
   timezone: string;
-  monthAppointments: Array<Pick<AppointmentDashboardRow, "id" | "status" | "totalPrice" | "createdAt" | "completedAt">>;
+  monthAppointments: Array<
+    Pick<
+      AppointmentDashboardRow,
+      | "id"
+      | "status"
+      | "createdAt"
+      | "completedAt"
+      | "subtotal"
+      | "taxRate"
+      | "taxAmount"
+      | "applyTax"
+      | "adminFeeRate"
+      | "adminFeeAmount"
+      | "applyAdminFee"
+      | "totalPrice"
+    >
+  >;
   quoteRows: Array<{ status: string; sentAt: Date | null; total: MoneyLike }>;
   pipelineStages: HomeDashboardPipelineStage[];
   depositsCollectedAmount: number;
@@ -1887,7 +1987,7 @@ export function buildBookingsOverview(params: {
     bookingsThisMonth > 0
       ? Number(
           (
-            params.monthAppointments.reduce((sum, row) => sum + toMoneyNumber(row.totalPrice), 0) /
+            params.monthAppointments.reduce((sum, row) => sum + getDashboardAppointmentAmount(row), 0) /
             Math.max(bookingsThisMonth, 1)
           ).toFixed(2)
         )
@@ -2312,6 +2412,13 @@ async function loadTodayAppointments(
       expectedCompletionTime: appointments.expectedCompletionTime,
       pickupReadyTime: appointments.pickupReadyTime,
       vehicleOnSite: appointments.vehicleOnSite,
+      subtotal: appointments.subtotal,
+      taxRate: appointments.taxRate,
+      taxAmount: appointments.taxAmount,
+      applyTax: appointments.applyTax,
+      adminFeeRate: appointments.adminFeeRate,
+      adminFeeAmount: appointments.adminFeeAmount,
+      applyAdminFee: appointments.applyAdminFee,
       totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
       clientId: clients.id,
@@ -2365,6 +2472,13 @@ async function loadWeeklyOverviewAppointments(
       expectedCompletionTime: appointments.expectedCompletionTime,
       pickupReadyTime: appointments.pickupReadyTime,
       vehicleOnSite: appointments.vehicleOnSite,
+      subtotal: appointments.subtotal,
+      taxRate: appointments.taxRate,
+      taxAmount: appointments.taxAmount,
+      applyTax: appointments.applyTax,
+      adminFeeRate: appointments.adminFeeRate,
+      adminFeeAmount: appointments.adminFeeAmount,
+      applyAdminFee: appointments.applyAdminFee,
       totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
       clientId: clients.id,
@@ -2530,6 +2644,13 @@ async function loadCompletedAppointmentsMissingInvoice(
       id: appointments.id,
       title: appointments.title,
       completedAt: appointments.completedAt,
+      subtotal: appointments.subtotal,
+      taxRate: appointments.taxRate,
+      taxAmount: appointments.taxAmount,
+      applyTax: appointments.applyTax,
+      adminFeeRate: appointments.adminFeeRate,
+      adminFeeAmount: appointments.adminFeeAmount,
+      applyAdminFee: appointments.applyAdminFee,
       totalPrice: appointments.totalPrice,
       clientId: appointments.clientId,
       assignedStaffId: appointments.assignedStaffId,
@@ -2562,11 +2683,36 @@ async function loadMonthAppointmentsForPipeline(
   monthStart: Date,
   monthEnd: Date,
   tx: DbExecutor
-): Promise<Array<Pick<AppointmentDashboardRow, "id" | "status" | "totalPrice" | "createdAt" | "completedAt">>> {
+): Promise<
+  Array<
+    Pick<
+      AppointmentDashboardRow,
+      | "id"
+      | "status"
+      | "subtotal"
+      | "taxRate"
+      | "taxAmount"
+      | "applyTax"
+      | "adminFeeRate"
+      | "adminFeeAmount"
+      | "applyAdminFee"
+      | "totalPrice"
+      | "createdAt"
+      | "completedAt"
+    >
+  >
+> {
   return tx
     .select({
       id: appointments.id,
       status: appointments.status,
+      subtotal: appointments.subtotal,
+      taxRate: appointments.taxRate,
+      taxAmount: appointments.taxAmount,
+      applyTax: appointments.applyTax,
+      adminFeeRate: appointments.adminFeeRate,
+      adminFeeAmount: appointments.adminFeeAmount,
+      applyAdminFee: appointments.applyAdminFee,
       totalPrice: appointments.totalPrice,
       createdAt: appointments.createdAt,
       completedAt: appointments.completedAt,
@@ -2581,11 +2727,30 @@ async function loadMonthAppointmentsForRevenue(
   monthStart: Date,
   monthEnd: Date,
   tx: DbExecutor
-): Promise<Array<{ bookedAt: Date; totalPrice: MoneyLike }>> {
+): Promise<
+  Array<{
+    bookedAt: Date;
+    subtotal: MoneyLike;
+    taxRate: MoneyLike;
+    taxAmount: MoneyLike;
+    applyTax: boolean | null;
+    adminFeeRate: MoneyLike;
+    adminFeeAmount: MoneyLike;
+    applyAdminFee: boolean | null;
+    totalPrice: MoneyLike;
+  }>
+> {
   const bookedAt = sql<Date>`coalesce(${appointments.jobStartTime}, ${appointments.startTime})`;
   return tx
     .select({
       bookedAt: bookedAt.as("booked_at"),
+      subtotal: appointments.subtotal,
+      taxRate: appointments.taxRate,
+      taxAmount: appointments.taxAmount,
+      applyTax: appointments.applyTax,
+      adminFeeRate: appointments.adminFeeRate,
+      adminFeeAmount: appointments.adminFeeAmount,
+      applyAdminFee: appointments.applyAdminFee,
       totalPrice: appointments.totalPrice,
     })
     .from(appointments)
@@ -2973,7 +3138,25 @@ export function buildActionQueue(params: {
   upcomingDepositRows: Array<{ id: string; title: string | null; startTime: Date; totalPrice: MoneyLike; depositAmount: MoneyLike; clientFirstName: string | null; clientLastName: string | null }>;
   upcomingDepositFinance: Map<string, AppointmentFinanceSummary>;
   overdueInvoices: InvoiceSnapshotRow[];
-  completedMissingInvoiceRows: Array<{ id: string; title: string | null; completedAt: Date | null; totalPrice: MoneyLike; clientId: string | null; clientFirstName: string | null; clientLastName: string | null }>;
+  completedMissingInvoiceRows: Array<
+    Pick<
+      AppointmentDashboardRow,
+      | "id"
+      | "title"
+      | "completedAt"
+      | "clientId"
+      | "clientFirstName"
+      | "clientLastName"
+      | "subtotal"
+      | "taxRate"
+      | "taxAmount"
+      | "applyTax"
+      | "adminFeeRate"
+      | "adminFeeAmount"
+      | "applyAdminFee"
+      | "totalPrice"
+    >
+  >;
   reviewRequestReadyRows: Array<{ id: string; title: string | null; completedAt: Date | null; clientFirstName: string | null; clientLastName: string | null; clientId: string | null }>;
   reactivationRows: Array<{ id: string; firstName: string | null; lastName: string | null; lastVisit: Date | null }>;
   systemIssueCounts: { notificationFailures: number; integrationFailures: number };
@@ -3078,7 +3261,7 @@ export function buildActionQueue(params: {
         label: `Invoice completed job for ${formatPersonName(row.clientFirstName, row.clientLastName)}`,
         reason: "Completed work still needs an invoice.",
         urgency: "high",
-        amountAtRisk: toMoneyNumber(row.totalPrice),
+        amountAtRisk: getDashboardAppointmentAmount(row),
         ctaLabel: "Open appointment",
         ctaUrl: `/appointments/${row.id}`,
         supportsSnooze: true,

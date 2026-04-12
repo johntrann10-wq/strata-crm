@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ResponsiveTimeSelect, buildQuarterHourOptions, toDateInputValue } from "@/components/appointments/SchedulingControls";
 import { cn } from "@/lib/utils";
 import { getJobPhaseLabel, getOperationalDayLabel, getOperationalTimelineLabel, isMultiDayJob } from "@/lib/calendarJobSpans";
+import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { hasBackendFinanceField, resolveAppointmentFinanceState } from "@/lib/appointmentFinanceState";
 
 export type AppointmentInspectorRecord = {
@@ -120,7 +121,7 @@ function getTechName(appointment: AppointmentInspectorRecord): string {
 }
 
 function getAmountLabel(appointment: AppointmentInspectorRecord): string {
-  const amount = Number(appointment.totalPrice ?? 0);
+  const amount = getDisplayedAppointmentAmount(appointment);
   return amount > 0 ? formatCurrency(amount) : "No amount set";
 }
 
@@ -367,7 +368,7 @@ export function AppointmentInspectorPanel({
   const showAdminFee = appointment.applyAdminFee === true && adminFeeAmount > 0;
   const showTax = appointment.applyTax === true && taxAmount > 0;
   const showFinancialBreakdown = showServicesSubtotal || showAdminFee || showTax;
-  const totalAmount = Number(appointment.totalPrice ?? 0);
+  const totalAmount = getDisplayedAppointmentAmount(appointment);
   const hasClient = Boolean(appointment.client?.firstName || appointment.client?.lastName);
   const isInternalAppointment = !hasClient;
   const effectiveCollectionAmount = paymentSummary.nextCollectionAmount;
