@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { getInitialInvoiceNumberSeed } from "./invoices.js";
+import { getInitialInvoiceNumberSeed, nextInvoiceNumberCandidate } from "./invoices.js";
 
 const createSchema = z.object({
   clientId: z.string().uuid(),
@@ -111,5 +111,11 @@ describe("invoices route logic", () => {
         globalHighestInvoiceNumber: 37,
       })
     ).toBe(112);
+  });
+
+  it("jumps invoice retry candidates to the safer fallback seed when conflicts continue", () => {
+    expect(nextInvoiceNumberCandidate("INV-1", 5000)).toBe("INV-5000");
+    expect(nextInvoiceNumberCandidate("INV-4999", 5000)).toBe("INV-5000");
+    expect(nextInvoiceNumberCandidate("INV-5000", 5000)).toBe("INV-5001");
   });
 });

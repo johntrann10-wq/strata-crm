@@ -92,10 +92,10 @@ function isInvoiceNumberConflictError(error: unknown): boolean {
   );
 }
 
-function nextInvoiceNumberCandidate(current: string, fallbackSeed: number) {
+export function nextInvoiceNumberCandidate(current: string, fallbackSeed: number) {
   const match = /^INV-(\d+)$/.exec(current);
   if (match) {
-    return `INV-${Number(match[1]) + 1}`;
+    return `INV-${Math.max(Number(match[1]) + 1, fallbackSeed)}`;
   }
   return `INV-${fallbackSeed}`;
 }
