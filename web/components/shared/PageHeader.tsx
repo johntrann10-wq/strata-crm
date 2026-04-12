@@ -12,7 +12,20 @@ interface PageHeaderProps {
   badge?: ReactNode;
 }
 
+function renderTitleBadge(title: ReactNode, badge?: ReactNode) {
+  if (badge) return badge;
+  if (typeof title !== "string") return null;
+
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+      {title}
+    </span>
+  );
+}
+
 export function PageHeader({ title, subtitle, right, actions, loading, backTo, badge }: PageHeaderProps) {
+  const titleBadge = renderTitleBadge(title, badge);
+
   return (
     <div className="surface-panel relative mb-4 overflow-hidden rounded-[1.7rem] sm:mb-7">
       <div className="border-b border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-4 py-3 sm:px-5 sm:py-4">
@@ -28,11 +41,11 @@ export function PageHeader({ title, subtitle, right, actions, loading, backTo, b
             Back
           </Link>
         )}
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-col gap-2">
+          {titleBadge}
           <h1 className="text-balance text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-[31px]">
             {title}
           </h1>
-          {badge && !subtitle ? badge : null}
         </div>
       </div>
       {(right ?? actions) && (
