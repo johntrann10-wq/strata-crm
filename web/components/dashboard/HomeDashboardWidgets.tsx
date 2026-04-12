@@ -171,23 +171,19 @@ export function HomeDashboardTopBar({
   ];
 
   return (
-    <Card className="overflow-hidden rounded-[1.8rem] border border-slate-200/80 bg-white/78 py-0 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur">
-      <div className="h-1.5 bg-gradient-to-r from-slate-900 via-amber-600 to-orange-400" />
-      <CardContent className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+    <Card className="surface-panel overflow-hidden rounded-[1.7rem] border-border/70 bg-white/96 py-0 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+      <CardContent className="flex flex-col gap-4 px-4 py-4 sm:px-5 sm:py-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-[-0.03em] text-slate-950 sm:text-[2rem]">
+            <h1 className="text-balance text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-[31px]">
               {title}
             </h1>
             {subtitle ? <p className="max-w-2xl text-sm text-slate-500">{subtitle}</p> : null}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50/90 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-amber-800">
-              {businessName ?? "Current business"}
-            </Badge>
-            <Badge variant="outline" className="rounded-full border-slate-200 bg-slate-50/90 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-700">
-              {roleLabel}
-            </Badge>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-slate-500 sm:text-sm">
+            <span>{businessName ?? "Current business"}</span>
+            <span className="text-slate-300">/</span>
+            <span>{roleLabel}</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
@@ -195,17 +191,17 @@ export function HomeDashboardTopBar({
           </div>
         </div>
 
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto">
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto lg:max-w-[56rem]">
           {primaryAction}
           {secondaryAction}
-          <div className="grid w-full grid-cols-3 rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 sm:w-auto sm:inline-flex">
+          <div className="grid w-full grid-cols-3 rounded-[1.1rem] border border-border/70 bg-slate-100/75 p-1 sm:w-auto sm:min-w-[18rem]">
             {rangeOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => onRangeChange(option.value)}
                 className={cn(
-                  "min-h-[42px] rounded-xl px-2.5 py-2 text-center text-sm font-medium transition-colors sm:px-3",
+                  "min-h-[42px] rounded-[0.9rem] px-2.5 py-2 text-center text-sm font-medium transition-colors sm:px-3",
                   range === option.value ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-foreground"
                 )}
                 aria-pressed={range === option.value}
@@ -216,7 +212,7 @@ export function HomeDashboardTopBar({
           </div>
 
           {canFilterTeam ? (
-            <label className="inline-flex w-full items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-500 sm:min-w-[210px] sm:w-auto">
+            <label className="inline-flex w-full items-center gap-2 rounded-[1.1rem] border border-border/70 bg-white px-3 py-2 text-sm text-slate-500 sm:min-w-[210px] sm:w-auto">
               <UserRound className="h-4 w-4" />
               <span className="sr-only">Filter dashboard by team member</span>
               <select
