@@ -254,8 +254,10 @@ export default function CalendarPage() {
     if (!requestedDate) return;
     const requestedKey = toLocalDateString(requestedDate);
     const internalSync = lastInternalUrlSyncRef.current;
-    if (internalSync && internalSync.view === view && internalSync.date === requestedKey) {
-      lastInternalUrlSyncRef.current = null;
+    if (internalSync) {
+      if (internalSync.view === view && internalSync.date === requestedKey) {
+        lastInternalUrlSyncRef.current = null;
+      }
       return;
     }
     if (view === "day") {
