@@ -610,6 +610,13 @@ function getActivityLogEffectivePaidAt(metadata: string | null | undefined, fall
   return fallback;
 }
 
+function isCarryoverPaymentRow(row: { notes?: string | null; idempotencyKey?: string | null }) {
+  return (
+    String(row.notes ?? "").trim() === "Carried over from appointment payment state." ||
+    String(row.idempotencyKey ?? "").startsWith("appointment-payment-carryover:")
+  );
+}
+
 function formatPersonName(firstName: string | null | undefined, lastName: string | null | undefined) {
   return `${firstName ?? ""} ${lastName ?? ""}`.trim() || "Unknown";
 }
