@@ -1376,6 +1376,7 @@ export default function SettingsPage() {
   const hasFullBillingWorkspaceAccess = billingStatus !== null && hasFullBillingAccess(billingStatus.accessState);
   const integrationsBlockedByBilling = billingStatus !== null && !hasFullBillingAccess(billingStatus.accessState);
   const canLoadIntegrationData = Boolean(businessId) && activeTab === "integrations" && hasFullBillingWorkspaceAccess;
+  const canLoadAutomationInsights = Boolean(businessId) && activeTab === "automations";
   const canManageTeam =
     permissions.has("team.write") ||
     membershipRole === "owner" ||
@@ -1672,12 +1673,13 @@ export default function SettingsPage() {
   }, [twilioConnection]);
 
   useEffect(() => {
-    if (!businessId) return;
+    if (!canLoadIntegrationData) return;
     void refetchOutboundWebhookActivity();
-  }, [businessId, refetchOutboundWebhookActivity]);
+  }, [canLoadIntegrationData, refetchOutboundWebhookActivity]);
 
   useEffect(() => {
     if (
+      !canLoadIntegrationData ||
       !googleCalendarRegistry?.featureFlagEnabled ||
       googleCalendarConnection?.status !== "connected"
     ) {
@@ -1703,10 +1705,15 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [googleCalendarConnection?.id, googleCalendarConnection?.status, googleCalendarRegistry?.featureFlagEnabled]);
+  }, [
+    canLoadIntegrationData,
+    googleCalendarConnection?.id,
+    googleCalendarConnection?.status,
+    googleCalendarRegistry?.featureFlagEnabled,
+  ]);
 
   useEffect(() => {
-    if (!businessId) return;
+    if (!canLoadAutomationInsights) return;
     let cancelled = false;
     getAutomationSummary()
       .then((result) => {
@@ -1720,10 +1727,10 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [businessId, getAutomationSummary]);
+  }, [canLoadAutomationInsights, getAutomationSummary]);
 
   useEffect(() => {
-    if (!businessId) return;
+    if (!canLoadAutomationInsights) return;
     let cancelled = false;
     getAutomationFeed({ limit: 12 })
       .then((result) => {
@@ -1737,15 +1744,15 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [businessId, getAutomationFeed]);
+  }, [canLoadAutomationInsights, getAutomationFeed]);
 
   useEffect(() => {
-    if (!businessId) return;
+    if (!canLoadAutomationInsights) return;
     void getWorkerHealth();
-  }, [businessId, getWorkerHealth]);
+  }, [canLoadAutomationInsights, getWorkerHealth]);
 
   useEffect(() => {
-    if (!businessId || activeTab !== "automations") return;
+    if (!canLoadAutomationInsights) return;
     let cancelled = false;
     const tick = async () => {
       if (typeof document !== "undefined" && document.hidden) return;
@@ -1764,7 +1771,7 @@ export default function SettingsPage() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [activeTab, businessId, refreshAutomationInsights]);
+  }, [canLoadAutomationInsights, refreshAutomationInsights]);
 
   useEffect(() => {
     if (!canViewDiagnostics) return;
