@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
+import { getInitialInvoiceNumberSeed } from "./invoices.js";
 
 const createSchema = z.object({
   clientId: z.string().uuid(),
@@ -90,5 +91,25 @@ describe("invoices route logic", () => {
       recipientEmail: "bad-address",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("seeds new invoice numbers above the global max when invoice numbers are globally unique", () => {
+    expect(
+      getInitialInvoiceNumberSeed({
+        nextInvoiceNumber: 1,
+        businessHighestInvoiceNumber: null,
+        globalHighestInvoiceNumber: 37,
+      })
+    ).toBe(38);
+  });
+
+  it("still respects a higher business-local counter when it is already ahead", () => {
+    expect(
+      getInitialInvoiceNumberSeed({
+        nextInvoiceNumber: 112,
+        businessHighestInvoiceNumber: 111,
+        globalHighestInvoiceNumber: 37,
+      })
+    ).toBe(112);
   });
 });

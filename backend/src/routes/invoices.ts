@@ -207,20 +207,37 @@ async function getNextInvoiceNumberWithFallback(
 
 async function getHighestExistingInvoiceNumber(
   executor: any,
-  bid: string
+  bid?: string | null
 ): Promise<number | null> {
   const invoiceColumns = await getInvoiceColumns();
   if (!invoiceColumns.has("invoice_number")) return null;
-  const result = await executor.execute(sql`
+  const result = bid
+    ? await executor.execute(sql`
     select max((regexp_match(invoice_number, '^INV-(\d+)$'))[1]::int) as max_invoice_number
     from invoices
     where business_id = ${bid}
+  `)
+    : await executor.execute(sql`
+    select max((regexp_match(invoice_number, '^INV-(\d+)$'))[1]::int) as max_invoice_number
+    from invoices
   `);
   const rows = (result as { rows?: Array<{ max_invoice_number?: number | string | null }> }).rows ?? [];
   const value = rows[0]?.max_invoice_number;
   if (value == null) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function getInitialInvoiceNumberSeed(params: {
+  nextInvoiceNumber: number | null;
+  businessHighestInvoiceNumber: number | null;
+  globalHighestInvoiceNumber: number | null;
+}) {
+  return Math.max(
+    params.nextInvoiceNumber ?? 1,
+    (params.businessHighestInvoiceNumber ?? 0) + 1,
+    (params.globalHighestInvoiceNumber ?? 0) + 1,
+  );
 }
 
 async function getInvoiceLineItemColumns(): Promise<Set<string>> {
@@ -1182,7 +1199,12 @@ invoicesRouter.post(
     const nextNum = b.nextInvoiceNumber ?? null;
     const invoiceId = randomUUID();
     const highestExistingInvoiceNumber = await getHighestExistingInvoiceNumber(executor, bid);
-    const initialNumericInvoiceNumber = Math.max(nextNum ?? 1, (highestExistingInvoiceNumber ?? 0) + 1);
+    const highestGlobalInvoiceNumber = await getHighestExistingInvoiceNumber(executor, null);
+    const initialNumericInvoiceNumber = getInitialInvoiceNumberSeed({
+      nextInvoiceNumber: nextNum,
+      businessHighestInvoiceNumber: highestExistingInvoiceNumber,
+      globalHighestInvoiceNumber: highestGlobalInvoiceNumber,
+    });
     const initialInvoiceNumber = `INV-${initialNumericInvoiceNumber}`;
     const dueDate =
       data.dueDate != null && data.dueDate !== ""
