@@ -116,62 +116,61 @@ async function syncAppointmentPaymentState(
   paidAt: Date | null,
   tx: DbExecutor
 ): Promise<void> {
-  // Find invoice with its linked appointment
-  const [inv] = await tx
-    .select({
-      appointmentId: invoices.appointmentId,
-      businessId: invoices.businessId,
-    })
-    .from(invoices)
-    .where(eq(invoices.id, invoiceId))
-    .limit(1);
-
-  if (!inv?.appointmentId) return;
-
-  const [appointment] = await tx
-    .select({
-      id: appointments.id,
-      totalPrice: appointments.totalPrice,
-      depositAmount: appointments.depositAmount,
-    })
-    .from(appointments)
-    .where(eq(appointments.id, inv.appointmentId))
-    .limit(1);
-
-  if (!appointment) return;
-
-  const finance = (
-    await getAppointmentFinanceSummaryMap(
-      inv.businessId,
-      [
-        {
-          id: appointment.id,
-          totalPrice: appointment.totalPrice,
-          depositAmount: appointment.depositAmount,
-          paidAt: null,
-        },
-      ],
-      tx
-    )
-  ).get(appointment.id);
-
-  const appointmentUpdates = getAppointmentFinanceMirrorUpdates({
-    depositAmount: appointment.depositAmount,
-    finance,
-    paidAtWhenPaid: paidAt ?? new Date(),
-    includeUpdatedAt: true,
-  });
-
   try {
+    // Find invoice with its linked appointment.
+    const [inv] = await tx
+      .select({
+        appointmentId: invoices.appointmentId,
+        businessId: invoices.businessId,
+      })
+      .from(invoices)
+      .where(eq(invoices.id, invoiceId))
+      .limit(1);
+
+    if (!inv?.appointmentId) return;
+
+    const [appointment] = await tx
+      .select({
+        id: appointments.id,
+        totalPrice: appointments.totalPrice,
+        depositAmount: appointments.depositAmount,
+      })
+      .from(appointments)
+      .where(eq(appointments.id, inv.appointmentId))
+      .limit(1);
+
+    if (!appointment) return;
+
+    const finance = (
+      await getAppointmentFinanceSummaryMap(
+        inv.businessId,
+        [
+          {
+            id: appointment.id,
+            totalPrice: appointment.totalPrice,
+            depositAmount: appointment.depositAmount,
+            paidAt: null,
+          },
+        ],
+        tx
+      )
+    ).get(appointment.id);
+
+    const appointmentUpdates = getAppointmentFinanceMirrorUpdates({
+      depositAmount: appointment.depositAmount,
+      finance,
+      paidAtWhenPaid: paidAt ?? new Date(),
+      includeUpdatedAt: true,
+    });
+
     await tx
       .update(appointments)
       .set(appointmentUpdates)
       .where(eq(appointments.id, inv.appointmentId));
   } catch (err) {
-    // Non-fatal: log and continue. Payment is already recorded on the invoice.
+    // Non-fatal: payment is already recorded on the invoice.
     logger.warn("Failed to sync appointment payment state after invoice payment", {
       invoiceId,
-      appointmentId: inv.appointmentId,
       newInvoiceStatus,
       error: err,
     });

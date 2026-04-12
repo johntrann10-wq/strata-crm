@@ -308,6 +308,8 @@ export default function NewInvoicePage() {
   async function recoverCreatedAppointmentInvoice(params: {
     appointmentId: string;
     clientId: string;
+    expectedTotal: number;
+    expectedLineItemCount: number;
   }): Promise<string | null> {
     try {
       const matches = await api.invoice.findMany({
@@ -316,22 +318,40 @@ export default function NewInvoicePage() {
           clientId: { equals: params.clientId },
         },
         sort: { createdAt: "Descending" },
-        first: 1,
+        first: 5,
         select: {
           id: true,
           createdAt: true,
+          total: true,
         },
       } as any);
-      const latest = Array.isArray(matches) ? (matches[0] as { id?: string; createdAt?: string | null } | undefined) : undefined;
-      if (!latest?.id) return null;
 
-      const createdAt = latest.createdAt ? new Date(latest.createdAt) : null;
-      if (createdAt && !Number.isNaN(createdAt.getTime())) {
-        const ageMs = Date.now() - createdAt.getTime();
-        if (ageMs > 2 * 60 * 1000) return null;
+      const candidates = Array.isArray(matches)
+        ? (matches as Array<{ id?: string; createdAt?: string | null; total?: string | number | null }>)
+        : [];
+
+      for (const candidate of candidates) {
+        if (!candidate?.id) continue;
+
+        const createdAt = candidate.createdAt ? new Date(candidate.createdAt) : null;
+        if (createdAt && !Number.isNaN(createdAt.getTime())) {
+          const ageMs = Date.now() - createdAt.getTime();
+          if (ageMs > 2 * 60 * 1000) continue;
+        }
+
+        const detail = await api.invoice.findOne(candidate.id);
+        const detailLineItems = Array.isArray((detail as { lineItems?: unknown[] } | null)?.lineItems)
+          ? ((detail as { lineItems?: unknown[] }).lineItems ?? [])
+          : [];
+        const detailTotal = Number((detail as { total?: string | number | null } | null)?.total ?? 0);
+
+        if (detailLineItems.length === 0) continue;
+        if (detailLineItems.length < params.expectedLineItemCount) continue;
+        if (Math.abs(detailTotal - params.expectedTotal) > 0.009) continue;
+
+        return candidate.id;
       }
-
-      return latest.id;
+      return null;
     } catch {
       return null;
     }
@@ -612,6 +632,9 @@ export default function NewInvoicePage() {
           const recoveredInvoiceId = await recoverCreatedAppointmentInvoice({
             appointmentId: appointmentIdParam,
             clientId: effectiveClientId,
+            expectedTotal: total,
+            expectedLineItemCount:
+              lineItems.length + (effectiveAdminFee > 0 ? 1 : 0),
           });
           if (recoveredInvoiceId) {
             toast.warning("Invoice was created, but the appointment workflow lost the response. Finishing the workflow now.");
@@ -643,6 +666,9 @@ export default function NewInvoicePage() {
         const recoveredInvoiceId = await recoverCreatedAppointmentInvoice({
           appointmentId: appointmentIdParam,
           clientId: effectiveClientId,
+          expectedTotal: total,
+          expectedLineItemCount:
+            lineItems.length + (effectiveAdminFee > 0 ? 1 : 0),
         });
         if (recoveredInvoiceId) {
           toast.warning("Invoice was created, but the appointment workflow lost the response. Finishing the workflow now.");
