@@ -72,6 +72,15 @@ export default function SubscribePage() {
     setError(null);
     setLoadingPortal(true);
     try {
+      if (billingStatus?.accessState === "canceled") {
+        const result = await api.billing.createCheckoutSession();
+        if (result?.url) {
+          window.location.href = result.url;
+          return;
+        }
+        setError("Billing checkout is not available right now.");
+        return;
+      }
       const promptStage =
         billingStatus?.billingPrompt.stage && billingStatus.billingPrompt.stage !== "none"
           ? billingStatus.billingPrompt.stage
@@ -219,6 +228,8 @@ export default function SubscribePage() {
                 {loadingPortal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {billingStatus?.accessState === "paused_missing_payment_method"
                   ? "Resume subscription"
+                  : billingStatus?.accessState === "canceled"
+                    ? "Reactivate subscription"
                   : billingStatus?.billingHasPaymentMethod
                     ? "Manage billing"
                     : "Add payment method"}

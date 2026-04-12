@@ -871,7 +871,10 @@ function BillingTab({
   const handleManageSubscription = async () => {
     setBillingPortalLoading(true);
     try {
-      const result = await api.billing.createPortalSession({ entryPoint: "settings" });
+      const result =
+        billingStatus?.accessState === "canceled"
+          ? await api.billing.createCheckoutSession()
+          : await api.billing.createPortalSession({ entryPoint: "settings" });
       if (result?.url) {
         window.location.href = result.url;
         return;
@@ -1101,6 +1104,8 @@ function BillingTab({
                   ? billingStatus.billingHasPaymentMethod
                     ? "Manage billing"
                     : "Add payment method"
+                  : billingStatus?.accessState === "canceled"
+                    ? "Reactivate subscription"
                   : "Manage billing"}
               </Button>
             </div>
