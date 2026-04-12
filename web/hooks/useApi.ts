@@ -10,11 +10,39 @@ import { persistAuthState } from "../lib/auth";
 import { recordReliabilityDiagnostic } from "../lib/reliabilityDiagnostics";
 import { recordRuntimeError } from "../lib/runtimeErrors";
 
+function getApiErrorStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+  const status = "status" in error ? (error as { status?: unknown }).status : null;
+  return typeof status === "number" ? status : null;
+}
+
+function getApiErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  const code = "code" in error ? (error as { code?: unknown }).code : null;
+  return typeof code === "string" ? code : null;
+}
+
+function shouldRecordActionFailureAsReliabilityEvent(error: unknown): boolean {
+  const status = getApiErrorStatus(error);
+  const code = getApiErrorCode(error);
+  if (status == null) return true;
+  if (status === 402 && code === "SUBSCRIPTION_REQUIRED") return false;
+  if (status === 401) return true;
+  return status >= 500 || status === 0;
+}
+
 function persistAuthTokenFromResponse(res: unknown): void {
   if (typeof window === "undefined") return;
   const r = res as { data?: { token?: string }; token?: string } | null | undefined;
   const token = r?.data?.token ?? (typeof r?.token === "string" ? r.token : undefined);
   if (token) persistAuthState(token, { source: "action-form" });
+}
+
+function shouldRecordQueryFailureAsReliabilityEvent(error: unknown): boolean {
+  const status = getApiErrorStatus(error);
+  const code = getApiErrorCode(error);
+  if (status === 402 && code === "SUBSCRIPTION_REQUIRED") return false;
+  return true;
 }
 
 type FindManyOpts = {
@@ -190,12 +218,14 @@ export function useFindOne(
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
       const err = e instanceof Error ? e : new Error(String(e));
       setError(err);
-      recordReliabilityDiagnostic({
-        source: "query.error",
-        severity: "error",
-        message: err.message,
-        detail: `findOne failed for id ${id}`,
-      });
+      if (shouldRecordQueryFailureAsReliabilityEvent(e)) {
+        recordReliabilityDiagnostic({
+          source: "query.error",
+          severity: "error",
+          message: err.message,
+          detail: `findOne failed for id ${id}`,
+        });
+      }
     } finally {
       if (mountedRef.current && requestId === requestIdRef.current) {
         setFetching(false);
@@ -328,12 +358,14 @@ export function useFindMany(
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
       const err = e instanceof Error ? e : new Error(String(e));
       setError(err);
-      recordReliabilityDiagnostic({
-        source: "query.error",
-        severity: "error",
-        message: err.message,
-        detail: "findMany failed for a resource query",
-      });
+      if (shouldRecordQueryFailureAsReliabilityEvent(e)) {
+        recordReliabilityDiagnostic({
+          source: "query.error",
+          severity: "error",
+          message: err.message,
+          detail: "findMany failed for a resource query",
+        });
+      }
     } finally {
       if (mountedRef.current && requestId === requestIdRef.current) {
         setFetching(false);
@@ -469,12 +501,14 @@ export function useFindFirst(
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
       const err = e instanceof Error ? e : new Error(String(e));
       setError(err);
-      recordReliabilityDiagnostic({
-        source: "query.error",
-        severity: "error",
-        message: err.message,
-        detail: "findFirst failed for a resource query",
-      });
+      if (shouldRecordQueryFailureAsReliabilityEvent(e)) {
+        recordReliabilityDiagnostic({
+          source: "query.error",
+          severity: "error",
+          message: err.message,
+          detail: "findFirst failed for a resource query",
+        });
+      }
     } finally {
       if (mountedRef.current && requestId === requestIdRef.current) {
         setFetching(false);
@@ -538,17 +572,19 @@ export function useAction(actionFn: ActionFn) {
             detail = "Action failed with unserializable params";
           }
         }
-        recordRuntimeError({
-          source: "window.unhandledrejection",
-          message,
-          detail,
-        });
-        recordReliabilityDiagnostic({
-          source: "action.error",
-          severity: "error",
-          message,
-          detail,
-        });
+        if (shouldRecordActionFailureAsReliabilityEvent(e)) {
+          recordRuntimeError({
+            source: "window.unhandledrejection",
+            message,
+            detail,
+          });
+          recordReliabilityDiagnostic({
+            source: "action.error",
+            severity: "error",
+            message,
+            detail,
+          });
+        }
         return { data: null, error: { message } };
       } finally {
         if (mountedRef.current && actionId === actionIdRef.current) {

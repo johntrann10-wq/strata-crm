@@ -20,6 +20,7 @@ export type ReliabilityDiagnosticEntry = {
 const STORAGE_KEY = "strata.reliabilityDiagnostics";
 const CHANGE_EVENT = "strata:reliability-diagnostics";
 const MAX_ENTRIES = 40;
+const DEDUPE_WINDOW_MS = 15_000;
 
 function safeSessionStorageGet(key: string): string | null {
   if (typeof window === "undefined") return null;
@@ -90,7 +91,23 @@ export function recordReliabilityDiagnostic(params: {
     detail: params.detail?.trim() || undefined,
     timestamp: new Date().toISOString(),
   };
-  writeEntries([entry, ...readEntries()]);
+  const existing = readEntries();
+  const now = Date.now();
+  const duplicate = existing.find((candidate) => {
+    const candidateAt = Date.parse(candidate.timestamp);
+    if (!Number.isFinite(candidateAt) || now - candidateAt > DEDUPE_WINDOW_MS) return false;
+    return (
+      candidate.source === entry.source &&
+      candidate.severity === entry.severity &&
+      candidate.message === entry.message &&
+      candidate.path === entry.path &&
+      candidate.method === entry.method &&
+      candidate.status === entry.status &&
+      candidate.detail === entry.detail
+    );
+  });
+  if (duplicate) return;
+  writeEntries([entry, ...existing]);
   console.error("[Strata reliability]", entry);
 }
 

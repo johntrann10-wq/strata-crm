@@ -103,6 +103,18 @@ export class ApiError extends Error {
   }
 }
 
+function isExpectedSubscriptionRestriction(params: {
+  status: number;
+  method: string;
+  code?: string;
+}): boolean {
+  return (
+    params.status === 402 &&
+    params.code === "SUBSCRIPTION_REQUIRED" &&
+    params.method.toUpperCase() === "GET"
+  );
+}
+
 function emitSubscriptionRequired(path: string): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent("subscription:required", { detail: { path } }));
@@ -257,15 +269,17 @@ async function request<T = unknown>(
           "API not found (404). Set STRATA_API_ORIGIN on Vercel/Netlify for the /api proxy, or VITE_API_URL / NEXT_PUBLIC_API_URL at build time (see DEPLOY.md).";
       }
     }
-    recordReliabilityDiagnostic({
-      source: "api.http",
-      severity: res.status >= 500 ? "error" : "warning",
-      message,
-      method,
-      path,
-      status: res.status,
-      detail: errBody.detail ?? errText.slice(0, 300),
-    });
+    if (!isExpectedSubscriptionRestriction({ status: res.status, method, code: errBody.code })) {
+      recordReliabilityDiagnostic({
+        source: "api.http",
+        severity: res.status >= 500 ? "error" : "warning",
+        message,
+        method,
+        path,
+        status: res.status,
+        detail: errBody.detail ?? errText.slice(0, 300),
+      });
+    }
     throw new ApiError(message, res.status, path, errBody.detail, errBody.code);
   }
   const text = await res.text();
