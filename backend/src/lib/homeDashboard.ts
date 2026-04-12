@@ -758,6 +758,11 @@ function getAppointmentOverviewStatus(status: string | null | undefined) {
   }
 }
 
+function isCalendarRevenueEligibleStatus(status: string | null | undefined) {
+  const normalized = (status ?? "").toLowerCase();
+  return normalized !== "cancelled" && normalized !== "no-show";
+}
+
 export function getDashboardModulePermissions(permissions: PermissionKey[] = []): DashboardModulePermissions {
   const has = (permission: PermissionKey) => permissions.includes(permission);
   return {
@@ -1713,7 +1718,9 @@ export function buildWeeklyAppointmentOverview(params: {
     const bucket = buckets.get(getBusinessDateKey(primaryStart, params.timezone));
     if (!bucket) continue;
     bucket.appointmentCount += 1;
-    bucket.bookedValue += toMoneyNumber(row.totalPrice);
+    if (isCalendarRevenueEligibleStatus(row.status)) {
+      bucket.bookedValue += toMoneyNumber(row.totalPrice);
+    }
     bucket.statusCounts[getAppointmentOverviewStatus(row.status)] += 1;
     if (row.assignedStaffId) bucket.assignedStaffIds.add(row.assignedStaffId);
     if (bucket.previewItems.length < 4) {
