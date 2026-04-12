@@ -19,6 +19,7 @@ import {
   MonthView,
   detectConflicts,
   getCalendarAppointmentAmount,
+  getCalendarDayRevenue,
   getHeaderTitle,
   getViewRange,
   navigateDate,
@@ -660,12 +661,8 @@ export default function CalendarPage() {
     [selectedDayAgendaItems]
   );
   const selectedDayRevenue = useMemo(
-    () =>
-      getOverviewCalendarAppointments(selectedDayAppointments).reduce(
-        (total, appointment) => total + getCalendarAppointmentAmount(appointment),
-        0
-      ),
-    [selectedDayAppointments]
+    () => getCalendarDayRevenue(selectedDayAppointments, inspectorDate),
+    [inspectorDate, selectedDayAppointments]
   );
   const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
   const selectedDayConflicts = selectedDayAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;

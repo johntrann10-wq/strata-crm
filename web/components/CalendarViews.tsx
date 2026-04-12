@@ -394,6 +394,16 @@ export function getCalendarAppointmentAmount(apt: ApptRecord): number {
   return storedTotal;
 }
 
+export function getCalendarDayRevenue(appointments: ApptRecord[], date: Date): number {
+  const dayKey = toDayKey(date);
+
+  return getOverviewCalendarAppointments(appointments).reduce((total, appointment) => {
+    return toDayKey(getJobSpanStart(appointment)) === dayKey
+      ? total + getCalendarAppointmentAmount(appointment)
+      : total;
+  }, 0);
+}
+
 export function apptMoneyLabel(apt: ApptRecord): string | null {
   const amount = getCalendarAppointmentAmount(apt);
   if (amount <= 0) return null;
