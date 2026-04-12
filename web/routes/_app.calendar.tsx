@@ -218,6 +218,7 @@ export default function CalendarPage() {
   const [isAppointmentInspectorOpen, setIsAppointmentInspectorOpen] = useState(false);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const layoutInitializedRef = useRef(false);
+  const lastInternalUrlSyncRef = useRef<{ view: "month" | "day"; date: string } | null>(null);
 
   useEffect(() => {
     const check = () => {
@@ -242,6 +243,7 @@ export default function CalendarPage() {
     }
     const dateValue = toLocalDateString(view === "month" ? toMonthAnchor(currentDate) : currentDate);
     if (next.get("view") === view && next.get("date") === dateValue) return;
+    lastInternalUrlSyncRef.current = { view, date: dateValue };
     next.set("view", view);
     next.set("date", dateValue);
     setSearchParams(next, { replace: true });
@@ -250,6 +252,11 @@ export default function CalendarPage() {
   useEffect(() => {
     if (!requestedDate) return;
     const requestedKey = toLocalDateString(requestedDate);
+    const internalSync = lastInternalUrlSyncRef.current;
+    if (internalSync && internalSync.view === view && internalSync.date === requestedKey) {
+      lastInternalUrlSyncRef.current = null;
+      return;
+    }
     if (view === "day") {
       if (toLocalDateString(selectedDate) !== requestedKey) {
         setSelectedDate(requestedDate);
