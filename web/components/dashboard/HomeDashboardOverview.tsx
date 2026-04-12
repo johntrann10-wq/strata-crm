@@ -781,11 +781,21 @@ export function HomeUpcomingAttentionPanel({
 
 export function HomeMonthlyRevenueChartCard({
   snapshot,
+  financeDashboard,
   loading,
   error,
   onRetry,
-}: { snapshot?: HomeDashboardSnapshot | null } & WidgetStateProps) {
-  const [mode, setMode] = useState<"booked" | "collected" | "expenses">("booked");
+}: {
+  snapshot?: HomeDashboardSnapshot | null;
+  financeDashboard?: {
+    kpis: {
+      grossRevenue: number;
+      expenses: number;
+      projectedNetProfit: number;
+      awaitingPayment: number;
+    };
+  } | null;
+} & WidgetStateProps) {
   if (loading) return <CardLoadingShell title="Monthly Revenue" rows={6} />;
   if (error) return <WidgetErrorState title="Monthly Revenue" error={error} onRetry={onRetry} />;
 
@@ -803,17 +813,34 @@ export function HomeMonthlyRevenueChartCard({
     );
   }
 
-  const values = chart.days.map((day) => (
-    mode === "booked"
-      ? day.bookedRevenue
-      : mode === "collected"
-        ? day.collectedRevenue
-        : day.expenseAmount
-  ));
-  const maxValue = Math.max(...values, 1);
-  const hasAnyRevenue = chart.days.some((day) => day.bookedRevenue > 0 || day.collectedRevenue > 0 || day.expenseAmount > 0);
-  const showGoalPace = mode === "booked" && chart.goalAmount != null && chart.days.some((day) => day.goalPaceRevenue != null);
-  const axisTicks = [1, 0.75, 0.5, 0.25, 0].map((factor) => formatDashboardAxisCurrency(maxValue * factor));
+  const bars = [
+    {
+      key: "booked",
+      label: "Booked",
+      value: chart.totalBookedThisMonth,
+      tone: "bg-amber-500",
+      hint: "scheduled work this month",
+      url: "/calendar?view=month",
+    },
+    {
+      key: "invoiced",
+      label: "Invoiced",
+      value: financeDashboard?.kpis.grossRevenue ?? 0,
+      tone: "bg-slate-900",
+      hint: "invoice value created this month",
+      url: "/finances",
+    },
+    {
+      key: "expenses",
+      label: "Expenses",
+      value: financeDashboard?.kpis.expenses ?? 0,
+      tone: "bg-rose-500",
+      hint: "logged expenses this month",
+      url: "/finances?view=expenses",
+    },
+  ];
+  const maxValue = Math.max(1, ...bars.map((bar) => bar.value));
+  const hasAnyRevenue = bars.some((bar) => bar.value > 0);
   const summaryItems = [
     {
       label: "Booked",
@@ -822,25 +849,22 @@ export function HomeMonthlyRevenueChartCard({
       hint: "scheduled work this month",
     },
     {
-      label: "Cash received",
-      value: formatDashboardCompactCurrency(chart.totalCollectedThisMonth),
+      label: "Invoiced",
+      value: formatDashboardCompactCurrency(financeDashboard?.kpis.grossRevenue ?? 0),
       tone: "text-slate-950",
-      hint: "cash collected this month",
+      hint: "invoice value this month",
     },
     {
       label: "Expenses",
-      value: formatDashboardCompactCurrency(chart.totalExpensesThisMonth),
-      tone: chart.totalExpensesThisMonth > 0 ? "text-rose-700" : "text-slate-950",
-      hint: "live expenses booked this month",
+      value: formatDashboardCompactCurrency(financeDashboard?.kpis.expenses ?? 0),
+      tone: (financeDashboard?.kpis.expenses ?? 0) > 0 ? "text-rose-700" : "text-slate-950",
+      hint: "logged expenses this month",
     },
     {
-      label: "Net cash",
-      value: formatDashboardCompactCurrency(chart.netThisMonth),
-      tone: chart.netThisMonth >= 0 ? "text-emerald-700" : "text-rose-700",
-      hint:
-        chart.goalAmount == null
-          ? `Open revenue ${formatDashboardCompactCurrency(chart.outstandingInvoiceAmount)}`
-          : `${chart.percentToGoal == null ? "--" : `${chart.percentToGoal}%`} to goal`,
+      label: "Projected net",
+      value: formatDashboardCompactCurrency(financeDashboard?.kpis.projectedNetProfit ?? 0),
+      tone: (financeDashboard?.kpis.projectedNetProfit ?? 0) >= 0 ? "text-emerald-700" : "text-rose-700",
+      hint: `Awaiting payment ${formatDashboardCompactCurrency(financeDashboard?.kpis.awaitingPayment ?? 0)}`,
     },
   ];
 
@@ -851,32 +875,10 @@ export function HomeMonthlyRevenueChartCard({
           <div>
             <CardTitle className="text-xl tracking-[-0.03em]">Monthly Revenue</CardTitle>
             <CardDescription>
-              {formatDateLabel(chart.monthStart, "MMMM yyyy")} · booked work, invoice cash, and live expenses grouped by day.
+              {formatDateLabel(chart.monthStart, "MMMM yyyy")} · booked work, invoiced value, and expenses using the same finance source as the finances page.
             </CardDescription>
           </div>
         </div>
-        <CardAction className="w-full sm:w-auto">
-          <div className="grid w-full grid-cols-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-1 sm:inline-flex sm:w-auto">
-            {([
-              { key: "booked", label: "booked" },
-              { key: "collected", label: "cash" },
-              { key: "expenses", label: "expenses" },
-            ] as const).map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                onClick={() => setMode(option.key)}
-                className={cn(
-                  "min-h-[42px] rounded-xl px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-[0.12em]",
-                  mode === option.key ? "bg-white text-foreground shadow-sm" : "text-slate-500"
-                )}
-                aria-pressed={mode === option.key}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </CardAction>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
@@ -895,112 +897,58 @@ export function HomeMonthlyRevenueChartCard({
               <EmptyState
                 icon={BarChart3}
                 title="No revenue activity this month yet"
-                description="Booked work, invoice cash, and expenses will draw here automatically as live business activity lands."
+                description="Booked work, issued invoices, and expenses will show here automatically as business activity lands."
               />
             </div>
           ) : (
             <>
               <div className="border-b border-slate-200/80 px-4 py-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-                  <span>
-                    {mode === "booked"
-                      ? "Booked work is grouped by scheduled day."
-                      : mode === "collected"
-                        ? "Invoice cash is grouped by payment day."
-                        : "Expenses are grouped by expense date."}{" "}
-                    Open any bar to drill into that date.
-                  </span>
-                  {showGoalPace ? <span>Goal pace line is shown as a guide for booked revenue.</span> : null}
+                  <span>Open any bar to jump into the source view behind that month-to-date number.</span>
+                  {chart.goalAmount != null ? <span>Monthly goal: {formatDashboardCurrency(chart.goalAmount)}</span> : null}
                 </div>
               </div>
               <div className="px-4 py-4">
-              <div className="rounded-[1.1rem] border border-slate-200/70 bg-white/92 p-3 sm:p-4">
-                <div className="grid gap-3 sm:grid-cols-[auto,1fr] sm:items-end">
-                  <div className="hidden h-64 flex-col justify-between text-[10px] text-slate-500 sm:flex">
-                    {axisTicks.map((tick) => (
-                      <span key={tick}>{tick}</span>
-                    ))}
-                  </div>
-                  <div className="min-w-0 overflow-x-auto pb-1">
-                    <div className="relative min-w-[480px] sm:min-w-[680px]">
-                      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
-                        <div className="border-t border-dashed border-slate-300/90" />
-                        <div className="border-t border-dashed border-slate-200/90" />
-                        <div className="border-t border-dashed border-slate-200/90" />
-                        <div className="border-t border-dashed border-slate-300/90" />
-                      </div>
-                      <div className="relative flex h-64 items-end gap-1.5">
-                        {chart.days.map((day) => {
-                          const value =
-                            mode === "booked"
-                              ? day.bookedRevenue
-                              : mode === "collected"
-                                ? day.collectedRevenue
-                                : day.expenseAmount;
-                          const barHeight = value > 0 ? Math.max(6, Math.round((value / maxValue) * 100)) : 0;
-                          const goalPaceHeight =
-                            showGoalPace && day.goalPaceRevenue != null
-                              ? Math.max(4, Math.min(100, Math.round((day.goalPaceRevenue / maxValue) * 100)))
-                              : null;
-                          const targetUrl =
-                            mode === "booked"
-                              ? day.bookedUrl
-                              : mode === "collected"
-                                ? day.collectedUrl
-                                : day.expenseUrl;
-                          const showTick = day.dayOfMonth === 1 || day.dayOfMonth === chart.days.length || day.dayOfMonth % 5 === 0;
-                          return (
-                            <Link
-                              key={day.date}
-                              to={targetUrl}
-                              className="group flex min-w-[14px] flex-1 flex-col items-center justify-end gap-2 sm:min-w-[18px]"
-                              aria-label={`Open ${mode} records for ${formatDateLabel(day.date, "MMM d")}`}
-                              title={`${formatDateLabel(day.date, "MMM d")}: ${formatDashboardCurrency(value)}`}
-                            >
-                              <div className="relative flex h-56 w-full items-end rounded-t-[10px]">
-                                {goalPaceHeight != null ? (
-                                  <div
-                                    className="pointer-events-none absolute inset-x-0 border-t border-dashed border-slate-400/70"
-                                    style={{ bottom: `${goalPaceHeight}%` }}
-                                    aria-hidden="true"
-                                  />
-                                ) : null}
-                                <div
-                                  className={cn(
-                                    "w-full rounded-t-[10px] transition-all group-hover:opacity-90",
-                                    mode === "booked"
-                                      ? "bg-gradient-to-t from-amber-700 to-orange-400"
-                                      : mode === "collected"
-                                        ? "bg-gradient-to-t from-emerald-600 to-emerald-400"
-                                        : "bg-gradient-to-t from-rose-700 to-rose-400",
-                                    value === 0 ? "bg-slate-200/70" : null
-                                  )}
-                                  style={{ height: `${barHeight}%` }}
-                                  aria-label={`${mode} amount for day ${day.dayOfMonth}: ${formatDashboardCurrency(value)}`}
-                                />
-                              </div>
-                              <div className="h-4 text-[10px] text-slate-500">{showTick ? day.dayOfMonth : ""}</div>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </div>
+                <div className="rounded-[1.1rem] border border-slate-200/70 bg-white/92 p-4">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {bars.map((bar) => {
+                      const barHeight = bar.value > 0 ? Math.max(10, Math.round((bar.value / maxValue) * 100)) : 10;
+                      return (
+                        <Link
+                          key={bar.key}
+                          to={bar.url}
+                          className="group rounded-[1rem] border border-slate-200/70 bg-slate-50/70 p-4 transition-colors hover:bg-white"
+                        >
+                          <div className="flex h-48 items-end justify-center rounded-[0.9rem] border border-dashed border-slate-200/80 bg-white px-6 pb-4 pt-6">
+                            <div className="flex h-full w-full items-end justify-center">
+                              <div className={cn("w-full max-w-[92px] rounded-t-[18px] transition-all group-hover:opacity-90", bar.tone)} style={{ height: `${barHeight}%` }} />
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-1 text-center">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{bar.label}</p>
+                            <p className="text-2xl font-semibold tracking-tight text-slate-950">{formatDashboardCompactCurrency(bar.value)}</p>
+                            <p className="text-xs text-slate-500">{bar.hint}</p>
+                          </div>
+                        </Link>
+                      );
+                    })}
                   </div>
                 </div>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-slate-500">
-                <span className="inline-flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "h-2.5 w-2.5 rounded-full",
-                      mode === "booked" ? "bg-amber-600" : mode === "collected" ? "bg-emerald-500" : "bg-rose-600"
-                    )}
-                  />
-                  {mode === "booked" ? "Booked work" : mode === "collected" ? "Invoice collections" : "Expenses"}
-                </span>
-                {chart.goalAmount != null ? <span>Monthly goal: {formatDashboardCurrency(chart.goalAmount)}</span> : null}
-                <span>Net cash: {formatDashboardCurrency(chart.netThisMonth)}</span>
-              </div>
+                <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                    Booked
+                  </span>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-slate-900" />
+                    Invoiced
+                  </span>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                    Expenses
+                  </span>
+                  <span>Projected net: {formatDashboardCurrency(financeDashboard?.kpis.projectedNetProfit ?? 0)}</span>
+                </div>
               </div>
             </>
           )}

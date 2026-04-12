@@ -19,11 +19,20 @@ import {
 } from "@/components/dashboard/HomeDashboardOverview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useAction, useFindMany } from "../hooks/useApi";
+import { useAction, useFindMany, useGlobalAction } from "../hooks/useApi";
 import type { HomeDashboardRange, HomeDashboardSnapshot } from "@/lib/homeDashboard";
 import type { AuthOutletContext } from "./_app";
 import { getPreferredAuthorizedAppPath } from "@/lib/permissionRouting";
 import { recordReliabilityDiagnostic } from "@/lib/reliabilityDiagnostics";
+
+type FinanceDashboardSummary = {
+  kpis: {
+    grossRevenue: number;
+    expenses: number;
+    projectedNetProfit: number;
+    awaitingPayment: number;
+  };
+};
 
 type StaffRecord = {
   id: string;
@@ -66,6 +75,7 @@ export default function DashboardHomeRoute() {
   const outletContext = useOutletContext<AuthOutletContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const canViewDashboard = outletContext.permissions.has("dashboard.view");
+  const canReadPayments = outletContext.permissions.has("payments.read");
 
   const range = isValidRange(searchParams.get("range")) ? searchParams.get("range") : "today";
   const canFilterTeam = outletContext.permissions.has("team.read");
@@ -95,8 +105,10 @@ export default function DashboardHomeRoute() {
   );
 
   const [{ data, fetching, error }, runDashboard] = useAction(api.getHomeDashboard);
+  const [{ data: financeDashboardData, fetching: financeFetching, error: financeError }, runFinanceDashboard] = useGlobalAction(api.getFinanceDashboard);
   const [, runPreferenceUpdate] = useAction(api.updateHomeDashboardPreferences);
   const snapshot = (data ?? null) as HomeDashboardSnapshot | null;
+  const financeDashboard = (financeDashboardData ?? null) as FinanceDashboardSummary | null;
   const lastMarkedSeenRef = useRef<string | null>(null);
   const lastRefreshRef = useRef(0);
 
@@ -112,10 +124,13 @@ export default function DashboardHomeRoute() {
       teamMemberId: teamMemberId === "all" ? null : teamMemberId,
       weekStartDate,
     });
+    if (canReadPayments) {
+      await runFinanceDashboard({ paymentLimit: 8, invoiceLimit: 150, monthCount: 6 });
+    }
     if (typeof window !== "undefined") {
       window.requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
     }
-  }, [range, runDashboard, teamMemberId, weekStartDate]);
+  }, [canReadPayments, range, runDashboard, runFinanceDashboard, teamMemberId, weekStartDate]);
 
   useEffect(() => {
     void refreshDashboard("force");
@@ -242,9 +257,9 @@ export default function DashboardHomeRoute() {
     !!snapshot?.monthlyRevenueChart.allowed &&
     (
       snapshot.monthlyRevenueChart.totalBookedThisMonth > 0
-      || snapshot.monthlyRevenueChart.totalCollectedThisMonth > 0
-      || snapshot.monthlyRevenueChart.totalExpensesThisMonth > 0
-      || snapshot.monthlyRevenueChart.netThisMonth !== 0
+      || (financeDashboard?.kpis.grossRevenue ?? 0) > 0
+      || (financeDashboard?.kpis.expenses ?? 0) > 0
+      || (financeDashboard?.kpis.projectedNetProfit ?? 0) !== 0
     );
   const hasMeaningfulBookingsOverview =
     !!snapshot?.bookingsOverview.allowed &&
@@ -348,8 +363,9 @@ export default function DashboardHomeRoute() {
                   <div className="xl:col-span-8">
                     <HomeMonthlyRevenueChartCard
                       snapshot={snapshot}
-                      loading={pageLoading}
-                      error={null}
+                      financeDashboard={financeDashboard}
+                      loading={pageLoading || (canReadPayments && financeFetching && !financeDashboard)}
+                      error={financeError as Error | null}
                       onRetry={() => void refreshDashboard("force")}
                     />
                   </div>
