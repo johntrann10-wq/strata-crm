@@ -289,7 +289,7 @@ export function HomeWeeklyAppointmentOverviewCard({
             </div>
             <div className="rounded-[1rem] border border-slate-200/80 bg-slate-50/80 px-3 py-2.5">
               <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Booked value</p>
-              <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{formatDashboardCompactCurrency(totalBookedValue)}</p>
+              <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{formatDashboardCurrency(totalBookedValue)}</p>
               <p className="text-xs text-slate-500">scheduled this week</p>
             </div>
             <div className="rounded-[1rem] border border-slate-200/80 bg-slate-50/80 px-3 py-2.5">
@@ -368,8 +368,9 @@ export function HomeWeeklyAppointmentOverviewCard({
                             >
                               <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{day.shortLabel}</p>
                               <p className="mt-1 text-base font-semibold tracking-tight text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
-                              <p className="mt-2 text-[12px] font-medium text-slate-600">
-                                {formatDashboardCompactCurrency(day.bookedValue)} booked
+                              <p className="mt-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">Booked</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900">
+                                {formatDashboardCurrency(day.bookedValue)}
                               </p>
                             </button>
                             <Link
@@ -402,11 +403,6 @@ export function HomeWeeklyAppointmentOverviewCard({
                               <span className="font-medium text-blue-700">Live {day.statusCounts.inProgress}</span>
                               <span className="font-medium text-emerald-700">Done {day.statusCounts.completed}</span>
                               <span className="font-medium text-rose-700">Cancel {day.statusCounts.cancelled}</span>
-                            </div>
-                            <div className="mt-5 border-t border-slate-100 pt-3">
-                              <span className={cn("text-[11px] font-medium", isActive ? "text-amber-700" : "text-slate-500")}>
-                                {isActive ? "Selected for dispatch" : "Click to inspect"}
-                              </span>
                             </div>
                           </button>
                         </div>

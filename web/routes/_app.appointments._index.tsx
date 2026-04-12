@@ -14,6 +14,7 @@ import { EmptyState } from "../components/shared/EmptyState";
 import { api, ApiError } from "../api";
 import { useFindMany } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
+import { getCalendarAppointmentAmount, getCalendarDayRevenue } from "@/components/CalendarViews";
 import {
   getJobPhaseLabel,
   getJobPhaseTone,
@@ -60,6 +61,13 @@ type AppointmentRecord = {
   pickupReadyTime?: string | null;
   vehicleOnSite?: boolean | null;
   jobPhase?: string | null;
+  subtotal?: number | null;
+  taxRate?: number | null;
+  taxAmount?: number | null;
+  applyTax?: boolean | null;
+  adminFeeRate?: number | null;
+  adminFeeAmount?: number | null;
+  applyAdminFee?: boolean | null;
   totalPrice?: number | null;
   depositAmount?: number | null;
   paidAt?: string | null;
@@ -122,7 +130,7 @@ function getAppointmentLabel(appointment: AppointmentRecord): string {
 }
 
 function getAppointmentMoneyLabel(appointment: AppointmentRecord): string | null {
-  const amount = Number(appointment.totalPrice ?? 0);
+  const amount = getCalendarAppointmentAmount(appointment);
   if (amount <= 0) return null;
   return formatCurrency(amount);
 }
@@ -585,7 +593,7 @@ export default function AppointmentsPage() {
 export { RouteErrorBoundary as ErrorBoundary };
 
 function WeeklyDaySection({ snapshot, onOpenDay }: { snapshot: DaySnapshot; onOpenDay: () => void }) {
-  const dayRevenue = snapshot.jobs.reduce((sum, appointment) => sum + Number(appointment.totalPrice ?? 0), 0);
+  const dayRevenue = getCalendarDayRevenue(snapshot.jobs, snapshot.date);
   const groups = [
     { label: "Drop-offs", items: snapshot.dropOffs },
     { label: "Timed work", items: snapshot.timedWork },
@@ -690,7 +698,7 @@ function ScheduleBoardRow({
 }
 
 function ScheduleDayInspector({ snapshot }: { snapshot: DaySnapshot }) {
-  const dayRevenue = snapshot.jobs.reduce((sum, appointment) => sum + Number(appointment.totalPrice ?? 0), 0);
+  const dayRevenue = getCalendarDayRevenue(snapshot.jobs, snapshot.date);
   const groups = [
     { label: "Drop-offs", items: snapshot.dropOffs },
     { label: "Timed work", items: snapshot.timedWork },
