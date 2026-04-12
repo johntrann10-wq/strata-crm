@@ -451,6 +451,42 @@ Staff utilization: {{staffUtilization}}
 Strata - {{businessName}}`,
 };
 
+export const billingTrialReminder: BuiltinEmailTemplate = {
+  subject: "{{trialState}} - {{businessName}}",
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Billing reminder",
+    title: "{{trialState}}",
+    introHtml:
+      `<p style="margin:0;">Your Strata workspace is set up and ready.</p>` +
+      `<p style="margin:10px 0 0;">{{trialDetail}}</p>`,
+    bodyHtml:
+      renderInfoCard(
+        "What to do next",
+        "Add a payment method in billing so your team keeps access without interruption."
+      ) +
+      renderInfoCard(
+        "Good to know",
+        "You only need to do this once. Your billing settings stay attached to the business workspace for the whole team."
+      ),
+    ctaLabel: "Open billing",
+    ctaUrl: "{{billingUrl}}",
+    ctaHint: "Billing settings: {{billingUrl}}",
+    showCtaHint: true,
+    footerNote: "If you already added a payment method recently, you can ignore this reminder.",
+  }),
+  bodyText: `{{trialState}} - {{businessName}}
+
+Your Strata workspace is set up and ready.
+
+{{trialDetail}}
+
+Add a payment method in billing so your team keeps access without interruption:
+{{billingUrl}}
+
+If you already added a payment method recently, you can ignore this reminder.`,
+};
+
 const builtins: Record<string, BuiltinEmailTemplate> = {
   password_reset: {
     subject: "Reset your Strata password",
@@ -560,6 +596,7 @@ If this access looks wrong, contact your shop owner or admin before using the ac
   review_request: reviewRequest,
   lapsed_client_reengagement: lapsedClientReengagement,
   weekly_summary: weeklySummary,
+  billing_trial_reminder: billingTrialReminder,
   quote_revision_request_alert: quoteRevisionRequestAlert,
   customer_portal_link: {
     subject: "Your customer hub from {{businessName}}",

@@ -59,15 +59,25 @@ export function getStripeConnectAccountState(
 export async function createCheckoutSession(params: {
   businessId: string;
   customerEmail: string;
+  customerId?: string | null;
   successUrl: string;
   cancelUrl: string;
 }): Promise<{ url: string } | null> {
   if (!stripe || !STRIPE_PRICE_ID) return null;
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
-    customer_email: params.customerEmail,
+    customer: params.customerId ?? undefined,
+    customer_email: params.customerId ? undefined : params.customerEmail,
+    payment_method_collection: "if_required",
     line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
-    subscription_data: { trial_period_days: TRIAL_DAYS },
+    subscription_data: {
+      trial_period_days: TRIAL_DAYS,
+      trial_settings: {
+        end_behavior: {
+          missing_payment_method: "pause",
+        },
+      },
+    },
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
     metadata: { businessId: params.businessId },

@@ -149,6 +149,42 @@ describe.skipIf(skipEmbeddedCriticalPath)("Critical path smoke (backend integrat
     expect(onboardingRes.status).toBe(200);
     expect(onboardingRes.body?.onboardingComplete).toBe(true);
 
+    const billingStatusRes = await request(app)
+      .get("/api/billing/status")
+      .set("Authorization", `Bearer ${token}`)
+      .set("x-business-id", businessId);
+    expect(billingStatusRes.status).toBe(200);
+    expect(billingStatusRes.body?.accessState).toBe("active_trial");
+    expect(billingStatusRes.body?.status).toBe("trialing");
+    expect(billingStatusRes.body?.billingHasPaymentMethod).toBe(false);
+    expect(billingStatusRes.body?.trialEndsAt).toBeTruthy();
+
+    const businessBeforeRetryRes = await request(app)
+      .get(`/api/businesses/${encodeURIComponent(businessId)}`)
+      .set("Authorization", `Bearer ${token}`)
+      .set("x-business-id", businessId);
+    expect(businessBeforeRetryRes.status).toBe(200);
+    expect(businessBeforeRetryRes.body?.stripeCustomerId).toBeTruthy();
+    expect(businessBeforeRetryRes.body?.stripeSubscriptionId).toBeTruthy();
+    const stripeCustomerId = businessBeforeRetryRes.body?.stripeCustomerId as string;
+    const stripeSubscriptionId = businessBeforeRetryRes.body?.stripeSubscriptionId as string;
+
+    // replay onboarding completion to prove trial setup stays idempotent on retry
+    const onboardingReplayRes = await request(app)
+      .post(`/api/businesses/${encodeURIComponent(businessId)}/completeOnboarding`)
+      .set("Authorization", `Bearer ${token}`)
+      .set("x-business-id", businessId)
+      .send({});
+    expect(onboardingReplayRes.status).toBe(200);
+
+    const businessAfterRetryRes = await request(app)
+      .get(`/api/businesses/${encodeURIComponent(businessId)}`)
+      .set("Authorization", `Bearer ${token}`)
+      .set("x-business-id", businessId);
+    expect(businessAfterRetryRes.status).toBe(200);
+    expect(businessAfterRetryRes.body?.stripeCustomerId).toBe(stripeCustomerId);
+    expect(businessAfterRetryRes.body?.stripeSubscriptionId).toBe(stripeSubscriptionId);
+
     // create client
     const clientRes = await request(app).post("/api/clients").set("Authorization", `Bearer ${token}`).send({
       firstName: "E2E",

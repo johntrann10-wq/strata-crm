@@ -42,6 +42,7 @@ import { parseLeadRecord } from "../lib/leads.js";
 import { getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 import { getHomeDashboardSnapshot, updateHomeDashboardPreferences } from "../lib/homeDashboard.js";
 import { calculateAppointmentFinanceTotals } from "../lib/revenueTotals.js";
+import { sendDelayedBillingReminderEmails } from "../lib/billingPrompts.js";
 
 export const actionsRouter = Router({ mergeParams: true });
 
@@ -1719,12 +1720,13 @@ actionsRouter.post("/runAutomations", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const [uncontactedLeads, reminders, abandonedQuotes, lapsed, reviews] = await Promise.all([
+    const [uncontactedLeads, reminders, abandonedQuotes, lapsed, reviews, billingReminders] = await Promise.all([
       automations.runUncontactedLeadReminders(),
       automations.runAppointmentReminders(),
       automations.runAbandonedQuoteFollowUps(),
       automations.runLapsedClientDetection(),
       automations.runReviewRequests(),
+      sendDelayedBillingReminderEmails({}),
     ]);
     res.json({
       ok: true,
@@ -1733,6 +1735,7 @@ actionsRouter.post("/runAutomations", async (req: Request, res: Response) => {
       abandonedQuoteFollowUpsSent: abandonedQuotes.sent,
       lapsedDetected: lapsed.detected,
       reviewRequestsSent: reviews.sent,
+      billingReminderEmailsSent: billingReminders.sent,
     });
   } catch (err) {
     logger.error(err instanceof Error ? err.message : "runAutomations failed", { error: err });

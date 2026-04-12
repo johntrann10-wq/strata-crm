@@ -153,8 +153,19 @@ CREATE TABLE IF NOT EXISTS businesses (
   stripe_customer_id text,
   stripe_subscription_id text,
   subscription_status text,
+  billing_access_state text,
+  trial_started_at timestamptz,
   trial_ends_at timestamptz,
   current_period_end timestamptz,
+  billing_has_payment_method boolean DEFAULT false,
+  billing_payment_method_added_at timestamptz,
+  billing_setup_error text,
+  billing_setup_failed_at timestamptz,
+  billing_last_stripe_event_id text,
+  billing_last_stripe_event_type text,
+  billing_last_stripe_event_at timestamptz,
+  billing_last_stripe_sync_status text,
+  billing_last_stripe_sync_error text,
   stripe_connect_account_id text,
   stripe_connect_details_submitted boolean DEFAULT false,
   stripe_connect_charges_enabled boolean DEFAULT false,
@@ -195,6 +206,19 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_events text 
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_charges_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_payouts_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_onboarded_at timestamptz;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS billing_access_state text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS trial_started_at timestamptz;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS trial_ends_at timestamptz;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS current_period_end timestamptz;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS billing_has_payment_method boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS billing_payment_method_added_at timestamptz;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS billing_last_stripe_event_id text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS billing_last_stripe_event_type text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS billing_last_stripe_event_at timestamptz;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS billing_last_stripe_sync_status text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS billing_last_stripe_sync_error text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS billing_setup_error text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS billing_setup_failed_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS business_memberships (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -606,6 +630,26 @@ ALTER TABLE IF EXISTS notification_logs
 
 CREATE UNIQUE INDEX IF NOT EXISTS notification_logs_provider_message_unique
   ON notification_logs (channel, provider_message_id);
+
+CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id text NOT NULL,
+  business_id uuid REFERENCES businesses(id) ON DELETE SET NULL,
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  event_type text NOT NULL,
+  status text NOT NULL DEFAULT 'processing',
+  attempt_count integer NOT NULL DEFAULT 0,
+  payload text,
+  processed_at timestamptz,
+  last_error text,
+  dead_lettered_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_webhook_events_event_id_unique
+  ON stripe_webhook_events (event_id);
 
 CREATE TABLE IF NOT EXISTS email_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

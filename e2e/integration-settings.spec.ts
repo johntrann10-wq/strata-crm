@@ -15,8 +15,21 @@ async function mockAuthenticatedSettings(
   context: import("@playwright/test").BrowserContext,
   options?: {
     infrastructure?: InfrastructureOverride;
+    billingScenario?:
+      | "default"
+      | "trial_soft_prompt"
+      | "trial_needs_payment_method"
+      | "paused_trial";
+    membershipRole?: "owner" | "admin" | "manager" | "technician";
+    permissions?: string[];
   }
 ) {
+  const membershipRole = options?.membershipRole ?? "owner";
+  const membershipPermissions =
+    options?.permissions ??
+    (membershipRole === "owner" || membershipRole === "admin"
+      ? ["dashboard.view", "settings.read", "settings.write"]
+      : ["dashboard.view", "settings.read"]);
   let quickBooksConnected = true;
   let quickBooksLastError: string | null = null;
   let quickBooksLastSuccessfulAt = "2026-04-04T17:00:00.000Z";
@@ -38,6 +51,161 @@ async function mockAuthenticatedSettings(
   let webhookUrl = "";
   let webhookSecret = "";
   let webhookEvents = ["invoice.sent", "payment.recorded"];
+  let billingState =
+    options?.billingScenario === "trial_soft_prompt"
+      ? {
+          status: "trialing",
+          accessState: "active_trial",
+          trialStartedAt: "2026-03-19T00:00:00.000Z",
+          trialEndsAt: "2026-05-18T00:00:00.000Z",
+          currentPeriodEnd: "2026-05-18T00:00:00.000Z",
+          billingHasPaymentMethod: false,
+          billingPaymentMethodAddedAt: null,
+          billingSetupError: null,
+          billingSetupFailedAt: null,
+          billingLastStripeEventId: "evt_trial_soft_prompt",
+          billingLastStripeEventType: "customer.subscription.updated",
+          billingLastStripeEventAt: "2026-04-11T16:00:00.000Z",
+          billingLastStripeSyncStatus: "synced",
+          billingLastStripeSyncError: null,
+          activationMilestone: {
+            reached: true,
+            type: "appointment_created",
+            occurredAt: "2026-04-10T15:00:00.000Z",
+            detail: "First appointment created",
+          },
+          billingPrompt: {
+            stage: "soft_activation",
+            visible: true,
+            daysLeftInTrial: 37,
+            dismissedUntil: null,
+            cooldownDays: 5,
+          },
+          billingEnforced: true,
+          checkoutConfigured: true,
+          portalConfigured: true,
+          stripeConnectConfigured: true,
+          stripeConnectAccountId: "acct_123",
+          stripeConnectDetailsSubmitted: true,
+          stripeConnectChargesEnabled: true,
+          stripeConnectPayoutsEnabled: true,
+          stripeConnectOnboardedAt: "2026-04-04T15:00:00.000Z",
+          stripeConnectReady: true,
+        }
+      : options?.billingScenario === "trial_needs_payment_method"
+      ? {
+          status: "trialing",
+          accessState: "active_trial",
+          trialStartedAt: "2026-03-19T00:00:00.000Z",
+          trialEndsAt: "2026-04-18T00:00:00.000Z",
+          currentPeriodEnd: "2026-04-18T00:00:00.000Z",
+          billingHasPaymentMethod: false,
+          billingPaymentMethodAddedAt: null,
+          billingSetupError: null,
+          billingSetupFailedAt: null,
+          billingLastStripeEventId: "evt_trial_will_end",
+          billingLastStripeEventType: "customer.subscription.trial_will_end",
+          billingLastStripeEventAt: "2026-04-11T16:00:00.000Z",
+          billingLastStripeSyncStatus: "synced",
+          billingLastStripeSyncError: null,
+          activationMilestone: {
+            reached: true,
+            type: "appointment_created",
+            occurredAt: "2026-04-04T15:00:00.000Z",
+            detail: "First appointment created",
+          },
+          billingPrompt: {
+            stage: "trial_7_days",
+            visible: true,
+            daysLeftInTrial: 7,
+            dismissedUntil: null,
+            cooldownDays: 5,
+          },
+          billingEnforced: true,
+          checkoutConfigured: true,
+          portalConfigured: true,
+          stripeConnectConfigured: true,
+          stripeConnectAccountId: "acct_123",
+          stripeConnectDetailsSubmitted: true,
+          stripeConnectChargesEnabled: true,
+          stripeConnectPayoutsEnabled: true,
+          stripeConnectOnboardedAt: "2026-04-04T15:00:00.000Z",
+          stripeConnectReady: true,
+        }
+      : options?.billingScenario === "paused_trial"
+      ? {
+          status: "paused",
+          accessState: "paused_missing_payment_method",
+          trialStartedAt: "2026-03-01T00:00:00.000Z",
+          trialEndsAt: "2026-03-31T00:00:00.000Z",
+          currentPeriodEnd: "2026-03-31T00:00:00.000Z",
+          billingHasPaymentMethod: false,
+          billingPaymentMethodAddedAt: null,
+          billingSetupError: null,
+          billingSetupFailedAt: null,
+          billingLastStripeEventId: "evt_subscription_paused",
+          billingLastStripeEventType: "customer.subscription.paused",
+          billingLastStripeEventAt: "2026-03-31T00:00:00.000Z",
+          billingLastStripeSyncStatus: "failed",
+          billingLastStripeSyncError: "Trial paused because no payment method was saved before the trial ended.",
+          activationMilestone: {
+            reached: true,
+            type: "appointment_created",
+            occurredAt: "2026-04-04T15:00:00.000Z",
+            detail: "First appointment created",
+          },
+          billingPrompt: {
+            stage: "paused",
+            visible: true,
+            daysLeftInTrial: 0,
+            dismissedUntil: null,
+            cooldownDays: 5,
+          },
+          billingEnforced: true,
+          checkoutConfigured: true,
+          portalConfigured: true,
+          stripeConnectConfigured: true,
+          stripeConnectAccountId: "acct_123",
+          stripeConnectDetailsSubmitted: true,
+          stripeConnectChargesEnabled: true,
+          stripeConnectPayoutsEnabled: true,
+          stripeConnectOnboardedAt: "2026-04-04T15:00:00.000Z",
+          stripeConnectReady: true,
+        }
+      : {
+          status: "active",
+          accessState: "active_paid",
+          trialStartedAt: null,
+          trialEndsAt: null,
+          currentPeriodEnd: null,
+          billingHasPaymentMethod: true,
+          billingPaymentMethodAddedAt: "2026-04-01T12:00:00.000Z",
+          billingSetupError: null,
+          billingSetupFailedAt: null,
+          billingLastStripeEventId: "evt_invoice_payment_succeeded",
+          billingLastStripeEventType: "invoice.payment_succeeded",
+          billingLastStripeEventAt: "2026-04-11T16:00:00.000Z",
+          billingLastStripeSyncStatus: "synced",
+          billingLastStripeSyncError: null,
+          activationMilestone: { reached: false, type: null, occurredAt: null, detail: null },
+          billingPrompt: {
+            stage: "none",
+            visible: false,
+            daysLeftInTrial: null,
+            dismissedUntil: null,
+            cooldownDays: 5,
+          },
+          billingEnforced: true,
+          checkoutConfigured: true,
+          portalConfigured: true,
+          stripeConnectConfigured: true,
+          stripeConnectAccountId: "acct_123",
+          stripeConnectDetailsSubmitted: true,
+          stripeConnectChargesEnabled: true,
+          stripeConnectPayoutsEnabled: true,
+          stripeConnectOnboardedAt: "2026-04-04T15:00:00.000Z",
+          stripeConnectReady: true,
+        };
   const infrastructure = {
     vaultConfigured: options?.infrastructure?.vaultConfigured ?? true,
     cronSecretConfigured: options?.infrastructure?.cronSecretConfigured ?? true,
@@ -81,10 +249,10 @@ async function mockAuthenticatedSettings(
               id: "biz-1",
               name: "QA Detail Shop",
               type: "auto_detailing",
-              role: "owner",
+              role: membershipRole,
               status: "active",
               isDefault: true,
-              permissions: ["settings.read", "settings.write"],
+              permissions: membershipPermissions,
             },
           ],
           currentBusinessId: "biz-1",
@@ -176,6 +344,16 @@ async function mockAuthenticatedSettings(
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ group: "detailing", count: 0, names: [] }),
+    });
+  });
+
+  await context.route("**/api/actions/getHomeDashboard", async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({
+        message: "Mock dashboard unavailable for billing banner test",
+      }),
     });
   });
 
@@ -547,25 +725,76 @@ async function mockAuthenticatedSettings(
     });
   });
 
-  await context.route("**/api/billing/status", async (route) => {
+  await context.route(/.*\/api\/billing\/(status|refresh-state)$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(billingState),
+    });
+  });
+
+  await context.route("**/api/billing/portal", async (route) => {
+    const payload = (route.request().postDataJSON() ?? {}) as {
+      entryPoint?: "settings" | "trial_banner" | "paused_recovery";
+    };
+    if (
+      options?.billingScenario === "trial_needs_payment_method" ||
+      options?.billingScenario === "trial_soft_prompt"
+    ) {
+      billingState = {
+        ...billingState,
+        status: "trialing",
+        accessState: "active_trial",
+        billingHasPaymentMethod: true,
+        billingPaymentMethodAddedAt: "2026-04-11T16:00:00.000Z",
+        billingPrompt: {
+          stage: "none",
+          visible: false,
+          daysLeftInTrial: billingState.billingPrompt.daysLeftInTrial,
+          dismissedUntil: null,
+          cooldownDays: 5,
+        },
+      };
+    } else if (options?.billingScenario === "paused_trial") {
+      billingState = {
+        ...billingState,
+        status: "active",
+        accessState: "active_paid",
+        billingHasPaymentMethod: true,
+        billingPaymentMethodAddedAt: "2026-04-11T16:00:00.000Z",
+        billingLastStripeEventId: "evt_subscription_resumed",
+        billingLastStripeEventType: "customer.subscription.resumed",
+        billingLastStripeEventAt: "2026-04-11T16:05:00.000Z",
+        billingLastStripeSyncStatus: "synced",
+        billingLastStripeSyncError: null,
+        billingPrompt: {
+          stage: "none",
+          visible: false,
+          daysLeftInTrial: null,
+          dismissedUntil: null,
+          cooldownDays: 5,
+        },
+      };
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        status: "active",
-        trialEndsAt: null,
-        currentPeriodEnd: null,
-        billingEnforced: true,
-        checkoutConfigured: true,
-        portalConfigured: true,
-        stripeConnectConfigured: true,
-        stripeConnectAccountId: "acct_123",
-        stripeConnectDetailsSubmitted: true,
-        stripeConnectChargesEnabled: true,
-        stripeConnectPayoutsEnabled: true,
-        stripeConnectOnboardedAt: "2026-04-04T15:00:00.000Z",
-        stripeConnectReady: true,
+        url:
+          payload.entryPoint === "paused_recovery"
+            ? "/subscribe?billingPortal=return"
+            : payload.entryPoint === "trial_banner"
+              ? "/signed-in?billingPortal=return"
+              : "/settings?tab=billing&billingPortal=return",
       }),
+    });
+  });
+
+  await context.route("**/api/billing/prompt-event", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
     });
   });
 
@@ -859,4 +1088,87 @@ test("shows recent automation activity across email and sms channels", async ({ 
   await page.getByRole("combobox", { name: /^automation$/i }).click();
   await page.getByRole("option", { name: /abandoned quote follow-up/i }).click();
   await expect(page.getByText(/abandoned quote follow-up sent\./i)).toBeVisible();
+});
+
+test("shows a soft trial prompt after activation and clears billing urgency after adding a payment method", async ({
+  page,
+  context,
+}) => {
+  await mockAuthenticatedSettings(context, {
+    billingScenario: "trial_soft_prompt",
+  });
+
+  await page.goto("/signed-in");
+
+  await expect(page.getByText("Your trial is active", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/first appointment created\. add payment method to keep access after trial\./i)).toBeVisible();
+
+  await page.goto("/settings?tab=billing");
+
+  await expect(page.getByRole("button", { name: /add payment method/i }).last()).toBeVisible();
+
+  await page.getByRole("button", { name: /add payment method/i }).last().click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: /add payment method/i }).click();
+
+  await expect(
+    page.getByText(/payment method saved\. your trial stays active and billing reminders have been cleared\./i).first()
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /manage billing/i })).toBeVisible();
+  await expect(page.getByText(/first appointment created\. add payment method to keep access after trial\./i)).not.toBeVisible();
+});
+
+test("shows trial_will_end reminder copy and blocks billing controls for non-admin team members", async ({
+  page,
+  context,
+}) => {
+  await mockAuthenticatedSettings(context, {
+    billingScenario: "trial_needs_payment_method",
+    membershipRole: "technician",
+    permissions: ["dashboard.view", "settings.read"],
+  });
+
+  await page.goto("/signed-in");
+
+  await expect(page.getByText("Your trial is active", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/7 days left\. add payment method to keep access after trial\./i)).toBeVisible();
+  await expect(page.getByText(/owners and admins manage billing\./i)).toBeVisible();
+
+  await page.goto("/settings?tab=billing");
+  await expect(page.getByText(/ask an owner or admin to update billing for this workspace\./i)).toBeVisible();
+  await expect(page.getByRole("button", { name: /add payment method|manage billing/i }).last()).toBeDisabled();
+});
+
+test("resumes a paused trial after billing portal recovery", async ({ page, context }) => {
+  await mockAuthenticatedSettings(context, {
+    billingScenario: "paused_trial",
+  });
+
+  await page.goto("/subscribe");
+
+  await expect(page.getByText(/trial ended without a saved payment method\. add one to resume full access immediately\./i)).toBeVisible();
+  await page.getByRole("button", { name: /resume subscription/i }).click();
+
+  await expect(page).toHaveURL(/\/signed-in/);
+});
+
+test.describe("trial billing mobile surfaces", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("keeps the trial banner and paused recovery usable on mobile", async ({ page, context }) => {
+    await mockAuthenticatedSettings(context, {
+      billingScenario: "trial_needs_payment_method",
+    });
+
+    await page.goto("/signed-in");
+    await expect(page.getByText("Your trial is active", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /add payment method/i }).first()).toBeVisible();
+
+    await mockAuthenticatedSettings(context, {
+      billingScenario: "paused_trial",
+    });
+    await page.goto("/subscribe");
+    await expect(page.getByText(/trial ended without a saved payment method/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /resume subscription/i })).toBeVisible();
+  });
 });

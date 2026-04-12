@@ -77,6 +77,19 @@ import {
 import { PageHeader } from "../components/shared/PageHeader";
 import { buildQuarterHourOptions } from "../components/appointments/SchedulingControls";
 import {
+  getBillingAccessLabel,
+  getTrialDaysLeft,
+  hasFullBillingAccess,
+  type BillingAccessState,
+} from "../lib/billingAccess";
+import {
+  getBillingPromptBody,
+  getBillingPromptHeadline,
+  type BillingActivationMilestone,
+  type BillingPromptState,
+} from "../lib/billingPrompts";
+import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
+import {
   businessSettingsFormFromSource,
   DEFAULT_BUSINESS_SETTINGS_FORM,
   normalizeDecimalInput,
@@ -116,8 +129,21 @@ const BILLING_FEATURES = [
 
 interface BillingStatus {
   status: string | null;
+  accessState: BillingAccessState | null;
+  trialStartedAt: string | null;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
+  billingHasPaymentMethod: boolean;
+  billingPaymentMethodAddedAt: string | null;
+  billingSetupError: string | null;
+  billingSetupFailedAt: string | null;
+  billingLastStripeEventId: string | null;
+  billingLastStripeEventType: string | null;
+  billingLastStripeEventAt: string | null;
+  billingLastStripeSyncStatus: "synced" | "failed" | null;
+  billingLastStripeSyncError: string | null;
+  activationMilestone: BillingActivationMilestone;
+  billingPrompt: BillingPromptState;
   stripeConnectConfigured: boolean;
   stripeConnectAccountId: string | null;
   stripeConnectDetailsSubmitted: boolean;
@@ -723,7 +749,9 @@ function BillingTab({
   const [stripeDashboardLoading, setStripeDashboardLoading] = useState(false);
   const [stripeRefreshLoading, setStripeRefreshLoading] = useState(false);
   const [stripeDisconnectLoading, setStripeDisconnectLoading] = useState(false);
+  const [billingRetryLoading, setBillingRetryLoading] = useState(false);
   const [disconnectStripeOpen, setDisconnectStripeOpen] = useState(false);
+  const [billingPromptOpen, setBillingPromptOpen] = useState(false);
 
   const refreshBillingStatus = useCallback(async () => {
     const result = await api.billing.getStatus();
@@ -742,8 +770,32 @@ function BillingTab({
         if (!cancelled) {
           setBillingStatus({
             status: null,
+            accessState: null,
+            trialStartedAt: null,
             trialEndsAt: null,
             currentPeriodEnd: null,
+            billingHasPaymentMethod: false,
+            billingPaymentMethodAddedAt: null,
+            billingSetupError: null,
+            billingSetupFailedAt: null,
+            billingLastStripeEventId: null,
+            billingLastStripeEventType: null,
+            billingLastStripeEventAt: null,
+            billingLastStripeSyncStatus: null,
+            billingLastStripeSyncError: null,
+            activationMilestone: {
+              reached: false,
+              type: null,
+              occurredAt: null,
+              detail: null,
+            },
+            billingPrompt: {
+              stage: "none",
+              visible: false,
+              daysLeftInTrial: null,
+              dismissedUntil: null,
+              cooldownDays: 5,
+            },
             stripeConnectConfigured: false,
             stripeConnectAccountId: null,
             stripeConnectDetailsSubmitted: false,
@@ -785,10 +837,41 @@ function BillingTab({
     setSearchParams(nextParams, { replace: true });
   }, [refreshBillingStatus, searchParams, setSearchParams]);
 
+  useEffect(() => {
+    const billingPortalState = searchParams.get("billingPortal");
+    if (billingPortalState !== "return") return;
+
+    setBillingPortalLoading(true);
+    api.billing
+      .refreshBillingState()
+      .then((result) => {
+        setBillingStatus(result);
+        if (result.accessState === "active_paid") {
+          toast.success("Billing is active and your subscription is ready.");
+        } else if (result.accessState === "active_trial" && result.billingHasPaymentMethod) {
+          toast.success("Payment method saved. Your trial stays active and billing reminders have been cleared.");
+        } else if (result.accessState === "paused_missing_payment_method") {
+          toast.message("Billing still needs a payment method before full access can resume.");
+        } else {
+          toast.message("Billing status refreshed.");
+        }
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Could not refresh billing status.");
+      })
+      .finally(() => {
+        setBillingPortalLoading(false);
+      });
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("billingPortal");
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams, setBillingStatus, setBillingPortalLoading]);
+
   const handleManageSubscription = async () => {
     setBillingPortalLoading(true);
     try {
-      const result = await api.billing.createPortalSession();
+      const result = await api.billing.createPortalSession({ entryPoint: "settings" });
       if (result?.url) {
         window.location.href = result.url;
         return;
@@ -798,6 +881,23 @@ function BillingTab({
       toast.error(error instanceof Error ? error.message : "Something went wrong.");
     } finally {
       setBillingPortalLoading(false);
+    }
+  };
+
+  const handleRetryBillingSetup = async () => {
+    setBillingRetryLoading(true);
+    try {
+      await api.billing.retryTrialSetup();
+      const result = await refreshBillingStatus();
+      if (hasFullBillingAccess(result.accessState)) {
+        toast.success("Billing setup retried successfully.");
+      } else {
+        toast.message("Billing still needs attention, but the latest status is now loaded.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not retry billing setup.");
+    } finally {
+      setBillingRetryLoading(false);
     }
   };
 
@@ -865,13 +965,24 @@ function BillingTab({
     }
   };
 
-  const isActive = billingStatus?.status === "active" || billingStatus?.status === "trialing";
+  const isActive = hasFullBillingAccess(billingStatus?.accessState);
+  const billingAccessLabel = getBillingAccessLabel(billingStatus?.accessState);
+  const trialDaysLeft = getTrialDaysLeft(billingStatus?.trialEndsAt);
   const trialEnd = billingStatus?.trialEndsAt ? new Date(billingStatus.trialEndsAt) : null;
   const periodEnd = billingStatus?.currentPeriodEnd ? new Date(billingStatus.currentPeriodEnd) : null;
   const stripeConnectOnboardedAt = billingStatus?.stripeConnectOnboardedAt
     ? new Date(billingStatus.stripeConnectOnboardedAt)
     : null;
   const canManageStripeConnect = membershipRole === "owner" || membershipRole === "admin";
+  const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
+  const promptBody =
+    billingStatus?.billingPrompt.stage && billingStatus.billingPrompt.stage !== "none"
+      ? getBillingPromptBody({
+          stage: billingStatus.billingPrompt.stage,
+          milestone: billingStatus.activationMilestone,
+          daysLeftInTrial: billingStatus.billingPrompt.daysLeftInTrial,
+        })
+      : "";
 
   return (
     <div className="space-y-6">
@@ -891,17 +1002,44 @@ function BillingTab({
           {billingStatus ? (
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={isActive ? "default" : "secondary"}>
-                {billingStatus.status === "trialing"
-                  ? "Free trial"
-                  : billingStatus.status === "active"
-                    ? "Active"
-                    : billingStatus.status ?? "No subscription"}
+                {billingAccessLabel}
               </Badge>
-              {trialEnd && billingStatus.status === "trialing" ? (
-                <span className="text-sm text-muted-foreground">Trial ends {trialEnd.toLocaleDateString()}</span>
+              {trialEnd && billingStatus.accessState === "active_trial" ? (
+                <span className="text-sm text-muted-foreground">
+                  {trialDaysLeft == null
+                    ? `Trial ends ${trialEnd.toLocaleDateString()}`
+                    : `${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} left`}
+                </span>
               ) : null}
-              {periodEnd && billingStatus.status === "active" ? (
+              {periodEnd && billingStatus.accessState === "active_paid" ? (
                 <span className="text-sm text-muted-foreground">Renews {periodEnd.toLocaleDateString()}</span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {billingStatus && billingStatus.billingPrompt.stage !== "none" ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-medium text-amber-950">
+                {getBillingPromptHeadline(billingStatus.billingPrompt.stage)}
+              </p>
+              <p className="mt-1 text-sm text-amber-900">{promptBody}</p>
+            </div>
+          ) : null}
+
+          {billingStatus?.billingLastStripeEventType || billingStatus?.billingLastStripeSyncError ? (
+            <div className="rounded-lg border bg-muted/20 px-4 py-3">
+              <p className="text-sm font-medium">Stripe sync</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {billingStatus.billingLastStripeSyncStatus === "failed"
+                  ? billingStatus.billingLastStripeSyncError || "Stripe reported a billing sync issue."
+                  : billingStatus.billingLastStripeEventType
+                    ? `Last event: ${billingStatus.billingLastStripeEventType}`
+                    : "Stripe billing sync is healthy."}
+              </p>
+              {billingStatus.billingLastStripeEventAt ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Updated {new Date(billingStatus.billingLastStripeEventAt).toLocaleString()}
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -920,27 +1058,99 @@ function BillingTab({
 
           <Separator />
 
-          {isActive ? (
-            <Button onClick={handleManageSubscription} disabled={billingPortalLoading}>
-              {billingPortalLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <ExternalLink className="mr-2 h-4 w-4" />
-              )}
-              Manage subscription
-            </Button>
+          {billingStatus?.accessState === "pending_setup_failure" ? (
+            <div className="space-y-3">
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                {billingStatus.billingSetupError?.trim() || "Strata could not finish Stripe setup automatically yet."}
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button onClick={handleRetryBillingSetup} disabled={billingRetryLoading || !canManageBilling}>
+                  {billingRetryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Retry billing setup
+                </Button>
+                <Button asChild variant="outline">
+                  <Link to="/subscribe">Open billing recovery</Link>
+                </Button>
+              </div>
+            </div>
+          ) : isActive ? (
+            <div className="space-y-3">
+              {billingStatus?.accessState === "active_trial" ? (
+                <p className="text-sm text-muted-foreground">
+                  {billingStatus.billingHasPaymentMethod
+                    ? "A payment method is already saved. Your trial stays active until the paid plan begins automatically."
+                    : "Your workspace is fully usable now. Add a payment method whenever you're ready so the trial can roll into a paid plan smoothly."}
+                </p>
+              ) : null}
+              <Button
+                onClick={
+                  billingStatus?.billingPrompt.stage &&
+                  billingStatus.billingPrompt.stage !== "none" &&
+                  billingStatus.accessState === "active_trial"
+                    ? () => setBillingPromptOpen(true)
+                    : handleManageSubscription
+                }
+                disabled={billingPortalLoading || !canManageBilling}
+              >
+                {billingPortalLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                )}
+                {billingStatus?.accessState === "active_trial"
+                  ? billingStatus.billingHasPaymentMethod
+                    ? "Manage billing"
+                    : "Add payment method"
+                  : "Manage billing"}
+              </Button>
+            </div>
           ) : billingStatus !== null ? (
             <div className="space-y-2">
               <p className="text-sm text-amber-600 dark:text-amber-400">
-                Subscribe to keep using Strata. Your data is saved.
+                {billingStatus.accessState === "paused_missing_payment_method"
+                  ? "The trial ended without a saved payment method. Add one to resume full access."
+                  : "Billing is inactive for this workspace. Your data is saved and ready to resume."}
               </p>
               <Button asChild variant="outline" size="sm">
-                <Link to="/subscribe">Subscribe now - $29/mo, first month free</Link>
+                <Link to="/subscribe">Open billing recovery</Link>
               </Button>
             </div>
           ) : null}
+
+          {!canManageBilling ? (
+            <p className="text-xs text-muted-foreground">
+              Ask an owner or admin to update billing for this workspace.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
+
+      <BillingPromptDialog
+        open={billingPromptOpen}
+        onOpenChange={setBillingPromptOpen}
+        stage={billingStatus?.billingPrompt.stage ?? "none"}
+        body={promptBody}
+        canManageBilling={canManageBilling}
+        loading={billingPortalLoading}
+        onContinue={() => {
+          const promptStage = billingStatus?.billingPrompt.stage;
+          if (!promptStage || promptStage === "none") return;
+          void (async () => {
+            setBillingPortalLoading(true);
+            try {
+              const result = await api.billing.createPortalSessionForPrompt({
+                promptStage,
+                entryPoint: "settings",
+              });
+              if (result?.url) window.location.href = result.url;
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Could not open billing portal.");
+            } finally {
+              setBillingPortalLoading(false);
+            }
+          })();
+        }}
+      />
 
       <Card>
         <CardHeader>

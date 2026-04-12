@@ -33,6 +33,35 @@ describe("API integration", () => {
     expect(res.status).toBe(401);
   });
 
+  it("POST /api/billing/portal without auth returns 401", async () => {
+    const res = await request(app).post("/api/billing/portal").send({});
+    expect(res.status).toBe(401);
+  });
+
+  it("POST /api/billing/refresh-state without auth returns 401", async () => {
+    const res = await request(app).post("/api/billing/refresh-state").send({});
+    expect(res.status).toBe(401);
+  });
+
+  it("POST /api/billing/webhook rejects invalid Stripe signatures", async () => {
+    const res = await request(app)
+      .post("/api/billing/webhook")
+      .set("Content-Type", "application/json")
+      .set("stripe-signature", "t=12345,v1=invalid")
+      .send({
+        id: "evt_invalid_signature",
+        type: "customer.subscription.updated",
+        data: { object: { id: "sub_test" } },
+      });
+
+    expect([200, 400]).toContain(res.status);
+    if (res.status === 200) {
+      expect(res.body).toMatchObject({ received: false, reason: "stripe_disabled" });
+    } else {
+      expect(res.text).toMatch(/invalid signature/i);
+    }
+  });
+
   it("GET /api/clients without auth returns 401", async () => {
     const res = await request(app).get("/api/clients");
     expect(res.status).toBe(401);

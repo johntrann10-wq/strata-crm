@@ -18,6 +18,8 @@ import { buildLeadNotes } from "../lib/leads.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 import { isEmailConfigured, isStripeConfigured } from "../lib/env.js";
 import { sendLeadAutoResponse, sendLeadFollowUpAlert } from "../lib/email.js";
+import { ensureBusinessTrialSubscription } from "../lib/billingLifecycle.js";
+import { hasFullBillingAccess } from "../lib/billingAccess.js";
 
 export const businessesRouter = Router({ mergeParams: true });
 type BusinessRecord = typeof businesses.$inferSelect;
@@ -132,10 +134,6 @@ const publicLeadSubmitLimiter = createInMemoryRateLimiter({
   message: "Too many lead submissions. Please wait a few minutes and try again.",
 });
 
-function isAllowedSubscriptionStatus(status: string | null | undefined): boolean {
-  return status === "active" || status === "trialing";
-}
-
 async function loadPublicLeadBusiness(id: string) {
   const selectBusiness = () =>
     db
@@ -154,6 +152,7 @@ async function loadPublicLeadBusiness(id: string) {
         missedCallTextBackEnabled: businesses.missedCallTextBackEnabled,
         automationUncontactedLeadHours: businesses.automationUncontactedLeadHours,
         subscriptionStatus: businesses.subscriptionStatus,
+        billingAccessState: businesses.billingAccessState,
         ownerEmail: users.email,
         ownerFirstName: users.firstName,
       })
@@ -177,7 +176,11 @@ async function loadPublicLeadBusiness(id: string) {
 
   if (!business) return null;
   if (process.env.BILLING_ENFORCED === "true" && isStripeConfigured()) {
-    if (!isAllowedSubscriptionStatus(business.subscriptionStatus)) {
+    if (
+      !hasFullBillingAccess(business.billingAccessState) &&
+      business.subscriptionStatus !== "active" &&
+      business.subscriptionStatus !== "trialing"
+    ) {
       return null;
     }
   }
@@ -250,8 +253,19 @@ function coerceBusinessRecord(
     stripeCustomerId: record.stripeCustomerId ?? null,
     stripeSubscriptionId: record.stripeSubscriptionId ?? null,
     subscriptionStatus: record.subscriptionStatus ?? null,
+    billingAccessState: record.billingAccessState ?? null,
+    trialStartedAt: record.trialStartedAt ?? null,
     trialEndsAt: record.trialEndsAt ?? null,
     currentPeriodEnd: record.currentPeriodEnd ?? null,
+    billingHasPaymentMethod: record.billingHasPaymentMethod ?? false,
+    billingPaymentMethodAddedAt: record.billingPaymentMethodAddedAt ?? null,
+    billingSetupError: record.billingSetupError ?? null,
+    billingSetupFailedAt: record.billingSetupFailedAt ?? null,
+    billingLastStripeEventId: record.billingLastStripeEventId ?? null,
+    billingLastStripeEventType: record.billingLastStripeEventType ?? null,
+    billingLastStripeEventAt: record.billingLastStripeEventAt ?? null,
+    billingLastStripeSyncStatus: record.billingLastStripeSyncStatus ?? null,
+    billingLastStripeSyncError: record.billingLastStripeSyncError ?? null,
     stripeConnectAccountId: record.stripeConnectAccountId ?? null,
     stripeConnectDetailsSubmitted: record.stripeConnectDetailsSubmitted ?? false,
     stripeConnectChargesEnabled: record.stripeConnectChargesEnabled ?? false,
@@ -274,6 +288,10 @@ function serializeBusiness(record: BusinessRecord) {
     integrationWebhookEvents,
     reviewRequestUrl: record.reviewRequestUrl ?? null,
     bookingRequestUrl: record.bookingRequestUrl ?? null,
+    billingAccessState: record.billingAccessState ?? null,
+    trialStartedAt: record.trialStartedAt ?? null,
+    billingSetupError: record.billingSetupError ?? null,
+    billingSetupFailedAt: record.billingSetupFailedAt ?? null,
     website: null,
     bio: null,
     instagram: null,
@@ -330,7 +348,11 @@ async function ensureBusinessAutomationColumns(): Promise<void> {
           ADD COLUMN IF NOT EXISTS notification_review_request_email_enabled boolean DEFAULT true,
           ADD COLUMN IF NOT EXISTS notification_lapsed_client_email_enabled boolean DEFAULT true,
           ADD COLUMN IF NOT EXISTS monthly_revenue_goal decimal(12, 2) DEFAULT NULL,
-          ADD COLUMN IF NOT EXISTS monthly_jobs_goal integer DEFAULT NULL
+          ADD COLUMN IF NOT EXISTS monthly_jobs_goal integer DEFAULT NULL,
+          ADD COLUMN IF NOT EXISTS billing_access_state text,
+          ADD COLUMN IF NOT EXISTS trial_started_at timestamptz,
+          ADD COLUMN IF NOT EXISTS billing_setup_error text,
+          ADD COLUMN IF NOT EXISTS billing_setup_failed_at timestamptz
       `);
     })().catch((error) => {
       ensureBusinessAutomationColumnsPromise = null;
@@ -1074,5 +1096,13 @@ businessesRouter.post("/:id/completeOnboarding", requireAuth, wrapAsync(async (r
     };
   }
   if (!updated) throw new NotFoundError("Business not found.");
-  res.json(serializeBusiness(updated));
+
+  await ensureBusinessTrialSubscription({
+    businessId: id,
+    triggeredByUserId: req.userId ?? null,
+    allowPendingFailure: true,
+  });
+
+  const refreshed = await loadBusinessById(id);
+  res.json(serializeBusiness(refreshed ?? updated));
 }));

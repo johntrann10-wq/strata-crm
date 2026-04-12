@@ -13,16 +13,7 @@ test.describe.configure({ mode: "serial" });
 const skipLocalWindowsCriticalPath = process.platform === "win32" && !process.env.PLAYWRIGHT_API_BASE;
 
 async function expectWorkspaceReady(page: import("@playwright/test").Page) {
-  await page.waitForURL(/\/(signed-in|subscribe)/);
-  const subscribeHeading = page.getByRole("heading", { name: /start your free trial/i });
-  const showingSubscribeGate = await subscribeHeading.isVisible().catch(() => false);
-
-  if (showingSubscribeGate) {
-    const skipButton = page.getByRole("button", { name: /i&apos;ll subscribe later|i'll subscribe later/i });
-    await expect(skipButton).toBeVisible();
-    await skipButton.click();
-  }
-
+  await page.waitForURL(/\/signed-in/);
   await expect(page).toHaveURL(/\/signed-in/);
   await expect(page.getByRole("heading", { name: /^dashboard$/i }).first()).toBeVisible();
 }

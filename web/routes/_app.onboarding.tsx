@@ -108,7 +108,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (!existingBusiness) return;
     if (existingBusiness.onboardingComplete === true) {
-      navigate("/subscribe", { replace: true });
+      navigate("/signed-in", { replace: true });
       return;
     }
     setSelectedType((existingBusiness.type as BusinessTypeValue | null) ?? null);
@@ -187,7 +187,7 @@ export default function OnboardingPage() {
       await api.business.completeOnboarding(saved.id);
       setCurrentBusinessId(saved.id);
       toast.success("Workspace ready.");
-      window.location.replace("/subscribe");
+      window.location.replace("/signed-in");
     } catch (submitError) {
       setValidationError(submitError instanceof Error ? submitError.message : "Could not finish setup.");
     }

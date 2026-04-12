@@ -307,14 +307,28 @@ export async function mockClientVehicleApp(page: Page): Promise<ClientVehicleMoc
       return;
     }
 
-    if (path === "/billing/status") {
+    if (path === "/billing/status" || path === "/billing/refresh-state") {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: toJson({
           status: "active",
+          accessState: "active_paid",
+          trialStartedAt: null,
           trialEndsAt: null,
           currentPeriodEnd: null,
+          billingHasPaymentMethod: true,
+          billingPaymentMethodAddedAt: "2026-04-01T12:00:00.000Z",
+          billingSetupError: null,
+          billingSetupFailedAt: null,
+          activationMilestone: { reached: false, type: null, occurredAt: null, detail: null },
+          billingPrompt: {
+            stage: "none",
+            visible: false,
+            daysLeftInTrial: null,
+            dismissedUntil: null,
+            cooldownDays: 5,
+          },
           billingEnforced: false,
           checkoutConfigured: true,
           portalConfigured: true,

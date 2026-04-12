@@ -9,6 +9,7 @@ import { businesses } from "../db/schema.js";
 import { SubscriptionRequiredError } from "../lib/errors.js";
 import { isStripeConfigured } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
+import { hasFullBillingAccess } from "../lib/billingAccess.js";
 
 function isSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -24,10 +25,6 @@ function isSchemaDriftError(error: unknown): boolean {
 
 function isBillingEnforced(): boolean {
   return process.env.BILLING_ENFORCED === "true" && isStripeConfigured();
-}
-
-function isAllowedSubscriptionStatus(status: string | null | undefined): boolean {
-  return status === "active" || status === "trialing";
 }
 
 export async function requireSubscription(
@@ -49,6 +46,7 @@ export async function requireSubscription(
     const [business] = await db
       .select({
         subscriptionStatus: businesses.subscriptionStatus,
+        billingAccessState: businesses.billingAccessState,
       })
       .from(businesses)
       .where(eq(businesses.id, req.businessId))
@@ -59,12 +57,17 @@ export async function requireSubscription(
       return;
     }
 
-    if (isAllowedSubscriptionStatus(business.subscriptionStatus)) {
+    if (hasFullBillingAccess(business.billingAccessState)) {
       next();
       return;
     }
 
-    next(new SubscriptionRequiredError("An active subscription is required to use this workspace."));
+    if (business.billingAccessState == null && (business.subscriptionStatus === "active" || business.subscriptionStatus === "trialing")) {
+      next();
+      return;
+    }
+
+    next(new SubscriptionRequiredError("Billing needs attention before this workspace can resume full access."));
   } catch (error) {
     if (!isSchemaDriftError(error)) {
       next(error);

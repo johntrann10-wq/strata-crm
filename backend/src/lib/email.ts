@@ -741,6 +741,27 @@ export async function sendInvoiceEmail(options: {
   });
 }
 
+export async function sendBillingTrialReminder(options: {
+  to: string;
+  businessId?: string | null;
+  businessName: string;
+  trialState: string;
+  trialDetail: string;
+  billingUrl: string;
+}) {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "billing_trial_reminder",
+    businessId: options.businessId,
+    vars: {
+      businessName: options.businessName,
+      trialState: options.trialState,
+      trialDetail: options.trialDetail,
+      billingUrl: options.billingUrl,
+    },
+  });
+}
+
 export async function sendCustomerPortalEmail(options: {
   to: string;
   businessId?: string | null;

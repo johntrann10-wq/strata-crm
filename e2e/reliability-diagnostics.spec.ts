@@ -69,14 +69,28 @@ test.describe("Reliability diagnostics", () => {
       });
     });
 
-    await context.route("**/api/billing/status", async (route) => {
+    await context.route(/.*\/api\/billing\/(status|refresh-state)$/, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
           status: "active",
+          accessState: "active_paid",
+          trialStartedAt: null,
           trialEndsAt: null,
           currentPeriodEnd: null,
+          billingHasPaymentMethod: true,
+          billingPaymentMethodAddedAt: "2026-04-01T12:00:00.000Z",
+          billingSetupError: null,
+          billingSetupFailedAt: null,
+          activationMilestone: { reached: false, type: null, occurredAt: null, detail: null },
+          billingPrompt: {
+            stage: "none",
+            visible: false,
+            daysLeftInTrial: null,
+            dismissedUntil: null,
+            cooldownDays: 5,
+          },
           billingEnforced: true,
           checkoutConfigured: true,
           portalConfigured: true,
@@ -314,14 +328,28 @@ test.describe("Reliability diagnostics", () => {
         }),
       });
     });
-    await context.route("**/api/billing/status", async (route) => {
+    await context.route(/.*\/api\/billing\/(status|refresh-state)$/, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
           status: "active",
+          accessState: "active_paid",
+          trialStartedAt: null,
           trialEndsAt: null,
           currentPeriodEnd: null,
+          billingHasPaymentMethod: true,
+          billingPaymentMethodAddedAt: "2026-04-01T12:00:00.000Z",
+          billingSetupError: null,
+          billingSetupFailedAt: null,
+          activationMilestone: { reached: false, type: null, occurredAt: null, detail: null },
+          billingPrompt: {
+            stage: "none",
+            visible: false,
+            daysLeftInTrial: null,
+            dismissedUntil: null,
+            cooldownDays: 5,
+          },
           billingEnforced: true,
           checkoutConfigured: true,
           portalConfigured: true,

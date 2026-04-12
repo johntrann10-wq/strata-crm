@@ -13,7 +13,7 @@
 import { UserIcon } from "@/components/shared/UserIcon";
 import { SecondaryNavigation } from "@/components/app/nav";
 import { QuickCreateMenu } from "../components/shared/QuickCreateMenu";
-import { Outlet, useOutletContext, NavLink, useNavigate, useLocation, Link } from "react-router";
+import { Outlet, useOutletContext, NavLink, useNavigate, useLocation, Link, useSearchParams } from "react-router";
 import type { RootOutletContext } from "../root";
 import type { Route } from "./+types/_app";
 import {
@@ -30,6 +30,7 @@ import {
   PhoneCall,
   Search as SearchIcon,
   Plus,
+  X,
 } from "lucide-react";
 import React, { useState, useEffect, memo, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
@@ -55,11 +56,37 @@ import {
 } from "@/lib/auth";
 import { pathAllowsMissingBusiness } from "../lib/routeRequiresBusiness";
 import { recordRuntimeError } from "../lib/runtimeErrors";
+import {
+  getTrialDaysLeft,
+  hasFullBillingAccess,
+  type BillingAccessState,
+} from "../lib/billingAccess";
+import {
+  canDismissBillingPrompt,
+  getBillingPromptBody,
+  getBillingPromptHeadline,
+  type BillingActivationMilestone,
+  type BillingPromptState,
+} from "../lib/billingPrompts";
+import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
 
 type BillingStatus = {
   status: string | null;
+  accessState: BillingAccessState | null;
+  trialStartedAt: string | null;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
+  billingHasPaymentMethod: boolean;
+  billingPaymentMethodAddedAt: string | null;
+  billingSetupError: string | null;
+  billingSetupFailedAt: string | null;
+  billingLastStripeEventId: string | null;
+  billingLastStripeEventType: string | null;
+  billingLastStripeEventAt: string | null;
+  billingLastStripeSyncStatus: "synced" | "failed" | null;
+  billingLastStripeSyncError: string | null;
+  activationMilestone: BillingActivationMilestone;
+  billingPrompt: BillingPromptState;
   billingEnforced: boolean;
   checkoutConfigured: boolean;
   portalConfigured: boolean;
@@ -184,6 +211,166 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
     }
     return this.props.children;
   }
+}
+
+function BillingStatusBanner({
+  billingStatus,
+  membershipRole,
+}: {
+  billingStatus: BillingStatus | null;
+  membershipRole: string | null;
+}) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [openingPortal, setOpeningPortal] = useState(false);
+  const [dismissedLocally, setDismissedLocally] = useState(false);
+
+  useEffect(() => {
+    setDismissedLocally(false);
+  }, [billingStatus?.billingPrompt.stage, billingStatus?.billingPrompt.visible]);
+
+  useEffect(() => {
+    if (!billingStatus?.billingPrompt.visible || dismissedLocally || billingStatus.billingPrompt.stage === "none") return;
+    void api.billing
+      .trackPromptEvent({
+        event: "shown",
+        stage: billingStatus.billingPrompt.stage,
+      })
+      .catch(() => {
+        // Prompt analytics should never break the shell.
+      });
+  }, [billingStatus?.billingPrompt.stage, billingStatus?.billingPrompt.visible, dismissedLocally]);
+
+  if (!billingStatus) return null;
+
+  const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
+
+  const handleDismiss = async () => {
+    if (!canDismissBillingPrompt(billingStatus.billingPrompt.stage)) return;
+    setDismissedLocally(true);
+    try {
+      await api.billing.trackPromptEvent({
+        event: "dismissed",
+        stage: billingStatus.billingPrompt.stage,
+      });
+    } catch {
+      // Keep the prompt dismissed locally even if logging fails.
+    }
+  };
+
+  const handleContinue = async () => {
+    if (!canManageBilling) return;
+    const promptStage = billingStatus.billingPrompt.stage;
+    if (promptStage === "none") return;
+    setOpeningPortal(true);
+    try {
+      const result = await api.billing.createPortalSessionForPrompt({
+        promptStage,
+        entryPoint: "trial_banner",
+      });
+      if (result?.url) window.location.href = result.url;
+    } finally {
+      setOpeningPortal(false);
+    }
+  };
+
+  if (billingStatus.accessState === "active_trial" && billingStatus.billingPrompt.visible && !dismissedLocally) {
+    const daysLeft = getTrialDaysLeft(billingStatus.trialEndsAt);
+    const body = getBillingPromptBody({
+      stage: billingStatus.billingPrompt.stage,
+      milestone: billingStatus.activationMilestone,
+      daysLeftInTrial: billingStatus.billingPrompt.daysLeftInTrial ?? daysLeft,
+    });
+    return (
+      <>
+        <div className="border-b border-amber-200/70 bg-amber-50/85 px-4 py-3 text-sm text-amber-950">
+          <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">{getBillingPromptHeadline(billingStatus.billingPrompt.stage)}</p>
+              <p className="text-amber-900/80">
+                {body ||
+                  (daysLeft == null
+                    ? "Add payment method whenever you're ready."
+                    : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left in your Strata free trial.`)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {canDismissBillingPrompt(billingStatus.billingPrompt.stage) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-amber-950 hover:bg-white/70"
+                  onClick={() => void handleDismiss()}
+                >
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Dismiss billing reminder</span>
+                </Button>
+              ) : null}
+              {canManageBilling ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-amber-300 bg-white/80 text-amber-950 hover:bg-white"
+                  onClick={() => setDialogOpen(true)}
+                >
+                  Add payment method
+                </Button>
+              ) : (
+                <span className="text-xs text-amber-900/75">Owners and admins manage billing.</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <BillingPromptDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          stage={billingStatus.billingPrompt.stage}
+          body={body}
+          canManageBilling={canManageBilling}
+          loading={openingPortal}
+          onContinue={() => void handleContinue()}
+        />
+      </>
+    );
+  }
+
+  if (billingStatus.accessState === "paused_missing_payment_method") {
+    return (
+      <div className="border-b border-rose-200/70 bg-rose-50/85 px-4 py-3 text-sm text-rose-950">
+        <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-medium">Trial paused - add payment method to resume</p>
+            <p className="text-rose-900/80">Open billing recovery to restore full workspace access.</p>
+          </div>
+          <Button asChild size="sm" variant="outline" className="border-rose-300 bg-white/80 text-rose-950 hover:bg-white">
+            <Link to="/subscribe">Open recovery</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (billingStatus.accessState === "pending_setup_failure") {
+    return (
+      <div className="border-b border-amber-200/70 bg-amber-50/85 px-4 py-3 text-sm text-amber-950">
+        <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-medium">Your workspace is live, but we still need to finish billing setup.</p>
+            <p className="text-amber-900/80">
+              {billingStatus.billingSetupError?.trim()
+                ? billingStatus.billingSetupError
+                : "Open Billing settings to retry the Stripe trial setup."}
+            </p>
+          </div>
+          <Button asChild size="sm" variant="outline" className="border-amber-300 bg-white/80 text-amber-950 hover:bg-white">
+            <Link to="/settings?tab=billing">Open billing</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 const SidebarNav = memo(function SidebarNav({
@@ -354,6 +541,7 @@ function AppLayoutInner({
   user,
   refreshUser,
   business,
+  billingStatus,
   currentMembership,
   tenantBusinesses,
   currentLocationId,
@@ -365,6 +553,7 @@ function AppLayoutInner({
   user: Record<string, unknown>;
   refreshUser: () => Promise<void>;
   business: Record<string, unknown> | null;
+  billingStatus: BillingStatus | null;
   currentMembership: AuthOutletContext["tenantBusinesses"][number] | null;
   tenantBusinesses: AuthOutletContext["tenantBusinesses"];
   currentLocationId: string | null;
@@ -675,6 +864,8 @@ function AppLayoutInner({
           </div>
         </header>
 
+        <BillingStatusBanner billingStatus={billingStatus} membershipRole={membershipRole} />
+
         <main className="flex-1 overflow-x-hidden md:overflow-y-auto">
           <AppErrorBoundary>
             <div className="w-full min-h-full">
@@ -691,6 +882,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const rootOutletContext = useOutletContext<RootOutletContext>();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const safeLoaderData = (loaderData ?? {}) as { signInPath?: string };
   const signInPath = safeLoaderData.signInPath ?? "/sign-in";
   // Predictable auth persistence: always revalidate via /api/auth/me on boot.
@@ -703,6 +895,16 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [billingCheckDone, setBillingCheckDone] = useState(false);
   const effectiveUserId = clientUserId;
+
+  const refreshBillingStatus = useCallback(
+    async (options?: { forceStripeRefresh?: boolean }) => {
+      const result = options?.forceStripeRefresh ? await api.billing.refreshBillingState() : await api.billing.getStatus();
+      setBillingStatus(result);
+      setBillingCheckDone(true);
+      return result;
+    },
+    []
+  );
 
   const resetClientAuthState = useCallback(() => {
     setClientUserId(null);
@@ -789,8 +991,32 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       setBillingStatus((current) =>
         current ?? {
           status: "required",
+          accessState: "canceled",
+          trialStartedAt: null,
           trialEndsAt: null,
           currentPeriodEnd: null,
+          billingHasPaymentMethod: false,
+          billingPaymentMethodAddedAt: null,
+          billingSetupError: null,
+          billingSetupFailedAt: null,
+          billingLastStripeEventId: null,
+          billingLastStripeEventType: null,
+          billingLastStripeEventAt: null,
+          billingLastStripeSyncStatus: null,
+          billingLastStripeSyncError: null,
+          activationMilestone: {
+            reached: false,
+            type: null,
+            occurredAt: null,
+            detail: null,
+          },
+          billingPrompt: {
+            stage: "paused",
+            visible: true,
+            daysLeftInTrial: null,
+            dismissedUntil: null,
+            cooldownDays: 5,
+          },
           billingEnforced: true,
           checkoutConfigured: false,
           portalConfigured: false,
@@ -865,12 +1091,9 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     }
 
     setBillingCheckDone(false);
-    api.billing
-      .getStatus()
-      .then((result) => {
+    refreshBillingStatus()
+      .then(() => {
         if (cancelled) return;
-        setBillingStatus(result);
-        setBillingCheckDone(true);
       })
       .catch(() => {
         if (cancelled) return;
@@ -881,7 +1104,27 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     return () => {
       cancelled = true;
     };
-  }, [effectiveUserId, currentBusinessId, allowWithoutSubscription]);
+  }, [effectiveUserId, currentBusinessId, allowWithoutSubscription, refreshBillingStatus]);
+
+  useEffect(() => {
+    if (searchParams.get("billingPortal") !== "return") return;
+    if (!effectiveUserId || !currentBusinessId) return;
+    if (allowWithoutSubscription) return;
+
+    let cancelled = false;
+    setBillingCheckDone(false);
+    void refreshBillingStatus({ forceStripeRefresh: true })
+      .finally(() => {
+        if (cancelled) return;
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("billingPortal");
+        setSearchParams(nextParams, { replace: true, preventScrollReset: true });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [allowWithoutSubscription, currentBusinessId, effectiveUserId, refreshBillingStatus, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!effectiveUserId) return;
@@ -954,8 +1197,12 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         : null);
     if (!resolvedBusiness) return "/onboarding";
     if ((resolvedBusiness as { onboardingComplete?: boolean }).onboardingComplete === false) return "/onboarding";
-    const isSubscribed = billingStatus?.status === "active" || billingStatus?.status === "trialing";
-    if (billingCheckDone && !allowWithoutSubscription && billingStatus?.billingEnforced && !isSubscribed) {
+    const hasAccess =
+      billingStatus == null ||
+      !billingStatus.billingEnforced ||
+      hasFullBillingAccess(billingStatus.accessState) ||
+      ((billingStatus.status === "active" || billingStatus.status === "trialing") && billingStatus.accessState == null);
+    if (billingCheckDone && !allowWithoutSubscription && billingStatus?.billingEnforced && !hasAccess) {
       return "/subscribe";
     }
     if (!canAccessAppPath(location.pathname, currentPermissions, currentEnabledModules)) {
@@ -1088,6 +1335,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         }}
         business={(business as Record<string, unknown>) ?? null}
         currentMembership={currentMembership}
+        billingStatus={billingStatus}
         tenantBusinesses={tenantBusinesses}
         currentLocationId={currentLocationId}
         onLocationChange={handleLocationChange}

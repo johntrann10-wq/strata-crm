@@ -1108,8 +1108,51 @@ export const api = {
     getStatus: () =>
       request<{
         status: string | null;
+        accessState:
+          | "pending_setup"
+          | "pending_setup_failure"
+          | "active_trial"
+          | "active_paid"
+          | "paused_missing_payment_method"
+          | "canceled"
+          | null;
+        trialStartedAt: string | null;
         trialEndsAt: string | null;
         currentPeriodEnd: string | null;
+        billingHasPaymentMethod: boolean;
+        billingPaymentMethodAddedAt: string | null;
+        billingSetupError: string | null;
+        billingSetupFailedAt: string | null;
+        billingLastStripeEventId: string | null;
+        billingLastStripeEventType: string | null;
+        billingLastStripeEventAt: string | null;
+        billingLastStripeSyncStatus: "synced" | "failed" | null;
+        billingLastStripeSyncError: string | null;
+        activationMilestone: {
+          reached: boolean;
+          type:
+            | "appointment_created"
+            | "quote_created"
+            | "invoice_created"
+            | "payment_collected"
+            | "clients_3_added"
+            | null;
+          occurredAt: string | null;
+          detail: string | null;
+        };
+        billingPrompt: {
+          stage:
+            | "none"
+            | "soft_activation"
+            | "trial_7_days"
+            | "trial_3_days"
+            | "trial_1_day"
+            | "paused";
+          visible: boolean;
+          daysLeftInTrial: number | null;
+          dismissedUntil: string | null;
+          cooldownDays: number;
+        };
         billingEnforced: boolean;
         checkoutConfigured: boolean;
         portalConfigured: boolean;
@@ -1121,10 +1164,96 @@ export const api = {
         stripeConnectOnboardedAt: string | null;
         stripeConnectReady: boolean;
       }>("/billing/status"),
+    refreshBillingState: () =>
+      request<{
+        status: string | null;
+        accessState:
+          | "pending_setup"
+          | "pending_setup_failure"
+          | "active_trial"
+          | "active_paid"
+          | "paused_missing_payment_method"
+          | "canceled"
+          | null;
+        trialStartedAt: string | null;
+        trialEndsAt: string | null;
+        currentPeriodEnd: string | null;
+        billingHasPaymentMethod: boolean;
+        billingPaymentMethodAddedAt: string | null;
+        billingSetupError: string | null;
+        billingSetupFailedAt: string | null;
+        billingLastStripeEventId: string | null;
+        billingLastStripeEventType: string | null;
+        billingLastStripeEventAt: string | null;
+        billingLastStripeSyncStatus: "synced" | "failed" | null;
+        billingLastStripeSyncError: string | null;
+        activationMilestone: {
+          reached: boolean;
+          type:
+            | "appointment_created"
+            | "quote_created"
+            | "invoice_created"
+            | "payment_collected"
+            | "clients_3_added"
+            | null;
+          occurredAt: string | null;
+          detail: string | null;
+        };
+        billingPrompt: {
+          stage:
+            | "none"
+            | "soft_activation"
+            | "trial_7_days"
+            | "trial_3_days"
+            | "trial_1_day"
+            | "paused";
+          visible: boolean;
+          daysLeftInTrial: number | null;
+          dismissedUntil: string | null;
+          cooldownDays: number;
+        };
+        billingEnforced: boolean;
+        checkoutConfigured: boolean;
+        portalConfigured: boolean;
+        stripeConnectConfigured: boolean;
+        stripeConnectAccountId: string | null;
+        stripeConnectDetailsSubmitted: boolean;
+        stripeConnectChargesEnabled: boolean;
+        stripeConnectPayoutsEnabled: boolean;
+        stripeConnectOnboardedAt: string | null;
+        stripeConnectReady: boolean;
+      }>("/billing/refresh-state", { method: "POST" }),
+    retryTrialSetup: () =>
+      request<{
+        ok: true;
+        accessState: string | null;
+        status: string | null;
+      }>("/billing/retry-setup", { method: "POST" }),
     createCheckoutSession: () =>
       request<{ url: string }>("/billing/create-checkout-session", { method: "POST" }),
-    createPortalSession: () =>
-      request<{ url: string }>("/billing/portal", { method: "POST" }),
+    createPortalSession: (params?: {
+      entryPoint?: "settings" | "trial_banner" | "paused_recovery";
+    }) =>
+      request<{ url: string }>("/billing/portal", {
+        method: "POST",
+        body: JSON.stringify(params ?? {}),
+      }),
+    createPortalSessionForPrompt: (params: {
+      promptStage: "soft_activation" | "trial_7_days" | "trial_3_days" | "trial_1_day" | "paused";
+      entryPoint?: "settings" | "trial_banner" | "paused_recovery";
+    }) =>
+      request<{ url: string }>("/billing/portal", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    trackPromptEvent: (params: {
+      event: "shown" | "dismissed" | "converted";
+      stage: "soft_activation" | "trial_7_days" | "trial_3_days" | "trial_1_day" | "paused";
+    }) =>
+      request<{ ok: true }>("/billing/prompt-event", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
     createConnectOnboardingLink: () =>
       request<{ url: string }>("/billing/connect/onboarding-link", { method: "POST" }),
     createConnectDashboardLink: () =>

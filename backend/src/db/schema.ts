@@ -177,8 +177,19 @@ export const businesses = pgTable("businesses", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   subscriptionStatus: text("subscription_status"), // trialing|active|past_due|canceled|incomplete_expired
+  billingAccessState: text("billing_access_state"), // pending_setup|pending_setup_failure|active_trial|active_paid|paused_missing_payment_method|canceled
+  trialStartedAt: timestamp("trial_started_at", { withTimezone: true }),
   trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  billingHasPaymentMethod: boolean("billing_has_payment_method").default(false),
+  billingPaymentMethodAddedAt: timestamp("billing_payment_method_added_at", { withTimezone: true }),
+  billingSetupError: text("billing_setup_error"),
+  billingSetupFailedAt: timestamp("billing_setup_failed_at", { withTimezone: true }),
+  billingLastStripeEventId: text("billing_last_stripe_event_id"),
+  billingLastStripeEventType: text("billing_last_stripe_event_type"),
+  billingLastStripeEventAt: timestamp("billing_last_stripe_event_at", { withTimezone: true }),
+  billingLastStripeSyncStatus: text("billing_last_stripe_sync_status"),
+  billingLastStripeSyncError: text("billing_last_stripe_sync_error"),
   stripeConnectAccountId: text("stripe_connect_account_id"),
   stripeConnectDetailsSubmitted: boolean("stripe_connect_details_submitted").default(false),
   stripeConnectChargesEnabled: boolean("stripe_connect_charges_enabled").default(false),
@@ -544,6 +555,27 @@ export const notificationLogs = pgTable("notification_logs", {
 }, (t) => [
   uniqueIndex("notification_logs_provider_message_unique").on(t.channel, t.providerMessageId),
 ]);
+
+export const stripeWebhookEvents = pgTable(
+  "stripe_webhook_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: text("event_id").notNull(),
+    businessId: uuid("business_id").references(() => businesses.id, { onDelete: "set null" }),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    eventType: text("event_type").notNull(),
+    status: text("status").default("processing").notNull(), // processing|processed|failed
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    payload: text("payload"),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    deadLetteredAt: timestamp("dead_lettered_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("stripe_webhook_events_event_id_unique").on(t.eventId)]
+);
 
 export const emailTemplates = pgTable("email_templates", {
   id: uuid("id").primaryKey().defaultRandom(),
