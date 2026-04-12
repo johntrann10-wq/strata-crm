@@ -1434,25 +1434,40 @@ invoicesRouter.post(
           const createdNumberMatch = /^INV-(\d+)$/.exec(created.invoiceNumber);
           const nextCounterValue =
             createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : initialNumericInvoiceNumber + 1;
-        await executor
-          .update(businesses)
-          .set({ nextInvoiceNumber: nextCounterValue, updatedAt: new Date() })
-          .where(eq(businesses.id, bid));
-      } catch (error) {
-        if (!isInvoiceSchemaDriftError(error)) throw error;
-        const businessColumns = await getBusinessColumns();
-        if (businessColumns.has("next_invoice_number")) {
-          const createdNumberMatch = /^INV-(\d+)$/.exec(created.invoiceNumber);
-          const nextCounterValue =
-            createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : initialNumericInvoiceNumber + 1;
-          const updates: Record<string, unknown> = { nextInvoiceNumber: nextCounterValue };
-          if (businessColumns.has("updated_at")) updates.updatedAt = new Date();
-          await executor.update(businesses).set(updates).where(eq(businesses.id, bid));
-        } else {
-        logger.warn("Business schema drift detected while incrementing invoice number; skipping counter update", {
-          businessId: bid,
-        });
-      }
+          await executor
+            .update(businesses)
+            .set({ nextInvoiceNumber: nextCounterValue, updatedAt: new Date() })
+            .where(eq(businesses.id, bid));
+        } catch (error) {
+          if (isInvoiceSchemaDriftError(error)) {
+            try {
+              const businessColumns = await getBusinessColumns();
+              if (businessColumns.has("next_invoice_number")) {
+                const createdNumberMatch = /^INV-(\d+)$/.exec(created.invoiceNumber);
+                const nextCounterValue =
+                  createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : initialNumericInvoiceNumber + 1;
+                const updates: Record<string, unknown> = { nextInvoiceNumber: nextCounterValue };
+                if (businessColumns.has("updated_at")) updates.updatedAt = new Date();
+                await executor.update(businesses).set(updates).where(eq(businesses.id, bid));
+              } else {
+                logger.warn("Business schema drift detected while incrementing invoice number; skipping counter update", {
+                  businessId: bid,
+                });
+              }
+            } catch (fallbackError) {
+              logger.warn("Invoice created but business invoice counter fallback update failed", {
+                businessId: bid,
+                invoiceId: created.id,
+                error: fallbackError,
+              });
+            }
+          } else {
+            logger.warn("Invoice created but business invoice counter update failed", {
+              businessId: bid,
+              invoiceId: created.id,
+              error,
+            });
+          }
         }
         for (const it of items) {
           const invoiceLineItemColumns = await getInvoiceLineItemColumns();
