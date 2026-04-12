@@ -9,6 +9,7 @@ import {
   businessMemberships,
   clients,
   dashboardPreferences,
+  expenses,
   integrationJobAttempts,
   integrationJobs,
   invoices,
@@ -272,9 +273,13 @@ export type HomeDashboardMonthlyRevenueDay = {
   dayOfMonth: number;
   bookedRevenue: number;
   collectedRevenue: number;
+  expenseAmount: number;
+  netAmount: number;
   goalPaceRevenue: number | null;
   bookedUrl: string;
   collectedUrl: string;
+  expenseUrl: string;
+  netUrl: string;
 };
 
 export type HomeDashboardBookingsOverview = {
@@ -388,6 +393,8 @@ export type HomeDashboardSnapshot = {
     monthEnd: string;
     totalBookedThisMonth: number;
     totalCollectedThisMonth: number;
+    totalExpensesThisMonth: number;
+    netThisMonth: number;
     outstandingInvoiceAmount: number;
     percentToGoal: number | null;
     goalAmount: number | null;
@@ -1752,6 +1759,7 @@ export function buildMonthlyRevenueChart(params: {
   bookedAppointments: Array<{ bookedAt: Date; totalPrice: MoneyLike }>;
   standaloneInvoices: Array<{ bookedAt: Date; total: MoneyLike }>;
   invoicePayments: Array<{ paidAt: Date; amount: MoneyLike }>;
+  expenseRows: Array<{ expenseDate: Date; amount: MoneyLike }>;
   monthlyRevenueGoal: number | null;
 }) {
   const monthStartParts = getTimeZoneParts(params.monthStart, params.timezone);
@@ -1766,9 +1774,13 @@ export function buildMonthlyRevenueChart(params: {
       dayOfMonth: index + 1,
       bookedRevenue: 0,
       collectedRevenue: 0,
+      expenseAmount: 0,
+      netAmount: 0,
       goalPaceRevenue: goalPacePerDay != null ? Number((((index + 1) * goalPacePerDay)).toFixed(2)) : null,
       bookedUrl: buildAppPath(`/calendar?view=day&date=${encodeURIComponent(getBusinessDateKey(date, params.timezone))}`),
       collectedUrl: buildAppPath(`/finances?focusDate=${encodeURIComponent(getBusinessDateKey(date, params.timezone))}`),
+      expenseUrl: buildAppPath(`/finances?focusDate=${encodeURIComponent(getBusinessDateKey(date, params.timezone))}`),
+      netUrl: buildAppPath(`/finances?focusDate=${encodeURIComponent(getBusinessDateKey(date, params.timezone))}`),
     };
   });
 
@@ -1783,16 +1795,29 @@ export function buildMonthlyRevenueChart(params: {
     if (index == null) return;
     days[index]!.collectedRevenue += amount;
   };
+  const addExpense = (date: Date, amount: MoneyLike) => {
+    const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
+    if (index == null) return;
+    days[index]!.expenseAmount += toMoneyNumber(amount);
+  };
 
   for (const row of params.bookedAppointments) addBooked(row.bookedAt, row.totalPrice);
   for (const row of params.standaloneInvoices) addBooked(row.bookedAt, row.total);
   for (const row of params.invoicePayments) addCollected(row.paidAt, toMoneyNumber(row.amount));
+  for (const row of params.expenseRows) addExpense(row.expenseDate, row.amount);
 
-  return days.map((day) => ({
-    ...day,
-    bookedRevenue: Number(day.bookedRevenue.toFixed(2)),
-    collectedRevenue: Number(day.collectedRevenue.toFixed(2)),
-  })) as HomeDashboardMonthlyRevenueDay[];
+  return days.map((day) => {
+    const bookedRevenue = Number(day.bookedRevenue.toFixed(2));
+    const collectedRevenue = Number(day.collectedRevenue.toFixed(2));
+    const expenseAmount = Number(day.expenseAmount.toFixed(2));
+    return {
+      ...day,
+      bookedRevenue,
+      collectedRevenue,
+      expenseAmount,
+      netAmount: Number((collectedRevenue - expenseAmount).toFixed(2)),
+    };
+  }) as HomeDashboardMonthlyRevenueDay[];
 }
 
 export function calculateUpcomingDepositCoverage(params: {
@@ -2868,6 +2893,28 @@ async function loadDirectAppointmentPaymentRowsInRange(
     .orderBy(asc(activityLogs.createdAt));
 }
 
+async function loadExpenseRowsInRange(
+  businessId: string,
+  start: Date,
+  end: Date,
+  tx: DbExecutor
+) {
+  return tx
+    .select({
+      expenseDate: expenses.expenseDate,
+      amount: expenses.amount,
+    })
+    .from(expenses)
+    .where(
+      and(
+        eq(expenses.businessId, businessId),
+        gte(expenses.expenseDate, start),
+        lte(expenses.expenseDate, end)
+      )
+    )
+    .orderBy(asc(expenses.expenseDate));
+}
+
 export function buildActionQueue(params: {
   context: ActionQueueContext;
   leadRows: LeadRow[];
@@ -3385,6 +3432,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     directCollectedThisMonth,
     invoicePaymentRowsThisMonth,
     directPaymentRowsThisMonth,
+    expenseRowsThisMonth,
   ] = await Promise.all([
     loadOrFallback("invoiceCollectedToday", 0, ["summary_cash", "revenue_collections", "goals"], () =>
       sumInvoicePaymentsInRange(params.businessId, todayStart, todayEnd, tx)
@@ -3416,11 +3464,19 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       ["revenue_collections"],
       () => loadDirectAppointmentPaymentRowsInRange(params.businessId, monthStart, monthEnd, tx)
     ),
+    loadOrFallback(
+      "expenseRowsThisMonth",
+      [] as Awaited<ReturnType<typeof loadExpenseRowsInRange>>,
+      ["revenue_collections"],
+      () => loadExpenseRowsInRange(params.businessId, monthStart, monthEnd, tx)
+    ),
   ]);
   const collectedToday = invoiceCollectedToday + directCollectedToday;
   const collectedThisWeek = invoiceCollectedThisWeek + directCollectedThisWeek;
   const collectedRevenueThisMonth = invoiceCollectedThisMonth + directCollectedThisMonth;
   const collectedInvoiceRevenueThisMonth = invoiceCollectedThisMonth;
+  const totalExpensesThisMonth = expenseRowsThisMonth.reduce((sum, row) => sum + toMoneyNumber(row.amount), 0);
+  const netRevenueThisMonth = collectedInvoiceRevenueThisMonth - totalExpensesThisMonth;
 
   const parsedLeads = leadRows.map((row) => ({ row, lead: parseLeadRecord(row.notes) }));
   const activeLeadRows = parsedLeads.filter(({ lead }) => lead.isLead);
@@ -3503,6 +3559,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
         bookedAppointments: monthRevenueAppointments,
         standaloneInvoices: monthStandaloneInvoices.map((row) => ({ bookedAt: row.createdAt, total: row.total })),
         invoicePayments: invoicePaymentRowsThisMonth,
+        expenseRows: expenseRowsThisMonth,
         monthlyRevenueGoal: toMoneyNumber(business.monthlyRevenueGoal),
       })
   );
@@ -3795,6 +3852,14 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       totalCollectedThisMonth:
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
           ? Number(collectedInvoiceRevenueThisMonth.toFixed(2))
+          : 0,
+      totalExpensesThisMonth:
+        modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
+          ? Number(totalExpensesThisMonth.toFixed(2))
+          : 0,
+      netThisMonth:
+        modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash
+          ? Number(netRevenueThisMonth.toFixed(2))
           : 0,
       outstandingInvoiceAmount:
         modulePermissions.revenueCollections || modulePermissions.goals || modulePermissions.cash

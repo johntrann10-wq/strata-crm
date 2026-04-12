@@ -240,6 +240,8 @@ export default function DashboardHomeRoute() {
     (
       snapshot.monthlyRevenueChart.totalBookedThisMonth > 0
       || snapshot.monthlyRevenueChart.totalCollectedThisMonth > 0
+      || snapshot.monthlyRevenueChart.totalExpensesThisMonth > 0
+      || snapshot.monthlyRevenueChart.netThisMonth !== 0
     );
   const hasMeaningfulBookingsOverview =
     !!snapshot?.bookingsOverview.allowed &&

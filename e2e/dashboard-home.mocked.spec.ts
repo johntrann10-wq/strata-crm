@@ -177,6 +177,8 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
       monthEnd: "2026-05-01T06:59:59.999Z",
       totalBookedThisMonth: mode === "empty" ? 0 : 11840,
       totalCollectedThisMonth: role === "technician" ? 0 : mode === "empty" ? 0 : 9320,
+      totalExpensesThisMonth: role === "technician" ? 0 : mode === "empty" ? 0 : mode === "edge" ? 3180 : 2410,
+      netThisMonth: role === "technician" ? 0 : mode === "empty" ? 0 : mode === "edge" ? 6140 : 6910,
       outstandingInvoiceAmount: role === "technician" ? 0 : mode === "edge" ? 2440 : 920,
       percentToGoal: role === "owner" && mode !== "empty" ? 78 : null,
       goalAmount: role === "owner" && mode !== "empty" ? 15000 : null,
@@ -185,9 +187,17 @@ function buildSnapshot(role: MockRole, mode: DashboardMode, range: DashboardRang
         dayOfMonth: index + 1,
         bookedRevenue: mode === "empty" ? 0 : [0, 220, 480, 0, 650, 0, 520, 310, 740, 560, 0, 880, 420, 0, 360, 690, 0, 510, 750, 0, 430, 260, 0, 980, 610, 0, 320, 540, 0, 480][index] ?? 0,
         collectedRevenue: role === "technician" || mode === "empty" ? 0 : [0, 0, 250, 0, 300, 0, 420, 0, 500, 0, 0, 610, 0, 0, 290, 0, 0, 440, 0, 0, 380, 0, 0, 730, 0, 0, 260, 0, 0, 420][index] ?? 0,
+        expenseAmount: role === "technician" || mode === "empty" ? 0 : [0, 120, 0, 90, 180, 0, 210, 0, 160, 140, 0, 220, 0, 85, 110, 0, 0, 145, 0, 130, 0, 95, 0, 240, 0, 105, 0, 155, 0, 130][index] ?? 0,
+        netAmount:
+          role === "technician" || mode === "empty"
+            ? 0
+            : (([0, 0, 250, 0, 300, 0, 420, 0, 500, 0, 0, 610, 0, 0, 290, 0, 0, 440, 0, 0, 380, 0, 0, 730, 0, 0, 260, 0, 0, 420][index] ?? 0)
+              - ([0, 120, 0, 90, 180, 0, 210, 0, 160, 140, 0, 220, 0, 85, 110, 0, 0, 145, 0, 130, 0, 95, 0, 240, 0, 105, 0, 155, 0, 130][index] ?? 0)),
         goalPaceRevenue: role === "owner" ? (15000 / 30) * (index + 1) : null,
         bookedUrl: `/calendar?view=day&date=2026-04-${String(index + 1).padStart(2, "0")}`,
         collectedUrl: `/finances?focusDate=2026-04-${String(index + 1).padStart(2, "0")}`,
+        expenseUrl: `/finances?focusDate=2026-04-${String(index + 1).padStart(2, "0")}`,
+        netUrl: `/finances?focusDate=2026-04-${String(index + 1).padStart(2, "0")}`,
       })),
     },
     bookingsOverview: {
@@ -285,7 +295,8 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(main.getByText("Weekly Appointment Overview", { exact: true })).toBeVisible();
     await expect(main.getByText("Upcoming Jobs / Needs Attention", { exact: true })).toBeVisible();
     await expect(main.getByText("Monthly Revenue", { exact: true })).toBeVisible();
-    await expect(main.getByText("Open revenue", { exact: true })).toBeVisible();
+    await expect(main.getByText("Expenses", { exact: true })).toBeVisible();
+    await expect(main.getByText("Net cash", { exact: true })).toBeVisible();
     await expect(main.getByText("Bookings Overview", { exact: true })).toBeVisible();
     await expect(main.getByText("Recent Activity", { exact: true })).toBeVisible();
     await expect(main.getByText("Unpaid Invoices / Deposits Due", { exact: true })).toBeVisible();
@@ -301,9 +312,11 @@ test.describe("Dashboard home (mocked)", () => {
     await page.getByRole("button", { name: "Focus Tuesday in weekly overview" }).click();
     await expect(page.getByRole("link", { name: /open day in calendar/i })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-07");
     await page.getByRole("button", { name: /^booked$/i }).click();
-    await expect(page.getByRole("link", { name: "Open booked revenue records for Apr 2", exact: true })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-02");
+    await expect(page.getByRole("link", { name: "Open booked records for Apr 2", exact: true })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-02");
     await page.getByRole("button", { name: /^cash$/i }).click();
-    await expect(page.getByRole("link", { name: "Open collected revenue records for Apr 3", exact: true })).toHaveAttribute("href", "/finances?focusDate=2026-04-03");
+    await expect(page.getByRole("link", { name: "Open collected records for Apr 3", exact: true })).toHaveAttribute("href", "/finances?focusDate=2026-04-03");
+    await page.getByRole("button", { name: /^expenses$/i }).click();
+    await expect(page.getByRole("link", { name: "Open expenses records for Apr 2", exact: true })).toHaveAttribute("href", "/finances?focusDate=2026-04-02");
     if (process.platform === "win32") {
       await expect(page.locator("main")).toHaveScreenshot("dashboard-owner-control-tower.png", {
         animations: "disabled",
@@ -399,8 +412,8 @@ test.describe("Dashboard home (mocked)", () => {
     });
     await page.goto("/signed-in");
     await expect(page.getByText("Monthly Revenue", { exact: true })).toBeVisible();
-    await expect(page.getByText("Open revenue", { exact: true })).toBeVisible();
-    await expect(page.getByText("Booked work is grouped by scheduled day. Tap a bar to drill into that date.")).toBeVisible();
+    await expect(page.getByText("Expenses", { exact: true })).toBeVisible();
+    await expect(page.getByText("Booked work is grouped by scheduled day. Open any bar to drill into that date.")).toBeVisible();
   });
 
   test("respects the dashboard feature flag rollback path", async ({ page }) => {

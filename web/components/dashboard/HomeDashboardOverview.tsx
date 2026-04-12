@@ -65,6 +65,11 @@ function shiftDateKey(value: string, days: number) {
   return base.toISOString().slice(0, 10);
 }
 
+function formatDashboardAxisCurrency(value: number) {
+  if (value === 0) return "$0";
+  return formatDashboardCompactCurrency(value);
+}
+
 function WidgetErrorState({ title, error, onRetry }: { title: string; error?: Error | null; onRetry?: () => void }) {
   return (
     <Card className={cn(dashboardPanelClassName, "min-h-[220px]")}>
@@ -364,10 +369,11 @@ export function HomeWeeklyAppointmentOverviewCard({
                               <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{day.shortLabel}</p>
                               <p className="mt-1 text-sm font-semibold text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
                             </button>
-                            <div className="flex items-center gap-2">
-                              <span className="shrink-0 rounded-full border border-slate-200/80 bg-white/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-700 shadow-sm">
-                                Booked {formatDashboardCompactCurrency(day.bookedValue)}
-                              </span>
+                            <div className="flex items-start gap-2">
+                              <div className="pt-0.5 text-right">
+                                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Booked</p>
+                                <p className="mt-1 text-xs font-semibold text-slate-700">{formatDashboardCompactCurrency(day.bookedValue)}</p>
+                              </div>
                               <Link
                                 to={day.calendarUrl}
                                 className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-950"
@@ -386,39 +392,23 @@ export function HomeWeeklyAppointmentOverviewCard({
                             aria-label={`Focus ${day.label} in weekly overview`}
                             aria-pressed={isActive}
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-slate-950">{day.appointmentCount}</p>
-                                <p className="mt-1 text-[11px] font-medium text-slate-500">{day.appointmentCount === 1 ? "appointment" : "appointments"}</p>
-                              </div>
-                              <div className="text-right">
-                                <span className="inline-flex rounded-full bg-slate-100/90 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
-                                  Queue {day.previewItems.length}
-                                </span>
-                                {day.capacityUsage != null ? (
-                                  <p className="mt-2 text-[10px] font-medium text-slate-500">{day.capacityUsage}% covered</p>
-                                ) : (
-                                  <p className="mt-2 text-[10px] font-medium text-slate-400">No coverage</p>
-                                )}
-                              </div>
+                            <div>
+                              <p className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-slate-950">{day.appointmentCount}</p>
+                              <p className="mt-1 text-[11px] font-medium text-slate-500">{day.appointmentCount === 1 ? "appointment" : "appointments"}</p>
+                              <p className="mt-3 text-[11px] text-slate-500">
+                                Queue {day.previewItems.length}
+                                {day.capacityUsage != null ? ` · ${day.capacityUsage}% covered` : " · no coverage"}
+                              </p>
                             </div>
-                            <div className="mt-4 grid grid-cols-2 gap-1.5 text-[10px]">
-                              <span className="rounded-full bg-slate-100 px-2 py-1 text-center font-medium text-slate-700">Up {day.statusCounts.upcoming}</span>
-                              <span className="rounded-full bg-blue-50 px-2 py-1 text-center font-medium text-blue-700">Live {day.statusCounts.inProgress}</span>
-                              <span className="rounded-full bg-emerald-50 px-2 py-1 text-center font-medium text-emerald-700">Done {day.statusCounts.completed}</span>
-                              <span className="rounded-full bg-rose-50 px-2 py-1 text-center font-medium text-rose-700">Cancel {day.statusCounts.cancelled}</span>
+                            <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                              <span className="font-medium text-slate-600">Up {day.statusCounts.upcoming}</span>
+                              <span className="font-medium text-blue-700">Live {day.statusCounts.inProgress}</span>
+                              <span className="font-medium text-emerald-700">Done {day.statusCounts.completed}</span>
+                              <span className="font-medium text-rose-700">Cancel {day.statusCounts.cancelled}</span>
                             </div>
-                            <div className="mt-5 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-400">
-                                {isActive ? "In focus" : "Select day"}
-                              </span>
-                              <span
-                                className={cn(
-                                  "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                                  isActive ? "bg-amber-50 text-amber-700" : "bg-slate-100/90 text-slate-500"
-                                )}
-                              >
-                                {isActive ? "Dispatch ready" : "Inspect"}
+                            <div className="mt-5 border-t border-slate-100 pt-3">
+                              <span className={cn("text-[11px] font-medium", isActive ? "text-amber-700" : "text-slate-500")}>
+                                {isActive ? "Selected for dispatch" : "Click to inspect"}
                               </span>
                             </div>
                           </button>
@@ -802,7 +792,7 @@ export function HomeMonthlyRevenueChartCard({
   error,
   onRetry,
 }: { snapshot?: HomeDashboardSnapshot | null } & WidgetStateProps) {
-  const [mode, setMode] = useState<"booked" | "collected">("booked");
+  const [mode, setMode] = useState<"booked" | "collected" | "expenses">("booked");
   if (loading) return <CardLoadingShell title="Monthly Revenue" rows={6} />;
   if (error) return <WidgetErrorState title="Monthly Revenue" error={error} onRetry={onRetry} />;
 
@@ -820,10 +810,17 @@ export function HomeMonthlyRevenueChartCard({
     );
   }
 
-  const values = chart.days.map((day) => (mode === "booked" ? day.bookedRevenue : day.collectedRevenue));
+  const values = chart.days.map((day) => (
+    mode === "booked"
+      ? day.bookedRevenue
+      : mode === "collected"
+        ? day.collectedRevenue
+        : day.expenseAmount
+  ));
   const maxValue = Math.max(...values, 1);
-  const hasAnyRevenue = values.some((value) => value > 0);
+  const hasAnyRevenue = chart.days.some((day) => day.bookedRevenue > 0 || day.collectedRevenue > 0 || day.expenseAmount > 0);
   const showGoalPace = mode === "booked" && chart.goalAmount != null && chart.days.some((day) => day.goalPaceRevenue != null);
+  const axisTicks = [1, 0.75, 0.5, 0.25, 0].map((factor) => formatDashboardAxisCurrency(maxValue * factor));
   const summaryItems = [
     {
       label: "Booked",
@@ -832,22 +829,25 @@ export function HomeMonthlyRevenueChartCard({
       hint: "scheduled work this month",
     },
     {
-      label: "Collected",
+      label: "Cash received",
       value: formatDashboardCompactCurrency(chart.totalCollectedThisMonth),
       tone: "text-slate-950",
       hint: "invoice cash received",
     },
     {
-      label: "Open revenue",
-      value: formatDashboardCompactCurrency(chart.outstandingInvoiceAmount),
-      tone: chart.outstandingInvoiceAmount > 0 ? "text-amber-700" : "text-slate-950",
-      hint: "still sitting in invoices",
+      label: "Expenses",
+      value: formatDashboardCompactCurrency(chart.totalExpensesThisMonth),
+      tone: chart.totalExpensesThisMonth > 0 ? "text-rose-700" : "text-slate-950",
+      hint: "live expenses booked this month",
     },
     {
-      label: "Goal pace",
-      value: chart.percentToGoal == null ? "--" : `${chart.percentToGoal}%`,
-      tone: chart.percentToGoal != null && chart.percentToGoal >= 100 ? "text-emerald-700" : "text-slate-950",
-      hint: chart.goalAmount == null ? "no monthly goal set" : formatDashboardCompactCurrency(chart.goalAmount),
+      label: "Net cash",
+      value: formatDashboardCompactCurrency(chart.netThisMonth),
+      tone: chart.netThisMonth >= 0 ? "text-emerald-700" : "text-rose-700",
+      hint:
+        chart.goalAmount == null
+          ? `Open revenue ${formatDashboardCompactCurrency(chart.outstandingInvoiceAmount)}`
+          : `${chart.percentToGoal == null ? "--" : `${chart.percentToGoal}%`} to goal`,
     },
   ];
 
@@ -858,15 +858,16 @@ export function HomeMonthlyRevenueChartCard({
           <div>
             <CardTitle className="text-xl tracking-[-0.03em]">Monthly Revenue</CardTitle>
             <CardDescription>
-              {formatDateLabel(chart.monthStart, "MMMM yyyy")} · booked work by scheduled day and cash received by payment day.
+              {formatDateLabel(chart.monthStart, "MMMM yyyy")} · booked work, invoice cash, and live expenses grouped by day.
             </CardDescription>
           </div>
         </div>
         <CardAction className="w-full sm:w-auto">
-          <div className="grid w-full grid-cols-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-1 sm:inline-flex sm:w-auto">
+          <div className="grid w-full grid-cols-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-1 sm:inline-flex sm:w-auto">
             {([
               { key: "booked", label: "booked" },
               { key: "collected", label: "cash" },
+              { key: "expenses", label: "expenses" },
             ] as const).map((option) => (
               <button
                 key={option.key}
@@ -901,14 +902,21 @@ export function HomeMonthlyRevenueChartCard({
               <EmptyState
                 icon={BarChart3}
                 title="No revenue activity this month yet"
-                description="Booked work and invoice collections will start drawing here as appointments, invoices, and payments land."
+                description="Booked work, invoice cash, and expenses will draw here automatically as live business activity lands."
               />
             </div>
           ) : (
             <>
               <div className="border-b border-slate-200/80 px-4 py-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-                  <span>{mode === "booked" ? "Booked work is grouped by scheduled day." : "Invoice cash is grouped by payment day."} Tap a bar to drill into that date.</span>
+                  <span>
+                    {mode === "booked"
+                      ? "Booked work is grouped by scheduled day."
+                      : mode === "collected"
+                        ? "Invoice cash is grouped by payment day."
+                        : "Expenses are grouped by expense date."}{" "}
+                    Open any bar to drill into that date.
+                  </span>
                   {showGoalPace ? <span>Goal pace line is shown as a guide for booked revenue.</span> : null}
                 </div>
               </div>
@@ -916,33 +924,45 @@ export function HomeMonthlyRevenueChartCard({
               <div className="rounded-[1.1rem] border border-slate-200/70 bg-white/92 p-3 sm:p-4">
                 <div className="grid gap-3 sm:grid-cols-[auto,1fr] sm:items-end">
                   <div className="hidden h-64 flex-col justify-between text-[10px] text-slate-500 sm:flex">
-                    <span>{formatDashboardCompactCurrency(maxValue)}</span>
-                    <span>{formatDashboardCompactCurrency(maxValue / 2)}</span>
-                    <span>$0</span>
+                    {axisTicks.map((tick) => (
+                      <span key={tick}>{tick}</span>
+                    ))}
                   </div>
                   <div className="min-w-0 overflow-x-auto pb-1">
                     <div className="relative min-w-[480px] sm:min-w-[680px]">
                       <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
                         <div className="border-t border-dashed border-slate-300/90" />
                         <div className="border-t border-dashed border-slate-200/90" />
+                        <div className="border-t border-dashed border-slate-200/90" />
                         <div className="border-t border-dashed border-slate-300/90" />
                       </div>
                       <div className="relative flex h-64 items-end gap-1.5">
                         {chart.days.map((day) => {
-                          const value = mode === "booked" ? day.bookedRevenue : day.collectedRevenue;
+                          const value =
+                            mode === "booked"
+                              ? day.bookedRevenue
+                              : mode === "collected"
+                                ? day.collectedRevenue
+                                : day.expenseAmount;
                           const barHeight = value > 0 ? Math.max(6, Math.round((value / maxValue) * 100)) : 0;
                           const goalPaceHeight =
                             showGoalPace && day.goalPaceRevenue != null
                               ? Math.max(4, Math.min(100, Math.round((day.goalPaceRevenue / maxValue) * 100)))
                               : null;
-                          const targetUrl = mode === "booked" ? day.bookedUrl : day.collectedUrl;
+                          const targetUrl =
+                            mode === "booked"
+                              ? day.bookedUrl
+                              : mode === "collected"
+                                ? day.collectedUrl
+                                : day.expenseUrl;
                           const showTick = day.dayOfMonth === 1 || day.dayOfMonth === chart.days.length || day.dayOfMonth % 5 === 0;
                           return (
                             <Link
                               key={day.date}
                               to={targetUrl}
                               className="group flex min-w-[14px] flex-1 flex-col items-center justify-end gap-2 sm:min-w-[18px]"
-                              aria-label={`Open ${mode} revenue records for ${formatDateLabel(day.date, "MMM d")}`}
+                              aria-label={`Open ${mode} records for ${formatDateLabel(day.date, "MMM d")}`}
+                              title={`${formatDateLabel(day.date, "MMM d")}: ${formatDashboardCurrency(value)}`}
                             >
                               <div className="relative flex h-56 w-full items-end rounded-t-[10px]">
                                 {goalPaceHeight != null ? (
@@ -955,11 +975,15 @@ export function HomeMonthlyRevenueChartCard({
                                 <div
                                   className={cn(
                                     "w-full rounded-t-[10px] transition-all group-hover:opacity-90",
-                                    mode === "booked" ? "bg-gradient-to-t from-amber-700 to-orange-400" : "bg-gradient-to-t from-emerald-600 to-emerald-400",
+                                    mode === "booked"
+                                      ? "bg-gradient-to-t from-amber-700 to-orange-400"
+                                      : mode === "collected"
+                                        ? "bg-gradient-to-t from-emerald-600 to-emerald-400"
+                                        : "bg-gradient-to-t from-rose-700 to-rose-400",
                                     value === 0 ? "bg-slate-200/70" : null
                                   )}
                                   style={{ height: `${barHeight}%` }}
-                                  aria-label={`${mode} revenue for day ${day.dayOfMonth}: ${formatDashboardCurrency(value)}`}
+                                  aria-label={`${mode} amount for day ${day.dayOfMonth}: ${formatDashboardCurrency(value)}`}
                                 />
                               </div>
                               <div className="h-4 text-[10px] text-slate-500">{showTick ? day.dayOfMonth : ""}</div>
@@ -973,10 +997,16 @@ export function HomeMonthlyRevenueChartCard({
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-slate-500">
                 <span className="inline-flex items-center gap-2">
-                  <span className={cn("h-2.5 w-2.5 rounded-full", mode === "booked" ? "bg-amber-600" : "bg-emerald-500")} />
-                  {mode === "booked" ? "Booked work" : "Invoice collections"}
+                  <span
+                    className={cn(
+                      "h-2.5 w-2.5 rounded-full",
+                      mode === "booked" ? "bg-amber-600" : mode === "collected" ? "bg-emerald-500" : "bg-rose-600"
+                    )}
+                  />
+                  {mode === "booked" ? "Booked work" : mode === "collected" ? "Invoice collections" : "Expenses"}
                 </span>
                 {chart.goalAmount != null ? <span>Monthly goal: {formatDashboardCurrency(chart.goalAmount)}</span> : null}
+                <span>Net cash: {formatDashboardCurrency(chart.netThisMonth)}</span>
               </div>
               </div>
             </>

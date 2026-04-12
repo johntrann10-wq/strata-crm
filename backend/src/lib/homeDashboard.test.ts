@@ -338,7 +338,7 @@ describe("home dashboard domain logic", () => {
     });
   });
 
-  it("builds monthly revenue bars from booked and collected activity", () => {
+  it("builds monthly revenue bars from booked, collected, and expense activity", () => {
     const days = buildMonthlyRevenueChart({
       monthStart: new Date("2026-04-01T07:00:00.000Z"),
       monthEnd: new Date("2026-04-30T06:59:59.999Z"),
@@ -347,17 +347,22 @@ describe("home dashboard domain logic", () => {
       bookedAppointments: [{ bookedAt: new Date("2026-04-02T16:00:00.000Z"), totalPrice: "500" }],
       standaloneInvoices: [{ bookedAt: new Date("2026-04-03T16:00:00.000Z"), total: "300" }],
       invoicePayments: [{ paidAt: new Date("2026-04-04T16:00:00.000Z"), amount: "250" }],
+      expenseRows: [{ expenseDate: new Date("2026-04-05T16:00:00.000Z"), amount: "125" }],
     });
 
     expect(days[1]).toMatchObject({
       dayOfMonth: 2,
       bookedRevenue: 500,
       collectedRevenue: 0,
+      expenseAmount: 0,
+      netAmount: 0,
       bookedUrl: "/calendar?view=day&date=2026-04-02",
       collectedUrl: "/finances?focusDate=2026-04-02",
+      expenseUrl: "/finances?focusDate=2026-04-02",
     });
     expect(days[2]).toMatchObject({ dayOfMonth: 3, bookedRevenue: 300 });
     expect(days[3]).toMatchObject({ dayOfMonth: 4, collectedRevenue: 250 });
+    expect(days[4]).toMatchObject({ dayOfMonth: 5, expenseAmount: 125, netAmount: -125 });
   });
 
   it("calculates deposit coverage from upcoming deposit-backed appointments only", () => {
