@@ -26,6 +26,7 @@ import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { getIntakePreset } from "../lib/intakePresets";
+import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -76,6 +77,17 @@ type JobRecord = {
   }>;
   invoice?: { id: string; invoiceNumber?: string | null; status: string; total?: number | string | null } | null;
   quote?: { id: string; status: string; total?: number | string | null } | null;
+};
+
+type LinkedAppointmentFinanceRecord = {
+  subtotal?: number | string | null;
+  taxRate?: number | string | null;
+  taxAmount?: number | string | null;
+  applyTax?: boolean | null;
+  adminFeeRate?: number | string | null;
+  adminFeeAmount?: number | string | null;
+  applyAdminFee?: boolean | null;
+  totalPrice?: number | string | null;
 };
 
 const STATUS_OPTIONS = [
@@ -155,6 +167,20 @@ export default function JobDetailPage() {
 
   const [{ data: job, fetching, error }, refetchJob] = useFindOne(api.job, id ?? "", {
     pause: !businessId || !id,
+  });
+  const linkedAppointmentId = ((job as JobRecord | null | undefined)?.appointmentId ?? "").trim();
+  const [{ data: linkedAppointment }] = useFindOne(api.appointment, linkedAppointmentId, {
+    pause: !businessId || !linkedAppointmentId,
+    select: {
+      subtotal: true,
+      taxRate: true,
+      taxAmount: true,
+      applyTax: true,
+      adminFeeRate: true,
+      adminFeeAmount: true,
+      applyAdminFee: true,
+      totalPrice: true,
+    },
   });
   const [{ data: staff }] = useFindMany(api.staff, { first: 100, pause: !businessId } as any);
   const [{ data: locations }] = useFindMany(api.location, { first: 100, pause: !businessId } as any);
@@ -288,6 +314,13 @@ export default function JobDetailPage() {
   const progressStages = record ? getProgressStages(record) : [];
   const completedServiceCount = (record?.services ?? []).filter((service) => completedServiceIds.get(service.id) === true).length;
   const pickupReady = record?.status === "completed" && completedServiceCount === (record?.services ?? []).length && Boolean(record?.invoice?.id);
+  const displayedJobRevenue = record
+    ? getDisplayedAppointmentAmount(
+        ((linkedAppointment as LinkedAppointmentFinanceRecord | null | undefined) ?? {
+          totalPrice: record.totalPrice,
+        }) as LinkedAppointmentFinanceRecord
+      )
+    : 0;
 
   const handleSave = async () => {
     if (!record) return;
@@ -444,7 +477,7 @@ export default function JobDetailPage() {
         <div className="grid gap-3 grid-cols-2 xl:grid-cols-5">
           <TopMetric label="Schedule" value={formatDateRange(record.scheduledStart, record.scheduledEnd)} />
           <TopMetric label="Technician" value={formatName(record.assignedStaff)} />
-          <TopMetric label="Revenue" value={formatCurrency(record.totalPrice)} />
+          <TopMetric label="Revenue" value={formatCurrency(displayedJobRevenue)} />
           <TopMetric label="Services" value={`${completedServiceCount}/${(record.services ?? []).length} complete`} />
           <TopMetric label="Pickup readiness" value={pickupReady ? "Ready" : record.status === "completed" ? "Needs wrap-up" : "In progress"} />
         </div>
