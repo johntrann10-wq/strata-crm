@@ -158,6 +158,26 @@ function formatTime(date: string | Date | null | undefined): string {
   });
 }
 
+function parseDateInputValue(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const [, yearRaw, monthRaw, dayRaw] = match;
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  const parsed = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
 function formatCurrency(amount: number | null | undefined): string {
   if (amount == null) return "—";
   return new Intl.NumberFormat("en-US", {
@@ -1325,8 +1345,11 @@ export default function AppointmentDetail() {
       toast.error(`Payment must match the amount due of ${formatCurrency(depositAmount)}.`);
       return;
     }
-    const [py, pm, pd] = depositPaymentDate.split("-").map(Number);
-    const paidAtDate = new Date(py, pm - 1, pd);
+    const paidAtDate = parseDateInputValue(depositPaymentDate);
+    if (!paidAtDate) {
+      toast.error("Enter a valid payment date.");
+      return;
+    }
     const result = await runRecordDepositPayment({
       id: appointment.id,
       amount,

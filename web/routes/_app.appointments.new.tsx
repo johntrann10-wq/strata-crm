@@ -81,6 +81,54 @@ const toMoneyNumber = (value: unknown): number => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
+function parseDateInputValue(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const [, yearRaw, monthRaw, dayRaw] = match;
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  const parsed = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
+function parseDateTimeInputValue(dateValue: string, timeValue: string): Date | null {
+  const parsedDate = parseDateInputValue(dateValue);
+  const match = /^(\d{2}):(\d{2})$/.exec(timeValue.trim());
+  if (!parsedDate || !match) return null;
+  const [, hoursRaw, minutesRaw] = match;
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+  return new Date(
+    parsedDate.getFullYear(),
+    parsedDate.getMonth(),
+    parsedDate.getDate(),
+    hours,
+    minutes,
+    0,
+    0
+  );
+}
+
 type ServiceCatalogRecord = {
   id: string;
   name: string;
@@ -311,8 +359,8 @@ export default function NewAppointmentPage() {
     }
     if (timeParam) setStartTime(timeParam);
     if (dateParam && !selectedDate) {
-      const d = new Date(dateParam + "T12:00:00");
-      if (!isNaN(d.getTime())) setSelectedDate(d);
+      const parsedDate = parseDateInputValue(dateParam);
+      if (parsedDate) setSelectedDate(parsedDate);
     }
   }, [clientIdParam, dateParam, ignoreClientPrefill, selectedClientId, selectedDate, selectedVehicleId, timeParam, vehicleIdParam]);
 
@@ -518,25 +566,22 @@ export default function NewAppointmentPage() {
 
   const dropOffDateTime = useMemo(() => {
     if (!jobStartDate || !jobStartTime) return null;
-    const parsed = new Date(`${jobStartDate}T${jobStartTime}`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+    return parseDateTimeInputValue(jobStartDate, jobStartTime);
   }, [jobStartDate, jobStartTime]);
 
   const pickupDateTime = useMemo(() => {
     if (!expectedCompletionDate || !expectedCompletionTime) return null;
-    const parsed = new Date(`${expectedCompletionDate}T${expectedCompletionTime}`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+    return parseDateTimeInputValue(expectedCompletionDate, expectedCompletionTime);
   }, [expectedCompletionDate, expectedCompletionTime]);
 
   const pickupReadyDateTime = useMemo(() => {
     if (!pickupReadyDate || !pickupReadyTime) return null;
-    const parsed = new Date(`${pickupReadyDate}T${pickupReadyTime}`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+    return parseDateTimeInputValue(pickupReadyDate, pickupReadyTime);
   }, [pickupReadyDate, pickupReadyTime]);
 
   const multiDayDateRange = useMemo<DateRange | undefined>(() => {
-    const from = jobStartDate ? new Date(`${jobStartDate}T12:00:00`) : undefined;
-    const to = expectedCompletionDate ? new Date(`${expectedCompletionDate}T12:00:00`) : undefined;
+    const from = jobStartDate ? parseDateInputValue(jobStartDate) ?? undefined : undefined;
+    const to = expectedCompletionDate ? parseDateInputValue(expectedCompletionDate) ?? undefined : undefined;
     if (!from && !to) return undefined;
     return {
       from,
@@ -854,8 +899,20 @@ export default function NewAppointmentPage() {
       setFormError("Invalid date/time combination.");
       return;
     }
+    if (isMultiDayJob && jobStartDate && jobStartTime && !dropOffDateTime) {
+      setFormError("Enter a valid multi-day start date and time.");
+      return;
+    }
     if (isMultiDayJob && (!expectedCompletionDate || !expectedCompletionTime)) {
       setFormError("Please enter an expected completion date and time for the multi-day job.");
+      return;
+    }
+    if (isMultiDayJob && expectedCompletionDate && expectedCompletionTime && !pickupDateTime) {
+      setFormError("Enter a valid expected completion date and time.");
+      return;
+    }
+    if (pickupReadyDate && pickupReadyTime && !pickupReadyDateTime) {
+      setFormError("Enter a valid pickup-ready date and time.");
       return;
     }
     if (isMobile && !mobileAddress.trim()) {
@@ -872,14 +929,12 @@ export default function NewAppointmentPage() {
     try {
       const jobStartDateTime =
         isMultiDayJob && jobStartDate && jobStartTime
-          ? new Date(`${jobStartDate}T${jobStartTime}`)
+          ? dropOffDateTime
           : startDateTime;
       const expectedCompletionDateTime =
         isMultiDayJob && expectedCompletionDate && expectedCompletionTime
-          ? new Date(`${expectedCompletionDate}T${expectedCompletionTime}`)
+          ? pickupDateTime
           : undefined;
-      const pickupReadyDateTime =
-        pickupReadyDate && pickupReadyTime ? new Date(`${pickupReadyDate}T${pickupReadyTime}`) : undefined;
       const clientNotes = notes.trim();
       const mobileAddressNote = isMobile && mobileAddress.trim() ? `Mobile service address: ${mobileAddress.trim()}` : "";
       const persistedNotes = [mobileAddressNote, clientNotes].filter(Boolean).join("\n\n") || undefined;

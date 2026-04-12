@@ -147,6 +147,26 @@ function getEffectiveInvoiceClientRecord(
   return records.find((client) => client.id === selectedClientId) ?? null;
 }
 
+function parseDateInputValue(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const [, yearRaw, monthRaw, dayRaw] = match;
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  const parsed = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
 export default function NewInvoicePage() {
   const navigate = useNavigate();
   const { user, businessId, businessType } = useOutletContext<AuthOutletContext>();
@@ -486,6 +506,13 @@ export default function NewInvoicePage() {
       return;
     }
 
+    const dueDateValue = dueDate.trim();
+    const parsedDueDate = dueDateValue ? parseDateInputValue(dueDateValue) : null;
+    if (dueDateValue && !parsedDueDate) {
+      toast.error("Enter a valid due date.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -512,7 +539,17 @@ export default function NewInvoicePage() {
         discountAmount: discountAmount || 0,
         taxRate: effectiveTaxRate,
         notes: notes.trim() || undefined,
-        dueDate: dueDate ? new Date(dueDate + "T12:00:00").toISOString() : undefined,
+        dueDate: parsedDueDate
+          ? new Date(
+              parsedDueDate.getFullYear(),
+              parsedDueDate.getMonth(),
+              parsedDueDate.getDate(),
+              12,
+              0,
+              0,
+              0
+            ).toISOString()
+          : undefined,
       });
 
       if (invoiceResult.error) {

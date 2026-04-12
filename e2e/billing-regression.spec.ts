@@ -145,6 +145,11 @@ test.describe("Billing regression", () => {
       );
       await page.getByRole("button", { name: /^collect payment$/i }).first().click();
       await expect(page.getByRole("heading", { name: /^record payment$/i })).toBeVisible();
+      await page.locator("#payment-date").fill("");
+      await page.getByRole("button", { name: /^record payment$/i }).last().click();
+      await expect(page.getByText(/enter a valid payment date/i)).toBeVisible();
+      expect(state.payments).toHaveLength(0);
+      await page.locator("#payment-date").fill("2026-04-11");
       await page.locator("#payment-amount").fill(String(invoiceTotal));
       await page.getByRole("button", { name: /^record payment$/i }).last().click();
       await paymentResponsePromise;

@@ -103,6 +103,26 @@ function formatDate(value: string | Date | null | undefined): string {
   });
 }
 
+function parseDateInputValue(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const [, yearRaw, monthRaw, dayRaw] = match;
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  const parsed = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
 function capitalize(str: string | null | undefined): string {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1);
@@ -453,8 +473,11 @@ export default function InvoiceDetailPage() {
       toast.error(validation.message);
       return;
     }
-    const [py, pm, pd] = paymentDate.split("-").map(Number);
-    const paidAtDate = new Date(py, pm - 1, pd);
+    const paidAtDate = parseDateInputValue(paymentDate);
+    if (!paidAtDate) {
+      toast.error("Enter a valid payment date.");
+      return;
+    }
     const result = await createPayment({
       invoiceId: invoice.id,
       amount: amountNum,
@@ -466,6 +489,7 @@ export default function InvoiceDetailPage() {
       toast.success("Payment recorded successfully");
       setRecordPaymentOpen(false);
       void refetch();
+      void refetchActivity();
     } else {
       toast.error("Failed to record payment: " + result.error.message);
     }
@@ -544,6 +568,7 @@ export default function InvoiceDetailPage() {
     if (!result.error) {
       toast.success("Invoice voided");
       void refetch();
+      void refetchActivity();
     } else {
       toast.error("Failed to void invoice");
     }
@@ -556,6 +581,7 @@ export default function InvoiceDetailPage() {
       toast.success("Payment reversed");
       setPaymentToReverse(null);
       void refetch();
+      void refetchActivity();
     } else {
       toast.error("Failed to reverse payment: " + result.error.message);
     }
