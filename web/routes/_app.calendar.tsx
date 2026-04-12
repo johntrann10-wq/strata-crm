@@ -411,6 +411,15 @@ export default function CalendarPage() {
   const overviewAppointments = useMemo(() => getOverviewCalendarAppointments(appointments), [appointments]);
 
   function handlePrev() {
+    if (view === "month") {
+      const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+      setCurrentDate(nextMonth);
+      setSelectedDate((selected) => {
+        const lastDayOfTargetMonth = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
+        return new Date(nextMonth.getFullYear(), nextMonth.getMonth(), Math.min(selected.getDate(), lastDayOfTargetMonth));
+      });
+      return;
+    }
     setCurrentDate((d) => {
       const next = navigateDate(d, view, -1);
       setSelectedDate(next);
@@ -419,6 +428,15 @@ export default function CalendarPage() {
   }
 
   function handleNext() {
+    if (view === "month") {
+      const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+      setCurrentDate(nextMonth);
+      setSelectedDate((selected) => {
+        const lastDayOfTargetMonth = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
+        return new Date(nextMonth.getFullYear(), nextMonth.getMonth(), Math.min(selected.getDate(), lastDayOfTargetMonth));
+      });
+      return;
+    }
     setCurrentDate((d) => {
       const next = navigateDate(d, view, 1);
       setSelectedDate(next);
