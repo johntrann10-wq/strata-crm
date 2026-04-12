@@ -46,6 +46,10 @@ function toLocalDateString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function toMonthAnchor(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -236,7 +240,7 @@ export default function CalendarPage() {
       setSearchParams(next, { replace: true });
       return;
     }
-    const dateValue = toLocalDateString(currentDate);
+    const dateValue = toLocalDateString(view === "month" ? toMonthAnchor(currentDate) : currentDate);
     if (next.get("view") === view && next.get("date") === dateValue) return;
     next.set("view", view);
     next.set("date", dateValue);
@@ -246,18 +250,26 @@ export default function CalendarPage() {
   useEffect(() => {
     if (!requestedDate) return;
     const requestedKey = toLocalDateString(requestedDate);
-    const requestedMatchesVisibleMonth =
-      requestedDate.getMonth() === currentDate.getMonth() &&
-      requestedDate.getFullYear() === currentDate.getFullYear();
-    if ((view === "day" || !requestedMatchesVisibleMonth) && toLocalDateString(selectedDate) !== requestedKey) {
-      setSelectedDate(requestedDate);
+    if (view === "day") {
+      if (toLocalDateString(selectedDate) !== requestedKey) {
+        setSelectedDate(requestedDate);
+      }
+      if (toLocalDateString(currentDate) !== requestedKey) {
+        setCurrentDate(requestedDate);
+      }
+      return;
     }
-    const shouldSyncVisibleDate =
-      view === "day" ||
-      requestedDate.getMonth() !== currentDate.getMonth() ||
-      requestedDate.getFullYear() !== currentDate.getFullYear();
-    if (shouldSyncVisibleDate && toLocalDateString(currentDate) !== requestedKey) {
-      setCurrentDate(requestedDate);
+
+    const requestedMonthAnchor = toMonthAnchor(requestedDate);
+    const visibleMonthAnchor = toMonthAnchor(currentDate);
+    const requestedMonthKey = toLocalDateString(requestedMonthAnchor);
+    const visibleMonthKey = toLocalDateString(visibleMonthAnchor);
+
+    if (visibleMonthKey !== requestedMonthKey) {
+      setCurrentDate(requestedMonthAnchor);
+      if (toLocalDateString(selectedDate) !== requestedKey) {
+        setSelectedDate(requestedDate);
+      }
     }
   }, [currentDate, requestedDate, selectedDate, view]);
 
@@ -266,6 +278,13 @@ export default function CalendarPage() {
     if (toLocalDateString(currentDate) === toLocalDateString(selectedDate)) return;
     setCurrentDate(selectedDate);
   }, [currentDate, selectedDate, view]);
+
+  useEffect(() => {
+    if (view !== "month") return;
+    const monthAnchor = toMonthAnchor(currentDate);
+    if (toLocalDateString(currentDate) === toLocalDateString(monthAnchor)) return;
+    setCurrentDate(monthAnchor);
+  }, [currentDate, view]);
 
   const { start: viewStart, end: viewEnd } = useMemo(
     () => getViewRange(currentDate, view),
@@ -447,7 +466,7 @@ export default function CalendarPage() {
 
   function handleToday() {
     const today = new Date();
-    setCurrentDate(today);
+    setCurrentDate(view === "month" ? toMonthAnchor(today) : today);
     setSelectedDate(today);
   }
 
@@ -456,7 +475,7 @@ export default function CalendarPage() {
     const shouldShiftVisibleMonth =
       date.getMonth() !== currentDate.getMonth() || date.getFullYear() !== currentDate.getFullYear();
     if (view === "day" || shouldShiftVisibleMonth) {
-      setCurrentDate(date);
+      setCurrentDate(view === "month" ? toMonthAnchor(date) : date);
     }
     const daySnapshot = getCalendarDaySnapshot(appointments, date);
     const nextAppointment =
@@ -661,8 +680,8 @@ export default function CalendarPage() {
     [selectedDayAgendaItems]
   );
   const selectedDayRevenue = useMemo(
-    () => getCalendarDayRevenue(selectedDayAppointments, inspectorDate),
-    [inspectorDate, selectedDayAppointments]
+    () => getCalendarDayRevenue(appointments, inspectorDate),
+    [appointments, inspectorDate]
   );
   const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
   const selectedDayConflicts = selectedDayAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
