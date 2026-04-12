@@ -196,6 +196,7 @@ export default function CalendarPage() {
       : null;
 
   const [currentDate, setCurrentDate] = useState(() => requestedDate ?? new Date());
+  const [selectedDate, setSelectedDate] = useState(() => requestedDate ?? new Date());
   const [view, setView] = useState<"month" | "day">(initialView ?? "month");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [conflictDismissed, setConflictDismissed] = useState(false);
@@ -234,18 +235,30 @@ export default function CalendarPage() {
       setSearchParams(next, { replace: true });
       return;
     }
-    const dateValue = toLocalDateString(currentDate);
+    const activeDate = view === "month" ? selectedDate : currentDate;
+    const dateValue = toLocalDateString(activeDate);
     if (next.get("view") === view && next.get("date") === dateValue) return;
     next.set("view", view);
     next.set("date", dateValue);
     setSearchParams(next, { replace: true });
-  }, [currentDate, searchParams, setSearchParams, view]);
+  }, [currentDate, searchParams, selectedDate, setSearchParams, view]);
 
   useEffect(() => {
     if (!requestedDate) return;
-    if (toLocalDateString(currentDate) === toLocalDateString(requestedDate)) return;
-    setCurrentDate(requestedDate);
-  }, [currentDate, requestedDate]);
+    const requestedKey = toLocalDateString(requestedDate);
+    if (toLocalDateString(selectedDate) !== requestedKey) {
+      setSelectedDate(requestedDate);
+    }
+    if (toLocalDateString(currentDate) !== requestedKey) {
+      setCurrentDate(requestedDate);
+    }
+  }, [currentDate, requestedDate, selectedDate]);
+
+  useEffect(() => {
+    if (view !== "day") return;
+    if (toLocalDateString(currentDate) === toLocalDateString(selectedDate)) return;
+    setCurrentDate(selectedDate);
+  }, [currentDate, selectedDate, view]);
 
   const { start: viewStart, end: viewEnd } = useMemo(
     () => getViewRange(currentDate, view),
@@ -392,19 +405,34 @@ export default function CalendarPage() {
   const overviewAppointments = useMemo(() => getOverviewCalendarAppointments(appointments), [appointments]);
 
   function handlePrev() {
-    setCurrentDate((d) => navigateDate(d, view, -1));
+    setCurrentDate((d) => {
+      const next = navigateDate(d, view, -1);
+      setSelectedDate(next);
+      return next;
+    });
   }
 
   function handleNext() {
-    setCurrentDate((d) => navigateDate(d, view, 1));
+    setCurrentDate((d) => {
+      const next = navigateDate(d, view, 1);
+      setSelectedDate(next);
+      return next;
+    });
   }
 
   function handleToday() {
-    setCurrentDate(new Date());
+    const today = new Date();
+    setCurrentDate(today);
+    setSelectedDate(today);
   }
 
   function handleDayClick(date: Date) {
-    setCurrentDate(date);
+    setSelectedDate(date);
+    const shouldShiftVisibleMonth =
+      date.getMonth() !== currentDate.getMonth() || date.getFullYear() !== currentDate.getFullYear();
+    if (view === "day" || shouldShiftVisibleMonth) {
+      setCurrentDate(date);
+    }
     const daySnapshot = getCalendarDaySnapshot(appointments, date);
     const nextAppointment =
       daySnapshot.agendaItems.find(({ appointment }) => !isCalendarBlockAppointment(appointment))?.appointment ?? null;
@@ -576,7 +604,8 @@ export default function CalendarPage() {
     void refetchAppointments();
   }
 
-  const selectedDaySnapshot = useMemo(() => getCalendarDaySnapshot(appointments, currentDate), [appointments, currentDate]);
+  const inspectorDate = view === "month" ? selectedDate : currentDate;
+  const selectedDaySnapshot = useMemo(() => getCalendarDaySnapshot(appointments, inspectorDate), [appointments, inspectorDate]);
   const selectedDayAppointments = selectedDaySnapshot.dayAppts;
   const selectedDayOnSiteJobs = selectedDaySnapshot.daySpans;
   const selectedDayOnSiteOnlyJobs = selectedDaySnapshot.onSiteOnlyJobs;
@@ -686,7 +715,7 @@ export default function CalendarPage() {
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3">
           <div className="space-y-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Day inspector</p>
-            <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(currentDate)}</h3>
+            <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(inspectorDate)}</h3>
           </div>
           {isMobileLayout ? (
             <div className="flex flex-wrap gap-2 text-xs">
@@ -732,7 +761,7 @@ export default function CalendarPage() {
                     appointment={appointment}
                     kind={kind}
                     selected={selectedAppointmentId === appointment.id}
-                    currentDate={currentDate}
+                    currentDate={inspectorDate}
                     onClick={() => handleApptClick(appointment)}
                   />
                 ))}
@@ -880,7 +909,7 @@ export default function CalendarPage() {
               {view === "month" ? (
                 <MonthView
                   currentDate={currentDate}
-                  selectedDate={currentDate}
+                  selectedDate={selectedDate}
                   selectedAppointmentId={selectedAppointmentId}
                   appointments={appointments}
                   onDayClick={handleDayClick}
