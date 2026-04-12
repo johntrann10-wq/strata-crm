@@ -600,6 +600,16 @@ function safeParseMetadata(metadata: string | null | undefined): Record<string, 
   }
 }
 
+function getActivityLogEffectivePaidAt(metadata: string | null | undefined, fallback: Date) {
+  const parsed = safeParseMetadata(metadata);
+  const rawPaidAt = parsed.paidAt;
+  if (typeof rawPaidAt === "string") {
+    const parsedDate = new Date(rawPaidAt);
+    if (!Number.isNaN(parsedDate.getTime())) return parsedDate;
+  }
+  return fallback;
+}
+
 function formatPersonName(firstName: string | null | undefined, lastName: string | null | undefined) {
   return `${firstName ?? ""} ${lastName ?? ""}`.trim() || "Unknown";
 }
@@ -2828,6 +2838,7 @@ async function sumDirectAppointmentPaymentsInRange(
 ) {
   const rows = await tx
     .select({
+      createdAt: activityLogs.createdAt,
       action: activityLogs.action,
       metadata: activityLogs.metadata,
     })
@@ -2836,13 +2847,13 @@ async function sumDirectAppointmentPaymentsInRange(
       and(
         eq(activityLogs.businessId, businessId),
         eq(activityLogs.entityType, "appointment"),
-        gte(activityLogs.createdAt, start),
-        lte(activityLogs.createdAt, end),
         sql`${activityLogs.action} in ('appointment.deposit_paid', 'appointment.deposit_payment_reversed')`
       )
     );
 
   return rows.reduce((sum, row) => {
+    const paidAt = getActivityLogEffectivePaidAt(row.metadata, row.createdAt);
+    if (paidAt < start || paidAt > end) return sum;
     const metadata = safeParseMetadata(row.metadata);
     const amount = toMoneyNumber(metadata.amount as MoneyLike);
     if (amount <= 0) return sum;
@@ -2892,21 +2903,22 @@ async function loadDirectAppointmentPaymentRowsInRange(
       and(
         eq(activityLogs.businessId, businessId),
         eq(activityLogs.entityType, "appointment"),
-        gte(activityLogs.createdAt, start),
-        lte(activityLogs.createdAt, end),
         sql`${activityLogs.action} in ('appointment.deposit_paid', 'appointment.deposit_payment_reversed')`
       )
     )
     .orderBy(asc(activityLogs.createdAt));
 
-  return rows.map((row) => {
-    const metadata = safeParseMetadata(row.metadata);
-    const amount = toMoneyNumber(metadata.amount as MoneyLike);
-    return {
-      paidAt: row.createdAt,
-      amount: row.action === "appointment.deposit_payment_reversed" ? -amount : amount,
-    };
-  });
+  return rows
+    .map((row) => {
+      const paidAt = getActivityLogEffectivePaidAt(row.metadata, row.createdAt);
+      const metadata = safeParseMetadata(row.metadata);
+      const amount = toMoneyNumber(metadata.amount as MoneyLike);
+      return {
+        paidAt,
+        amount: row.action === "appointment.deposit_payment_reversed" ? -amount : amount,
+      };
+    })
+    .filter((row) => row.paidAt >= start && row.paidAt <= end);
 }
 
 async function loadExpenseRowsInRange(
