@@ -289,8 +289,6 @@ async function recoverRecentlyCreatedInvoice(params: {
   expectedTotal: number;
   expectedLineItemCount: number;
 }) {
-  if (!params.appointmentId) return null;
-
   const recentMatches = await db
     .select({
       id: invoices.id,
@@ -302,7 +300,7 @@ async function recoverRecentlyCreatedInvoice(params: {
       and(
         eq(invoices.businessId, params.businessId),
         eq(invoices.clientId, params.clientId),
-        eq(invoices.appointmentId, params.appointmentId)
+        params.appointmentId ? eq(invoices.appointmentId, params.appointmentId) : isNull(invoices.appointmentId)
       )
     )
     .orderBy(desc(invoices.createdAt))
