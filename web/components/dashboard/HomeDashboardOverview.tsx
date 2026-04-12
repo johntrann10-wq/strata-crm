@@ -367,10 +367,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                               aria-pressed={isActive}
                             >
                               <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{day.shortLabel}</p>
-                              <div className="mt-1 space-y-0.5">
-                                <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">{formatDateLabel(day.date, "MMM")}</p>
-                                <p className="text-base font-semibold leading-none tracking-tight text-slate-950">{formatDateLabel(day.date, "d")}</p>
-                              </div>
+                              <p className="mt-1 text-base font-semibold tracking-tight text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
                               <p className="mt-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">Booked</p>
                               <p className="mt-1 text-sm font-semibold text-slate-900">
                                 {formatDashboardCurrency(day.bookedValue)}
