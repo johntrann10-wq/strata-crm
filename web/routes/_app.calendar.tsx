@@ -830,7 +830,7 @@ export default function CalendarPage() {
             {selectedDayAgendaItems.length > 0 ? (
               <div
                 className={cn(
-                  "min-h-0 flex-1 space-y-2 overflow-y-auto pb-2",
+                  "min-h-0 flex-1 space-y-2 overflow-y-auto scroll-pb-8 pb-2",
                   isMobileLayout
                     ? "touch-pan-y overscroll-contain px-1 pb-4 pr-0.5 pt-0.5 [-webkit-overflow-scrolling:touch]"
                     : "pr-1 pt-0.5"
@@ -846,6 +846,7 @@ export default function CalendarPage() {
                     onClick={() => handleApptClick(appointment)}
                   />
                 ))}
+                {isMobileLayout ? <div aria-hidden="true" className="h-6 shrink-0" /> : null}
               </div>
             ) : (
               <div className={cn("rounded-2xl border border-dashed border-border/70 bg-muted/10", isMobileLayout ? "px-3 py-4" : "px-4 py-5")}>
