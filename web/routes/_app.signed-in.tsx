@@ -17,7 +17,6 @@ import {
   HomeUpcomingAttentionPanel,
   HomeWeeklyAppointmentOverviewCard,
 } from "@/components/dashboard/HomeDashboardOverview";
-import { PageHeader } from "../components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAction, useFindMany } from "../hooks/useApi";
@@ -262,19 +261,9 @@ export default function DashboardHomeRoute() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <PageHeader
-        title="Dashboard"
-        right={
-          <Button asChild className="min-h-[44px] rounded-xl bg-slate-950 text-white hover:bg-slate-800">
-            <Link to="/appointments/new">
-              <CalendarPlus className="mr-2 h-4 w-4" />
-              New appointment
-            </Link>
-          </Button>
-        }
-      />
-
       <HomeDashboardTopBar
+        title="Dashboard"
+        subtitle="Run the shop from one live view of bookings, cash, and what needs attention next."
         businessName={outletContext.businessName}
         roleLabel={getRoleLabel(snapshot?.context.role ?? outletContext.membershipRole)}
         range={range}
@@ -285,6 +274,14 @@ export default function DashboardHomeRoute() {
         canFilterTeam={canFilterTeam}
         lastUpdatedLabel={lastUpdatedLabel}
         refreshing={fetching && !!snapshot}
+        primaryAction={
+          <Button asChild className="min-h-[44px] rounded-xl bg-slate-950 text-white hover:bg-slate-800">
+            <Link to="/appointments/new">
+              <CalendarPlus className="mr-2 h-4 w-4" />
+              New appointment
+            </Link>
+          </Button>
+        }
         secondaryAction={featureEnabled ? null : <Badge variant="outline" className="rounded-full bg-slate-50 px-3 py-2 text-xs text-slate-600">Stable dashboard mode</Badge>}
       />
 

@@ -36,6 +36,8 @@ type WidgetStateProps = {
 };
 
 type TopBarProps = {
+  title?: string;
+  subtitle?: string;
   businessName: string | null;
   roleLabel: string;
   range: HomeDashboardRange;
@@ -46,6 +48,7 @@ type TopBarProps = {
   canFilterTeam: boolean;
   lastUpdatedLabel: string;
   refreshing: boolean;
+  primaryAction?: ReactNode;
   secondaryAction?: ReactNode;
 };
 
@@ -146,6 +149,8 @@ function CardLoadingShell({ title, rows = 4, compact = false }: { title: string;
 }
 
 export function HomeDashboardTopBar({
+  title = "Dashboard",
+  subtitle,
   businessName,
   roleLabel,
   range,
@@ -156,6 +161,7 @@ export function HomeDashboardTopBar({
   canFilterTeam,
   lastUpdatedLabel,
   refreshing,
+  primaryAction,
   secondaryAction,
 }: TopBarProps) {
   const rangeOptions: Array<{ value: HomeDashboardRange; label: string }> = [
@@ -169,6 +175,12 @@ export function HomeDashboardTopBar({
       <div className="h-1.5 bg-gradient-to-r from-slate-900 via-amber-600 to-orange-400" />
       <CardContent className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-2">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-[-0.03em] text-slate-950 sm:text-[2rem]">
+              {title}
+            </h1>
+            {subtitle ? <p className="max-w-2xl text-sm text-slate-500">{subtitle}</p> : null}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50/90 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-amber-800">
               {businessName ?? "Current business"}
@@ -184,6 +196,7 @@ export function HomeDashboardTopBar({
         </div>
 
         <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto">
+          {primaryAction}
           {secondaryAction}
           <div className="grid w-full grid-cols-3 rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 sm:w-auto sm:inline-flex">
             {rangeOptions.map((option) => (
