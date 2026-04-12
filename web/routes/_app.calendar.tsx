@@ -242,13 +242,13 @@ export default function CalendarPage() {
       setSearchParams(next, { replace: true });
       return;
     }
-    const dateValue = toLocalDateString(view === "month" ? visibleMonthDate : currentDate);
+    const dateValue = toLocalDateString(view === "month" ? selectedDate : currentDate);
     if (next.get("view") === view && next.get("date") === dateValue) return;
     lastInternalUrlSyncRef.current = { view, date: dateValue };
     next.set("view", view);
     next.set("date", dateValue);
     setSearchParams(next, { replace: true });
-  }, [currentDate, searchParams, setSearchParams, view, visibleMonthDate]);
+  }, [currentDate, searchParams, selectedDate, setSearchParams, view]);
 
   useEffect(() => {
     if (!requestedDate) return;
@@ -484,13 +484,12 @@ export default function CalendarPage() {
 
   function handleDayClick(date: Date) {
     setSelectedDate(date);
+    setCurrentDate(date);
     const shouldShiftVisibleMonth =
       date.getMonth() !== visibleMonthDate.getMonth() || date.getFullYear() !== visibleMonthDate.getFullYear();
     if (view === "day" || shouldShiftVisibleMonth) {
       if (view === "month") {
         setVisibleMonthDate(toMonthAnchor(date));
-      } else {
-        setCurrentDate(date);
       }
     }
     const daySnapshot = getCalendarDaySnapshot(appointments, date);
@@ -523,14 +522,16 @@ export default function CalendarPage() {
   }
 
   function handleNewAppointment() {
-    const iso = toLocalDateString(currentDate);
+    const targetDate = view === "month" ? selectedDate : currentDate;
+    const iso = toLocalDateString(targetDate);
     navigate(`/appointments/new?date=${encodeURIComponent(iso)}${
       currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""
     }`);
   }
 
   function handleOpenBlockDialog() {
-    const selectedDate = toLocalDateString(currentDate);
+    const targetDate = view === "month" ? selectedDate : currentDate;
+    const selectedDate = toLocalDateString(targetDate);
     setEditingBlockId(null);
     setBlockMode("time");
     setBlockStartDate(selectedDate);

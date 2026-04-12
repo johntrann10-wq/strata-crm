@@ -957,7 +957,7 @@ export function MonthView({
         ))}
       </div>
 
-      <div className="grid h-[23rem] min-h-[23rem] min-w-0 grid-rows-6 overflow-hidden [grid-template-rows:repeat(6,minmax(0,1fr))] sm:h-[24rem] sm:min-h-[24rem] md:h-[28rem] md:min-h-[28rem] md:flex-1 md:auto-rows-fr md:[grid-template-rows:repeat(6,minmax(0,1fr))] xl:h-[30rem] xl:min-h-[30rem]">
+      <div className="grid h-[23.75rem] min-h-[23.75rem] min-w-0 grid-rows-6 overflow-hidden [grid-template-rows:repeat(6,minmax(0,1fr))] sm:h-[24rem] sm:min-h-[24rem] md:h-[28rem] md:min-h-[28rem] md:flex-1 md:auto-rows-fr md:[grid-template-rows:repeat(6,minmax(0,1fr))] xl:h-[30rem] xl:min-h-[30rem]">
         {grid.map((week, wi) => (
           <div key={wi} className="grid min-h-0 grid-cols-7 border-b border-border/60 last:border-b-0">
             {week.map((day, di) => {
@@ -1036,7 +1036,7 @@ export function MonthView({
                         <div className="min-h-0 flex-1" />
                       )}
 
-                      <div className="mt-auto overflow-visible space-y-1 pt-1.5 pb-2 sm:pt-2 sm:pb-2.5">
+                      <div className="mt-auto overflow-visible space-y-1 pt-1.5 pb-2.5 sm:pt-2 sm:pb-2.5">
                         <DayStatusDots appointments={dayDensityItems} />
                       </div>
                     </div>
