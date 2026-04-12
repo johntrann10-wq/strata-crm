@@ -25,6 +25,18 @@ function businessId(req: Request): string {
   return req.businessId;
 }
 
+const optionalIsoDateSchema = z.preprocess((value) => {
+  if (value == null) return undefined;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? Symbol.for("invalid-date") : value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? Symbol.for("invalid-date") : parsed;
+  }
+  return value;
+}, z.union([z.date(), z.undefined()]));
+
 const createSchema = z.object({
   invoiceId: z.string().uuid(),
   amount: z.number().positive(),
@@ -32,7 +44,7 @@ const createSchema = z.object({
   idempotencyKey: z.string().optional(),
   notes: z.string().optional(),
   referenceNumber: z.string().optional(),
-  paidAt: z.union([z.string(), z.date()]).optional(),
+  paidAt: optionalIsoDateSchema,
 });
 
 function normalizeLegacyPayment<T extends object>(row: T): T & { notes: string | null; referenceNumber: string | null; reversedAt: Date | null } {
@@ -121,7 +133,7 @@ paymentsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
           invoiceId: data.invoiceId,
           amount: data.amount,
           method: data.method,
-          paidAt: data.paidAt ? new Date(data.paidAt) : new Date(),
+          paidAt: data.paidAt ?? new Date(),
           idempotencyKey: data.idempotencyKey ?? null,
           notes: data.notes ?? null,
           referenceNumber: data.referenceNumber ?? null,

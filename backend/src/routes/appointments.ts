@@ -633,12 +633,24 @@ const depositPaymentMethodSchema = z.enum([
   "other",
 ]);
 
+const optionalIsoDateSchema = z.preprocess((value) => {
+  if (value == null) return undefined;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? Symbol.for("invalid-date") : value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? Symbol.for("invalid-date") : parsed;
+  }
+  return value;
+}, z.union([z.date(), z.undefined()]));
+
 const recordDepositPaymentSchema = z.object({
   amount: z.number().positive(),
   method: depositPaymentMethodSchema,
   notes: z.string().trim().max(1000).optional(),
   referenceNumber: z.string().trim().max(120).optional(),
-  paidAt: z.union([z.string(), z.date()]).optional(),
+  paidAt: optionalIsoDateSchema,
 });
 function parseIsoDate(s: string | undefined): Date | undefined {
   if (!s?.trim()) return undefined;

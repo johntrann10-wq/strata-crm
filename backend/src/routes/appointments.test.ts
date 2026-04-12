@@ -36,12 +36,23 @@ describe("appointments route logic", () => {
       z.string().trim().max(120).optional()
     ),
   });
+  const optionalIsoDateSchema = z.preprocess((value) => {
+    if (value == null) return undefined;
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? Symbol.for("invalid-date") : value;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return undefined;
+      const parsed = new Date(trimmed);
+      return Number.isNaN(parsed.getTime()) ? Symbol.for("invalid-date") : parsed;
+    }
+    return value;
+  }, z.union([z.date(), z.undefined()]));
   const recordDepositPaymentSchema = z.object({
     amount: z.number().positive(),
     method: z.enum(["cash", "card", "check", "venmo", "cashapp", "zelle", "other"]),
     notes: z.string().trim().max(1000).optional(),
     referenceNumber: z.string().trim().max(120).optional(),
-    paidAt: z.union([z.string(), z.date()]).optional(),
+    paidAt: optionalIsoDateSchema,
   });
 
   it("accepts valid appointment create payload", () => {
@@ -121,6 +132,18 @@ describe("appointments route logic", () => {
       paidAt: "2026-03-30T10:00:00.000Z",
     });
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.paidAt).toBeInstanceOf(Date);
+    }
+  });
+
+  it("rejects invalid manual deposit payment dates", () => {
+    const result = recordDepositPaymentSchema.safeParse({
+      amount: 50,
+      method: "card",
+      paidAt: "not-a-date",
+    });
+    expect(result.success).toBe(false);
   });
 
   it("rejects deposit payment with invalid method", () => {
