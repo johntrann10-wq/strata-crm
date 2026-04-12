@@ -100,17 +100,21 @@ export default function DashboardHomeRoute() {
   const lastMarkedSeenRef = useRef<string | null>(null);
   const lastRefreshRef = useRef(0);
 
-  const refreshDashboard = useCallback((reason?: string) => {
+  const refreshDashboard = useCallback(async (reason?: string) => {
     const now = Date.now();
     if (reason !== "force" && now - lastRefreshRef.current < 1_500) {
-      return Promise.resolve();
+      return;
     }
     lastRefreshRef.current = now;
-    return runDashboard({
+    const scrollY = typeof window !== "undefined" ? window.scrollY : 0;
+    await runDashboard({
       range,
       teamMemberId: teamMemberId === "all" ? null : teamMemberId,
       weekStartDate,
     });
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
+    }
   }, [range, runDashboard, teamMemberId, weekStartDate]);
 
   useEffect(() => {
@@ -139,7 +143,7 @@ export default function DashboardHomeRoute() {
       next.set("range", nextRange);
       next.delete("weekStart");
       next.delete("day");
-      setSearchParams(next, { replace: true });
+      setSearchParams(next, { replace: true, preventScrollReset: true });
     },
     [searchParams, setSearchParams]
   );
@@ -152,7 +156,7 @@ export default function DashboardHomeRoute() {
       } else {
         next.set("team", nextTeam);
       }
-      setSearchParams(next, { replace: true });
+      setSearchParams(next, { replace: true, preventScrollReset: true });
     },
     [canFilterTeam, searchParams, setSearchParams]
   );
@@ -170,7 +174,7 @@ export default function DashboardHomeRoute() {
       } else {
         next.delete("day");
       }
-      setSearchParams(next, { replace: true });
+      setSearchParams(next, { replace: true, preventScrollReset: true });
     },
     [searchParams, setSearchParams]
   );
@@ -183,7 +187,7 @@ export default function DashboardHomeRoute() {
       } else {
         next.delete("day");
       }
-      setSearchParams(next, { replace: true });
+      setSearchParams(next, { replace: true, preventScrollReset: true });
     },
     [searchParams, setSearchParams]
   );

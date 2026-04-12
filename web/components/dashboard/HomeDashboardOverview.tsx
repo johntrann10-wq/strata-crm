@@ -1038,15 +1038,7 @@ export function HomeBookingsOverviewCard({
     bookings.quotesSent === 0 &&
     bookings.quotesAccepted === 0 &&
     bookings.depositsCollectedAmount === 0 &&
-    bookings.depositsDueAmount === 0 &&
-    bookings.funnel.length === 0;
-  const funnelLinks: Record<string, string> = {
-    new_leads: "/leads",
-    quoted: "/quotes?tab=followup",
-    booked: bookings.links.bookingsThisWeek,
-    completed: "/jobs",
-    paid: "/invoices?tab=paid",
-  };
+    bookings.depositsDueAmount === 0;
   const depositCoverageBase = bookings.depositsCollectedAmount + bookings.depositsDueAmount;
   const depositCoveragePercent =
     depositCoverageBase > 0 ? Math.max(0, Math.min(100, Math.round((bookings.depositsCollectedAmount / depositCoverageBase) * 100))) : null;
@@ -1172,45 +1164,6 @@ export function HomeBookingsOverviewCard({
                 </Link>
               </div>
             </div>
-            {bookings.funnel.length > 0 ? (
-              <div className={cn(dashboardInsetClassName, "px-3 py-3")}>
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Flow</p>
-                    <p className="mt-1 text-sm text-muted-foreground">Lead to paid using the live business pipeline.</p>
-                  </div>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                {bookings.funnel.map((stage) => (
-                  <Link
-                    key={stage.key}
-                    to={funnelLinks[stage.key] ?? "/signed-in"}
-                    className="rounded-[1rem] border border-slate-200/80 bg-white/95 px-3 py-3 transition-colors hover:border-amber-200 hover:bg-amber-50/45"
-                    aria-label={`Open ${stage.label.toLowerCase()} stage`}
-                  >
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{stage.label}</p>
-                    <div className="mt-2">
-                      <p className="text-[1.9rem] font-semibold leading-none tracking-[-0.05em] text-slate-950">{stage.count}</p>
-                      <p className="mt-1 text-[11px] text-slate-500">{stage.count === 1 ? "record" : "records"}</p>
-                    </div>
-                    <div className="mt-3 border-t border-slate-200/70 pt-3">
-                      {stage.value != null ? (
-                        <>
-                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Value</p>
-                          <p className="mt-1 text-sm font-semibold text-slate-900">{formatDashboardCurrency(stage.value)}</p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Value</p>
-                          <p className="mt-1 text-sm text-slate-500">Count only</p>
-                        </>
-                      )}
-                    </div>
-                  </Link>
-                ))}
-                </div>
-              </div>
-            ) : null}
           </>
         )}
       </CardContent>
