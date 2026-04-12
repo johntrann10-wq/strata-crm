@@ -201,6 +201,7 @@ export default function CalendarPage() {
       : null;
 
   const [currentDate, setCurrentDate] = useState(() => requestedDate ?? new Date());
+  const [visibleMonthDate, setVisibleMonthDate] = useState(() => toMonthAnchor(requestedDate ?? new Date()));
   const [selectedDate, setSelectedDate] = useState(() => requestedDate ?? new Date());
   const [view, setView] = useState<"month" | "day">(initialView ?? "month");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
@@ -241,13 +242,13 @@ export default function CalendarPage() {
       setSearchParams(next, { replace: true });
       return;
     }
-    const dateValue = toLocalDateString(view === "month" ? toMonthAnchor(currentDate) : currentDate);
+    const dateValue = toLocalDateString(view === "month" ? visibleMonthDate : currentDate);
     if (next.get("view") === view && next.get("date") === dateValue) return;
     lastInternalUrlSyncRef.current = { view, date: dateValue };
     next.set("view", view);
     next.set("date", dateValue);
     setSearchParams(next, { replace: true });
-  }, [currentDate, searchParams, setSearchParams, view]);
+  }, [currentDate, searchParams, setSearchParams, view, visibleMonthDate]);
 
   useEffect(() => {
     if (!requestedDate) return;
@@ -264,21 +265,24 @@ export default function CalendarPage() {
       if (toLocalDateString(currentDate) !== requestedKey) {
         setCurrentDate(requestedDate);
       }
+      const requestedMonthAnchor = toMonthAnchor(requestedDate);
+      if (toLocalDateString(visibleMonthDate) !== toLocalDateString(requestedMonthAnchor)) {
+        setVisibleMonthDate(requestedMonthAnchor);
+      }
       return;
     }
 
     const requestedMonthAnchor = toMonthAnchor(requestedDate);
-    const visibleMonthAnchor = toMonthAnchor(currentDate);
     const requestedMonthKey = toLocalDateString(requestedMonthAnchor);
-    const visibleMonthKey = toLocalDateString(visibleMonthAnchor);
+    const visibleMonthKey = toLocalDateString(visibleMonthDate);
 
     if (visibleMonthKey !== requestedMonthKey) {
-      setCurrentDate(requestedMonthAnchor);
+      setVisibleMonthDate(requestedMonthAnchor);
       if (toLocalDateString(selectedDate) !== requestedKey) {
         setSelectedDate(requestedDate);
       }
     }
-  }, [currentDate, requestedDate, selectedDate, view]);
+  }, [currentDate, requestedDate, selectedDate, view, visibleMonthDate]);
 
   useEffect(() => {
     if (view !== "day") return;
@@ -286,26 +290,21 @@ export default function CalendarPage() {
     setCurrentDate(selectedDate);
   }, [currentDate, selectedDate, view]);
 
-  useEffect(() => {
-    if (view !== "month") return;
-    const monthAnchor = toMonthAnchor(currentDate);
-    if (toLocalDateString(currentDate) === toLocalDateString(monthAnchor)) return;
-    setCurrentDate(monthAnchor);
-  }, [currentDate, view]);
+  const visibleDate = view === "month" ? visibleMonthDate : currentDate;
 
   const { start: viewStart, end: viewEnd } = useMemo(
-    () => getViewRange(currentDate, view),
-    [currentDate, view]
+    () => getViewRange(visibleDate, view),
+    [visibleDate, view]
   );
 
   const { queryStart, queryEnd } = useMemo(() => {
-    const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999);
+    const monthStart = new Date(visibleDate.getFullYear(), visibleDate.getMonth(), 1);
+    const monthEnd = new Date(visibleDate.getFullYear(), visibleDate.getMonth() + 1, 0, 23, 59, 59, 999);
     return {
       queryStart: viewStart.getTime() < monthStart.getTime() ? viewStart : monthStart,
       queryEnd: viewEnd.getTime() > monthEnd.getTime() ? viewEnd : monthEnd,
     };
-  }, [currentDate, viewEnd, viewStart]);
+  }, [visibleDate, viewEnd, viewStart]);
 
   const { startGte, startLte } = useMemo(
     () => ({ startGte: queryStart.toISOString(), startLte: queryEnd.toISOString() }),
@@ -439,8 +438,8 @@ export default function CalendarPage() {
 
   function handlePrev() {
     if (view === "month") {
-      const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
-      setCurrentDate(nextMonth);
+      const nextMonth = new Date(visibleMonthDate.getFullYear(), visibleMonthDate.getMonth() - 1, 1);
+      setVisibleMonthDate(nextMonth);
       setSelectedDate((selected) => {
         const lastDayOfTargetMonth = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
         return new Date(nextMonth.getFullYear(), nextMonth.getMonth(), Math.min(selected.getDate(), lastDayOfTargetMonth));
@@ -456,8 +455,8 @@ export default function CalendarPage() {
 
   function handleNext() {
     if (view === "month") {
-      const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
-      setCurrentDate(nextMonth);
+      const nextMonth = new Date(visibleMonthDate.getFullYear(), visibleMonthDate.getMonth() + 1, 1);
+      setVisibleMonthDate(nextMonth);
       setSelectedDate((selected) => {
         const lastDayOfTargetMonth = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
         return new Date(nextMonth.getFullYear(), nextMonth.getMonth(), Math.min(selected.getDate(), lastDayOfTargetMonth));
@@ -473,16 +472,24 @@ export default function CalendarPage() {
 
   function handleToday() {
     const today = new Date();
-    setCurrentDate(view === "month" ? toMonthAnchor(today) : today);
+    if (view === "month") {
+      setVisibleMonthDate(toMonthAnchor(today));
+    } else {
+      setCurrentDate(today);
+    }
     setSelectedDate(today);
   }
 
   function handleDayClick(date: Date) {
     setSelectedDate(date);
     const shouldShiftVisibleMonth =
-      date.getMonth() !== currentDate.getMonth() || date.getFullYear() !== currentDate.getFullYear();
+      date.getMonth() !== visibleMonthDate.getMonth() || date.getFullYear() !== visibleMonthDate.getFullYear();
     if (view === "day" || shouldShiftVisibleMonth) {
-      setCurrentDate(view === "month" ? toMonthAnchor(date) : date);
+      if (view === "month") {
+        setVisibleMonthDate(toMonthAnchor(date));
+      } else {
+        setCurrentDate(date);
+      }
     }
     const daySnapshot = getCalendarDaySnapshot(appointments, date);
     const nextAppointment =
@@ -693,10 +700,10 @@ export default function CalendarPage() {
   const selectedDayUnassigned = selectedDayAppointments.filter((appointment) => !appointment.assignedStaffId).length;
   const selectedDayConflicts = selectedDayAppointments.filter((appointment) => activeConflicts.has(appointment.id)).length;
   const selectedMonthRange = useMemo(() => {
-    const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1, 0, 0, 0, 0);
-    const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999);
+    const start = new Date(visibleMonthDate.getFullYear(), visibleMonthDate.getMonth(), 1, 0, 0, 0, 0);
+    const end = new Date(visibleMonthDate.getFullYear(), visibleMonthDate.getMonth() + 1, 0, 23, 59, 59, 999);
     return { start, end };
-  }, [currentDate]);
+  }, [visibleMonthDate]);
   const selectedMonthAppointments = useMemo(
     () =>
       overviewAppointments.filter((appointment) => {
@@ -726,7 +733,7 @@ export default function CalendarPage() {
       const cursor = dayStart(getJobSpanStart(appointment));
       const last = dayEnd(getJobSpanEnd(appointment));
       while (cursor.getTime() <= last.getTime()) {
-        if (cursor.getMonth() === currentDate.getMonth() && cursor.getFullYear() === currentDate.getFullYear()) {
+        if (cursor.getMonth() === visibleMonthDate.getMonth() && cursor.getFullYear() === visibleMonthDate.getFullYear()) {
           const key = toLocalDateString(cursor);
           const existing = counts.get(key);
           if (existing) {
@@ -739,7 +746,7 @@ export default function CalendarPage() {
       }
     }
     return Array.from(counts.values()).sort((a, b) => b.count - a.count)[0] ?? null;
-  }, [currentDate, selectedMonthAppointments]);
+  }, [selectedMonthAppointments, visibleMonthDate]);
   const availableViews = isMobileLayout ? (["day", "month"] as const) : (["day", "month"] as const);
   const selectedAppointment = useMemo(
     () =>
@@ -840,7 +847,7 @@ export default function CalendarPage() {
               <div className="flex min-w-0 flex-1 flex-col gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-lg font-semibold tracking-[-0.02em] text-foreground sm:text-xl">
-                    {getHeaderTitle(currentDate, view)}
+                    {getHeaderTitle(visibleDate, view)}
                   </h1>
                   {activeLocationName ? (
                     <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -953,7 +960,7 @@ export default function CalendarPage() {
             >
               {view === "month" ? (
                 <MonthView
-                  currentDate={currentDate}
+                  currentDate={visibleMonthDate}
                   selectedDate={selectedDate}
                   selectedAppointmentId={selectedAppointmentId}
                   appointments={appointments}
