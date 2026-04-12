@@ -470,7 +470,7 @@ export default function LandingPage() {
                     <span className="pb-1 text-base text-gray-600">per month</span>
                   </div>
                   <p className="mt-2 max-w-sm text-sm leading-6 text-gray-600">
-                    Early shops can lock in founder pricing at $29/mo. Public pricing will move to $99/mo.
+                    Early shops can lock in founder pricing at $29/mo. Public pricing will move to $79/mo.
                   </p>
                   <p className="mt-1 max-w-sm text-sm leading-6 text-gray-500">
                     First month free. One plan for the actual core workflows instead of hiding them behind feature tiers.
