@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 
 const homeTitle = "Automotive Service Business Software | Strata CRM";
 const homeDescription =
-  "Strata CRM is modern software for automotive service businesses. Manage scheduling, clients, vehicles, jobs, quotes, invoices, deposits, team access, and connected Stripe payments in one clear system.";
+  "Strata CRM is modern software for automotive service businesses, including shops and mobile detailers. Manage scheduling, clients, vehicles, jobs, quotes, invoices, deposits, team access, and connected Stripe payments in one clear system.";
 
 const featureCards = [
   {
@@ -65,8 +65,9 @@ const featureCards = [
 ];
 
 const trustPoints = [
-  "Built for automotive service businesses, not generic agencies or sales teams",
-  "Month-to-day scheduling flow designed for front-desk speed",
+  "Built for automotive service businesses, from shop floors to mobile detailing crews",
+  "Shaped with feedback from real shop owners and operators running the work day-to-day",
+  "Month-to-day scheduling flow designed for fast booking at the desk or on the phone",
   "Client, vehicle, quote, appointment, deposit, invoice, and payment history in one place",
 ];
 
@@ -389,15 +390,15 @@ export default function LandingPage() {
           <div className="space-y-7">
               <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/88 px-3.5 py-1.5 text-sm font-medium text-orange-700 shadow-sm">
                 <Sparkles className="h-4 w-4" />
-                Strata CRM for automotive service businesses
+                Strata CRM for automotive shops and mobile detailers
               </div>
 
             <div className="space-y-4">
               <h1 className="max-w-4xl text-balance text-4xl font-extrabold tracking-tight text-gray-950 sm:text-5xl lg:text-6xl">
-                Automotive shop software for scheduling, customer records, and billing in one clear daily flow.
+                Automotive service software for scheduling, customer records, and billing in one clear daily flow.
               </h1>
               <p className="max-w-3xl text-lg leading-8 text-gray-600 sm:text-xl">
-                Strata helps automotive service businesses manage appointments, clients, vehicles, jobs, quotes, invoices, deposits, and connected Stripe payments without the clutter of outdated shop software.
+                Strata helps shop owners and mobile detailers manage appointments, clients, vehicles, jobs, quotes, invoices, deposits, and connected Stripe payments without the clutter of generic field-service or old-school shop software.
               </p>
             </div>
 
@@ -445,7 +446,7 @@ export default function LandingPage() {
             </div>
 
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm leading-6 text-gray-600">
-                <p>First month free. No contracts. Founder pricing is available for the first 25 shops.</p>
+                <p>First month free. No contracts. Founder pricing is available for the first 25 businesses.</p>
                 <div className="inline-flex items-center rounded-full border border-orange-200/70 bg-orange-50/90 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-orange-700">
                   23 of 25 spots left
                 </div>
@@ -692,7 +693,7 @@ export default function LandingPage() {
           <div className="rounded-[30px] border border-orange-100 bg-white/94 p-6 shadow-[0_12px_50px_rgba(15,23,42,0.05)] sm:p-8">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Why it feels lower risk</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-              A simpler buying decision for shops that want operational clarity fast.
+              A simpler buying decision for teams that want operational clarity fast.
             </h2>
             <div className="mt-6 grid gap-3">
               {riskReversal.map((item) => (
@@ -707,10 +708,10 @@ export default function LandingPage() {
           <div className="rounded-[30px] border border-orange-100 bg-gray-950 p-6 text-white shadow-[0_16px_60px_rgba(15,23,42,0.12)] sm:p-8">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-300">Best fit</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight">
-              Strongest for owners who already know generic tools are slowing the shop down.
+              Strongest for operators who already know generic tools are slowing the business down.
             </h2>
             <p className="mt-4 text-sm leading-7 text-white/72">
-              Strata is a stronger fit when your team is past "just use a calendar and figure the rest out," but still wants software that stays clean and fast to use.
+              Strata is a stronger fit when you are past "just use a calendar and figure the rest out," but still want software that stays clean whether the work happens at the front desk, in the bay, or out in the field.
             </p>
             <div className="mt-6 flex flex-col gap-3">
               <Link
@@ -802,12 +803,12 @@ export default function LandingPage() {
       <section className="px-5 py-14 sm:px-6 sm:py-18 lg:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-3xl text-center">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">What shop owners actually care about</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">What operators actually care about</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
               Why modern automotive service businesses switch to Strata.
             </h2>
             <p className="mt-4 text-lg leading-8 text-gray-600">
-              The product is designed around the moments that actually slow shops down: intake, scheduling, team handoff, approvals, invoicing, deposits, and getting paid.
+              The product is designed around the moments that actually slow operators down: intake, scheduling, field coordination, team handoff, approvals, invoicing, deposits, and getting paid.
             </p>
           </div>
 
@@ -836,7 +837,7 @@ export default function LandingPage() {
 
       <section id="industries" className="border-y border-orange-100 bg-[linear-gradient(180deg,#fff8f1_0%,#fffefc_100%)] px-5 py-14 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto max-w-4xl text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Built for the way automotive shops actually work</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-700">Built for the way automotive service businesses actually work</p>
           <p className="mt-4 text-xl font-medium leading-8 text-gray-800 sm:text-2xl">
             Use one system across detailing, tint, wrap, PPF, tires, mobile service, mechanical work, or a hybrid shop model.
           </p>

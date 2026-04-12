@@ -11,6 +11,7 @@ export type SeoPageKey =
   | "detailingCrm"
   | "orbisxAlternative"
   | "strataVsOrbisx"
+  | "strataVsJobber"
   | "bestCrmAutoDetailing"
   | "bestWindowTintSoftware"
   | "bestPpfSoftware"
@@ -413,6 +414,52 @@ const pages: SeoPageConfig[] = [
     related: ["orbisxAlternative", "mechanicSoftware", "shopSchedulingSoftware"],
   },
   {
+    key: "strataVsJobber",
+    path: "/strata-vs-jobber",
+    navLabel: "Strata vs Jobber",
+    seoTitle: "Strata vs Jobber for automotive shops and mobile detailers",
+    seoDescription:
+      "Compare Strata vs Jobber for automotive shops and mobile detailers. See where Strata fits businesses that need vehicle-aware records, scheduling, quoting, invoicing, and automotive-specific workflow clarity.",
+    eyebrow: "Strata vs Jobber",
+    h1: "Strata vs Jobber for automotive operators who need more than generic field service software.",
+    intro:
+      "Jobber can be a familiar starting point for general home-service businesses, but automotive operators usually need the schedule, vehicle context, quoting, invoicing, and repeat-customer memory to stay closer together. Strata is built for that automotive-specific workflow, whether the work happens in a shop or out on mobile jobs.",
+    audience:
+      "Best for detailers, tint shops, wrap and PPF businesses, mixed automotive operators, and mobile crews comparing a generic field-service tool against a purpose-built automotive workflow.",
+    pains: [
+      "Generic field-service software can feel clean at first, but it often loses the vehicle-specific context automotive businesses depend on.",
+      "Mobile detailers and shop teams still need one system that handles scheduling, customer records, quotes, invoices, and repeat-service history together.",
+      "Operators want software that feels credible in front of customers without forcing them to duct-tape automotive workflow on top of a generic service template.",
+    ],
+    benefits: [
+      {
+        title: "Automotive-specific records instead of generic customer jobs",
+        description: "Strata keeps the client and the vehicle connected so every appointment, quote, invoice, and payment has the right service history attached.",
+      },
+      {
+        title: "A better fit for shops and mobile operators",
+        description: "The workflow is designed to stay clear whether you are booking work from a front desk, dispatching a small crew, or invoicing from the field.",
+      },
+      {
+        title: "Built with operator input",
+        description: "Strata is being shaped in collaboration with real shop owners and automotive operators who care about speed, clarity, and customer-facing polish.",
+      },
+    ],
+    workflowSteps: [
+      { title: "Capture the client and vehicle once", description: "Keep service history, vehicle details, and the customer's financial trail tied together from the first visit." },
+      { title: "Book and run the work clearly", description: "Use the calendar and workflow surfaces to manage scheduled work without losing context between the phone, the desk, and the field." },
+      { title: "Invoice, collect, and keep the history", description: "Preserve the job, the payment trail, and the vehicle memory so repeat business gets easier every month." },
+    ],
+    fitPoints: [
+      "Automotive businesses that have outgrown generic field-service software",
+      "Mobile detailers who still need vehicle-aware records and cleaner billing",
+      "Owners and operators who want software shaped around real automotive workflow",
+    ],
+    ctaTitle: "See whether Strata fits your automotive workflow better than Jobber.",
+    ctaBody: "Start free, load your business type, and compare the day-to-day experience in a real Strata workspace.",
+    related: ["mobileDetailingSoftware", "autoDetailingSoftware", "shopSchedulingSoftware"],
+  },
+  {
     key: "bestCrmAutoDetailing",
     path: "/best-crm-for-auto-detailing-shops",
     navLabel: "Best CRM for Auto Detailing Shops",
@@ -617,6 +664,7 @@ export const featureSeoPageKeys: SeoPageKey[] = ["shopSchedulingSoftware", "deta
 export const comparisonSeoPageKeys: SeoPageKey[] = [
   "orbisxAlternative",
   "strataVsOrbisx",
+  "strataVsJobber",
   "bestCrmAutoDetailing",
   "bestWindowTintSoftware",
   "bestPpfSoftware",
