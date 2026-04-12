@@ -2814,8 +2814,12 @@ async function sumInvoicePaymentsInRange(
   end: Date,
   tx: DbExecutor
 ) {
-  const [row] = await tx
-    .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+  const rows = await tx
+    .select({
+      amount: payments.amount,
+      notes: payments.notes,
+      idempotencyKey: payments.idempotencyKey,
+    })
     .from(payments)
     .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
     .where(
@@ -2827,7 +2831,10 @@ async function sumInvoicePaymentsInRange(
         sql`${invoices.status} != 'void'`
       )
     );
-  return toMoneyNumber(row?.total);
+  return rows.reduce((sum, row) => {
+    if (isCarryoverPaymentRow(row)) return sum;
+    return sum + toMoneyNumber(row.amount);
+  }, 0);
 }
 
 async function sumDirectAppointmentPaymentsInRange(
@@ -2867,10 +2874,12 @@ async function loadInvoicePaymentRowsInRange(
   end: Date,
   tx: DbExecutor
 ) {
-  return tx
+  const rows = await tx
     .select({
       paidAt: payments.paidAt,
       amount: payments.amount,
+      notes: payments.notes,
+      idempotencyKey: payments.idempotencyKey,
     })
     .from(payments)
     .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
@@ -2884,6 +2893,13 @@ async function loadInvoicePaymentRowsInRange(
       )
     )
     .orderBy(asc(payments.paidAt));
+
+  return rows
+    .filter((row) => !isCarryoverPaymentRow(row))
+    .map((row) => ({
+      paidAt: row.paidAt,
+      amount: row.amount,
+    }));
 }
 
 async function loadDirectAppointmentPaymentRowsInRange(
