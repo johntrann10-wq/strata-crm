@@ -367,7 +367,10 @@ export function HomeWeeklyAppointmentOverviewCard({
                               aria-pressed={isActive}
                             >
                               <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{day.shortLabel}</p>
-                              <p className="mt-1 text-base font-semibold tracking-tight text-slate-950">{formatDateLabel(day.date, "MMM d")}</p>
+                              <div className="mt-1 space-y-0.5">
+                                <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">{formatDateLabel(day.date, "MMM")}</p>
+                                <p className="text-[1.75rem] font-semibold leading-none tracking-[-0.05em] text-slate-950">{formatDateLabel(day.date, "d")}</p>
+                              </div>
                               <p className="mt-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">Booked</p>
                               <p className="mt-1 text-sm font-semibold text-slate-900">
                                 {formatDashboardCurrency(day.bookedValue)}
@@ -1189,9 +1192,22 @@ export function HomeBookingsOverviewCard({
                     aria-label={`Open ${stage.label.toLowerCase()} stage`}
                   >
                     <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{stage.label}</p>
-                    <div className="mt-2 flex items-end justify-between gap-3">
-                      <p className="text-xl font-semibold tracking-tight text-slate-950">{stage.count}</p>
-                      <p className="text-[11px] text-slate-500">{stage.value != null ? formatDashboardCompactCurrency(stage.value) : "count only"}</p>
+                    <div className="mt-2">
+                      <p className="text-[1.9rem] font-semibold leading-none tracking-[-0.05em] text-slate-950">{stage.count}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{stage.count === 1 ? "record" : "records"}</p>
+                    </div>
+                    <div className="mt-3 border-t border-slate-200/70 pt-3">
+                      {stage.value != null ? (
+                        <>
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Value</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">{formatDashboardCurrency(stage.value)}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Value</p>
+                          <p className="mt-1 text-sm text-slate-500">Count only</p>
+                        </>
+                      )}
                     </div>
                   </Link>
                 ))}
