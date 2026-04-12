@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { Car, CalendarDays, Plus } from "lucide-react";
 
 function formatDateTime(dateStr: string | Date | null | undefined): string {
@@ -303,6 +304,13 @@ interface AppointmentHistoryCardProps {
         startTime: Date | null;
         status: string | null;
         totalPrice: number | null;
+        subtotal?: number | null;
+        taxRate?: number | null;
+        taxAmount?: number | null;
+        applyTax?: boolean | null;
+        adminFeeRate?: number | null;
+        adminFeeAmount?: number | null;
+        applyAdminFee?: boolean | null;
         vehicle: { make: string | null; model: string | null; year: number | null } | null;
       }>
     | null
@@ -341,7 +349,7 @@ export function AppointmentHistoryCard({ id, appointments, totalSpend }: Appoint
         {appointments && appointments.length > 0 ? (
           <div className="space-y-2">
             {appointments.map((appt) => {
-              const apptPrice = appt.totalPrice;
+              const apptPrice = getDisplayedAppointmentAmount(appt);
               return (
                 <Link
                   key={appt.id}

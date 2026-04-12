@@ -36,6 +36,7 @@ import { CommunicationCard } from "../components/shared/CommunicationCard";
 import { RelatedRecordsPanel } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { AppointmentHistoryCard, ClientEditForm, type FormState, VehiclesCard } from "../components/ClientDetailCards";
+import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 
 const blank: FormState = {
   firstName: "",
@@ -361,7 +362,21 @@ export default function ClientDetailPage() {
     clientId: id,
     sort: { startTime: "Descending" },
     first: 20,
-    select: { id: true, startTime: true, status: true, title: true, totalPrice: true, vehicle: { make: true, model: true, year: true } },
+    select: {
+      id: true,
+      startTime: true,
+      status: true,
+      title: true,
+      subtotal: true,
+      taxRate: true,
+      taxAmount: true,
+      applyTax: true,
+      adminFeeRate: true,
+      adminFeeAmount: true,
+      applyAdminFee: true,
+      totalPrice: true,
+      vehicle: { make: true, model: true, year: true },
+    },
     pause: !id,
   });
   const [{ data: quotes, fetching: quotesFetching, error: quotesError }] = useFindMany(api.quote, {
@@ -506,7 +521,7 @@ export default function ClientDetailPage() {
   const invoiceList = Array.isArray(invoices) ? invoices : [];
   const jobList = Array.isArray(jobs) ? jobs : [];
 
-  const totalSpend = apptList.reduce((s, a) => s + (a.totalPrice ?? 0), 0);
+  const totalSpend = apptList.reduce((sum, appointment) => sum + getDisplayedAppointmentAmount(appointment as Record<string, unknown>), 0);
   const openQuoteValue = quoteList
     .filter((quote) => ["draft", "sent"].includes(String((quote as any).status ?? "")))
     .reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0);

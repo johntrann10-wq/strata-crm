@@ -467,4 +467,28 @@ test.describe("Billing regression", () => {
       await expect(page.getByText("Remaining balance")).toBeVisible();
     });
   });
+
+  test("client detail totals stay aligned with computed appointment amounts", async ({ page }) => {
+    test.setTimeout(120000);
+    const clientPath = "/clients/client-1";
+
+    await mockBillingFlowApp(page);
+    await signIn(page);
+    await page.goto(clientPath);
+    await expect(page.getByRole("heading", { name: /avery detail/i }).first()).toBeVisible();
+
+    await test.step("Client summary and appointment history use computed amounts", async () => {
+      await expect(page.getByText("Total spend:")).toBeVisible();
+      await expect(page.getByText("$601.00", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("$121.00", { exact: true })).toBeVisible();
+      await expect(page.getByText("$999.00", { exact: true })).toHaveCount(0);
+    });
+
+    await test.step("Computed client totals survive revisiting the page", async () => {
+      await page.goto(clientPath);
+      await expect(page.getByText("$601.00", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("$121.00", { exact: true })).toBeVisible();
+      await expect(page.getByText("$999.00", { exact: true })).toHaveCount(0);
+    });
+  });
 });
