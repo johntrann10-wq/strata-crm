@@ -282,6 +282,61 @@ async function insertLegacyInvoiceLineItem(
   await executor.insert(invoiceLineItems).values(insertData);
 }
 
+async function recoverRecentlyCreatedInvoice(params: {
+  businessId: string;
+  clientId: string;
+  appointmentId?: string | null;
+  expectedTotal: number;
+  expectedLineItemCount: number;
+}) {
+  if (!params.appointmentId) return null;
+
+  const recentMatches = await db
+    .select({
+      id: invoices.id,
+      total: invoices.total,
+      createdAt: invoices.createdAt,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.businessId, params.businessId),
+        eq(invoices.clientId, params.clientId),
+        eq(invoices.appointmentId, params.appointmentId)
+      )
+    )
+    .orderBy(desc(invoices.createdAt))
+    .limit(5);
+
+  for (const match of recentMatches) {
+    const createdAt = match.createdAt ? new Date(match.createdAt) : null;
+    if (createdAt && !Number.isNaN(createdAt.getTime())) {
+      const ageMs = Date.now() - createdAt.getTime();
+      if (ageMs > 2 * 60 * 1000) continue;
+    }
+
+    const totalAmount = Number(match.total ?? 0);
+    if (Math.abs(totalAmount - params.expectedTotal) > 0.009) continue;
+
+    const lineItemsRows = await db
+      .select({ id: invoiceLineItems.id })
+      .from(invoiceLineItems)
+      .where(eq(invoiceLineItems.invoiceId, match.id));
+
+    if (lineItemsRows.length < params.expectedLineItemCount) continue;
+
+    const [invoice] = await db
+      .select(createInvoiceReturning)
+      .from(invoices)
+      .where(eq(invoices.id, match.id))
+      .limit(1);
+
+    if (invoice) return invoice;
+  }
+
+  return null;
+}
+
 async function insertLegacyInvoice(
   executor: any,
   bid: string,
@@ -1437,24 +1492,33 @@ invoicesRouter.post(
           }
         }
         if (appointmentPaymentCarryoverAmount > 0) {
-          await recordInvoicePayment(
-            {
+          try {
+            await recordInvoicePayment(
+              {
+                businessId: bid,
+                invoiceId: created.id,
+                amount: appointmentPaymentCarryoverAmount,
+                method: "other",
+                paidAt: appointment?.updatedAt ?? now,
+                notes: "Carried over from appointment payment state.",
+                referenceNumber: appointment?.id ?? null,
+                idempotencyKey: `appointment-payment-carryover:${created.id}`,
+              },
+              executor
+            );
+            created = {
+              ...created,
+              status: appointmentPaymentCarryoverAmount >= total ? "paid" : "partial",
+              paidAt: appointmentPaymentCarryoverAmount >= total ? (appointment?.updatedAt ?? now) : null,
+            };
+          } catch (error) {
+            logger.warn("Appointment payment carryover write failed during invoice create; continuing without carryover", {
               businessId: bid,
+              appointmentId: appointment?.id ?? null,
               invoiceId: created.id,
-              amount: appointmentPaymentCarryoverAmount,
-              method: "other",
-              paidAt: appointment?.updatedAt ?? now,
-              notes: "Carried over from appointment payment state.",
-              referenceNumber: appointment?.id ?? null,
-              idempotencyKey: `appointment-payment-carryover:${created.id}`,
-            },
-            executor
-          );
-          created = {
-            ...created,
-            status: appointmentPaymentCarryoverAmount >= total ? "paid" : "partial",
-            paidAt: appointmentPaymentCarryoverAmount >= total ? (appointment?.updatedAt ?? now) : null,
-          };
+              error,
+            });
+          }
         }
         return created;
       } catch (error) {
@@ -1474,7 +1538,28 @@ invoicesRouter.post(
       clientId: data.clientId,
       error,
     });
-    inv = await createInvoiceWithExecutor(db, { cleanupOnFailure: true });
+    try {
+      inv = await createInvoiceWithExecutor(db, { cleanupOnFailure: true });
+    } catch (fallbackError) {
+      const recoveredInvoice = await recoverRecentlyCreatedInvoice({
+        businessId: bid,
+        clientId: data.clientId,
+        appointmentId: data.appointmentId ?? null,
+        expectedTotal: total,
+        expectedLineItemCount: items.length,
+      });
+      if (recoveredInvoice) {
+        logger.warn("Recovered recently created invoice after create failure", {
+          businessId: bid,
+          clientId: data.clientId,
+          appointmentId: data.appointmentId ?? null,
+          invoiceId: recoveredInvoice.id,
+        });
+        inv = recoveredInvoice;
+      } else {
+        throw fallbackError;
+      }
+    }
   }
 
   logger.info("Invoice created", { invoiceId: inv.id, businessId: bid });
