@@ -245,7 +245,10 @@ export default function CalendarPage() {
   useEffect(() => {
     if (!requestedDate) return;
     const requestedKey = toLocalDateString(requestedDate);
-    if (toLocalDateString(selectedDate) !== requestedKey) {
+    const requestedMatchesVisibleMonth =
+      requestedDate.getMonth() === currentDate.getMonth() &&
+      requestedDate.getFullYear() === currentDate.getFullYear();
+    if ((view === "day" || !requestedMatchesVisibleMonth) && toLocalDateString(selectedDate) !== requestedKey) {
       setSelectedDate(requestedDate);
     }
     const shouldSyncVisibleDate =
