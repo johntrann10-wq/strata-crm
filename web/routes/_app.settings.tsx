@@ -1373,6 +1373,9 @@ export default function SettingsPage() {
     message: "Not checked yet.",
     checkedAt: null,
   });
+  const hasFullBillingWorkspaceAccess = billingStatus !== null && hasFullBillingAccess(billingStatus.accessState);
+  const integrationsBlockedByBilling = billingStatus !== null && !hasFullBillingAccess(billingStatus.accessState);
+  const canLoadIntegrationData = Boolean(businessId) && activeTab === "integrations" && hasFullBillingWorkspaceAccess;
   const canManageTeam =
     permissions.has("team.write") ||
     membershipRole === "owner" ||
@@ -1436,13 +1439,13 @@ export default function SettingsPage() {
     {
       findFirst: () => api.integration.listStatus(),
     },
-    { pause: !businessId }
+    { pause: !canLoadIntegrationData }
   );
   const [{ data: integrationFailureData, fetching: integrationFailuresFetching }, refetchIntegrationFailures] = useFindMany(
     {
       findMany: () => api.integration.listFailures().then((result) => result.records ?? []),
     },
-    { pause: !businessId }
+    { pause: !canLoadIntegrationData }
   );
   const [{ data: outboundWebhookActivityData, fetching: outboundWebhookActivityFetching }, refetchOutboundWebhookActivity] =
     useFindMany(
@@ -1450,7 +1453,7 @@ export default function SettingsPage() {
         findMany: () =>
           api.integration.listRecentOutboundWebhookEvents().then((result) => result.records ?? []),
       },
-      { pause: !businessId }
+      { pause: !canLoadIntegrationData }
     );
   const [{ fetching: retryingIntegrationJob }, retryIntegrationJob] = useAction(api.integration.retryJob);
   const integrationStatus = integrationStatusData as
@@ -1543,7 +1546,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const quickBooksState = searchParams.get("quickbooks");
-    if (!quickBooksState) return;
+    if (!quickBooksState || integrationsBlockedByBilling) return;
 
     void refetchIntegrationStatus();
 
@@ -1560,11 +1563,11 @@ export default function SettingsPage() {
     nextParams.delete("quickbooks");
     nextParams.delete("quickbooksMessage");
     setSearchParams(nextParams, { replace: true });
-  }, [refetchIntegrationStatus, searchParams, setSearchParams]);
+  }, [integrationsBlockedByBilling, refetchIntegrationStatus, searchParams, setSearchParams]);
 
   useEffect(() => {
     const googleCalendarState = searchParams.get("googleCalendar");
-    if (!googleCalendarState) return;
+    if (!googleCalendarState || integrationsBlockedByBilling) return;
 
     void refetchIntegrationStatus();
 
@@ -1581,7 +1584,7 @@ export default function SettingsPage() {
     nextParams.delete("googleCalendar");
     nextParams.delete("googleCalendarMessage");
     setSearchParams(nextParams, { replace: true });
-  }, [refetchIntegrationStatus, searchParams, setSearchParams]);
+  }, [integrationsBlockedByBilling, refetchIntegrationStatus, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!business) return;
@@ -3259,6 +3262,32 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
           <TabsContent value="integrations" className="space-y-6">
+            {integrationsBlockedByBilling ? (
+              <Card>
+                <CardHeader>
+                  <div className="mb-1 flex items-center gap-3">
+                    <div className="rounded-md bg-amber-500/10 p-2">
+                      <CreditCard className="h-5 w-5 text-amber-700" />
+                    </div>
+                    <CardTitle>Billing access required</CardTitle>
+                  </div>
+                  <CardDescription>
+                    Integrations stay read-protected until billing is active again. Open Billing to restore full workspace access.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3 sm:flex-row">
+                  <Button asChild>
+                    <Link to="/settings?tab=billing">Open billing</Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link to="/subscribe">
+                      {billingStatus?.accessState === "canceled" ? "Reactivate subscription" : "Open recovery"}
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : null}
+            {integrationsBlockedByBilling ? null : (
             <Card>
               <CardHeader>
                 <div className="mb-1 flex items-center gap-3">
@@ -4117,6 +4146,7 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+            )}
           </TabsContent>
           <TabsContent value="automations" className="space-y-6">
             <Card>
