@@ -815,7 +815,7 @@ export default function CalendarPage() {
         <div className="grid h-full min-h-0 gap-3 grid-cols-1">
           <div
             className={cn(
-              "flex h-full min-h-0 flex-col rounded-[1.3rem] border border-border/60 bg-white/72",
+              "flex h-full min-h-0 flex-col overflow-hidden rounded-[1.3rem] border border-border/60 bg-white/72",
               isMobileLayout ? "min-h-[18.5rem] p-2.5" : "min-h-[22rem] p-3 xl:min-h-[25rem]"
             )}
           >
@@ -830,8 +830,10 @@ export default function CalendarPage() {
             {selectedDayAgendaItems.length > 0 ? (
               <div
                 className={cn(
-                  "min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 pb-2",
-                  isMobileLayout ? "pt-0.5" : "pt-0.5"
+                  "min-h-0 flex-1 space-y-2 overflow-y-auto pb-2",
+                  isMobileLayout
+                    ? "touch-pan-y overscroll-contain px-1 pb-4 pr-0.5 pt-0.5 [-webkit-overflow-scrolling:touch]"
+                    : "pr-1 pt-0.5"
                 )}
               >
                 {selectedDayAgendaItems.map(({ appointment, kind }) => (
@@ -1018,7 +1020,7 @@ export default function CalendarPage() {
             <div
               className={cn(
                 "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
-                isMobileLayout ? "h-[24rem] min-h-[24rem] p-3" : "min-h-[24rem] flex-1 xl:min-h-[28rem]"
+                isMobileLayout ? "h-[26rem] min-h-[26rem] p-3" : "min-h-[24rem] flex-1 xl:min-h-[28rem]"
               )}
             >
               {dayInspectorPanel}
