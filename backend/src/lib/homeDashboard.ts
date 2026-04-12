@@ -32,7 +32,7 @@ import { buildVehicleDisplayName } from "./vehicleFormatting.js";
 type DbExecutor = typeof db;
 
 const DEFAULT_TIMEZONE = "America/New_York";
-const WEEK_START_DAY = 1;
+const WEEK_START_DAY = 0;
 const MAX_RECENT_ACTIVITY = 20;
 const MAX_ACTION_QUEUE_ITEMS = 18;
 const HOME_DASHBOARD_CACHE_TTL_MS = 30_000;
@@ -450,7 +450,7 @@ export type HomeDashboardSnapshot = {
   };
   goals: HomeDashboardGoals;
   definitions: {
-    weekStartsOn: "monday";
+    weekStartsOn: "sunday";
     uncontactedLead: string;
     quoteFollowUp: string;
     depositDue: string;
@@ -3911,7 +3911,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     },
     goals,
     definitions: {
-      weekStartsOn: "monday",
+      weekStartsOn: "sunday",
       uncontactedLead: `Lead record with status "new", no first-contact timestamp, and created more than ${uncontactedLeadHours} hour(s) ago.`,
       quoteFollowUp: `Sent quote without a follow-up timestamp after the business abandoned-quote delay (${quoteFollowUpHours} hour(s)).`,
       depositDue: "Appointment starting in the next 48 hours with a required deposit that is not yet satisfied.",
@@ -3922,7 +3922,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       bookedRevenueThisWeek:
         "Appointment value scheduled within the current business week plus standalone invoice value created this week, excluding void invoices to avoid double-counting linked work.",
       weeklyOverview:
-        "Weekly appointment overview buckets appointments by their operational start day within the selected Monday-through-Sunday business week and summarizes status, booked value, assigned-capacity usage, and next jobs for each day.",
+        "Weekly appointment overview buckets appointments by their operational start day within the selected Sunday-through-Saturday business week and summarizes status, booked value, assigned-capacity usage, and next jobs for each day.",
       monthlyRevenueChart:
         "Monthly revenue chart groups booked revenue by the appointment's operational start day (or standalone invoice creation day) and collected revenue by payment day within the current business month.",
       bookingsOverview:
