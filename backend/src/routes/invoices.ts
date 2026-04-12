@@ -1167,8 +1167,10 @@ invoicesRouter.post(
   const taxRate = parsed.data.taxRate ?? 0;
   const taxAmount = (subtotal * taxRate) / 100;
   const total = Math.max(0, subtotal + taxAmount - discountAmount);
-  const appointmentPaymentCarryoverAmount = appointment
-    ? Math.min(
+  let appointmentPaymentCarryoverAmount = 0;
+  if (appointment) {
+    try {
+      appointmentPaymentCarryoverAmount = Math.min(
         total,
         (
           await getAppointmentFinanceSummaryMap(bid, [
@@ -1180,8 +1182,17 @@ invoicesRouter.post(
             },
           ])
         ).get(appointment.id)?.collectedAmount ?? 0
-      )
-    : 0;
+      );
+    } catch (error) {
+      logger.warn("Appointment finance carryover lookup failed during invoice create; continuing without carryover", {
+        businessId: bid,
+        appointmentId: appointment.id,
+        clientId: data.clientId,
+        error,
+      });
+      appointmentPaymentCarryoverAmount = 0;
+    }
+  }
   const items = lineItems.map((li) => {
     const lineTotal = li.quantity * li.unitPrice;
     return { description: li.description, quantity: String(li.quantity), unitPrice: String(li.unitPrice), total: String(lineTotal) };
