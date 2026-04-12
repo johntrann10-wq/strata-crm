@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { AlertTriangle, Ban, CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
+import { AlertTriangle, Ban, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
 import { api } from "../api";
 import { useAction, useFindMany } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
@@ -235,13 +235,12 @@ export default function CalendarPage() {
       setSearchParams(next, { replace: true });
       return;
     }
-    const activeDate = view === "month" ? selectedDate : currentDate;
-    const dateValue = toLocalDateString(activeDate);
+    const dateValue = toLocalDateString(currentDate);
     if (next.get("view") === view && next.get("date") === dateValue) return;
     next.set("view", view);
     next.set("date", dateValue);
     setSearchParams(next, { replace: true });
-  }, [currentDate, searchParams, selectedDate, setSearchParams, view]);
+  }, [currentDate, searchParams, setSearchParams, view]);
 
   useEffect(() => {
     if (!requestedDate) return;
@@ -249,10 +248,14 @@ export default function CalendarPage() {
     if (toLocalDateString(selectedDate) !== requestedKey) {
       setSelectedDate(requestedDate);
     }
-    if (toLocalDateString(currentDate) !== requestedKey) {
+    const shouldSyncVisibleDate =
+      view === "day" ||
+      requestedDate.getMonth() !== currentDate.getMonth() ||
+      requestedDate.getFullYear() !== currentDate.getFullYear();
+    if (shouldSyncVisibleDate && toLocalDateString(currentDate) !== requestedKey) {
       setCurrentDate(requestedDate);
     }
-  }, [currentDate, requestedDate, selectedDate]);
+  }, [currentDate, requestedDate, selectedDate, view]);
 
   useEffect(() => {
     if (view !== "day") return;
@@ -619,17 +622,17 @@ export default function CalendarPage() {
     () =>
       selectedDayAgendaItems.filter(
         ({ appointment }) =>
-          !isCalendarBlockAppointment(appointment) && getOperationalDayLabel(appointment, currentDate) === "Drop-off"
+          !isCalendarBlockAppointment(appointment) && getOperationalDayLabel(appointment, inspectorDate) === "Drop-off"
       ).length,
-    [currentDate, selectedDayAgendaItems]
+    [inspectorDate, selectedDayAgendaItems]
   );
   const selectedDayPickups = useMemo(
     () =>
       selectedDayAgendaItems.filter(
         ({ appointment }) =>
-          !isCalendarBlockAppointment(appointment) && getOperationalDayLabel(appointment, currentDate) === "Pickup"
+          !isCalendarBlockAppointment(appointment) && getOperationalDayLabel(appointment, inspectorDate) === "Pickup"
       ).length,
-    [currentDate, selectedDayAgendaItems]
+    [inspectorDate, selectedDayAgendaItems]
   );
   const selectedDayInShopCount = useMemo(
     () => selectedDayAgendaItems.filter(({ kind }) => kind === "onsite").length,
@@ -792,17 +795,15 @@ export default function CalendarPage() {
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex min-w-0 flex-1 flex-col gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    <CalendarDays className="h-3.5 w-3.5" />
-                    Calendar
-                  </span>
+                  <h1 className="text-lg font-semibold tracking-[-0.02em] text-foreground sm:text-xl">
+                    {getHeaderTitle(currentDate, view)}
+                  </h1>
                   {activeLocationName ? (
-                    <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                       <MapPin className="h-3.5 w-3.5" />
                       {activeLocationName}
                     </span>
                   ) : null}
-                  <h1 className="text-sm font-semibold text-foreground">{getHeaderTitle(currentDate, view)}</h1>
                 </div>
 
                 <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
