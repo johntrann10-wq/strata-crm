@@ -3,52 +3,77 @@ const CURRENT_BUSINESS_ID_KEY = "currentBusinessId";
 const CURRENT_LOCATION_ID_KEY = "currentLocationId";
 const AUTH_EVENT_CHANNEL_KEY = "authEventChannel";
 
-export function getAuthToken(): string | null {
+function safeLocalStorageGet(key: string): string | null {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalStorageSet(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures for restricted documents or private mode edge cases.
+  }
+}
+
+function safeLocalStorageRemove(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures for restricted documents or private mode edge cases.
+  }
+}
+
+export function getAuthToken(): string | null {
+  return safeLocalStorageGet(AUTH_TOKEN_KEY);
 }
 
 export function setAuthToken(token: string): void {
+  safeLocalStorageSet(AUTH_TOKEN_KEY, token);
+}
+
+export function persistAuthState(token: string, detail?: unknown): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  setAuthToken(token);
+  emitAuthEvent("auth:login", detail);
+  broadcastAuthEvent("auth:login", detail);
 }
 
 export function clearAuthToken(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  safeLocalStorageRemove(AUTH_TOKEN_KEY);
 }
 
 export function getCurrentBusinessId(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(CURRENT_BUSINESS_ID_KEY);
+  return safeLocalStorageGet(CURRENT_BUSINESS_ID_KEY);
 }
 
 export function setCurrentBusinessId(businessId: string): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(CURRENT_BUSINESS_ID_KEY, businessId);
+  safeLocalStorageSet(CURRENT_BUSINESS_ID_KEY, businessId);
 }
 
 export function clearCurrentBusinessId(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(CURRENT_BUSINESS_ID_KEY);
+  safeLocalStorageRemove(CURRENT_BUSINESS_ID_KEY);
 }
 
 export function getCurrentLocationId(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(CURRENT_LOCATION_ID_KEY);
+  return safeLocalStorageGet(CURRENT_LOCATION_ID_KEY);
 }
 
 export function setCurrentLocationId(locationId: string): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(CURRENT_LOCATION_ID_KEY, locationId);
+  safeLocalStorageSet(CURRENT_LOCATION_ID_KEY, locationId);
 }
 
 export function clearCurrentLocationId(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(CURRENT_LOCATION_ID_KEY);
+  safeLocalStorageRemove(CURRENT_LOCATION_ID_KEY);
 }
 
-export type AuthEventName = "auth:invalid" | "auth:logout";
+export type AuthEventName = "auth:invalid" | "auth:logout" | "auth:login";
 
 export function emitAuthEvent(name: AuthEventName, detail?: unknown): void {
   if (typeof window === "undefined") return;
@@ -58,7 +83,7 @@ export function emitAuthEvent(name: AuthEventName, detail?: unknown): void {
 function broadcastAuthEvent(name: AuthEventName, detail?: unknown): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(
+    safeLocalStorageSet(
       AUTH_EVENT_CHANNEL_KEY,
       JSON.stringify({
         name,
@@ -84,7 +109,7 @@ export function readBroadcastAuthEvent(event: StorageEvent): { name: AuthEventNa
   if (event.key !== AUTH_EVENT_CHANNEL_KEY || !event.newValue) return null;
   try {
     const parsed = JSON.parse(event.newValue) as { name?: unknown; detail?: unknown };
-    if (parsed.name === "auth:invalid" || parsed.name === "auth:logout") {
+    if (parsed.name === "auth:invalid" || parsed.name === "auth:logout" || parsed.name === "auth:login") {
       return {
         name: parsed.name,
         detail: parsed.detail,

@@ -1039,16 +1039,21 @@ export function MonthView({
                     </div>
 
                     <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                      {!isMobileLayout && dayDensityItems.length > 0 ? (
-                        <div className="mt-1 hidden min-h-0 flex-1 space-y-1 overflow-hidden pt-1 sm:block">
-                          {dayDensityItems.slice(0, 2).map((appointment) => (
-                            <div
-                              key={`${appointment.id}-${day.toISOString()}-label`}
-                              className="truncate rounded-md bg-muted/[0.16] px-1.5 py-0.5 text-[10px] font-medium text-foreground/85"
-                            >
-                              {apptLabel(appointment)}
-                            </div>
-                          ))}
+                      {dayDensityItems.length > 0 ? (
+                        <div className="mt-1 min-h-0 flex-1 space-y-1 overflow-hidden pt-1">
+                          {dayDensityItems
+                            .slice(0, isMobileLayout ? 1 : 2)
+                            .map((appointment) => (
+                              <div
+                                key={`${appointment.id}-${day.toISOString()}-label`}
+                                className={cn(
+                                  "truncate rounded-md bg-muted/[0.16] px-1.5 py-0.5 font-medium text-foreground/85",
+                                  isMobileLayout ? "text-[9px]" : "hidden text-[10px] sm:block"
+                                )}
+                              >
+                                {apptLabel(appointment)}
+                              </div>
+                            ))}
                         </div>
                       ) : (
                         <div className="min-h-0 flex-1" />

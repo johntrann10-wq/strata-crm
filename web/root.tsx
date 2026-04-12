@@ -16,7 +16,7 @@ import appleTouchIconHref from "./apple-touch-icon.png";
 import socialPreviewHref from "./social-preview.png";
 import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
-import { setAuthToken } from "./lib/auth";
+import { persistAuthState } from "./lib/auth";
 import { analyticsEnabled, getClarityProjectId, getGaMeasurementId, trackPageView } from "./lib/analytics";
 import { recordRuntimeError } from "./lib/runtimeErrors";
 
@@ -107,7 +107,7 @@ function OAuthTokenFromQuery() {
     const token = params.get("token");
     if (!token) return;
 
-    setAuthToken(token);
+    persistAuthState(token, { source: "oauth-query" });
     params.delete("token");
     const qs = params.toString();
     const next = `${location.pathname}${qs ? `?${qs}` : ""}${location.hash}`;

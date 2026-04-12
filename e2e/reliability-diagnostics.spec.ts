@@ -190,6 +190,164 @@ test.describe("Reliability diagnostics", () => {
     );
   });
 
+  test("shows a retryable workspace error instead of pretending the user needs onboarding", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("authToken", "qa-token");
+    });
+
+    await page.route("**/api/users/user-1", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "user-1",
+          email: "owner@example.com",
+          firstName: "Owner",
+          lastName: "Test",
+          googleProfileId: null,
+        }),
+      });
+    });
+    await page.route("**/api/auth/me", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            id: "user-1",
+            email: "owner@example.com",
+            firstName: "Owner",
+            lastName: "Test",
+            token: "qa-token",
+          },
+        }),
+      });
+    });
+    await page.route("**/api/auth/context", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Workspace temporarily unavailable" }),
+      });
+    });
+
+    await page.goto("/signed-in");
+
+    await expect(page).toHaveURL(/\/signed-in/);
+    await expect(page.getByText(/business context failed to load/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /retry workspace/i })).toBeVisible();
+    await expect(page).not.toHaveURL(/\/onboarding/);
+  });
+
+  test("workspace retry recovers cleanly once context is available again", async ({ context }) => {
+    let authContextAttempts = 0;
+
+    await context.route("**/api/auth/me", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            id: "user-1",
+            email: "owner@example.com",
+            firstName: "Owner",
+            lastName: "Test",
+            token: "qa-token",
+          },
+        }),
+      });
+    });
+    await context.route("**/api/auth/context", async (route) => {
+      authContextAttempts += 1;
+      if (authContextAttempts === 1) {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "Workspace temporarily unavailable" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            businesses: [
+              {
+                id: "biz-1",
+                name: "QA Detail Shop",
+                type: "auto_detailing",
+                role: "owner",
+                status: "active",
+                isDefault: true,
+                onboardingComplete: true,
+                permissions: ["*"],
+              },
+            ],
+            currentBusinessId: "biz-1",
+          },
+        }),
+      });
+    });
+    await context.route("**/api/users/user-1", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "user-1",
+          email: "owner@example.com",
+          firstName: "Owner",
+          lastName: "Test",
+          googleProfileId: null,
+        }),
+      });
+    });
+    await context.route("**/api/businesses/biz-1", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "biz-1",
+          name: "QA Detail Shop",
+          type: "auto_detailing",
+          onboardingComplete: true,
+        }),
+      });
+    });
+    await context.route("**/api/billing/status", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "active",
+          trialEndsAt: null,
+          currentPeriodEnd: null,
+          billingEnforced: true,
+          checkoutConfigured: true,
+          portalConfigured: true,
+        }),
+      });
+    });
+    await context.route("**/api/locations**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ records: [] }),
+      });
+    });
+
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      window.localStorage.setItem("authToken", "qa-token");
+    });
+
+    await page.goto("/signed-in");
+    await expect(page.getByRole("button", { name: /retry workspace/i })).toBeVisible();
+    await page.getByRole("button", { name: /retry workspace/i }).click();
+    await expect(page).not.toHaveURL(/\/sign-in/);
+    await expect(page.getByRole("main").getByRole("heading", { level: 1, name: /^profile$/i }).first()).toBeVisible();
+  });
+
   test("propagates sign-out across tabs so protected screens do not drift", async ({ context }) => {
     await mockAuthenticatedShell(context);
 

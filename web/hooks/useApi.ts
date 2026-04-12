@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { FormEvent } from "react";
 import { api } from "../api";
-import { setAuthToken } from "../lib/auth";
+import { persistAuthState } from "../lib/auth";
 import { recordReliabilityDiagnostic } from "../lib/reliabilityDiagnostics";
 import { recordRuntimeError } from "../lib/runtimeErrors";
 
@@ -14,7 +14,7 @@ function persistAuthTokenFromResponse(res: unknown): void {
   if (typeof window === "undefined") return;
   const r = res as { data?: { token?: string }; token?: string } | null | undefined;
   const token = r?.data?.token ?? (typeof r?.token === "string" ? r.token : undefined);
-  if (token) setAuthToken(token);
+  if (token) persistAuthState(token, { source: "action-form" });
 }
 
 type FindManyOpts = {

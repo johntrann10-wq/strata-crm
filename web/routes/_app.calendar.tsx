@@ -496,6 +496,11 @@ export default function CalendarPage() {
     const daySnapshot = getCalendarDaySnapshot(appointments, date);
     const nextAppointment =
       daySnapshot.agendaItems.find(({ appointment }) => !isCalendarBlockAppointment(appointment))?.appointment ?? null;
+    if (view === "month" && isMobileLayout) {
+      setSelectedAppointmentId(null);
+      setIsAppointmentInspectorOpen(false);
+      return;
+    }
     setSelectedAppointmentId(nextAppointment?.id ?? null);
   }
 
@@ -766,12 +771,19 @@ export default function CalendarPage() {
     setIsAppointmentInspectorOpen(false);
   }, [selectableDayAgendaItems, selectedAppointmentId]);
 
+  const dayInspectorTitleId = `day-inspector-title-${view}`;
+
   const dayInspectorPanel = (
-    <div className="flex min-h-0 flex-col overflow-hidden">
+    <aside
+      role="complementary"
+      aria-label="Day inspector"
+      aria-labelledby={dayInspectorTitleId}
+      className="flex h-full min-h-0 flex-col overflow-hidden"
+    >
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3">
           <div className="space-y-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Day inspector</p>
-            <h3 className="truncate text-base font-semibold text-foreground">{formatPanelDate(inspectorDate)}</h3>
+            <h3 id={dayInspectorTitleId} className="truncate text-base font-semibold text-foreground">{formatPanelDate(inspectorDate)}</h3>
           </div>
           {isMobileLayout ? (
             <div className="flex flex-wrap gap-2 text-xs">
@@ -799,17 +811,17 @@ export default function CalendarPage() {
           )}
       </div>
       <div className="mt-3 min-h-0 flex-1">
-        {selectedDayAgendaItems.length > 0 ? (
-          <div className="grid h-full min-h-0 gap-3 grid-cols-1">
-            <div className={cn("min-h-0 rounded-[1.3rem] border border-border/60 bg-white/72", isMobileLayout ? "p-2.5" : "p-3")}>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  {view === "month" ? "Selected date" : "Today plan"}
-                </p>
-                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                  {selectedDayAgendaItems.length}
-                </span>
-              </div>
+        <div className="grid h-full min-h-0 gap-3 grid-cols-1">
+          <div className={cn("min-h-0 rounded-[1.3rem] border border-border/60 bg-white/72", isMobileLayout ? "p-2.5" : "p-3")}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {view === "month" ? "Selected date" : "Today plan"}
+              </p>
+              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                {selectedDayAgendaItems.length}
+              </span>
+            </div>
+            {selectedDayAgendaItems.length > 0 ? (
               <div className="h-full space-y-2 overflow-y-auto pr-1">
                 {selectedDayAgendaItems.map(({ appointment, kind }) => (
                   <AgendaPreviewRow
@@ -822,22 +834,20 @@ export default function CalendarPage() {
                   />
                 ))}
               </div>
-            </div>
+            ) : (
+              <div className={cn("rounded-2xl border border-dashed border-border/70 bg-muted/10", isMobileLayout ? "px-3 py-4" : "px-4 py-5")}>
+                <p className="text-sm font-medium text-foreground">No appointments on this {view === "month" ? "date" : "day"}</p>
+                {view === "month" && busiestMonthDay ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Busiest day this month: {formatPanelDate(busiestMonthDay.date)} ({busiestMonthDay.count})
+                  </p>
+                ) : null}
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="grid h-full min-h-0 gap-3 grid-cols-1">
-            <div className={cn("rounded-2xl border border-dashed border-border/70 bg-muted/10", isMobileLayout ? "px-3 py-4" : "px-4 py-5")}>
-              <p className="text-sm font-medium text-foreground">No appointments on this {view === "month" ? "date" : "day"}</p>
-              {view === "month" && busiestMonthDay ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Busiest day this month: {formatPanelDate(busiestMonthDay.date)} ({busiestMonthDay.count})
-                </p>
-              ) : null}
-            </div>
-          </div>
-        )}
+        </div>
       </div>
-    </div>
+    </aside>
   );
 
   return (
@@ -997,7 +1007,7 @@ export default function CalendarPage() {
             <div
               className={cn(
                 "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
-                isMobileLayout ? "flex-1 min-h-[15rem] p-3" : "flex-1"
+                isMobileLayout ? "h-[18rem] min-h-[18rem] p-3" : "flex-1"
               )}
             >
               {dayInspectorPanel}
@@ -1014,12 +1024,15 @@ export default function CalendarPage() {
         }}
       >
         <DialogContent className="flex h-[92dvh] max-w-none flex-col overflow-hidden rounded-[1.25rem] p-0 sm:ml-auto sm:mr-4 sm:mt-6 sm:h-[calc(100dvh-3rem)] sm:max-h-[calc(100dvh-3rem)] sm:w-[30rem] sm:max-w-[30rem] sm:rounded-[1.75rem] lg:w-[34rem] lg:max-w-[34rem]">
-          <div className="border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 py-4">
+          <DialogHeader className="border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 py-4 text-left">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Appointment inspector</p>
-            <h2 className="mt-1 text-lg font-semibold text-foreground">
+            <DialogTitle className="mt-1 text-lg font-semibold text-foreground">
               {selectedAppointment ? getCalendarAppointmentLabel(selectedAppointment) : "Appointment"}
-            </h2>
-          </div>
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Review appointment money, customer, vehicle, timing, and status details for the selected calendar job.
+            </DialogDescription>
+          </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {isAppointmentInspectorOpen ? (
               <AppointmentInspectorPanel

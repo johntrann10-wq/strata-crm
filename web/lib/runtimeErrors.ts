@@ -11,10 +11,36 @@ const STORAGE_KEY = "strata.runtimeErrors";
 const CHANGE_EVENT = "strata:runtime-errors";
 const MAX_ENTRIES = 20;
 
-function readEntries(): RuntimeErrorEntry[] {
-  if (typeof window === "undefined") return [];
+function safeSessionStorageGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSessionStorageSet(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures for restricted documents or private mode edge cases.
+  }
+}
+
+function safeSessionStorageRemove(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures for restricted documents or private mode edge cases.
+  }
+}
+
+function readEntries(): RuntimeErrorEntry[] {
+  try {
+    const raw = safeSessionStorageGet(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -26,7 +52,7 @@ function readEntries(): RuntimeErrorEntry[] {
 function writeEntries(entries: RuntimeErrorEntry[]): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_ENTRIES)));
+    safeSessionStorageSet(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_ENTRIES)));
     window.dispatchEvent(new CustomEvent(CHANGE_EVENT));
   } catch {
     // Ignore storage failures in private mode / quota edge cases.
@@ -59,7 +85,7 @@ export function listRuntimeErrors(): RuntimeErrorEntry[] {
 export function clearRuntimeErrors(): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.removeItem(STORAGE_KEY);
+    safeSessionStorageRemove(STORAGE_KEY);
     window.dispatchEvent(new CustomEvent(CHANGE_EVENT));
   } catch {
     // Ignore storage failures in private mode / quota edge cases.

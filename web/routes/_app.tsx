@@ -44,6 +44,7 @@ import { api } from "../api";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import {
   clearAuthState,
+  getAuthToken,
   clearCurrentBusinessId,
   clearCurrentLocationId,
   getCurrentBusinessId,
@@ -698,6 +699,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const [currentBusinessId, setCurrentBusinessIdState] = useState<string | null>(() => getCurrentBusinessId());
   const [currentLocationId, setCurrentLocationIdState] = useState<string | null>(() => getCurrentLocationId());
   const [authCheckDone, setAuthCheckDone] = useState(false);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<Error | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [billingCheckDone, setBillingCheckDone] = useState(false);
   const effectiveUserId = clientUserId;
@@ -707,52 +709,75 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     setTenantBusinesses([]);
     setCurrentBusinessIdState(null);
     setCurrentLocationIdState(null);
+    setWorkspaceLoadError(null);
     setAuthCheckDone(true);
   }, []);
 
-  useEffect(() => {
+  const hydrateClientAuthState = useCallback(async () => {
+    setWorkspaceLoadError(null);
     let cancelled = false;
-    api.user
-      .me()
-      .then(async (me) => {
-        let context: Awaited<ReturnType<typeof api.user.context>> = {
-          businesses: [],
-          currentBusinessId: null,
-        };
-        try {
-          context = await api.user.context();
-        } catch (error) {
-          console.error("Failed to load auth context", error);
-        }
-        const availableBusinesses = context.businesses;
-        const storedBusinessId = getCurrentBusinessId();
-        const resolvedBusinessId =
-          availableBusinesses.find((business) => business.id === storedBusinessId)?.id ??
-          context.currentBusinessId ??
-          availableBusinesses[0]?.id ??
-          null;
+    const token = getAuthToken();
+    if (!token) {
+      resetClientAuthState();
+      return () => {
+        cancelled = true;
+      };
+    }
+    try {
+      const me = await api.user.me();
+      let context: Awaited<ReturnType<typeof api.user.context>>;
+      try {
+        context = await api.user.context();
+      } catch (error) {
+        const workspaceError =
+          error instanceof Error ? error : new Error("Failed to load workspace context");
+        console.error("Failed to load auth context", workspaceError);
         if (!cancelled) {
           setClientUserId(me.id);
-          setTenantBusinesses(availableBusinesses);
-          setCurrentBusinessIdState(resolvedBusinessId);
-          if (resolvedBusinessId) setCurrentBusinessId(resolvedBusinessId);
-          else clearCurrentBusinessId();
+          setTenantBusinesses([]);
+          setCurrentBusinessIdState(null);
+          setWorkspaceLoadError(workspaceError);
           setAuthCheckDone(true);
         }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          // Invalid/expired token: clear local state and force the user back to sign-in.
-          clearAuthState("auth:invalid");
-          resetClientAuthState();
-        }
-      });
+        return () => {
+          cancelled = true;
+        };
+      }
+      const availableBusinesses = context.businesses;
+      const storedBusinessId = getCurrentBusinessId();
+      const resolvedBusinessId =
+        availableBusinesses.find((business) => business.id === storedBusinessId)?.id ??
+        context.currentBusinessId ??
+        availableBusinesses[0]?.id ??
+        null;
+      if (!cancelled) {
+        setClientUserId(me.id);
+        setTenantBusinesses(availableBusinesses);
+        setCurrentBusinessIdState(resolvedBusinessId);
+        if (resolvedBusinessId) setCurrentBusinessId(resolvedBusinessId);
+        else clearCurrentBusinessId();
+        setAuthCheckDone(true);
+      }
+    } catch {
+      if (!cancelled) {
+        // Invalid/expired token: clear local state and force the user back to sign-in.
+        clearAuthState("auth:invalid");
+        resetClientAuthState();
+      }
+    }
     return () => {
       cancelled = true;
     };
   }, [resetClientAuthState]);
 
   useEffect(() => {
+    void hydrateClientAuthState();
+  }, [hydrateClientAuthState]);
+
+  useEffect(() => {
+    const onLogin = () => {
+      void hydrateClientAuthState();
+    };
     const onInvalid = () => {
       resetClientAuthState();
     };
@@ -775,21 +800,27 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     const onStorage = (event: StorageEvent) => {
       const authEvent = readBroadcastAuthEvent(event);
       if (!authEvent) return;
+      if (authEvent.name === "auth:login") {
+        void hydrateClientAuthState();
+        return;
+      }
       if (authEvent.name === "auth:invalid" || authEvent.name === "auth:logout") {
         resetClientAuthState();
       }
     };
+    window.addEventListener("auth:login", onLogin as EventListener);
     window.addEventListener("auth:invalid", onInvalid as EventListener);
     window.addEventListener("auth:logout", onLogout as EventListener);
     window.addEventListener("subscription:required", onSubscriptionRequired as EventListener);
     window.addEventListener("storage", onStorage);
     return () => {
+      window.removeEventListener("auth:login", onLogin as EventListener);
       window.removeEventListener("auth:invalid", onInvalid as EventListener);
       window.removeEventListener("auth:logout", onLogout as EventListener);
       window.removeEventListener("subscription:required", onSubscriptionRequired as EventListener);
       window.removeEventListener("storage", onStorage);
     };
-  }, [resetClientAuthState]);
+  }, [hydrateClientAuthState, resetClientAuthState]);
 
   const [{ data: user, fetching: userFetching, error: userError }, refetchUser] = useFindOne(
     api.user,
@@ -852,28 +883,52 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     };
   }, [effectiveUserId, currentBusinessId, allowWithoutSubscription]);
 
+  useEffect(() => {
+    if (!effectiveUserId) return;
+    if (tenantBusinesses.length === 0) {
+      if (currentBusinessId !== null) {
+        setCurrentBusinessIdState(null);
+        clearCurrentBusinessId();
+      }
+      if (currentLocationId !== null) {
+        setCurrentLocationIdState(null);
+        clearCurrentLocationId();
+      }
+      return;
+    }
+    if (currentBusinessId && tenantBusinesses.some((tenantBusiness) => tenantBusiness.id === currentBusinessId)) {
+      return;
+    }
+    const fallbackBusinessId = tenantBusinesses[0]?.id ?? null;
+    setCurrentBusinessIdState(fallbackBusinessId);
+    if (fallbackBusinessId) setCurrentBusinessId(fallbackBusinessId);
+    else clearCurrentBusinessId();
+    if (currentLocationId !== null) {
+      setCurrentLocationIdState(null);
+      clearCurrentLocationId();
+    }
+  }, [effectiveUserId, tenantBusinesses, currentBusinessId, currentLocationId]);
+
   const handleBusinessChange = useCallback(
     (businessId: string) => {
       const targetBusiness = tenantBusinesses.find((tenantBusiness) => tenantBusiness.id === businessId) ?? null;
       const targetModules = getEnabledModules(targetBusiness?.type ?? null) as Set<string>;
       const targetPermissions = new Set(targetBusiness?.permissions ?? []);
-      const isSubscribed =
-        billingStatus?.status === "active" || billingStatus?.status === "trialing";
       const destination =
         !targetBusiness
           ? "/onboarding"
           : targetBusiness.onboardingComplete === false
             ? "/onboarding"
-            : billingStatus?.billingEnforced && !isSubscribed
-              ? "/subscribe"
-              : getPreferredAuthorizedAppPath(targetPermissions, targetModules);
+            : getPreferredAuthorizedAppPath(targetPermissions, targetModules);
       setCurrentBusinessIdState(businessId);
       setCurrentBusinessId(businessId);
       setCurrentLocationIdState(null);
       clearCurrentLocationId();
+      setBillingStatus(null);
+      setBillingCheckDone(false);
       navigate(destination);
     },
-    [billingStatus?.billingEnforced, billingStatus?.status, navigate, tenantBusinesses]
+    [navigate, tenantBusinesses]
   );
 
   const handleLocationChange = useCallback((locationId: string | null) => {
@@ -885,6 +940,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const redirectTarget = useMemo(() => {
     if (!authCheckDone) return null;
     if (!effectiveUserId) return signInPath;
+    if (workspaceLoadError) return null;
     if (userFetching || businessFetching || businessError) return null;
     const resolvedBusiness =
       business ??
@@ -923,6 +979,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     currentMembership,
     billingStatus,
     billingCheckDone,
+    workspaceLoadError,
   ]);
 
   useEffect(() => {
@@ -969,6 +1026,20 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     );
   }
 
+  if (workspaceLoadError) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center gap-4 p-6 max-w-md mx-auto text-center">
+        <p className="text-muted-foreground">
+          We couldn&apos;t load your workspace yet. Your account is still signed in, but the business context failed to load.
+        </p>
+        <p className="text-sm text-muted-foreground/80">{workspaceLoadError.message}</p>
+        <Button type="button" onClick={() => void hydrateClientAuthState()}>
+          Retry workspace
+        </Button>
+      </div>
+    );
+  }
+
   // When no business exists yet (or onboarding is incomplete), block CRM routes until redirect runs
   // or allow account/onboarding-only screens (see `pathAllowsMissingBusiness`).
   if (businessError && !allowWithoutBusiness && canReadSettings) {
@@ -982,7 +1053,13 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     );
   }
   if (!business && !allowWithoutBusiness && canReadSettings) {
-    if (tenantBusinesses.length === 0) return null;
+    if (tenantBusinesses.length === 0) {
+      return (
+        <div className="h-screen flex items-center justify-center">
+          <div className="animate-pulse text-muted-foreground">Preparing your workspace...</div>
+        </div>
+      );
+    }
     return (
       <div className="h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Preparing your workspace...</div>
