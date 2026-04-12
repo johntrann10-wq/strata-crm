@@ -89,7 +89,7 @@ const included = [
   "Client and vehicle CRM in one connected system",
   "Quotes, invoices, payment visibility, and print-ready documents",
   "Business-type onboarding defaults and operational setup guidance",
-  "Dashboard, daily workflow visibility, and operational follow-through",
+  "Dashboard visibility, daily workflow support, and operational follow-through",
 ];
 
 const pricingAssurances = [
@@ -122,7 +122,7 @@ const faqs = [
   {
     question: "Does the pricing include scheduling, CRM, and invoices?",
     answer:
-      "Yes. The goal is one clear operating system for scheduling, clients, vehicles, quotes, invoices, and daily workflow visibility.",
+      "Yes. The goal is one clear system for scheduling, clients, vehicles, quotes, invoices, and daily workflow visibility.",
   },
   {
     question: "Can I start with a simple setup and grow into it?",
@@ -195,7 +195,7 @@ export default function PricingPage() {
                 Strata CRM is priced for automotive service businesses that need scheduling, clients, vehicles, jobs, quotes, invoices, and daily workflow visibility in one modern system.
               </p>
               <p className="max-w-3xl text-base leading-7 text-gray-600">
-                If you are searching for affordable automotive shop software, detailing CRM pricing, or shop scheduling software pricing, this page is the clean answer: one plan, first month free, no confusing tier maze.
+                If you are searching for affordable automotive shop software, detailing CRM pricing, or shop scheduling software pricing, this page gives you the simple answer: one plan, the first month free, and no confusing tier maze.
               </p>
             </div>
 

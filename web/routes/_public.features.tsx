@@ -26,7 +26,7 @@ const featureSections = [
     icon: Calendar,
     title: "Scheduling software for automotive shops",
     description:
-      "Strata is designed around a cleaner month-to-day scheduling workflow so front-desk users can see the month, drill into the day, and book work without calendar clutter.",
+      "Strata is designed around a cleaner month-to-day scheduling workflow so front-desk staff can see the month, drill into the day, and book work without calendar clutter.",
     bullets: ["Month-first calendar flow", "Day drill-down", "Appointments tied to client and vehicle records"],
     links: [
       { to: "/shop-scheduling-software", label: "Explore shop scheduling software" },
@@ -86,7 +86,7 @@ const featureSections = [
     icon: BellRing,
     title: "Appointment confirmations and reminders",
     description:
-      "Appointment confirmation sending and follow-up are part of the workflow so the shop can keep customers informed while preserving operational clarity around the booked work.",
+      "Appointment confirmations and follow-up are part of the workflow, so the shop can keep customers informed without losing clarity around the booked work.",
     bullets: ["Confirmation sending", "Booking follow-through", "Operational context stays attached"],
     links: [{ to: "/shop-scheduling-software", label: "See booking and confirmation flow" }],
   },
@@ -94,7 +94,7 @@ const featureSections = [
     icon: Wrench,
     title: "Shop workflow organization",
     description:
-      "Strata is built to organize the real day: customer intake, vehicle context, appointments, jobs, approvals, invoices, follow-up, and the dashboard view that ties it all together.",
+      "Strata is built to organize the real workday: customer intake, vehicle context, appointments, jobs, approvals, invoices, follow-up, and the dashboard that ties it all together.",
     bullets: ["Daily command center", "Active work visibility", "One connected operating system"],
     links: [
       { to: "/orbisx-alternative", label: "See the workflow alternative page" },
@@ -117,7 +117,7 @@ const featureFaqs = [
   {
     question: "Why is Strata different from generic business software?",
     answer:
-      "Strata keeps scheduling, CRM, vehicle history, quotes, invoices, and job workflow connected in one operating system instead of forcing shops to stitch together separate admin tools.",
+      "Strata keeps scheduling, CRM, vehicle history, quotes, invoices, and job workflow connected in one system instead of forcing shops to stitch together separate admin tools.",
   },
 ];
 
@@ -246,7 +246,7 @@ export default function FeaturesHubPage() {
                 Explore the Strata CRM feature set around scheduling, calendar, estimates, invoicing, customer management, vehicle management, booking, appointment confirmations, and shop workflow organization.
               </p>
               <p className="max-w-3xl text-base leading-7 text-gray-600">
-                This hub is designed for buyers actively searching for software. It organizes the product around the features that actually drive daily operations in detailing, tint, wrap, mechanic, tire, performance, and mixed automotive businesses.
+                This hub is designed for buyers actively searching for software. It organizes the product around the features that drive daily operations in detailing, tint, wrap, mechanic, tire, performance, and mixed automotive businesses.
               </p>
             </div>
 
@@ -420,7 +420,7 @@ export default function FeaturesHubPage() {
             Explore the features, then see how fast Strata feels in a real workspace.
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-orange-50">
-            The goal is not a giant feature checklist. It is a clearer operating system for scheduling, CRM, billing, and daily shop workflow.
+            The goal is not a giant feature checklist. It is a clearer system for scheduling, CRM, billing, and daily shop workflow.
           </p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <Link

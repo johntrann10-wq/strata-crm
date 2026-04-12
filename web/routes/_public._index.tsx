@@ -41,7 +41,7 @@ const featureCards = [
     icon: FileText,
     title: "Send cleaner customer-facing documents",
     description:
-      "Quotes, invoices, and appointment confirmations now feel client-ready for email, printing, approvals, and payment follow-through.",
+      "Quotes, invoices, and appointment confirmations feel polished for email, printing, approvals, and payments.",
   },
   {
     icon: Wrench,
@@ -57,15 +57,15 @@ const featureCards = [
   },
   {
     icon: Layers,
-    title: "Fit mixed automotive service businesses",
+    title: "Built for mixed automotive service businesses",
     description:
-      "Use one operating system across detailing, tint, wrap, PPF, tires, mobile service, or mechanical work.",
+      "Run one connected system across detailing, tint, wrap, PPF, tires, mobile service, or mechanical work.",
   },
 ];
 
 const trustPoints = [
   "Built for automotive service businesses, from shop floors to mobile detailing crews",
-  "Shaped with feedback from real shop owners and operators running the work day-to-day",
+  "Shaped with feedback from real shop owners and operators doing the work every day",
   "Month-to-day scheduling flow designed for fast booking at the desk or on the phone",
   "Client, vehicle, quote, appointment, deposit, invoice, and payment history in one place",
 ];
@@ -121,7 +121,7 @@ const productProof = [
     eyebrow: "Scheduling",
     title: "See the month. Open the day. Book the work.",
     description:
-      "The calendar is built to help a front-desk user understand availability and move into the exact day view that matters.",
+      "The calendar helps front-desk staff understand availability and move straight into the day view that matters.",
     bullets: ["Monthly overview first", "Clean day drill-down", "Client + vehicle context attached"],
   },
   {
@@ -172,7 +172,7 @@ const objections = [
   {
     question: "Do I need multiple tools to handle scheduling, CRM, and billing?",
     answer:
-      "No. The point of Strata is to reduce tool sprawl by keeping customer records, scheduling, jobs, invoices, deposits, and payments in one operating system.",
+      "No. Strata reduces tool sprawl by keeping customer records, scheduling, jobs, invoices, deposits, and payments in one connected system.",
   },
 ];
 
@@ -187,7 +187,7 @@ const featureCategories = [
     icon: Calendar,
     eyebrow: "Scheduling",
     title: "Front-desk scheduling and job flow",
-    description: "Book work fast from a clear calendar and keep the appointment tied to the actual job, vehicle, deposit, and next action.",
+    description: "Book work quickly from a clear calendar and keep each appointment tied to the job, vehicle, deposit, and next action.",
     items: [
       "Month-to-day calendar flow",
       "Appointment confirmations and reminders",
@@ -199,7 +199,7 @@ const featureCategories = [
     icon: Users,
     eyebrow: "CRM",
     title: "Clients, vehicles, and team access",
-    description: "Keep customer history, vehicle context, and page-level team permissions inside the same operating system instead of spread across tools.",
+    description: "Keep customer history, vehicle context, and page-level team permissions in the same system instead of scattering them across tools.",
     items: [
       "Client and vehicle records that stay connected",
       "Role-based team permissions",
@@ -211,7 +211,7 @@ const featureCategories = [
     icon: CreditCard,
     eyebrow: "Billing",
     title: "Quotes, invoices, deposits, and payments",
-    description: "Move cleanly from estimate to invoice with customer-facing pages, connected Stripe collection, and clearer approval and balance tracking.",
+    description: "Move cleanly from estimate to invoice with customer-facing pages, connected Stripe payments, and clearer approval and balance tracking.",
     items: [
       "Quotes and invoices",
       "Deposit collection and invoice payments",
