@@ -111,6 +111,13 @@ function getStripeConnectErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Stripe could not complete the connected account request.";
 }
 
+function getStripeCheckoutErrorMessage(error: unknown): string {
+  if (error instanceof Stripe.errors.StripeError) {
+    return error.message || "Stripe could not open checkout right now.";
+  }
+  return error instanceof Error ? error.message : "Stripe could not open checkout right now.";
+}
+
 async function syncStripeConnectStatus(businessId: string): Promise<{
   stripeConnectAccountId: string | null;
   stripeConnectDetailsSubmitted: boolean;
@@ -1327,13 +1334,18 @@ billingRouter.post(
     const email = user?.email;
     if (!email) throw new BadRequestError("User email required.");
     const base = process.env.FRONTEND_URL!;
-    const result = await createCheckoutSession({
-      businessId,
-      customerEmail: email,
-      customerId: business?.stripeCustomerId ?? null,
-      successUrl: `${base}/settings?tab=billing&subscription=success`,
-      cancelUrl: `${base}/subscribe?canceled=1`,
-    });
+    let result;
+    try {
+      result = await createCheckoutSession({
+        businessId,
+        customerEmail: email,
+        customerId: business?.stripeCustomerId ?? null,
+        successUrl: `${base}/settings?tab=billing&subscription=success`,
+        cancelUrl: `${base}/subscribe?canceled=1`,
+      });
+    } catch (error) {
+      throw new BadRequestError(getStripeCheckoutErrorMessage(error));
+    }
     if (!result) {
       throw new BadRequestError(
         stripe

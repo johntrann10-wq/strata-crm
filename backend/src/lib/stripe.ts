@@ -64,26 +64,44 @@ export async function createCheckoutSession(params: {
   cancelUrl: string;
 }): Promise<{ url: string } | null> {
   if (!stripe || !STRIPE_PRICE_ID) return null;
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: params.customerId ?? undefined,
-    customer_email: params.customerId ? undefined : params.customerEmail,
-    payment_method_collection: "if_required",
-    line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
-    subscription_data: {
-      trial_period_days: TRIAL_DAYS,
-      trial_settings: {
-        end_behavior: {
-          missing_payment_method: "pause",
+  const createSession = (customerId?: string | null) =>
+    stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId ?? undefined,
+      customer_email: customerId ? undefined : params.customerEmail,
+      payment_method_collection: "if_required",
+      line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
+      subscription_data: {
+        trial_period_days: TRIAL_DAYS,
+        trial_settings: {
+          end_behavior: {
+            missing_payment_method: "pause",
+          },
         },
       },
-    },
-    success_url: params.successUrl,
-    cancel_url: params.cancelUrl,
-    metadata: { businessId: params.businessId },
-    allow_promotion_codes: true,
-  });
-  return { url: session.url! };
+      success_url: params.successUrl,
+      cancel_url: params.cancelUrl,
+      metadata: { businessId: params.businessId },
+      allow_promotion_codes: true,
+    });
+
+  try {
+    const session = await createSession(params.customerId ?? null);
+    return { url: session.url! };
+  } catch (error) {
+    const stripeMessage = error instanceof Stripe.errors.StripeError ? error.message ?? "" : "";
+    const isStaleCustomerError =
+      Boolean(params.customerId) &&
+      error instanceof Stripe.errors.StripeInvalidRequestError &&
+      (error.code === "resource_missing" || /No such customer/i.test(stripeMessage));
+
+    if (!isStaleCustomerError) {
+      throw error;
+    }
+
+    const session = await createSession(null);
+    return { url: session.url! };
+  }
 }
 
 export async function createPortalSession(params: {
