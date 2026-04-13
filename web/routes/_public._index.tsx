@@ -428,8 +428,8 @@ export default function LandingPage() {
                   ) : null}
                 </div>
                 {displayedFeature.mobileImage || queuedFeature?.mobileImage ? (
-                  <div className="absolute -bottom-6 right-6 w-40 rounded-[22px] border border-orange-100 bg-white shadow-[0_14px_30px_rgba(15,23,42,0.18)]">
-                    <div className="relative h-full w-full overflow-hidden rounded-[22px]">
+                  <div className="absolute -bottom-6 right-6 aspect-[390/844] w-40 overflow-hidden rounded-[22px] border border-orange-100 bg-white shadow-[0_14px_30px_rgba(15,23,42,0.18)]">
+                    <div className="relative h-full w-full">
                       {displayedFeature.mobileImage ? (
                         <img
                           src={displayedFeature.mobileImage}
@@ -506,8 +506,8 @@ export default function LandingPage() {
                   </div>
                 ) : null}
                 {displayedFeature.mobileImage || queuedFeature?.mobileImage ? (
-                  <div className="absolute bottom-4 right-4 w-32 rounded-[18px] border border-orange-100 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.18)]">
-                    <div className="relative h-full w-full overflow-hidden rounded-[18px]">
+                  <div className="absolute bottom-4 right-4 aspect-[390/844] w-32 overflow-hidden rounded-[18px] border border-orange-100 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.18)]">
+                    <div className="relative h-full w-full">
                       {displayedFeature.mobileImage ? (
                         <img
                           src={displayedFeature.mobileImage}
