@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const pricingTitle = "Strata CRM Pricing | Affordable Automotive Shop Software";
 const pricingDescription =
-  "See Strata CRM pricing for automotive service businesses. Affordable detailing CRM pricing, shop scheduling software pricing, and one clear system for clients, vehicles, appointments, quotes, and invoices.";
+  "See Strata CRM pricing for automotive service businesses. Founder pricing is $29/month with a 30-day free trial and no card required. Public pricing will move to $79/month.";
 
 const pricingSchema = {
   "@context": "https://schema.org",
@@ -68,7 +68,7 @@ const pricingSchema = {
           name: "How much does Strata CRM cost?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Strata CRM costs $29 per month, and the first month is free.",
+            text: "Founder pricing is $29 per month with a 30-day free trial and no card required. Public pricing will move to $79 per month.",
           },
         },
         {
@@ -93,9 +93,9 @@ const included = [
 ];
 
 const pricingAssurances = [
-  "First month free so the team can test the daily workflow before committing",
+  "30-day free trial with no card required to see the workflow in action",
+  "Founder pricing at $29 per month with a clear path to public pricing at $79",
   "One plan instead of feature tiers that hold back core operations",
-  "Built for shops that need scheduling, CRM, and billing together",
 ];
 
 const buyerReasons = [
@@ -195,7 +195,7 @@ export default function PricingPage() {
                 Strata CRM is priced for automotive service businesses that need scheduling, clients, vehicles, jobs, quotes, invoices, and daily workflow visibility in one modern system.
               </p>
               <p className="max-w-3xl text-base leading-7 text-gray-600">
-                If you are searching for affordable automotive shop software, detailing CRM pricing, or shop scheduling software pricing, this page gives you the simple answer: one plan, the first month free, and no confusing tier maze.
+                If you are searching for affordable automotive shop software, detailing CRM pricing, or shop scheduling software pricing, this page gives you the simple answer: one plan, a 30-day free trial, and no confusing tier maze.
               </p>
             </div>
 
@@ -207,7 +207,7 @@ export default function PricingPage() {
                   "min-h-[54px] rounded-2xl bg-orange-500 px-7 text-base font-semibold text-white shadow-lg shadow-orange-200/70 hover:bg-orange-600"
                 )}
               >
-                Start free
+                Start free trial
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
               <Link
@@ -229,7 +229,9 @@ export default function PricingPage() {
                 <span className="text-6xl font-extrabold tracking-tight">$29</span>
                 <span className="pb-2 text-base text-white/72">per month</span>
               </div>
-              <p className="mt-3 text-sm leading-6 text-white/72">First month free. No separate pricing tier just to unlock core scheduling, CRM, and billing workflows.</p>
+              <p className="mt-3 text-sm leading-6 text-white/72">
+                Founder pricing. Public pricing moves to $79/month. Start with a 30-day free trial and no card required.
+              </p>
               <div className="mt-6 space-y-3">
                 {included.slice(0, 3).map((item) => (
                   <div key={item} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
@@ -393,7 +395,7 @@ export default function PricingPage() {
             Get modern automotive shop software without the pricing clutter.
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-orange-50">
-            Start with the first month free, set up your shop type, and see whether Strata feels better in real daily use.
+            Start with a 30-day free trial, set up your shop type, and see whether Strata feels better in real daily use.
           </p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <Link
@@ -403,7 +405,7 @@ export default function PricingPage() {
                 "min-h-[54px] rounded-2xl bg-white px-8 text-base font-semibold text-orange-600 hover:bg-orange-50"
               )}
             >
-              Start free
+              Start free trial
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
             <Link

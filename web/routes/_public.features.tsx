@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 
 const featuresTitle = "Strata CRM Features | Scheduling, CRM, Invoicing, and Shop Workflow Software";
 const featuresDescription =
-  "Explore Strata CRM features for automotive service businesses, including scheduling, calendar, invoicing, estimates, customer management, vehicle management, appointment confirmations, booking, and shop workflow organization.";
+  "Explore Strata CRM features for automotive service businesses, including scheduling, calendar workflow, estimates, invoicing, customer management, vehicle management, appointment confirmations, and shop workflow organization.";
 
 const featureSections = [
   {
@@ -35,10 +35,10 @@ const featureSections = [
   },
   {
     icon: LayoutDashboard,
-    title: "Calendar and booking workflow organization",
+    title: "Calendar workflow organization",
     description:
-      "The calendar is not isolated from the rest of the business. Booking stays connected to CRM records, jobs, follow-up, and billing so the schedule actually supports operations.",
-    bullets: ["Cleaner booking context", "Appointment visibility", "Workflow continuity after booking"],
+      "The calendar is not isolated from the rest of the business. Appointments stay connected to CRM records, jobs, follow-up, and billing so the schedule actually supports operations.",
+    bullets: ["Cleaner appointment context", "Appointment visibility", "Workflow continuity after scheduling"],
     links: [{ to: "/shop-scheduling-software", label: "See the calendar workflow" }],
   },
   {
@@ -86,9 +86,9 @@ const featureSections = [
     icon: BellRing,
     title: "Appointment confirmations and reminders",
     description:
-      "Appointment confirmations and follow-up are part of the workflow, so the shop can keep customers informed without losing clarity around the booked work.",
-    bullets: ["Confirmation sending", "Booking follow-through", "Operational context stays attached"],
-    links: [{ to: "/shop-scheduling-software", label: "See booking and confirmation flow" }],
+      "Appointment confirmations and follow-up can be configured so the shop can keep customers informed without losing clarity around the scheduled work.",
+    bullets: ["Confirmation sending", "Follow-up workflow support", "Operational context stays attached"],
+    links: [{ to: "/shop-scheduling-software", label: "See scheduling and confirmation flow" }],
   },
   {
     icon: Wrench,
@@ -107,7 +107,7 @@ const featureFaqs = [
   {
     question: "What features does Strata CRM include for automotive shops?",
     answer:
-      "Strata CRM includes scheduling, calendar workflow, client and vehicle records, quotes, invoices, payment visibility, appointment confirmations, and daily shop workflow organization.",
+      "Strata CRM includes scheduling, calendar workflow, client and vehicle records, quotes, invoices, payment visibility, appointment confirmations when configured, and daily shop workflow organization.",
   },
   {
     question: "Who is Strata CRM built for?",
@@ -243,7 +243,7 @@ export default function FeaturesHubPage() {
                 Features built for real automotive shop workflow, not generic admin software.
               </h1>
               <p className="max-w-3xl text-lg leading-8 text-gray-600 sm:text-xl">
-                Explore the Strata CRM feature set around scheduling, calendar, estimates, invoicing, customer management, vehicle management, booking, appointment confirmations, and shop workflow organization.
+                Explore the Strata CRM feature set around scheduling, calendar, estimates, invoicing, customer management, vehicle management, appointment confirmations, and shop workflow organization.
               </p>
               <p className="max-w-3xl text-base leading-7 text-gray-600">
                 This hub is designed for buyers actively searching for software. It organizes the product around the features that drive daily operations in detailing, tint, wrap, mechanic, tire, performance, and mixed automotive businesses.
@@ -258,7 +258,7 @@ export default function FeaturesHubPage() {
                   "min-h-[54px] rounded-2xl bg-orange-500 px-7 text-base font-semibold text-white shadow-lg shadow-orange-200/70 hover:bg-orange-600"
                 )}
               >
-                Start free
+                Start free trial
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
               <Link
@@ -271,13 +271,14 @@ export default function FeaturesHubPage() {
                 View pricing
               </Link>
             </div>
+            <p className="text-sm text-gray-500">30-day free trial • No card required • Founder pricing $29/mo (public $79/mo)</p>
           </div>
 
           <div className="rounded-[28px] border border-orange-200/80 bg-white/95 p-5 shadow-[0_20px_70px_rgba(249,115,22,0.12)] sm:p-6">
             <div className="rounded-3xl bg-gray-950 p-6 text-white">
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-300">Feature clusters</p>
               <div className="mt-5 space-y-3">
-                {["Scheduling and calendar", "CRM and vehicle history", "Quotes, invoices, and confirmations", "Booking and daily workflow organization"].map((item) => (
+                {["Scheduling and calendar", "CRM and vehicle history", "Quotes, invoices, and confirmations", "Daily workflow organization"].map((item) => (
                   <div key={item} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-300" />
                     <p className="text-sm text-white/88">{item}</p>
@@ -430,7 +431,7 @@ export default function FeaturesHubPage() {
                 "min-h-[54px] rounded-2xl bg-white px-8 text-base font-semibold text-orange-600 hover:bg-orange-50"
               )}
             >
-              Start free
+              Start free trial
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
             <Link

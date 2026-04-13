@@ -52,10 +52,10 @@ export default function PublicLayout() {
                   Strata CRM
                 </Link>
                 <p className="max-w-xs text-sm leading-6 text-gray-600">
-                  Modern automotive service business software for scheduling, clients, vehicles, jobs, quotes, invoices, and payments.
+                  Modern automotive service business software for scheduling, clients, vehicles, quotes, invoices, deposits, and payments.
                 </p>
                 <p className="max-w-xs text-sm leading-6 text-gray-600">
-                  Includes reminders, follow-up automations, connected payments, SMS, and calendar sync.
+                  Customer-facing documents, a portal for approvals and payments, and optional reminders when configured.
                 </p>
                 <Link
                   to="/pricing"

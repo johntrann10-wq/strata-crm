@@ -9,7 +9,6 @@ import { api, API_BASE } from "../../api";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import { trackEvent } from "@/lib/analytics";
 import { useMemo, useState, type FormEvent } from "react";
-import { CheckCircle2 } from "lucide-react";
 
 function buildGoogleAuthHref(search: string): string {
   const params = new URLSearchParams(search);
@@ -69,8 +68,8 @@ export const SignUpComponent = (props: {
 
   return (
     <div className="w-full max-w-5xl">
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
-        <div className="w-full max-w-sm">
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)] lg:items-start">
+        <div className="mx-auto w-full max-w-sm">
           <div className="mx-auto mb-8 flex flex-col items-center gap-3">
             <StrataLogoLockup
               className="flex-col gap-3"
@@ -227,47 +226,6 @@ export const SignUpComponent = (props: {
               Sign in
             </Link>
           </p>
-        </div>
-
-        <div className="space-y-5">
-          <div className="rounded-2xl border border-orange-100 bg-white/95 p-6 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Why Strata</p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-gray-950">
-              See your week, clients, and payments in one place.
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-gray-600">
-              Built for owner-operated automotive service shops that want clean scheduling, clearer billing, and a team that stays aligned.
-            </p>
-            <div className="mt-4 space-y-3">
-              {[
-                "Week and day scheduling that stays readable.",
-                "Client + vehicle history attached to every job.",
-                "Quotes, invoices, and payments that stay connected to the work.",
-              ].map((item) => (
-                <div key={item} className="flex items-start gap-2 text-sm text-gray-700">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-orange-600" />
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="relative overflow-hidden rounded-[24px] border border-orange-100 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
-            <img
-              src="/marketing/strata-ui/hero-desktop-calendar.png"
-              alt="Strata calendar preview."
-              className="h-72 w-full object-cover"
-              loading="lazy"
-            />
-            <div className="absolute -bottom-8 right-6 w-32 rounded-[20px] border border-orange-100 bg-white shadow-[0_12px_26px_rgba(15,23,42,0.16)]">
-              <img
-                src="/marketing/strata-ui/hero-mobile-appointment.png"
-                alt="Strata mobile appointment preview."
-                className="h-full w-full rounded-[20px] object-cover"
-                loading="lazy"
-              />
-            </div>
-          </div>
         </div>
       </div>
     </div>

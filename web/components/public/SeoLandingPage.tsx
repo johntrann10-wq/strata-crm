@@ -153,7 +153,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
                   "min-h-[54px] rounded-2xl bg-orange-500 px-7 text-base font-semibold text-white shadow-lg shadow-orange-200/70 hover:bg-orange-600"
                 )}
               >
-                Start free
+                Start free trial
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
               <Link
@@ -166,6 +166,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
                 Sign in
               </Link>
             </div>
+            <p className="text-sm text-gray-500">30-day free trial • No card required • Founder pricing $29/mo (public $79/mo)</p>
           </div>
 
           <div className="rounded-[28px] border border-orange-200/80 bg-white/95 p-5 shadow-[0_20px_70px_rgba(249,115,22,0.12)] sm:p-6">
@@ -374,7 +375,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
                 "min-h-[54px] rounded-2xl bg-white px-8 text-base font-semibold text-orange-600 hover:bg-orange-50"
               )}
             >
-              Start free
+              Start free trial
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
             <Link

@@ -33,25 +33,25 @@ const navigationItems: NavItems = [
     type: "item",
     title: "Product",
     href: "/#product",
-    description: "Speed, quotes, and scheduling for any auto service shop.",
+    description: "Scheduling, CRM, quotes, invoices, and payments for automotive service shops.",
   },
   {
     type: "item",
     title: "Features",
     href: "/features",
-    description: "Quote-to-booking, CRM, scheduling, and payments—done right.",
+    description: "Quotes to invoices, client + vehicle CRM, scheduling, and payments.",
   },
   {
     type: "item",
     title: "Who it’s for",
     href: "/#industries",
-    description: "Detail, tint, tires, mechanical, mobile—flexible services, one CRM.",
+    description: "Detail, tint, wrap, mobile, and owner-operated automotive service teams.",
   },
   {
     type: "item",
     title: "Pricing",
     href: "/pricing",
-    description: "$29/month, first month free.",
+    description: "Founder pricing $29/mo, public $79/mo, 30-day trial.",
   },
 ];
 
