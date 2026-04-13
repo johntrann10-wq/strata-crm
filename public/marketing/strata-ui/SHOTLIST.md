@@ -2,8 +2,8 @@
 
 ## Hero
 - `hero-desktop-calendar.png`
-  - Route: `/calendar?view=month&date=2026-04-08`
-  - Message: An active, organized schedule for Coastline Detail Co. across a busy week.
+  - Route: `/calendar?view=day&date=2026-04-08`
+  - Message: An active, organized daily schedule for Coastline Detail Co. with multiple bookings.
   - Placement: Hero desktop showcase
 - `hero-mobile-appointment.png`
   - Route: `/appointments/appt-ceramic-1`

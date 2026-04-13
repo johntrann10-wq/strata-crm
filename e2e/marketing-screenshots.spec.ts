@@ -39,7 +39,7 @@ test.describe("Marketing screenshots", () => {
     await mockMarketingApp(page);
     await signIn(page);
     await page.setViewportSize({ width: 1440, height: 1024 });
-    await page.goto("/calendar?view=month&date=2026-04-08");
+    await page.goto("/calendar?view=day&date=2026-04-08");
     await expect(page.getByText("Ceramic Coating").first()).toBeVisible();
     await captureScreenshot(page, "hero-desktop-calendar", 960);
   });
