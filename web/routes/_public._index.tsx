@@ -330,14 +330,14 @@ export default function LandingPage() {
           </div>
 
           <div className="lg:hidden">
-            <div className="flex gap-2 overflow-x-auto pb-3">
+            <div className="grid grid-cols-2 gap-2 pb-3">
               {featureRail.map((feature) => (
                 <button
                   key={feature.id}
                   type="button"
                   onClick={() => setActiveFeatureId(feature.id)}
                   className={cn(
-                    "whitespace-nowrap rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em]",
+                    "rounded-2xl border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em]",
                     feature.id === activeFeatureId
                       ? "border-orange-200 bg-orange-100 text-orange-800"
                       : "border-orange-100 bg-white text-gray-600"
@@ -348,27 +348,27 @@ export default function LandingPage() {
               ))}
             </div>
             <div className="rounded-[24px] border border-orange-100 bg-white/95 p-4 shadow-[0_12px_40px_rgba(15,23,42,0.08)]">
-              <div className="overflow-hidden rounded-2xl border border-orange-100 bg-white">
+              <div className="relative overflow-hidden rounded-2xl border border-orange-100 bg-white">
                 <img
                   key={activeFeature?.desktopImage}
                   src={activeFeature?.desktopImage}
                   alt={activeFeature?.desktopAlt}
-                  className="h-56 w-full object-cover"
+                  className="h-60 w-full object-cover"
                   loading="lazy"
                 />
+                {activeFeature?.mobileImage ? (
+                  <div className="absolute bottom-4 right-4 w-28 rounded-[18px] border border-orange-100 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.18)]">
+                    <img
+                      key={activeFeature?.mobileImage}
+                      src={activeFeature?.mobileImage}
+                      alt={activeFeature?.mobileAlt ?? "Strata mobile preview"}
+                      className="h-full w-full rounded-[18px] object-contain"
+                      loading="lazy"
+                    />
+                  </div>
+                ) : null}
               </div>
-              {activeFeature?.mobileImage ? (
-                <div className="mt-4 overflow-hidden rounded-2xl border border-orange-100 bg-white">
-                  <img
-                    key={activeFeature?.mobileImage}
-                    src={activeFeature?.mobileImage}
-                    alt={activeFeature?.mobileAlt ?? "Strata mobile preview"}
-                    className="h-56 w-full object-cover"
-                    loading="lazy"
-                  />
-                </div>
-              ) : null}
-              <div className="mt-4 space-y-2">
+              <div className="mt-5 space-y-2">
                 <h3 className="text-base font-semibold text-gray-950">{activeFeature?.title}</h3>
                 <p className="text-sm leading-6 text-gray-600">{activeFeature?.description}</p>
               </div>
