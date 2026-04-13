@@ -315,7 +315,7 @@ const pages: SeoPageConfig[] = [
     seoDescription: "Strata is a detailing CRM for automotive service businesses that need customers, vehicles, appointments, invoices, and history tied together in one system.",
     eyebrow: "Detailing CRM",
     h1: "A detailing CRM that actually remembers the customer and the car.",
-    intro: "Strata is a CRM built for automotive service shops, which means the vehicle matters as much as the customer. Every quote, appointment, invoice, and note stays tied together.",
+    intro: "Strata is a CRM built for automotive service businesses, which means the vehicle matters as much as the customer. Every quote, appointment, invoice, and note stays tied together.",
     audience: "Built for detailers and service businesses that need stronger customer memory than a generic contact database can provide.",
     pains: [
       "Generic CRMs do not treat the vehicle as a first-class record, which breaks the service history.",

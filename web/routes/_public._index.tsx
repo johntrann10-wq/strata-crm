@@ -199,7 +199,7 @@ export default function LandingPage() {
         <div className="relative z-10 mx-auto grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-center">
           <div className="space-y-6">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">
-              Built for owner-operated automotive service shops
+              Built for owner-operated automotive service businesses
             </p>
             <div className="space-y-4">
               <h1 className="text-balance text-4xl font-extrabold tracking-tight text-gray-950 sm:text-5xl lg:text-6xl">

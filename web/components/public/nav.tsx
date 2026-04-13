@@ -33,7 +33,7 @@ const navigationItems: NavItems = [
     type: "item",
     title: "Product",
     href: "/#product",
-    description: "Scheduling, CRM, quotes, invoices, and payments for automotive service shops.",
+    description: "Scheduling, CRM, quotes, invoices, and payments for automotive service businesses.",
   },
   {
     type: "item",
