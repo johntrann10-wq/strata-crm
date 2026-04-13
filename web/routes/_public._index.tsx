@@ -60,6 +60,8 @@ const featureRail = [
   },
 ];
 
+type FeaturePreview = (typeof featureRail)[number];
+
 const trustStrip = [
   { icon: Wrench, label: "Built for owner-operated shops" },
   { icon: Smartphone, label: "Mobile-ready pages for daily use" },
@@ -148,10 +150,29 @@ export default function LandingPage() {
   const location = useLocation();
   const [activeFeatureId, setActiveFeatureId] = useState(featureRail[0]?.id ?? "scheduling");
   const featureRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [displayedFeature, setDisplayedFeature] = useState<FeaturePreview>(featureRail[0]);
+  const [queuedFeature, setQueuedFeature] = useState<FeaturePreview | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [loadedVersion, setLoadedVersion] = useState(0);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const loadedImages = useRef(new Set<string>());
+  const transitionTimer = useRef<number | null>(null);
   const activeFeature = useMemo(
     () => featureRail.find((feature) => feature.id === activeFeatureId) ?? featureRail[0],
     [activeFeatureId]
   );
+  const isFeatureLoaded = (feature: FeaturePreview | null) => {
+    if (!feature) return true;
+    return [feature.desktopImage, feature.mobileImage]
+      .filter((src): src is string => Boolean(src))
+      .every((src) => loadedImages.current.has(src));
+  };
+  const handleImageLoad = (src?: string) => {
+    if (!src) return;
+    if (loadedImages.current.has(src)) return;
+    loadedImages.current.add(src);
+    setLoadedVersion((value) => value + 1);
+  };
 
   useEffect(() => {
     const id = location.hash.replace(/^#/, "");
@@ -182,6 +203,82 @@ export default function LandingPage() {
     });
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setPrefersReducedMotion(media.matches);
+    update();
+    if ("addEventListener" in media) {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let isMounted = true;
+    const sources = new Set<string>();
+    featureRail.forEach((feature) => {
+      sources.add(feature.desktopImage);
+      if (feature.mobileImage) sources.add(feature.mobileImage);
+    });
+    sources.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+      const markLoaded = () => {
+        if (!isMounted) return;
+        if (loadedImages.current.has(src)) return;
+        loadedImages.current.add(src);
+        setLoadedVersion((value) => value + 1);
+      };
+      if (img.complete) {
+        markLoaded();
+      } else {
+        img.onload = markLoaded;
+        img.onerror = markLoaded;
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const next = featureRail.find((feature) => feature.id === activeFeatureId);
+    if (!next || next.id === displayedFeature.id) return;
+    if (transitionTimer.current) {
+      window.clearTimeout(transitionTimer.current);
+      transitionTimer.current = null;
+    }
+    setIsTransitioning(false);
+    setQueuedFeature(next);
+  }, [activeFeatureId, displayedFeature.id]);
+
+  useEffect(() => {
+    if (!queuedFeature) return;
+    if (prefersReducedMotion) {
+      setDisplayedFeature(queuedFeature);
+      setQueuedFeature(null);
+      return;
+    }
+    if (!isFeatureLoaded(queuedFeature)) return;
+    setIsTransitioning(true);
+    transitionTimer.current = window.setTimeout(() => {
+      setDisplayedFeature(queuedFeature);
+      setQueuedFeature(null);
+      setIsTransitioning(false);
+      transitionTimer.current = null;
+    }, 320);
+    return () => {
+      if (transitionTimer.current) {
+        window.clearTimeout(transitionTimer.current);
+        transitionTimer.current = null;
+      }
+    };
+  }, [queuedFeature, loadedVersion, prefersReducedMotion]);
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
@@ -304,25 +401,61 @@ export default function LandingPage() {
             </div>
 
             <div className="sticky top-24 h-fit">
-              <div className="relative rounded-[28px] border border-orange-100 bg-white/95 p-4 shadow-[0_16px_50px_rgba(15,23,42,0.08)]">
-                <div className="overflow-hidden rounded-2xl border border-orange-100 bg-white">
+              <div className="relative rounded-[32px] border border-orange-100 bg-white/95 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
+                <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[26px] border border-orange-100 bg-white">
                   <img
-                    key={activeFeature?.desktopImage}
-                    src={activeFeature?.desktopImage}
-                    alt={activeFeature?.desktopAlt}
-                    className="h-[360px] w-full object-cover transition-opacity duration-300"
+                    src={displayedFeature.desktopImage}
+                    alt={displayedFeature.desktopAlt}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    onLoad={() => handleImageLoad(displayedFeature.desktopImage)}
                     loading="lazy"
                   />
+                  {queuedFeature ? (
+                    <div
+                      className={cn(
+                        "absolute inset-0 transform-gpu transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none",
+                        isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
+                      )}
+                    >
+                      <img
+                        src={queuedFeature.desktopImage}
+                        alt={queuedFeature.desktopAlt}
+                        className="absolute inset-0 h-full w-full object-cover"
+                        onLoad={() => handleImageLoad(queuedFeature.desktopImage)}
+                        loading="lazy"
+                      />
+                    </div>
+                  ) : null}
                 </div>
-                {activeFeature?.mobileImage ? (
+                {displayedFeature.mobileImage || queuedFeature?.mobileImage ? (
                   <div className="absolute -bottom-6 right-6 w-40 rounded-[22px] border border-orange-100 bg-white shadow-[0_14px_30px_rgba(15,23,42,0.18)]">
-                    <img
-                      key={activeFeature?.mobileImage}
-                      src={activeFeature?.mobileImage}
-                      alt={activeFeature?.mobileAlt ?? "Strata mobile preview"}
-                      className="h-full w-full rounded-[22px] object-cover"
-                      loading="lazy"
-                    />
+                    <div className="relative h-full w-full overflow-hidden rounded-[22px]">
+                      {displayedFeature.mobileImage ? (
+                        <img
+                          src={displayedFeature.mobileImage}
+                          alt={displayedFeature.mobileAlt ?? "Strata mobile preview"}
+                          className="absolute inset-0 h-full w-full object-cover"
+                          onLoad={() => handleImageLoad(displayedFeature.mobileImage)}
+                          loading="lazy"
+                        />
+                      ) : null}
+                      {queuedFeature?.mobileImage ? (
+                        <div
+                          className={cn(
+                            "absolute inset-0 transform-gpu transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none",
+                            isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
+                          )}
+                        >
+                          <img
+                            src={queuedFeature.mobileImage}
+                            alt={queuedFeature.mobileAlt ?? "Strata mobile preview"}
+                            className="absolute inset-0 h-full w-full object-cover"
+                            onLoad={() => handleImageLoad(queuedFeature.mobileImage)}
+                            loading="lazy"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -347,24 +480,60 @@ export default function LandingPage() {
                 </button>
               ))}
             </div>
-            <div className="rounded-[24px] border border-orange-100 bg-white/95 p-4 shadow-[0_12px_40px_rgba(15,23,42,0.08)]">
-              <div className="relative overflow-hidden rounded-2xl border border-orange-100 bg-white">
+            <div className="rounded-[28px] border border-orange-100 bg-white/95 p-4 shadow-[0_16px_50px_rgba(15,23,42,0.1)]">
+              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[24px] border border-orange-100 bg-white">
                 <img
-                  key={activeFeature?.desktopImage}
-                  src={activeFeature?.desktopImage}
-                  alt={activeFeature?.desktopAlt}
-                  className="h-60 w-full object-cover"
+                  src={displayedFeature.desktopImage}
+                  alt={displayedFeature.desktopAlt}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  onLoad={() => handleImageLoad(displayedFeature.desktopImage)}
                   loading="lazy"
                 />
-                {activeFeature?.mobileImage ? (
-                  <div className="absolute bottom-4 right-4 w-28 rounded-[18px] border border-orange-100 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.18)]">
+                {queuedFeature ? (
+                  <div
+                    className={cn(
+                      "absolute inset-0 transform-gpu transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none",
+                      isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
+                    )}
+                  >
                     <img
-                      key={activeFeature?.mobileImage}
-                      src={activeFeature?.mobileImage}
-                      alt={activeFeature?.mobileAlt ?? "Strata mobile preview"}
-                      className="h-full w-full rounded-[18px] object-contain"
+                      src={queuedFeature.desktopImage}
+                      alt={queuedFeature.desktopAlt}
+                      className="absolute inset-0 h-full w-full object-cover"
+                      onLoad={() => handleImageLoad(queuedFeature.desktopImage)}
                       loading="lazy"
                     />
+                  </div>
+                ) : null}
+                {displayedFeature.mobileImage || queuedFeature?.mobileImage ? (
+                  <div className="absolute bottom-4 right-4 w-32 rounded-[18px] border border-orange-100 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.18)]">
+                    <div className="relative h-full w-full overflow-hidden rounded-[18px]">
+                      {displayedFeature.mobileImage ? (
+                        <img
+                          src={displayedFeature.mobileImage}
+                          alt={displayedFeature.mobileAlt ?? "Strata mobile preview"}
+                          className="absolute inset-0 h-full w-full object-cover"
+                          onLoad={() => handleImageLoad(displayedFeature.mobileImage)}
+                          loading="lazy"
+                        />
+                      ) : null}
+                      {queuedFeature?.mobileImage ? (
+                        <div
+                          className={cn(
+                            "absolute inset-0 transform-gpu transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none",
+                            isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
+                          )}
+                        >
+                          <img
+                            src={queuedFeature.mobileImage}
+                            alt={queuedFeature.mobileAlt ?? "Strata mobile preview"}
+                            className="absolute inset-0 h-full w-full object-cover"
+                            onLoad={() => handleImageLoad(queuedFeature.mobileImage)}
+                            loading="lazy"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 ) : null}
               </div>
