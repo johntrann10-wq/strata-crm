@@ -94,8 +94,8 @@ const USER_ID = "owner-jake";
 const LOCATION_ID = "loc-coastline";
 
 const STAFF = [
-  { id: "staff-jake", firstName: "Jake", lastName: "Holloway", role: "Owner" },
-  { id: "staff-marco", firstName: "Marco", lastName: "Silva", role: "Lead Tech" },
+  { id: "staff-jake", firstName: "Jake", lastName: "Holloway", role: "owner", status: "active", membershipRole: "owner" },
+  { id: "staff-marco", firstName: "Marco", lastName: "Silva", role: "technician", status: "active", membershipRole: "member" },
 ];
 
 const CLIENTS: ClientRecord[] = [
@@ -322,6 +322,8 @@ const APPOINTMENTS: AppointmentRecord[] = [
     title: "Ceramic Coating",
     startTime: iso("2026-04-08T09:00:00-07:00"),
     endTime: iso("2026-04-08T12:30:00-07:00"),
+    jobStartTime: iso("2026-04-08T09:00:00-07:00"),
+    expectedCompletionTime: iso("2026-04-08T13:00:00-07:00"),
     status: "confirmed",
     totalPrice: 1200,
     depositAmount: 300,
@@ -330,12 +332,15 @@ const APPOINTMENTS: AppointmentRecord[] = [
     client: { id: "client-elena", firstName: "Elena", lastName: "Torres", phone: "555-210-8890", email: "elena@coastlineclients.com" },
     vehicle: { id: "veh-elena", year: 2023, make: "Tesla", model: "Model Y", color: "Pearl White", licensePlate: "DETAILY" },
     assignedStaff: { id: "staff-jake", firstName: "Jake", lastName: "Holloway" },
+    location: { name: "Coastline Bay" },
   }),
   makeAppointment({
     id: "appt-full-detail",
     title: "Full Detail + Interior Refresh",
     startTime: iso("2026-04-08T13:30:00-07:00"),
     endTime: iso("2026-04-08T16:30:00-07:00"),
+    jobStartTime: iso("2026-04-08T13:30:00-07:00"),
+    expectedCompletionTime: iso("2026-04-08T17:00:00-07:00"),
     status: "scheduled",
     totalPrice: 380,
     depositAmount: 100,
@@ -344,12 +349,15 @@ const APPOINTMENTS: AppointmentRecord[] = [
     client: { id: "client-harper", firstName: "Harper", lastName: "Brooks", phone: "555-771-0988", email: "harper.brooks@example.com" },
     vehicle: { id: "veh-harper", year: 2020, make: "Audi", model: "Q7", color: "Navarra Blue", licensePlate: "Q7FLEET" },
     assignedStaff: { id: "staff-marco", firstName: "Marco", lastName: "Silva" },
+    location: { name: "Coastline Bay" },
   }),
   makeAppointment({
     id: "appt-mobile",
     title: "Mobile Detail",
     startTime: iso("2026-04-07T08:30:00-07:00"),
     endTime: iso("2026-04-07T10:00:00-07:00"),
+    jobStartTime: iso("2026-04-07T08:30:00-07:00"),
+    expectedCompletionTime: iso("2026-04-07T10:30:00-07:00"),
     status: "scheduled",
     totalPrice: 140,
     depositAmount: 0,
@@ -360,12 +368,15 @@ const APPOINTMENTS: AppointmentRecord[] = [
     client: { id: "client-noah", firstName: "Noah", lastName: "Martinez", phone: "555-440-9013", email: "noah.martinez@example.com" },
     vehicle: { id: "veh-noah", year: 2021, make: "Toyota", model: "Tacoma", color: "Cement", licensePlate: "TACO21" },
     assignedStaff: { id: "staff-marco", firstName: "Marco", lastName: "Silva" },
+    location: { name: "Mobile Crew" },
   }),
   makeAppointment({
     id: "appt-maintenance",
     title: "Maintenance Wash",
     startTime: iso("2026-04-06T11:00:00-07:00"),
     endTime: iso("2026-04-06T12:00:00-07:00"),
+    jobStartTime: iso("2026-04-06T11:00:00-07:00"),
+    expectedCompletionTime: iso("2026-04-06T12:30:00-07:00"),
     status: "completed",
     totalPrice: 85,
     depositAmount: 0,
@@ -375,12 +386,15 @@ const APPOINTMENTS: AppointmentRecord[] = [
     client: { id: "client-priya", firstName: "Priya", lastName: "Singh", phone: "555-551-7720", email: "priya.singh@example.com" },
     vehicle: { id: "veh-priya", year: 2024, make: "BMW", model: "X3", color: "Brooklyn Gray", licensePlate: "COASTX3" },
     assignedStaff: { id: "staff-jake", firstName: "Jake", lastName: "Holloway" },
+    location: { name: "Coastline Bay" },
   }),
   makeAppointment({
     id: "appt-correction",
     title: "Paint Correction",
     startTime: iso("2026-04-09T10:00:00-07:00"),
     endTime: iso("2026-04-09T14:30:00-07:00"),
+    jobStartTime: iso("2026-04-09T10:00:00-07:00"),
+    expectedCompletionTime: iso("2026-04-09T15:00:00-07:00"),
     status: "confirmed",
     totalPrice: 650,
     depositAmount: 150,
@@ -389,12 +403,15 @@ const APPOINTMENTS: AppointmentRecord[] = [
     client: { id: "client-miles", firstName: "Miles", lastName: "Carter", phone: "555-987-4412", email: "miles.carter@example.com" },
     vehicle: { id: "veh-miles", year: 2022, make: "Ford", model: "Bronco", color: "Cyber Orange", licensePlate: "BRONCO22" },
     assignedStaff: { id: "staff-marco", firstName: "Marco", lastName: "Silva" },
+    location: { name: "Coastline Bay" },
   }),
   makeAppointment({
     id: "appt-interior",
     title: "Interior Refresh",
     startTime: iso("2026-04-10T09:30:00-07:00"),
     endTime: iso("2026-04-10T11:30:00-07:00"),
+    jobStartTime: iso("2026-04-10T09:30:00-07:00"),
+    expectedCompletionTime: iso("2026-04-10T12:00:00-07:00"),
     status: "scheduled",
     totalPrice: 160,
     depositAmount: 0,
@@ -403,12 +420,15 @@ const APPOINTMENTS: AppointmentRecord[] = [
     client: { id: "client-elena", firstName: "Elena", lastName: "Torres", phone: "555-210-8890", email: "elena@coastlineclients.com" },
     vehicle: { id: "veh-elena", year: 2023, make: "Tesla", model: "Model Y", color: "Pearl White", licensePlate: "DETAILY" },
     assignedStaff: { id: "staff-jake", firstName: "Jake", lastName: "Holloway" },
+    location: { name: "Coastline Bay" },
   }),
   makeAppointment({
     id: "appt-maintenance-2",
     title: "Maintenance Wash",
     startTime: iso("2026-04-11T08:00:00-07:00"),
     endTime: iso("2026-04-11T09:00:00-07:00"),
+    jobStartTime: iso("2026-04-11T08:00:00-07:00"),
+    expectedCompletionTime: iso("2026-04-11T09:30:00-07:00"),
     status: "scheduled",
     totalPrice: 85,
     depositAmount: 0,
@@ -417,12 +437,15 @@ const APPOINTMENTS: AppointmentRecord[] = [
     client: { id: "client-harper", firstName: "Harper", lastName: "Brooks", phone: "555-771-0988", email: "harper.brooks@example.com" },
     vehicle: { id: "veh-harper", year: 2020, make: "Audi", model: "Q7", color: "Navarra Blue", licensePlate: "Q7FLEET" },
     assignedStaff: { id: "staff-marco", firstName: "Marco", lastName: "Silva" },
+    location: { name: "Coastline Bay" },
   }),
   makeAppointment({
     id: "appt-touchup",
     title: "Gloss Enhancement",
     startTime: iso("2026-04-12T10:00:00-07:00"),
     endTime: iso("2026-04-12T12:00:00-07:00"),
+    jobStartTime: iso("2026-04-12T10:00:00-07:00"),
+    expectedCompletionTime: iso("2026-04-12T12:30:00-07:00"),
     status: "scheduled",
     totalPrice: 190,
     depositAmount: 50,
@@ -431,6 +454,7 @@ const APPOINTMENTS: AppointmentRecord[] = [
     client: { id: "client-priya", firstName: "Priya", lastName: "Singh", phone: "555-551-7720", email: "priya.singh@example.com" },
     vehicle: { id: "veh-priya", year: 2024, make: "BMW", model: "X3", color: "Brooklyn Gray", licensePlate: "COASTX3" },
     assignedStaff: { id: "staff-jake", firstName: "Jake", lastName: "Holloway" },
+    location: { name: "Coastline Bay" },
   }),
 ];
 
@@ -749,7 +773,50 @@ export async function mockMarketingApp(page: Page) {
     }
 
     if (path === "/staff") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records: STAFF }) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson({
+          records: STAFF.map((member) => ({
+            id: member.id,
+            firstName: member.firstName,
+            lastName: member.lastName,
+            email: member.id === "staff-jake" ? "jake@coastlinedetail.com" : "marco@coastlinedetail.com",
+            role: member.role,
+            membershipRole: member.membershipRole,
+            status: member.status,
+            active: true,
+            inviteSentAt: "2026-04-01T17:00:00.000Z",
+          })),
+        }),
+      });
+      return;
+    }
+
+    if (path === "/integrations/status") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson({
+          infrastructure: {
+            vaultConfigured: true,
+            cronSecretConfigured: true,
+            providerConfiguration: {
+              quickbooks_online: false,
+              google_calendar: false,
+              twilio_sms: false,
+              outbound_webhooks: false,
+            },
+          },
+          registry: [],
+          connections: [],
+        }),
+      });
+      return;
+    }
+
+    if (path === "/integrations/failures" || path === "/integrations" || path === "/integrations/outbound-webhooks/recent-events") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records: [] }) });
       return;
     }
 
