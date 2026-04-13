@@ -1,0 +1,29 @@
+Subject: A cleaner CRM built for detailers
+Preheader: Start a 30-day free trial - no card required.
+
+A cleaner CRM for detailers who want their day under control.
+
+Schedule work, track customers and vehicles, send quotes and invoices, and collect deposits and payments in one modern system.
+
+Start your free trial: {{signup_url}}
+
+30-day free trial - No card required - Founder pricing $29/mo (25 spots, 23 left)
+
+See the day clearly
+- Month-to-day scheduling that stays readable
+- Client + vehicle history attached to every job
+- Deposits and payment status visible
+
+Every record stays connected
+- Client + vehicle CRM keeps history in one place
+- Quotes, appointments, and invoices stay tied together
+
+Send cleaner quotes and invoices
+- Client-ready documents with public approval links
+- Stripe payments built into the workflow
+- Everything stays connected to the job and customer
+
+Founder pricing: $29/mo (public pricing moves to $79/mo)
+
+Questions? Reply to this email or contact support@stratacrm.app
+Unsubscribe: {{unsubscribe_url}}
