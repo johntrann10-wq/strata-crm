@@ -382,7 +382,7 @@ export default function LandingPage() {
           <div className="mb-10 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Platform</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-              Everything a modern automotive service shop needs, in one system.
+              Everything a modern automotive service business needs, in one system.
             </h2>
             <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-gray-600">
               Keep scheduling, CRM, and billing connected without stacking separate tools.
