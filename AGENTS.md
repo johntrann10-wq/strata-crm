@@ -58,3 +58,48 @@ Always provide:
 - What was preserved
 - What risks were avoided
 - Any remaining UX debt
+
+## Production Hardening Rules for Strata CRM
+
+This repo is in production-hardening mode.
+
+### Top priority
+- Make the app reliable enough for real-world business use
+
+### Non-negotiables
+- No silent failures
+- No false success states
+- No broken core workflows
+- No fragile auth/session behavior
+- No broken persistence
+- No broken customer-facing documents
+- No market-facing demo polish at the expense of real functionality
+
+### Required workflow
+1. Reproduce bugs before fixing
+2. Identify root cause
+3. Fix safely
+4. Verify manually
+5. Run build/lint/tests
+6. Report what changed and what remains risky
+
+### Critical workflows
+- auth
+- clients
+- vehicles
+- appointments
+- calendar
+- estimates
+- invoices
+- email sending
+- print views
+- persistence after reload
+- mobile core flows
+
+### Output format
+Always report:
+- issue
+- root cause
+- fix
+- verification
+- residual risk

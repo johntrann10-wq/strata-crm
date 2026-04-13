@@ -236,13 +236,13 @@ export const SignUpComponent = (props: {
               See your week, clients, and payments in one place.
             </h2>
             <p className="mt-3 text-sm leading-6 text-gray-600">
-              Built for detailers who want clean scheduling, cleaner invoices, and a team that stays aligned.
+              Built for owner-operated automotive service shops that want clean scheduling, clearer billing, and a team that stays aligned.
             </p>
             <div className="mt-4 space-y-3">
               {[
-                "Weekly scheduling that keeps the front desk fast.",
+                "Week and day scheduling that stays readable.",
                 "Client + vehicle history attached to every job.",
-                "Invoices and payments that stay connected to the work.",
+                "Quotes, invoices, and payments that stay connected to the work.",
               ].map((item) => (
                 <div key={item} className="flex items-start gap-2 text-sm text-gray-700">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 text-orange-600" />
@@ -254,14 +254,14 @@ export const SignUpComponent = (props: {
 
           <div className="relative overflow-hidden rounded-[24px] border border-orange-100 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
             <img
-              src="/marketing/strata-ui/weekly-calendar-desktop.png"
-              alt="Strata weekly schedule preview."
+              src="/marketing/strata-ui/hero-desktop-calendar.png"
+              alt="Strata calendar preview."
               className="h-72 w-full object-cover"
               loading="lazy"
             />
             <div className="absolute -bottom-8 right-6 w-32 rounded-[20px] border border-orange-100 bg-white shadow-[0_12px_26px_rgba(15,23,42,0.16)]">
               <img
-                src="/marketing/strata-ui/appointment-details-mobile.png"
+                src="/marketing/strata-ui/hero-mobile-appointment.png"
                 alt="Strata mobile appointment preview."
                 className="h-full w-full rounded-[20px] object-cover"
                 loading="lazy"

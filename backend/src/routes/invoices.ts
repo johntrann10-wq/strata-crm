@@ -441,6 +441,22 @@ async function markInvoiceSentWithFallback(invoiceId: string) {
   }
 }
 
+async function createInvoiceRequestActivityLogSafely(
+  req: Request,
+  input: Parameters<typeof createRequestActivityLog>[1]
+) {
+  try {
+    await createRequestActivityLog(req, input);
+  } catch (error) {
+    logger.warn("Invoice activity log write failed", {
+      businessId: input.businessId,
+      action: input.action,
+      entityId: input.entityId ?? null,
+      error,
+    });
+  }
+}
+
 async function listInvoicePayments(invoiceId: string) {
   try {
     return await db.select().from(payments).where(eq(payments.invoiceId, invoiceId));
@@ -1576,22 +1592,18 @@ invoicesRouter.post(
   }
 
   logger.info("Invoice created", { invoiceId: inv.id, businessId: bid });
-  try {
-    await createRequestActivityLog(req, {
-      businessId: bid,
-      action: "invoice.created",
-      entityType: "invoice",
-      entityId: inv.id,
-      metadata: {
-        clientId: inv.clientId,
-        appointmentId: inv.appointmentId,
-        total: inv.total,
-        status: inv.status,
-      },
-    });
-  } catch (error) {
-    logger.warn("Invoice created but activity log write failed", { invoiceId: inv.id, businessId: bid, error });
-  }
+  await createInvoiceRequestActivityLogSafely(req, {
+    businessId: bid,
+    action: "invoice.created",
+    entityType: "invoice",
+    entityId: inv.id,
+    metadata: {
+      clientId: inv.clientId,
+      appointmentId: inv.appointmentId,
+      total: inv.total,
+      status: inv.status,
+    },
+  });
   void enqueueQuickBooksInvoiceSync({
     businessId: bid,
     invoiceId: inv.id,
@@ -1614,7 +1626,7 @@ invoicesRouter.post("/:id/void", requireAuth, requireTenant, async (req: Request
   if (existing.status === "void") throw new BadRequestError("Invoice is already void.");
   const [updated] = await db.update(invoices).set({ status: "void", updatedAt: new Date() }).where(eq(invoices.id, req.params.id)).returning();
   if (updated) {
-    await createRequestActivityLog(req, {
+    await createInvoiceRequestActivityLogSafely(req, {
       businessId: bid,
       action: "invoice.voided",
       entityType: "invoice",
@@ -1656,7 +1668,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
     "Customer";
   if (!recipientEmail) {
     logger.warn("Invoice send blocked: client email missing", { invoiceId: existing.id, businessId: bid });
-    await createRequestActivityLog(req, {
+    await createInvoiceRequestActivityLogSafely(req, {
       businessId: bid,
       action: "invoice.send_failed",
       entityType: "invoice",
@@ -1680,7 +1692,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
   }
   if (!isEmailConfigured()) {
     logger.error("Invoice send blocked: SMTP is not configured", { invoiceId: existing.id, businessId: bid });
-    await createRequestActivityLog(req, {
+    await createInvoiceRequestActivityLogSafely(req, {
       businessId: bid,
       action: "invoice.send_failed",
       entityType: "invoice",
@@ -1731,7 +1743,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
   } catch (error) {
     deliveryError = error instanceof Error ? error.message : String(error);
     logger.error("Invoice email send failed", { invoiceId: existing.id, businessId: bid, error: deliveryError });
-    await createRequestActivityLog(req, {
+    await createInvoiceRequestActivityLogSafely(req, {
       businessId: bid,
       action: "invoice.send_failed",
       entityType: "invoice",
@@ -1778,27 +1790,19 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       status: "sent",
     };
   }
-  try {
-    await createRequestActivityLog(req, {
-      businessId: bid,
-      action: "invoice.sent",
-      entityType: "invoice",
-      entityId: updated.id,
-      metadata: {
-        invoiceNumber: updated.invoiceNumber ?? null,
-        recipient: recipientEmail,
-        recipientName,
-        message: parsed.data.message ?? null,
-        deliveryStatus: "emailed",
-        deliveryError: null,
-      },
-    });
-  } catch (error) {
-    logger.warn("Invoice emailed but activity log write failed", {
-      invoiceId: updated.id,
-      businessId: bid,
-      error,
-    });
-  }
+  await createInvoiceRequestActivityLogSafely(req, {
+    businessId: bid,
+    action: "invoice.sent",
+    entityType: "invoice",
+    entityId: updated.id,
+    metadata: {
+      invoiceNumber: updated.invoiceNumber ?? null,
+      recipient: recipientEmail,
+      recipientName,
+      message: parsed.data.message ?? null,
+      deliveryStatus: "emailed",
+      deliveryError: null,
+    },
+  });
   res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null, recipient: recipientEmail, recipientName });
 }));

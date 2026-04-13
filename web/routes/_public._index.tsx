@@ -4,91 +4,110 @@ import {
   ArrowRight,
   CalendarDays,
   CreditCard,
+  ExternalLink,
   FileText,
-  MessageCircle,
+  Receipt,
   ShieldCheck,
   Smartphone,
+  TrendingUp,
+  UserCheck,
   Users,
-  Workflow,
+  Wrench,
 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
-const homeTitle = "Automotive Service Business Software | Strata CRM";
+const homeTitle = "Automotive Service CRM | Strata";
 const homeDescription =
-  "Strata CRM is a simpler CRM for detailers and small automotive service businesses. Manage bookings, customers, quotes, invoices, and payments in one clean system.";
+  "Strata is a scheduling-first CRM for automotive service businesses. Manage appointments, customers, vehicles, quotes, invoices, deposits, and payments in one clean system.";
 
 const featureRail = [
   {
-    id: "crm",
-    title: "Customer CRM",
-    description: "Every client, vehicle, and service history in one place.",
-    desktopImage: "/marketing/strata-ui/customer-crm-desktop.png",
-    desktopAlt: "Customer CRM list with vehicles and contact information.",
-    mobileImage: "/marketing/strata-ui/customer-detail-mobile.png",
-    mobileAlt: "Mobile customer detail view with vehicle and contact info.",
-  },
-  {
-    id: "payments",
-    title: "Payment Processing",
-    description: "Accept cards, send invoices, and get paid the same day.",
-    desktopImage: "/marketing/strata-ui/invoice-quote-desktop.png",
-    desktopAlt: "Invoice workflow with balance and line items.",
-    mobileImage: "/marketing/strata-ui/payment-invoice-mobile.png",
-    mobileAlt: "Mobile customer payment view.",
-  },
-  {
     id: "scheduling",
-    title: "Smart Scheduling",
-    description: "Stay in control of reschedules, team assignments, and weekly load.",
-    desktopImage: "/marketing/strata-ui/weekly-calendar-desktop.png",
-    desktopAlt: "Weekly schedule view in Strata showing an active detailing week.",
-    mobileImage: "/marketing/strata-ui/appointment-details-mobile.png",
-    mobileAlt: "Mobile appointment details with customer and service context.",
+    title: "Scheduling that stays clear",
+    description: "Start from the month, drill into the day, and act with the full client and vehicle context.",
+    desktopImage: "/marketing/strata-ui/hero-desktop-calendar.png",
+    desktopAlt: "Monthly calendar with active appointments and day inspector.",
+    mobileImage: "/marketing/strata-ui/hero-mobile-appointment.png",
+    mobileAlt: "Mobile appointment detail with client, vehicle, and deposit status.",
   },
+  {
+    id: "crm",
+    title: "Client + vehicle CRM",
+    description: "Every customer, vehicle, and service history stays tied to quotes, appointments, and invoices.",
+    desktopImage: "/marketing/strata-ui/desktop-customer-crm.png",
+    desktopAlt: "Customer CRM list with vehicle context and activity.",
+    mobileImage: "/marketing/strata-ui/mobile-client-detail.png",
+    mobileAlt: "Mobile customer detail view with vehicles and activity.",
+  },
+  {
+    id: "billing",
+    title: "Quotes, invoices, and payments",
+    description: "Send client-ready estimates, collect deposits, and track balances without switching tools.",
+    desktopImage: "/marketing/strata-ui/desktop-invoice.png",
+    desktopAlt: "Invoice workflow with line items, totals, and status.",
+    mobileImage: "/marketing/strata-ui/mobile-portal-payment.png",
+    mobileAlt: "Customer portal payment view on mobile.",
+  },
+  {
+    id: "team",
+    title: "Team access without the chaos",
+    description: "Invite staff and control visibility with role-based permissions built for small teams.",
+    desktopImage: "/marketing/strata-ui/desktop-team-access.png",
+    desktopAlt: "Team access and roles settings.",
+  },
+];
+
+const trustStrip = [
+  { icon: Wrench, label: "Built for owner-operated shops" },
+  { icon: Smartphone, label: "Mobile-ready pages for daily use" },
+  { icon: CreditCard, label: "Stripe-powered deposits and payments" },
+  { icon: ShieldCheck, label: "Customer portal + public approvals" },
+  { icon: Users, label: "Role-based team access" },
 ];
 
 const platformCards = [
   {
     title: "Scheduling",
-    description: "Weekly schedules and day views that stay fast under pressure.",
+    description: "Month-to-day calendar and appointment flow that stays clear.",
     icon: CalendarDays,
   },
   {
-    title: "CRM",
-    description: "Clients, vehicles, and service history in one ledger.",
+    title: "Client + Vehicle CRM",
+    description: "Every customer and vehicle stays tied to the work.",
     icon: Users,
   },
   {
-    title: "Invoicing",
-    description: "Clean estimates and invoices built for approvals.",
+    title: "Quotes",
+    description: "Send estimates with public approval and revisions.",
     icon: FileText,
   },
   {
-    title: "Payments",
-    description: "Accept card payments with clear Stripe status tracking.",
+    title: "Invoices",
+    description: "Client-ready invoices with clear payment status.",
+    icon: Receipt,
+  },
+  {
+    title: "Deposits & Payments",
+    description: "Collect deposits and track balances with Stripe.",
     icon: CreditCard,
   },
   {
-    title: "Online Booking",
-    description: "Structured intake without losing day-to-day control.",
-    icon: Workflow,
+    title: "Customer Portal",
+    description: "Clients view quotes, invoices, and appointments in one hub.",
+    icon: ExternalLink,
   },
   {
-    title: "Communication",
-    description: "Email-ready updates that keep customers in the loop.",
-    icon: MessageCircle,
+    title: "Finance Dashboard",
+    description: "Track revenue, expenses, and collections health.",
+    icon: TrendingUp,
   },
   {
-    title: "Deposits",
-    description: "Collect deposits without chasing manual follow-up.",
-    icon: ShieldCheck,
-  },
-  {
-    title: "Mobile Access",
-    description: "Mobile-friendly pages for crews on the move.",
-    icon: Smartphone,
+    title: "Team Permissions",
+    description: "Role-based access for owners, managers, and techs.",
+    icon: UserCheck,
   },
 ];
 
@@ -113,7 +132,7 @@ export function meta() {
     { property: "og:type", content: "website" },
     { property: "og:image", content: socialImageUrl },
     { property: "og:image:secure_url", content: socialImageUrl },
-    { property: "og:image:alt", content: "Strata CRM preview showing scheduling, CRM, and invoicing for detailers." },
+    { property: "og:image:alt", content: "Strata CRM preview showing scheduling, CRM, and invoicing for automotive service businesses." },
     { property: "og:image:width", content: "1200" },
     { property: "og:image:height", content: "630" },
     { name: "twitter:card", content: "summary_large_image" },
@@ -121,7 +140,7 @@ export function meta() {
     { name: "twitter:title", content: homeTitle },
     { name: "twitter:description", content: homeDescription },
     { name: "twitter:image", content: socialImageUrl },
-    { name: "twitter:image:alt", content: "Strata CRM preview showing scheduling, CRM, and invoicing for detailers." },
+    { name: "twitter:image:alt", content: "Strata CRM preview showing scheduling, CRM, and invoicing for automotive service businesses." },
   ];
 }
 
@@ -168,7 +187,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeSchema) }} />
 
-      <section className="relative overflow-hidden px-5 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-18 lg:px-8 lg:pb-24 lg:pt-24">
+      <section className="relative overflow-hidden px-5 pb-12 pt-14 sm:px-6 sm:pb-16 sm:pt-18 lg:px-8 lg:pb-20 lg:pt-24">
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] opacity-90"
           style={{
@@ -177,16 +196,21 @@ export default function LandingPage() {
           }}
         />
 
-        <div className="relative z-10 mx-auto grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center">
+        <div className="relative z-10 mx-auto grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-center">
           <div className="space-y-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Built for detailers</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">
+              Built for owner-operated automotive service shops
+            </p>
             <div className="space-y-4">
               <h1 className="text-balance text-4xl font-extrabold tracking-tight text-gray-950 sm:text-5xl lg:text-6xl">
-                A simpler CRM for detailers
+                A cleaner CRM for automotive service businesses
               </h1>
               <p className="max-w-xl text-lg leading-8 text-gray-600 sm:text-xl">
-                Manage bookings, customers, quotes, invoices, and payments in one clean, mobile-friendly system built for modern detailing
-                businesses.
+                Schedule work, track customers and vehicles, send estimates and invoices, and collect deposits and payments in one modern system
+                built for the day-to-day shop flow.
+              </p>
+              <p className="text-sm font-medium text-gray-500">
+                Detailers, tint and wrap shops, mobile service operators, and small teams.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -205,22 +229,22 @@ export default function LandingPage() {
                 Sign in
               </Link>
             </div>
-            <p className="text-sm font-medium text-gray-500">30-day free trial • No card required • Founder pricing available</p>
+            <p className="text-sm font-medium text-gray-500">30-day free trial | No card required | Founder pricing $29/mo</p>
           </div>
 
           <div className="relative">
             <div className="overflow-hidden rounded-[32px] border border-orange-100 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
               <img
-                src="/marketing/strata-ui/weekly-calendar-desktop.png"
-                alt="Strata CRM weekly schedule with active appointments."
+                src="/marketing/strata-ui/hero-desktop-calendar.png"
+                alt="Strata calendar with month overview and active appointments."
                 className="h-full w-full object-cover"
                 loading="eager"
               />
             </div>
-            <div className="absolute -bottom-10 right-4 w-36 rounded-[26px] border border-orange-100 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.18)] sm:right-8 sm:w-44 lg:w-52">
+            <div className="absolute -bottom-8 right-4 w-36 rounded-[26px] border border-orange-100 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.18)] sm:right-8 sm:w-44 lg:w-52">
               <img
-                src="/marketing/strata-ui/appointment-details-mobile.png"
-                alt="Strata CRM mobile appointment details."
+                src="/marketing/strata-ui/hero-mobile-appointment.png"
+                alt="Strata mobile appointment details."
                 className="h-full w-full rounded-[26px] object-cover"
                 loading="eager"
               />
@@ -229,15 +253,26 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className="px-5 pb-12 sm:px-6 sm:pb-14 lg:px-8 lg:pb-16">
+        <div className="mx-auto grid max-w-6xl gap-3 rounded-[28px] border border-orange-100 bg-white/90 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)] sm:grid-cols-2 sm:gap-4 sm:p-5 lg:grid-cols-5">
+          {trustStrip.map((item) => (
+            <div key={item.label} className="flex items-center gap-3 rounded-2xl border border-orange-100/70 bg-white px-3 py-3">
+              <item.icon className="h-4 w-4 text-orange-600" />
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-700">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="px-5 pb-16 sm:px-6 sm:pb-20 lg:px-8 lg:pb-24">
         <div className="mx-auto max-w-6xl">
           <div className="mb-10 flex flex-col gap-4 text-center lg:mb-12">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Product preview</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Workflow preview</p>
             <h2 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-              See the workflow before you sign up.
+              See how Strata runs the day-to-day shop flow.
             </h2>
             <p className="mx-auto max-w-2xl text-base leading-7 text-gray-600">
-              Strata keeps daily operations clear with one connected workflow for scheduling, CRM, and billing.
+              Every view is built around scheduling clarity, customer context, and billing follow-through.
             </p>
           </div>
 
@@ -347,10 +382,10 @@ export default function LandingPage() {
           <div className="mb-10 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Platform</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-              Everything a detailing shop needs, in one system.
+              Everything a modern automotive service shop needs, in one system.
             </h2>
             <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-gray-600">
-              Keep scheduling, CRM, and payments in one connected workflow without stacking separate tools.
+              Keep scheduling, CRM, and billing connected without stacking separate tools.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -396,6 +431,46 @@ export default function LandingPage() {
               </Link>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="px-5 pb-20 sm:px-6 sm:pb-24 lg:px-8">
+        <div className="mx-auto max-w-5xl rounded-[28px] border border-orange-100 bg-white/90 p-6 shadow-[0_16px_50px_rgba(15,23,42,0.06)] sm:p-8">
+          <div className="mb-6 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Built for real workflows</p>
+            <h2 className="text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
+              The product depth you need, without the overhead.
+            </h2>
+            <p className="text-sm leading-6 text-gray-600">
+              Strata focuses on the workflows that keep appointments, customer context, and billing moving without clutter.
+            </p>
+          </div>
+          <Accordion type="single" collapsible className="space-y-3">
+            <AccordionItem value="scheduling" className="rounded-2xl border border-orange-100 bg-white px-4">
+              <AccordionTrigger className="py-4 text-left text-sm font-semibold">
+                Scheduling clarity from month to day
+              </AccordionTrigger>
+              <AccordionContent className="pb-4 text-sm text-gray-600">
+                Month view, day drill-down, and appointment detail panels keep the schedule readable while the full client and vehicle context stays attached.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="billing" className="rounded-2xl border border-orange-100 bg-white px-4">
+              <AccordionTrigger className="py-4 text-left text-sm font-semibold">
+                Client-ready quotes, invoices, and payments
+              </AccordionTrigger>
+              <AccordionContent className="pb-4 text-sm text-gray-600">
+                Send estimates and invoices with public approval links, collect deposits, and let clients pay through the customer portal.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="automation" className="rounded-2xl border border-orange-100 bg-white px-4">
+              <AccordionTrigger className="py-4 text-left text-sm font-semibold">
+                Follow-ups and reminders when you want them
+              </AccordionTrigger>
+              <AccordionContent className="pb-4 text-sm text-gray-600">
+                Automations cover appointment reminders, review requests, abandoned quotes, and lapsed client outreach with configurable timing.
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </div>
       </section>
     </div>

@@ -2961,7 +2961,7 @@ async function deleteAppointmentRecord(req: Request, res: Response) {
       )
     );
   if (!canDeleteAppointmentWithInvoiceStatuses(linkedInvoices.map((invoice) => invoice.status))) {
-    throw new BadRequestError("This appointment already has an active invoice and cannot be deleted.");
+    throw new BadRequestError("This appointment can't be deleted because it has linked invoices. Void or remove the invoice first.");
   }
 
   const [linkedQuote] = await db
@@ -2970,7 +2970,7 @@ async function deleteAppointmentRecord(req: Request, res: Response) {
     .where(and(eq(quotes.businessId, bid), eq(quotes.appointmentId, existing.id)))
     .limit(1);
   if (linkedQuote) {
-    throw new BadRequestError("This appointment is linked to a quote and cannot be deleted.");
+    throw new BadRequestError("This appointment can't be deleted because it is linked to a quote. Remove the quote first.");
   }
 
   await db.transaction(async (tx) => {

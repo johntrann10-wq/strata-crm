@@ -900,7 +900,8 @@ export default function AppointmentDetail() {
     if (!appointment) return;
     const result = await runDeleteAppointment({ id: appointment.id });
     if (result.error) {
-      toast.error(`Failed to delete appointment: ${result.error.message}`);
+      const message = result.error.message ?? "Failed to delete appointment";
+      toast.error(message.includes("can't be deleted") ? message : `Failed to delete appointment: ${message}`);
       return;
     }
     toast.success("Appointment deleted");
