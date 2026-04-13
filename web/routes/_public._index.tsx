@@ -14,24 +14,24 @@ const productProof = [
     key: "calendar",
     title: "Scheduling that stays clear under pressure.",
     description: "Start from the month, open the day, and book without losing context.",
-    image: "/marketing/strata-desktop.png",
-    alt: "Strata calendar and scheduling view on desktop.",
+    image: "/marketing/strata-ui/hero-desktop-calendar.png",
+    alt: "Strata calendar and scheduling view with a full week of appointments.",
     objectPosition: "left top",
   },
   {
     key: "billing",
     title: "Quotes and invoices that feel professional.",
     description: "Move from approval to payment without stitching together extra tools.",
-    image: "/marketing/strata-desktop.png",
-    alt: "Strata quotes and invoices workflow on desktop.",
+    image: "/marketing/strata-ui/desktop-invoice-or-quote.png",
+    alt: "Strata invoice workflow with line items and totals.",
     objectPosition: "right top",
   },
   {
     key: "mobile",
     title: "Mobile workflows that keep crews moving.",
     description: "Run the day from the bay or the driveway with a clean mobile UI.",
-    image: "/marketing/strata-mobile.png",
-    alt: "Strata mobile workflow view for detailers.",
+    image: "/marketing/strata-ui/mobile-payment-or-estimate.png",
+    alt: "Strata mobile payment and estimate experience.",
     objectPosition: "center top",
   },
 ];
@@ -151,16 +151,16 @@ export default function LandingPage() {
           <div className="relative">
             <div className="overflow-hidden rounded-[32px] border border-orange-100 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
               <img
-                src="/marketing/strata-desktop.png"
-                alt="Strata CRM dashboard and scheduling on desktop."
+                src="/marketing/strata-ui/hero-desktop-calendar.png"
+                alt="Strata CRM calendar view with active scheduling."
                 className="h-full w-full object-cover"
                 loading="eager"
               />
             </div>
             <div className="absolute -bottom-10 right-4 w-36 rounded-[26px] border border-orange-100 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.18)] sm:right-8 sm:w-44 lg:w-52">
               <img
-                src="/marketing/strata-mobile.png"
-                alt="Strata CRM mobile view for detailers."
+                src="/marketing/strata-ui/hero-mobile-appointment.png"
+                alt="Strata CRM mobile appointment details."
                 className="h-full w-full rounded-[26px] object-cover"
                 loading="eager"
               />
