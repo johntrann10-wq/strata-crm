@@ -401,8 +401,8 @@ export default function LandingPage() {
             </div>
 
             <div className="sticky top-24 h-fit">
-              <div className="relative rounded-[32px] border border-orange-100 bg-white/95 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
-                <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[26px] border border-orange-100 bg-white">
+              <div className="relative overflow-visible rounded-[32px] border border-orange-100 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
+                <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[32px] bg-white">
                   <img
                     src={displayedFeature.desktopImage}
                     alt={displayedFeature.desktopAlt}
@@ -428,7 +428,7 @@ export default function LandingPage() {
                   ) : null}
                 </div>
                 {displayedFeature.mobileImage || queuedFeature?.mobileImage ? (
-                  <div className="absolute -bottom-6 right-6 aspect-[390/844] w-40 overflow-hidden rounded-[22px] border border-orange-100 bg-white shadow-[0_14px_30px_rgba(15,23,42,0.18)]">
+                  <div className="absolute -bottom-8 right-6 aspect-[390/844] w-36 overflow-hidden rounded-[26px] border border-orange-100 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.18)] sm:w-44 lg:w-52">
                     <div className="relative h-full w-full">
                       {displayedFeature.mobileImage ? (
                         <img
@@ -480,8 +480,8 @@ export default function LandingPage() {
                 </button>
               ))}
             </div>
-            <div className="rounded-[28px] border border-orange-100 bg-white/95 p-4 shadow-[0_16px_50px_rgba(15,23,42,0.1)]">
-              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[24px] border border-orange-100 bg-white">
+            <div className="relative overflow-visible rounded-[28px] border border-orange-100 bg-white shadow-[0_16px_50px_rgba(15,23,42,0.1)]">
+              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[28px] bg-white">
                 <img
                   src={displayedFeature.desktopImage}
                   alt={displayedFeature.desktopAlt}
@@ -506,7 +506,7 @@ export default function LandingPage() {
                   </div>
                 ) : null}
                 {displayedFeature.mobileImage || queuedFeature?.mobileImage ? (
-                  <div className="absolute bottom-4 right-4 aspect-[390/844] w-32 overflow-hidden rounded-[18px] border border-orange-100 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.18)]">
+                  <div className="absolute -bottom-6 right-4 aspect-[390/844] w-28 overflow-hidden rounded-[22px] border border-orange-100 bg-white shadow-[0_14px_30px_rgba(15,23,42,0.18)]">
                     <div className="relative h-full w-full">
                       {displayedFeature.mobileImage ? (
                         <img
@@ -537,7 +537,7 @@ export default function LandingPage() {
                   </div>
                 ) : null}
               </div>
-              <div className="mt-5 space-y-2">
+              <div className="px-4 pb-5 pt-6 space-y-2">
                 <h3 className="text-base font-semibold text-gray-950">{activeFeature?.title}</h3>
                 <p className="text-sm leading-6 text-gray-600">{activeFeature?.description}</p>
               </div>
