@@ -40,11 +40,20 @@ function resolveSameSite(req?: Request): "Lax" | "Strict" | "None" {
   if (configured === "none") return "None";
   if (configured === "strict") return "Strict";
   if (configured === "lax") return "Lax";
-  if (!req) return "Lax";
+  const frontendUrl = process.env.FRONTEND_URL?.trim();
+  if (!req) return frontendUrl ? "None" : "Lax";
   const origin = req.get("origin");
+  const referer = req.get("referer");
   const host = req.get("host");
-  if (!origin || !host) return "Lax";
+  if (!host) return frontendUrl ? "None" : "Lax";
   try {
+    const frontendHost = frontendUrl ? new URL(frontendUrl).host : null;
+    if (frontendHost && frontendHost !== host) return "None";
+    if (!origin && referer) {
+      const refererHost = new URL(referer).host;
+      return refererHost && refererHost !== host ? "None" : "Lax";
+    }
+    if (!origin) return "Lax";
     const originHost = new URL(origin).host;
     return originHost && originHost !== host ? "None" : "Lax";
   } catch {
