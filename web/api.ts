@@ -1,4 +1,4 @@
-import { clearAuthState, getCurrentBusinessId } from "./lib/auth";
+import { clearAuthState, getAuthToken, getCurrentBusinessId } from "./lib/auth";
 import type { HomeDashboardRange, HomeDashboardSnapshot } from "./lib/homeDashboard";
 import { recordReliabilityDiagnostic } from "./lib/reliabilityDiagnostics";
 
@@ -154,6 +154,10 @@ async function request<T = unknown>(
     "Content-Type": "application/json",
     ...init.headers,
   };
+  const authToken = getAuthToken();
+  if (authToken && !(headers as Record<string, string>).Authorization) {
+    (headers as Record<string, string>).Authorization = `Bearer ${authToken}`;
+  }
   const currentBusinessId = getCurrentBusinessId();
   if (currentBusinessId) {
     (headers as any)["x-business-id"] = currentBusinessId;

@@ -7,6 +7,7 @@ type CookieOptions = {
   maxAgeDays?: number;
   secure?: boolean;
   domain?: string | null;
+  sameSite?: "Lax" | "Strict" | "None";
 };
 
 function isSecureRequest(req?: Request): boolean {
@@ -18,7 +19,8 @@ function isSecureRequest(req?: Request): boolean {
 }
 
 function buildCookieAttributes(options: CookieOptions): string[] {
-  const attrs = ["Path=/", "HttpOnly", "SameSite=Lax"];
+  const sameSite = options.sameSite ?? "Lax";
+  const attrs = ["Path=/", "HttpOnly", `SameSite=${sameSite}`];
   const maxAgeDays = options.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS;
   const maxAgeSeconds = Math.max(0, Math.floor(maxAgeDays * 24 * 60 * 60));
   if (maxAgeSeconds > 0) {
@@ -33,6 +35,23 @@ function buildCookieAttributes(options: CookieOptions): string[] {
   return attrs;
 }
 
+function resolveSameSite(req?: Request): "Lax" | "Strict" | "None" {
+  const configured = process.env.AUTH_COOKIE_SAMESITE?.trim().toLowerCase();
+  if (configured === "none") return "None";
+  if (configured === "strict") return "Strict";
+  if (configured === "lax") return "Lax";
+  if (!req) return "Lax";
+  const origin = req.get("origin");
+  const host = req.get("host");
+  if (!origin || !host) return "Lax";
+  try {
+    const originHost = new URL(origin).host;
+    return originHost && originHost !== host ? "None" : "Lax";
+  } catch {
+    return "Lax";
+  }
+}
+
 export function buildAuthCookie(value: string, options: CookieOptions = {}): string {
   const attrs = buildCookieAttributes(options);
   return `${AUTH_COOKIE_NAME}=${encodeURIComponent(value)}; ${attrs.join("; ")}`;
@@ -45,13 +64,27 @@ export function buildClearedAuthCookie(options: CookieOptions = {}): string {
 
 export function setAuthCookie(res: Response, token: string, req?: Request) {
   const domain = process.env.AUTH_COOKIE_DOMAIN?.trim() || null;
-  const cookie = buildAuthCookie(token, { secure: isSecureRequest(req), domain });
+  let secure = isSecureRequest(req);
+  let sameSite = resolveSameSite(req);
+  if (sameSite === "None" && !secure) {
+    sameSite = "Lax";
+  } else if (sameSite === "None") {
+    secure = true;
+  }
+  const cookie = buildAuthCookie(token, { secure, domain, sameSite });
   res.setHeader("Set-Cookie", cookie);
 }
 
 export function clearAuthCookie(res: Response, req?: Request) {
   const domain = process.env.AUTH_COOKIE_DOMAIN?.trim() || null;
-  const cookie = buildClearedAuthCookie({ secure: isSecureRequest(req), domain });
+  let secure = isSecureRequest(req);
+  let sameSite = resolveSameSite(req);
+  if (sameSite === "None" && !secure) {
+    sameSite = "Lax";
+  } else if (sameSite === "None") {
+    secure = true;
+  }
+  const cookie = buildClearedAuthCookie({ secure, domain, sameSite });
   res.setHeader("Set-Cookie", cookie);
 }
 
@@ -68,4 +101,3 @@ export function getAuthTokenFromCookieHeader(cookieHeader: string | undefined | 
     return value;
   }
 }
-
