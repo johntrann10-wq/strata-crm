@@ -6,9 +6,10 @@ import {
   ScrollRestoration,
   isRouteErrorResponse,
   useLocation,
+  useNavigate,
   useRouteError,
 } from "react-router";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useState } from "react";
 import "./app.css";
 import faviconHref from "./favicon.svg";
 import appleTouchIconHref from "./apple-touch-icon.png";
@@ -16,6 +17,7 @@ import socialPreviewHref from "./social-preview.png";
 import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
 import { analyticsEnabled, getClarityProjectId, getGaMeasurementId, trackPageView } from "./lib/analytics";
+import { parseAuthTokenFromHash, persistAuthState } from "./lib/auth";
 import { recordRuntimeError } from "./lib/runtimeErrors";
 
 const isProduction = import.meta.env.PROD;
@@ -150,8 +152,26 @@ function AnalyticsRouteTracker() {
     if (!analyticsEnabled()) return;
     const query = location.search || "";
     const hash = location.hash || "";
-    trackPageView(`${location.pathname}${query}${hash}`);
+    const safeHash = hash.includes("authToken=") ? "" : hash;
+    trackPageView(`${location.pathname}${query}${safeHash}`);
   }, [location.pathname, location.search, location.hash]);
+
+  return null;
+}
+
+function AuthHashConsumer() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    const { token, cleanedHash } = parseAuthTokenFromHash(location.hash);
+    if (!token) return;
+    persistAuthState(token, { source: "auth-hash" });
+    if (cleanedHash !== location.hash) {
+      navigate(`${location.pathname}${location.search}${cleanedHash}`, { replace: true });
+    }
+  }, [location.hash, location.pathname, location.search, navigate]);
 
   return null;
 }
@@ -289,6 +309,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
       </head>
       <body>
         <Suspense>
+          <AuthHashConsumer />
           <AnalyticsRouteTracker />
           <BrowserErrorReporter />
           <Outlet context={{ gadgetConfig, csrfToken }} />

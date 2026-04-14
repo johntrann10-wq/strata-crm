@@ -121,3 +121,16 @@ export function readBroadcastAuthEvent(event: StorageEvent): { name: AuthEventNa
   }
 }
 
+export function parseAuthTokenFromHash(hash: string | null | undefined): { token: string | null; cleanedHash: string } {
+  const value = typeof hash === "string" ? hash : "";
+  if (!value || !value.includes("authToken=")) {
+    return { token: null, cleanedHash: value };
+  }
+  const params = new URLSearchParams(value.replace(/^#/, ""));
+  const token = params.get("authToken");
+  if (!token) return { token: null, cleanedHash: value };
+  params.delete("authToken");
+  const remainder = params.toString();
+  return { token, cleanedHash: remainder ? `#${remainder}` : "" };
+}
+

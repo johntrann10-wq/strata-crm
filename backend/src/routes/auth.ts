@@ -928,6 +928,7 @@ authRouter.get(
     const redirectPath = resolveGoogleStateRedirect(req.query.state);
     const frontendUrl = resolveFrontendBaseUrl(req);
     const baseRedirect = `${frontendUrl}${redirectPath}`;
-    res.redirect(baseRedirect);
+    const separator = baseRedirect.includes("#") ? "&" : "#";
+    res.redirect(`${baseRedirect}${separator}authToken=${encodeURIComponent(token)}`);
   })
 );
