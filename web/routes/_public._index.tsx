@@ -57,6 +57,8 @@ const featureRail = [
     description: "Invite staff and control visibility with role-based permissions built for small teams.",
     desktopImage: "/marketing/strata-ui/desktop-team-access.png",
     desktopAlt: "Team access and roles settings.",
+    mobileImage: "/marketing/strata-ui/appointment-details-mobile.png",
+    mobileAlt: "Mobile appointment detail view.",
   },
 ];
 
@@ -289,7 +291,7 @@ export default function LandingPage() {
       setQueuedFeature(null);
       setIsTransitioning(false);
       transitionTimer.current = null;
-    }, 420);
+    }, 700);
     return () => {
       if (transitionTimer.current) {
         window.clearTimeout(transitionTimer.current);
@@ -450,7 +452,7 @@ export default function LandingPage() {
                   {queuedFeature ? (
                     <div
                       className={cn(
-                        "absolute inset-0 transform-gpu transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
+                        "absolute inset-0 transform-gpu transition-all duration-650 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
                         isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
                       )}
                     >
@@ -479,7 +481,7 @@ export default function LandingPage() {
                       {queuedFeature?.mobileImage ? (
                         <div
                           className={cn(
-                            "absolute inset-0 transform-gpu transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
+                            "absolute inset-0 transform-gpu transition-all duration-650 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
                             isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
                           )}
                         >
@@ -532,7 +534,7 @@ export default function LandingPage() {
                 {queuedFeature ? (
                   <div
                     className={cn(
-                      "absolute inset-0 transform-gpu transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
+                      "absolute inset-0 transform-gpu transition-all duration-650 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
                       isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
                     )}
                   >
@@ -560,7 +562,7 @@ export default function LandingPage() {
                       {queuedFeature?.mobileImage ? (
                         <div
                           className={cn(
-                            "absolute inset-0 transform-gpu transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
+                            "absolute inset-0 transform-gpu transition-all duration-650 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
                             isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
                           )}
                         >
