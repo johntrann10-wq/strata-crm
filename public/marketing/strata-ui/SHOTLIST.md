@@ -31,6 +31,10 @@
   - Route: `/settings` (Team & Roles section)
   - Message: Team access controls and roles for multi-user shops.
   - Placement: Feature rail (Team Access)
+- `team-access-mobile.png`
+  - Route: `/settings` (Team & Roles section)
+  - Message: Mobile team access and role visibility.
+  - Placement: Feature rail mobile overlay
 
 ## Raw Captures
 - `*-raw.png` files are full viewport exports for archive and future crops.

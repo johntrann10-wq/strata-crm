@@ -120,4 +120,16 @@ test.describe("Marketing screenshots", () => {
     await expect(page.getByText("Team & Roles", { exact: true })).toBeVisible();
     await captureScreenshot(page, "team-access-desktop", 960);
   });
+
+  test("team-access-mobile", async ({ page }) => {
+    await mockMarketingApp(page);
+    await signIn(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/settings");
+    const teamTab = page.getByRole("tab", { name: "Team" });
+    await expect(teamTab).toBeVisible();
+    await teamTab.click();
+    await expect(page.getByText("Team & Roles", { exact: true })).toBeVisible();
+    await captureScreenshot(page, "team-access-mobile", 780);
+  });
 });

@@ -57,8 +57,8 @@ const featureRail = [
     description: "Invite staff and control visibility with role-based permissions built for small teams.",
     desktopImage: "/marketing/strata-ui/desktop-team-access.png",
     desktopAlt: "Team access and roles settings.",
-    mobileImage: "/marketing/strata-ui/mobile-client-detail.png",
-    mobileAlt: "Mobile customer detail view with vehicles and activity.",
+    mobileImage: "/marketing/strata-ui/team-access-mobile.png",
+    mobileAlt: "Team access and roles on mobile.",
   },
 ];
 
