@@ -24,6 +24,12 @@ export function encryptIntegrationSecret(value: string | null | undefined): stri
   return [VAULT_PREFIX, iv.toString("base64url"), tag.toString("base64url"), encrypted.toString("base64url")].join(":");
 }
 
+export function isIntegrationSecretEncrypted(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const parts = value.split(":");
+  return parts.length === 4 && parts[0] === VAULT_PREFIX;
+}
+
 export function decryptIntegrationSecret(value: string | null | undefined): string | null {
   if (!value) return null;
   const [version, ivPart, tagPart, encryptedPart] = value.split(":");
@@ -43,6 +49,18 @@ export function decryptIntegrationSecret(value: string | null | undefined): stri
   return decrypted.toString("utf8");
 }
 
+export function maybeEncryptIntegrationSecret(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (isIntegrationSecretEncrypted(value)) return value;
+  return encryptIntegrationSecret(value);
+}
+
+export function maybeDecryptIntegrationSecret(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (!isIntegrationSecretEncrypted(value)) return value;
+  return decryptIntegrationSecret(value);
+}
+
 export function encryptIntegrationJson(value: Record<string, unknown> | null | undefined): string | null {
   if (!value) return null;
   return encryptIntegrationSecret(JSON.stringify(value));
@@ -53,4 +71,3 @@ export function decryptIntegrationJson<T>(value: string | null | undefined): T |
   if (!decrypted) return null;
   return JSON.parse(decrypted) as T;
 }
-

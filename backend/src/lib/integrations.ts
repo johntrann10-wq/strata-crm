@@ -10,7 +10,7 @@ import {
 } from "./integrationConnections.js";
 import { enqueueIntegrationJob, markIntegrationJobFailed, markIntegrationJobSucceeded, type IntegrationJobRecord } from "./integrationJobs.js";
 import { isIntegrationFeatureEnabled } from "./integrationFeatureFlags.js";
-import { isIntegrationVaultConfigured } from "./integrationVault.js";
+import { isIntegrationVaultConfigured, maybeDecryptIntegrationSecret } from "./integrationVault.js";
 import { BadRequestError, NotFoundError } from "./errors.js";
 import { logger } from "./logger.js";
 
@@ -180,7 +180,19 @@ export async function syncOutboundWebhookConnectionForBusiness(input: {
     });
     return null;
   }
+  let webhookSecret = input.webhookSecret ?? null;
+  try {
+    webhookSecret = maybeDecryptIntegrationSecret(webhookSecret);
+  } catch (error) {
+    logger.warn("Failed to decrypt webhook signing secret; skipping secret sync", {
+      businessId: input.businessId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    webhookSecret = null;
+  }
+  webhookSecret = webhookSecret?.trim() || null;
   const config = buildWebhookConfig(input);
+  config.webhookSecret = webhookSecret;
   const connected = !!input.webhookEnabled && !!config.webhookUrl;
   return upsertBusinessIntegrationConnection({
     businessId: input.businessId,

@@ -4,7 +4,10 @@ import {
   decryptIntegrationSecret,
   encryptIntegrationJson,
   encryptIntegrationSecret,
+  isIntegrationSecretEncrypted,
   isIntegrationVaultConfigured,
+  maybeDecryptIntegrationSecret,
+  maybeEncryptIntegrationSecret,
 } from "./integrationVault.js";
 
 describe("integrationVault", () => {
@@ -23,6 +26,21 @@ describe("integrationVault", () => {
     expect(encrypted).toBeTruthy();
     expect(encrypted).not.toContain("super-secret-token");
     expect(decryptIntegrationSecret(encrypted)).toBe("super-secret-token");
+  });
+
+  it("detects encrypted secrets and preserves plaintext safely", () => {
+    const encrypted = encryptIntegrationSecret("secret-123");
+    expect(isIntegrationSecretEncrypted(encrypted)).toBe(true);
+    expect(isIntegrationSecretEncrypted("plain-secret")).toBe(false);
+    expect(maybeEncryptIntegrationSecret(encrypted)).toBe(encrypted);
+    expect(maybeDecryptIntegrationSecret("plain-secret")).toBe("plain-secret");
+  });
+
+  it("round-trips secrets with the maybe helpers", () => {
+    const encrypted = maybeEncryptIntegrationSecret("extra-secret");
+    expect(encrypted).toBeTruthy();
+    expect(isIntegrationSecretEncrypted(encrypted)).toBe(true);
+    expect(maybeDecryptIntegrationSecret(encrypted)).toBe("extra-secret");
   });
 
   it("encrypts and decrypts json payloads", () => {
@@ -44,4 +62,3 @@ describe("integrationVault", () => {
     expect(isIntegrationVaultConfigured()).toBe(false);
   });
 });
-

@@ -6,10 +6,21 @@ export type PublicDocumentTokenPayload = {
   kind: PublicDocumentKind;
   entityId: string;
   businessId: string;
+  ver?: number;
 };
 
-export function createPublicDocumentToken(payload: PublicDocumentTokenPayload): string {
-  return createScopedPublicDocumentToken(payload);
+export function createPublicDocumentToken(payload: PublicDocumentTokenPayload & { tokenVersion?: number }): string {
+  const tokenVersion = typeof payload.tokenVersion === "number"
+    ? payload.tokenVersion
+    : typeof payload.ver === "number"
+      ? payload.ver
+      : 1;
+  return createScopedPublicDocumentToken({
+    kind: payload.kind,
+    entityId: payload.entityId,
+    businessId: payload.businessId,
+    ver: tokenVersion,
+  });
 }
 
 export function verifyAnyPublicDocumentToken(token: string): PublicDocumentTokenPayload | null {
@@ -19,7 +30,11 @@ export function verifyAnyPublicDocumentToken(token: string): PublicDocumentToken
   if (payload.kind !== "quote" && payload.kind !== "invoice" && payload.kind !== "appointment") {
     return null;
   }
-  return payload;
+  const tokenVersion = typeof payload.ver === "number" && Number.isFinite(payload.ver) ? payload.ver : 1;
+  return {
+    ...payload,
+    ver: tokenVersion,
+  };
 }
 
 export function verifyPublicDocumentToken(

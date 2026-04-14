@@ -11,6 +11,7 @@ import { logger } from "../lib/logger.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
 import { warnOnce } from "../lib/warnOnce.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
 
 export const vehiclesRouter = Router({ mergeParams: true });
@@ -363,6 +364,7 @@ vehiclesRouter.get(
   "/",
   requireAuth,
   requireTenant,
+  requirePermission("vehicles.read"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     let clientId: string | undefined;
@@ -479,6 +481,7 @@ vehiclesRouter.get(
   "/:id",
   requireAuth,
   requireTenant,
+  requirePermission("vehicles.read"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     try {
@@ -526,6 +529,7 @@ vehiclesRouter.post(
   "/",
   requireAuth,
   requireTenant,
+  requirePermission("vehicles.write"),
   wrapAsync(async (req: Request, res: Response) => {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -601,6 +605,7 @@ vehiclesRouter.patch(
   "/:id",
   requireAuth,
   requireTenant,
+  requirePermission("vehicles.write"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const existing = await loadVehicleRecordById(req.params.id, bid);

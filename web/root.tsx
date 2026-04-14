@@ -6,7 +6,6 @@ import {
   ScrollRestoration,
   isRouteErrorResponse,
   useLocation,
-  useNavigate,
   useRouteError,
 } from "react-router";
 import { Suspense, useEffect, useState } from "react";
@@ -16,7 +15,6 @@ import appleTouchIconHref from "./apple-touch-icon.png";
 import socialPreviewHref from "./social-preview.png";
 import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
-import { persistAuthState } from "./lib/auth";
 import { analyticsEnabled, getClarityProjectId, getGaMeasurementId, trackPageView } from "./lib/analytics";
 import { recordRuntimeError } from "./lib/runtimeErrors";
 
@@ -97,25 +95,6 @@ function isIndexableMarketingPath(pathname: string) {
   ].includes(pathname);
 }
 
-/** Google OAuth redirects with ?token=... persist before /auth/me runs. */
-function OAuthTokenFromQuery() {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const token = params.get("token");
-    if (!token) return;
-
-    persistAuthState(token, { source: "oauth-query" });
-    params.delete("token");
-    const qs = params.toString();
-    const next = `${location.pathname}${qs ? `?${qs}` : ""}${location.hash}`;
-    navigate(next, { replace: true });
-  }, [location.pathname, location.search, location.hash, navigate]);
-
-  return null;
-}
 
 /** Renders Toaster only on the client to avoid SSR crashes (e.g. Sonner in serverless). */
 function ClientToaster() {
@@ -310,7 +289,6 @@ export default function App({ loaderData }: Route.ComponentProps) {
       </head>
       <body>
         <Suspense>
-          <OAuthTokenFromQuery />
           <AnalyticsRouteTracker />
           <BrowserErrorReporter />
           <Outlet context={{ gadgetConfig, csrfToken }} />

@@ -1,7 +1,7 @@
-const AUTH_TOKEN_KEY = "authToken";
 const CURRENT_BUSINESS_ID_KEY = "currentBusinessId";
 const CURRENT_LOCATION_ID_KEY = "currentLocationId";
 const AUTH_EVENT_CHANNEL_KEY = "authEventChannel";
+let inMemoryAuthToken: string | null = null;
 
 function safeLocalStorageGet(key: string): string | null {
   if (typeof window === "undefined") return null;
@@ -31,11 +31,11 @@ function safeLocalStorageRemove(key: string): void {
 }
 
 export function getAuthToken(): string | null {
-  return safeLocalStorageGet(AUTH_TOKEN_KEY);
+  return inMemoryAuthToken;
 }
 
 export function setAuthToken(token: string): void {
-  safeLocalStorageSet(AUTH_TOKEN_KEY, token);
+  inMemoryAuthToken = token;
 }
 
 export function persistAuthState(token: string, detail?: unknown): void {
@@ -46,7 +46,7 @@ export function persistAuthState(token: string, detail?: unknown): void {
 }
 
 export function clearAuthToken(): void {
-  safeLocalStorageRemove(AUTH_TOKEN_KEY);
+  inMemoryAuthToken = null;
 }
 
 export function getCurrentBusinessId(): string | null {

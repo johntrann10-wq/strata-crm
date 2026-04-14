@@ -13,8 +13,8 @@ function requireJwtSecret(): string {
   return secret;
 }
 
-export function createAccessToken(userId: string): string {
-  return jwt.sign({ userId }, requireJwtSecret(), {
+export function createAccessToken(userId: string, tokenVersion: number = 1): string {
+  return jwt.sign({ userId, ver: tokenVersion }, requireJwtSecret(), {
     algorithm: "HS256",
     audience: ACCESS_TOKEN_AUDIENCE,
     expiresIn: "7d",
@@ -23,13 +23,13 @@ export function createAccessToken(userId: string): string {
   });
 }
 
-export function verifyAccessToken(token: string): { userId?: string } | null {
+export function verifyAccessToken(token: string): { userId?: string; ver?: number } | null {
   try {
     return jwt.verify(token, requireJwtSecret(), {
       algorithms: ["HS256"],
       audience: ACCESS_TOKEN_AUDIENCE,
       issuer: JWT_ISSUER,
-    }) as { userId?: string };
+    }) as { userId?: string; ver?: number };
   } catch {
     return null;
   }
@@ -39,7 +39,7 @@ export function createScopedPublicDocumentToken<T extends Record<string, unknown
   return jwt.sign(payload, requireJwtSecret(), {
     algorithm: "HS256",
     audience: PUBLIC_DOCUMENT_AUDIENCE,
-    expiresIn: "30d",
+    expiresIn: "14d",
     issuer: JWT_ISSUER,
   });
 }

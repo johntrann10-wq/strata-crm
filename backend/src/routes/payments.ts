@@ -5,6 +5,7 @@ import { payments, invoices, clients, businesses } from "../db/schema.js";
 import { eq, and } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { withIdempotency } from "../lib/idempotency.js";
 import { logger } from "../lib/logger.js";
@@ -107,19 +108,19 @@ async function getPaymentById(id: string, bid: string) {
   }
 }
 
-paymentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+paymentsRouter.get("/", requireAuth, requireTenant, requirePermission("payments.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const list = await listPaymentsForBusiness(bid);
   res.json({ records: list });
 });
 
-paymentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+paymentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("payments.read"), async (req: Request, res: Response) => {
   const row = await getPaymentById(req.params.id, businessId(req));
   if (!row) throw new NotFoundError("Payment not found.");
   res.json(row);
 });
 
-paymentsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+paymentsRouter.post("/", requireAuth, requireTenant, requirePermission("payments.write"), async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -213,7 +214,7 @@ paymentsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: R
   res.status(201).json(payment);
 });
 
-paymentsRouter.post("/:id/reverse", requireAuth, requireTenant, async (req: Request, res: Response) => {
+paymentsRouter.post("/:id/reverse", requireAuth, requireTenant, requirePermission("payments.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const existing = await getPaymentById(req.params.id, bid);
   if (!existing) throw new NotFoundError("Payment not found.");

@@ -58,7 +58,7 @@ async function assertEntityExists(req: Request, entityType: "appointment" | "job
   if (!record) throw new NotFoundError(entityType === "job" ? "Job not found." : "Appointment not found.");
 }
 
-activityLogsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+activityLogsRouter.get("/", requireAuth, requireTenant, requirePermission("dashboard.view"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const first = Math.min(Number(req.query.first) || 20, 50);
   const entityType = typeof req.query.entityType === "string" ? req.query.entityType.trim() : "";

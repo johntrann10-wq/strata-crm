@@ -681,6 +681,7 @@ export async function runAbandonedQuoteFollowUps(options?: {
         clientId: quotes.clientId,
         sentAt: quotes.sentAt,
         total: quotes.total,
+        publicTokenVersion: quotes.publicTokenVersion,
         clientFirstName: clients.firstName,
         clientLastName: clients.lastName,
         clientEmail: clients.email,
@@ -735,6 +736,7 @@ export async function runAbandonedQuoteFollowUps(options?: {
           kind: "quote",
           entityId: row.id,
           businessId: business.id,
+          tokenVersion: row.publicTokenVersion ?? 1,
         });
         await sendQuoteFollowUpEmail({
           to: row.clientEmail,

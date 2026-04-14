@@ -6,6 +6,7 @@ import { eq, and, asc } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
 
 export const serviceAddonLinksRouter = Router({ mergeParams: true });
@@ -41,7 +42,7 @@ const createSchema = z.object({
   sortOrder: z.number().int().min(0).optional(),
 });
 
-serviceAddonLinksRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+serviceAddonLinksRouter.get("/", requireAuth, requireTenant, requirePermission("services.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const filter = parseFilter(req) as
     | { parentService?: { id?: { equals?: string } }; parentServiceId?: { equals?: string } }
@@ -74,7 +75,7 @@ serviceAddonLinksRouter.get("/", requireAuth, requireTenant, async (req: Request
   res.json({ records: rows });
 });
 
-serviceAddonLinksRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+serviceAddonLinksRouter.post("/", requireAuth, requireTenant, requirePermission("services.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -122,7 +123,7 @@ serviceAddonLinksRouter.post("/", requireAuth, requireTenant, async (req: Reques
   res.status(201).json(created);
 });
 
-serviceAddonLinksRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+serviceAddonLinksRouter.delete("/:id", requireAuth, requireTenant, requirePermission("services.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   let existing: unknown;
   try {

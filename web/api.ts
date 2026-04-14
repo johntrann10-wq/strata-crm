@@ -1,9 +1,4 @@
-import {
-  clearAuthState,
-  getAuthToken,
-  getCurrentBusinessId,
-  setAuthToken,
-} from "./lib/auth";
+import { clearAuthState, getCurrentBusinessId } from "./lib/auth";
 import type { HomeDashboardRange, HomeDashboardSnapshot } from "./lib/homeDashboard";
 import { recordReliabilityDiagnostic } from "./lib/reliabilityDiagnostics";
 
@@ -149,23 +144,16 @@ function emitHomeDashboardInvalidated(path: string, method: string): void {
   );
 }
 
-function getToken() {
-  return getAuthToken();
-}
 async function request<T = unknown>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
   const url = buildApiUrl(path);
   const method = (init.method ?? "GET").toUpperCase();
-  const token = getToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...init.headers,
   };
-  if (token) {
-    (headers as any).Authorization = `Bearer ${token}`;
-  }
   const currentBusinessId = getCurrentBusinessId();
   if (currentBusinessId) {
     (headers as any)["x-business-id"] = currentBusinessId;
@@ -174,6 +162,7 @@ async function request<T = unknown>(
   const requestInit: RequestInit = {
     ...init,
     headers,
+    credentials: "include",
   };
   try {
     res = await performRequest(url, requestInit);
@@ -876,11 +865,10 @@ export const api = {
         body: JSON.stringify(params),
       }),
     signOut: () => request("/auth/sign-out", { method: "POST" }),
-    /** Validates JWT, returns user + fresh token (persisted to localStorage). */
+    /** Validates JWT, returns user + fresh token (also refreshes auth cookie server-side). */
     me: () =>
       request<AuthEnvelope>("/auth/me").then((body) => {
         const d = assertAuthEnvelope(body, "/auth/me");
-        setAuthToken(d.token);
         return d;
       }),
     context: () =>

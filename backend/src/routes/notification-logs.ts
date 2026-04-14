@@ -3,6 +3,7 @@ import { db } from "../db/index.js";
 import { notificationLogs } from "../db/schema.js";
 import { eq, and, isNotNull, desc } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
 
 export const notificationLogsRouter = Router();
@@ -24,7 +25,7 @@ function parseStatusFilter(filter: unknown): "all" | "failed" {
   return "all";
 }
 
-notificationLogsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+notificationLogsRouter.get("/", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   let filter: unknown;
   try {

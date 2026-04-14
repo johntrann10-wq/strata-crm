@@ -5,6 +5,7 @@ import { locations, appointments } from "../db/schema.js";
 import { eq, and, asc } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { logger } from "../lib/logger.js";
 import { warnOnce } from "../lib/warnOnce.js";
@@ -187,19 +188,19 @@ async function getLocationForBusiness(bid: string, id: string): Promise<Location
   }
 }
 
-locationsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+locationsRouter.get("/", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
   const list = await listLocationsForBusiness(businessId(req));
   res.json({ records: list });
 });
 
-locationsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+locationsRouter.get("/:id", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const row = await getLocationForBusiness(bid, req.params.id);
   if (!row) throw new NotFoundError("Location not found.");
   res.json(row);
 });
 
-locationsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+locationsRouter.post("/", requireAuth, requireTenant, requirePermission("settings.write"), async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
   const bid = businessId(req);
@@ -258,7 +259,7 @@ locationsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: 
   res.status(201).json(created);
 });
 
-locationsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+locationsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("settings.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const existing = await getLocationForBusiness(bid, req.params.id);
   if (!existing) throw new NotFoundError("Location not found.");
@@ -317,7 +318,7 @@ locationsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, r
   res.json(updated);
 });
 
-locationsRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+locationsRouter.delete("/:id", requireAuth, requireTenant, requirePermission("settings.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const id = req.params.id;
   const existing = await getLocationForBusiness(bid, id);

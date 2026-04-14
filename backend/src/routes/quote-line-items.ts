@@ -5,6 +5,7 @@ import { quoteLineItems, quotes } from "../db/schema.js";
 import { and, eq, desc } from "drizzle-orm";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { recalculateQuoteTotals } from "../lib/revenueTotals.js";
 
@@ -23,7 +24,7 @@ function parseFilter(req: Request): unknown {
   }
 }
 
-quoteLineItemsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quoteLineItemsRouter.get("/", requireAuth, requireTenant, requirePermission("quotes.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const filter = parseFilter(req) as { quoteId?: { equals?: string } } | undefined;
   const quoteId = filter?.quoteId?.equals;
@@ -44,7 +45,7 @@ quoteLineItemsRouter.get("/", requireAuth, requireTenant, async (req: Request, r
   res.json({ records: rows });
 });
 
-quoteLineItemsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quoteLineItemsRouter.get("/:id", requireAuth, requireTenant, requirePermission("quotes.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
     .select()
@@ -65,7 +66,7 @@ const createSchema = z.object({
   unitPrice: z.coerce.number().min(0),
 });
 
-quoteLineItemsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quoteLineItemsRouter.post("/", requireAuth, requireTenant, requirePermission("quotes.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -104,7 +105,7 @@ const updateSchema = z.object({
   unitPrice: z.coerce.number().min(0).optional(),
 });
 
-quoteLineItemsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quoteLineItemsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("quotes.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -135,7 +136,7 @@ quoteLineItemsRouter.patch("/:id", requireAuth, requireTenant, async (req: Reque
   res.json(updated);
 });
 
-quoteLineItemsRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quoteLineItemsRouter.delete("/:id", requireAuth, requireTenant, requirePermission("quotes.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db.select().from(quoteLineItems).where(eq(quoteLineItems.id, req.params.id)).limit(1);
   if (!existing) throw new NotFoundError("Quote line item not found.");

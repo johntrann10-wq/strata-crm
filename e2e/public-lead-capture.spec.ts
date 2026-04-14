@@ -32,7 +32,7 @@ test("public lead capture form loads and submits successfully", async ({ page })
 
   await page.goto("/lead/biz-public?utm_source=instagram&utm_campaign=spring-detail");
 
-  await expect(page.getByRole("heading", { name: /reach north star detail fast/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /contact north star detail/i })).toBeVisible();
   await page.getByLabel("First name").fill("Jamie");
   await page.getByLabel("Last name").fill("Rivera");
   await page.getByLabel("Email").fill("jamie@example.com");
@@ -40,10 +40,10 @@ test("public lead capture form loads and submits successfully", async ({ page })
   await page.getByLabel("Vehicle if known").fill("2022 BMW X5");
   await page.getByLabel("Service interest").fill("Paint correction");
   await page
-    .getByLabel("What are you trying to get done?")
+    .getByLabel("How can the shop help?")
     .fill("Looking for correction and ceramic coating next week.");
 
-  await page.getByRole("button", { name: "Send request" }).click();
+  await page.getByRole("button", { name: "Submit request" }).click();
 
   await expect(page.getByText("Request received")).toBeVisible();
   expect(postedPayload).toMatchObject({

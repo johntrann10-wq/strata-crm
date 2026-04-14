@@ -4,6 +4,8 @@ import { logger } from "../lib/logger.js";
 import { resolveTenantContext } from "../lib/tenantContext.js";
 import type { MembershipRole, PermissionKey } from "../lib/permissions.js";
 import { verifyAccessToken } from "../lib/jwt.js";
+import { getAuthTokenFromCookieHeader } from "../lib/authCookies.js";
+import { isAuthTokenVersionMismatch, loadAuthTokenVersion } from "../lib/authTokenVersion.js";
 export interface SessionUser {
   id: string;
   email?: string;
@@ -21,20 +23,23 @@ declare global {
     }
   }
 }
-function getUserIdFromRequest(req: Request): string | null {
+function getUserIdFromRequest(req: Request): { userId: string; tokenVersion?: number } | null {
   // Protected API auth is JWT-only. Invalid or missing bearer tokens
   // should fail closed instead of falling back to a different session source.
   const authHeader = req.headers.authorization ?? "";
   const bearerPrefix = "Bearer ";
-  if (!authHeader.startsWith(bearerPrefix)) return null;
-  const rawToken = authHeader.slice(bearerPrefix.length).trim();
+  let rawToken = authHeader.startsWith(bearerPrefix) ? authHeader.slice(bearerPrefix.length).trim() : "";
+  if (!rawToken) {
+    rawToken = getAuthTokenFromCookieHeader(req.headers.cookie);
+  }
   if (!rawToken) return null;
   const payload = verifyAccessToken(rawToken);
-  return payload?.userId ?? null;
+  if (!payload?.userId) return null;
+  return { userId: payload.userId, tokenVersion: payload.ver };
 }
 export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
-  const userId = getUserIdFromRequest(req);
-  if (!userId) {
+  const auth = getUserIdFromRequest(req);
+  if (!auth?.userId) {
     logger.warn("Unauthorized request", {
       path: req.path,
       requestId: (req as Request & { requestId?: string }).requestId,
@@ -42,9 +47,18 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     next(new UnauthorizedError("You must be signed in."));
     return;
   }
-  req.userId = userId;
+  const currentVersion = await loadAuthTokenVersion(auth.userId);
+  if (isAuthTokenVersionMismatch(auth.tokenVersion, currentVersion)) {
+    logger.warn("Rejected token with mismatched version", {
+      userId: auth.userId,
+      requestId: (req as Request & { requestId?: string }).requestId,
+    });
+    next(new UnauthorizedError("You must be signed in."));
+    return;
+  }
+  req.userId = auth.userId;
   const preferredBusinessId = typeof req.headers["x-business-id"] === "string" ? req.headers["x-business-id"] : null;
-  const tenantContext = await resolveTenantContext(userId, preferredBusinessId);
+  const tenantContext = await resolveTenantContext(auth.userId, preferredBusinessId);
   if (tenantContext) {
     req.businessId = tenantContext.businessId;
     req.membershipRole = tenantContext.role;
@@ -54,14 +68,19 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 }
 /** Optional auth: set req.userId/businessId if a bearer token exists, but do not require. */
 export async function optionalAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
-  const userId = getUserIdFromRequest(req);
-  if (!userId) {
+  const auth = getUserIdFromRequest(req);
+  if (!auth?.userId) {
     next();
     return;
   }
-  req.userId = userId;
+  const currentVersion = await loadAuthTokenVersion(auth.userId);
+  if (isAuthTokenVersionMismatch(auth.tokenVersion, currentVersion)) {
+    next();
+    return;
+  }
+  req.userId = auth.userId;
   const preferredBusinessId = typeof req.headers["x-business-id"] === "string" ? req.headers["x-business-id"] : null;
-  const tenantContext = await resolveTenantContext(userId, preferredBusinessId);
+  const tenantContext = await resolveTenantContext(auth.userId, preferredBusinessId);
   if (tenantContext) {
     req.businessId = tenantContext.businessId;
     req.membershipRole = tenantContext.role;

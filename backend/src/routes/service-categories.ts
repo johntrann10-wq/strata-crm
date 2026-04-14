@@ -9,6 +9,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js
 import { formatLegacyServiceCategory, isLegacyServiceCategory, LEGACY_SERVICE_CATEGORIES } from "../lib/serviceCategories.js";
 import { warnOnce } from "../lib/warnOnce.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
 
 export const serviceCategoriesRouter = Router({ mergeParams: true });
@@ -89,6 +90,7 @@ serviceCategoriesRouter.get(
   "/capabilities",
   requireAuth,
   requireTenant,
+  requirePermission("services.read"),
   wrapAsync(async (_req: Request, res: Response) => {
     res.json({ supportsManagement: await supportsManagedServiceCategories() });
   })
@@ -98,6 +100,7 @@ serviceCategoriesRouter.get(
   "/",
   requireAuth,
   requireTenant,
+  requirePermission("services.read"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const filter = parseFilter(req) as { active?: { equals?: boolean } } | undefined;
@@ -184,6 +187,7 @@ serviceCategoriesRouter.post(
   "/",
   requireAuth,
   requireTenant,
+  requirePermission("services.write"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const parsed = createSchema.safeParse(req.body);
@@ -238,6 +242,7 @@ serviceCategoriesRouter.patch(
   "/:id",
   requireAuth,
   requireTenant,
+  requirePermission("services.write"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const parsed = patchSchema.safeParse(req.body);
@@ -293,6 +298,7 @@ serviceCategoriesRouter.post(
   "/reorder",
   requireAuth,
   requireTenant,
+  requirePermission("services.write"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const parsed = reorderSchema.safeParse(req.body);
@@ -334,6 +340,7 @@ serviceCategoriesRouter.delete(
   "/:id",
   requireAuth,
   requireTenant,
+  requirePermission("services.write"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const parsed = deleteSchema.safeParse(req.body ?? {});

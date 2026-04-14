@@ -6,7 +6,9 @@ import { quotes, clients, vehicles, quoteLineItems, appointments, staff, locatio
 import { eq, and, desc, asc, isNull, lt, sql, ilike, or } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError, ConflictError, AppError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { createRateLimiter } from "../middleware/security.js";
 import { hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
 import { recalculateQuoteTotals } from "../lib/revenueTotals.js";
 import { createActivityLog, createRequestActivityLog } from "../lib/activity.js";
@@ -183,7 +185,21 @@ const publicRevisionRequestSchema = z.object({
   ),
 });
 
-quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+const quoteSendLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  message: "Too many quote emails sent. Please wait a bit before trying again.",
+  key: ({ businessId, ip, path }) => `email:quote-send:${businessId ?? ip}:${path}`,
+});
+
+const quoteFollowUpLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 6,
+  message: "Too many quote follow-ups sent. Please wait a bit before trying again.",
+  key: ({ businessId, ip, path }) => `email:quote-followup:${businessId ?? ip}:${path}`,
+});
+
+quotesRouter.get("/", requireAuth, requireTenant, requirePermission("quotes.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 100) : 50;
   let parsedFilter:
@@ -340,7 +356,7 @@ quotesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Resp
   res.json({ records });
 });
 
-quotesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quotesRouter.get("/:id", requireAuth, requireTenant, requirePermission("quotes.read"), async (req: Request, res: Response) => {
   const [row] = await db
     .select()
     .from(quotes)
@@ -404,7 +420,7 @@ quotesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: R
   });
 });
 
-quotesRouter.get("/:id/html", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quotesRouter.get("/:id/html", requireAuth, requireTenant, requirePermission("quotes.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [row] = await db
     .select()
@@ -515,6 +531,9 @@ quotesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, access.businessId)))
     .limit(1);
   if (!row) throw new NotFoundError("Quote not found.");
+  if (row.publicTokenVersion != null && access.ver !== row.publicTokenVersion) {
+    throw new ForbiddenError("Quote access link is invalid or expired.");
+  }
 
   const [businessRow] = await db
     .select({
@@ -635,6 +654,7 @@ quotesRouter.post("/:id/public-request-revision", express.urlencoded({ extended:
       status: quotes.status,
       total: quotes.total,
       businessId: quotes.businessId,
+      publicTokenVersion: quotes.publicTokenVersion,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
       clientEmail: clients.email,
@@ -652,6 +672,9 @@ quotesRouter.post("/:id/public-request-revision", express.urlencoded({ extended:
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, access.businessId)))
     .limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
+  if (existing.publicTokenVersion != null && access.ver !== existing.publicTokenVersion) {
+    throw new ForbiddenError("Quote access link is invalid or expired.");
+  }
   if (existing.status === "accepted") {
     throw new BadRequestError("This estimate is already approved. Contact the shop directly for post-approval changes.");
   }
@@ -735,11 +758,15 @@ quotesRouter.post("/:id/public-respond", express.urlencoded({ extended: false })
       id: quotes.id,
       status: quotes.status,
       businessId: quotes.businessId,
+      publicTokenVersion: quotes.publicTokenVersion,
     })
     .from(quotes)
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, access.businessId)))
     .limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
+  if (existing.publicTokenVersion != null && access.ver !== existing.publicTokenVersion) {
+    throw new ForbiddenError("Quote access link is invalid or expired.");
+  }
 
   let responseState: "accepted" | "declined" | "already_accepted" | "already_declined" = response;
   if (existing.status === "accepted") {
@@ -807,7 +834,7 @@ const createQuoteSchema = z.object({
     .optional(),
 });
 
-quotesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quotesRouter.post("/", requireAuth, requireTenant, requirePermission("quotes.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const parsed = createQuoteSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -934,7 +961,7 @@ const patchQuoteSchema = z
   })
   .strict();
 
-quotesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quotesRouter.patch("/:id", requireAuth, requireTenant, requirePermission("quotes.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db.select().from(quotes).where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid))).limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
@@ -1008,7 +1035,7 @@ quotesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res:
   res.json(fresh ?? updated);
 });
 
-quotesRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quotesRouter.delete("/:id", requireAuth, requireTenant, requirePermission("quotes.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db.select().from(quotes).where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid))).limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
@@ -1017,7 +1044,13 @@ quotesRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res
   res.status(204).end();
 });
 
-quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
+quotesRouter.post(
+  "/:id/send",
+  quoteSendLimiter.middleware,
+  requireAuth,
+  requireTenant,
+  requirePermission("quotes.write"),
+  wrapAsync(async (req: Request, res: Response) => {
   const parsed = sendQuoteSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -1027,6 +1060,7 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
       total: quotes.total,
       vehicleId: quotes.vehicleId,
       clientId: quotes.clientId,
+      publicTokenVersion: quotes.publicTokenVersion,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
       clientEmail: clients.email,
@@ -1102,6 +1136,7 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
       kind: "quote",
       entityId: existing.id,
       businessId: bid,
+      tokenVersion: existing.publicTokenVersion ?? 1,
     });
     await sendQuoteEmail({
       to: recipientEmail,
@@ -1167,7 +1202,13 @@ quotesRouter.post("/:id/send", requireAuth, requireTenant, wrapAsync(async (req:
   res.json({ ...updated, deliveryStatus: "emailed", deliveryError: null, recipient: recipientEmail, recipientName });
 }));
 
-quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
+quotesRouter.post(
+  "/:id/sendFollowUp",
+  quoteFollowUpLimiter.middleware,
+  requireAuth,
+  requireTenant,
+  requirePermission("quotes.write"),
+  wrapAsync(async (req: Request, res: Response) => {
   const parsed = sendQuoteSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -1176,6 +1217,7 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
       id: quotes.id,
       total: quotes.total,
       vehicleId: quotes.vehicleId,
+      publicTokenVersion: quotes.publicTokenVersion,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
       clientEmail: clients.email,
@@ -1251,6 +1293,7 @@ quotesRouter.post("/:id/sendFollowUp", requireAuth, requireTenant, wrapAsync(asy
       kind: "quote",
       entityId: existing.id,
       businessId: bid,
+      tokenVersion: existing.publicTokenVersion ?? 1,
     });
     await sendQuoteFollowUpEmail({
       to: recipientEmail,
@@ -1325,7 +1368,7 @@ const scheduleFromQuoteSchema = z.object({
 });
 
 /** Create an appointment from a quote and link the quote (status → accepted). */
-quotesRouter.post("/:id/schedule", requireAuth, requireTenant, async (req: Request, res: Response) => {
+quotesRouter.post("/:id/schedule", requireAuth, requireTenant, requirePermission("quotes.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const quoteId = req.params.id;
   const parsed = scheduleFromQuoteSchema.safeParse(req.body);

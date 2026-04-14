@@ -12,7 +12,8 @@ import { roleHasPermission } from "../lib/permissions.js";
 import { warnOnce } from "../lib/warnOnce.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { syncOutboundWebhookConnectionForBusiness } from "../lib/integrations.js";
-import { createInMemoryRateLimiter } from "../middleware/security.js";
+import { isIntegrationVaultConfigured, maybeDecryptIntegrationSecret, maybeEncryptIntegrationSecret } from "../lib/integrationVault.js";
+import { createRateLimiter } from "../middleware/security.js";
 import { createActivityLog } from "../lib/activity.js";
 import { buildLeadNotes } from "../lib/leads.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
@@ -115,13 +116,13 @@ const publicLeadCaptureSchema = z.object({
   website: z.string().max(0).optional(), // honeypot
 });
 
-const publicLeadConfigLimiter = createInMemoryRateLimiter({
+const publicLeadConfigLimiter = createRateLimiter({
   windowMs: 60 * 1000,
   max: 60,
   message: "Please try again shortly.",
 });
 
-const publicLeadSubmitLimiter = createInMemoryRateLimiter({
+const publicLeadSubmitLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
   key: ({ ip, path, body }) => {
@@ -277,6 +278,7 @@ function coerceBusinessRecord(
 }
 
 function serializeBusiness(record: BusinessRecord) {
+  const { integrationWebhookSecret: _integrationWebhookSecret, ...rest } = record;
   let integrationWebhookEvents: string[] = [];
   try {
     integrationWebhookEvents = JSON.parse(record.integrationWebhookEvents ?? "[]") as string[];
@@ -284,7 +286,7 @@ function serializeBusiness(record: BusinessRecord) {
     integrationWebhookEvents = [];
   }
   return {
-    ...record,
+    ...rest,
     integrationWebhookEvents,
     reviewRequestUrl: record.reviewRequestUrl ?? null,
     bookingRequestUrl: record.bookingRequestUrl ?? null,
@@ -759,7 +761,12 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       monthlyJobsGoal: parsed.data.monthlyJobsGoal ?? null,
       integrationWebhookEnabled: parsed.data.integrationWebhookEnabled ?? false,
       integrationWebhookUrl: parsed.data.integrationWebhookUrl ?? null,
-      integrationWebhookSecret: parsed.data.integrationWebhookSecret ?? null,
+      integrationWebhookSecret:
+        parsed.data.integrationWebhookSecret != null
+          ? isIntegrationVaultConfigured()
+            ? maybeEncryptIntegrationSecret(parsed.data.integrationWebhookSecret)
+            : parsed.data.integrationWebhookSecret
+          : null,
       integrationWebhookEvents: JSON.stringify(parsed.data.integrationWebhookEvents ?? []),
     })
     .returning();
@@ -791,7 +798,9 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       businessId,
       webhookEnabled: created.integrationWebhookEnabled ?? false,
       webhookUrl: created.integrationWebhookUrl ?? null,
-      webhookSecret: created.integrationWebhookSecret ?? null,
+      webhookSecret: isIntegrationVaultConfigured()
+        ? maybeDecryptIntegrationSecret(created.integrationWebhookSecret)
+        : created.integrationWebhookSecret ?? null,
       webhookEvents: JSON.parse(created.integrationWebhookEvents ?? "[]") as string[],
     });
   } catch (error) {
@@ -942,7 +951,12 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
     updates.integrationWebhookUrl = parsed.data.integrationWebhookUrl ?? null;
   }
   if (parsed.data.integrationWebhookSecret !== undefined) {
-    updates.integrationWebhookSecret = parsed.data.integrationWebhookSecret ?? null;
+    updates.integrationWebhookSecret =
+      parsed.data.integrationWebhookSecret != null
+        ? isIntegrationVaultConfigured()
+          ? maybeEncryptIntegrationSecret(parsed.data.integrationWebhookSecret)
+          : parsed.data.integrationWebhookSecret
+        : null;
   }
   if (parsed.data.integrationWebhookEvents !== undefined) {
     updates.integrationWebhookEvents = JSON.stringify(parsed.data.integrationWebhookEvents ?? []);
@@ -1052,7 +1066,9 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
       businessId: updated.id,
       webhookEnabled: updated.integrationWebhookEnabled ?? false,
       webhookUrl: updated.integrationWebhookUrl ?? null,
-      webhookSecret: updated.integrationWebhookSecret ?? null,
+      webhookSecret: isIntegrationVaultConfigured()
+        ? maybeDecryptIntegrationSecret(updated.integrationWebhookSecret)
+        : updated.integrationWebhookSecret ?? null,
       webhookEvents: JSON.parse(updated.integrationWebhookEvents ?? "[]") as string[],
     });
   } catch (error) {

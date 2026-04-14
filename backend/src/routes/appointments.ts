@@ -6,7 +6,9 @@ import { appointments, clients, vehicles, staff, locations, quotes, services, ap
 import { eq, and, or, desc, asc, gte, lte, ilike, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { createRateLimiter } from "../middleware/security.js";
 import { logger } from "../lib/logger.js";
 import { countOverlappingAppointments, hasAppointmentOverlap } from "../lib/appointmentOverlap.js";
 import { ConflictError } from "../lib/errors.js";
@@ -27,6 +29,13 @@ import { calculateAppointmentFinanceSummary, getAppointmentFinanceMirrorUpdates,
 export const appointmentsRouter = Router({ mergeParams: true });
 
 const CALENDAR_BLOCK_PREFIX = "[[calendar-block:";
+
+const appointmentConfirmationLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  message: "Too many appointment confirmations sent. Please wait a bit before trying again.",
+  key: ({ businessId, ip, path }) => `email:appointment:${businessId ?? ip}:${path}`,
+});
 
 export function canDeleteAppointmentWithInvoiceStatuses(
   statuses: Array<string | null | undefined>
@@ -784,10 +793,11 @@ async function buildAppointmentConfirmationPayload(
         vehicleModel: vehicles.model,
         locationName: locations.name,
         locationAddress: locations.address,
-        locationTimezone: locations.timezone,
-        totalPrice: appointments.totalPrice,
-        depositAmount: appointments.depositAmount,
-      })
+          locationTimezone: locations.timezone,
+          totalPrice: appointments.totalPrice,
+          depositAmount: appointments.depositAmount,
+          publicTokenVersion: appointments.publicTokenVersion,
+        })
       .from(appointments)
       .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
       .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
@@ -824,6 +834,7 @@ async function buildAppointmentConfirmationPayload(
           locationTimezone: sql<string | null>`null`,
           totalPrice: appointments.totalPrice,
           depositAmount: appointments.depositAmount,
+          publicTokenVersion: appointments.publicTokenVersion,
         })
         .from(appointments)
         .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
@@ -893,6 +904,7 @@ async function buildAppointmentConfirmationPayload(
     kind: "appointment",
     entityId: appointmentRow.id,
     businessId: bid,
+    tokenVersion: appointmentRow.publicTokenVersion ?? 1,
   });
   const publicAppointmentUrl = buildPublicDocumentUrl(
     `/api/appointments/${appointmentRow.id}/public-html?token=${encodeURIComponent(publicToken)}`
@@ -1079,7 +1091,7 @@ async function sendAppointmentConfirmationForRecord(
   }
 }
 
-appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentsRouter.get("/", requireAuth, requireTenant, requirePermission("appointments.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 500) : 50;
 
@@ -1260,7 +1272,7 @@ appointmentsRouter.get("/", requireAuth, requireTenant, async (req: Request, res
   res.json({ records });
 });
 
-appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("appointments.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
 
   const [row] = await db
@@ -1401,7 +1413,7 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, 
   });
 });
 
-appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
+appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -1828,7 +1840,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, wrapAsync(async (req: R
   res.status(201).json({ ...created, ...confirmationResult });
 }));
 
-appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("appointments.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
     .select({
@@ -2053,7 +2065,7 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request
   res.json(updated);
 });
 
-appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant, requirePermission("payments.write"), wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const parsed = recordDepositPaymentSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -2193,7 +2205,7 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   });
 }));
 
-appointmentsRouter.post("/:id/create-deposit-payment-session", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/create-deposit-payment-session", requireAuth, requireTenant, requirePermission("payments.write"), wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [appointment] = await db
     .select({
@@ -2267,7 +2279,7 @@ appointmentsRouter.post("/:id/create-deposit-payment-session", requireAuth, requ
   res.json(result);
 }));
 
-appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requireTenant, requirePermission("payments.write"), wrapAsync(async (req: Request, res: Response) => {
   const parsed = confirmStripeDepositSessionSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
 
@@ -2328,7 +2340,7 @@ appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requ
   });
 }));
 
-appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant, requirePermission("payments.write"), wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
     .select({
@@ -2441,6 +2453,7 @@ appointmentsRouter.post("/:id/public-request-change", express.urlencoded({ exten
       title: appointments.title,
       startTime: appointments.startTime,
       status: appointments.status,
+      publicTokenVersion: appointments.publicTokenVersion,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
       clientEmail: clients.email,
@@ -2463,6 +2476,9 @@ appointmentsRouter.post("/:id/public-request-change", express.urlencoded({ exten
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, access.businessId)))
     .limit(1);
   if (!appointment) throw new NotFoundError("Appointment not found.");
+  if (appointment.publicTokenVersion != null && access.ver !== appointment.publicTokenVersion) {
+    throw new ForbiddenError("Appointment access link is invalid or expired.");
+  }
 
   const appointmentDateTime = formatAppointmentDateTime(
     appointment.startTime,
@@ -2548,6 +2564,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
       notes: appointments.notes,
       totalPrice: appointments.totalPrice,
       depositAmount: appointments.depositAmount,
+      publicTokenVersion: appointments.publicTokenVersion,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
       clientEmail: clients.email,
@@ -2575,6 +2592,9 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, access.businessId)))
     .limit(1);
   if (!appointment) throw new NotFoundError("Appointment not found.");
+  if (appointment.publicTokenVersion != null && access.ver !== appointment.publicTokenVersion) {
+    throw new ForbiddenError("Appointment access link is invalid or expired.");
+  }
 
   const readFinance = async () =>
     (
@@ -2713,11 +2733,15 @@ appointmentsRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Re
       title: appointments.title,
       clientId: appointments.clientId,
       depositAmount: appointments.depositAmount,
+      publicTokenVersion: appointments.publicTokenVersion,
     })
     .from(appointments)
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, access.businessId)))
     .limit(1);
   if (!appointment) throw new NotFoundError("Appointment not found.");
+  if (appointment.publicTokenVersion != null && access.ver !== appointment.publicTokenVersion) {
+    throw new ForbiddenError("Appointment access link is invalid or expired.");
+  }
 
   const depositAmount = Number(appointment.depositAmount ?? 0);
   const finance = (
@@ -2782,7 +2806,13 @@ appointmentsRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Re
   res.redirect(303, result.url);
 }));
 
-appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
+appointmentsRouter.post(
+  "/:id/sendConfirmation",
+  appointmentConfirmationLimiter.middleware,
+  requireAuth,
+  requireTenant,
+  requirePermission("appointments.write"),
+  wrapAsync(async (req: Request, res: Response) => {
   const parsed = sendConfirmationSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -2844,7 +2874,7 @@ appointmentsRouter.post("/:id/sendConfirmation", requireAuth, requireTenant, wra
   });
 }));
 
-appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, requirePermission("appointments.write"), async (req: Request, res: Response) => {
   const statusParsed = appointmentStatusSchema.safeParse(req.body?.status ?? "scheduled");
   if (!statusParsed.success) throw new BadRequestError("Invalid status.");
   const status = statusParsed.data;
@@ -3001,10 +3031,10 @@ async function deleteAppointmentRecord(req: Request, res: Response) {
   res.status(204).send();
 }
 
-appointmentsRouter.delete("/:id", requireAuth, requireTenant, deleteAppointmentRecord);
-appointmentsRouter.post("/:id/delete", requireAuth, requireTenant, deleteAppointmentRecord);
+appointmentsRouter.delete("/:id", requireAuth, requireTenant, requirePermission("appointments.write"), deleteAppointmentRecord);
+appointmentsRouter.post("/:id/delete", requireAuth, requireTenant, requirePermission("appointments.write"), deleteAppointmentRecord);
 
-appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, requirePermission("appointments.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
     .select({ id: appointments.id })
@@ -3044,7 +3074,7 @@ appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, async (req:
   res.json(updated);
 });
 
-appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, requirePermission("appointments.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
     .select({ id: appointments.id })
@@ -3054,7 +3084,12 @@ appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, async (req: R
   if (!existing) throw new NotFoundError("Appointment not found.");
   const [updated] = await db
     .update(appointments)
-    .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
+    .set({
+      status: "cancelled",
+      cancelledAt: new Date(),
+      publicTokenVersion: sql`coalesce(${appointments.publicTokenVersion}, 1) + 1`,
+      updatedAt: new Date(),
+    })
     .where(eq(appointments.id, req.params.id))
     .returning();
   if (updated) {

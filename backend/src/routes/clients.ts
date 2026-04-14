@@ -5,7 +5,9 @@ import { appointments, businesses, clients, invoices, quotes, vehicles } from ".
 import { eq, and, desc, asc, isNull, or, ilike, sql, inArray } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { createRateLimiter } from "../middleware/security.js";
 import { createRequestActivityLog } from "../lib/activity.js";
 import { logger } from "../lib/logger.js";
 import { isEmailConfigured } from "../lib/env.js";
@@ -64,6 +66,13 @@ const sendPortalSchema = z.object({
   ),
 });
 
+const clientPortalLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 6,
+  message: "Too many portal emails sent. Please wait a bit before trying again.",
+  key: ({ businessId, ip, path }) => `email:client-portal:${businessId ?? ip}:${path}`,
+});
+
 /** Empty strings clear optional text fields on PATCH. */
 function normalizeClientPatchBody(body: unknown): unknown {
   if (body == null || typeof body !== "object") return body;
@@ -80,6 +89,7 @@ async function resolveClientPortalToken(clientId: string, businessId: string) {
       id: quotes.id,
       updatedAt: quotes.updatedAt,
       createdAt: quotes.createdAt,
+      publicTokenVersion: quotes.publicTokenVersion,
     })
     .from(quotes)
     .where(
@@ -92,7 +102,12 @@ async function resolveClientPortalToken(clientId: string, businessId: string) {
     .orderBy(desc(quotes.updatedAt), desc(quotes.createdAt))
     .limit(1);
   if (quote?.id) {
-    return createPublicDocumentToken({ kind: "quote", entityId: quote.id, businessId });
+    return createPublicDocumentToken({
+      kind: "quote",
+      entityId: quote.id,
+      businessId,
+      tokenVersion: quote.publicTokenVersion ?? 1,
+    });
   }
 
   const [invoice] = await db
@@ -100,6 +115,7 @@ async function resolveClientPortalToken(clientId: string, businessId: string) {
       id: invoices.id,
       updatedAt: invoices.updatedAt,
       createdAt: invoices.createdAt,
+      publicTokenVersion: invoices.publicTokenVersion,
     })
     .from(invoices)
     .where(
@@ -112,7 +128,12 @@ async function resolveClientPortalToken(clientId: string, businessId: string) {
     .orderBy(desc(invoices.updatedAt), desc(invoices.createdAt))
     .limit(1);
   if (invoice?.id) {
-    return createPublicDocumentToken({ kind: "invoice", entityId: invoice.id, businessId });
+    return createPublicDocumentToken({
+      kind: "invoice",
+      entityId: invoice.id,
+      businessId,
+      tokenVersion: invoice.publicTokenVersion ?? 1,
+    });
   }
 
   const [appointment] = await db
@@ -120,19 +141,25 @@ async function resolveClientPortalToken(clientId: string, businessId: string) {
       id: appointments.id,
       updatedAt: appointments.updatedAt,
       startTime: appointments.startTime,
+      publicTokenVersion: appointments.publicTokenVersion,
     })
     .from(appointments)
     .where(and(eq(appointments.clientId, clientId), eq(appointments.businessId, businessId)))
     .orderBy(desc(appointments.updatedAt), desc(appointments.startTime))
     .limit(1);
   if (appointment?.id) {
-    return createPublicDocumentToken({ kind: "appointment", entityId: appointment.id, businessId });
+    return createPublicDocumentToken({
+      kind: "appointment",
+      entityId: appointment.id,
+      businessId,
+      tokenVersion: appointment.publicTokenVersion ?? 1,
+    });
   }
 
   return null;
 }
 
-clientsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+clientsRouter.get("/", requireAuth, requireTenant, requirePermission("customers.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 100) : 50;
   const includeDeleted = req.query.includeDeleted === "true";
@@ -168,7 +195,7 @@ clientsRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Res
   res.json({ records: list });
 });
 
-clientsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+clientsRouter.get("/:id", requireAuth, requireTenant, requirePermission("customers.read"), async (req: Request, res: Response) => {
   const [row] = await db
     .select()
     .from(clients)
@@ -178,7 +205,7 @@ clientsRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: 
   res.json(row);
 });
 
-clientsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+clientsRouter.post("/", requireAuth, requireTenant, requirePermission("customers.write"), async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -226,7 +253,7 @@ clientsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Re
   res.status(201).json(created);
 });
 
-clientsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+clientsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("customers.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db.select().from(clients).where(and(eq(clients.id, req.params.id), eq(clients.businessId, bid))).limit(1);
   if (!existing) throw new NotFoundError("Client not found.");
@@ -265,7 +292,13 @@ clientsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res
   res.json(updated);
 });
 
-clientsRouter.post("/:id/sendPortal", requireAuth, requireTenant, async (req: Request, res: Response) => {
+clientsRouter.post(
+  "/:id/sendPortal",
+  clientPortalLimiter.middleware,
+  requireAuth,
+  requireTenant,
+  requirePermission("customers.write"),
+  async (req: Request, res: Response) => {
   const bid = businessId(req);
   const parsed = sendPortalSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -403,7 +436,7 @@ clientsRouter.post("/:id/sendPortal", requireAuth, requireTenant, async (req: Re
 });
 
 /** Soft-delete client and cascade to vehicles (set deletedAt on all client vehicles). */
-clientsRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+clientsRouter.delete("/:id", requireAuth, requireTenant, requirePermission("customers.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db.select().from(clients).where(and(eq(clients.id, req.params.id), eq(clients.businessId, bid))).limit(1);
   if (!existing) throw new NotFoundError("Client not found.");

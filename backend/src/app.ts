@@ -44,6 +44,12 @@ validateEnv();
 
 const app = express();
 app.disable("x-powered-by");
+const trustProxy = process.env.TRUST_PROXY?.trim();
+if (trustProxy) {
+  app.set("trust proxy", trustProxy);
+} else if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", "loopback");
+}
 
 function dashboardMutationInvalidation(req: express.Request, res: express.Response, next: express.NextFunction) {
   const method = req.method.toUpperCase();

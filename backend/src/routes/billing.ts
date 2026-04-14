@@ -25,6 +25,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { BadRequestError, ForbiddenError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
+import { createRateLimiter } from "../middleware/security.js";
 import { isEmailConfigured, isStripeConfigured } from "../lib/env.js";
 import { withIdempotency } from "../lib/idempotency.js";
 import { createActivityLog } from "../lib/activity.js";
@@ -328,6 +329,13 @@ async function loadBillingStatusResponse(req: Request, businessId: string | null
 const STRIPE_WEBHOOK_DEAD_LETTER_THRESHOLD = 3;
 const STRIPE_TRIAL_REMINDER_DEDUPE_DAYS = 14;
 
+const billingPortalLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  message: "Too many billing portal requests. Please wait a bit before trying again.",
+  key: ({ businessId, ip }) => `billing:portal:${businessId ?? ip}`,
+});
+
 type StripeWebhookBusinessContext = {
   id: string;
   name: string;
@@ -341,13 +349,25 @@ type StripeWebhookBusinessContext = {
   billingHasPaymentMethod: boolean | null;
 };
 
-function getStripeWebhookPayload(event: Stripe.Event): string {
+export function getStripeWebhookPayload(event: Stripe.Event): string {
+  const dataObject = event.data.object as Record<string, unknown>;
+  const summary = {
+    object: typeof dataObject?.object === "string" ? dataObject.object : null,
+    id: typeof dataObject?.id === "string" ? dataObject.id : null,
+    status: typeof dataObject?.status === "string" ? dataObject.status : null,
+    customer: typeof dataObject?.customer === "string" ? dataObject.customer : null,
+    subscription: typeof dataObject?.subscription === "string" ? dataObject.subscription : null,
+    invoice: typeof dataObject?.invoice === "string" ? dataObject.invoice : null,
+    amount_due: typeof dataObject?.amount_due === "number" ? dataObject.amount_due : null,
+    amount_paid: typeof dataObject?.amount_paid === "number" ? dataObject.amount_paid : null,
+    currency: typeof dataObject?.currency === "string" ? dataObject.currency : null,
+  };
   return JSON.stringify({
     id: event.id,
     type: event.type,
     created: event.created,
     livemode: event.livemode,
-    object: event.data.object,
+    data: summary,
   });
 }
 
@@ -1360,6 +1380,7 @@ billingRouter.post(
 /** POST /api/billing/portal — Stripe Customer Portal (manage subscription, payment method). */
 billingRouter.post(
   "/portal",
+  billingPortalLimiter.middleware,
   requireAuth,
   requireTenant,
   wrapAsync(async (req: Request, res: Response) => {

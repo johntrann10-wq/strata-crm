@@ -6,6 +6,9 @@ import { users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { NotFoundError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
+import { createAccessToken } from "../lib/jwt.js";
+import { setAuthCookie } from "../lib/authCookies.js";
+import { normalizeTokenVersion } from "../lib/authTokenVersion.js";
 
 export const usersRouter = Router({ mergeParams: true });
 
@@ -38,7 +41,13 @@ usersRouter.post("/change-password", requireAuth, async (req: Request, res: Resp
     const ok = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!ok) throw new BadRequestError("Current password is incorrect.");
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
+    const nextAuthVersion = normalizeTokenVersion(user.authTokenVersion) + 1;
+    await db
+      .update(users)
+      .set({ passwordHash, authTokenVersion: nextAuthVersion, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+    const token = createAccessToken(userId, nextAuthVersion);
+    setAuthCookie(res, token, req);
     res.json({ ok: true });
   } catch (error) {
     next(error);
@@ -60,7 +69,13 @@ usersRouter.post("/set-password", requireAuth, async (req: Request, res: Respons
       throw new BadRequestError("This account already has a password. Use change password instead.");
     }
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
+    const nextAuthVersion = normalizeTokenVersion(user.authTokenVersion) + 1;
+    await db
+      .update(users)
+      .set({ passwordHash, authTokenVersion: nextAuthVersion, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+    const token = createAccessToken(userId, nextAuthVersion);
+    setAuthCookie(res, token, req);
     res.json({ ok: true });
   } catch (error) {
     next(error);

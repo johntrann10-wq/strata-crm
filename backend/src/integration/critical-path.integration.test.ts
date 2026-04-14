@@ -7,6 +7,7 @@ import path from "path";
 import os from "os";
 import { fileURLToPath } from "url";
 import type { Application } from "express";
+import { createPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 
 // Minimal smoke coverage for the critical end-to-end API chain.
 // Runs against an embedded Postgres instance so tests are self-contained.
@@ -243,6 +244,17 @@ describe.skipIf(skipEmbeddedCriticalPath)("Critical path smoke (backend integrat
     appointmentId = appointmentRes.body?.id;
     expect(appointmentId).toBeTruthy();
 
+    const appointmentToken = createPublicDocumentToken({
+      kind: "appointment",
+      entityId: appointmentId,
+      businessId,
+    });
+
+    const appointmentPublicBeforeCancel = await request(app)
+      .get(`/api/appointments/${appointmentId}/public-html`)
+      .query({ token: appointmentToken });
+    expect(appointmentPublicBeforeCancel.status).toBe(200);
+
     // create invoice
     const invoiceRes = await request(app).post("/api/invoices").set("Authorization", `Bearer ${token}`).send({
       clientId,
@@ -260,6 +272,17 @@ describe.skipIf(skipEmbeddedCriticalPath)("Critical path smoke (backend integrat
     invoiceId = invoiceRes.body?.id;
     expect(invoiceId).toBeTruthy();
     expect(invoiceRes.body?.invoiceNumber).toMatch(/^INV-/);
+
+    const cancelRes = await request(app)
+      .post(`/api/appointments/${appointmentId}/cancel`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    expect(cancelRes.status).toBe(200);
+
+    const appointmentPublicAfterCancel = await request(app)
+      .get(`/api/appointments/${appointmentId}/public-html`)
+      .query({ token: appointmentToken });
+    expect(appointmentPublicAfterCancel.status).toBe(403);
   });
 });
 

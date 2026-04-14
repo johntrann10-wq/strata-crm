@@ -80,6 +80,7 @@ export function corsMiddleware(allowedOrigins: Set<string>) {
       res.setHeader("Access-Control-Allow-Origin", requestOrigin);
       res.setHeader("Vary", "Origin");
       res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,PATCH,PUT,DELETE,OPTIONS");
+      res.setHeader("Access-Control-Allow-Credentials", "true");
       res.setHeader(
         "Access-Control-Allow-Headers",
         "Authorization, Content-Type, x-business-id, x-cron-secret"

@@ -116,6 +116,7 @@ export const users = pgTable("users", {
   lastName: text("last_name"),
   emailVerified: boolean("email_verified").default(false),
   googleProfileId: text("google_profile_id"),
+  authTokenVersion: integer("auth_token_version").default(1).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -349,6 +350,7 @@ export const appointments = pgTable("appointments", {
   vehicleOnSite: boolean("vehicle_on_site").default(false),
   jobPhase: appointmentJobPhaseEnum("job_phase").default("scheduled").notNull(),
   status: appointmentStatusEnum("status").default("scheduled").notNull(),
+  publicTokenVersion: integer("public_token_version").default(1).notNull(),
   subtotal: decimal("subtotal", { precision: 12, scale: 2 }).default("0"),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("0"),
   taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).default("0"),
@@ -440,6 +442,7 @@ export const invoices = pgTable("invoices", {
   appointmentId: uuid("appointment_id").references(() => appointments.id),
   invoiceNumber: text("invoice_number").unique(),
   status: invoiceStatusEnum("status").default("draft").notNull(),
+  publicTokenVersion: integer("public_token_version").default(1).notNull(),
   subtotal: decimal("subtotal", { precision: 12, scale: 2 }).default("0"),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("0"),
   taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).default("0"),
@@ -501,6 +504,7 @@ export const quotes = pgTable("quotes", {
   vehicleId: uuid("vehicle_id").references(() => vehicles.id),
   appointmentId: uuid("appointment_id").references(() => appointments.id),
   status: quoteStatusEnum("status").default("draft").notNull(),
+  publicTokenVersion: integer("public_token_version").default(1).notNull(),
   subtotal: decimal("subtotal", { precision: 12, scale: 2 }).default("0"),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("0"),
   taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).default("0"),
@@ -576,6 +580,14 @@ export const stripeWebhookEvents = pgTable(
   },
   (t) => [uniqueIndex("stripe_webhook_events_event_id_unique").on(t.eventId)]
 );
+
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").default(0).notNull(),
+  resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
 
 export const emailTemplates = pgTable("email_templates", {
   id: uuid("id").primaryKey().defaultRandom(),

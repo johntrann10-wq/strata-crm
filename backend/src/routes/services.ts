@@ -8,6 +8,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js
 import { warnOnce } from "../lib/warnOnce.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
 import {
   ensureBusinessServiceCategories,
@@ -512,6 +513,7 @@ servicesRouter.get(
   "/",
   requireAuth,
   requireTenant,
+  requirePermission("services.read"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const filter = parseFilter(req);
@@ -526,6 +528,7 @@ servicesRouter.get(
   "/:id",
   requireAuth,
   requireTenant,
+  requirePermission("services.read"),
   wrapAsync(async (req: Request, res: Response) => {
     const row = await getServiceForBusiness(req.params.id, businessId(req));
     if (!row) throw new NotFoundError("Service not found.");
@@ -537,6 +540,7 @@ servicesRouter.post(
   "/",
   requireAuth,
   requireTenant,
+  requirePermission("services.write"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const parsed = createSchema.safeParse(req.body);
@@ -591,6 +595,7 @@ servicesRouter.patch(
   "/:id",
   requireAuth,
   requireTenant,
+  requirePermission("services.write"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const existing = await getServiceForBusiness(req.params.id, bid);
@@ -655,6 +660,7 @@ servicesRouter.post(
   "/reorder",
   requireAuth,
   requireTenant,
+  requirePermission("services.write"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const parsed = reorderSchema.safeParse(req.body);
@@ -703,6 +709,7 @@ servicesRouter.delete(
   "/:id",
   requireAuth,
   requireTenant,
+  requirePermission("services.write"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const existing = await getServiceForBusiness(req.params.id, bid);

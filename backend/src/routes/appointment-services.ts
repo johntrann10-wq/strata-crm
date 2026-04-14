@@ -7,6 +7,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js
 import { formatLegacyServiceCategory } from "../lib/serviceCategories.js";
 import { warnOnce } from "../lib/warnOnce.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { recalculateAppointmentTotal } from "../lib/revenueTotals.js";
 import { createRequestActivityLog } from "../lib/activity.js";
@@ -48,7 +49,7 @@ async function getTableColumns(tableName: string): Promise<Set<string>> {
   return new Set(rows.map((row) => row.column_name).filter((value): value is string => Boolean(value)));
 }
 
-appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentServicesRouter.get("/", requireAuth, requireTenant, requirePermission("jobs.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const filter = parseFilter(req) as { appointmentId?: { equals?: string } } | undefined;
 
@@ -147,7 +148,7 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Reque
   });
 });
 
-appointmentServicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentServicesRouter.get("/:id", requireAuth, requireTenant, requirePermission("jobs.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
     .select()
@@ -167,7 +168,7 @@ const createSchema = z.object({
   unitPrice: z.number().min(0).optional(),
 });
 
-appointmentServicesRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentServicesRouter.post("/", requireAuth, requireTenant, requirePermission("jobs.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -220,7 +221,7 @@ const updateSchema = z.object({
   unitPrice: z.number().min(0).optional().nullable(),
 });
 
-appointmentServicesRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentServicesRouter.patch("/:id", requireAuth, requireTenant, requirePermission("jobs.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -262,7 +263,7 @@ appointmentServicesRouter.patch("/:id", requireAuth, requireTenant, async (req: 
   res.json(updated);
 });
 
-appointmentServicesRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentServicesRouter.delete("/:id", requireAuth, requireTenant, requirePermission("jobs.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db.select().from(appointmentServices).where(eq(appointmentServices.id, req.params.id)).limit(1);
   if (!existing) throw new NotFoundError("Appointment service not found.");
@@ -353,7 +354,7 @@ appointmentServicesRouter.delete("/:id", requireAuth, requireTenant, async (req:
   res.status(204).send();
 });
 
-appointmentServicesRouter.post("/:id/complete", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentServicesRouter.post("/:id/complete", requireAuth, requireTenant, requirePermission("jobs.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db.select().from(appointmentServices).where(eq(appointmentServices.id, req.params.id)).limit(1);
   if (!existing) throw new NotFoundError("Appointment service not found.");
@@ -379,7 +380,7 @@ appointmentServicesRouter.post("/:id/complete", requireAuth, requireTenant, asyn
   res.json({ ok: true });
 });
 
-appointmentServicesRouter.post("/:id/reopen", requireAuth, requireTenant, async (req: Request, res: Response) => {
+appointmentServicesRouter.post("/:id/reopen", requireAuth, requireTenant, requirePermission("jobs.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db.select().from(appointmentServices).where(eq(appointmentServices.id, req.params.id)).limit(1);
   if (!existing) throw new NotFoundError("Appointment service not found.");

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
-import { createInMemoryRateLimiter } from "./security.js";
+import { createInMemoryRateLimiter, createRateLimiter } from "./security.js";
 
 function createMockResponse() {
   const headers = new Map<string, string>();
@@ -81,6 +81,34 @@ describe("createInMemoryRateLimiter", () => {
     limiter.middleware(makeReq(" one@example.com "), res, next);
 
     expect(next).toHaveBeenCalledTimes(2);
+    expect(res.status).toHaveBeenCalledWith(429);
+  });
+});
+
+describe("createRateLimiter", () => {
+  it("respects configured limits when using the in-memory store", async () => {
+    const limiter = createRateLimiter({
+      windowMs: 60_000,
+      max: 1,
+      store: "memory",
+      message: "Slow down",
+    });
+    const req = {
+      ip: "127.0.0.1",
+      method: "POST",
+      path: "/auth/sign-in",
+      body: {},
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as Request;
+
+    const next = vi.fn();
+    await limiter.middleware(req, createMockResponse().res, next);
+
+    const { res } = createMockResponse();
+    await limiter.middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
     expect(res.status).toHaveBeenCalledWith(429);
   });
 });

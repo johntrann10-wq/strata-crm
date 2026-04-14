@@ -91,12 +91,13 @@ function formatDocumentTitle(kind: PublicDocumentKind, source: Record<string, un
   return title || "Appointment";
 }
 
-function buildDocumentUrl(payload: PublicDocumentTokenPayload): string {
+function buildDocumentUrl(payload: PublicDocumentTokenPayload & { tokenVersion?: number }): string {
   const token = encodeURIComponent(
     createPublicDocumentToken({
       kind: payload.kind,
       entityId: payload.entityId,
       businessId: payload.businessId,
+      tokenVersion: payload.tokenVersion ?? payload.ver,
     })
   );
   if (payload.kind === "quote") {
@@ -118,11 +119,15 @@ async function resolvePortalReferenceDocument(access: PublicDocumentTokenPayload
         id: quotes.id,
         clientId: quotes.clientId,
         status: quotes.status,
+        publicTokenVersion: quotes.publicTokenVersion,
       })
       .from(quotes)
       .where(and(eq(quotes.id, access.entityId), eq(quotes.businessId, access.businessId)))
       .limit(1);
     if (!quote) throw new NotFoundError("Estimate not found.");
+    if (quote.publicTokenVersion != null && access.ver !== quote.publicTokenVersion) {
+      throw new BadRequestError("This customer hub link is invalid or expired.");
+    }
     return {
       clientId: quote.clientId,
       currentDocument: {
@@ -130,7 +135,7 @@ async function resolvePortalReferenceDocument(access: PublicDocumentTokenPayload
         id: quote.id,
         title: "Estimate",
         status: quote.status,
-        url: buildDocumentUrl(access),
+        url: buildDocumentUrl({ ...access, tokenVersion: quote.publicTokenVersion ?? 1 }),
       },
     };
   }
@@ -142,11 +147,15 @@ async function resolvePortalReferenceDocument(access: PublicDocumentTokenPayload
         clientId: invoices.clientId,
         status: invoices.status,
         invoiceNumber: invoices.invoiceNumber,
+        publicTokenVersion: invoices.publicTokenVersion,
       })
       .from(invoices)
       .where(and(eq(invoices.id, access.entityId), eq(invoices.businessId, access.businessId)))
       .limit(1);
     if (!invoice) throw new NotFoundError("Invoice not found.");
+    if (invoice.publicTokenVersion != null && access.ver !== invoice.publicTokenVersion) {
+      throw new BadRequestError("This customer hub link is invalid or expired.");
+    }
     return {
       clientId: invoice.clientId,
       currentDocument: {
@@ -154,7 +163,7 @@ async function resolvePortalReferenceDocument(access: PublicDocumentTokenPayload
         id: invoice.id,
         title: formatDocumentTitle("invoice", invoice),
         status: invoice.status,
-        url: buildDocumentUrl(access),
+        url: buildDocumentUrl({ ...access, tokenVersion: invoice.publicTokenVersion ?? 1 }),
       },
     };
   }
@@ -165,11 +174,15 @@ async function resolvePortalReferenceDocument(access: PublicDocumentTokenPayload
       clientId: appointments.clientId,
       status: appointments.status,
       title: appointments.title,
+      publicTokenVersion: appointments.publicTokenVersion,
     })
     .from(appointments)
     .where(and(eq(appointments.id, access.entityId), eq(appointments.businessId, access.businessId)))
     .limit(1);
   if (!appointment) throw new NotFoundError("Appointment not found.");
+  if (appointment.publicTokenVersion != null && access.ver !== appointment.publicTokenVersion) {
+    throw new BadRequestError("This customer hub link is invalid or expired.");
+  }
   if (!appointment.clientId) {
     throw new BadRequestError("This appointment does not have a client portal view yet.");
   }
@@ -180,7 +193,7 @@ async function resolvePortalReferenceDocument(access: PublicDocumentTokenPayload
       id: appointment.id,
       title: formatDocumentTitle("appointment", appointment),
       status: appointment.status,
-      url: buildDocumentUrl(access),
+      url: buildDocumentUrl({ ...access, tokenVersion: appointment.publicTokenVersion ?? 1 }),
     },
   };
 }
@@ -247,6 +260,7 @@ portalRouter.get(
         total: quotes.total,
         expiresAt: quotes.expiresAt,
         createdAt: quotes.createdAt,
+        publicTokenVersion: quotes.publicTokenVersion,
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
@@ -271,6 +285,7 @@ portalRouter.get(
         total: invoices.total,
         dueDate: invoices.dueDate,
         createdAt: invoices.createdAt,
+        publicTokenVersion: invoices.publicTokenVersion,
       })
       .from(invoices)
       .where(
@@ -312,6 +327,7 @@ portalRouter.get(
         applyAdminFee: appointments.applyAdminFee,
         totalPrice: appointments.totalPrice,
         depositAmount: appointments.depositAmount,
+        publicTokenVersion: appointments.publicTokenVersion,
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
@@ -356,6 +372,7 @@ portalRouter.get(
         vehicleYear: vehicles.year,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
+        publicTokenVersion: appointments.publicTokenVersion,
       })
       .from(appointments)
       .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, access.businessId)))
@@ -395,6 +412,7 @@ portalRouter.get(
             kind: "quote",
             entityId: quote.id,
             businessId: access.businessId,
+            tokenVersion: quote.publicTokenVersion ?? 1,
           }),
         })),
         invoices: unpaidInvoices.map((invoice) => ({
@@ -409,6 +427,7 @@ portalRouter.get(
             kind: "invoice",
             entityId: invoice.id,
             businessId: access.businessId,
+            tokenVersion: invoice.publicTokenVersion ?? 1,
           }),
           payUrl:
             invoice.balance > 0
@@ -418,6 +437,7 @@ portalRouter.get(
                       kind: "invoice",
                       entityId: invoice.id,
                       businessId: access.businessId,
+                      tokenVersion: invoice.publicTokenVersion ?? 1,
                     })
                   )}`
                 )
@@ -442,6 +462,7 @@ portalRouter.get(
             kind: "appointment",
             entityId: appointment.id,
             businessId: access.businessId,
+            tokenVersion: appointment.publicTokenVersion ?? 1,
           }),
           payUrl:
             stripeReady && Number(appointment.depositAmount ?? 0) > 0 && finance?.depositSatisfied !== true
@@ -451,6 +472,7 @@ portalRouter.get(
                       kind: "appointment",
                       entityId: appointment.id,
                       businessId: access.businessId,
+                      tokenVersion: appointment.publicTokenVersion ?? 1,
                     })
                   )}`
                 )
@@ -469,6 +491,7 @@ portalRouter.get(
             kind: "appointment",
             entityId: appointment.id,
             businessId: access.businessId,
+            tokenVersion: appointment.publicTokenVersion ?? 1,
           }),
         })),
         vehicles: clientVehicles.map((vehicle) => ({

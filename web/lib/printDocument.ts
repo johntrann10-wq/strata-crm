@@ -1,4 +1,4 @@
-import { getAuthToken, getCurrentBusinessId } from "./auth";
+import { getCurrentBusinessId } from "./auth";
 
 type PrintAuthenticatedDocumentOptions = {
   url: string;
@@ -13,20 +13,13 @@ export async function printAuthenticatedDocument({
   pendingTitle,
   loadErrorMessage,
 }: PrintAuthenticatedDocumentOptions) {
-  const token = getAuthToken();
-  if (!token) {
-    throw new Error("You need to sign in again before printing.");
-  }
-
-  const headers: HeadersInit = {
-    Authorization: `Bearer ${token}`,
-  };
+  const headers: HeadersInit = {};
   const activeBusinessId = businessId ?? getCurrentBusinessId();
   if (activeBusinessId) {
     (headers as Record<string, string>)["x-business-id"] = activeBusinessId;
   }
 
-  const response = await fetch(url, { headers });
+  const response = await fetch(url, { headers, credentials: "include" });
   if (!response.ok) {
     throw new Error(loadErrorMessage);
   }

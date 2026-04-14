@@ -5,6 +5,7 @@ import { invoiceLineItems, invoices } from "../db/schema.js";
 import { eq, and } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { recalculateInvoiceTotals } from "../lib/revenueTotals.js";
 
@@ -28,7 +29,7 @@ const updateSchema = z.object({
   unitPrice: z.number().min(0).optional(),
 });
 
-invoiceLineItemsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+invoiceLineItemsRouter.post("/", requireAuth, requireTenant, requirePermission("invoices.write"), async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -55,7 +56,7 @@ invoiceLineItemsRouter.post("/", requireAuth, requireTenant, async (req: Request
   res.status(201).json(created);
 });
 
-invoiceLineItemsRouter.patch("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+invoiceLineItemsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("invoices.write"), async (req: Request, res: Response) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -82,7 +83,7 @@ invoiceLineItemsRouter.patch("/:id", requireAuth, requireTenant, async (req: Req
   res.json(updated);
 });
 
-invoiceLineItemsRouter.delete("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+invoiceLineItemsRouter.delete("/:id", requireAuth, requireTenant, requirePermission("invoices.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.id, req.params.id)).limit(1);
   if (!existing) throw new NotFoundError("Line item not found.");

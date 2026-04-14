@@ -22,6 +22,26 @@ describe("auth route helper logic", () => {
     expect(resolveGoogleStateRedirect(JSON.stringify({ redirectPath: "/signed-in" }))).toBe("/signed-in");
   });
 
+  it("uses the configured frontend origin for security-sensitive links", async () => {
+    const { resolveFrontendBaseUrl } = await import("./auth.js");
+    const previous = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = "https://app.strata.test/";
+    expect(resolveFrontendBaseUrl({} as any)).toBe("https://app.strata.test");
+    if (previous === undefined) {
+      delete process.env.FRONTEND_URL;
+    } else {
+      process.env.FRONTEND_URL = previous;
+    }
+  });
+
+  it("rejects reset URLs when no frontend origin is configured", async () => {
+    const { resolveFrontendBaseUrl } = await import("./auth.js");
+    const previous = process.env.FRONTEND_URL;
+    delete process.env.FRONTEND_URL;
+    expect(() => resolveFrontendBaseUrl({} as any)).toThrowError("Password reset is not configured.");
+    if (previous !== undefined) process.env.FRONTEND_URL = previous;
+  });
+
   it("backfills Google linkage and verification for existing email accounts", async () => {
     const { resolveGoogleAccountUpdates } = await import("./auth.js");
     const updates = resolveGoogleAccountUpdates(

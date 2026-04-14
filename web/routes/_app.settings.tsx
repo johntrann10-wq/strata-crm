@@ -1648,7 +1648,7 @@ export default function SettingsPage() {
     setIntegrationSettings({
       webhookEnabled: business.integrationWebhookEnabled ?? DEFAULT_INTEGRATION_SETTINGS.webhookEnabled,
       webhookUrl: business.integrationWebhookUrl ?? "",
-      webhookSecret: business.integrationWebhookSecret ?? "",
+      webhookSecret: "",
       webhookEvents:
         Array.isArray(business.integrationWebhookEvents) && business.integrationWebhookEvents.length > 0
           ? business.integrationWebhookEvents
@@ -1998,13 +1998,17 @@ export default function SettingsPage() {
       toast.error("Add a webhook endpoint URL before enabling signed webhooks.");
       return;
     }
-    await update({
+    const trimmedSecret = integrationSettings.webhookSecret.trim();
+    const payload: Record<string, unknown> = {
       id: business.id,
       integrationWebhookEnabled: integrationSettings.webhookEnabled,
       integrationWebhookUrl: integrationSettings.webhookUrl.trim() || null,
-      integrationWebhookSecret: integrationSettings.webhookSecret.trim() || null,
       integrationWebhookEvents: integrationSettings.webhookEvents,
-    });
+    };
+    if (trimmedSecret) {
+      payload.integrationWebhookSecret = trimmedSecret;
+    }
+    await update(payload);
     await refetchIntegrationStatus();
     toast.success("Integration settings saved");
   };

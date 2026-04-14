@@ -415,6 +415,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   start_time timestamptz NOT NULL,
   end_time timestamptz,
   status appointment_status NOT NULL DEFAULT 'scheduled',
+  public_token_version integer NOT NULL DEFAULT 1,
   subtotal decimal(12,2) DEFAULT 0,
   tax_rate decimal(5,2) DEFAULT 0,
   tax_amount decimal(12,2) DEFAULT 0,
@@ -438,6 +439,7 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS expected_completion_time times
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS pickup_ready_time timestamptz;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS vehicle_on_site boolean DEFAULT false;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS job_phase appointment_job_phase DEFAULT 'scheduled';
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS public_token_version integer NOT NULL DEFAULT 1;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS subtotal decimal(12,2) DEFAULT 0;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS tax_rate decimal(5,2) DEFAULT 0;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS tax_amount decimal(12,2) DEFAULT 0;
@@ -479,6 +481,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   appointment_id uuid REFERENCES appointments(id),
   invoice_number text UNIQUE,
   status invoice_status NOT NULL DEFAULT 'draft',
+  public_token_version integer NOT NULL DEFAULT 1,
   subtotal decimal(12,2) DEFAULT 0,
   tax_rate decimal(5,2) DEFAULT 0,
   tax_amount decimal(12,2) DEFAULT 0,
@@ -494,6 +497,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS appointment_id uuid REFERENCES appointments(id);
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS invoice_number text;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS status invoice_status DEFAULT 'draft';
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS public_token_version integer NOT NULL DEFAULT 1;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS subtotal decimal(12,2) DEFAULT 0;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tax_rate decimal(5,2) DEFAULT 0;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tax_amount decimal(12,2) DEFAULT 0;
@@ -567,6 +571,7 @@ CREATE TABLE IF NOT EXISTS quotes (
   vehicle_id uuid REFERENCES vehicles(id),
   appointment_id uuid REFERENCES appointments(id),
   status quote_status NOT NULL DEFAULT 'draft',
+  public_token_version integer NOT NULL DEFAULT 1,
   subtotal decimal(12,2) DEFAULT 0,
   tax_rate decimal(5,2) DEFAULT 0,
   tax_amount decimal(12,2) DEFAULT 0,
@@ -578,6 +583,8 @@ CREATE TABLE IF NOT EXISTS quotes (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS public_token_version integer NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS quote_line_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -650,6 +657,14 @@ CREATE TABLE IF NOT EXISTS stripe_webhook_events (
 
 CREATE UNIQUE INDEX IF NOT EXISTS stripe_webhook_events_event_id_unique
   ON stripe_webhook_events (event_id);
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key text PRIMARY KEY,
+  count integer NOT NULL DEFAULT 0,
+  reset_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 
 CREATE TABLE IF NOT EXISTS email_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

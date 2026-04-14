@@ -10,8 +10,10 @@ import { googleClient } from "../lib/googleAuth.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { randomUUID } from "crypto";
 import { getDefaultPermissionsForRole, resolvePermissionsForRole } from "../lib/permissions.js";
-import { createInMemoryRateLimiter } from "../middleware/security.js";
+import { createRateLimiter } from "../middleware/security.js";
 import { createAccessToken, createPasswordResetToken, verifyAccessToken, verifyPasswordResetToken, verifyTeamInviteToken } from "../lib/jwt.js";
+import { clearAuthCookie, getAuthTokenFromCookieHeader, setAuthCookie } from "../lib/authCookies.js";
+import { isAuthTokenVersionMismatch, loadAuthTokenVersion, normalizeTokenVersion } from "../lib/authTokenVersion.js";
 import { sendTemplatedEmail } from "../lib/email.js";
 import { isEmailConfigured } from "../lib/env.js";
 
@@ -39,7 +41,7 @@ const resetPasswordSchema = z.object({
 });
 export const authRouter = Router();
 
-const signInLimiter = createInMemoryRateLimiter({
+const signInLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 8,
   message: "Too many sign-in attempts. Please wait a few minutes and try again.",
@@ -49,7 +51,7 @@ const signInLimiter = createInMemoryRateLimiter({
   },
 });
 
-const signUpLimiter = createInMemoryRateLimiter({
+const signUpLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   max: 6,
   message: "Too many sign-up attempts. Please wait a bit before trying again.",
@@ -58,7 +60,7 @@ const signUpLimiter = createInMemoryRateLimiter({
     return `auth:sign-up:${ip}:${email}`;
   },
 });
-const forgotPasswordLimiter = createInMemoryRateLimiter({
+const forgotPasswordLimiter = createRateLimiter({
   windowMs: 30 * 60 * 1000,
   max: 6,
   message: "Too many password reset requests. Please wait a bit before trying again.",
@@ -68,19 +70,19 @@ const forgotPasswordLimiter = createInMemoryRateLimiter({
   },
 });
 
-const resetPasswordLimiter = createInMemoryRateLimiter({
+const resetPasswordLimiter = createRateLimiter({
   windowMs: 30 * 60 * 1000,
   max: 12,
   message: "Too many password reset attempts. Please wait a bit before trying again.",
 });
 
-const googleOAuthStartLimiter = createInMemoryRateLimiter({
+const googleOAuthStartLimiter = createRateLimiter({
   windowMs: 10 * 60 * 1000,
   max: 30,
   message: "Too many Google sign-in attempts. Please try again shortly.",
 });
 
-const googleOAuthCallbackLimiter = createInMemoryRateLimiter({
+const googleOAuthCallbackLimiter = createRateLimiter({
   windowMs: 10 * 60 * 1000,
   max: 30,
   message: "Too many Google callback attempts. Please try again shortly.",
@@ -173,27 +175,25 @@ export function resolveGoogleStateRedirect(input: unknown): string {
   }
 }
 
-function resolveFrontendBaseUrl(req: Request): string {
+export function resolveFrontendBaseUrl(_req: Request): string {
   const configured = process.env.FRONTEND_URL?.trim();
   if (configured) return configured.replace(/\/+$/, "");
-  const origin = req.get("origin")?.trim();
-  if (origin && /^https?:\/\//i.test(origin)) return origin.replace(/\/+$/, "");
-  const host = req.get("host")?.trim();
-  if (host) {
-    const protocol = req.secure || req.get("x-forwarded-proto") === "https" ? "https" : "http";
-    return `${protocol}://${host}`.replace(/\/+$/, "");
-  }
   throw new BadRequestError("Password reset is not configured.");
 }
 
-function getUserIdFromAuthHeader(req: Request): string | null {
+async function getAuthContextFromRequest(req: Request): Promise<{ userId: string; tokenVersion?: number } | null> {
   const authHeader = req.headers.authorization ?? "";
   const bearerPrefix = "Bearer ";
-  if (!authHeader.startsWith(bearerPrefix)) return null;
-  const rawToken = authHeader.slice(bearerPrefix.length).trim();
+  let rawToken = authHeader.startsWith(bearerPrefix) ? authHeader.slice(bearerPrefix.length).trim() : "";
+  if (!rawToken) {
+    rawToken = getAuthTokenFromCookieHeader(req.headers.cookie);
+  }
   if (!rawToken) return null;
   const payload = verifyAccessToken(rawToken);
-  return payload?.userId ?? null;
+  if (!payload?.userId) return null;
+  const currentVersion = await loadAuthTokenVersion(payload.userId);
+  if (isAuthTokenVersionMismatch(payload.ver, currentVersion)) return null;
+  return { userId: payload.userId, tokenVersion: normalizeTokenVersion(payload.ver) };
 }
 
 function isTenantSchemaDriftError(error: unknown): boolean {
@@ -346,21 +346,30 @@ async function sendActivatedMembershipEmails(
 authRouter.get(
   "/me",
   wrapAsync(async (req: Request, res: Response) => {
-    const userId = getUserIdFromAuthHeader(req);
-    if (!userId) {
+    const auth = await getAuthContextFromRequest(req);
+    if (!auth?.userId) {
       res.status(401).json({ message: "Not signed in" });
       return;
     }
     const [user] = await db
-      .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName, googleProfileId: users.googleProfileId, passwordHash: users.passwordHash })
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        googleProfileId: users.googleProfileId,
+        passwordHash: users.passwordHash,
+        authTokenVersion: users.authTokenVersion,
+      })
       .from(users)
-      .where(eq(users.id, userId))
+      .where(eq(users.id, auth.userId))
       .limit(1);
     if (!user) {
       res.status(401).json({ message: "Not signed in" });
       return;
     }
-    const token = createAccessToken(user.id);
+    const token = createAccessToken(user.id, user.authTokenVersion ?? 1);
+    setAuthCookie(res, token, req);
     res.json({
       data: {
         ...serializeAuthUser(user),
@@ -372,8 +381,8 @@ authRouter.get(
 authRouter.get(
   "/context",
   wrapAsync(async (req: Request, res: Response) => {
-    const userId = getUserIdFromAuthHeader(req);
-    if (!userId) {
+    const auth = await getAuthContextFromRequest(req);
+    if (!auth?.userId) {
       res.status(401).json({ message: "Not signed in" });
       return;
     }
@@ -387,7 +396,7 @@ authRouter.get(
           onboardingComplete: businesses.onboardingComplete,
         })
         .from(businesses)
-        .where(eq(businesses.ownerId, userId));
+        .where(eq(businesses.ownerId, auth.userId));
       let memberships: Array<{
         businessId: string;
         role: "owner" | "admin" | "manager" | "service_advisor" | "technician";
@@ -404,11 +413,11 @@ authRouter.get(
             isDefault: businessMemberships.isDefault,
           })
           .from(businessMemberships)
-          .where(eq(businessMemberships.userId, userId));
+          .where(eq(businessMemberships.userId, auth.userId));
       } catch (error) {
         if (!isTenantSchemaDriftError(error)) throw error;
         logger.warn("business membership schema unavailable; falling back to owner-only auth context", {
-          userId,
+          userId: auth.userId,
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -456,7 +465,7 @@ authRouter.get(
 
         const membershipBusinessMap = new Map(membershipBusinesses.map((business) => [business.id, business]));
         const permissionOverridesByBusiness = await getMembershipPermissionMap(
-          userId,
+          auth.userId,
           memberships.map((membership) => membership.businessId)
         );
         for (const membership of memberships) {
@@ -488,10 +497,10 @@ authRouter.get(
       });
     } catch (error) {
       logger.error("Auth context failed; returning safe fallback", {
-        userId,
+        userId: auth.userId,
         error: error instanceof Error ? error.message : String(error),
       });
-      res.json({ data: await buildSafeAuthContext(userId) });
+      res.json({ data: await buildSafeAuthContext(auth.userId) });
     }
   })
 );
@@ -509,7 +518,8 @@ authRouter.post(
     if (!ok) throw new UnauthorizedError("Invalid email or password.");
     const activatedMemberships = await activateInvitedMemberships(user.id);
     await sendActivatedMembershipEmails(req, { email: user.email, firstName: user.firstName }, activatedMemberships);
-    const token = createAccessToken(user.id);
+    const token = createAccessToken(user.id, normalizeTokenVersion(user.authTokenVersion));
+    setAuthCookie(res, token, req);
     logger.info("User signed in", { userId: user.id, email: user.email });
     res.json({
       data: {
@@ -535,6 +545,9 @@ authRouter.post(
           email: string;
           firstName: string | null;
           lastName: string | null;
+          authTokenVersion?: number | null;
+          googleProfileId?: string | null;
+          passwordHash?: string | null;
         }
       | undefined;
 
@@ -592,23 +605,24 @@ authRouter.post(
         });
 
       const [claimedUser] = await db.transaction(async (tx) => {
-        const [updatedUser] = await tx
-          .update(users)
-          .set({
-            passwordHash,
-            firstName: firstName ?? existing.firstName ?? null,
-            lastName: lastName ?? existing.lastName ?? null,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, existing.id))
-          .returning({
-            id: users.id,
-            email: users.email,
-            firstName: users.firstName,
-            lastName: users.lastName,
-            googleProfileId: users.googleProfileId,
-            passwordHash: users.passwordHash,
-          });
+      const [updatedUser] = await tx
+        .update(users)
+        .set({
+          passwordHash,
+          firstName: firstName ?? existing.firstName ?? null,
+          lastName: lastName ?? existing.lastName ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, existing.id))
+        .returning({
+          id: users.id,
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          googleProfileId: users.googleProfileId,
+          passwordHash: users.passwordHash,
+          authTokenVersion: users.authTokenVersion,
+        });
 
         try {
           await tx
@@ -650,13 +664,15 @@ authRouter.post(
           lastName: users.lastName,
           googleProfileId: users.googleProfileId,
           passwordHash: users.passwordHash,
+          authTokenVersion: users.authTokenVersion,
         });
       user = createdUser;
       logger.info("User signed up", { userId: user?.id, email: user?.email });
     }
 
     if (!user) throw new BadRequestError("Failed to create account.");
-    const token = createAccessToken(user.id);
+    const token = createAccessToken(user.id, normalizeTokenVersion(user.authTokenVersion));
+    setAuthCookie(res, token, req);
     res.status(201).json({
       data: {
         ...serializeAuthUser(user),
@@ -719,14 +735,19 @@ authRouter.post(
       }
     }
     const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-    await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, user.id));
+    const nextAuthVersion = normalizeTokenVersion(user.authTokenVersion) + 1;
+    await db
+      .update(users)
+      .set({ passwordHash, authTokenVersion: nextAuthVersion, updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+    clearAuthCookie(res);
     logger.info("Password reset completed", { userId: user.id, email: user.email });
     res.json({ ok: true });
   })
 );
 authRouter.post("/sign-out", (_req: Request, res: Response) => {
-  // JWT sign-out is handled client-side by removing the token.
-  res.json({});
+  clearAuthCookie(res);
+  res.json({ ok: true });
 });
 // ---------------------------------------------------------------------------
 // Google OAuth (sign in / sign up with Google)
@@ -814,12 +835,11 @@ authRouter.get(
       await sendActivatedMembershipEmails(req, { email: user.email, firstName: user.firstName }, activatedMemberships);
       logger.info("User signed in via Google", { userId: user.id, email: user.email });
     }
-    const token = createAccessToken(user.id);
+    const token = createAccessToken(user.id, normalizeTokenVersion(user.authTokenVersion));
+    setAuthCookie(res, token, req);
     const redirectPath = resolveGoogleStateRedirect(req.query.state);
-    const frontendUrl = process.env.FRONTEND_URL ?? "";
-    const baseRedirect = frontendUrl ? `${frontendUrl}${redirectPath}` : redirectPath;
-    const url = new URL(baseRedirect, frontendUrl || undefined);
-    url.searchParams.set("token", token);
-    res.redirect(url.toString());
+    const frontendUrl = resolveFrontendBaseUrl(req);
+    const baseRedirect = `${frontendUrl}${redirectPath}`;
+    res.redirect(baseRedirect);
   })
 );

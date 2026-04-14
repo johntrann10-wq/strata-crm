@@ -6,7 +6,9 @@ import { invoices, businesses, invoiceLineItems, clients, payments, appointments
 import { eq, and, or, desc, asc, isNull, sql, ilike } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
+import { createRateLimiter } from "../middleware/security.js";
 import { logger } from "../lib/logger.js";
 import { renderInvoiceHtml, type InvoiceTemplateData } from "../lib/invoiceTemplate.js";
 import { createRequestActivityLog } from "../lib/activity.js";
@@ -58,6 +60,13 @@ const sendInvoiceSchema = z.object({
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z.string().trim().max(120).optional()
   ),
+});
+
+const invoiceSendLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  message: "Too many invoice emails sent. Please wait a bit before trying again.",
+  key: ({ businessId, ip, path }) => `email:invoice-send:${businessId ?? ip}:${path}`,
 });
 
 const INVOICE_STATUSES = ["draft", "sent", "paid", "partial", "void"] as const;
@@ -657,7 +666,7 @@ async function listInvoicesWithPaymentMetrics(whereClause: ReturnType<typeof and
   }
 }
 
-invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
+invoicesRouter.get("/", requireAuth, requireTenant, requirePermission("invoices.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 100) : 50;
   let parsedFilter:
@@ -788,7 +797,7 @@ invoicesRouter.get("/", requireAuth, requireTenant, async (req: Request, res: Re
   res.json({ records });
 });
 
-invoicesRouter.get("/:id", requireAuth, requireTenant, async (req: Request, res: Response) => {
+invoicesRouter.get("/:id", requireAuth, requireTenant, requirePermission("invoices.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [row] = await db
     .select()
@@ -868,6 +877,7 @@ invoicesRouter.post(
   "/:id/create-payment-session",
   requireAuth,
   requireTenant,
+  requirePermission("invoices.write"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const [invoice] = await db
@@ -934,7 +944,7 @@ invoicesRouter.post(
   })
 );
 
-invoicesRouter.get("/:id/html", requireAuth, requireTenant, async (req: Request, res: Response) => {
+invoicesRouter.get("/:id/html", requireAuth, requireTenant, requirePermission("invoices.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [row] = await db
     .select()
@@ -1006,6 +1016,9 @@ invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
     .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, access.businessId)))
     .limit(1);
   if (!row) throw new NotFoundError("Invoice not found.");
+  if (row.publicTokenVersion != null && access.ver !== row.publicTokenVersion) {
+    throw new ForbiddenError("Invoice access link is invalid or expired.");
+  }
   const [businessRow] = await db
     .select({ name: businesses.name, email: businesses.email, phone: businesses.phone, address: businesses.address, city: businesses.city, state: businesses.state, zip: businesses.zip, timezone: businesses.timezone })
     .from(businesses)
@@ -1080,11 +1093,15 @@ invoicesRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Respon
       status: invoices.status,
       total: invoices.total,
       clientId: invoices.clientId,
+      publicTokenVersion: invoices.publicTokenVersion,
     })
     .from(invoices)
     .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, access.businessId)))
     .limit(1);
   if (!invoice) throw new NotFoundError("Invoice not found.");
+  if (invoice.publicTokenVersion != null && access.ver !== invoice.publicTokenVersion) {
+    throw new ForbiddenError("Invoice access link is invalid or expired.");
+  }
   if (invoice.status === "void") throw new BadRequestError("Void invoices cannot accept Stripe payments.");
   if (invoice.status === "paid") throw new BadRequestError("This invoice is already fully paid.");
 
@@ -1142,6 +1159,7 @@ invoicesRouter.post(
   "/",
   requireAuth,
   requireTenant,
+  requirePermission("invoices.write"),
   wrapAsync(async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
@@ -1619,12 +1637,20 @@ invoicesRouter.post(
   })
 );
 
-invoicesRouter.post("/:id/void", requireAuth, requireTenant, async (req: Request, res: Response) => {
+invoicesRouter.post("/:id/void", requireAuth, requireTenant, requirePermission("invoices.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db.select().from(invoices).where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, bid))).limit(1);
   if (!existing) throw new NotFoundError("Invoice not found.");
   if (existing.status === "void") throw new BadRequestError("Invoice is already void.");
-  const [updated] = await db.update(invoices).set({ status: "void", updatedAt: new Date() }).where(eq(invoices.id, req.params.id)).returning();
+  const [updated] = await db
+    .update(invoices)
+    .set({
+      status: "void",
+      publicTokenVersion: sql`coalesce(${invoices.publicTokenVersion}, 1) + 1`,
+      updatedAt: new Date(),
+    })
+    .where(eq(invoices.id, req.params.id))
+    .returning();
   if (updated) {
     await createInvoiceRequestActivityLogSafely(req, {
       businessId: bid,
@@ -1639,7 +1665,13 @@ invoicesRouter.post("/:id/void", requireAuth, requireTenant, async (req: Request
   res.json(updated);
 });
 
-invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(async (req: Request, res: Response) => {
+invoicesRouter.post(
+  "/:id/sendToClient",
+  invoiceSendLimiter.middleware,
+  requireAuth,
+  requireTenant,
+  requirePermission("invoices.write"),
+  wrapAsync(async (req: Request, res: Response) => {
   const parsed = sendInvoiceSchema.safeParse(req.body ?? {});
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
@@ -1649,6 +1681,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       invoiceNumber: invoices.invoiceNumber,
       status: invoices.status,
       total: invoices.total,
+      publicTokenVersion: invoices.publicTokenVersion,
       clientFirstName: clients.firstName,
       clientLastName: clients.lastName,
       clientEmail: clients.email,
@@ -1722,6 +1755,7 @@ invoicesRouter.post("/:id/sendToClient", requireAuth, requireTenant, wrapAsync(a
       kind: "invoice",
       entityId: existing.id,
       businessId: bid,
+      tokenVersion: existing.publicTokenVersion ?? 1,
     });
     const invoicePayUrl =
       existing.status !== "paid" && existing.status !== "void" && Number(existing.total ?? 0) > 0

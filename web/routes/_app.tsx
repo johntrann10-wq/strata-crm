@@ -45,7 +45,6 @@ import { api } from "../api";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import {
   clearAuthState,
-  getAuthToken,
   clearCurrentBusinessId,
   clearCurrentLocationId,
   getCurrentBusinessId,
@@ -918,13 +917,6 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const hydrateClientAuthState = useCallback(async () => {
     setWorkspaceLoadError(null);
     let cancelled = false;
-    const token = getAuthToken();
-    if (!token) {
-      resetClientAuthState();
-      return () => {
-        cancelled = true;
-      };
-    }
     try {
       const me = await api.user.me();
       let context: Awaited<ReturnType<typeof api.user.context>>;
