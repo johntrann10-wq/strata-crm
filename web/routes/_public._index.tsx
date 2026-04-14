@@ -355,9 +355,6 @@ export default function LandingPage() {
                 Start free trial
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
-              <Link to="/sign-in" className="text-sm font-semibold text-gray-500 transition-colors hover:text-gray-900">
-                Sign in
-              </Link>
             </div>
             <p className="text-sm font-medium text-gray-500">30-day free trial | No card required | Founder pricing $29/mo</p>
           </div>
