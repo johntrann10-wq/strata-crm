@@ -134,7 +134,7 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
     label: "Operations",
     items: [
       { icon: LayoutDashboard, label: "Dashboard", href: "/signed-in", end: true, permission: "dashboard.view", description: "Run today's operation from one command surface." },
-      { icon: Calendar, label: "Calendar", href: "/calendar", end: false, reloadDocument: true, module: "calendar", permission: "appointments.read", description: "Plan the schedule and see the shop at a glance." },
+      { icon: Calendar, label: "Calendar", href: "/calendar", end: false, module: "calendar", permission: "appointments.read", description: "Plan the schedule and see the shop at a glance." },
       { icon: Calendar, label: "Schedule", href: "/appointments", end: false, module: "appointments", permission: "appointments.read", description: "Work the appointment queue and move bookings forward." },
       { icon: ClipboardList, label: "Jobs", href: "/jobs", end: false, module: "jobs", permission: "jobs.read", description: "Track live work orders, staffing, and completion." },
     ],

@@ -1,6 +1,7 @@
 const CURRENT_BUSINESS_ID_KEY = "currentBusinessId";
 const CURRENT_LOCATION_ID_KEY = "currentLocationId";
 const AUTH_EVENT_CHANNEL_KEY = "authEventChannel";
+const SESSION_AUTH_TOKEN_KEY = "strataSessionAuthToken";
 let inMemoryAuthToken: string | null = null;
 
 function safeLocalStorageGet(key: string): string | null {
@@ -30,12 +31,43 @@ function safeLocalStorageRemove(key: string): void {
   }
 }
 
+function safeSessionStorageGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSessionStorageSet(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures in restricted browser contexts.
+  }
+}
+
+function safeSessionStorageRemove(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures in restricted browser contexts.
+  }
+}
+
 export function getAuthToken(): string | null {
+  if (!inMemoryAuthToken) {
+    inMemoryAuthToken = safeSessionStorageGet(SESSION_AUTH_TOKEN_KEY);
+  }
   return inMemoryAuthToken;
 }
 
 export function setAuthToken(token: string): void {
   inMemoryAuthToken = token;
+  safeSessionStorageSet(SESSION_AUTH_TOKEN_KEY, token);
 }
 
 export function persistAuthState(token: string, detail?: unknown): void {
@@ -47,6 +79,7 @@ export function persistAuthState(token: string, detail?: unknown): void {
 
 export function clearAuthToken(): void {
   inMemoryAuthToken = null;
+  safeSessionStorageRemove(SESSION_AUTH_TOKEN_KEY);
 }
 
 export function getCurrentBusinessId(): string | null {
