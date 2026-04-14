@@ -350,7 +350,7 @@ type StripeWebhookBusinessContext = {
 };
 
 export function getStripeWebhookPayload(event: Stripe.Event): string {
-  const dataObject = event.data.object as Record<string, unknown>;
+  const dataObject = event.data.object as unknown as Record<string, unknown>;
   const summary = {
     object: typeof dataObject?.object === "string" ? dataObject.object : null,
     id: typeof dataObject?.id === "string" ? dataObject.id : null,

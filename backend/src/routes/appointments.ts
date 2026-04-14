@@ -771,6 +771,7 @@ async function buildAppointmentConfirmationPayload(
         locationTimezone: string | null;
         totalPrice: string | null;
         depositAmount: string | null;
+        publicTokenVersion: number | null;
       }
     | undefined;
   try {
@@ -871,6 +872,7 @@ async function buildAppointmentConfirmationPayload(
           locationTimezone: sql<string | null>`null`,
           totalPrice: appointments.totalPrice,
           depositAmount: appointments.depositAmount,
+          publicTokenVersion: appointments.publicTokenVersion,
         })
         .from(appointments)
         .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))

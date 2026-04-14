@@ -30,7 +30,7 @@ function getUserIdFromRequest(req: Request): { userId: string; tokenVersion?: nu
   const bearerPrefix = "Bearer ";
   let rawToken = authHeader.startsWith(bearerPrefix) ? authHeader.slice(bearerPrefix.length).trim() : "";
   if (!rawToken) {
-    rawToken = getAuthTokenFromCookieHeader(req.headers.cookie);
+    rawToken = getAuthTokenFromCookieHeader(req.headers.cookie) ?? "";
   }
   if (!rawToken) return null;
   const payload = verifyAccessToken(rawToken);
