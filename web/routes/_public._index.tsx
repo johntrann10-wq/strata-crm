@@ -155,8 +155,10 @@ export default function LandingPage() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [loadedVersion, setLoadedVersion] = useState(0);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(true);
   const loadedImages = useRef(new Set<string>());
   const transitionTimer = useRef<number | null>(null);
+  const lastInteractionRef = useRef(Date.now());
   const activeFeature = useMemo(
     () => featureRail.find((feature) => feature.id === activeFeatureId) ?? featureRail[0],
     [activeFeatureId]
@@ -172,6 +174,9 @@ export default function LandingPage() {
     if (loadedImages.current.has(src)) return;
     loadedImages.current.add(src);
     setLoadedVersion((value) => value + 1);
+  };
+  const markInteraction = () => {
+    lastInteractionRef.current = Date.now();
   };
 
   useEffect(() => {
@@ -208,6 +213,19 @@ export default function LandingPage() {
     if (typeof window === "undefined") return;
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setPrefersReducedMotion(media.matches);
+    update();
+    if ("addEventListener" in media) {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsDesktop(media.matches);
     update();
     if ("addEventListener" in media) {
       media.addEventListener("change", update);
@@ -271,7 +289,7 @@ export default function LandingPage() {
       setQueuedFeature(null);
       setIsTransitioning(false);
       transitionTimer.current = null;
-    }, 320);
+    }, 420);
     return () => {
       if (transitionTimer.current) {
         window.clearTimeout(transitionTimer.current);
@@ -279,6 +297,19 @@ export default function LandingPage() {
       }
     };
   }, [queuedFeature, loadedVersion, prefersReducedMotion]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (prefersReducedMotion || isDesktop) return;
+    const interval = window.setInterval(() => {
+      if (queuedFeature || isTransitioning) return;
+      if (Date.now() - lastInteractionRef.current < 5000) return;
+      const currentIndex = featureRail.findIndex((feature) => feature.id === activeFeatureId);
+      const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % featureRail.length;
+      setActiveFeatureId(featureRail[nextIndex].id);
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [activeFeatureId, isDesktop, prefersReducedMotion, queuedFeature, isTransitioning]);
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
@@ -384,8 +415,14 @@ export default function LandingPage() {
                     ref={(node) => {
                       featureRefs.current[feature.id] = node;
                     }}
-                    onMouseEnter={() => setActiveFeatureId(feature.id)}
-                    onClick={() => setActiveFeatureId(feature.id)}
+                    onMouseEnter={() => {
+                      markInteraction();
+                      setActiveFeatureId(feature.id);
+                    }}
+                    onClick={() => {
+                      markInteraction();
+                      setActiveFeatureId(feature.id);
+                    }}
                     className={cn(
                       "rounded-2xl border px-5 py-4 transition-all",
                       isActive
@@ -413,7 +450,7 @@ export default function LandingPage() {
                   {queuedFeature ? (
                     <div
                       className={cn(
-                        "absolute inset-0 transform-gpu transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none",
+                        "absolute inset-0 transform-gpu transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
                         isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
                       )}
                     >
@@ -442,7 +479,7 @@ export default function LandingPage() {
                       {queuedFeature?.mobileImage ? (
                         <div
                           className={cn(
-                            "absolute inset-0 transform-gpu transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none",
+                            "absolute inset-0 transform-gpu transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
                             isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
                           )}
                         >
@@ -468,7 +505,10 @@ export default function LandingPage() {
                 <button
                   key={feature.id}
                   type="button"
-                  onClick={() => setActiveFeatureId(feature.id)}
+                    onClick={() => {
+                      markInteraction();
+                      setActiveFeatureId(feature.id);
+                    }}
                   className={cn(
                     "rounded-2xl border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em]",
                     feature.id === activeFeatureId
@@ -492,7 +532,7 @@ export default function LandingPage() {
                 {queuedFeature ? (
                   <div
                     className={cn(
-                      "absolute inset-0 transform-gpu transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none",
+                      "absolute inset-0 transform-gpu transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
                       isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
                     )}
                   >
@@ -520,7 +560,7 @@ export default function LandingPage() {
                       {queuedFeature?.mobileImage ? (
                         <div
                           className={cn(
-                            "absolute inset-0 transform-gpu transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none",
+                            "absolute inset-0 transform-gpu transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
                             isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
                           )}
                         >
