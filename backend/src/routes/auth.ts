@@ -3,7 +3,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "../db/index.js";
 import { businessMemberships, businesses, membershipPermissionGrants, users } from "../db/schema.js";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { BadRequestError, UnauthorizedError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { googleClient } from "../lib/googleAuth.js";
@@ -181,6 +181,106 @@ export function resolveFrontendBaseUrl(_req: Request): string {
   throw new BadRequestError("Password reset is not configured.");
 }
 
+type AuthUserRecord = {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  googleProfileId: string | null;
+  passwordHash: string | null;
+  authTokenVersion: number | null;
+  emailVerified: boolean | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+};
+
+function isUserSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+function mapLegacyUserRow(row: Record<string, unknown>): AuthUserRecord {
+  return {
+    id: String(row.id),
+    email: String(row.email),
+    firstName: (row.first_name as string | null | undefined) ?? (row.firstName as string | null | undefined) ?? null,
+    lastName: (row.last_name as string | null | undefined) ?? (row.lastName as string | null | undefined) ?? null,
+    googleProfileId:
+      (row.google_profile_id as string | null | undefined) ?? (row.googleProfileId as string | null | undefined) ?? null,
+    passwordHash:
+      (row.password_hash as string | null | undefined) ?? (row.passwordHash as string | null | undefined) ?? null,
+    emailVerified:
+      (row.email_verified as boolean | null | undefined) ?? (row.emailVerified as boolean | null | undefined) ?? null,
+    authTokenVersion:
+      (row.auth_token_version as number | null | undefined) ?? (row.authTokenVersion as number | null | undefined) ?? null,
+    createdAt: (row.created_at as Date | null | undefined) ?? (row.createdAt as Date | null | undefined) ?? null,
+    updatedAt: (row.updated_at as Date | null | undefined) ?? (row.updatedAt as Date | null | undefined) ?? null,
+  };
+}
+
+function normalizeAuthUser(user: AuthUserRecord): AuthUserRecord {
+  return {
+    ...user,
+    firstName: user.firstName ?? null,
+    lastName: user.lastName ?? null,
+    googleProfileId: user.googleProfileId ?? null,
+    passwordHash: user.passwordHash ?? null,
+    authTokenVersion: user.authTokenVersion ?? null,
+    emailVerified: user.emailVerified ?? null,
+    createdAt: user.createdAt ?? null,
+    updatedAt: user.updatedAt ?? null,
+  };
+}
+
+async function loadUserByEmailSafe(email: string): Promise<AuthUserRecord | null> {
+  try {
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return user ? normalizeAuthUser(user as AuthUserRecord) : null;
+  } catch (error) {
+    if (!isUserSchemaDriftError(error)) throw error;
+    logger.warn("Users schema drift detected during email lookup; falling back to legacy select", {
+      email,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const result = await db.execute(sql`
+      SELECT id, email, password_hash, first_name, last_name, email_verified, google_profile_id, created_at, updated_at
+      FROM users
+      WHERE email = ${email}
+      LIMIT 1
+    `);
+    const row = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0];
+    return row ? mapLegacyUserRow(row) : null;
+  }
+}
+
+async function loadUserByIdSafe(userId: string): Promise<AuthUserRecord | null> {
+  try {
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    return user ? normalizeAuthUser(user as AuthUserRecord) : null;
+  } catch (error) {
+    if (!isUserSchemaDriftError(error)) throw error;
+    logger.warn("Users schema drift detected during ID lookup; falling back to legacy select", {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const result = await db.execute(sql`
+      SELECT id, email, password_hash, first_name, last_name, email_verified, google_profile_id, created_at, updated_at
+      FROM users
+      WHERE id = ${userId}
+      LIMIT 1
+    `);
+    const row = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0];
+    return row ? mapLegacyUserRow(row) : null;
+  }
+}
+
 async function getAuthContextFromRequest(req: Request): Promise<{ userId: string; tokenVersion?: number } | null> {
   const authHeader = req.headers.authorization ?? "";
   const bearerPrefix = "Bearer ";
@@ -351,24 +451,12 @@ authRouter.get(
       res.status(401).json({ message: "Not signed in" });
       return;
     }
-    const [user] = await db
-      .select({
-        id: users.id,
-        email: users.email,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        googleProfileId: users.googleProfileId,
-        passwordHash: users.passwordHash,
-        authTokenVersion: users.authTokenVersion,
-      })
-      .from(users)
-      .where(eq(users.id, auth.userId))
-      .limit(1);
+    const user = await loadUserByIdSafe(auth.userId);
     if (!user) {
       res.status(401).json({ message: "Not signed in" });
       return;
     }
-    const token = createAccessToken(user.id, user.authTokenVersion ?? 1);
+    const token = createAccessToken(user.id, normalizeTokenVersion(user.authTokenVersion));
     setAuthCookie(res, token, req);
     res.json({
       data: {
@@ -512,7 +600,7 @@ authRouter.post(
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
     const email = normalizeEmail(parsed.data.email);
     const { password } = parsed.data;
-    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const user = await loadUserByEmailSafe(email);
     const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
     if (!user || !user.passwordHash) throw new UnauthorizedError("Invalid email or password.");
     if (!ok) throw new UnauthorizedError("Invalid email or password.");
@@ -537,7 +625,7 @@ authRouter.post(
     if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
     const email = normalizeEmail(parsed.data.email);
     const { password, firstName, lastName, inviteToken } = parsed.data;
-    const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const existing = await loadUserByEmailSafe(email);
     const passwordHash = await bcrypt.hash(password, 10);
     let user:
       | {
@@ -688,7 +776,7 @@ authRouter.post(
     const parsed = forgotPasswordSchema.safeParse(req.body);
     if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
     const email = normalizeEmail(parsed.data.email);
-    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const user = await loadUserByEmailSafe(email);
 
     if (user) {
       if (!isEmailConfigured()) {
@@ -724,7 +812,7 @@ authRouter.post(
     if (!verified?.userId || !verified?.email) {
       throw new BadRequestError("This password reset link is invalid or has expired.");
     }
-    const [user] = await db.select().from(users).where(eq(users.id, verified.userId)).limit(1);
+    const user = await loadUserByIdSafe(verified.userId);
     if (!user || normalizeEmail(user.email) !== normalizeEmail(verified.email)) {
       throw new BadRequestError("This password reset link is invalid or has expired.");
     }
@@ -800,7 +888,7 @@ authRouter.get(
     const firstName = payload.given_name ?? null;
     const lastName = payload.family_name ?? null;
     // Find or create user
-    const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const existing = await loadUserByEmailSafe(email);
     let user = existing as (typeof users.$inferSelect) | undefined;
     if (!user) {
       const [created] = await db
