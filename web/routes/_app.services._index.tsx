@@ -1000,6 +1000,9 @@ function BookingBuilderCard({
     value.bookingDefaultFlow === "self_book"
       ? ["Service", "Vehicle", "Timing", "Contact", "Review"]
       : ["Service", "Vehicle", "Timing", "Contact", "Request"];
+  const previewCanvasWidth = 320;
+  const previewCanvasHeight = 640;
+  const previewCanvasScale = 0.58;
 
   const renderPreview = () => (
     <Card className="overflow-hidden border-slate-200/80 bg-white/96 shadow-[0_22px_56px_rgba(15,23,42,0.08)]">
@@ -1017,19 +1020,29 @@ function BookingBuilderCard({
       </CardHeader>
       <CardContent className="space-y-4 px-4 pb-5 pt-0">
         <div className="flex justify-center">
-          <div className="relative w-[222px] sm:w-[240px] lg:w-[222px] xl:w-[236px]">
-            <div className="absolute left-[-3px] top-[74px] h-9 w-[3px] rounded-full bg-black/90" />
-            <div className="absolute left-[-3px] top-[118px] h-14 w-[3px] rounded-full bg-black/90" />
-            <div className="absolute left-[-3px] top-[180px] h-14 w-[3px] rounded-full bg-black/90" />
-            <div className="rounded-[2.5rem] bg-black p-[6px] shadow-[0_24px_52px_rgba(15,23,42,0.16)] ring-1 ring-black/90">
-              <div className="relative overflow-hidden rounded-[2.15rem] border border-slate-200 bg-[radial-gradient(circle_at_top,rgba(249,115,22,0.10),transparent_26%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]">
-                <div className="absolute left-1/2 top-2.5 z-20 h-5 w-16 -translate-x-1/2 rounded-full bg-black shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]" />
-                <div className="flex items-center gap-1.5 border-b border-slate-100 px-3.5 pb-2.5 pt-9">
+          <div className="relative w-[206px]">
+            <div className="absolute left-[-3px] top-[66px] h-8 w-[3px] rounded-full bg-black/90" />
+            <div className="absolute left-[-3px] top-[106px] h-12 w-[3px] rounded-full bg-black/90" />
+            <div className="absolute left-[-3px] top-[160px] h-12 w-[3px] rounded-full bg-black/90" />
+            <div className="rounded-[2.35rem] bg-black p-[6px] shadow-[0_20px_44px_rgba(15,23,42,0.16)] ring-1 ring-black/90">
+              <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-white">
+                <div className="relative aspect-[320/640] bg-[radial-gradient(circle_at_top,rgba(249,115,22,0.10),transparent_26%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]">
+                  <div
+                    className="absolute left-1/2 top-0"
+                    style={{
+                      width: `${previewCanvasWidth}px`,
+                      height: `${previewCanvasHeight}px`,
+                      transform: `translateX(-50%) scale(${previewCanvasScale})`,
+                      transformOrigin: "top center",
+                    }}
+                  >
+                    <div className="absolute left-1/2 top-2.5 z-20 h-5 w-16 -translate-x-1/2 rounded-full bg-black shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]" />
+                    <div className="flex items-center gap-1.5 border-b border-slate-100 px-3.5 pb-2.5 pt-9">
                   <span className="h-2 w-2 rounded-full bg-rose-400" />
                   <span className="h-2 w-2 rounded-full bg-amber-300" />
                   <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                </div>
-                <div className="space-y-3 border-b border-slate-100 px-3.5 py-3.5">
+                    </div>
+                    <div className="space-y-3 border-b border-slate-100 px-3.5 py-3.5">
                   <Badge variant="secondary" className="rounded-full border border-orange-200 bg-orange-50 text-[10px] text-orange-700">
                     Online Booking
                   </Badge>
@@ -1055,8 +1068,8 @@ function BookingBuilderCard({
                       );
                     })}
                   </div>
-                </div>
-                <div className="border-b border-slate-100 px-3.5 py-3">
+                    </div>
+                    <div className="border-b border-slate-100 px-3.5 py-3">
                   <div className="grid grid-cols-2 gap-2">
                     {previewStepLabels.map((step, index) => (
                       <div
@@ -1070,8 +1083,8 @@ function BookingBuilderCard({
                       </div>
                     ))}
                   </div>
-                </div>
-                <div className="space-y-2.5 px-3.5 py-3.5">
+                    </div>
+                    <div className="space-y-2.5 px-3.5 py-3.5">
                   {previewHeroService ? (
                     <div className="rounded-[1.2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] p-3 shadow-sm">
                       <div className="flex items-start justify-between gap-2">
@@ -1139,8 +1152,8 @@ function BookingBuilderCard({
                       Turn on booking for at least one service below to preview what customers can book.
                     </div>
                   )}
-                </div>
-                <div className="border-t border-slate-100 bg-slate-50/80 px-3.5 py-3.5">
+                    </div>
+                    <div className="border-t border-slate-100 bg-slate-50/80 px-3.5 py-3.5">
                   <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Confirmation</p>
                   <p className="mt-1.5 text-[11px] leading-5 text-slate-700">
                     {value.bookingConfirmationMessage.trim() ||
@@ -1148,6 +1161,8 @@ function BookingBuilderCard({
                         ? "Your appointment is booked. You can review the confirmation details right away."
                         : "Your request is with the shop. They can follow up with the next step soon.")}
                   </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
