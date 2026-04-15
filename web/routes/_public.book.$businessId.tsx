@@ -198,6 +198,114 @@ function stepDefinitions(modeStepType: "none" | "location" | "service_mode", flo
   return steps;
 }
 
+function TrustPointPill({
+  title,
+  body,
+  icon: Icon,
+}: {
+  title: string;
+  body: string;
+  icon: typeof ShieldCheck;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-[1.2rem] border border-white/80 bg-white/88 px-4 py-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)] backdrop-blur-sm">
+      <div className="rounded-xl bg-orange-50 p-2.5 text-orange-600 ring-1 ring-orange-100">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div>
+        <p className="text-sm font-semibold tracking-[-0.01em] text-slate-950">{title}</p>
+        <p className="mt-1 text-sm leading-5 text-slate-600">{body}</p>
+      </div>
+    </div>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  emphasize,
+}: {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-slate-600">{label}</span>
+      <span className={cn("text-right font-medium text-slate-950", emphasize ? "text-base" : "text-sm")}>{value}</span>
+    </div>
+  );
+}
+
+function StepHint({
+  icon: Icon,
+  text,
+}: {
+  icon: typeof ShieldCheck;
+  text: string;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-[1.2rem] bg-slate-50/90 px-4 py-3.5 text-sm leading-6 text-slate-600 ring-1 ring-slate-200/70">
+      <div className="rounded-full bg-white p-2 text-slate-700 shadow-sm ring-1 ring-slate-200/80">
+        <Icon className="h-4 w-4" />
+      </div>
+      <p>{text}</p>
+    </div>
+  );
+}
+
+function CompactStepRail({
+  steps,
+  currentStep,
+  onSelect,
+  canNavigate,
+}: {
+  steps: FlowStep[];
+  currentStep: number;
+  onSelect: (index: number) => void;
+  canNavigate: (index: number) => boolean;
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+      {steps.map((step, index) => {
+        const Icon = stepIcon(step.key);
+        const isActive = index === currentStep;
+        const isComplete = index < currentStep;
+        return (
+          <button
+            key={step.key}
+            type="button"
+            onClick={() => {
+              if (canNavigate(index)) onSelect(index);
+            }}
+            className={cn(
+              "flex items-center gap-3 rounded-[1.15rem] border px-3 py-3 text-left transition-all",
+              isActive
+                ? "border-orange-300 bg-orange-50/80 shadow-[0_10px_24px_rgba(249,115,22,0.10)]"
+                : isComplete
+                  ? "border-emerald-200 bg-emerald-50/80"
+                  : "border-slate-200 bg-slate-50/90 hover:border-slate-300 hover:bg-white"
+            )}
+          >
+            <div
+              className={cn(
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold uppercase",
+                isActive ? "bg-orange-500 text-white" : isComplete ? "bg-emerald-500 text-white" : "bg-white text-slate-600"
+              )}
+            >
+              {isComplete ? "Done" : <Icon className="h-4 w-4" />}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">{step.label}</p>
+              <p className="truncate text-sm font-medium text-slate-950">{step.title}</p>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function toCategoryFilterValue(categoryId: string | null | undefined) {
   return categoryId || UNCATEGORIZED_CATEGORY;
 }
@@ -547,9 +655,9 @@ export default function PublicBookingPage() {
   }
 
   const selectedServiceSummary = selectedService ? (
-    <div className="rounded-[1.5rem] border border-slate-200/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)] sm:p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-3">
+    <div className="rounded-[1.7rem] border border-slate-200/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(248,250,252,0.97))] p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)] sm:p-6">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary" className="rounded-full border border-orange-200 bg-orange-50 text-orange-700">
               {effectiveFlow === "self_book" ? "Book instantly" : "Request review"}
@@ -564,15 +672,28 @@ export default function PublicBookingPage() {
             ) : null}
           </div>
           <div className="space-y-1.5">
-            <p className="text-xl font-semibold tracking-[-0.03em] text-slate-950">{selectedService.name}</p>
+            <p className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">{selectedService.name}</p>
             <p className="max-w-2xl text-sm leading-6 text-slate-600">
               {selectedService.description || nextStepMessage}
             </p>
           </div>
-          <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-            {canShowSelectedPrice ? <span className="font-semibold text-slate-950">{formatPrice(subtotal)}</span> : null}
-            {canShowSelectedDuration ? <span>{formatDuration(totalDuration)} estimated time</span> : null}
-            <span>{summaryPromise}</span>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {canShowSelectedPrice ? (
+              <div className="rounded-[1.2rem] border border-slate-200 bg-white/85 px-4 py-3">
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Starting at</p>
+                <p className="mt-1 text-base font-semibold text-slate-950">{formatPrice(subtotal)}</p>
+              </div>
+            ) : null}
+            {canShowSelectedDuration ? (
+              <div className="rounded-[1.2rem] border border-slate-200 bg-white/85 px-4 py-3">
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Estimated time</p>
+                <p className="mt-1 text-base font-semibold text-slate-950">{formatDuration(totalDuration)}</p>
+              </div>
+            ) : null}
+            <div className="rounded-[1.2rem] border border-slate-200 bg-white/85 px-4 py-3 sm:col-span-1">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">What happens next</p>
+              <p className="mt-1 text-sm leading-6 text-slate-700">{summaryPromise}</p>
+            </div>
           </div>
         </div>
         {currentStep > 0 ? (
@@ -809,11 +930,14 @@ export default function PublicBookingPage() {
               <Input id="booking-vehicle-model" value={form.vehicleModel} onChange={(event) => setForm((current) => ({ ...current, vehicleModel: event.target.value }))} placeholder="X5" required={config.requireVehicle} className="h-12 rounded-2xl bg-slate-50" />
             </div>
           </div>
-          <div className="rounded-[1.3rem] border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm leading-6 text-slate-600">
-            {selectedService
-              ? `Add the vehicle for ${selectedService.name}. If you only know part of it, start with the basics and the shop can fill in the rest.`
-              : "Add the vehicle you want serviced. If you only know part of it, start with the basics and the shop can fill in the rest."}
-          </div>
+          <StepHint
+            icon={CarFront}
+            text={
+              selectedService
+                ? `Add the vehicle for ${selectedService.name}. If you only know part of it, start with the basics and the shop can fill in the rest.`
+                : "Add the vehicle you want serviced. If you only know part of it, start with the basics and the shop can fill in the rest."
+            }
+          />
         </div>
       );
     }
@@ -904,9 +1028,10 @@ export default function PublicBookingPage() {
             <Label htmlFor="booking-request-date">Preferred date</Label>
             <Input id="booking-request-date" type="date" min={minBookingDate} max={maxBookingDate} value={form.bookingDate} onChange={(event) => setForm((current) => ({ ...current, bookingDate: event.target.value }))} className="h-12 rounded-2xl bg-slate-50" />
           </div>
-          <div className="rounded-[1.3rem] border border-slate-200 bg-slate-50/90 px-4 py-4 text-sm leading-6 text-slate-600">
-            This service is reviewed by the shop before anything is scheduled. If your timing is flexible, leave the date open and add details in the final step.
-          </div>
+          <StepHint
+            icon={Clock3}
+            text="This service is reviewed by the shop before anything is scheduled. If your timing is flexible, leave the date open and add details in the final step."
+          />
         </div>
       );
     }
@@ -935,11 +1060,14 @@ export default function PublicBookingPage() {
               <Input id="booking-phone" type="tel" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} placeholder="(555) 111-2222" required={config.requirePhone} className="h-12 rounded-2xl bg-slate-50" />
             </div>
           </div>
-            <div className="rounded-[1.3rem] border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm leading-6 text-slate-600">
-              {config.requireEmail
+          <StepHint
+            icon={UserRound}
+            text={
+              config.requireEmail
                 ? "Email is required for this booking page. Add a phone number too if the team should call or text."
-                : "Add at least one way to follow up. Confirmation is sent after the request or booking is received."}
-            </div>
+                : "Add at least one way to follow up. Confirmation is sent after the request or booking is received."
+            }
+          />
         </div>
       );
     }
@@ -985,16 +1113,14 @@ export default function PublicBookingPage() {
             </div>
           </div>
         </div>
-        <div className="rounded-[1.35rem] border border-slate-200 bg-white px-4 py-4">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">{effectiveFlow === "self_book" ? "Direct booking" : "Request flow"}</Badge>
-              {selectedLocation ? <Badge variant="outline">{selectedLocation.name}</Badge> : null}
-              {selectedTimeLabel && effectiveFlow === "self_book" ? <Badge variant="outline">{selectedTimeLabel}</Badge> : null}
-            </div>
-            <p className="text-sm leading-6 text-slate-600">{effectiveFlow === "self_book" ? "Your booking is checked against live availability one more time when you confirm." : "Your request goes directly to the shop with the service and vehicle details they need."}</p>
-          </div>
-        </div>
+        <StepHint
+          icon={ShieldCheck}
+          text={
+            effectiveFlow === "self_book"
+              ? "Availability is checked one more time when you confirm so the booking stays accurate."
+              : "The request goes directly to the shop with the service, vehicle, and contact details it needs."
+          }
+        />
       </div>
     );
   };
@@ -1003,33 +1129,33 @@ export default function PublicBookingPage() {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(249,115,22,0.16),transparent_24%),linear-gradient(180deg,#f8fafc_0%,#eef2f7_42%,#f8fafc_100%)]">
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-14">
         <div className="space-y-8">
-          <header className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
+          <header className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-end">
             <div className="space-y-4">
               <Badge variant="secondary" className="rounded-full px-3 py-1 text-[0.68rem] uppercase tracking-[0.18em] shadow-sm">
                 Online Booking
               </Badge>
-              <div className="space-y-2">
-                <h1 className="max-w-3xl text-3xl font-semibold tracking-[-0.05em] text-slate-950 sm:text-[3.1rem] sm:leading-[0.98]">
+              <div className="space-y-3">
+                <h1 className="max-w-3xl text-3xl font-semibold tracking-[-0.05em] text-slate-950 sm:text-[3.3rem] sm:leading-[0.96]">
                   {config?.title ?? "Tell us what you need"}
                 </h1>
                 <p className="max-w-2xl text-sm leading-6 text-slate-600 sm:text-base sm:leading-7">
-                  {config?.subtitle ?? "Choose the service you need, share your vehicle details, and lock in the next step without the back-and-forth."}
+                  {config?.subtitle ?? "Choose the service, share your vehicle, and lock in the next step without the back-and-forth."}
                 </p>
                 <div className="flex flex-wrap items-center gap-3 text-[0.72rem] font-medium uppercase tracking-[0.18em] text-slate-500">
                   <span>{loading ? "Preparing booking page" : `For ${config?.businessName ?? "the shop"}`}</span>
                   <span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:inline-block" />
                   <span>{effectiveFlow === "self_book" ? "Live booking" : "Guided request"}</span>
                   <span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:inline-block" />
-                  <span>{selectedService ? "Service context stays in view" : "Fast guided flow"}</span>
+                  <span>{selectedService ? "Service stays in view" : "Fast step-by-step flow"}</span>
                 </div>
               </div>
             </div>
-            <div className="rounded-[1.6rem] border border-white/90 bg-white/88 p-5 shadow-[0_20px_44px_rgba(15,23,42,0.06)] backdrop-blur-sm">
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-500">What happens next</p>
+            <div className="rounded-[1.7rem] border border-white/90 bg-white/90 p-5 shadow-[0_20px_44px_rgba(15,23,42,0.06)] backdrop-blur-sm">
+              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-500">Booking glance</p>
               <p className="mt-2 text-sm font-medium leading-6 text-slate-950">
                 {effectiveFlow === "self_book"
-                  ? "Pick a time, confirm the details, and get the confirmation right away."
-                  : "Send the request once and the shop can follow up with the right next step."}
+                  ? "Choose a service, pick a time, and get the confirmation right away."
+                  : "Send the request once and the shop can follow up with the next step."}
               </p>
               <div className="mt-4 grid gap-2 text-sm text-slate-600">
                 <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
@@ -1037,8 +1163,8 @@ export default function PublicBookingPage() {
                   <span className="font-medium text-slate-950">{stepProgress}%</span>
                 </div>
                 <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
-                  <span>Booking flow</span>
-                  <span className="font-medium text-slate-950">{effectiveFlow === "self_book" ? "Instant" : "Request review"}</span>
+                  <span>Flow</span>
+                  <span className="font-medium text-slate-950">{effectiveFlow === "self_book" ? "Instant booking" : "Request review"}</span>
                 </div>
               </div>
             </div>
@@ -1052,21 +1178,7 @@ export default function PublicBookingPage() {
                   : index === 1
                     ? { icon: Clock3, title: point, body: effectiveFlow === "self_book" ? "Confirmation is sent right after booking." : "The team gets the request right away." }
                     : { icon: Sparkles, title: point, body: "Service, vehicle, and next step in one clean flow." };
-              const Icon = item.icon;
-              return (
-                <div
-                  key={item.title}
-                  className="flex items-start gap-3 rounded-[1.35rem] border border-white/90 bg-white/88 px-4 py-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)] backdrop-blur-sm"
-                >
-                  <div className="rounded-xl bg-orange-50 p-2.5 text-orange-600 ring-1 ring-orange-100">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold tracking-[-0.01em] text-slate-950">{item.title}</p>
-                    <p className="mt-1 text-sm leading-5 text-slate-600">{item.body}</p>
-                  </div>
-                </div>
-              );
+              return <TrustPointPill key={item.title} title={item.title} body={item.body} icon={item.icon} />;
             })}
           </div>
 
@@ -1123,34 +1235,12 @@ export default function PublicBookingPage() {
                           <span>{stepProgress}% complete</span>
                         </div>
                       </div>
-                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
-                        {steps.map((step, index) => {
-                          const Icon = stepIcon(step.key);
-                          const isActive = index === currentStep;
-                          const isComplete = index < currentStep;
-                          return (
-                            <button
-                              key={step.key}
-                              type="button"
-                              onClick={() => { if (step.key === "service" || selectedService) moveToStep(index); }}
-                              className={cn(
-                                "flex items-center gap-3 rounded-[1.2rem] border px-3 py-3 text-left transition-all",
-                                isActive
-                                  ? "border-orange-300 bg-orange-50/80 shadow-[0_10px_24px_rgba(249,115,22,0.10)]"
-                                  : isComplete
-                                    ? "border-emerald-200 bg-emerald-50/80"
-                                    : "border-slate-200 bg-slate-50/90 hover:border-slate-300 hover:bg-white"
-                              )}
-                            >
-                              <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold uppercase", isActive ? "bg-orange-500 text-white" : isComplete ? "bg-emerald-500 text-white" : "bg-white text-slate-600")}>{isComplete ? "Done" : <Icon className="h-4 w-4" />}</div>
-                              <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{step.label}</p>
-                                <p className="truncate text-sm font-medium text-slate-950">{step.title}</p>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <CompactStepRail
+                        steps={steps}
+                        currentStep={currentStep}
+                        onSelect={moveToStep}
+                        canNavigate={(index) => steps[index]?.key === "service" || Boolean(selectedService)}
+                      />
                       {selectedServiceSummary}
                     </CardHeader>
                     <CardContent className="space-y-7 px-6 pb-0 pt-6 sm:px-7 sm:pt-7">
@@ -1198,8 +1288,8 @@ export default function PublicBookingPage() {
               <Card className="sticky top-6 overflow-hidden border-slate-200/80 bg-white/96 shadow-[0_22px_54px_rgba(15,23,42,0.08)]">
                 <div className="h-1 w-full bg-[linear-gradient(90deg,rgba(15,23,42,0.92),rgba(249,115,22,0.92))]" />
                 <CardHeader>
-                  <CardTitle className="text-lg">Booking summary</CardTitle>
-                  <CardDescription>{selectedService ? "Keep the service, timing, and follow-up details in view as you move through the steps." : "Choose a service to start building your booking."}</CardDescription>
+                  <CardTitle className="text-lg tracking-[-0.02em]">Booking summary</CardTitle>
+                  <CardDescription>{selectedService ? "Keep the selected service, timing, and next step in view while you move through the flow." : "Choose a service to start building your booking."}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {selectedService ? (
@@ -1216,25 +1306,34 @@ export default function PublicBookingPage() {
                       </div>
                       {selectedAddons.length > 0 ? <div className="space-y-2"><p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Add-ons</p><div className="flex flex-wrap gap-2">{selectedAddons.map((addon) => <Badge key={addon.id} variant="outline">{addon.name}</Badge>)}</div></div> : null}
                       <div className="grid gap-3 rounded-[1.35rem] border border-slate-200 bg-slate-50/85 p-4 text-sm">
-                        <div className="flex items-center justify-between"><span className="text-slate-600">Flow</span><span className="font-medium text-slate-950">{effectiveFlow === "self_book" ? "Book instantly" : "Request approval"}</span></div>
-                        <div className="flex items-center justify-between"><span className="text-slate-600">Service mode</span><span className="font-medium text-slate-950">{form.serviceMode === "mobile" ? "Mobile / on-site" : "In-shop"}</span></div>
-                        {selectedLocation ? <div className="flex items-center justify-between"><span className="text-slate-600">Location</span><span className="font-medium text-slate-950">{selectedLocation.name}</span></div> : null}
-                        {form.serviceMode === "mobile" && form.serviceAddress ? <div className="flex items-center justify-between gap-4"><span className="text-slate-600">Service address</span><span className="font-medium text-right text-slate-950">{[form.serviceAddress, form.serviceCity, form.serviceState, form.serviceZip].filter(Boolean).join(", ")}</span></div> : null}
-                          {canShowSelectedPrice ? <div className="flex items-center justify-between"><span className="text-slate-600">Subtotal</span><span className="font-medium text-slate-950">{formatPrice(subtotal)}</span></div> : null}
-                          {canShowSelectedDuration ? <div className="flex items-center justify-between"><span className="text-slate-600">Estimated time</span><span className="font-medium text-slate-950">{formatDuration(totalDuration)}</span></div> : null}
-                        {totalDeposit > 0 ? <div className="flex items-center justify-between"><span className="text-slate-600">Deposit</span><span className="font-medium text-slate-950">{formatPrice(totalDeposit)}</span></div> : null}
-                        {selectedTimeLabel && effectiveFlow === "self_book" ? <div className="flex items-center justify-between"><span className="text-slate-600">Chosen time</span><span className="font-medium text-slate-950">{selectedTimeLabel}</span></div> : null}
-                        {form.bookingDate && effectiveFlow === "request" ? <div className="flex items-center justify-between"><span className="text-slate-600">Preferred date</span><span className="font-medium text-slate-950">{form.bookingDate}</span></div> : null}
+                        <SummaryRow label="Flow" value={effectiveFlow === "self_book" ? "Book instantly" : "Request approval"} />
+                        <SummaryRow label="Service mode" value={form.serviceMode === "mobile" ? "Mobile / on-site" : "In-shop"} />
+                        {selectedLocation ? <SummaryRow label="Location" value={selectedLocation.name} /> : null}
+                        {form.serviceMode === "mobile" && form.serviceAddress ? <SummaryRow label="Service address" value={[form.serviceAddress, form.serviceCity, form.serviceState, form.serviceZip].filter(Boolean).join(", ")} /> : null}
+                        {canShowSelectedPrice ? <SummaryRow label="Subtotal" value={formatPrice(subtotal)} emphasize /> : null}
+                        {canShowSelectedDuration ? <SummaryRow label="Estimated time" value={formatDuration(totalDuration)} /> : null}
+                        {totalDeposit > 0 ? <SummaryRow label="Deposit" value={formatPrice(totalDeposit)} /> : null}
+                        {selectedTimeLabel && effectiveFlow === "self_book" ? <SummaryRow label="Chosen time" value={selectedTimeLabel} /> : null}
+                        {form.bookingDate && effectiveFlow === "request" ? <SummaryRow label="Preferred date" value={form.bookingDate} /> : null}
                       </div>
                       <div className={cn("rounded-[1.35rem] border px-4 py-4 text-sm leading-6", effectiveFlow === "self_book" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-700")}>
-                        {effectiveFlow === "self_book" ? "Confirmation is sent after the booking is placed, with a customer portal link right away." : "Request-only services let the shop review the job before anything is scheduled."}
+                        {effectiveFlow === "self_book" ? "Confirmation is sent as soon as the booking is placed, with a customer portal link right away." : "Request-only services let the shop review the job before anything is scheduled."}
                       </div>
-                      <div className="rounded-[1.35rem] border border-slate-200 bg-white px-4 py-4 text-sm">
-                        <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Why this feels easy</p>
-                        <div className="mt-3 space-y-2 text-slate-600">
-                          <p>Selected service stays in view the whole time.</p>
-                          <p>Vehicle, timing, and follow-up happen in one clean flow.</p>
-                          <p>{effectiveFlow === "self_book" ? "You’ll see confirmation right away after booking." : "You’ll know the request reached the shop as soon as it’s sent."}</p>
+                      <div className="rounded-[1.35rem] bg-slate-50/90 px-4 py-4 text-sm ring-1 ring-slate-200/80">
+                        <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Why it feels simple</p>
+                        <div className="mt-3 space-y-2.5 text-slate-600">
+                          <div className="flex items-start gap-2.5">
+                            <div className="mt-1 h-1.5 w-1.5 rounded-full bg-orange-500" />
+                            <p>Selected service stays visible from start to finish.</p>
+                          </div>
+                          <div className="flex items-start gap-2.5">
+                            <div className="mt-1 h-1.5 w-1.5 rounded-full bg-orange-500" />
+                            <p>Vehicle, timing, and follow-up stay in one clear flow.</p>
+                          </div>
+                          <div className="flex items-start gap-2.5">
+                            <div className="mt-1 h-1.5 w-1.5 rounded-full bg-orange-500" />
+                            <p>{effectiveFlow === "self_book" ? "You'll see confirmation right away after booking." : "You'll know the request reached the shop as soon as it's sent."}</p>
+                          </div>
                         </div>
                       </div>
                     </>
