@@ -75,4 +75,15 @@ describe("appointment template finance messaging", () => {
     expect(html).toContain("$515.85");
     expect(html).not.toContain("Pay $200.00 with Stripe");
   });
+
+  it("shows a customer-friendly change-request error state instead of raw API messaging", () => {
+    const html = renderTemplate({
+      publicRequestChangeUrl: "https://example.com/change",
+      changeRequestState: "error",
+    });
+
+    expect(html).toContain("Add a preferred time or a quick note before sending your request.");
+    expect(html).toContain('id="change-request-form"');
+    expect(html).toContain('id="change-request-inline-error"');
+  });
 });

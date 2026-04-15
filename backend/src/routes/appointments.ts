@@ -2482,13 +2482,22 @@ appointmentsRouter.post("/:id/public-request-change", publicAppointmentChangeReq
   const access = verifyPublicDocumentToken(token, { kind: "appointment", entityId: req.params.id });
   if (!access) throw new ForbiddenError("Appointment access link is invalid or expired.");
 
+  const buildChangeRequestRedirectUrl = (state: "sent" | "recorded" | "error") =>
+    buildPublicDocumentUrl(
+      `/api/appointments/${encodeURIComponent(req.params.id)}/public-html?token=${encodeURIComponent(token)}&changeRequest=${encodeURIComponent(state)}`
+    );
+
   const parsed = publicChangeRequestSchema.safeParse(req.body ?? {});
-  if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
+  if (!parsed.success) {
+    res.redirect(303, buildChangeRequestRedirectUrl("error"));
+    return;
+  }
 
   const preferredTiming = parsed.data.preferredTiming?.trim() ?? null;
   const message = parsed.data.message?.trim() ?? null;
   if (!preferredTiming && !message) {
-    throw new BadRequestError("Share a preferred time or a quick note so the shop knows what to change.");
+    res.redirect(303, buildChangeRequestRedirectUrl("error"));
+    return;
   }
 
   const [appointment] = await db
@@ -2588,9 +2597,7 @@ appointmentsRouter.post("/:id/public-request-change", publicAppointmentChangeReq
     }
   }
 
-  const redirectUrl = buildPublicDocumentUrl(
-    `/api/appointments/${encodeURIComponent(appointment.id)}/public-html?token=${encodeURIComponent(token)}&changeRequest=${encodeURIComponent(changeRequestState)}`
-  );
+  const redirectUrl = buildChangeRequestRedirectUrl(changeRequestState);
   res.redirect(303, redirectUrl);
 }));
 
@@ -2749,8 +2756,8 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
     ),
     changeRequestState:
       typeof req.query.changeRequest === "string" &&
-      ["sent", "recorded"].includes(req.query.changeRequest)
-        ? (req.query.changeRequest as "sent" | "recorded")
+      ["sent", "recorded", "error"].includes(req.query.changeRequest)
+        ? (req.query.changeRequest as "sent" | "recorded" | "error")
         : null,
     stripePaymentState:
       stripePaymentQuery === "success" && finance?.depositSatisfied === true

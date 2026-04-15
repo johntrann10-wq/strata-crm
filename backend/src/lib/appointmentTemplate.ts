@@ -30,7 +30,7 @@ type AppointmentTemplateData = {
   publicPaymentUrl?: string | null;
   publicRequestChangeUrl?: string | null;
   portalUrl?: string | null;
-  changeRequestState?: "sent" | "recorded" | null;
+  changeRequestState?: "sent" | "recorded" | "error" | null;
   stripePaymentState?: "success" | "cancelled" | null;
 };
 
@@ -116,6 +116,8 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
       ? `<div class="banner banner-success">Your change request was sent to the shop. They can follow up using the contact details already on file.</div>`
       : data.changeRequestState === "recorded"
         ? `<div class="banner banner-muted">Your change request was recorded. The shop can review it from the appointment activity feed even if email alerts are unavailable right now.</div>`
+        : data.changeRequestState === "error"
+          ? `<div class="banner banner-error" id="change-request-feedback">Add a preferred time or a quick note before sending your request.</div>`
         : "";
   const depositStatus = hasDeposit
     ? depositSatisfied
@@ -165,6 +167,7 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
       .banner { margin: 18px 0 0; padding: 14px 16px; border-radius: 16px; font-size: 14px; line-height: 1.5; }
       .banner-success { background: #ecfdf3; border: 1px solid #a7f3d0; color: #166534; }
       .banner-muted { background: #f8fafc; border: 1px solid #e2e8f0; color: #475569; }
+      .banner-error { background: #fff1f2; border: 1px solid #fecdd3; color: #be123c; }
       .body { padding: 24px 32px 32px; display: grid; gap: 18px; }
       .hero,.summary { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(280px,.8fr); gap: 16px; }
       .card { border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; padding: 18px; }
@@ -268,14 +271,15 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
           ${publicRequestChangeUrl ? `<section id="request-change" class="card soft">
             <div class="label">Need to reschedule?</div>
             <div class="value muted">Send a quick change request here and the shop can follow up with the best next time.</div>
-            <form method="post" action="${escapeHtml(publicRequestChangeUrl)}" class="field-grid">
+            <div id="change-request-inline-error" class="banner banner-error" style="display:none; margin-top:16px;">Add a preferred time or a quick note before sending your request.</div>
+            <form method="post" action="${escapeHtml(publicRequestChangeUrl)}" class="field-grid" id="change-request-form">
               <label class="field-label">
                 Preferred timing
-                <input class="field-input" type="text" name="preferredTiming" placeholder="Example: next Tuesday afternoon" />
+                <input class="field-input" type="text" name="preferredTiming" id="preferredTiming" placeholder="Example: next Tuesday afternoon" />
               </label>
               <label class="field-label">
                 What needs to change?
-                <textarea class="field-textarea" name="message" placeholder="Tell the shop what you need adjusted."></textarea>
+                <textarea class="field-textarea" name="message" id="changeMessage" placeholder="Tell the shop what you need adjusted."></textarea>
               </label>
               <button class="sub-cta" type="submit" style="justify-self:start; margin-top:0;">Request a change</button>
             </form>
@@ -287,6 +291,28 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
         </div>
       </div>
     </div>
+    <script>
+      (function () {
+        var form = document.getElementById("change-request-form");
+        if (!form) return;
+        form.addEventListener("submit", function (event) {
+          var preferredTiming = document.getElementById("preferredTiming");
+          var changeMessage = document.getElementById("changeMessage");
+          var errorBanner = document.getElementById("change-request-inline-error");
+          var preferredValue = preferredTiming && "value" in preferredTiming ? String(preferredTiming.value || "").trim() : "";
+          var messageValue = changeMessage && "value" in changeMessage ? String(changeMessage.value || "").trim() : "";
+          if (preferredValue || messageValue) {
+            if (errorBanner) errorBanner.style.display = "none";
+            return;
+          }
+          event.preventDefault();
+          if (errorBanner) {
+            errorBanner.style.display = "block";
+            errorBanner.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }
+        });
+      })();
+    </script>
   </body>
 </html>`;
 }

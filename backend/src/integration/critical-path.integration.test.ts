@@ -255,6 +255,15 @@ describe.skipIf(skipEmbeddedCriticalPath)("Critical path smoke (backend integrat
       .query({ token: appointmentToken });
     expect(appointmentPublicBeforeCancel.status).toBe(200);
 
+    const emptyChangeRequestRes = await request(app)
+      .post(`/api/appointments/${appointmentId}/public-request-change`)
+      .query({ token: appointmentToken })
+      .type("form")
+      .send({ preferredTiming: "", message: "" });
+    expect(emptyChangeRequestRes.status).toBe(303);
+    expect(emptyChangeRequestRes.headers.location).toContain(`/api/appointments/${appointmentId}/public-html`);
+    expect(emptyChangeRequestRes.headers.location).toContain("changeRequest=error");
+
     // create invoice
     const invoiceRes = await request(app).post("/api/invoices").set("Authorization", `Bearer ${token}`).send({
       clientId,
