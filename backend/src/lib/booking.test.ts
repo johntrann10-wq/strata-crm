@@ -9,6 +9,7 @@ import {
   parseOperatingHours,
   resolveCustomerBookingMode,
   resolveBookingFlow,
+  toBookingBufferMinutes,
 } from "./booking.js";
 
 describe("booking helpers", () => {
@@ -91,5 +92,11 @@ describe("booking helpers", () => {
   it("parses valid time strings and rejects invalid ones", () => {
     expect(parseTimeToMinutes("09:30")).toBe(570);
     expect(parseTimeToMinutes("25:00")).toBeNull();
+  });
+
+  it("clamps booking buffer minutes to a safe range", () => {
+    expect(toBookingBufferMinutes(-10)).toBe(0);
+    expect(toBookingBufferMinutes(25)).toBe(25);
+    expect(toBookingBufferMinutes(999)).toBe(240);
   });
 });

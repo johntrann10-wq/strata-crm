@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useOutletContext } from "react-router";
+import { Link, useOutletContext } from "react-router";
 import { useAction, useFindMany } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
@@ -36,6 +36,18 @@ import { EmptyState } from "../components/shared/EmptyState";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import { PageHeader } from "../components/shared/PageHeader";
 import { cn } from "@/lib/utils";
+import {
+  bookingBrandAccentColorOptions,
+  bookingBrandBackgroundToneOptions,
+  bookingBrandButtonStyleOptions,
+  bookingBrandPrimaryColorOptions,
+  defaultBookingBranding,
+  resolveBookingBrandTheme,
+  type BookingBrandAccentColorToken,
+  type BookingBrandBackgroundToneToken,
+  type BookingBrandButtonStyleToken,
+  type BookingBrandPrimaryColorToken,
+} from "@/lib/bookingBranding";
 import {
   ArrowDown,
   ArrowUp,
@@ -80,6 +92,7 @@ type ServiceRecord = {
   bookingAvailableDays: number[] | null;
   bookingAvailableStartTime: string | null;
   bookingAvailableEndTime: string | null;
+  bookingBufferMinutes: number | null;
   bookingCapacityPerSlot: number | null;
   bookingFeatured: boolean | null;
   bookingHidePrice: boolean | null;
@@ -96,6 +109,11 @@ type BusinessBookingSettings = {
   bookingTrustBulletSecondary: string;
   bookingTrustBulletTertiary: string;
   bookingNotesPrompt: string;
+  bookingBrandLogoUrl: string;
+  bookingBrandPrimaryColorToken: BookingBrandPrimaryColorToken;
+  bookingBrandAccentColorToken: BookingBrandAccentColorToken;
+  bookingBrandBackgroundToneToken: BookingBrandBackgroundToneToken;
+  bookingBrandButtonStyleToken: BookingBrandButtonStyleToken;
   bookingRequireEmail: boolean;
   bookingRequirePhone: boolean;
   bookingRequireVehicle: boolean;
@@ -145,6 +163,7 @@ type ServiceFormData = {
   bookingAvailableDays: number[];
   bookingAvailableStartTime: string;
   bookingAvailableEndTime: string;
+  bookingBufferMinutes: string;
   bookingCapacityPerSlot: string;
   bookingFeatured: boolean;
   bookingHidePrice: boolean;
@@ -169,6 +188,7 @@ const defaultServiceFormData: ServiceFormData = {
   bookingAvailableDays: [],
   bookingAvailableStartTime: "",
   bookingAvailableEndTime: "",
+  bookingBufferMinutes: "",
   bookingCapacityPerSlot: "",
   bookingFeatured: false,
   bookingHidePrice: false,
@@ -185,6 +205,11 @@ const defaultBookingSettings: BusinessBookingSettings = {
   bookingTrustBulletSecondary: "Quick follow-up",
   bookingTrustBulletTertiary: "Secure and simple",
   bookingNotesPrompt: "Add timing, questions, or anything the shop should know.",
+  bookingBrandLogoUrl: "",
+  bookingBrandPrimaryColorToken: defaultBookingBranding.primaryColorToken,
+  bookingBrandAccentColorToken: defaultBookingBranding.accentColorToken,
+  bookingBrandBackgroundToneToken: defaultBookingBranding.backgroundToneToken,
+  bookingBrandButtonStyleToken: defaultBookingBranding.buttonStyleToken,
   bookingRequireEmail: false,
   bookingRequirePhone: false,
   bookingRequireVehicle: true,
@@ -276,6 +301,10 @@ function serviceToFormData(service: ServiceRecord): ServiceFormData {
     bookingAvailableDays: service.bookingAvailableDays ?? [],
     bookingAvailableStartTime: service.bookingAvailableStartTime ?? "",
     bookingAvailableEndTime: service.bookingAvailableEndTime ?? "",
+    bookingBufferMinutes:
+      service.bookingBufferMinutes != null && Number(service.bookingBufferMinutes) >= 0
+        ? String(service.bookingBufferMinutes)
+        : "",
     bookingCapacityPerSlot:
       service.bookingCapacityPerSlot != null && Number(service.bookingCapacityPerSlot) > 0
         ? String(service.bookingCapacityPerSlot)
@@ -297,6 +326,19 @@ function businessToBookingSettings(record: Partial<BusinessBookingSettings> | nu
     bookingTrustBulletSecondary: record?.bookingTrustBulletSecondary ?? "Quick follow-up",
     bookingTrustBulletTertiary: record?.bookingTrustBulletTertiary ?? "Secure and simple",
     bookingNotesPrompt: record?.bookingNotesPrompt ?? "Add timing, questions, or anything the shop should know.",
+    bookingBrandLogoUrl: (record as { bookingBrandLogoUrl?: string | null })?.bookingBrandLogoUrl ?? "",
+    bookingBrandPrimaryColorToken:
+      ((record as { bookingBrandPrimaryColorToken?: BookingBrandPrimaryColorToken | null })?.bookingBrandPrimaryColorToken as BookingBrandPrimaryColorToken | undefined) ??
+      defaultBookingBranding.primaryColorToken,
+    bookingBrandAccentColorToken:
+      ((record as { bookingBrandAccentColorToken?: BookingBrandAccentColorToken | null })?.bookingBrandAccentColorToken as BookingBrandAccentColorToken | undefined) ??
+      defaultBookingBranding.accentColorToken,
+    bookingBrandBackgroundToneToken:
+      ((record as { bookingBrandBackgroundToneToken?: BookingBrandBackgroundToneToken | null })?.bookingBrandBackgroundToneToken as BookingBrandBackgroundToneToken | undefined) ??
+      defaultBookingBranding.backgroundToneToken,
+    bookingBrandButtonStyleToken:
+      ((record as { bookingBrandButtonStyleToken?: BookingBrandButtonStyleToken | null })?.bookingBrandButtonStyleToken as BookingBrandButtonStyleToken | undefined) ??
+      defaultBookingBranding.buttonStyleToken,
     bookingRequireEmail: record?.bookingRequireEmail ?? false,
     bookingRequirePhone: record?.bookingRequirePhone ?? false,
     bookingRequireVehicle: record?.bookingRequireVehicle ?? true,
@@ -646,7 +688,7 @@ function ServiceForm({
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
           <div className="grid gap-2">
             <Label htmlFor="svc-booking-mode">Service mode</Label>
             <Select
@@ -667,6 +709,19 @@ function ServiceForm({
                 <SelectItem value="both">Let the customer choose</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="svc-booking-buffer">Buffer after booking (minutes)</Label>
+            <Input
+              id="svc-booking-buffer"
+              type="number"
+              min="0"
+              max="240"
+              step="5"
+              value={formData.bookingBufferMinutes}
+              onChange={(e) => onChange({ ...formData, bookingBufferMinutes: e.target.value })}
+              placeholder="Use business default"
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="svc-booking-capacity">Capacity per slot</Label>
@@ -804,7 +859,7 @@ function ServiceForm({
 
 function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <Card className="border-slate-200/80 bg-white/95 shadow-[0_16px_34px_rgba(15,23,42,0.05)]">
+    <Card className="border-slate-200/75 bg-white/95 shadow-[0_12px_28px_rgba(15,23,42,0.045)]">
       <CardContent className="space-y-2 p-4">
         <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
         <p className="text-2xl font-semibold tracking-[-0.03em] text-slate-950">{value}</p>
@@ -818,7 +873,7 @@ function BookingRulePill({ active, children }: { active: boolean; children: Reac
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-1 text-[0.68rem] font-medium tracking-[0.08em] uppercase",
+        "inline-flex items-center rounded-full border px-2.5 py-1 text-[0.68rem] font-medium tracking-[0.08em] uppercase shadow-[inset_0_1px_0_rgba(255,255,255,0.3)]",
         active
           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
           : "border-slate-200 bg-white text-slate-500"
@@ -841,7 +896,7 @@ function BuilderSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[1.6rem] border border-slate-200/80 bg-white/95 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.06)] sm:p-6">
+    <section className="rounded-[1.45rem] border border-slate-200/80 bg-white/95 p-5 shadow-[0_14px_34px_rgba(15,23,42,0.05)] sm:p-6">
       <div className="space-y-1">
         <p className="text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
         <h3 className="text-lg font-semibold tracking-[-0.02em] text-slate-950">{title}</h3>
@@ -852,7 +907,7 @@ function BuilderSection({
   );
 }
 
-type BuilderTab = "flow" | "services" | "availability" | "payments" | "branding";
+type BuilderTab = "flow" | "services" | "availability" | "payments" | "branding" | "advanced";
 
 function BuilderTabButton({
   active,
@@ -870,7 +925,7 @@ function BuilderTabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "min-w-[180px] rounded-[1.2rem] border px-4 py-3 text-left transition-all",
+        "min-w-[180px] rounded-[1.05rem] border px-4 py-3 text-left transition-all",
         active
           ? "border-slate-900 bg-slate-900 text-white shadow-[0_18px_34px_rgba(15,23,42,0.18)]"
           : "border-slate-200 bg-white/92 text-slate-700 hover:border-slate-300 hover:bg-white"
@@ -892,7 +947,7 @@ function BuilderControlCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-[1.35rem] border border-slate-200/80 bg-white/92 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+    <div className="rounded-[1.2rem] border border-slate-200/80 bg-white/92 p-4 shadow-[0_8px_20px_rgba(15,23,42,0.035)]">
       <div className="space-y-1">
         <p className="text-sm font-semibold tracking-[-0.01em] text-slate-950">{title}</p>
         <p className="text-sm leading-6 text-slate-600">{description}</p>
@@ -988,11 +1043,12 @@ function BookingBuilderCard({
     (service) => service.bookingEnabled === true && service.active !== false && service.bookingFeatured === true,
   ).length;
   const builderTabs: Array<{ key: BuilderTab; label: string; detail: string }> = [
-    { key: "flow", label: "Flow", detail: "Publishing, default mode, and flow posture" },
-    { key: "services", label: "Services", detail: "What shows publicly and how it merchandises" },
-    { key: "availability", label: "Availability", detail: "Booking windows, capacity, and timing controls" },
-    { key: "payments", label: "Payments & Deposits", detail: "How instant booking and deposits behave" },
-    { key: "branding", label: "Branding & Content", detail: "Title, trust copy, and confirmation tone" },
+    { key: "flow", label: "Flow", detail: "Publishing, intake rules, and step posture" },
+    { key: "services", label: "Services", detail: "Visibility, featured order, and overrides" },
+    { key: "availability", label: "Availability", detail: "Days, windows, blackout rules, and mode" },
+    { key: "payments", label: "Payments", detail: "Deposits and direct-book follow-up" },
+    { key: "branding", label: "Branding", detail: "Headline, trust copy, and confirmation tone" },
+    { key: "advanced", label: "Advanced", detail: "Source capture, throttling, and metadata" },
   ];
   const previewHeroService = featuredPreviewServices[0] ?? null;
   const previewServiceList = previewHeroService ? featuredPreviewServices.slice(1, 4) : featuredPreviewServices.slice(0, 3);
@@ -1003,15 +1059,40 @@ function BookingBuilderCard({
   const previewCanvasWidth = 320;
   const previewCanvasHeight = 640;
   const previewCanvasScale = 0.58;
+  const contactSummary = [
+    value.bookingRequireVehicle ? "Vehicle required" : "Vehicle optional",
+    value.bookingRequirePhone ? "Phone required" : value.bookingRequireEmail ? "Email required" : "Flexible contact",
+  ].join(" / ");
+  const windowSummary =
+    value.bookingAvailableStartTime || value.bookingAvailableEndTime
+      ? `${value.bookingAvailableStartTime || "Start"}-${value.bookingAvailableEndTime || "End"}`
+      : "Uses booking defaults";
+  const brandTitle = value.bookingPageTitle.trim() || "Tell us what you need";
+  const brandSubtitle =
+    value.bookingPageSubtitle.trim() || "Share a few details and the shop can follow up with the right next step.";
+  const bookingBrandTheme = resolveBookingBrandTheme({
+    logoUrl: value.bookingBrandLogoUrl || null,
+    primaryColorToken: value.bookingBrandPrimaryColorToken,
+    accentColorToken: value.bookingBrandAccentColorToken,
+    backgroundToneToken: value.bookingBrandBackgroundToneToken,
+    buttonStyleToken: value.bookingBrandButtonStyleToken,
+  });
 
   const renderPreview = () => (
-    <Card className="overflow-hidden border-slate-200/80 bg-white/96 shadow-[0_22px_56px_rgba(15,23,42,0.08)]">
-      <div className="h-1 bg-[linear-gradient(90deg,rgba(15,23,42,0.92),rgba(249,115,22,0.92))]" />
+    <Card
+      data-booking-primary={bookingBrandTheme.tokens.primaryColorToken}
+      data-booking-accent={bookingBrandTheme.tokens.accentColorToken}
+      data-booking-background={bookingBrandTheme.tokens.backgroundToneToken}
+      data-booking-button-style={bookingBrandTheme.tokens.buttonStyleToken}
+      style={bookingBrandTheme.style}
+      className="overflow-hidden border-slate-200/80 bg-white/96 shadow-[0_18px_42px_rgba(15,23,42,0.065)]"
+    >
+      <div className="h-1 bg-[linear-gradient(90deg,var(--booking-primary-strong),var(--booking-primary),var(--booking-accent-ink))]" />
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <CardTitle className="text-lg tracking-[-0.02em]">Live preview</CardTitle>
-            <CardDescription>See the customer flow update as you shape it.</CardDescription>
+            <CardDescription>Live customer viewport with copy, flow, and service updates.</CardDescription>
           </div>
           <Badge variant="outline" className="rounded-full bg-white">
             {value.bookingDefaultFlow === "self_book" ? "Instant booking" : "Request flow"}
@@ -1020,13 +1101,13 @@ function BookingBuilderCard({
       </CardHeader>
       <CardContent className="space-y-4 px-4 pb-5 pt-0">
         <div className="flex justify-center">
-          <div className="relative w-[206px]">
+          <div className="relative w-[196px]">
             <div className="absolute left-[-3px] top-[66px] h-8 w-[3px] rounded-full bg-black/90" />
             <div className="absolute left-[-3px] top-[106px] h-12 w-[3px] rounded-full bg-black/90" />
             <div className="absolute left-[-3px] top-[160px] h-12 w-[3px] rounded-full bg-black/90" />
             <div className="rounded-[2.35rem] bg-black p-[6px] shadow-[0_20px_44px_rgba(15,23,42,0.16)] ring-1 ring-black/90">
               <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-white">
-                <div className="relative aspect-[320/640] bg-[radial-gradient(circle_at_top,rgba(249,115,22,0.10),transparent_26%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]">
+                <div className="relative aspect-[320/640] bg-[radial-gradient(circle_at_top,var(--booking-page-halo),transparent_26%),linear-gradient(180deg,var(--booking-page)_0%,var(--booking-page-muted)_100%)]">
                   <div
                     className="absolute left-1/2 top-0"
                     style={{
@@ -1043,23 +1124,32 @@ function BookingBuilderCard({
                   <span className="h-2 w-2 rounded-full bg-emerald-400" />
                     </div>
                     <div className="space-y-3 border-b border-slate-100 px-3.5 py-3.5">
-                  <Badge variant="secondary" className="rounded-full border border-orange-200 bg-orange-50 text-[10px] text-orange-700">
+                  <div className="flex items-center gap-2">
+                    {bookingBrandTheme.tokens.logoUrl ? (
+                      <img
+                        src={bookingBrandTheme.tokens.logoUrl}
+                        alt="Business logo"
+                        className="h-7 w-7 rounded-lg border border-slate-200 bg-white object-contain p-1"
+                      />
+                    ) : null}
+                    <Badge variant="secondary" className="rounded-full border border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] text-[10px] text-[color:var(--booking-primary-ink)]">
                     Online Booking
                   </Badge>
+                  </div>
                   <div className="space-y-1.5">
                     <h3 className="text-[1.02rem] font-semibold tracking-[-0.04em] text-slate-950">
-                      {value.bookingPageTitle.trim() || "Tell us what you need"}
+                      {brandTitle}
                     </h3>
                     <p className="text-[11px] leading-5 text-slate-600">
-                      {value.bookingPageSubtitle.trim() || "Share a few details and the shop can follow up with the right next step."}
+                      {brandSubtitle}
                     </p>
                   </div>
-                  <div className="grid gap-2">
+                  <div className="grid gap-1.5">
                     {previewTrustPoints.map((point, index) => {
                       const Icon = index === 0 ? Globe : index === 1 ? CalendarCheck2 : Wrench;
                       return (
-                        <div key={point} className="rounded-[0.95rem] border border-slate-200 bg-white/92 px-2.5 py-2.5 shadow-sm">
-                          <div className="flex items-center gap-1.5 text-orange-600">
+                        <div key={point} className="rounded-[0.95rem] border border-[color:var(--booking-accent-border)] bg-white/90 px-2.5 py-2 shadow-sm">
+                          <div className="flex items-center gap-1.5 text-[color:var(--booking-accent-ink)]">
                             <Icon className="h-3 w-3" />
                             <span className="text-[0.58rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Trust</span>
                           </div>
@@ -1076,7 +1166,7 @@ function BookingBuilderCard({
                         key={step}
                         className={cn(
                           "rounded-[0.95rem] border px-2.5 py-2 text-[0.6rem] font-semibold uppercase tracking-[0.13em]",
-                          index === 0 ? "border-orange-300 bg-orange-50 text-orange-700" : "border-slate-200 bg-white text-slate-500"
+                          index === 0 ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] text-[color:var(--booking-primary-ink)]" : "border-slate-200 bg-white text-slate-500"
                         )}
                       >
                         {step}
@@ -1090,10 +1180,10 @@ function BookingBuilderCard({
                       <div className="flex items-start justify-between gap-2">
                         <div className="space-y-1.5">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <Badge variant="secondary" className="rounded-full border border-orange-200 bg-orange-50 text-[10px] text-orange-700">
+                            <Badge variant="secondary" className="rounded-full border border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] text-[10px] text-[color:var(--booking-primary-ink)]">
                               {bookingModeLabel(previewHeroService, value.bookingDefaultFlow)}
                             </Badge>
-                            {previewHeroService.bookingFeatured ? <Badge className="bg-orange-50 text-[10px] text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
+                            {previewHeroService.bookingFeatured ? <Badge className="bg-[var(--booking-accent-soft)] text-[10px] text-[color:var(--booking-accent-ink)] hover:bg-[var(--booking-accent-soft)]">Featured</Badge> : null}
                           </div>
                           <p className="text-sm font-semibold tracking-[-0.02em] text-slate-950">{previewHeroService.name}</p>
                           <p className="text-[11px] leading-5 text-slate-600">
@@ -1125,14 +1215,14 @@ function BookingBuilderCard({
                         key={service.id}
                         className={cn(
                           "rounded-[1.1rem] border px-3 py-3 shadow-sm",
-                          index === 0 ? "border-orange-200 bg-orange-50/35" : "border-slate-200 bg-white"
+                          index === 0 ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]/70" : "border-slate-200 bg-white"
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-1.5">
                               <p className="text-[12px] font-medium text-slate-950">{service.name}</p>
-                              {service.bookingFeatured ? <Badge className="bg-orange-50 px-1.5 py-0.5 text-[10px] text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
+                              {service.bookingFeatured ? <Badge className="bg-[var(--booking-accent-soft)] px-1.5 py-0.5 text-[10px] text-[color:var(--booking-accent-ink)] hover:bg-[var(--booking-accent-soft)]">Featured</Badge> : null}
                             </div>
                             {service.bookingDescription ? <p className="text-[10px] leading-4.5 text-slate-600">{service.bookingDescription}</p> : null}
                           </div>
@@ -1173,19 +1263,19 @@ function BookingBuilderCard({
   );
 
   return (
-    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.08),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.99),rgba(248,250,252,0.95))] shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
+    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.08),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.99),rgba(248,250,252,0.95))] shadow-[0_20px_48px_rgba(15,23,42,0.07)]">
       <div className="h-1.5 bg-[linear-gradient(90deg,rgba(249,115,22,0.95),rgba(251,146,60,0.92),rgba(15,23,42,0.92))]" />
       <CardHeader className="space-y-6 border-b border-slate-200/70 pb-6">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_360px] xl:items-start">
-          <div className="space-y-5">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.18fr)_320px] xl:items-start">
+          <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm font-medium text-orange-700">
               <CalendarCheck2 className="h-4 w-4" />
               Booking builder
             </div>
             <div className="space-y-2">
-              <CardTitle className="text-3xl tracking-[-0.04em] text-slate-950">Turn your service catalog into a booking flow</CardTitle>
+              <CardTitle className="text-3xl tracking-[-0.04em] text-slate-950">Design the booking flow customers actually feel</CardTitle>
               <CardDescription className="max-w-3xl text-sm leading-6 text-slate-600">
-                Shape the customer journey from service selection to confirmation without touching code. The goal is simple: a booking page that feels clean, trustworthy, and easy to finish.
+                Shape the public journey from service browse to confirmation without turning this into a long settings wall. Keep the defaults strong, then refine the details that matter.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1201,21 +1291,12 @@ function BookingBuilderCard({
               </div>
               <div className="rounded-[1.35rem] border border-slate-200/80 bg-white/90 p-4 shadow-sm">
                 <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Customer asks</p>
-                <p className="mt-2 text-sm font-medium text-slate-950">
-                  {[
-                    value.bookingRequireVehicle ? "Vehicle required" : "Vehicle optional",
-                    value.bookingRequirePhone ? "Phone required" : value.bookingRequireEmail ? "Email required" : "Flexible contact",
-                  ].join(" / ")}
-                </p>
+                <p className="mt-2 text-sm font-medium text-slate-950">{contactSummary}</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">Keep the intake fast while still collecting the details the shop actually needs.</p>
               </div>
               <div className="rounded-[1.35rem] border border-slate-200/80 bg-white/90 p-4 shadow-sm">
                 <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Booking window</p>
-                <p className="mt-2 text-sm font-medium text-slate-950">
-                  {value.bookingAvailableStartTime || value.bookingAvailableEndTime
-                    ? `${value.bookingAvailableStartTime || "Start"}-${value.bookingAvailableEndTime || "End"}`
-                    : "Uses booking defaults"}
-                </p>
+                <p className="mt-2 text-sm font-medium text-slate-950">{windowSummary}</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">Availability controls here layer on top of service-specific lead time and booking rules.</p>
               </div>
             </div>
@@ -1239,8 +1320,11 @@ function BookingBuilderCard({
               </Button>
             </div>
             <div className="mt-5 rounded-[1.35rem] border border-slate-200 bg-slate-50/85 p-4">
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Default posture</p>
-              <p className="mt-2 text-sm leading-6 text-slate-700">{typeDefaults.bookingSettingsLabel}</p>
+              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Editor posture</p>
+              <p className="mt-2 text-sm font-medium text-slate-950">Live preview stays fixed on desktop</p>
+              <p className="mt-1 text-sm leading-6 text-slate-700">
+                Edit on the left, keep the customer booking page in view on the right, and use the tabs to focus on one layer of the flow at a time.
+              </p>
             </div>
           </div>
         </div>
@@ -1254,10 +1338,25 @@ function BookingBuilderCard({
         ) : null}
 
         <div className="space-y-4 rounded-[1.8rem] border border-slate-200/80 bg-white/95 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.06)]">
-          <div className="space-y-1">
-            <p className="text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-500">Flow editor</p>
-            <h3 className="text-xl font-semibold tracking-[-0.03em] text-slate-950">Design the booking journey section by section</h3>
-            <p className="text-sm leading-6 text-slate-600">Use the tabs to focus on one layer of the experience at a time instead of editing a long settings wall.</p>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-500">Flow editor</p>
+              <h3 className="text-xl font-semibold tracking-[-0.03em] text-slate-950">Edit the booking experience one layer at a time</h3>
+              <p className="text-sm leading-6 text-slate-600">Each tab controls one part of the customer journey so the builder feels like a product editor, not a settings wall.</p>
+            </div>
+            <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50/85 px-4 py-3 text-sm leading-6 text-slate-600 lg:max-w-[320px]">
+              {activeTab === "advanced"
+                ? "Advanced settings surface the metadata and protection rules that already support the live booking flow."
+                : activeTab === "branding"
+                  ? "Branding keeps the page clear, trustworthy, and on-tone without overloading the customer."
+                  : activeTab === "payments"
+                    ? "Payments stays focused on what changes the customer commitment moment."
+                    : activeTab === "availability"
+                      ? "Availability controls shape the bookable window without disturbing the rest of the schedule."
+                      : activeTab === "services"
+                        ? "Services controls what merchandises first. Fine-grained overrides still live on each service card below."
+                        : "Flow controls the customer journey, what they must provide, and how the final review stays consistent."}
+            </div>
           </div>
           <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
             {builderTabs.map((tab) => (
@@ -1271,8 +1370,8 @@ function BookingBuilderCard({
             ))}
           </div>
           <div className="lg:hidden">
-            <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => setShowMobilePreview((current) => !current)}>
-              {showMobilePreview ? "Hide live preview" : "Show live preview"}
+            <Button type="button" variant="outline" className="w-full rounded-xl border-slate-200 bg-white" onClick={() => setShowMobilePreview((current) => !current)}>
+              {showMobilePreview ? "Hide booking preview" : "Show booking preview"}
             </Button>
           </div>
           {showMobilePreview ? <div className="lg:hidden">{renderPreview()}</div> : null}
@@ -1281,209 +1380,357 @@ function BookingBuilderCard({
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_340px]">
           <div className="space-y-5">
             {activeTab === "flow" ? (
-            <BuilderSection
-              eyebrow="Flow"
-              title="Set the motion of the booking experience"
-              description="Control whether customers book instantly, send a request, or let each service decide without making the builder feel like an old settings page."
-            >
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-slate-950">Set the default booking posture</p>
-                  <p className="text-sm leading-6 text-slate-600">Choose the primary motion of the flow first, then override specific services below when needed.</p>
-                </div>
-                <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm">
-                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Publishing</span>
-                  <Switch checked={value.bookingEnabled} onCheckedChange={(checked) => onChange({ ...value, bookingEnabled: checked })} disabled={!canEdit} />
-                </div>
-              </div>
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="booking-default-flow">Default booking mode</Label>
-                  <Select
-                    value={value.bookingDefaultFlow}
-                    onValueChange={(next) => onChange({ ...value, bookingDefaultFlow: next as BusinessBookingSettings["bookingDefaultFlow"] })}
-                    disabled={!canEdit}
-                  >
-                    <SelectTrigger id="booking-default-flow">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="request">Request only by default</SelectItem>
-                      <SelectItem value="self_book">Direct booking by default</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs leading-5 text-slate-500">Services can still override this one by one.</p>
-                </div>
-                <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                  <Checkbox
-                    id="booking-confirmation-email-enabled"
-                    checked={value.notificationAppointmentConfirmationEmailEnabled}
-                    onCheckedChange={(checked) => onChange({ ...value, notificationAppointmentConfirmationEmailEnabled: checked === true })}
-                    className="mt-1"
-                    disabled={!canEdit}
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="booking-confirmation-email-enabled" className="cursor-pointer text-sm font-medium text-slate-950">
-                      Send confirmation email after direct booking
-                    </Label>
-                    <p className="text-xs leading-5 text-slate-500">Uses Strata&apos;s existing appointment confirmation email when a customer books instantly.</p>
+              <>
+                <BuilderSection
+                  eyebrow="Flow"
+                  title="Set the overall motion of the booking journey"
+                  description="Choose how the public flow behaves first, then layer service-specific overrides where a job needs a different path."
+                >
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+                    <BuilderControlCard
+                      title="Publishing and booking mode"
+                      description="Turn the booking page on, then choose whether the default experience is direct booking or guided request."
+                    >
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between rounded-[1.2rem] border border-slate-200 bg-slate-50/80 px-4 py-3">
+                          <div>
+                            <p className="text-sm font-medium text-slate-950">Booking page live</p>
+                            <p className="text-xs leading-5 text-slate-500">Customers can open the public booking page and begin a flow.</p>
+                          </div>
+                          <Switch checked={value.bookingEnabled} onCheckedChange={(checked) => onChange({ ...value, bookingEnabled: checked })} disabled={!canEdit} />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="booking-default-flow">Default booking mode</Label>
+                          <Select
+                            value={value.bookingDefaultFlow}
+                            onValueChange={(next) => onChange({ ...value, bookingDefaultFlow: next as BusinessBookingSettings["bookingDefaultFlow"] })}
+                            disabled={!canEdit}
+                          >
+                            <SelectTrigger id="booking-default-flow">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="request">Request only by default</SelectItem>
+                              <SelectItem value="self_book">Direct booking by default</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs leading-5 text-slate-500">Individual services can still choose request-only or instant booking on their own cards below.</p>
+                        </div>
+                      </div>
+                    </BuilderControlCard>
+                    <BuilderControlCard
+                      title="Current posture"
+                      description="This is the customer promise your current defaults are making before per-service overrides apply."
+                    >
+                      <div className="space-y-3">
+                        <BookingRulePill active={value.bookingEnabled}>{value.bookingEnabled ? "Live to customers" : "Builder only"}</BookingRulePill>
+                        <p className="text-sm font-medium text-slate-950">{value.bookingDefaultFlow === "self_book" ? "Faster self-booking" : "Guided request flow"}</p>
+                        <p className="text-sm leading-6 text-slate-600">{typeDefaults.bookingSettingsLabel}</p>
+                      </div>
+                    </BuilderControlCard>
                   </div>
-                </div>
-              </div>
-            </BuilderSection>
+                </BuilderSection>
+
+                <BuilderSection
+                  eyebrow="Flow"
+                  title="Decide what the customer must provide"
+                  description="Keep the intake lightweight, but make the required information obvious so your team gets what it needs the first time."
+                >
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {[
+                      { id: "booking-require-email", label: "Require email address", checked: value.bookingRequireEmail, description: "Useful when confirmations and follow-up should land in email.", key: "bookingRequireEmail" as const },
+                      { id: "booking-require-phone", label: "Require phone number", checked: value.bookingRequirePhone, description: "Useful when the team confirms timing by call or text.", key: "bookingRequirePhone" as const },
+                      { id: "booking-require-vehicle", label: "Require vehicle details", checked: value.bookingRequireVehicle, description: "Keep make and model required before the request lands.", key: "bookingRequireVehicle" as const },
+                      { id: "booking-allow-notes", label: "Allow customer notes", checked: value.bookingAllowCustomerNotes, description: "Let customers add timing, questions, or job context.", key: "bookingAllowCustomerNotes" as const },
+                    ].map((item) => (
+                      <div key={item.id} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                        <Checkbox
+                          id={item.id}
+                          checked={item.checked}
+                          onCheckedChange={(checked) => onChange({ ...value, [item.key]: checked === true })}
+                          className="mt-1"
+                          disabled={!canEdit}
+                        />
+                        <div className="space-y-1">
+                          <Label htmlFor={item.id} className="cursor-pointer text-sm font-medium text-slate-950">{item.label}</Label>
+                          <p className="text-xs leading-5 text-slate-500">{item.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+                    <div className="grid gap-2">
+                      <Label htmlFor="booking-notes-prompt">Notes prompt</Label>
+                      <Input id="booking-notes-prompt" value={value.bookingNotesPrompt} onChange={(event) => onChange({ ...value, bookingNotesPrompt: event.target.value })} placeholder="Add timing, questions, or anything the shop should know." disabled={!canEdit || !value.bookingAllowCustomerNotes} />
+                      <p className="text-xs leading-5 text-slate-500">Shown above the final notes field when customer notes are enabled.</p>
+                    </div>
+                    <BuilderControlCard
+                      title="Step behavior"
+                      description="The public flow stays five focused steps with a final review before send or confirm."
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-3 rounded-[1.1rem] border border-slate-200 bg-slate-50/80 px-3 py-3">
+                          <Checkbox id="booking-review-step" checked className="mt-1" disabled />
+                          <div className="space-y-1">
+                            <Label htmlFor="booking-review-step" className="text-sm font-medium text-slate-950">Review step enabled</Label>
+                            <p className="text-xs leading-5 text-slate-500">Always on so customers can verify service, timing, and contact details before booking or sending a request.</p>
+                          </div>
+                        </div>
+                        <p className="text-xs leading-5 text-slate-500">Draft lead capture, resume behavior, and booking confirmation all depend on that final review step staying consistent.</p>
+                      </div>
+                    </BuilderControlCard>
+                  </div>
+                </BuilderSection>
+              </>
             ) : null}
 
             {activeTab === "branding" ? (
-            <BuilderSection
-              eyebrow="Branding"
-              title="Shape the page copy and trust cues"
-              description="Tune the booking page headline, reassurance copy, and confirmation state so the customer knows exactly what they are doing and what happens next."
-            >
-              <div className="mt-5 grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="booking-page-title">Booking page title</Label>
-                  <Input id="booking-page-title" value={value.bookingPageTitle} onChange={(event) => onChange({ ...value, bookingPageTitle: event.target.value })} placeholder="Tell us what you need" disabled={!canEdit} />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="booking-page-subtitle">Intro text</Label>
-                  <Textarea id="booking-page-subtitle" rows={3} value={value.bookingPageSubtitle} onChange={(event) => onChange({ ...value, bookingPageSubtitle: event.target.value })} placeholder="Share a few details and the shop can follow up with the right next step." disabled={!canEdit} />
-                </div>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="grid gap-2">
-                    <Label htmlFor="booking-trust-primary">Trust point 1</Label>
-                    <Input id="booking-trust-primary" value={value.bookingTrustBulletPrimary} onChange={(event) => onChange({ ...value, bookingTrustBulletPrimary: event.target.value })} placeholder="Goes directly to the shop" disabled={!canEdit} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="booking-trust-secondary">Trust point 2</Label>
-                    <Input id="booking-trust-secondary" value={value.bookingTrustBulletSecondary} onChange={(event) => onChange({ ...value, bookingTrustBulletSecondary: event.target.value })} placeholder="Quick follow-up" disabled={!canEdit} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="booking-trust-tertiary">Trust point 3</Label>
-                    <Input id="booking-trust-tertiary" value={value.bookingTrustBulletTertiary} onChange={(event) => onChange({ ...value, bookingTrustBulletTertiary: event.target.value })} placeholder="Secure and simple" disabled={!canEdit} />
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="booking-confirmation-message">Confirmation message</Label>
-                  <Textarea id="booking-confirmation-message" rows={3} value={value.bookingConfirmationMessage} onChange={(event) => onChange({ ...value, bookingConfirmationMessage: event.target.value })} placeholder="Your appointment is booked. You can review the confirmation details right away." disabled={!canEdit} />
-                </div>
-              </div>
-            </BuilderSection>
-            ) : null}
-
-            {activeTab === "branding" ? (
-            <BuilderSection
-              eyebrow="Branding"
-              title="Keep intake clear and lightweight"
-              description="Keep the form fast while making sure the shop still gets the information it truly needs to act on the booking."
-            >
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                {[
-                  { id: "booking-require-email", label: "Require email address", checked: value.bookingRequireEmail, description: "Useful when confirmations and follow-up should land in email.", key: "bookingRequireEmail" as const },
-                  { id: "booking-require-phone", label: "Require phone number", checked: value.bookingRequirePhone, description: "Useful when the team confirms timing by call or text.", key: "bookingRequirePhone" as const },
-                  { id: "booking-require-vehicle", label: "Require vehicle details", checked: value.bookingRequireVehicle, description: "Keep make and model required before the request lands.", key: "bookingRequireVehicle" as const },
-                  { id: "booking-allow-notes", label: "Allow customer notes", checked: value.bookingAllowCustomerNotes, description: "Let customers add timing, questions, or job context.", key: "bookingAllowCustomerNotes" as const },
-                  { id: "booking-show-prices", label: "Show pricing by default", checked: value.bookingShowPrices, description: "Services can still hide pricing individually.", key: "bookingShowPrices" as const },
-                  { id: "booking-show-durations", label: "Show durations by default", checked: value.bookingShowDurations, description: "Services can still hide timing individually.", key: "bookingShowDurations" as const },
-                ].map((item) => (
-                  <div key={item.id} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                    <Checkbox
-                      id={item.id}
-                      checked={item.checked}
-                      onCheckedChange={(checked) => onChange({ ...value, [item.key]: checked === true })}
-                      className="mt-1"
-                      disabled={!canEdit}
-                    />
-                    <div className="space-y-1">
-                      <Label htmlFor={item.id} className="cursor-pointer text-sm font-medium text-slate-950">{item.label}</Label>
-                      <p className="text-xs leading-5 text-slate-500">{item.description}</p>
+              <>
+                <BuilderSection
+                  eyebrow="Branding"
+                  title="Shape the copy and trust cues customers feel"
+                  description="Tune the page headline, reassurance copy, and confirmation state so the booking page feels polished without sounding generic."
+                >
+                  <div className="mt-5 grid gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="booking-page-title">Booking page title</Label>
+                      <Input id="booking-page-title" value={value.bookingPageTitle} onChange={(event) => onChange({ ...value, bookingPageTitle: event.target.value })} placeholder="Tell us what you need" disabled={!canEdit} />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="booking-page-subtitle">Intro text</Label>
+                      <Textarea id="booking-page-subtitle" rows={3} value={value.bookingPageSubtitle} onChange={(event) => onChange({ ...value, bookingPageSubtitle: event.target.value })} placeholder="Share a few details and the shop can follow up with the right next step." disabled={!canEdit} />
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="grid gap-2">
+                        <Label htmlFor="booking-trust-primary">Trust point 1</Label>
+                        <Input id="booking-trust-primary" value={value.bookingTrustBulletPrimary} onChange={(event) => onChange({ ...value, bookingTrustBulletPrimary: event.target.value })} placeholder="Goes directly to the shop" disabled={!canEdit} />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="booking-trust-secondary">Trust point 2</Label>
+                        <Input id="booking-trust-secondary" value={value.bookingTrustBulletSecondary} onChange={(event) => onChange({ ...value, bookingTrustBulletSecondary: event.target.value })} placeholder="Quick follow-up" disabled={!canEdit} />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="booking-trust-tertiary">Trust point 3</Label>
+                        <Input id="booking-trust-tertiary" value={value.bookingTrustBulletTertiary} onChange={(event) => onChange({ ...value, bookingTrustBulletTertiary: event.target.value })} placeholder="Secure and simple" disabled={!canEdit} />
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="booking-confirmation-message">Confirmation message</Label>
+                      <Textarea id="booking-confirmation-message" rows={3} value={value.bookingConfirmationMessage} onChange={(event) => onChange({ ...value, bookingConfirmationMessage: event.target.value })} placeholder="Your appointment is booked. You can review the confirmation details right away." disabled={!canEdit} />
                     </div>
                   </div>
-                ))}
-              </div>
-              <div className="mt-4 grid gap-2">
-                <Label htmlFor="booking-notes-prompt">Notes prompt</Label>
-                <Input id="booking-notes-prompt" value={value.bookingNotesPrompt} onChange={(event) => onChange({ ...value, bookingNotesPrompt: event.target.value })} placeholder="Add timing, questions, or anything the shop should know." disabled={!canEdit || !value.bookingAllowCustomerNotes} />
-                <p className="text-xs leading-5 text-slate-500">Shown above the final notes field when customer notes are enabled.</p>
-              </div>
-            </BuilderSection>
+                </BuilderSection>
+              </>
+            ) : null}
+
+            {activeTab === "branding" ? (
+              <>
+                <BuilderSection
+                  eyebrow="Branding"
+                  title="Apply constrained visual branding"
+                  description="Use presets for logo, color, background tone, and button style so the booking page can feel like the shop while staying readable and conversion-focused."
+                >
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="grid gap-2 lg:col-span-2">
+                      <Label htmlFor="booking-brand-logo-url">Logo URL</Label>
+                      <Input
+                        id="booking-brand-logo-url"
+                        value={value.bookingBrandLogoUrl}
+                        onChange={(event) => onChange({ ...value, bookingBrandLogoUrl: event.target.value })}
+                        placeholder="https://example.com/logo.png"
+                        disabled={!canEdit}
+                      />
+                      <p className="text-xs leading-5 text-slate-500">Shown in the booking header and preview. Use a simple square or transparent logo for the cleanest result.</p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="booking-brand-primary">Primary color</Label>
+                      <Select
+                        value={value.bookingBrandPrimaryColorToken}
+                        onValueChange={(next) => onChange({ ...value, bookingBrandPrimaryColorToken: next as BookingBrandPrimaryColorToken })}
+                        disabled={!canEdit}
+                      >
+                        <SelectTrigger id="booking-brand-primary">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {bookingBrandPrimaryColorOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="booking-brand-accent">Accent color</Label>
+                      <Select
+                        value={value.bookingBrandAccentColorToken}
+                        onValueChange={(next) => onChange({ ...value, bookingBrandAccentColorToken: next as BookingBrandAccentColorToken })}
+                        disabled={!canEdit}
+                      >
+                        <SelectTrigger id="booking-brand-accent">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {bookingBrandAccentColorOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="booking-brand-background">Background tone</Label>
+                      <Select
+                        value={value.bookingBrandBackgroundToneToken}
+                        onValueChange={(next) => onChange({ ...value, bookingBrandBackgroundToneToken: next as BookingBrandBackgroundToneToken })}
+                        disabled={!canEdit}
+                      >
+                        <SelectTrigger id="booking-brand-background">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {bookingBrandBackgroundToneOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="booking-brand-button-style">Button style</Label>
+                      <Select
+                        value={value.bookingBrandButtonStyleToken}
+                        onValueChange={(next) => onChange({ ...value, bookingBrandButtonStyleToken: next as BookingBrandButtonStyleToken })}
+                        disabled={!canEdit}
+                      >
+                        <SelectTrigger id="booking-brand-button-style">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {bookingBrandButtonStyleOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                    <BuilderControlCard
+                      title="Guardrails"
+                      description="These presets protect contrast, keep buttons readable, and avoid branded layouts that hurt conversion."
+                    >
+                      <p className="text-sm leading-6 text-slate-600">No arbitrary CSS, no freeform layout modules, and no dark or low-contrast presets that would make the mobile flow harder to finish.</p>
+                    </BuilderControlCard>
+                    <BuilderControlCard
+                      title="Performance"
+                      description="The booking page stays fast because branding uses a small token set rather than heavy theme bundles."
+                    >
+                      <p className="text-sm leading-6 text-slate-600">The preview and live page share the same constrained theme variables so there is no extra styling runtime to load.</p>
+                    </BuilderControlCard>
+                    <BuilderControlCard
+                      title="Imagery"
+                      description="Hero imagery still is not exposed here because there is no persisted booking-safe image model yet."
+                    >
+                      <p className="text-sm leading-6 text-slate-600">That keeps the builder honest and avoids giving customers a broken or overly heavy hero surface on mobile.</p>
+                    </BuilderControlCard>
+                  </div>
+                </BuilderSection>
+              </>
             ) : null}
 
             {activeTab === "availability" ? (
-            <BuilderSection
-              eyebrow="Availability"
-              title="Control when booking can happen"
-              description="Set the booking-only schedule without changing the rest of the app. Service-level lead time and booking windows still layer on top."
-            >
-              <div className="mt-5 space-y-5">
-                <div className="space-y-2">
-                  <Label>Available days</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {BOOKING_DAY_OPTIONS.map((day) => {
-                      const active = value.bookingAvailableDays.includes(day.value);
-                      return (
-                        <Button
-                          key={day.value}
-                          type="button"
-                          variant={active ? "default" : "outline"}
-                          size="sm"
-                          className={cn(active ? "bg-slate-950 text-white hover:bg-slate-900" : "")}
-                          onClick={() => toggleDay(day.value)}
+              <>
+                <BuilderSection
+                  eyebrow="Availability"
+                  title="Control when booking can happen"
+                  description="Set the booking-only schedule without changing the rest of the app. Service-level lead time and booking windows still layer on top."
+                >
+                  <div className="mt-5 space-y-5">
+                    <div className="space-y-2">
+                      <Label>Available days</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {BOOKING_DAY_OPTIONS.map((day) => {
+                          const active = value.bookingAvailableDays.includes(day.value);
+                          return (
+                            <Button
+                              key={day.value}
+                              type="button"
+                              variant={active ? "default" : "outline"}
+                              size="sm"
+                              className={cn(active ? "bg-slate-950 text-white hover:bg-slate-900" : "")}
+                              onClick={() => toggleDay(day.value)}
+                              disabled={!canEdit}
+                            >
+                              {day.label}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="booking-start-time">Window start</Label>
+                        <Input id="booking-start-time" type="time" value={value.bookingAvailableStartTime} onChange={(event) => onChange({ ...value, bookingAvailableStartTime: event.target.value })} disabled={!canEdit} />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="booking-end-time">Window end</Label>
+                        <Input id="booking-end-time" type="time" value={value.bookingAvailableEndTime} onChange={(event) => onChange({ ...value, bookingAvailableEndTime: event.target.value })} disabled={!canEdit} />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="booking-slot-interval">Slot interval</Label>
+                        <Select
+                          value={String(value.bookingSlotIntervalMinutes)}
+                          onValueChange={(next) => onChange({ ...value, bookingSlotIntervalMinutes: Number(next) })}
                           disabled={!canEdit}
                         >
-                          {day.label}
-                        </Button>
-                      );
-                    })}
+                          <SelectTrigger id="booking-slot-interval">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[15, 30, 45, 60].map((minutes) => (
+                              <SelectItem key={minutes} value={String(minutes)}>{minutes} minutes</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="booking-buffer">Booking buffer</Label>
+                        <Input id="booking-buffer" type="number" min="0" max="240" step="5" value={value.bookingBufferMinutes} onChange={(event) => onChange({ ...value, bookingBufferMinutes: event.target.value })} placeholder="Use main schedule buffer" disabled={!canEdit} />
+                      </div>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="grid gap-2">
+                        <Label htmlFor="booking-capacity">Max bookings per slot</Label>
+                        <Input id="booking-capacity" type="number" min="1" max="12" step="1" value={value.bookingCapacityPerSlot} onChange={(event) => onChange({ ...value, bookingCapacityPerSlot: event.target.value })} placeholder="Use calendar capacity" disabled={!canEdit} />
+                        <p className="text-xs leading-5 text-slate-500">Useful for fast-turn work or multi-bay shops.</p>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="booking-blackout-dates">Blackout dates</Label>
+                        <Textarea id="booking-blackout-dates" rows={4} value={value.bookingBlackoutDatesText} onChange={(event) => onChange({ ...value, bookingBlackoutDatesText: event.target.value })} placeholder={"2026-04-15\n2026-05-27"} disabled={!canEdit} />
+                        <p className="text-xs leading-5 text-slate-500">One date per line in YYYY-MM-DD format.</p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="booking-start-time">Window start</Label>
-                    <Input id="booking-start-time" type="time" value={value.bookingAvailableStartTime} onChange={(event) => onChange({ ...value, bookingAvailableStartTime: event.target.value })} disabled={!canEdit} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="booking-end-time">Window end</Label>
-                    <Input id="booking-end-time" type="time" value={value.bookingAvailableEndTime} onChange={(event) => onChange({ ...value, bookingAvailableEndTime: event.target.value })} disabled={!canEdit} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="booking-slot-interval">Slot interval</Label>
-                    <Select
-                      value={String(value.bookingSlotIntervalMinutes)}
-                      onValueChange={(next) => onChange({ ...value, bookingSlotIntervalMinutes: Number(next) })}
-                      disabled={!canEdit}
+                </BuilderSection>
+
+                <BuilderSection
+                  eyebrow="Availability"
+                  title="Handle in-shop and mobile service cleanly"
+                  description="Service-specific modes, location branching, and timing exceptions still live on each service, but the public flow uses these defaults first."
+                >
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <BuilderControlCard
+                      title="Mobile or on-site branching"
+                      description="If you offer both in-shop and mobile work, use locations to represent each service mode."
                     >
-                      <SelectTrigger id="booking-slot-interval">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[15, 30, 45, 60].map((minutes) => (
-                          <SelectItem key={minutes} value={String(minutes)}>{minutes} minutes</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <p className="text-sm leading-6 text-slate-600">The public booking flow automatically shows a location step when more than one active location is available, then respects the service&apos;s mobile, in-shop, or both-mode posture.</p>
+                    </BuilderControlCard>
+                    <BuilderControlCard
+                      title="Service-specific availability"
+                      description="Lead time, booking windows, and capacity exceptions stay service-level so the builder can stay clean."
+                    >
+                      <p className="text-sm leading-6 text-slate-600">Use the service cards below when a specific job should only appear on certain days, require extra notice, or stay request-only even when the overall flow defaults to instant booking.</p>
+                    </BuilderControlCard>
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="booking-buffer">Booking buffer</Label>
-                    <Input id="booking-buffer" type="number" min="0" max="240" step="5" value={value.bookingBufferMinutes} onChange={(event) => onChange({ ...value, bookingBufferMinutes: event.target.value })} placeholder="Use main schedule buffer" disabled={!canEdit} />
-                  </div>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="grid gap-2">
-                    <Label htmlFor="booking-capacity">Max bookings per slot</Label>
-                    <Input id="booking-capacity" type="number" min="1" max="12" step="1" value={value.bookingCapacityPerSlot} onChange={(event) => onChange({ ...value, bookingCapacityPerSlot: event.target.value })} placeholder="Use calendar capacity" disabled={!canEdit} />
-                    <p className="text-xs leading-5 text-slate-500">Useful for fast-turn work or multi-bay shops.</p>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="booking-blackout-dates">Blackout dates</Label>
-                    <Textarea id="booking-blackout-dates" rows={4} value={value.bookingBlackoutDatesText} onChange={(event) => onChange({ ...value, bookingBlackoutDatesText: event.target.value })} placeholder={"2026-04-15\n2026-05-27"} disabled={!canEdit} />
-                    <p className="text-xs leading-5 text-slate-500">One date per line in YYYY-MM-DD format.</p>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-600">
-                  If you offer both in-shop and mobile service, use locations to represent each service mode. The booking flow automatically shows a location step when more than one active location is available.
-                </div>
-              </div>
-            </BuilderSection>
+                </BuilderSection>
+              </>
             ) : null}
 
             {activeTab === "payments" ? (
@@ -1527,46 +1774,124 @@ function BookingBuilderCard({
             ) : null}
 
             {activeTab === "services" ? (
-              <BuilderSection
-                eyebrow="Services"
-                title="Shape what customers browse first"
-                description="Use business-level defaults here, then fine-tune visibility, featured placement, deposits, and service-specific rules on the service cards below."
-              >
-                <div className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <MetricCard label="Live services" value={String(bookableServicesCount)} detail="Visible on the public booking page" />
-                    <MetricCard label="Featured" value={String(featuredServicesCount)} detail="Pinned higher in the booking browse step" />
-                    <MetricCard label="Instant-book" value={String(selfBookServicesCount)} detail="Services that can confirm immediately" />
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {[
-                      { id: "booking-show-prices", label: "Show pricing by default", checked: value.bookingShowPrices, description: "Keep pricing visible unless a specific service should hold it back.", key: "bookingShowPrices" as const },
-                      { id: "booking-show-durations", label: "Show durations by default", checked: value.bookingShowDurations, description: "Keep timing visible unless a service needs review before promising it.", key: "bookingShowDurations" as const },
-                    ].map((item) => (
-                      <div key={item.id} className="flex items-start gap-3 rounded-[1.2rem] border border-slate-200 bg-slate-50/80 p-4">
-                        <Checkbox
-                          id={item.id}
-                          checked={item.checked}
-                          onCheckedChange={(checked) => onChange({ ...value, [item.key]: checked === true })}
-                          className="mt-1"
-                          disabled={!canEdit}
-                        />
-                        <div className="space-y-1">
-                          <Label htmlFor={item.id} className="cursor-pointer text-sm font-medium text-slate-950">{item.label}</Label>
-                          <p className="text-xs leading-5 text-slate-500">{item.description}</p>
+              <>
+                <BuilderSection
+                  eyebrow="Services"
+                  title="Shape what customers browse first"
+                  description="Use business-level defaults here, then fine-tune visibility, featured placement, add-ons, and service-specific rules on the service cards below."
+                >
+                  <div className="space-y-4">
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <MetricCard label="Live services" value={String(bookableServicesCount)} detail="Visible on the public booking page" />
+                      <MetricCard label="Featured" value={String(featuredServicesCount)} detail="Pinned higher in the booking browse step" />
+                      <MetricCard label="Instant-book" value={String(selfBookServicesCount)} detail="Services that can confirm immediately" />
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {[
+                        { id: "booking-show-prices", label: "Show pricing by default", checked: value.bookingShowPrices, description: "Keep pricing visible unless a specific service should hold it back.", key: "bookingShowPrices" as const },
+                        { id: "booking-show-durations", label: "Show durations by default", checked: value.bookingShowDurations, description: "Keep timing visible unless a service needs review before promising it.", key: "bookingShowDurations" as const },
+                      ].map((item) => (
+                        <div key={item.id} className="flex items-start gap-3 rounded-[1.2rem] border border-slate-200 bg-slate-50/80 p-4">
+                          <Checkbox
+                            id={item.id}
+                            checked={item.checked}
+                            onCheckedChange={(checked) => onChange({ ...value, [item.key]: checked === true })}
+                            className="mt-1"
+                            disabled={!canEdit}
+                          />
+                          <div className="space-y-1">
+                            <Label htmlFor={item.id} className="cursor-pointer text-sm font-medium text-slate-950">{item.label}</Label>
+                            <p className="text-xs leading-5 text-slate-500">{item.description}</p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </BuilderSection>
+                </BuilderSection>
+
+                <BuilderSection
+                  eyebrow="Services"
+                  title="Use service cards for the heavy lifting"
+                  description="Ordering, featured placement, add-ons, request-only overrides, and service-specific deposits stay closest to each service."
+                >
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    <BuilderControlCard
+                      title="Visibility and order"
+                      description="Turn services on for public booking, move their order, and keep the highest-intent offers near the top."
+                    >
+                      <p className="text-sm leading-6 text-slate-600">The catalog below remains the source of truth for what customers can browse and book.</p>
+                    </BuilderControlCard>
+                    <BuilderControlCard
+                      title="Featured and overrides"
+                      description="Mark hero services as featured, switch them to request-only when needed, and hide pricing or duration one service at a time."
+                    >
+                      <p className="text-sm leading-6 text-slate-600">Those overrides are already live in the public flow and are easier to scan directly on the service card.</p>
+                    </BuilderControlCard>
+                    <BuilderControlCard
+                      title="Add-ons and related services"
+                      description="Linked add-ons become the booking flow&apos;s “Frequently added” recommendations."
+                    >
+                      <p className="text-sm leading-6 text-slate-600">Keep upsells clean and relevant instead of turning the booking flow into a cluttered options list.</p>
+                    </BuilderControlCard>
+                  </div>
+                </BuilderSection>
+              </>
             ) : null}
 
-            {(activeTab === "services" || activeTab === "payments") ? (
+            {activeTab === "advanced" ? (
+              <>
+                <BuilderSection
+                  eyebrow="Advanced"
+                  title="Surface the invisible rules that already support the flow"
+                  description="These controls are intentionally lighter. The point is clarity around tracking, throttling, and metadata without turning the builder into an enterprise settings wall."
+                >
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    <BuilderControlCard
+                      title="Source capture"
+                      description="Public booking links already preserve source and category context from the services page."
+                    >
+                      <p className="text-sm leading-6 text-slate-600">Services-page entry automatically appends source metadata like <span className="font-mono text-[12px]">source=services-page</span> and keeps service context in the booking flow.</p>
+                    </BuilderControlCard>
+                    <BuilderControlCard
+                      title="Spam and rate limits"
+                      description="Public booking and draft endpoints are protected, but those controls stay operational instead of cluttering the main editor."
+                    >
+                      <p className="text-sm leading-6 text-slate-600">Use launch monitoring for throttling visibility. The public form does not expose those internals to customers.</p>
+                    </BuilderControlCard>
+                    <BuilderControlCard
+                      title="Hidden metadata"
+                      description="Draft capture and final booking submission preserve timing, service, and source metadata behind the scenes."
+                    >
+                      <p className="text-sm leading-6 text-slate-600">That lets the team understand intent and booking path without exposing internal-only fields on the public page.</p>
+                    </BuilderControlCard>
+                  </div>
+                </BuilderSection>
+
+                <BuilderSection
+                  eyebrow="Advanced"
+                  title="Know what happens after submit"
+                  description="Confirmation pages, portal links, and downstream follow-up still come from live booking runtime logic instead of bespoke redirect fields here."
+                >
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+                    <div className="rounded-[1.35rem] border border-slate-200 bg-slate-50/80 p-4 text-sm leading-6 text-slate-600">
+                      Direct bookings follow the existing confirmation and deposit flow. Request-mode services continue into the shop&apos;s manual follow-up path. Draft autosave, resume, and public throttling all stay active without requiring extra setup here.
+                    </div>
+                    <BuilderControlCard
+                      title="Current entry link"
+                      description="Use this to test hidden metadata and public handoff behavior."
+                    >
+                      <p className="break-all text-xs leading-5 text-slate-600">{bookingUrl ?? "Booking link appears after the page is enabled."}</p>
+                    </BuilderControlCard>
+                  </div>
+                </BuilderSection>
+              </>
+            ) : null}
+
+            {(activeTab === "services" || activeTab === "payments" || activeTab === "advanced") ? (
             <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-slate-950">Service-level controls stay on each service card</p>
-                <p className="text-sm leading-6 text-slate-600">Featured placement, service-specific mode, deposits, booking descriptions, lead time, and price/duration visibility are handled per service below.</p>
+                <p className="text-sm leading-6 text-slate-600">Visibility, featured placement, service-specific mode, deposits, booking descriptions, lead time, and price or duration visibility are still handled per service below.</p>
               </div>
               <div className="hidden gap-2 lg:flex">
                 <BookingRulePill active={bookableServicesCount > 0}>{bookableServicesCount} services live</BookingRulePill>
@@ -1577,7 +1902,7 @@ function BookingBuilderCard({
           </div>
 
           <div className="hidden space-y-4 lg:block">
-            <div className="sticky top-6">{renderPreview()}</div>
+            <div className="sticky top-5">{renderPreview()}</div>
           </div>
         </div>
 
@@ -1720,6 +2045,7 @@ function ServiceCard({
         <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
           {service.taxable ? <span>Taxable</span> : null}
           {service.bookingEnabled === true && service.bookingLeadTimeHours ? <span>{service.bookingLeadTimeHours}h lead time</span> : null}
+          {service.bookingEnabled === true && service.bookingBufferMinutes ? <span>{service.bookingBufferMinutes}m buffer</span> : null}
           {service.bookingEnabled === true && service.bookingWindowDays ? <span>{service.bookingWindowDays} day window</span> : null}
         </div>
       </div>
@@ -1728,16 +2054,16 @@ function ServiceCard({
         <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end">
           {primaryBookingHref ? (
             <Button size="sm" className="rounded-xl shadow-sm" asChild onClick={(e) => e.stopPropagation()}>
-              <a href={primaryBookingHref} target="_blank" rel="noreferrer">
+              <Link to={primaryBookingHref}>
                 {effectiveBookingCta}
-              </a>
+              </Link>
             </Button>
           ) : null}
           {detailBookingHref ? (
             <Button size="sm" variant="outline" className="rounded-xl" asChild onClick={(e) => e.stopPropagation()}>
-              <a href={detailBookingHref} target="_blank" rel="noreferrer">
+              <Link to={detailBookingHref}>
                 Learn more
-              </a>
+              </Link>
             </Button>
           ) : null}
           <Button size="sm" variant="outline" className="rounded-xl" onClick={(e) => { e.stopPropagation(); onEdit(service); }} disabled={!canEdit}>
@@ -2065,6 +2391,7 @@ export default function ServicesPage() {
         bookingAvailableDays: createFormData.bookingAvailableDays,
         bookingAvailableStartTime: createFormData.bookingAvailableStartTime || null,
         bookingAvailableEndTime: createFormData.bookingAvailableEndTime || null,
+        bookingBufferMinutes: createFormData.bookingBufferMinutes ? parseInt(createFormData.bookingBufferMinutes, 10) : null,
         bookingCapacityPerSlot: createFormData.bookingCapacityPerSlot ? parseInt(createFormData.bookingCapacityPerSlot, 10) : null,
         bookingFeatured: createFormData.bookingFeatured,
         bookingHidePrice: createFormData.bookingHidePrice,
@@ -2100,6 +2427,7 @@ export default function ServicesPage() {
         bookingAvailableDays: editFormData.bookingAvailableDays,
         bookingAvailableStartTime: editFormData.bookingAvailableStartTime || null,
         bookingAvailableEndTime: editFormData.bookingAvailableEndTime || null,
+        bookingBufferMinutes: editFormData.bookingBufferMinutes ? parseInt(editFormData.bookingBufferMinutes, 10) : null,
         bookingCapacityPerSlot: editFormData.bookingCapacityPerSlot ? parseInt(editFormData.bookingCapacityPerSlot, 10) : null,
         bookingFeatured: editFormData.bookingFeatured,
         bookingHidePrice: editFormData.bookingHidePrice,
@@ -2185,6 +2513,11 @@ export default function ServicesPage() {
       bookingTrustBulletSecondary: bookingSettings.bookingTrustBulletSecondary.trim() || null,
       bookingTrustBulletTertiary: bookingSettings.bookingTrustBulletTertiary.trim() || null,
       bookingNotesPrompt: bookingSettings.bookingNotesPrompt.trim() || null,
+      bookingBrandLogoUrl: bookingSettings.bookingBrandLogoUrl.trim() || null,
+      bookingBrandPrimaryColorToken: bookingSettings.bookingBrandPrimaryColorToken,
+      bookingBrandAccentColorToken: bookingSettings.bookingBrandAccentColorToken,
+      bookingBrandBackgroundToneToken: bookingSettings.bookingBrandBackgroundToneToken,
+      bookingBrandButtonStyleToken: bookingSettings.bookingBrandButtonStyleToken,
       bookingRequireEmail: bookingSettings.bookingRequireEmail,
       bookingRequirePhone: bookingSettings.bookingRequirePhone,
       bookingRequireVehicle: bookingSettings.bookingRequireVehicle,

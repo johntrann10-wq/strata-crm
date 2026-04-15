@@ -4,6 +4,7 @@ import { db } from "../db/index.js";
 import {
   appointmentServices,
   appointments,
+  bookingDrafts,
   businessMemberships,
   businesses,
   clients,
@@ -45,6 +46,7 @@ import {
   parseTimeToMinutes,
   resolveCustomerBookingMode,
   resolveBookingFlow,
+  toBookingBufferMinutes,
   toBookingDurationMinutes,
   toBookingLeadTimeHours,
   toBookingWindowDays,
@@ -54,6 +56,12 @@ import { countOverlappingAppointments } from "../lib/appointmentOverlap.js";
 import { buildPublicAppUrl, buildPublicDocumentUrl, createPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
 import { calculateAppointmentFinanceTotals } from "../lib/revenueTotals.js";
+import {
+  buildBookingDraftComparableSignature,
+  deriveBookingDraftStatus,
+  hasMeaningfulBookingDraftIntent,
+  type BookingDraftStatus,
+} from "../lib/bookingDrafts.js";
 
 export const businessesRouter = Router({ mergeParams: true });
 type BusinessRecord = typeof businesses.$inferSelect;
@@ -119,6 +127,11 @@ const createSchema = z.object({
   bookingTrustBulletSecondary: z.string().max(80).nullable().optional(),
   bookingTrustBulletTertiary: z.string().max(80).nullable().optional(),
   bookingNotesPrompt: z.string().max(160).nullable().optional(),
+  bookingBrandLogoUrl: z.string().url().max(1000).nullable().optional(),
+  bookingBrandPrimaryColorToken: z.enum(["orange", "sky", "emerald", "rose", "slate"]).optional(),
+  bookingBrandAccentColorToken: z.enum(["amber", "blue", "mint", "violet", "stone"]).optional(),
+  bookingBrandBackgroundToneToken: z.enum(["ivory", "mist", "sand", "slate"]).optional(),
+  bookingBrandButtonStyleToken: z.enum(["solid", "soft", "outline"]).optional(),
   bookingRequireEmail: z.boolean().optional(),
   bookingRequirePhone: z.boolean().optional(),
   bookingRequireVehicle: z.boolean().optional(),
@@ -210,6 +223,7 @@ const publicBookingAvailabilityQuerySchema = z.object({
 const publicBookingSubmitSchema = z.object({
   serviceId: z.string().uuid("Select a valid service."),
   addonServiceIds: z.array(z.string().uuid()).optional(),
+  draftResumeToken: z.string().trim().max(255).optional().or(z.literal("")),
   locationId: z.string().uuid().optional(),
   serviceMode: z.enum(["in_shop", "mobile"]).optional(),
   startTime: z.string().datetime().optional(),
@@ -230,6 +244,68 @@ const publicBookingSubmitSchema = z.object({
   source: z.string().trim().max(120).optional().or(z.literal("")),
   campaign: z.string().trim().max(120).optional().or(z.literal("")),
   website: z.string().max(0).optional(),
+});
+
+const publicBookingDraftLimiter = createRateLimiter({
+  id: "public_booking_draft",
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  key: ({ ip, path, body }) => {
+    const resumeToken =
+      body && typeof body === "object" && typeof (body as Record<string, unknown>).resumeToken === "string"
+        ? String((body as Record<string, unknown>).resumeToken).trim()
+        : "";
+    return `${path}:${ip}:${resumeToken}`;
+  },
+  message: "Please wait a moment before saving again.",
+});
+
+const publicBookingDraftResumeLimiter = createRateLimiter({
+  id: "public_booking_draft_resume",
+  windowMs: 5 * 60 * 1000,
+  max: 40,
+  message: "Please refresh the booking page in a moment.",
+});
+
+const publicBookingDraftAbandonLimiter = createRateLimiter({
+  id: "public_booking_draft_abandon",
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: "Please try again shortly.",
+});
+
+const publicBookingDraftParamsSchema = z.object({
+  id: z.string().uuid("Invalid business id."),
+  resumeToken: z.string().trim().min(16, "Invalid draft token.").max(255),
+});
+
+const publicBookingDraftSaveSchema = z.object({
+  resumeToken: z.string().trim().min(16).max(255).optional(),
+  serviceId: z.string().uuid("Select a valid service."),
+  addonServiceIds: z.array(z.string().uuid()).optional(),
+  serviceMode: z.enum(["in_shop", "mobile"]).optional(),
+  locationId: z.string().uuid().optional().or(z.literal("")),
+  bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
+  startTime: z.string().datetime().optional().or(z.literal("")),
+  firstName: z.string().trim().max(80).optional().or(z.literal("")),
+  lastName: z.string().trim().max(80).optional().or(z.literal("")),
+  email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
+  phone: z.string().trim().max(40).optional().or(z.literal("")),
+  vehicleYear: z.preprocess((value) => (value === "" ? undefined : value), z.coerce.number().int().min(1900).max(2100).optional()),
+  vehicleMake: z.string().trim().max(80).optional().or(z.literal("")),
+  vehicleModel: z.string().trim().max(80).optional().or(z.literal("")),
+  vehicleColor: z.string().trim().max(80).optional().or(z.literal("")),
+  serviceAddress: z.string().trim().max(120).optional().or(z.literal("")),
+  serviceCity: z.string().trim().max(80).optional().or(z.literal("")),
+  serviceState: z.string().trim().max(40).optional().or(z.literal("")),
+  serviceZip: z.string().trim().max(20).optional().or(z.literal("")),
+  notes: z.string().trim().max(1200).optional().or(z.literal("")),
+  marketingOptIn: z.boolean().optional(),
+  source: z.string().trim().max(120).optional().or(z.literal("")),
+  campaign: z.string().trim().max(120).optional().or(z.literal("")),
+  currentStep: z.number().int().min(0).max(4).optional(),
+  serviceCategoryFilter: z.string().trim().max(80).optional().or(z.literal("")),
+  expandedServiceId: z.string().trim().max(120).optional().or(z.literal("")),
 });
 
 const publicLeadConfigLimiter = createRateLimiter({
@@ -358,6 +434,180 @@ function normalizeBlackoutDates(raw: string | null | undefined): Set<string> {
   );
 }
 
+type BookingDraftRecord = typeof bookingDrafts.$inferSelect;
+
+function isBookingDraftSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("booking_drafts");
+}
+
+function buildPublicBookingDraftComparable(input: {
+  serviceId?: string | null;
+  addonServiceIds?: string[] | null;
+  serviceMode?: string | null;
+  locationId?: string | null;
+  bookingDate?: string | null;
+  startTime?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  vehicleYear?: number | string | null;
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  vehicleColor?: string | null;
+  serviceAddress?: string | null;
+  serviceCity?: string | null;
+  serviceState?: string | null;
+  serviceZip?: string | null;
+  notes?: string | null;
+  marketingOptIn?: boolean | null;
+  source?: string | null;
+  campaign?: string | null;
+  currentStep?: number | null;
+  serviceCategoryFilter?: string | null;
+  expandedServiceId?: string | null;
+}) {
+  return {
+    serviceId: input.serviceId ?? "",
+    addonServiceIds: input.addonServiceIds ?? [],
+    serviceMode: input.serviceMode ?? "in_shop",
+    locationId: input.locationId ?? "",
+    bookingDate: input.bookingDate ?? "",
+    startTime: input.startTime ?? "",
+    firstName: input.firstName ?? "",
+    lastName: input.lastName ?? "",
+    email: input.email ?? "",
+    phone: input.phone ?? "",
+    vehicleYear: input.vehicleYear ?? "",
+    vehicleMake: input.vehicleMake ?? "",
+    vehicleModel: input.vehicleModel ?? "",
+    vehicleColor: input.vehicleColor ?? "",
+    serviceAddress: input.serviceAddress ?? "",
+    serviceCity: input.serviceCity ?? "",
+    serviceState: input.serviceState ?? "",
+    serviceZip: input.serviceZip ?? "",
+    notes: input.notes ?? "",
+    marketingOptIn: input.marketingOptIn ?? true,
+    source: input.source ?? "",
+    campaign: input.campaign ?? "",
+    currentStep: input.currentStep ?? 0,
+    serviceCategoryFilter: input.serviceCategoryFilter ?? "",
+    expandedServiceId: input.expandedServiceId ?? "",
+  };
+}
+
+function serializePublicBookingDraft(draft: BookingDraftRecord) {
+  return {
+    draftId: draft.id,
+    resumeToken: draft.resumeToken,
+    status: draft.status,
+    savedAt: draft.updatedAt?.toISOString?.() ?? new Date(draft.updatedAt).toISOString(),
+    currentStep: draft.currentStep ?? 0,
+    serviceCategoryFilter: draft.serviceCategoryFilter ?? "",
+    expandedServiceId: draft.expandedServiceId ?? "",
+    form: {
+      serviceId: draft.serviceId ?? "",
+      addonServiceIds: parseStoredStringArray(draft.addonServiceIds ?? "[]"),
+      serviceMode: normalizeBookingServiceMode(draft.serviceMode),
+      locationId: draft.locationId ?? "",
+      bookingDate: draft.bookingDate ?? "",
+      startTime: draft.startTime ? draft.startTime.toISOString() : "",
+      firstName: draft.firstName ?? "",
+      lastName: draft.lastName ?? "",
+      email: draft.email ?? "",
+      phone: draft.phone ?? "",
+      vehicleYear: draft.vehicleYear != null ? String(draft.vehicleYear) : "",
+      vehicleMake: draft.vehicleMake ?? "",
+      vehicleModel: draft.vehicleModel ?? "",
+      vehicleColor: draft.vehicleColor ?? "",
+      serviceAddress: draft.serviceAddress ?? "",
+      serviceCity: draft.serviceCity ?? "",
+      serviceState: draft.serviceState ?? "",
+      serviceZip: draft.serviceZip ?? "",
+      notes: draft.notes ?? "",
+      marketingOptIn: draft.marketingOptIn ?? true,
+      website: "",
+    },
+  };
+}
+
+async function findPublicBookingDraftByResumeToken(params: { businessId: string; resumeToken: string }) {
+  try {
+    const [draft] = await db
+      .select()
+      .from(bookingDrafts)
+      .where(
+        and(
+          eq(bookingDrafts.businessId, params.businessId),
+          eq(bookingDrafts.resumeToken, params.resumeToken)
+        )
+      )
+      .limit(1);
+    return draft ?? null;
+  } catch (error) {
+    if (!isBookingDraftSchemaDriftError(error)) throw error;
+    warnOnce("booking-drafts:schema", "booking draft schema unavailable; falling back to local-only save", {
+      businessId: params.businessId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+async function finalizePublicBookingDraft(params: {
+  businessId: string;
+  resumeToken: string | null;
+  finalStatus: Extract<BookingDraftStatus, "submitted_request" | "confirmed_booking">;
+  metadata: Record<string, unknown>;
+}) {
+  if (!params.resumeToken) return;
+
+  try {
+    const existing = await findPublicBookingDraftByResumeToken({
+      businessId: params.businessId,
+      resumeToken: params.resumeToken,
+    });
+    if (!existing) return;
+
+    const now = new Date();
+    const updates: Record<string, unknown> = {
+      status: params.finalStatus,
+      submittedAt: params.finalStatus === "submitted_request" ? now : existing.submittedAt ?? null,
+      confirmedAt: params.finalStatus === "confirmed_booking" ? now : existing.confirmedAt ?? null,
+      abandonedAt: null,
+      lastClientEventAt: now,
+      updatedAt: now,
+    };
+
+    await db
+      .update(bookingDrafts)
+      .set(updates)
+      .where(eq(bookingDrafts.id, existing.id));
+
+    await createActivityLog({
+      businessId: params.businessId,
+      action: params.finalStatus === "confirmed_booking" ? "booking.draft_confirmed" : "booking.draft_submitted",
+      entityType: "booking_draft",
+      entityId: existing.id,
+      metadata: {
+        draftStatus: params.finalStatus,
+        ...params.metadata,
+      },
+    });
+  } catch (error) {
+    if (isBookingDraftSchemaDriftError(error)) return;
+    throw error;
+  }
+}
+
 function resolveBookingSchedule(business: {
   operatingHours?: string | null;
   bookingAvailableDays?: string | null;
@@ -451,6 +701,26 @@ function buildBookingPageTitle(business: { bookingPageTitle?: string | null; nam
   return business.bookingPageTitle?.trim() || `Book with ${business.name?.trim() || "the shop"}`;
 }
 
+function normalizeBookingBrandLogoUrl(value: string | null | undefined) {
+  return cleanOptionalText(value ?? undefined);
+}
+
+function normalizeBookingBrandPrimaryColorToken(value: string | null | undefined) {
+  return value === "sky" || value === "emerald" || value === "rose" || value === "slate" ? value : "orange";
+}
+
+function normalizeBookingBrandAccentColorToken(value: string | null | undefined) {
+  return value === "blue" || value === "mint" || value === "violet" || value === "stone" ? value : "amber";
+}
+
+function normalizeBookingBrandBackgroundToneToken(value: string | null | undefined) {
+  return value === "mist" || value === "sand" || value === "slate" ? value : "ivory";
+}
+
+function normalizeBookingBrandButtonStyleToken(value: string | null | undefined) {
+  return value === "soft" || value === "outline" ? value : "solid";
+}
+
 function buildBookingPageSubtitle(business: { bookingPageSubtitle?: string | null }): string {
   return business.bookingPageSubtitle?.trim() || "Choose the service you need, share your vehicle details, and lock in the next step without the back-and-forth.";
 }
@@ -491,11 +761,136 @@ type PublicBookingServiceRecord = {
   bookingAvailableDays: string | null;
   bookingAvailableStartTime: string | null;
   bookingAvailableEndTime: string | null;
+  bookingBufferMinutes: number | null;
   bookingCapacityPerSlot: number | null;
   bookingFeatured: boolean | null;
   bookingHidePrice: boolean | null;
   bookingHideDuration: boolean | null;
 };
+
+type PublicBookingConfigPayload = {
+  businessId: string;
+  businessName: string;
+  businessType: string | null;
+  timezone: string;
+  title: string;
+  subtitle: string;
+  confirmationMessage: string | null;
+  defaultFlow: "request" | "self_book";
+  branding: {
+    logoUrl: string | null;
+    primaryColorToken: "orange" | "sky" | "emerald" | "rose" | "slate";
+    accentColorToken: "amber" | "blue" | "mint" | "violet" | "stone";
+    backgroundToneToken: "ivory" | "mist" | "sand" | "slate";
+    buttonStyleToken: "solid" | "soft" | "outline";
+  };
+  trustPoints: [string, string, string];
+  notesPrompt: string;
+  requireEmail: boolean;
+  requirePhone: boolean;
+  requireVehicle: boolean;
+  allowCustomerNotes: boolean;
+  showPrices: boolean;
+  showDurations: boolean;
+  locations: Array<{ id: string; name: string; address: string | null }>;
+  services: Array<{
+    id: string;
+    name: string;
+    categoryId: string | null;
+    categoryLabel: string | null;
+    description: string | null;
+    price: number;
+    durationMinutes: number;
+    effectiveFlow: "request" | "self_book";
+    depositAmount: number;
+    leadTimeHours: number;
+    bookingWindowDays: number;
+    bufferMinutes: number;
+    serviceMode: "in_shop" | "mobile" | "both";
+    featured: boolean;
+    showPrice: boolean;
+    showDuration: boolean;
+    addons: Array<{
+      id: string;
+      name: string;
+      price: number;
+      durationMinutes: number;
+      depositAmount: number;
+      bufferMinutes: number;
+      description: string | null;
+      featured: boolean;
+      showPrice: boolean;
+      showDuration: boolean;
+    }>;
+  }>;
+};
+
+export function buildPublicBookingConfigResponse(params: {
+  business: Pick<
+    BusinessRecord,
+    | "id"
+    | "name"
+    | "type"
+    | "timezone"
+    | "bookingDefaultFlow"
+    | "bookingPageTitle"
+    | "bookingPageSubtitle"
+    | "bookingConfirmationMessage"
+    | "bookingTrustBulletPrimary"
+    | "bookingTrustBulletSecondary"
+    | "bookingTrustBulletTertiary"
+    | "bookingNotesPrompt"
+    | "bookingBrandLogoUrl"
+    | "bookingBrandPrimaryColorToken"
+    | "bookingBrandAccentColorToken"
+    | "bookingBrandBackgroundToneToken"
+    | "bookingBrandButtonStyleToken"
+    | "bookingRequireEmail"
+    | "bookingRequirePhone"
+    | "bookingRequireVehicle"
+    | "bookingAllowCustomerNotes"
+    | "bookingShowPrices"
+    | "bookingShowDurations"
+  >;
+  services: PublicBookingConfigPayload["services"];
+  locations: PublicBookingConfigPayload["locations"];
+}): PublicBookingConfigPayload {
+  const { business, services, locations } = params;
+  return {
+    businessId: business.id,
+    businessName: business.name,
+    businessType: business.type,
+    timezone: business.timezone ?? "America/Los_Angeles",
+    title: buildBookingPageTitle(business),
+    subtitle: buildBookingPageSubtitle(business),
+    confirmationMessage: cleanOptionalText(business.bookingConfirmationMessage ?? undefined),
+    defaultFlow: normalizeBookingDefaultFlowValue(business.bookingDefaultFlow),
+    branding: {
+      logoUrl: normalizeBookingBrandLogoUrl(business.bookingBrandLogoUrl),
+      primaryColorToken: normalizeBookingBrandPrimaryColorToken(business.bookingBrandPrimaryColorToken),
+      accentColorToken: normalizeBookingBrandAccentColorToken(business.bookingBrandAccentColorToken),
+      backgroundToneToken: normalizeBookingBrandBackgroundToneToken(business.bookingBrandBackgroundToneToken),
+      buttonStyleToken: normalizeBookingBrandButtonStyleToken(business.bookingBrandButtonStyleToken),
+    },
+    trustPoints: [
+      normalizeBookingTrustBullet(business.bookingTrustBulletPrimary, "Goes directly to the shop"),
+      normalizeBookingTrustBullet(
+        business.bookingTrustBulletSecondary,
+        business.bookingDefaultFlow === "self_book" ? "Quick confirmation" : "Quick follow-up"
+      ),
+      normalizeBookingTrustBullet(business.bookingTrustBulletTertiary, "Secure and simple"),
+    ],
+    notesPrompt: normalizeBookingNotesPrompt(business.bookingNotesPrompt),
+    requireEmail: business.bookingRequireEmail ?? false,
+    requirePhone: business.bookingRequirePhone ?? false,
+    requireVehicle: business.bookingRequireVehicle ?? true,
+    allowCustomerNotes: business.bookingAllowCustomerNotes ?? true,
+    showPrices: business.bookingShowPrices ?? true,
+    showDurations: business.bookingShowDurations ?? true,
+    locations,
+    services,
+  };
+}
 
 let publicBookingServiceColumnsPromise: Promise<Set<string>> | null = null;
 
@@ -546,6 +941,7 @@ async function listPublicBookingServices(businessId: string): Promise<{
       bookingAvailableDays: columns.has("booking_available_days") ? services.bookingAvailableDays : sql<string | null>`null`,
       bookingAvailableStartTime: columns.has("booking_available_start_time") ? services.bookingAvailableStartTime : sql<string | null>`null`,
       bookingAvailableEndTime: columns.has("booking_available_end_time") ? services.bookingAvailableEndTime : sql<string | null>`null`,
+      bookingBufferMinutes: columns.has("booking_buffer_minutes") ? services.bookingBufferMinutes : sql<number | null>`null`,
       bookingCapacityPerSlot: columns.has("booking_capacity_per_slot") ? services.bookingCapacityPerSlot : sql<number | null>`null`,
       bookingFeatured: columns.has("booking_featured") ? services.bookingFeatured : sql<boolean | null>`false`,
       bookingHidePrice: columns.has("booking_hide_price") ? services.bookingHidePrice : sql<boolean | null>`false`,
@@ -669,6 +1065,9 @@ function resolveBookingServicesSelection(params: {
     ...addonServices.map((service) => toBookingWindowDays(service.bookingWindowDays))
   );
   const applyTax = allServices.some((service) => service.taxable === true);
+  const explicitBufferOverrides = allServices
+    .map((service) => service.bookingBufferMinutes)
+    .filter((value): value is number => Number.isFinite(value));
 
   return {
     baseService,
@@ -680,6 +1079,10 @@ function resolveBookingServicesSelection(params: {
     durationMinutes,
     leadTimeHours,
     bookingWindowDays,
+    bufferMinutes:
+      explicitBufferOverrides.length > 0
+        ? Math.max(...explicitBufferOverrides.map((value) => toBookingBufferMinutes(value)))
+        : null,
     serviceMode: normalizeBookingServiceMode(baseService.bookingServiceMode),
     availableDayIndexes: parseStoredServiceBookingDays(baseService.bookingAvailableDays),
     openTime:
@@ -936,6 +1339,11 @@ function coerceBusinessRecord(
     bookingTrustBulletSecondary: record.bookingTrustBulletSecondary ?? null,
     bookingTrustBulletTertiary: record.bookingTrustBulletTertiary ?? null,
     bookingNotesPrompt: record.bookingNotesPrompt ?? null,
+    bookingBrandLogoUrl: record.bookingBrandLogoUrl ?? null,
+    bookingBrandPrimaryColorToken: record.bookingBrandPrimaryColorToken ?? "orange",
+    bookingBrandAccentColorToken: record.bookingBrandAccentColorToken ?? "amber",
+    bookingBrandBackgroundToneToken: record.bookingBrandBackgroundToneToken ?? "ivory",
+    bookingBrandButtonStyleToken: record.bookingBrandButtonStyleToken ?? "solid",
     bookingRequireEmail: record.bookingRequireEmail ?? false,
     bookingRequirePhone: record.bookingRequirePhone ?? false,
     bookingRequireVehicle: record.bookingRequireVehicle ?? true,
@@ -1007,6 +1415,11 @@ export function serializeBusiness(record: BusinessRecord) {
     bookingTrustBulletSecondary: record.bookingTrustBulletSecondary ?? null,
     bookingTrustBulletTertiary: record.bookingTrustBulletTertiary ?? null,
     bookingNotesPrompt: record.bookingNotesPrompt ?? null,
+    bookingBrandLogoUrl: record.bookingBrandLogoUrl ?? null,
+    bookingBrandPrimaryColorToken: record.bookingBrandPrimaryColorToken ?? "orange",
+    bookingBrandAccentColorToken: record.bookingBrandAccentColorToken ?? "amber",
+    bookingBrandBackgroundToneToken: record.bookingBrandBackgroundToneToken ?? "ivory",
+    bookingBrandButtonStyleToken: record.bookingBrandButtonStyleToken ?? "solid",
     bookingRequireEmail: record.bookingRequireEmail ?? false,
     bookingRequirePhone: record.bookingRequirePhone ?? false,
     bookingRequireVehicle: record.bookingRequireVehicle ?? true,
@@ -1088,6 +1501,11 @@ async function ensureBusinessAutomationColumns(): Promise<void> {
           ADD COLUMN IF NOT EXISTS booking_trust_bullet_secondary text,
           ADD COLUMN IF NOT EXISTS booking_trust_bullet_tertiary text,
           ADD COLUMN IF NOT EXISTS booking_notes_prompt text,
+          ADD COLUMN IF NOT EXISTS booking_brand_logo_url text,
+          ADD COLUMN IF NOT EXISTS booking_brand_primary_color_token text DEFAULT 'orange',
+          ADD COLUMN IF NOT EXISTS booking_brand_accent_color_token text DEFAULT 'amber',
+          ADD COLUMN IF NOT EXISTS booking_brand_background_tone_token text DEFAULT 'ivory',
+          ADD COLUMN IF NOT EXISTS booking_brand_button_style_token text DEFAULT 'solid',
           ADD COLUMN IF NOT EXISTS booking_require_email boolean DEFAULT false,
           ADD COLUMN IF NOT EXISTS booking_require_phone boolean DEFAULT false,
           ADD COLUMN IF NOT EXISTS booking_require_vehicle boolean DEFAULT true,
@@ -1221,6 +1639,317 @@ async function loadBusinessByOwner(ownerId: string): Promise<BusinessRecord | nu
 }
 
 businessesRouter.get(
+  "/:id/public-booking-drafts/:resumeToken",
+  publicBookingDraftResumeLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = publicBookingDraftParamsSchema.safeParse(req.params);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid draft link.");
+
+    const business = await loadPublicBookingBusiness(parsed.data.id);
+    if (!business || business.bookingEnabled !== true) {
+      throw new NotFoundError("Online booking is not available for this business.");
+    }
+
+    const draft = await findPublicBookingDraftByResumeToken({
+      businessId: business.id,
+      resumeToken: parsed.data.resumeToken,
+    });
+    if (!draft || draft.status === "submitted_request" || draft.status === "confirmed_booking") {
+      throw new NotFoundError("This booking draft could not be restored.");
+    }
+
+    res.json({
+      ok: true,
+      draft: serializePublicBookingDraft(draft),
+    });
+  })
+);
+
+businessesRouter.post(
+  "/:id/public-booking-drafts",
+  publicBookingDraftLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsedParams = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError(parsedParams.error.issues[0]?.message ?? "Invalid business.");
+    const parsedBody = publicBookingDraftSaveSchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) throw new BadRequestError(parsedBody.error.issues[0]?.message ?? "Invalid booking draft.");
+
+    const business = await loadPublicBookingBusiness(parsedParams.data.id);
+    if (!business || business.bookingEnabled !== true) {
+      throw new NotFoundError("Online booking is not available for this business.");
+    }
+
+    const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
+    const selection = resolveBookingServicesSelection({
+      businessDefaultFlow: business.bookingDefaultFlow,
+      baseServiceId: parsedBody.data.serviceId,
+      addonServiceIds: Array.from(new Set(parsedBody.data.addonServiceIds ?? [])),
+      services: publicServices,
+      addonLinks,
+    });
+
+    const comparable = buildPublicBookingDraftComparable({
+      serviceId: selection.baseService.id,
+      addonServiceIds: selection.addonServices.map((service) => service.id),
+      serviceMode: resolveCustomerBookingMode({
+        serviceMode: selection.serviceMode,
+        requestedMode: parsedBody.data.serviceMode,
+      }),
+      locationId: cleanOptionalText(parsedBody.data.locationId),
+      bookingDate: cleanOptionalText(parsedBody.data.bookingDate),
+      startTime: cleanOptionalText(parsedBody.data.startTime),
+      firstName: cleanOptionalText(parsedBody.data.firstName),
+      lastName: cleanOptionalText(parsedBody.data.lastName),
+      email: cleanOptionalText(parsedBody.data.email),
+      phone: cleanOptionalText(parsedBody.data.phone),
+      vehicleYear: parsedBody.data.vehicleYear ?? "",
+      vehicleMake: cleanOptionalText(parsedBody.data.vehicleMake),
+      vehicleModel: cleanOptionalText(parsedBody.data.vehicleModel),
+      vehicleColor: cleanOptionalText(parsedBody.data.vehicleColor),
+      serviceAddress: cleanOptionalText(parsedBody.data.serviceAddress),
+      serviceCity: cleanOptionalText(parsedBody.data.serviceCity),
+      serviceState: cleanOptionalText(parsedBody.data.serviceState),
+      serviceZip: cleanOptionalText(parsedBody.data.serviceZip),
+      notes: cleanOptionalText(parsedBody.data.notes),
+      marketingOptIn: parsedBody.data.marketingOptIn ?? true,
+      source: cleanOptionalText(parsedBody.data.source),
+      campaign: cleanOptionalText(parsedBody.data.campaign),
+      currentStep: parsedBody.data.currentStep ?? 0,
+      serviceCategoryFilter: cleanOptionalText(parsedBody.data.serviceCategoryFilter),
+      expandedServiceId: cleanOptionalText(parsedBody.data.expandedServiceId),
+    });
+
+    if (!hasMeaningfulBookingDraftIntent(comparable)) {
+      res.status(202).json({
+        ok: true,
+        accepted: false,
+        reason: "not_meaningful_yet",
+      });
+      return;
+    }
+
+    const draftStatus = deriveBookingDraftStatus(comparable);
+    if (!draftStatus) {
+      res.status(202).json({
+        ok: true,
+        accepted: false,
+        reason: "not_meaningful_yet",
+      });
+      return;
+    }
+
+    const resumeToken = cleanOptionalText(parsedBody.data.resumeToken) ?? randomUUID();
+
+    try {
+      const existing = await findPublicBookingDraftByResumeToken({
+        businessId: business.id,
+        resumeToken,
+      });
+      const nextSignature = buildBookingDraftComparableSignature(comparable);
+
+      if (existing) {
+        const existingSignature = buildBookingDraftComparableSignature({
+          serviceId: existing.serviceId,
+          addonServiceIds: parseStoredStringArray(existing.addonServiceIds),
+          serviceMode: existing.serviceMode,
+          locationId: existing.locationId,
+          bookingDate: existing.bookingDate,
+          startTime: existing.startTime ? existing.startTime.toISOString() : "",
+          firstName: existing.firstName,
+          lastName: existing.lastName,
+          email: existing.email,
+          phone: existing.phone,
+          vehicleYear: existing.vehicleYear,
+          vehicleMake: existing.vehicleMake,
+          vehicleModel: existing.vehicleModel,
+          vehicleColor: existing.vehicleColor,
+          serviceAddress: existing.serviceAddress,
+          serviceCity: existing.serviceCity,
+          serviceState: existing.serviceState,
+          serviceZip: existing.serviceZip,
+          notes: existing.notes,
+          marketingOptIn: existing.marketingOptIn,
+          source: existing.source,
+          campaign: existing.campaign,
+          currentStep: existing.currentStep,
+          serviceCategoryFilter: existing.serviceCategoryFilter,
+          expandedServiceId: existing.expandedServiceId,
+        });
+
+        if (existingSignature === nextSignature && existing.status === draftStatus) {
+          res.json({
+            ok: true,
+            accepted: true,
+            created: false,
+            unchanged: true,
+            draft: serializePublicBookingDraft(existing),
+          });
+          return;
+        }
+      }
+
+      const now = new Date();
+      const persistedValues = {
+        businessId: business.id,
+        serviceId: selection.baseService.id,
+        locationId: comparable.locationId || null,
+        resumeToken,
+        status: draftStatus,
+        addonServiceIds: JSON.stringify(comparable.addonServiceIds),
+        serviceMode: comparable.serviceMode,
+        bookingDate: comparable.bookingDate || null,
+        startTime: comparable.startTime ? new Date(comparable.startTime) : null,
+        firstName: comparable.firstName || null,
+        lastName: comparable.lastName || null,
+        email: comparable.email || null,
+        phone: comparable.phone || null,
+        vehicleYear: comparable.vehicleYear ? Number(comparable.vehicleYear) : null,
+        vehicleMake: comparable.vehicleMake || null,
+        vehicleModel: comparable.vehicleModel || null,
+        vehicleColor: comparable.vehicleColor || null,
+        serviceAddress: comparable.serviceAddress || null,
+        serviceCity: comparable.serviceCity || null,
+        serviceState: comparable.serviceState || null,
+        serviceZip: comparable.serviceZip || null,
+        notes: comparable.notes || null,
+        marketingOptIn: comparable.marketingOptIn !== false,
+        source: comparable.source || null,
+        campaign: comparable.campaign || null,
+        currentStep: comparable.currentStep,
+        serviceCategoryFilter: comparable.serviceCategoryFilter || null,
+        expandedServiceId: comparable.expandedServiceId || null,
+        identifiedAt:
+          draftStatus === "identified_lead" || draftStatus === "qualified_booking_intent"
+            ? existing?.identifiedAt ?? now
+            : existing?.identifiedAt ?? null,
+        qualifiedAt:
+          draftStatus === "qualified_booking_intent" ? existing?.qualifiedAt ?? now : existing?.qualifiedAt ?? null,
+        abandonedAt: null,
+        lastClientEventAt: now,
+        updatedAt: now,
+      };
+
+      let saved: BookingDraftRecord | null = null;
+      let created = false;
+
+      if (existing) {
+        [saved] = await db
+          .update(bookingDrafts)
+          .set(persistedValues)
+          .where(eq(bookingDrafts.id, existing.id))
+          .returning();
+      } else {
+        created = true;
+        [saved] = await db
+          .insert(bookingDrafts)
+          .values({
+            id: randomUUID(),
+            ...persistedValues,
+            createdAt: now,
+          })
+          .returning();
+      }
+
+      if (!saved) {
+        throw new BadRequestError("Could not save this booking draft.");
+      }
+
+      await createActivityLog({
+        businessId: business.id,
+        action: created ? "booking.draft_created" : "booking.draft_updated",
+        entityType: "booking_draft",
+        entityId: saved.id,
+        metadata: {
+          draftStatus,
+          previousStatus: existing?.status ?? null,
+          serviceId: selection.baseService.id,
+          addonCount: comparable.addonServiceIds.length,
+          currentStep: comparable.currentStep,
+          source: comparable.source || null,
+          campaign: comparable.campaign || null,
+        },
+      });
+
+      res.status(created ? 201 : 200).json({
+        ok: true,
+        accepted: true,
+        created,
+        unchanged: false,
+        draft: serializePublicBookingDraft(saved),
+      });
+    } catch (error) {
+      if (!isBookingDraftSchemaDriftError(error)) throw error;
+      res.status(202).json({
+        ok: true,
+        accepted: false,
+        localOnly: true,
+      });
+    }
+  })
+);
+
+businessesRouter.post(
+  "/:id/public-booking-drafts/:resumeToken/abandon",
+  publicBookingDraftAbandonLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = publicBookingDraftParamsSchema.safeParse(req.params);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid draft link.");
+
+    const business = await loadPublicBookingBusiness(parsed.data.id);
+    if (!business || business.bookingEnabled !== true) {
+      throw new NotFoundError("Online booking is not available for this business.");
+    }
+
+    try {
+      const draft = await findPublicBookingDraftByResumeToken({
+        businessId: business.id,
+        resumeToken: parsed.data.resumeToken,
+      });
+      if (!draft || draft.status === "submitted_request" || draft.status === "confirmed_booking") {
+        res.json({ ok: true, accepted: false });
+        return;
+      }
+
+      if (draft.abandonedAt) {
+        res.json({ ok: true, accepted: true });
+        return;
+      }
+
+      const now = new Date();
+      await db
+        .update(bookingDrafts)
+        .set({
+          abandonedAt: now,
+          lastClientEventAt: now,
+          updatedAt: now,
+        })
+        .where(eq(bookingDrafts.id, draft.id));
+
+      await createActivityLog({
+        businessId: business.id,
+        action: "booking.draft_abandoned",
+        entityType: "booking_draft",
+        entityId: draft.id,
+        metadata: {
+          draftStatus: draft.status,
+          currentStep: draft.currentStep ?? 0,
+          serviceId: draft.serviceId ?? null,
+        },
+      });
+
+      res.json({ ok: true, accepted: true });
+    } catch (error) {
+      if (!isBookingDraftSchemaDriftError(error)) throw error;
+      res.status(202).json({
+        ok: true,
+        accepted: false,
+        localOnly: true,
+      });
+    }
+  })
+);
+
+businessesRouter.get(
   "/:id/public-booking-config",
   publicBookingConfigLimiter.middleware,
   wrapAsync(async (req: Request, res: Response) => {
@@ -1251,6 +1980,7 @@ businessesRouter.get(
         depositAmount: bookingServiceDeposit(service),
         leadTimeHours: toBookingLeadTimeHours(service.bookingLeadTimeHours),
         bookingWindowDays: toBookingWindowDays(service.bookingWindowDays),
+        bufferMinutes: toBookingBufferMinutes(service.bookingBufferMinutes),
         serviceMode: normalizeBookingServiceMode(service.bookingServiceMode),
         featured: service.bookingFeatured === true,
         showPrice: service.bookingHidePrice !== true,
@@ -1266,6 +1996,7 @@ businessesRouter.get(
             price: bookingServicePrice(candidate),
             durationMinutes: toBookingDurationMinutes(candidate.durationMinutes),
             depositAmount: bookingServiceDeposit(candidate),
+            bufferMinutes: toBookingBufferMinutes(candidate.bookingBufferMinutes),
             description: cleanOptionalText(candidate.bookingDescription ?? undefined),
             featured: candidate.bookingFeatured === true,
             showPrice: candidate.bookingHidePrice !== true,
@@ -1277,37 +2008,17 @@ businessesRouter.get(
       throw new NotFoundError("No services are currently available for booking.");
     }
 
-    res.json({
-      businessId: business.id,
-      businessName: business.name,
-      businessType: business.type,
-      timezone: business.timezone ?? "America/Los_Angeles",
-      title: buildBookingPageTitle(business),
-      subtitle: buildBookingPageSubtitle(business),
-      confirmationMessage: cleanOptionalText(business.bookingConfirmationMessage ?? undefined),
-      defaultFlow: normalizeBookingDefaultFlowValue(business.bookingDefaultFlow),
-      trustPoints: [
-        normalizeBookingTrustBullet(business.bookingTrustBulletPrimary, "Goes directly to the shop"),
-        normalizeBookingTrustBullet(
-          business.bookingTrustBulletSecondary,
-          business.bookingDefaultFlow === "self_book" ? "Quick confirmation" : "Quick follow-up"
-        ),
-        normalizeBookingTrustBullet(business.bookingTrustBulletTertiary, "Secure and simple"),
-      ],
-      notesPrompt: normalizeBookingNotesPrompt(business.bookingNotesPrompt),
-      requireEmail: business.bookingRequireEmail ?? false,
-      requirePhone: business.bookingRequirePhone ?? false,
-      requireVehicle: business.bookingRequireVehicle ?? true,
-      allowCustomerNotes: business.bookingAllowCustomerNotes ?? true,
-      showPrices: business.bookingShowPrices ?? true,
-      showDurations: business.bookingShowDurations ?? true,
-      locations: locations.map((location) => ({
-        id: location.id,
-        name: location.name,
-        address: location.address,
-      })),
-      services: baseServices,
-    });
+    res.json(
+      buildPublicBookingConfigResponse({
+        business,
+        locations: locations.map((location) => ({
+          id: location.id,
+          name: location.name,
+          address: location.address,
+        })),
+        services: baseServices,
+      })
+    );
   })
 );
 
@@ -1420,7 +2131,7 @@ businessesRouter.get(
       isSlotAvailable({
         slotStart,
         durationMinutes: selection.durationMinutes,
-        bufferMinutes: bookingSchedule.bufferMinutes,
+        bufferMinutes: selection.bufferMinutes ?? bookingSchedule.bufferMinutes,
         appointmentCapacity: selection.slotCapacity ?? slotCapacity,
         blockCapacity: selection.slotCapacity ?? slotCapacity,
         existingRows,
@@ -1497,6 +2208,7 @@ businessesRouter.post(
     const normalizedSource = normalizeLeadSourceValue(parsedBody.data.source);
     const campaign = cleanOptionalText(parsedBody.data.campaign);
     const customerNotes = cleanOptionalText(parsedBody.data.notes);
+    const draftResumeToken = cleanOptionalText(parsedBody.data.draftResumeToken);
     const serviceAddress = cleanOptionalText(parsedBody.data.serviceAddress);
     const serviceCity = cleanOptionalText(parsedBody.data.serviceCity);
     const serviceState = cleanOptionalText(parsedBody.data.serviceState);
@@ -1664,6 +2376,17 @@ businessesRouter.post(
 
       await Promise.all(followUpTasks);
 
+      await finalizePublicBookingDraft({
+        businessId: business.id,
+        resumeToken: draftResumeToken,
+        finalStatus: "submitted_request",
+        metadata: {
+          leadId: createdLead.id,
+          bookingFlow: "request",
+          serviceSummary: selection.serviceSummary,
+        },
+      });
+
       res.status(201).json({
         ok: true,
         accepted: true,
@@ -1731,7 +2454,7 @@ businessesRouter.post(
       isSlotAvailable({
         slotStart,
         durationMinutes: selection.durationMinutes,
-        bufferMinutes: bookingSchedule.bufferMinutes,
+        bufferMinutes: selection.bufferMinutes ?? bookingSchedule.bufferMinutes,
         appointmentCapacity: selection.slotCapacity ?? slotCapacity,
         blockCapacity: selection.slotCapacity ?? slotCapacity,
         existingRows,
@@ -1895,6 +2618,17 @@ businessesRouter.post(
         });
       });
     }
+
+    await finalizePublicBookingDraft({
+      businessId: business.id,
+      resumeToken: draftResumeToken,
+      finalStatus: "confirmed_booking",
+      metadata: {
+        appointmentId: createdAppointment.id,
+        bookingFlow: "self_book",
+        serviceSummary: selection.serviceSummary,
+      },
+    });
 
     res.status(201).json({
       ok: true,
@@ -2230,6 +2964,11 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       bookingTrustBulletSecondary: parsed.data.bookingTrustBulletSecondary?.trim() || null,
       bookingTrustBulletTertiary: parsed.data.bookingTrustBulletTertiary?.trim() || null,
       bookingNotesPrompt: parsed.data.bookingNotesPrompt?.trim() || null,
+      bookingBrandLogoUrl: parsed.data.bookingBrandLogoUrl?.trim() || null,
+      bookingBrandPrimaryColorToken: normalizeBookingBrandPrimaryColorToken(parsed.data.bookingBrandPrimaryColorToken),
+      bookingBrandAccentColorToken: normalizeBookingBrandAccentColorToken(parsed.data.bookingBrandAccentColorToken),
+      bookingBrandBackgroundToneToken: normalizeBookingBrandBackgroundToneToken(parsed.data.bookingBrandBackgroundToneToken),
+      bookingBrandButtonStyleToken: normalizeBookingBrandButtonStyleToken(parsed.data.bookingBrandButtonStyleToken),
       bookingRequireEmail: parsed.data.bookingRequireEmail ?? false,
       bookingRequirePhone: parsed.data.bookingRequirePhone ?? false,
       bookingRequireVehicle: parsed.data.bookingRequireVehicle ?? true,
@@ -2445,6 +3184,21 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.bookingNotesPrompt !== undefined) {
     updates.bookingNotesPrompt = parsed.data.bookingNotesPrompt?.trim() || null;
+  }
+  if (parsed.data.bookingBrandLogoUrl !== undefined) {
+    updates.bookingBrandLogoUrl = parsed.data.bookingBrandLogoUrl?.trim() || null;
+  }
+  if (parsed.data.bookingBrandPrimaryColorToken !== undefined) {
+    updates.bookingBrandPrimaryColorToken = normalizeBookingBrandPrimaryColorToken(parsed.data.bookingBrandPrimaryColorToken);
+  }
+  if (parsed.data.bookingBrandAccentColorToken !== undefined) {
+    updates.bookingBrandAccentColorToken = normalizeBookingBrandAccentColorToken(parsed.data.bookingBrandAccentColorToken);
+  }
+  if (parsed.data.bookingBrandBackgroundToneToken !== undefined) {
+    updates.bookingBrandBackgroundToneToken = normalizeBookingBrandBackgroundToneToken(parsed.data.bookingBrandBackgroundToneToken);
+  }
+  if (parsed.data.bookingBrandButtonStyleToken !== undefined) {
+    updates.bookingBrandButtonStyleToken = normalizeBookingBrandButtonStyleToken(parsed.data.bookingBrandButtonStyleToken);
   }
   if (parsed.data.bookingRequireEmail !== undefined) {
     updates.bookingRequireEmail = parsed.data.bookingRequireEmail ?? false;

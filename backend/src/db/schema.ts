@@ -40,6 +40,13 @@ const quoteStatusEnum = pgEnum("quote_status", ["draft", "sent", "accepted", "de
 const paymentMethodEnum = pgEnum("payment_method", [
   "cash", "card", "check", "venmo", "cashapp", "zelle", "other",
 ]);
+const bookingDraftStatusEnum = pgEnum("booking_draft_status", [
+  "anonymous_draft",
+  "identified_lead",
+  "qualified_booking_intent",
+  "submitted_request",
+  "confirmed_booking",
+]);
 export const integrationProviderEnum = pgEnum("integration_provider", [
   "quickbooks_online",
   "twilio_sms",
@@ -173,6 +180,11 @@ export const businesses = pgTable("businesses", {
   bookingTrustBulletSecondary: text("booking_trust_bullet_secondary"),
   bookingTrustBulletTertiary: text("booking_trust_bullet_tertiary"),
   bookingNotesPrompt: text("booking_notes_prompt"),
+  bookingBrandLogoUrl: text("booking_brand_logo_url"),
+  bookingBrandPrimaryColorToken: text("booking_brand_primary_color_token").default("orange"),
+  bookingBrandAccentColorToken: text("booking_brand_accent_color_token").default("amber"),
+  bookingBrandBackgroundToneToken: text("booking_brand_background_tone_token").default("ivory"),
+  bookingBrandButtonStyleToken: text("booking_brand_button_style_token").default("solid"),
   bookingRequireEmail: boolean("booking_require_email").default(false),
   bookingRequirePhone: boolean("booking_require_phone").default(false),
   bookingRequireVehicle: boolean("booking_require_vehicle").default(true),
@@ -416,6 +428,7 @@ export const services = pgTable("services", {
   bookingAvailableDays: text("booking_available_days"),
   bookingAvailableStartTime: text("booking_available_start_time"),
   bookingAvailableEndTime: text("booking_available_end_time"),
+  bookingBufferMinutes: integer("booking_buffer_minutes"),
   bookingCapacityPerSlot: integer("booking_capacity_per_slot"),
   bookingFeatured: boolean("booking_featured").default(false),
   bookingHidePrice: boolean("booking_hide_price").default(false),
@@ -624,6 +637,52 @@ export const rateLimits = pgTable("rate_limits", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const bookingDrafts = pgTable(
+  "booking_drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id").notNull().references(() => businesses.id, { onDelete: "cascade" }),
+    serviceId: uuid("service_id").references(() => services.id, { onDelete: "set null" }),
+    locationId: uuid("location_id").references(() => locations.id, { onDelete: "set null" }),
+    resumeToken: text("resume_token").notNull(),
+    status: bookingDraftStatusEnum("status").default("anonymous_draft").notNull(),
+    addonServiceIds: text("addon_service_ids").default("[]").notNull(),
+    serviceMode: text("service_mode").default("in_shop"),
+    bookingDate: text("booking_date"),
+    startTime: timestamp("start_time", { withTimezone: true }),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    email: text("email"),
+    phone: text("phone"),
+    vehicleYear: integer("vehicle_year"),
+    vehicleMake: text("vehicle_make"),
+    vehicleModel: text("vehicle_model"),
+    vehicleColor: text("vehicle_color"),
+    serviceAddress: text("service_address"),
+    serviceCity: text("service_city"),
+    serviceState: text("service_state"),
+    serviceZip: text("service_zip"),
+    notes: text("notes"),
+    marketingOptIn: boolean("marketing_opt_in").default(true).notNull(),
+    source: text("source"),
+    campaign: text("campaign"),
+    currentStep: integer("current_step").default(0).notNull(),
+    serviceCategoryFilter: text("service_category_filter"),
+    expandedServiceId: text("expanded_service_id"),
+    identifiedAt: timestamp("identified_at", { withTimezone: true }),
+    qualifiedAt: timestamp("qualified_at", { withTimezone: true }),
+    abandonedAt: timestamp("abandoned_at", { withTimezone: true }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    lastClientEventAt: timestamp("last_client_event_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("booking_drafts_resume_token_unique").on(t.resumeToken),
+  ]
+);
 
 export const emailTemplates = pgTable("email_templates", {
   id: uuid("id").primaryKey().defaultRandom(),

@@ -139,6 +139,10 @@ export function toBookingLeadTimeHours(value: number | null | undefined): number
   return clampInteger(value ?? 0, 0, 24 * 14);
 }
 
+export function toBookingBufferMinutes(value: number | null | undefined): number {
+  return clampInteger(value ?? 0, 0, 240);
+}
+
 export function normalizeBookingDayIndexes(value: Array<number> | null | undefined): Set<number> | null {
   if (!Array.isArray(value)) return null;
   const next = new Set<number>();

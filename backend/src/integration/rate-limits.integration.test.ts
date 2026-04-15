@@ -8,6 +8,7 @@ beforeAll(async () => {
   process.env.RATE_LIMIT_STORE = "memory";
   process.env.RATE_LIMIT_AUTH_SIGN_IN_MAX = "2";
   process.env.RATE_LIMIT_PUBLIC_LEAD_SUBMIT_MAX = "2";
+  process.env.RATE_LIMIT_PUBLIC_BOOKING_DRAFT_MAX = "2";
   process.env.RATE_LIMIT_PUBLIC_BOOKING_SUBMIT_MAX = "2";
   process.env.RATE_LIMIT_BILLING_PORTAL_MAX = "1";
   process.env.RATE_LIMIT_BILLING_CHECKOUT_SESSION_MAX = "1";
@@ -20,6 +21,7 @@ afterAll(() => {
   delete process.env.RATE_LIMIT_STORE;
   delete process.env.RATE_LIMIT_AUTH_SIGN_IN_MAX;
   delete process.env.RATE_LIMIT_PUBLIC_LEAD_SUBMIT_MAX;
+  delete process.env.RATE_LIMIT_PUBLIC_BOOKING_DRAFT_MAX;
   delete process.env.RATE_LIMIT_PUBLIC_BOOKING_SUBMIT_MAX;
   delete process.env.RATE_LIMIT_BILLING_PORTAL_MAX;
   delete process.env.RATE_LIMIT_BILLING_CHECKOUT_SESSION_MAX;
@@ -73,6 +75,23 @@ describe("rate limiting integration", () => {
     expect(third.body).toMatchObject({
       code: "RATE_LIMITED",
       message: expect.stringMatching(/booking attempts/i),
+      retryAfterSeconds: expect.any(Number),
+    });
+  });
+
+  it("throttles repeated public booking draft autosave attempts with a clean error", async () => {
+    const agent = request.agent(app);
+
+    const first = await agent.post("/api/businesses/not-a-uuid/public-booking-drafts").send({});
+    const second = await agent.post("/api/businesses/not-a-uuid/public-booking-drafts").send({});
+    const third = await agent.post("/api/businesses/not-a-uuid/public-booking-drafts").send({});
+
+    expect(first.status).toBe(400);
+    expect(second.status).toBe(400);
+    expect(third.status).toBe(429);
+    expect(third.body).toMatchObject({
+      code: "RATE_LIMITED",
+      message: expect.stringMatching(/saving again/i),
       retryAfterSeconds: expect.any(Number),
     });
   });

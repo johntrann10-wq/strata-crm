@@ -32,6 +32,12 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 DO $$ BEGIN
+  CREATE TYPE booking_draft_status AS ENUM (
+    'anonymous_draft', 'identified_lead', 'qualified_booking_intent', 'submitted_request', 'confirmed_booking'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
   CREATE TYPE integration_provider AS ENUM (
     'quickbooks_online', 'twilio_sms', 'google_calendar', 'outbound_webhooks'
   );
@@ -151,6 +157,11 @@ CREATE TABLE IF NOT EXISTS businesses (
   booking_trust_bullet_secondary text,
   booking_trust_bullet_tertiary text,
   booking_notes_prompt text,
+  booking_brand_logo_url text,
+  booking_brand_primary_color_token text DEFAULT 'orange',
+  booking_brand_accent_color_token text DEFAULT 'amber',
+  booking_brand_background_tone_token text DEFAULT 'ivory',
+  booking_brand_button_style_token text DEFAULT 'solid',
   booking_require_email boolean DEFAULT false,
   booking_require_phone boolean DEFAULT false,
   booking_require_vehicle boolean DEFAULT true,
@@ -402,6 +413,7 @@ CREATE TABLE IF NOT EXISTS services (
   booking_available_days text,
   booking_available_start_time text,
   booking_available_end_time text,
+  booking_buffer_minutes integer,
   booking_capacity_per_slot integer,
   booking_featured boolean DEFAULT false,
   booking_hide_price boolean DEFAULT false,
@@ -443,6 +455,7 @@ ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_service_mode text DEFAULT 
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_days text;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_start_time text;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_end_time text;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_buffer_minutes integer;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_capacity_per_slot integer;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_featured boolean DEFAULT false;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_hide_price boolean DEFAULT false;
@@ -737,6 +750,49 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS booking_drafts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  service_id uuid REFERENCES services(id) ON DELETE SET NULL,
+  location_id uuid REFERENCES locations(id) ON DELETE SET NULL,
+  resume_token text NOT NULL,
+  status booking_draft_status NOT NULL DEFAULT 'anonymous_draft',
+  addon_service_ids text NOT NULL DEFAULT '[]',
+  service_mode text DEFAULT 'in_shop',
+  booking_date text,
+  start_time timestamptz,
+  first_name text,
+  last_name text,
+  email text,
+  phone text,
+  vehicle_year integer,
+  vehicle_make text,
+  vehicle_model text,
+  vehicle_color text,
+  service_address text,
+  service_city text,
+  service_state text,
+  service_zip text,
+  notes text,
+  marketing_opt_in boolean NOT NULL DEFAULT true,
+  source text,
+  campaign text,
+  current_step integer NOT NULL DEFAULT 0,
+  service_category_filter text,
+  expanded_service_id text,
+  identified_at timestamptz,
+  qualified_at timestamptz,
+  abandoned_at timestamptz,
+  submitted_at timestamptz,
+  confirmed_at timestamptz,
+  last_client_event_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS booking_drafts_resume_token_unique
+  ON booking_drafts (resume_token);
 
 CREATE TABLE IF NOT EXISTS email_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

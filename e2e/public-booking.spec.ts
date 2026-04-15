@@ -1,5 +1,135 @@
 import { expect, test } from "@playwright/test";
 
+async function mockBookingDrafts(page: import("@playwright/test").Page, options?: { resumeToken?: string }) {
+  const resumeToken = options?.resumeToken ?? "draft-token";
+  let updateCount = 0;
+  let abandonCount = 0;
+  let lastDraftBody: Record<string, unknown> | null = null;
+
+  await page.route("**/api/businesses/*/public-booking-drafts/*/abandon", async (route) => {
+    abandonCount += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, accepted: true }),
+    });
+  });
+
+  await page.route("**/api/businesses/*/public-booking-drafts/*", async (route) => {
+    if (route.request().method().toUpperCase() !== "GET") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        draft: {
+          draftId: "draft-1",
+          resumeToken,
+          status:
+            lastDraftBody?.email || lastDraftBody?.phone
+              ? lastDraftBody?.vehicleMake || lastDraftBody?.vehicleModel || lastDraftBody?.bookingDate
+                ? "qualified_booking_intent"
+                : "identified_lead"
+              : "anonymous_draft",
+          savedAt: "2026-04-20T18:15:00.000Z",
+          currentStep: Number(lastDraftBody?.currentStep ?? 0),
+          serviceCategoryFilter: String(lastDraftBody?.serviceCategoryFilter ?? "all"),
+          expandedServiceId: String(lastDraftBody?.expandedServiceId ?? ""),
+          form: {
+            serviceId: String(lastDraftBody?.serviceId ?? ""),
+            addonServiceIds: Array.isArray(lastDraftBody?.addonServiceIds) ? lastDraftBody?.addonServiceIds : [],
+            serviceMode: String(lastDraftBody?.serviceMode ?? "in_shop"),
+            locationId: String(lastDraftBody?.locationId ?? ""),
+            bookingDate: String(lastDraftBody?.bookingDate ?? ""),
+            startTime: String(lastDraftBody?.startTime ?? ""),
+            firstName: String(lastDraftBody?.firstName ?? ""),
+            lastName: String(lastDraftBody?.lastName ?? ""),
+            email: String(lastDraftBody?.email ?? ""),
+            phone: String(lastDraftBody?.phone ?? ""),
+            vehicleYear: lastDraftBody?.vehicleYear ? String(lastDraftBody?.vehicleYear) : "",
+            vehicleMake: String(lastDraftBody?.vehicleMake ?? ""),
+            vehicleModel: String(lastDraftBody?.vehicleModel ?? ""),
+            vehicleColor: String(lastDraftBody?.vehicleColor ?? ""),
+            serviceAddress: String(lastDraftBody?.serviceAddress ?? ""),
+            serviceCity: String(lastDraftBody?.serviceCity ?? ""),
+            serviceState: String(lastDraftBody?.serviceState ?? ""),
+            serviceZip: String(lastDraftBody?.serviceZip ?? ""),
+            notes: String(lastDraftBody?.notes ?? ""),
+            marketingOptIn: lastDraftBody?.marketingOptIn !== false,
+            website: "",
+          },
+        },
+      }),
+    });
+  });
+
+  await page.route("**/api/businesses/*/public-booking-drafts", async (route) => {
+    if (route.request().method().toUpperCase() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    updateCount += 1;
+    lastDraftBody = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: updateCount === 1 ? 201 : 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        accepted: true,
+        created: updateCount === 1,
+        unchanged: false,
+        draft: {
+          draftId: "draft-1",
+          resumeToken,
+          status:
+            lastDraftBody?.email || lastDraftBody?.phone
+              ? lastDraftBody?.vehicleMake || lastDraftBody?.vehicleModel || lastDraftBody?.bookingDate
+                ? "qualified_booking_intent"
+                : "identified_lead"
+              : "anonymous_draft",
+          savedAt: "2026-04-20T18:15:00.000Z",
+          currentStep: Number(lastDraftBody?.currentStep ?? 0),
+          serviceCategoryFilter: String(lastDraftBody?.serviceCategoryFilter ?? "all"),
+          expandedServiceId: String(lastDraftBody?.expandedServiceId ?? ""),
+          form: {
+            serviceId: String(lastDraftBody?.serviceId ?? ""),
+            addonServiceIds: Array.isArray(lastDraftBody?.addonServiceIds) ? lastDraftBody?.addonServiceIds : [],
+            serviceMode: String(lastDraftBody?.serviceMode ?? "in_shop"),
+            locationId: String(lastDraftBody?.locationId ?? ""),
+            bookingDate: String(lastDraftBody?.bookingDate ?? ""),
+            startTime: String(lastDraftBody?.startTime ?? ""),
+            firstName: String(lastDraftBody?.firstName ?? ""),
+            lastName: String(lastDraftBody?.lastName ?? ""),
+            email: String(lastDraftBody?.email ?? ""),
+            phone: String(lastDraftBody?.phone ?? ""),
+            vehicleYear: lastDraftBody?.vehicleYear ? String(lastDraftBody?.vehicleYear) : "",
+            vehicleMake: String(lastDraftBody?.vehicleMake ?? ""),
+            vehicleModel: String(lastDraftBody?.vehicleModel ?? ""),
+            vehicleColor: String(lastDraftBody?.vehicleColor ?? ""),
+            serviceAddress: String(lastDraftBody?.serviceAddress ?? ""),
+            serviceCity: String(lastDraftBody?.serviceCity ?? ""),
+            serviceState: String(lastDraftBody?.serviceState ?? ""),
+            serviceZip: String(lastDraftBody?.serviceZip ?? ""),
+            notes: String(lastDraftBody?.notes ?? ""),
+            marketingOptIn: lastDraftBody?.marketingOptIn !== false,
+            website: "",
+          },
+        },
+      }),
+    });
+  });
+
+  return {
+    getLastDraftBody: () => lastDraftBody,
+    getUpdateCount: () => updateCount,
+    getAbandonCount: () => abandonCount,
+    resumeToken,
+  };
+}
+
 async function mockSelfBooking(page: import("@playwright/test").Page) {
   await page.route("**/api/businesses/biz-book/public-booking-config", async (route) => {
     await route.fulfill({
@@ -15,6 +145,13 @@ async function mockSelfBooking(page: import("@playwright/test").Page) {
         confirmationMessage: null,
         trustPoints: ["Goes directly to the shop", "Quick follow-up", "Secure and simple"],
         notesPrompt: "Add timing, questions, or anything the shop should know.",
+        branding: {
+          logoUrl: "https://cdn.example.com/north-star-detail-logo.png",
+          primaryColorToken: "sky",
+          accentColorToken: "blue",
+          backgroundToneToken: "mist",
+          buttonStyleToken: "outline",
+        },
         defaultFlow: "self_book",
         requireEmail: false,
         requirePhone: true,
@@ -36,6 +173,7 @@ async function mockSelfBooking(page: import("@playwright/test").Page) {
             depositAmount: 50,
             leadTimeHours: 0,
             bookingWindowDays: 30,
+            bufferMinutes: 20,
             serviceMode: "in_shop",
             featured: true,
             showPrice: true,
@@ -47,6 +185,7 @@ async function mockSelfBooking(page: import("@playwright/test").Page) {
                 price: 35,
                 durationMinutes: 30,
                 depositAmount: 10,
+                bufferMinutes: 0,
                 description: "Add-on cleaning.",
                 featured: false,
                 showPrice: true,
@@ -81,6 +220,7 @@ async function mockSelfBooking(page: import("@playwright/test").Page) {
 
 test("public booking flow supports self-booking end to end", async ({ page }) => {
   await mockSelfBooking(page);
+  const draftMock = await mockBookingDrafts(page);
 
   let postedPayload: Record<string, unknown> | null = null;
   await page.route("**/api/businesses/biz-book/public-bookings", async (route) => {
@@ -104,14 +244,17 @@ test("public booking flow supports self-booking end to end", async ({ page }) =>
   await page.goto("/book/biz-book?utm_source=instagram&utm_campaign=spring-detail");
 
   await expect(page.getByRole("heading", { name: /tell us what you need/i })).toBeVisible();
+  await expect(page.locator('[data-booking-primary="sky"][data-booking-accent="blue"][data-booking-background="mist"][data-booking-button-style="outline"]')).toBeVisible();
+  await expect(page.getByAltText("North Star Detail logo")).toBeVisible();
   await page.getByRole("button", { name: "Book now" }).click();
-  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Add vehicle details" })).toBeVisible();
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What will we be working on?" })).toBeVisible();
 
   await page.getByLabel("Vehicle make *").fill("BMW");
   await page.getByLabel("Vehicle model *").fill("X5");
+  await expect.poll(() => draftMock.getUpdateCount()).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Continue", exact: true }).click();
 
-  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Choose a date and time" })).toBeVisible();
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Where and when works best?" })).toBeVisible();
   await page.getByLabel("Preferred date").fill("2026-04-20");
   await page.getByRole("button", { name: "10:00 AM" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -131,6 +274,7 @@ test("public booking flow supports self-booking end to end", async ({ page }) =>
 
   await expect(page.getByText("Appointment booked")).toBeVisible();
   expect(postedPayload).toMatchObject({
+    draftResumeToken: draftMock.resumeToken,
     serviceId: "svc-1",
     addonServiceIds: ["addon-1"],
     startTime: "2026-04-20T17:00:00.000Z",
@@ -162,6 +306,13 @@ test("public booking supports request-only services on mobile", async ({ page })
         confirmationMessage: null,
         trustPoints: ["Goes directly to the shop", "Quick follow-up", "Secure and simple"],
         notesPrompt: "Add timing, questions, or anything the shop should know.",
+        branding: {
+          logoUrl: null,
+          primaryColorToken: "emerald",
+          accentColorToken: "mint",
+          backgroundToneToken: "sand",
+          buttonStyleToken: "soft",
+        },
         defaultFlow: "request",
         requireEmail: false,
         requirePhone: false,
@@ -183,6 +334,7 @@ test("public booking supports request-only services on mobile", async ({ page })
             depositAmount: 0,
             leadTimeHours: 0,
             bookingWindowDays: 30,
+            bufferMinutes: 0,
             serviceMode: "in_shop",
             featured: false,
             showPrice: true,
@@ -215,7 +367,7 @@ test("public booking supports request-only services on mobile", async ({ page })
   await page.getByLabel("Vehicle make *").fill("Tesla");
   await page.getByLabel("Vehicle model *").fill("Model Y");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Choose your timing" })).toBeVisible();
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Where and when works best?" })).toBeVisible();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("First name").fill("Taylor");
   await page.getByLabel("Last name").fill("Morgan");
@@ -228,10 +380,44 @@ test("public booking supports request-only services on mobile", async ({ page })
 
 test("service query param carries service and category context into the booking flow", async ({ page }) => {
   await mockSelfBooking(page);
-  await page.goto("/book/biz-book?service=svc-1&category=cat-1&step=service");
-  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Choose your service" })).toBeVisible();
+  await page.goto("/book/biz-book?service=svc-1&category=cat-1&source=services-page&step=service");
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What service do you need?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Detailing" })).toBeVisible();
   await expect(page.locator("form").getByText("Full Detail").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Full Detail" })).toBeVisible();
+  await expect(page.getByText("Book instantly").first()).toBeVisible();
+  await expect(page.getByText("$50.00 deposit").first()).toBeVisible();
+  await expect(page.getByText("$275.00").first()).toBeVisible();
+  await expect(page.getByText("3h").first()).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Full Detail" })).toBeVisible();
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What service do you need?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Detailing" })).toBeVisible();
+});
+
+test("booking drafts autosave once intent is meaningful and resume on return", async ({ page }) => {
+  await mockSelfBooking(page);
+  const draftMock = await mockBookingDrafts(page, { resumeToken: "resume-booking-1" });
+
+  await page.goto("/book/biz-book");
+  await page.getByRole("button", { name: "Book now" }).click();
+  await page.getByLabel("Vehicle make *").fill("BMW");
+  await page.getByLabel("Vehicle model *").fill("X5");
+
+  await expect.poll(() => draftMock.getUpdateCount()).toBe(1);
+  expect(draftMock.getLastDraftBody()).toMatchObject({
+    serviceId: "svc-1",
+    vehicleMake: "BMW",
+    vehicleModel: "X5",
+  });
+  await expect(page.getByText(/saving|saved/i).first()).toBeVisible();
+
+  await page.reload();
+  await expect.poll(() => draftMock.getAbandonCount()).toBeGreaterThan(0);
+  await expect(page.getByLabel("Vehicle make *")).toHaveValue("BMW");
+  await expect(page.getByLabel("Vehicle model *")).toHaveValue("X5");
+  await expect(page.getByText(/saving|saved/i).first()).toBeVisible();
 });
 
 test("invalid public booking states fail with a clean unavailable message", async ({ page }) => {
@@ -252,6 +438,7 @@ test("invalid public booking states fail with a clean unavailable message", asyn
 });
 
 test("hybrid services support mobile booking mode and submit address details cleanly", async ({ page }) => {
+  const draftMock = await mockBookingDrafts(page, { resumeToken: "hybrid-draft-token" });
   let availabilityRequestUrl = "";
   let postedPayload: Record<string, unknown> | null = null;
 
@@ -269,6 +456,13 @@ test("hybrid services support mobile booking mode and submit address details cle
         confirmationMessage: null,
         trustPoints: ["Goes directly to the shop", "Quick follow-up", "Secure and simple"],
         notesPrompt: "Add timing, questions, or anything the shop should know.",
+        branding: {
+          logoUrl: "https://cdn.example.com/north-star-coatings-logo.png",
+          primaryColorToken: "rose",
+          accentColorToken: "violet",
+          backgroundToneToken: "slate",
+          buttonStyleToken: "solid",
+        },
         defaultFlow: "self_book",
         requireEmail: false,
         requirePhone: true,
@@ -290,6 +484,7 @@ test("hybrid services support mobile booking mode and submit address details cle
             depositAmount: 25,
             leadTimeHours: 12,
             bookingWindowDays: 21,
+            bufferMinutes: 30,
             serviceMode: "both",
             featured: true,
             showPrice: true,
@@ -301,6 +496,7 @@ test("hybrid services support mobile booking mode and submit address details cle
                 price: 45,
                 durationMinutes: 30,
                 depositAmount: 0,
+                bufferMinutes: 10,
                 description: "A clean upsell when the vehicle already needs coating maintenance.",
                 featured: true,
                 showPrice: true,
@@ -352,8 +548,11 @@ test("hybrid services support mobile booking mode and submit address details cle
   await page.goto("/book/biz-hybrid?service=svc-hybrid");
 
   await expect(page.locator('[data-slot="card"]').filter({ hasText: "Ceramic maintenance" }).getByText("Ceramic maintenance", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("12h notice").first()).toBeVisible();
+  await expect(page.getByText("30m buffer").first()).toBeVisible();
   await page.getByLabel("Vehicle make *").fill("Rivian");
   await page.getByLabel("Vehicle model *").fill("R1S");
+  await expect.poll(() => draftMock.getUpdateCount()).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Continue", exact: true }).click();
 
   await expect(page.getByRole("button", { name: /in-shop visit/i })).toBeVisible();
@@ -362,9 +561,6 @@ test("hybrid services support mobile booking mode and submit address details cle
   await page.getByLabel("City").fill("Irvine");
   await page.getByLabel("State").fill("CA");
   await page.getByLabel("ZIP").fill("92618");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-
-  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Choose a date and time" })).toBeVisible();
   await page.getByLabel("Preferred date").fill("2026-04-21");
   await page.getByRole("button", { name: "11:00 AM" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -382,6 +578,7 @@ test("hybrid services support mobile booking mode and submit address details cle
 
   expect(availabilityRequestUrl).toContain("serviceMode=mobile");
   expect(postedPayload).toMatchObject({
+    draftResumeToken: "hybrid-draft-token",
     serviceId: "svc-hybrid",
     addonServiceIds: ["addon-2"],
     serviceMode: "mobile",
@@ -393,4 +590,5 @@ test("hybrid services support mobile booking mode and submit address details cle
     vehicleModel: "R1S",
   });
   await expect(page.getByText("Appointment booked")).toBeVisible();
+  await expect.poll(() => draftMock.getUpdateCount()).toBeGreaterThan(0);
 });

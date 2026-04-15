@@ -50,6 +50,7 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
       bookingAvailableDays: [1, 2, 3, 4, 5],
       bookingAvailableStartTime: "09:00",
       bookingAvailableEndTime: "17:00",
+      bookingBufferMinutes: 20,
       bookingCapacityPerSlot: 1,
       bookingFeatured: true,
       bookingHidePrice: false,
@@ -78,6 +79,7 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
       bookingAvailableDays: [1, 2, 3, 4, 5],
       bookingAvailableStartTime: "09:00",
       bookingAvailableEndTime: "17:00",
+      bookingBufferMinutes: null,
       bookingCapacityPerSlot: 1,
       bookingFeatured: false,
       bookingHidePrice: false,
@@ -98,6 +100,11 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
     bookingTrustBulletSecondary: "Quick confirmation",
     bookingTrustBulletTertiary: "Secure and simple",
     bookingNotesPrompt: "Add timing, questions, or anything the shop should know.",
+    bookingBrandLogoUrl: "https://cdn.example.com/logo.png",
+    bookingBrandPrimaryColorToken: "orange",
+    bookingBrandAccentColorToken: "amber",
+    bookingBrandBackgroundToneToken: "ivory",
+    bookingBrandButtonStyleToken: "solid",
     bookingRequireEmail: false,
     bookingRequirePhone: true,
     bookingRequireVehicle: true,
@@ -295,11 +302,17 @@ test("services page drives booking CTAs with preserved service context", async (
 
   await page.goto("/services");
 
-  await expect(page.getByText("Turn your service catalog into a booking flow")).toBeVisible();
+  await expect(page.getByText("Design the booking flow customers actually feel")).toBeVisible();
+  await expect(page.getByText("20m buffer")).toBeVisible();
+  await expect(page.getByText("Request only")).toBeVisible();
 
   await expect(page.locator('a[href*="service=svc-book"][href*="source=services-page"]').filter({ hasText: "Book now" })).toHaveAttribute(
     "href",
     /\/book\/biz-booking-builder\?service=svc-book&source=services-page&category=cat-1/
+  );
+  await expect(page.locator('a[href*="service=svc-book"][href*="source=services-page"]').filter({ hasText: "Book now" })).not.toHaveAttribute(
+    "target",
+    "_blank"
   );
   await expect(page.locator('a[href*="service=svc-book"][href*="step=service"]').filter({ hasText: "Learn more" })).toHaveAttribute(
     "href",
@@ -316,16 +329,23 @@ test("booking builder preview updates and saves business-level settings", async 
 
   await page.goto("/services");
 
-  await expect(page.getByText("Turn your service catalog into a booking flow")).toBeVisible();
+  await expect(page.getByText("Design the booking flow customers actually feel")).toBeVisible();
   await expect(page.getByText("Live preview", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: /Branding & Content/i }).click();
+  await page.getByRole("button", { name: /Branding/i }).click();
 
   await page.getByLabel("Booking page title").fill("Book your gloss reset");
   await page.getByLabel("Trust point 1").fill("Straight to the team");
+  await page.getByLabel("Primary color").click();
+  await page.getByRole("option", { name: "Sky" }).click();
+  await page.getByLabel("Button style").click();
+  await page.getByRole("option", { name: "Outline" }).click();
+  await page.getByRole("button", { name: /Flow/i }).click();
   await page.getByLabel("Notes prompt").fill("Add timing or service details the shop should know.");
 
   await expect(page.getByText("Book your gloss reset")).toBeVisible();
   await expect(page.getByText("Straight to the team")).toBeVisible();
+  await expect(page.locator('[data-booking-primary="sky"][data-booking-button-style="outline"]')).toBeVisible();
+  await expect(page.getByAltText("Business logo")).toBeVisible();
   await expect(page.getByText("Usually takes about a minute.")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Save booking settings" }).click();
@@ -336,6 +356,8 @@ test("booking builder preview updates and saves business-level settings", async 
     bookingPageTitle: "Book your gloss reset",
     bookingTrustBulletPrimary: "Straight to the team",
     bookingNotesPrompt: "Add timing or service details the shop should know.",
+    bookingBrandPrimaryColorToken: "sky",
+    bookingBrandButtonStyleToken: "outline",
     bookingRequestUrl: expect.stringContaining(`/book/${BUSINESS_ID}`),
   });
 });
@@ -348,7 +370,7 @@ test("booking builder stays permission-gated without settings.write", async ({ p
   await page.goto("/services");
 
   await expect(page.getByText(/only teammates with settings access can change business-level booking rules/i)).toBeVisible();
-  await page.getByRole("button", { name: /Branding & Content/i }).click();
+  await page.getByRole("button", { name: /Branding/i }).click();
   await expect(page.getByLabel("Booking page title")).toBeDisabled();
   await expect(page.getByRole("button", { name: "Save booking settings" })).toBeDisabled();
 });
