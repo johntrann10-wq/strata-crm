@@ -902,6 +902,32 @@ function BuilderControlCard({
   );
 }
 
+function ServiceMetaPill({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "warm" | "success";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-[1rem] border px-3 py-2",
+        tone === "warm"
+          ? "border-orange-200 bg-orange-50/80"
+          : tone === "success"
+            ? "border-emerald-200 bg-emerald-50/80"
+            : "border-slate-200 bg-slate-50/85"
+      )}
+    >
+      <p className="text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-medium text-slate-950">{value}</p>
+    </div>
+  );
+}
+
 function BookingBuilderCard({
   value,
   onChange,
@@ -968,6 +994,12 @@ function BookingBuilderCard({
     { key: "payments", label: "Payments & Deposits", detail: "How instant booking and deposits behave" },
     { key: "branding", label: "Branding & Content", detail: "Title, trust copy, and confirmation tone" },
   ];
+  const previewHeroService = featuredPreviewServices[0] ?? null;
+  const previewServiceList = previewHeroService ? featuredPreviewServices.slice(1, 4) : featuredPreviewServices.slice(0, 3);
+  const previewStepLabels =
+    value.bookingDefaultFlow === "self_book"
+      ? ["Service", "Vehicle", "Timing", "Contact", "Review"]
+      : ["Service", "Vehicle", "Timing", "Contact", "Request"];
 
   const renderPreview = () => (
     <Card className="overflow-hidden border-slate-200/80 bg-white/96 shadow-[0_22px_56px_rgba(15,23,42,0.08)]">
@@ -1003,18 +1035,24 @@ function BookingBuilderCard({
                   {value.bookingPageSubtitle.trim() || "Share a few details and the shop can follow up with the right next step."}
                 </p>
               </div>
-              <div className="grid gap-2">
-                {previewTrustPoints.map((point) => (
-                  <div key={point} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-700 shadow-sm">
-                    <Globe className="h-3.5 w-3.5 text-orange-600" />
-                    <span>{point}</span>
-                  </div>
-                ))}
+              <div className="grid gap-2 sm:grid-cols-3">
+                {previewTrustPoints.map((point, index) => {
+                  const Icon = index === 0 ? Globe : index === 1 ? CalendarCheck2 : Wrench;
+                  return (
+                    <div key={point} className="rounded-[1rem] border border-slate-200 bg-white/92 px-3 py-3 shadow-sm">
+                      <div className="flex items-center gap-2 text-orange-600">
+                        <Icon className="h-3.5 w-3.5" />
+                        <span className="text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Trust</span>
+                      </div>
+                      <p className="mt-2 text-sm font-medium leading-5 text-slate-800">{point}</p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <div className="border-b border-slate-100 px-5 py-4">
-              <div className="grid gap-2 sm:grid-cols-2">
-                {["Service", "Vehicle", value.bookingDefaultFlow === "self_book" ? "Time" : "Timing", "Confirm"].map((step, index) => (
+              <div className="grid gap-2 sm:grid-cols-5">
+                {previewStepLabels.map((step, index) => (
                   <div
                     key={step}
                     className={cn(
@@ -1028,12 +1066,46 @@ function BookingBuilderCard({
               </div>
             </div>
             <div className="space-y-3 px-5 py-4">
-              {featuredPreviewServices.length > 0 ? (
-                featuredPreviewServices.map((service, index) => (
+              {previewHeroService ? (
+                <div className="rounded-[1.45rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary" className="rounded-full border border-orange-200 bg-orange-50 text-orange-700">
+                          {bookingModeLabel(previewHeroService, value.bookingDefaultFlow)}
+                        </Badge>
+                        {previewHeroService.bookingFeatured ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
+                      </div>
+                      <p className="text-base font-semibold tracking-[-0.02em] text-slate-950">{previewHeroService.name}</p>
+                      <p className="text-sm leading-6 text-slate-600">
+                        {previewHeroService.bookingDescription || "Selected service stays visible while the customer moves through the flow."}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="rounded-full bg-white">
+                      {serviceModeLabel(previewHeroService.bookingServiceMode)}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    {value.bookingShowPrices && previewHeroService.bookingHidePrice !== true ? (
+                      <ServiceMetaPill label="Starting at" value={formatPrice(previewHeroService.price)} tone="warm" />
+                    ) : null}
+                    {value.bookingShowDurations && previewHeroService.bookingHideDuration !== true && previewHeroService.durationMinutes ? (
+                      <ServiceMetaPill label="Estimated time" value={formatDuration(previewHeroService.durationMinutes)} />
+                    ) : null}
+                    <ServiceMetaPill
+                      label="Next step"
+                      value={value.bookingDefaultFlow === "self_book" ? "Choose a live slot" : "Send a request"}
+                      tone={value.bookingDefaultFlow === "self_book" ? "success" : "neutral"}
+                    />
+                  </div>
+                </div>
+              ) : null}
+              {previewServiceList.length > 0 ? (
+                previewServiceList.map((service, index) => (
                   <div
                     key={service.id}
                     className={cn(
-                      "rounded-[1.45rem] border px-4 py-4 shadow-sm",
+                      "rounded-[1.3rem] border px-4 py-4 shadow-sm",
                       index === 0 ? "border-orange-200 bg-orange-50/45" : "border-slate-200 bg-white"
                     )}
                   >
@@ -1110,7 +1182,7 @@ function BookingBuilderCard({
                   {[
                     value.bookingRequireVehicle ? "Vehicle required" : "Vehicle optional",
                     value.bookingRequirePhone ? "Phone required" : value.bookingRequireEmail ? "Email required" : "Flexible contact",
-                  ].join(" · ")}
+                  ].join(" / ")}
                 </p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">Keep the intake fast while still collecting the details the shop actually needs.</p>
               </div>
@@ -1574,57 +1646,100 @@ function ServiceCard({
 
   return (
     <div
-      className="group flex flex-col gap-4 rounded-[1.4rem] border border-slate-200/80 bg-white p-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)] transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)] lg:flex-row lg:items-start lg:justify-between"
+      className="group flex flex-col gap-5 rounded-[1.5rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(248,250,252,0.95))] p-5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_20px_42px_rgba(15,23,42,0.08)] lg:flex-row lg:items-start lg:justify-between"
       onClick={() => { if (canEdit) onEdit(service); }}
     >
-      <div className="min-w-0 space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="truncate text-base font-semibold tracking-[-0.02em] text-slate-950">{service.name}</span>
-          {service.isAddon ? <Badge variant="secondary">Add-on</Badge> : null}
-          <Badge variant="outline">{service.categoryLabel ?? formatServiceCategory(service.category)}</Badge>
-          {service.bookingEnabled === true ? <Badge variant="outline">{serviceModeLabel(service.bookingServiceMode)}</Badge> : null}
-          {service.bookingFeatured === true ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
-          {bookingModeBadge ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">{bookingModeBadge}</Badge> : null}
+      <div className="min-w-0 flex-1 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="rounded-full bg-white">
+                {service.bookingEnabled === true ? "Public booking" : "Internal only"}
+              </Badge>
+              {service.isAddon ? <Badge variant="secondary">Add-on</Badge> : null}
+              <Badge variant="outline">{service.categoryLabel ?? formatServiceCategory(service.category)}</Badge>
+              {service.bookingEnabled === true ? <Badge variant="outline">{serviceModeLabel(service.bookingServiceMode)}</Badge> : null}
+            </div>
+            <div className="space-y-1">
+              <span className="truncate text-lg font-semibold tracking-[-0.03em] text-slate-950">{service.name}</span>
+              <p className="max-w-3xl text-sm leading-6 text-slate-600">
+                {service.bookingDescription || service.notes || "Use this service as part of the public booking catalog without losing the internal detail your team already relies on."}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {service.bookingFeatured === true ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
+            {bookingModeBadge ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">{bookingModeBadge}</Badge> : null}
+          </div>
         </div>
-        <p className="max-w-3xl text-sm leading-6 text-slate-600">
-          {service.bookingDescription || service.notes || "Use this service as part of the public booking catalog without losing the internal detail your team already relies on."}
-        </p>
+
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <ServiceMetaPill
+            label="Price"
+            value={service.bookingHidePrice !== true ? formatPrice(service.price) : "Hidden"}
+            tone={service.bookingHidePrice !== true ? "warm" : "neutral"}
+          />
+          <ServiceMetaPill
+            label="Duration"
+            value={service.bookingHideDuration !== true && durationStr ? durationStr : "Hidden"}
+          />
+          <ServiceMetaPill
+            label="Deposit"
+            value={service.bookingEnabled === true && Number(service.bookingDepositAmount ?? 0) > 0 ? formatPrice(service.bookingDepositAmount ?? 0) : "None"}
+            tone={service.bookingEnabled === true && Number(service.bookingDepositAmount ?? 0) > 0 ? "success" : "neutral"}
+          />
+          <ServiceMetaPill
+            label="Availability"
+            value={service.bookingEnabled === true && (service.bookingAvailableDays?.length ?? 0) > 0 ? `${service.bookingAvailableDays?.length} booking days` : "Uses defaults"}
+          />
+        </div>
+
         <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
-          {service.bookingHidePrice !== true ? <span className="font-medium text-slate-950">{formatPrice(service.price)}</span> : <span>Price hidden</span>}
-          {service.bookingHideDuration !== true && durationStr ? <span>{durationStr}</span> : null}
           {service.taxable ? <span>Taxable</span> : null}
-          {service.bookingEnabled === true && Number(service.bookingDepositAmount ?? 0) > 0 ? (
-            <span>{formatPrice(service.bookingDepositAmount ?? 0)} deposit</span>
-          ) : null}
-          {service.bookingEnabled === true && (service.bookingAvailableDays?.length ?? 0) > 0 ? <span>{service.bookingAvailableDays?.length} booking days</span> : null}
+          {service.bookingEnabled === true && service.bookingLeadTimeHours ? <span>{service.bookingLeadTimeHours}h lead time</span> : null}
+          {service.bookingEnabled === true && service.bookingWindowDays ? <span>{service.bookingWindowDays} day window</span> : null}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 lg:ml-4 lg:justify-end">
-        {primaryBookingHref ? (
-          <Button size="sm" className="rounded-xl shadow-sm" asChild onClick={(e) => e.stopPropagation()}>
-            <a href={primaryBookingHref} target="_blank" rel="noreferrer">
-              {effectiveBookingCta}
-            </a>
+      <div className="flex w-full flex-col gap-3 lg:ml-4 lg:w-auto lg:min-w-[220px] lg:items-end">
+        <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end">
+          {primaryBookingHref ? (
+            <Button size="sm" className="rounded-xl shadow-sm" asChild onClick={(e) => e.stopPropagation()}>
+              <a href={primaryBookingHref} target="_blank" rel="noreferrer">
+                {effectiveBookingCta}
+              </a>
+            </Button>
+          ) : null}
+          {detailBookingHref ? (
+            <Button size="sm" variant="outline" className="rounded-xl" asChild onClick={(e) => e.stopPropagation()}>
+              <a href={detailBookingHref} target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </Button>
+          ) : null}
+          <Button size="sm" variant="outline" className="rounded-xl" onClick={(e) => { e.stopPropagation(); onEdit(service); }} disabled={!canEdit}>
+            <Pencil className="mr-1.5 h-3.5 w-3.5" />
+            Edit
           </Button>
-        ) : null}
-        {detailBookingHref ? (
-          <Button size="sm" variant="outline" className="rounded-xl" asChild onClick={(e) => e.stopPropagation()}>
-            <a href={detailBookingHref} target="_blank" rel="noreferrer">
-              Learn more
-            </a>
-          </Button>
-        ) : null}
-        <Button size="icon" variant="outline" className="rounded-xl" onClick={(e) => { e.stopPropagation(); onMoveUp(); }} disabled={moveDisabledUp || !canEdit}>
-          <ArrowUp className="h-3.5 w-3.5" />
-        </Button>
-        <Button size="icon" variant="outline" className="rounded-xl" onClick={(e) => { e.stopPropagation(); onMoveDown(); }} disabled={moveDisabledDown || !canEdit}>
-          <ArrowDown className="h-3.5 w-3.5" />
-        </Button>
-        <Button size="icon" variant="outline" className="rounded-xl" onClick={(e) => { e.stopPropagation(); onEdit(service); }} disabled={!canEdit}>
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <ActiveToggle active={service.active !== false} onToggle={() => onToggle(service)} loading={isToggling || !canEdit} />
+        </div>
+        <div className="flex w-full items-center justify-between rounded-[1.1rem] border border-slate-200 bg-slate-50/80 px-3 py-2.5 lg:w-auto lg:min-w-[220px]">
+          <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Service order</span>
+          <div className="flex items-center gap-2">
+            <Button size="icon" variant="outline" className="h-8 w-8 rounded-xl" onClick={(e) => { e.stopPropagation(); onMoveUp(); }} disabled={moveDisabledUp || !canEdit}>
+              <ArrowUp className="h-3.5 w-3.5" />
+            </Button>
+            <Button size="icon" variant="outline" className="h-8 w-8 rounded-xl" onClick={(e) => { e.stopPropagation(); onMoveDown(); }} disabled={moveDisabledDown || !canEdit}>
+              <ArrowDown className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+        <div className="flex w-full items-center justify-between rounded-[1.1rem] border border-slate-200 bg-white px-3 py-2.5 lg:w-auto lg:min-w-[220px]">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Active</p>
+            <p className="text-sm font-medium text-slate-950">{service.active !== false ? "Visible internally" : "Archived from team view"}</p>
+          </div>
+          <ActiveToggle active={service.active !== false} onToggle={() => onToggle(service)} loading={isToggling || !canEdit} />
+        </div>
       </div>
     </div>
   );
