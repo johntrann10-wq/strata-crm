@@ -8,6 +8,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { requirePermission } from "../middleware/permissions.js";
+import { createRateLimiter } from "../middleware/security.js";
 import { ALL_PERMISSION_KEYS, getDefaultPermissionsForRole, normalizePermissionSelection, type MembershipRole, type PermissionKey } from "../lib/permissions.js";
 import { logger } from "../lib/logger.js";
 import { warnOnce } from "../lib/warnOnce.js";
@@ -16,6 +17,14 @@ import { sendTemplatedEmail } from "../lib/email.js";
 import { isEmailConfigured } from "../lib/env.js";
 
 export const staffRouter = Router({ mergeParams: true });
+
+const teamInviteLimiter = createRateLimiter({
+  id: "team_resend_invite",
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  message: "Too many team invites sent. Please wait a bit before trying again.",
+  key: ({ businessId, userId, ip, path }) => `email:team-invite:${businessId ?? "none"}:${userId ?? ip}:${path}`,
+});
 
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
@@ -736,7 +745,7 @@ staffRouter.patch("/:id", requireAuth, requireTenant, requirePermission("team.wr
   });
 });
 
-staffRouter.post("/:id/resend-invite", requireAuth, requireTenant, requirePermission("team.write"), async (req: Request, res: Response) => {
+staffRouter.post("/:id/resend-invite", teamInviteLimiter.middleware, requireAuth, requireTenant, requirePermission("team.write"), async (req: Request, res: Response) => {
   requireTeamManager(req);
   const { existing, membership } = await getInviteTarget(req, req.params.id);
 

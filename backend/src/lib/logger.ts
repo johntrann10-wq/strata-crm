@@ -12,6 +12,26 @@ export interface LogContext {
 }
 
 const REDACTED = "[REDACTED]";
+const sensitiveStringPatterns = [
+  {
+    pattern: /\b(Bearer\s+)([A-Za-z0-9\-._~+/]+=*)/gi,
+    replace: (_match: string, prefix: string) => `${prefix}${REDACTED}`,
+  },
+  {
+    pattern:
+      /([?&](?:auth(?:_|-)?token|invite(?:_|-)?token|reset(?:_|-)?token|token|session_id|client_secret|secret|signature)=)([^&#\s]+)/gi,
+    replace: (_match: string, prefix: string) => `${prefix}${REDACTED}`,
+  },
+  {
+    pattern:
+      /((?:^|\s|\(|\{|\[|,|;)(?:token|auth(?:_|-)?token|invite(?:_|-)?token|reset(?:_|-)?token|password|secret|signature)\s*[:=]\s*)(["']?)([^\s"',}&]+)(\2)/gi,
+    replace: (_match: string, prefix: string, quote: string) => `${prefix}${REDACTED}${quote}`,
+  },
+  {
+    pattern: /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g,
+    replace: () => REDACTED,
+  },
+];
 const sensitiveKeyMatchers = [
   /authorization/i,
   /token/i,
@@ -54,6 +74,13 @@ function maskPhone(value: string): string {
   return `***-***-${digits.slice(-4)}`;
 }
 
+function maskContactValue(value: string): string {
+  if (value.includes("@")) return maskEmail(value);
+  const digits = value.replace(/\D/g, "");
+  if (digits.length >= 4) return maskPhone(value);
+  return REDACTED;
+}
+
 function isSensitiveKey(key: string): boolean {
   return sensitiveKeyMatchers.some((matcher) => matcher.test(key));
 }
@@ -70,16 +97,23 @@ function isAddressKey(key: string): boolean {
   return addressKeyMatchers.some((matcher) => matcher.test(key));
 }
 
-function sanitizeValue(key: string, value: unknown): unknown {
+export function sanitizeStringValue(value: string): string {
+  return sensitiveStringPatterns.reduce(
+    (current, { pattern, replace }) => current.replace(pattern, replace as Parameters<string["replace"]>[1]),
+    value
+  );
+}
+
+export function sanitizeValue(key: string, value: unknown): unknown {
   if (value == null) return value;
 
   if (isSensitiveKey(key)) return REDACTED;
 
   if (typeof value === "string") {
-    if (isEmailKey(key)) return maskEmail(value);
+    if (isEmailKey(key)) return maskContactValue(value);
     if (isPhoneKey(key)) return maskPhone(value);
     if (isAddressKey(key)) return REDACTED;
-    return value;
+    return sanitizeStringValue(value);
   }
 
   if (Array.isArray(value)) {
@@ -106,7 +140,7 @@ function formatMessage(level: LogLevel, message: string, context?: LogContext): 
   const payload = {
     timestamp: new Date().toISOString(),
     level,
-    message,
+    message: sanitizeStringValue(message),
     ...sanitizeContext(context),
   };
   return JSON.stringify(payload);

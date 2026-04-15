@@ -680,3 +680,45 @@ vehiclesRouter.patch(
     res.json(normalized);
   })
 );
+
+vehiclesRouter.delete(
+  "/:id",
+  requireAuth,
+  requireTenant,
+  requirePermission("vehicles.write"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    const existing = await loadVehicleRecordById(req.params.id, bid);
+    if (!existing || existing.deletedAt) throw new NotFoundError("Vehicle not found.");
+
+    const now = new Date();
+    const [updated] = await db
+      .update(vehicles)
+      .set({
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(vehicles.id, req.params.id), eq(vehicles.businessId, bid), isNull(vehicles.deletedAt)))
+      .returning();
+
+    if (!updated) throw new NotFoundError("Vehicle not found.");
+
+    logger.info("Vehicle archived", { vehicleId: req.params.id, businessId: bid, clientId: existing.clientId });
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "vehicle.archived",
+      entityType: "vehicle",
+      entityId: req.params.id,
+      metadata: {
+        clientId: existing.clientId,
+        make: existing.make,
+        model: existing.model,
+        year: existing.year,
+        trim: existing.trim,
+        deletedAt: now.toISOString(),
+      },
+    });
+
+    res.json(withMissingVehicleFields(updated));
+  })
+);

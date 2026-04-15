@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { sql } from "drizzle-orm";
+import { createHash } from "crypto";
 import { db } from "../db/index.js";
 import { logger } from "../lib/logger.js";
 import { warnOnce } from "../lib/warnOnce.js";
@@ -19,6 +20,7 @@ type RateLimitEntry = {
 };
 
 type RateLimiterOptions = {
+  id?: string;
   windowMs: number;
   max: number;
   key?: (parts: RateLimitKeyParts) => string;
@@ -28,7 +30,8 @@ type RateLimiterOptions = {
 };
 
 function normalizeIp(req: Request): string {
-  return req.ip || req.socket.remoteAddress || "unknown";
+  const rawIp = req.ip || req.socket.remoteAddress || "unknown";
+  return rawIp.replace(/^::ffff:/, "").trim() || "unknown";
 }
 
 function isRateLimitSchemaError(error: unknown): boolean {
@@ -43,11 +46,40 @@ function isRateLimitSchemaError(error: unknown): boolean {
   return code === "42P01" || code === "42703" || message.includes("rate_limits");
 }
 
+function sanitizeRateLimitId(value: string | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  return normalized || null;
+}
+
+function readRateLimitNumberEnv(key: string): number | null {
+  const raw = process.env[key]?.trim();
+  if (!raw) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.floor(parsed);
+}
+
 function resolveRateLimitStore(options?: RateLimiterOptions): "memory" | "database" {
-  const configured = options?.store ?? process.env.RATE_LIMIT_STORE?.trim().toLowerCase();
+  const id = sanitizeRateLimitId(options?.id);
+  const configured =
+    (id ? process.env[`RATE_LIMIT_${id}_STORE`]?.trim().toLowerCase() : undefined) ??
+    options?.store ??
+    process.env.RATE_LIMIT_STORE?.trim().toLowerCase();
   if (configured === "memory") return "memory";
   if (configured === "database") return "database";
   return process.env.NODE_ENV === "production" ? "database" : "memory";
+}
+
+function resolveRateLimiterOptions(options: RateLimiterOptions): RateLimiterOptions {
+  const id = sanitizeRateLimitId(options.id);
+  const envMax = id ? readRateLimitNumberEnv(`RATE_LIMIT_${id}_MAX`) : null;
+  const envWindowMs = id ? readRateLimitNumberEnv(`RATE_LIMIT_${id}_WINDOW_MS`) : null;
+  return {
+    ...options,
+    max: envMax ?? options.max,
+    windowMs: envWindowMs ?? options.windowMs,
+  };
 }
 
 function buildRateLimitKey(options: RateLimiterOptions, parts: RateLimitKeyParts): string {
@@ -55,6 +87,40 @@ function buildRateLimitKey(options: RateLimiterOptions, parts: RateLimitKeyParts
     options.key?.(parts) ?? `${parts.method}:${parts.path}:${parts.ip}`;
   const prefix = options.prefix?.trim() || "rate";
   return `${prefix}:${baseKey}`;
+}
+
+function hashForLogging(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 12);
+}
+
+function buildRateLimitResponse(options: RateLimiterOptions, retryAfterSeconds: number) {
+  return {
+    code: "RATE_LIMITED",
+    message: options.message ?? "Too many requests. Please try again shortly.",
+    retryAfterSeconds,
+  };
+}
+
+function setRateLimitHeaders(res: Response, params: { limit: number; remaining: number; resetAt: number; retryAfterSeconds?: number }) {
+  res.setHeader("X-RateLimit-Limit", String(params.limit));
+  res.setHeader("X-RateLimit-Remaining", String(Math.max(0, params.remaining)));
+  res.setHeader("X-RateLimit-Reset", String(Math.max(0, Math.ceil(params.resetAt / 1000))));
+  if (params.retryAfterSeconds != null) {
+    res.setHeader("Retry-After", String(Math.max(1, params.retryAfterSeconds)));
+  }
+}
+
+function logRateLimitEvent(req: Request, options: RateLimiterOptions, key: string, retryAfterSeconds: number) {
+  logger.warn("Rate limit exceeded", {
+    limiterId: options.id ?? options.prefix ?? "rate",
+    method: req.method,
+    path: req.path,
+    retryAfterSeconds,
+    keyHash: hashForLogging(key),
+    ipHash: hashForLogging(normalizeIp(req)),
+    userId: req.userId ?? undefined,
+    businessId: req.businessId ?? undefined,
+  });
 }
 
 async function consumeDatabaseRateLimit(params: {
@@ -103,12 +169,13 @@ export function noStore(_req: Request, res: Response, next: NextFunction): void 
 }
 
 export function createInMemoryRateLimiter(options: RateLimiterOptions) {
+  const resolvedOptions = resolveRateLimiterOptions(options);
   const entries = new Map<string, RateLimitEntry>();
 
   function middleware(req: Request, res: Response, next: NextFunction): void {
     const now = Date.now();
     const ip = normalizeIp(req);
-    const key = buildRateLimitKey(options, {
+    const key = buildRateLimitKey(resolvedOptions, {
       ip,
       path: req.path,
       method: req.method,
@@ -123,21 +190,35 @@ export function createInMemoryRateLimiter(options: RateLimiterOptions) {
 
     const existing = entries.get(key);
     if (!existing || existing.resetAt <= now) {
-      entries.set(key, { count: 1, resetAt: now + options.windowMs });
+      entries.set(key, { count: 1, resetAt: now + resolvedOptions.windowMs });
+      setRateLimitHeaders(res, {
+        limit: resolvedOptions.max,
+        remaining: resolvedOptions.max - 1,
+        resetAt: now + resolvedOptions.windowMs,
+      });
       next();
       return;
     }
 
-    if (existing.count >= options.max) {
+    if (existing.count >= resolvedOptions.max) {
       const retryAfterSeconds = Math.max(1, Math.ceil((existing.resetAt - now) / 1000));
-      res.setHeader("Retry-After", String(retryAfterSeconds));
-      res.status(429).json({
-        message: options.message ?? "Too many requests. Please try again shortly.",
+      setRateLimitHeaders(res, {
+        limit: resolvedOptions.max,
+        remaining: 0,
+        resetAt: existing.resetAt,
+        retryAfterSeconds,
       });
+      logRateLimitEvent(req, resolvedOptions, key, retryAfterSeconds);
+      res.status(429).json(buildRateLimitResponse(resolvedOptions, retryAfterSeconds));
       return;
     }
 
     existing.count += 1;
+    setRateLimitHeaders(res, {
+      limit: resolvedOptions.max,
+      remaining: resolvedOptions.max - existing.count,
+      resetAt: existing.resetAt,
+    });
     next();
   }
 
@@ -150,8 +231,9 @@ export function createInMemoryRateLimiter(options: RateLimiterOptions) {
 }
 
 export function createRateLimiter(options: RateLimiterOptions) {
-  const store = resolveRateLimitStore(options);
-  const memoryLimiter = createInMemoryRateLimiter(options);
+  const resolvedOptions = resolveRateLimiterOptions(options);
+  const store = resolveRateLimitStore(resolvedOptions);
+  const memoryLimiter = createInMemoryRateLimiter(resolvedOptions);
 
   async function middleware(req: Request, res: Response, next: NextFunction) {
     if (store === "memory") {
@@ -160,7 +242,7 @@ export function createRateLimiter(options: RateLimiterOptions) {
     }
 
     const ip = normalizeIp(req);
-    const key = buildRateLimitKey(options, {
+    const key = buildRateLimitKey(resolvedOptions, {
       ip,
       path: req.path,
       method: req.method,
@@ -172,16 +254,25 @@ export function createRateLimiter(options: RateLimiterOptions) {
     try {
       const { count, resetAt } = await consumeDatabaseRateLimit({
         key,
-        windowMs: options.windowMs,
+        windowMs: resolvedOptions.windowMs,
       });
-      if (count > options.max) {
+      if (count > resolvedOptions.max) {
         const retryAfterSeconds = Math.max(1, Math.ceil((resetAt.getTime() - Date.now()) / 1000));
-        res.setHeader("Retry-After", String(retryAfterSeconds));
-        res.status(429).json({
-          message: options.message ?? "Too many requests. Please try again shortly.",
+        setRateLimitHeaders(res, {
+          limit: resolvedOptions.max,
+          remaining: 0,
+          resetAt: resetAt.getTime(),
+          retryAfterSeconds,
         });
+        logRateLimitEvent(req, resolvedOptions, key, retryAfterSeconds);
+        res.status(429).json(buildRateLimitResponse(resolvedOptions, retryAfterSeconds));
         return;
       }
+      setRateLimitHeaders(res, {
+        limit: resolvedOptions.max,
+        remaining: resolvedOptions.max - count,
+        resetAt: resetAt.getTime(),
+      });
       next();
     } catch (error) {
       if (isRateLimitSchemaError(error)) {

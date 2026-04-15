@@ -18,7 +18,13 @@ import { logger } from "../lib/logger.js";
 import { renderQuoteHtml, type QuoteTemplateData } from "../lib/quoteTemplate.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
-import { buildPublicAppUrl, buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
+import {
+  buildPublicAppUrl,
+  buildPublicDocumentUrl,
+  createPublicDocumentToken,
+  isPublicDocumentTokenCurrent,
+  verifyPublicDocumentToken,
+} from "../lib/publicDocumentAccess.js";
 
 export const quotesRouter = Router({ mergeParams: true });
 
@@ -186,17 +192,27 @@ const publicRevisionRequestSchema = z.object({
 });
 
 const quoteSendLimiter = createRateLimiter({
+  id: "quote_send",
   windowMs: 10 * 60 * 1000,
   max: 8,
   message: "Too many quote emails sent. Please wait a bit before trying again.",
-  key: ({ businessId, ip, path }) => `email:quote-send:${businessId ?? ip}:${path}`,
+  key: ({ businessId, userId, ip, path }) => `email:quote-send:${businessId ?? "none"}:${userId ?? ip}:${path}`,
 });
 
 const quoteFollowUpLimiter = createRateLimiter({
+  id: "quote_follow_up",
   windowMs: 10 * 60 * 1000,
   max: 6,
   message: "Too many quote follow-ups sent. Please wait a bit before trying again.",
-  key: ({ businessId, ip, path }) => `email:quote-followup:${businessId ?? ip}:${path}`,
+  key: ({ businessId, userId, ip, path }) => `email:quote-followup:${businessId ?? "none"}:${userId ?? ip}:${path}`,
+});
+
+const publicQuoteRevisionRequestLimiter = createRateLimiter({
+  id: "public_quote_revision_request",
+  windowMs: 15 * 60 * 1000,
+  max: 6,
+  message: "Too many revision requests. Please wait a bit before trying again.",
+  key: ({ ip, path }) => `public:quote-revision:${ip}:${path}`,
 });
 
 quotesRouter.get("/", requireAuth, requireTenant, requirePermission("quotes.read"), async (req: Request, res: Response) => {
@@ -531,7 +547,7 @@ quotesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, access.businessId)))
     .limit(1);
   if (!row) throw new NotFoundError("Quote not found.");
-  if (row.publicTokenVersion != null && access.ver !== row.publicTokenVersion) {
+  if (!isPublicDocumentTokenCurrent(access, row.publicTokenVersion)) {
     throw new ForbiddenError("Quote access link is invalid or expired.");
   }
 
@@ -638,7 +654,7 @@ quotesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
   res.send(html);
 });
 
-quotesRouter.post("/:id/public-request-revision", express.urlencoded({ extended: false }), wrapAsync(async (req: Request, res: Response) => {
+quotesRouter.post("/:id/public-request-revision", publicQuoteRevisionRequestLimiter.middleware, express.urlencoded({ extended: false }), wrapAsync(async (req: Request, res: Response) => {
   const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
   const access = verifyPublicDocumentToken(token, { kind: "quote", entityId: req.params.id });
   if (!access) throw new ForbiddenError("Quote access link is invalid or expired.");
@@ -672,7 +688,7 @@ quotesRouter.post("/:id/public-request-revision", express.urlencoded({ extended:
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, access.businessId)))
     .limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
-  if (existing.publicTokenVersion != null && access.ver !== existing.publicTokenVersion) {
+  if (!isPublicDocumentTokenCurrent(access, existing.publicTokenVersion)) {
     throw new ForbiddenError("Quote access link is invalid or expired.");
   }
   if (existing.status === "accepted") {
@@ -764,7 +780,7 @@ quotesRouter.post("/:id/public-respond", express.urlencoded({ extended: false })
     .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, access.businessId)))
     .limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
-  if (existing.publicTokenVersion != null && access.ver !== existing.publicTokenVersion) {
+  if (!isPublicDocumentTokenCurrent(access, existing.publicTokenVersion)) {
     throw new ForbiddenError("Quote access link is invalid or expired.");
   }
 
@@ -1017,12 +1033,20 @@ quotesRouter.patch("/:id", requireAuth, requireTenant, requirePermission("quotes
   }
   if (patch.taxRate != null) updates.taxRate = String(patch.taxRate);
 
-  const [updated] = await db.update(quotes).set(updates).where(eq(quotes.id, req.params.id)).returning();
+  const [updated] = await db
+    .update(quotes)
+    .set(updates)
+    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
+    .returning();
   if (!updated) throw new NotFoundError("Quote not found.");
   if (patch.taxRate != null) {
     await recalculateQuoteTotals(db, req.params.id);
   }
-  const [fresh] = await db.select().from(quotes).where(eq(quotes.id, req.params.id)).limit(1);
+  const [fresh] = await db
+    .select()
+    .from(quotes)
+    .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
+    .limit(1);
   await createRequestActivityLog(req, {
     businessId: bid,
     action: "quote.updated",
@@ -1040,9 +1064,44 @@ quotesRouter.delete("/:id", requireAuth, requireTenant, requirePermission("quote
   const [existing] = await db.select().from(quotes).where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid))).limit(1);
   if (!existing) throw new NotFoundError("Quote not found.");
   await db.delete(quoteLineItems).where(eq(quoteLineItems.quoteId, req.params.id));
-  await db.delete(quotes).where(eq(quotes.id, req.params.id));
+  await db.delete(quotes).where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)));
   res.status(204).end();
 });
+
+quotesRouter.post(
+  "/:id/revoke-public-access",
+  requireAuth,
+  requireTenant,
+  requirePermission("quotes.write"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    const [updated] = await db
+      .update(quotes)
+      .set({
+        publicTokenVersion: sql`coalesce(${quotes.publicTokenVersion}, 1) + 1`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(quotes.id, req.params.id), eq(quotes.businessId, bid)))
+      .returning({
+        id: quotes.id,
+        publicTokenVersion: quotes.publicTokenVersion,
+      });
+    if (!updated) throw new NotFoundError("Quote not found.");
+
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "quote.public_access_revoked",
+      entityType: "quote",
+      entityId: updated.id,
+      metadata: {
+        publicTokenVersion: updated.publicTokenVersion,
+        source: "staff_action",
+      },
+    });
+
+    res.json({ ok: true, id: updated.id, publicTokenVersion: updated.publicTokenVersion });
+  })
+);
 
 quotesRouter.post(
   "/:id/send",
@@ -1431,7 +1490,10 @@ quotesRouter.post("/:id/schedule", requireAuth, requireTenant, requirePermission
       })
       .returning();
     if (!a) throw new BadRequestError("Failed to create appointment.");
-    await tx.update(quotes).set({ appointmentId: a.id, status: "accepted", updatedAt: new Date() }).where(eq(quotes.id, quoteId));
+    await tx
+      .update(quotes)
+      .set({ appointmentId: a.id, status: "accepted", updatedAt: new Date() })
+      .where(and(eq(quotes.id, quoteId), eq(quotes.businessId, bid)));
     return a;
   });
   await createRequestActivityLog(req, {

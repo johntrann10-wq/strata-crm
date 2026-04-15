@@ -18,6 +18,7 @@ import {
   buildPublicAppUrl,
   buildPublicDocumentUrl,
   createPublicDocumentToken,
+  isPublicDocumentTokenCurrent,
   verifyAnyPublicDocumentToken,
   type PublicDocumentKind,
   type PublicDocumentTokenPayload,
@@ -120,12 +121,12 @@ async function resolvePortalReferenceDocument(access: PublicDocumentTokenPayload
         clientId: quotes.clientId,
         status: quotes.status,
         publicTokenVersion: quotes.publicTokenVersion,
-      })
-      .from(quotes)
-      .where(and(eq(quotes.id, access.entityId), eq(quotes.businessId, access.businessId)))
-      .limit(1);
+    })
+    .from(quotes)
+    .where(and(eq(quotes.id, access.entityId), eq(quotes.businessId, access.businessId)))
+    .limit(1);
     if (!quote) throw new NotFoundError("Estimate not found.");
-    if (quote.publicTokenVersion != null && access.ver !== quote.publicTokenVersion) {
+    if (!isPublicDocumentTokenCurrent(access, quote.publicTokenVersion)) {
       throw new BadRequestError("This customer hub link is invalid or expired.");
     }
     return {
@@ -153,7 +154,7 @@ async function resolvePortalReferenceDocument(access: PublicDocumentTokenPayload
       .where(and(eq(invoices.id, access.entityId), eq(invoices.businessId, access.businessId)))
       .limit(1);
     if (!invoice) throw new NotFoundError("Invoice not found.");
-    if (invoice.publicTokenVersion != null && access.ver !== invoice.publicTokenVersion) {
+    if (!isPublicDocumentTokenCurrent(access, invoice.publicTokenVersion)) {
       throw new BadRequestError("This customer hub link is invalid or expired.");
     }
     return {
@@ -180,7 +181,7 @@ async function resolvePortalReferenceDocument(access: PublicDocumentTokenPayload
     .where(and(eq(appointments.id, access.entityId), eq(appointments.businessId, access.businessId)))
     .limit(1);
   if (!appointment) throw new NotFoundError("Appointment not found.");
-  if (appointment.publicTokenVersion != null && access.ver !== appointment.publicTokenVersion) {
+  if (!isPublicDocumentTokenCurrent(access, appointment.publicTokenVersion)) {
     throw new BadRequestError("This customer hub link is invalid or expired.");
   }
   if (!appointment.clientId) {

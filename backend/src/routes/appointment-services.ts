@@ -244,7 +244,11 @@ appointmentServicesRouter.patch("/:id", requireAuth, requireTenant, requirePermi
   }
 
   const updated = await db.transaction(async (tx) => {
-    const [row] = await tx.update(appointmentServices).set(updates as Record<string, unknown>).where(eq(appointmentServices.id, req.params.id)).returning();
+    const [row] = await tx
+      .update(appointmentServices)
+      .set(updates as Record<string, unknown>)
+      .where(and(eq(appointmentServices.id, req.params.id), eq(appointmentServices.appointmentId, existing.appointmentId)))
+      .returning();
     if (!row) throw new NotFoundError("Appointment service not found.");
     await recalculateAppointmentTotal(tx, existing.appointmentId);
     return row;
@@ -277,7 +281,9 @@ appointmentServicesRouter.delete("/:id", requireAuth, requireTenant, requirePerm
 
   const apptId = existing.appointmentId;
   const cleanupResult = await db.transaction(async (tx) => {
-    await tx.delete(appointmentServices).where(eq(appointmentServices.id, req.params.id));
+    await tx
+      .delete(appointmentServices)
+      .where(and(eq(appointmentServices.id, req.params.id), eq(appointmentServices.appointmentId, apptId)));
     await recalculateAppointmentTotal(tx, apptId);
     const [remainingServices] = await tx
       .select({ count: sql<number>`count(*)::int` })

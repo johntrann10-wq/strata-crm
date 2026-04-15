@@ -1,3 +1,4 @@
+import type { SignOptions } from "jsonwebtoken";
 import { createScopedPublicDocumentToken, verifyScopedPublicDocumentToken } from "./jwt.js";
 
 export type PublicDocumentKind = "quote" | "invoice" | "appointment";
@@ -9,17 +10,41 @@ export type PublicDocumentTokenPayload = {
   ver?: number;
 };
 
-export function createPublicDocumentToken(payload: PublicDocumentTokenPayload & { tokenVersion?: number }): string {
-  const tokenVersion = typeof payload.tokenVersion === "number"
-    ? payload.tokenVersion
-    : typeof payload.ver === "number"
-      ? payload.ver
-      : 1;
+const DEFAULT_PUBLIC_DOCUMENT_EXPIRY_BY_KIND: Record<PublicDocumentKind, NonNullable<SignOptions["expiresIn"]>> = {
+  quote: "14d",
+  invoice: "14d",
+  appointment: "7d",
+};
+
+export function normalizePublicDocumentTokenVersion(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+}
+
+export function getPublicDocumentTokenExpiry(kind: PublicDocumentKind): NonNullable<SignOptions["expiresIn"]> {
+  return DEFAULT_PUBLIC_DOCUMENT_EXPIRY_BY_KIND[kind];
+}
+
+export function isPublicDocumentTokenCurrent(
+  payload: Pick<PublicDocumentTokenPayload, "ver"> | null | undefined,
+  currentVersion: unknown
+): boolean {
+  if (!payload) return false;
+  return normalizePublicDocumentTokenVersion(payload.ver) === normalizePublicDocumentTokenVersion(currentVersion);
+}
+
+export function createPublicDocumentToken(
+  payload: PublicDocumentTokenPayload & { tokenVersion?: number; expiresIn?: SignOptions["expiresIn"] }
+): string {
+  const tokenVersion = normalizePublicDocumentTokenVersion(
+    typeof payload.tokenVersion === "number" ? payload.tokenVersion : payload.ver
+  );
   return createScopedPublicDocumentToken({
     kind: payload.kind,
     entityId: payload.entityId,
     businessId: payload.businessId,
     ver: tokenVersion,
+  }, {
+    expiresIn: payload.expiresIn ?? getPublicDocumentTokenExpiry(payload.kind),
   });
 }
 
@@ -30,7 +55,7 @@ export function verifyAnyPublicDocumentToken(token: string): PublicDocumentToken
   if (payload.kind !== "quote" && payload.kind !== "invoice" && payload.kind !== "appointment") {
     return null;
   }
-  const tokenVersion = typeof payload.ver === "number" && Number.isFinite(payload.ver) ? payload.ver : 1;
+  const tokenVersion = normalizePublicDocumentTokenVersion(payload.ver);
   return {
     ...payload,
     ver: tokenVersion,
@@ -45,6 +70,17 @@ export function verifyPublicDocumentToken(
   if (!payload) return null;
   if (payload.kind !== expected.kind) return null;
   if (payload.entityId !== expected.entityId) return null;
+  return payload;
+}
+
+export function verifyCurrentPublicDocumentToken(
+  token: string,
+  expected: { kind: PublicDocumentKind; entityId: string },
+  currentVersion: unknown
+): PublicDocumentTokenPayload | null {
+  const payload = verifyPublicDocumentToken(token, expected);
+  if (!payload) return null;
+  if (!isPublicDocumentTokenCurrent(payload, currentVersion)) return null;
   return payload;
 }
 

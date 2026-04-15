@@ -824,7 +824,7 @@ async function listRecentFinancePayments(bid: string, limit: number): Promise<Fi
   }
 }
 
-actionsRouter.post("/getDashboardStats", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/getDashboardStats", requireAuth, requireTenant, requirePermission("dashboard.view"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
@@ -927,7 +927,7 @@ actionsRouter.post("/updateHomeDashboardPreferences", requireAuth, requireTenant
   return res.json({ preferences });
 });
 
-actionsRouter.post("/getCapacityInsights", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/getCapacityInsights", requireAuth, requireTenant, requirePermission("dashboard.view"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const now = new Date();
   const startOfWeek = new Date(now);
@@ -946,7 +946,7 @@ actionsRouter.post("/getCapacityInsights", requireAuth, requireTenant, async (re
 });
 
 // Used by the frontend Invoices page to render month KPIs.
-actionsRouter.post("/getInvoiceMetrics", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/getInvoiceMetrics", requireAuth, requireTenant, requirePermission("invoices.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
@@ -1193,7 +1193,7 @@ actionsRouter.post("/getFinanceDashboard", requireAuth, requireTenant, requirePe
   });
 });
 
-actionsRouter.post("/getGrowthMetrics", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/getGrowthMetrics", requireAuth, requireTenant, requirePermission("dashboard.view"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const params = z
     .object({
@@ -1575,7 +1575,7 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
   });
 });
 
-actionsRouter.post("/restoreClient", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/restoreClient", requireAuth, requireTenant, requirePermission("customers.write"), async (req: Request, res: Response) => {
   const parsed = idParamSchema.safeParse(req.body);
   const id = parsed.success ? parsed.data.id : undefined;
   if (!id) throw new NotFoundError("id required");
@@ -1588,7 +1588,7 @@ actionsRouter.post("/restoreClient", requireAuth, requireTenant, async (req: Req
   res.json(updated);
 });
 
-actionsRouter.post("/restoreVehicle", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/restoreVehicle", requireAuth, requireTenant, requirePermission("vehicles.write"), async (req: Request, res: Response) => {
   const parsed = idParamSchema.safeParse(req.body);
   const id = parsed.success ? parsed.data.id : undefined;
   if (!id) throw new NotFoundError("id required");
@@ -1601,7 +1601,7 @@ actionsRouter.post("/restoreVehicle", requireAuth, requireTenant, async (req: Re
   res.json(updated);
 });
 
-actionsRouter.post("/restoreService", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/restoreService", requireAuth, requireTenant, requirePermission("services.write"), async (req: Request, res: Response) => {
   const parsed = idParamSchema.safeParse(req.body);
   const id = parsed.success ? parsed.data.id : undefined;
   if (!id) throw new NotFoundError("id required");
@@ -1614,7 +1614,7 @@ actionsRouter.post("/restoreService", requireAuth, requireTenant, async (req: Re
   res.json(updated);
 });
 
-actionsRouter.post("/unvoidInvoice", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/unvoidInvoice", requireAuth, requireTenant, requirePermission("invoices.write"), async (req: Request, res: Response) => {
   const parsed = idParamSchema.safeParse(req.body);
   const id = parsed.success ? parsed.data.id : undefined;
   if (!id) throw new NotFoundError("id required");
@@ -1627,7 +1627,7 @@ actionsRouter.post("/unvoidInvoice", requireAuth, requireTenant, async (req: Req
   res.json(updated);
 });
 
-actionsRouter.post("/reversePayment", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/reversePayment", requireAuth, requireTenant, requirePermission("payments.write"), async (req: Request, res: Response) => {
   const parsed = idParamSchema.safeParse(req.body);
   const id = parsed.success ? parsed.data.id : undefined;
   if (!id) throw new NotFoundError("id required");
@@ -1635,7 +1635,11 @@ actionsRouter.post("/reversePayment", requireAuth, requireTenant, async (req: Re
   try {
     const [p] = await db.select().from(payments).where(and(eq(payments.id, id), eq(payments.businessId, bid))).limit(1);
     if (!p || p.reversedAt) throw new NotFoundError("Payment not found or already reversed.");
-    const [updated] = await db.update(payments).set({ reversedAt: new Date(), updatedAt: new Date() }).where(eq(payments.id, id)).returning();
+    const [updated] = await db
+      .update(payments)
+      .set({ reversedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(payments.id, id), eq(payments.businessId, bid)))
+      .returning();
     res.json(updated);
   } catch (error) {
     if (!isPaymentSchemaDriftError(error)) throw error;
@@ -1644,7 +1648,7 @@ actionsRouter.post("/reversePayment", requireAuth, requireTenant, async (req: Re
   }
 });
 
-actionsRouter.post("/retryFailedNotifications", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/retryFailedNotifications", requireAuth, requireTenant, requirePermission("settings.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const result = await withIdempotency(
     `retry-notifications-${bid}-${Math.floor(Date.now() / 10000)}`,
@@ -1654,14 +1658,14 @@ actionsRouter.post("/retryFailedNotifications", requireAuth, requireTenant, asyn
   res.json({ ok: true, retried: result.retried, succeeded: result.succeeded });
 });
 
-actionsRouter.post("/getBusinessPreset", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/getBusinessPreset", requireAuth, requireTenant, requirePermission("settings.read"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [business] = await db.select({ type: businesses.type }).from(businesses).where(eq(businesses.id, bid)).limit(1);
   const summary = getPresetSummaryForBusinessType(business?.type ?? null);
   res.json(summary);
 });
 
-actionsRouter.post("/applyBusinessPreset", requireAuth, requireTenant, async (req: Request, res: Response) => {
+actionsRouter.post("/applyBusinessPreset", requireAuth, requireTenant, requirePermission("settings.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   try {
     const result = await applyBusinessPreset(bid);

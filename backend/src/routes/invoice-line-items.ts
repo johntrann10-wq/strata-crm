@@ -75,7 +75,11 @@ invoiceLineItemsRouter.patch("/:id", requireAuth, requireTenant, requirePermissi
     updates.total = String(qty * up);
   }
   const updated = await db.transaction(async (tx) => {
-    const [row] = await tx.update(invoiceLineItems).set(updates).where(eq(invoiceLineItems.id, req.params.id)).returning();
+    const [row] = await tx
+      .update(invoiceLineItems)
+      .set(updates)
+      .where(and(eq(invoiceLineItems.id, req.params.id), eq(invoiceLineItems.invoiceId, existing.invoiceId)))
+      .returning();
     if (!row) throw new NotFoundError("Line item not found.");
     await recalculateInvoiceTotals(tx, existing.invoiceId);
     return row;
@@ -92,7 +96,9 @@ invoiceLineItemsRouter.delete("/:id", requireAuth, requireTenant, requirePermiss
   if (inv.status === "void") throw new BadRequestError("Cannot delete line items from a void invoice.");
   const invId = existing.invoiceId;
   await db.transaction(async (tx) => {
-    await tx.delete(invoiceLineItems).where(eq(invoiceLineItems.id, req.params.id));
+    await tx
+      .delete(invoiceLineItems)
+      .where(and(eq(invoiceLineItems.id, req.params.id), eq(invoiceLineItems.invoiceId, invId)));
     await recalculateInvoiceTotals(tx, invId);
   });
   res.status(204).send();

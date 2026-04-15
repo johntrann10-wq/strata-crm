@@ -227,7 +227,7 @@ paymentsRouter.post("/:id/reverse", requireAuth, requireTenant, requirePermissio
     [updated] = await db
       .update(payments)
       .set({ reversedAt: new Date(), updatedAt: new Date() })
-      .where(eq(payments.id, req.params.id))
+      .where(and(eq(payments.id, req.params.id), eq(payments.businessId, bid)))
       .returning();
   } catch (error) {
     if (!isPaymentSchemaDriftError(error)) throw error;
@@ -242,7 +242,10 @@ paymentsRouter.post("/:id/reverse", requireAuth, requireTenant, requirePermissio
     const paidNow = await getActiveInvoicePaymentTotal(inv.id);
     const invTotal = Number(inv.total ?? 0);
     const newStatus = paidNow <= 0 ? "sent" : paidNow >= invTotal ? "paid" : "partial";
-    await db.update(invoices).set({ status: newStatus, paidAt: paidNow >= invTotal ? inv.paidAt : null, updatedAt: new Date() }).where(eq(invoices.id, inv.id));
+    await db
+      .update(invoices)
+      .set({ status: newStatus, paidAt: paidNow >= invTotal ? inv.paidAt : null, updatedAt: new Date() })
+      .where(and(eq(invoices.id, inv.id), eq(invoices.businessId, bid)));
     await syncAppointmentAfterPaymentReversal(inv.id, newStatus);
   }
   await createRequestActivityLog(req, {

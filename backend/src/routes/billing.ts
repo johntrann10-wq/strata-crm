@@ -23,7 +23,7 @@ import {
 import type { StripeConnectAccountState } from "../lib/stripe.js";
 import { requireAuth } from "../middleware/auth.js";
 import { BadRequestError, ForbiddenError } from "../lib/errors.js";
-import { logger } from "../lib/logger.js";
+import { logger, sanitizeStringValue } from "../lib/logger.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { createRateLimiter } from "../middleware/security.js";
 import { isEmailConfigured, isStripeConfigured } from "../lib/env.js";
@@ -330,10 +330,19 @@ const STRIPE_WEBHOOK_DEAD_LETTER_THRESHOLD = 3;
 const STRIPE_TRIAL_REMINDER_DEDUPE_DAYS = 14;
 
 const billingPortalLimiter = createRateLimiter({
+  id: "billing_portal",
   windowMs: 10 * 60 * 1000,
   max: 10,
   message: "Too many billing portal requests. Please wait a bit before trying again.",
-  key: ({ businessId, ip }) => `billing:portal:${businessId ?? ip}`,
+  key: ({ businessId, userId, ip }) => `billing:portal:${businessId ?? "none"}:${userId ?? ip}`,
+});
+
+const billingCheckoutLimiter = createRateLimiter({
+  id: "billing_checkout_session",
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  message: "Too many billing checkout attempts. Please wait a bit before trying again.",
+  key: ({ businessId, userId, ip }) => `billing:checkout:${businessId ?? "none"}:${userId ?? ip}`,
 });
 
 type StripeWebhookBusinessContext = {
@@ -351,24 +360,30 @@ type StripeWebhookBusinessContext = {
 
 export function getStripeWebhookPayload(event: Stripe.Event): string {
   const dataObject = event.data.object as unknown as Record<string, unknown>;
-  const summary = {
-    object: typeof dataObject?.object === "string" ? dataObject.object : null,
-    id: typeof dataObject?.id === "string" ? dataObject.id : null,
-    status: typeof dataObject?.status === "string" ? dataObject.status : null,
-    customer: typeof dataObject?.customer === "string" ? dataObject.customer : null,
-    subscription: typeof dataObject?.subscription === "string" ? dataObject.subscription : null,
-    invoice: typeof dataObject?.invoice === "string" ? dataObject.invoice : null,
-    amount_due: typeof dataObject?.amount_due === "number" ? dataObject.amount_due : null,
-    amount_paid: typeof dataObject?.amount_paid === "number" ? dataObject.amount_paid : null,
-    currency: typeof dataObject?.currency === "string" ? dataObject.currency : null,
-  };
-  return JSON.stringify({
-    id: event.id,
-    type: event.type,
-    created: event.created,
-    livemode: event.livemode,
-    data: summary,
-  });
+  const summary = Object.fromEntries(
+    Object.entries({
+      object: typeof dataObject?.object === "string" ? dataObject.object : null,
+      id: typeof dataObject?.id === "string" ? dataObject.id : null,
+      status: typeof dataObject?.status === "string" ? dataObject.status : null,
+      customer: typeof dataObject?.customer === "string" ? dataObject.customer : null,
+      subscription: typeof dataObject?.subscription === "string" ? dataObject.subscription : null,
+      invoice: typeof dataObject?.invoice === "string" ? dataObject.invoice : null,
+      amount_due: typeof dataObject?.amount_due === "number" ? dataObject.amount_due : null,
+      amount_paid: typeof dataObject?.amount_paid === "number" ? dataObject.amount_paid : null,
+      currency: typeof dataObject?.currency === "string" ? dataObject.currency : null,
+    }).filter(([, value]) => value != null)
+  );
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries({
+        id: event.id,
+        type: event.type,
+        created: event.created,
+        livemode: event.livemode,
+        data: Object.keys(summary).length > 0 ? summary : undefined,
+      }).filter(([, value]) => value !== undefined)
+    )
+  );
 }
 
 async function findBusinessForStripeAction(action: StripeBillingWebhookAction): Promise<StripeWebhookBusinessContext | null> {
@@ -435,7 +450,7 @@ async function markBusinessStripeSyncState(params: {
       billingLastStripeEventType: params.event.type,
       billingLastStripeEventAt: new Date(params.event.created * 1000),
       billingLastStripeSyncStatus: params.status,
-      billingLastStripeSyncError: params.error ?? null,
+      billingLastStripeSyncError: params.error ? sanitizeStringValue(params.error) : null,
       updatedAt: new Date(),
     })
     .where(eq(businesses.id, params.businessId));
@@ -515,7 +530,7 @@ async function finalizeStripeWebhookProcessing(params: {
     .set({
       status: params.status,
       processedAt: params.status === "processed" ? new Date() : null,
-      lastError: params.error ?? null,
+      lastError: params.error ? sanitizeStringValue(params.error) : null,
       deadLetteredAt:
         params.status === "failed" && attemptCount >= STRIPE_WEBHOOK_DEAD_LETTER_THRESHOLD
           ? new Date()
@@ -1334,6 +1349,7 @@ billingRouter.post(
 /** POST /api/billing/create-checkout-session — start subscription (30-day trial). Requires auth + business. */
 billingRouter.post(
   "/create-checkout-session",
+  billingCheckoutLimiter.middleware,
   requireAuth,
   wrapAsync(async (req: Request, res: Response) => {
     const businessId = req.businessId;
@@ -1462,7 +1478,11 @@ export async function handleStripeWebhook(
       STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    logger.warn("Stripe webhook signature verification failed", { err });
+    logger.warn("Stripe webhook signature verification failed", {
+      requestId: (req as Request & { requestId?: string }).requestId,
+      path: req.path,
+      error: err instanceof Error ? err.message : String(err),
+    });
     res.status(400).send("Invalid signature");
     return;
   }

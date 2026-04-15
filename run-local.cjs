@@ -11,8 +11,7 @@ const backendEnvPath = path.join(__dirname, "backend", ".env");
 const backendEnvExample = path.join(__dirname, "backend", ".env.example");
 const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
 const defaultEnv = `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/strata
-JWT_SECRET=dev-jwt-secret-change-in-production
-SESSION_SECRET=dev-secret-change-in-production
+JWT_SECRET=local-dev-jwt-secret
 FRONTEND_URL=http://localhost:5173
 PORT=3001
 `;

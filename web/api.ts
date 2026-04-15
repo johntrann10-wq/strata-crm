@@ -50,7 +50,6 @@ function resolveApiBase(): string {
   // Use `import.meta.env.VITE_*` directly here — assigning `import.meta.env` to a variable
   // breaks Vite's static replacement and can minify to `{}`, ignoring build-time API URLs.
   const raw =
-    import.meta.env.STRATA_API_ORIGIN?.trim() ||
     import.meta.env.VITE_API_URL?.trim() ||
     import.meta.env.NEXT_PUBLIC_API_URL?.trim() ||
     "";

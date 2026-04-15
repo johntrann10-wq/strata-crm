@@ -16,7 +16,13 @@ import { isEmailConfigured } from "../lib/env.js";
 import { sendInvoiceEmail } from "../lib/email.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
-import { buildPublicAppUrl, buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
+import {
+  buildPublicAppUrl,
+  buildPublicDocumentUrl,
+  createPublicDocumentToken,
+  isPublicDocumentTokenCurrent,
+  verifyPublicDocumentToken,
+} from "../lib/publicDocumentAccess.js";
 import { createInvoicePaymentCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
 import { createActivityLog } from "../lib/activity.js";
 import { getActiveInvoicePaymentTotal, isPaymentSchemaDriftError, recordInvoicePayment } from "../lib/invoicePayments.js";
@@ -63,10 +69,27 @@ const sendInvoiceSchema = z.object({
 });
 
 const invoiceSendLimiter = createRateLimiter({
+  id: "invoice_send",
   windowMs: 10 * 60 * 1000,
   max: 8,
   message: "Too many invoice emails sent. Please wait a bit before trying again.",
-  key: ({ businessId, ip, path }) => `email:invoice-send:${businessId ?? ip}:${path}`,
+  key: ({ businessId, userId, ip, path }) => `email:invoice-send:${businessId ?? "none"}:${userId ?? ip}:${path}`,
+});
+
+const invoicePaymentSessionLimiter = createRateLimiter({
+  id: "invoice_payment_session",
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  message: "Too many invoice payment attempts. Please wait a bit before trying again.",
+  key: ({ businessId, userId, ip, path }) => `payment:invoice:${businessId ?? "none"}:${userId ?? ip}:${path}`,
+});
+
+const publicInvoicePaymentSessionLimiter = createRateLimiter({
+  id: "public_invoice_payment_session",
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  message: "Too many payment attempts. Please wait a bit before trying again.",
+  key: ({ ip, path }) => `public:invoice-payment:${ip}:${path}`,
 });
 
 const INVOICE_STATUSES = ["draft", "sent", "paid", "partial", "void"] as const;
@@ -875,6 +898,7 @@ invoicesRouter.get("/:id", requireAuth, requireTenant, requirePermission("invoic
 
 invoicesRouter.post(
   "/:id/create-payment-session",
+  invoicePaymentSessionLimiter.middleware,
   requireAuth,
   requireTenant,
   requirePermission("invoices.write"),
@@ -1016,7 +1040,7 @@ invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
     .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, access.businessId)))
     .limit(1);
   if (!row) throw new NotFoundError("Invoice not found.");
-  if (row.publicTokenVersion != null && access.ver !== row.publicTokenVersion) {
+  if (!isPublicDocumentTokenCurrent(access, row.publicTokenVersion)) {
     throw new ForbiddenError("Invoice access link is invalid or expired.");
   }
   const [businessRow] = await db
@@ -1081,7 +1105,7 @@ invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
   res.send(html);
 });
 
-invoicesRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Response) => {
+invoicesRouter.get("/:id/public-pay", publicInvoicePaymentSessionLimiter.middleware, wrapAsync(async (req: Request, res: Response) => {
   const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
   const access = verifyPublicDocumentToken(token, { kind: "invoice", entityId: req.params.id });
   if (!access) throw new ForbiddenError("Invoice access link is invalid or expired.");
@@ -1099,7 +1123,7 @@ invoicesRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Respon
     .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, access.businessId)))
     .limit(1);
   if (!invoice) throw new NotFoundError("Invoice not found.");
-  if (invoice.publicTokenVersion != null && access.ver !== invoice.publicTokenVersion) {
+  if (!isPublicDocumentTokenCurrent(access, invoice.publicTokenVersion)) {
     throw new ForbiddenError("Invoice access link is invalid or expired.");
   }
   if (invoice.status === "void") throw new BadRequestError("Void invoices cannot accept Stripe payments.");
@@ -1302,7 +1326,7 @@ invoicesRouter.post(
       });
     }
     try {
-      await executor.delete(payments).where(eq(payments.invoiceId, invoiceId));
+      await executor.delete(payments).where(and(eq(payments.invoiceId, invoiceId), eq(payments.businessId, bid)));
     } catch (error) {
       logger.warn("Failed to clean up partial invoice payments", {
         businessId: bid,
@@ -1311,7 +1335,7 @@ invoicesRouter.post(
       });
     }
     try {
-      await executor.delete(invoices).where(eq(invoices.id, invoiceId));
+      await executor.delete(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.businessId, bid)));
     } catch (error) {
       logger.warn("Failed to clean up partial invoice record", {
         businessId: bid,
@@ -1664,6 +1688,41 @@ invoicesRouter.post("/:id/void", requireAuth, requireTenant, requirePermission("
   }
   res.json(updated);
 });
+
+invoicesRouter.post(
+  "/:id/revoke-public-access",
+  requireAuth,
+  requireTenant,
+  requirePermission("invoices.write"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    const [updated] = await db
+      .update(invoices)
+      .set({
+        publicTokenVersion: sql`coalesce(${invoices.publicTokenVersion}, 1) + 1`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(invoices.id, req.params.id), eq(invoices.businessId, bid)))
+      .returning({
+        id: invoices.id,
+        publicTokenVersion: invoices.publicTokenVersion,
+      });
+    if (!updated) throw new NotFoundError("Invoice not found.");
+
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "invoice.public_access_revoked",
+      entityType: "invoice",
+      entityId: updated.id,
+      metadata: {
+        publicTokenVersion: updated.publicTokenVersion,
+        source: "staff_action",
+      },
+    });
+
+    res.json({ ok: true, id: updated.id, publicTokenVersion: updated.publicTokenVersion });
+  })
+);
 
 invoicesRouter.post(
   "/:id/sendToClient",

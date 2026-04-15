@@ -15,6 +15,7 @@
     "cleanup:placeholder-bookings": "tsx scripts/cleanup-placeholder-bookings.ts",
     "audit:appointment-finance": "tsx scripts/audit-appointment-finance.ts",
     "repair:appointment-finance": "tsx scripts/repair-appointment-finance.ts",
+    "backfill:business-webhook-secrets": "tsx scripts/backfill-business-webhook-secrets.ts",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts"
   },

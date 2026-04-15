@@ -723,7 +723,7 @@ servicesRouter.delete(
       throw new BadRequestError("This service is linked to past appointments. Deactivate it instead of deleting.");
     }
 
-    await db.delete(services).where(eq(services.id, req.params.id));
+    await db.delete(services).where(and(eq(services.id, req.params.id), eq(services.businessId, bid)));
     res.status(204).end();
   })
 );

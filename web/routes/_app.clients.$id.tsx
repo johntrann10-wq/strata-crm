@@ -628,22 +628,24 @@ export default function ClientDetailPage() {
                   New Quote
                 </Link>
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="More actions" className="col-span-2 justify-self-start sm:justify-self-auto">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => setDeleteOpen(true)}
-                    disabled={deleting}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    Archive Client
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {permissions.has("customers.write") ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label="More actions" className="col-span-2 justify-self-start sm:justify-self-auto">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => setDeleteOpen(true)}
+                      disabled={deleting}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      Archive Client
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
             </div>
           }
         />

@@ -6,14 +6,54 @@ import { eq, desc, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { requirePermission } from "../middleware/permissions.js";
-import { BadRequestError, NotFoundError } from "../lib/errors.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { createRequestActivityLog } from "../lib/activity.js";
+import { sanitizeStringValue, sanitizeValue } from "../lib/logger.js";
+import { roleHasPermission, type PermissionKey } from "../lib/permissions.js";
+import { wrapAsync } from "../lib/asyncHandler.js";
 
 export const activityLogsRouter = Router();
+
+type ActivityLogListRow = {
+  id: string;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  userId: string | null;
+  metadata: string | null;
+  createdAt: Date;
+};
 
 function businessId(req: Request): string {
   if (!req.businessId) throw new Error("No business.");
   return req.businessId;
+}
+
+function sanitizeMetadataString(metadata: string | null): string | null {
+  if (!metadata) return null;
+
+  try {
+    const parsed = JSON.parse(metadata) as unknown;
+    const sanitized = sanitizeValue("metadata", parsed);
+    if (sanitized == null) return null;
+    return typeof sanitized === "string" ? sanitized : JSON.stringify(sanitized);
+  } catch {
+    return sanitizeStringValue(metadata);
+  }
+}
+
+export function serializeActivityLogRecord(row: ActivityLogListRow) {
+  const metadata = sanitizeMetadataString(row.metadata);
+  return {
+    id: row.id,
+    type: row.action,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    userId: row.userId,
+    description: metadata ?? "",
+    metadata,
+    createdAt: row.createdAt,
+  };
 }
 
 const createActivitySchema = z
@@ -58,82 +98,96 @@ async function assertEntityExists(req: Request, entityType: "appointment" | "job
   if (!record) throw new NotFoundError(entityType === "job" ? "Job not found." : "Appointment not found.");
 }
 
-activityLogsRouter.get("/", requireAuth, requireTenant, requirePermission("dashboard.view"), async (req: Request, res: Response) => {
-  const bid = businessId(req);
-  const first = Math.min(Number(req.query.first) || 20, 50);
-  const entityType = typeof req.query.entityType === "string" ? req.query.entityType.trim() : "";
-  const entityId = typeof req.query.entityId === "string" ? req.query.entityId.trim() : "";
-  const conditions = [eq(activityLogs.businessId, bid)];
-  if (entityType) conditions.push(eq(activityLogs.entityType, entityType));
-  if (entityId) conditions.push(eq(activityLogs.entityId, entityId));
-  const list = await db
-    .select({
-      id: activityLogs.id,
-      action: activityLogs.action,
-      entityType: activityLogs.entityType,
-      entityId: activityLogs.entityId,
-      userId: activityLogs.userId,
-      metadata: activityLogs.metadata,
-      createdAt: activityLogs.createdAt,
-    })
-    .from(activityLogs)
-    .where(and(...conditions))
-    .orderBy(desc(activityLogs.createdAt))
-    .limit(first);
-  const records = list.map((row) => ({
-    id: row.id,
-    type: row.action,
-    entityType: row.entityType,
-    entityId: row.entityId,
-    userId: row.userId,
-    description: row.metadata ?? "",
-    metadata: row.metadata,
-    createdAt: row.createdAt,
-  }));
-  res.json({ records });
-});
-
-activityLogsRouter.post("/", requireAuth, requireTenant, async (req: Request, res: Response) => {
-  const parsed = createActivitySchema.safeParse(req.body);
-  if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
-
-  if (parsed.data.entityType === "job") {
-    requirePermission("jobs.write")(req, res, () => undefined);
-  } else {
-    requirePermission("appointments.write")(req, res, () => undefined);
+function assertRequestPermission(req: Request, permission: PermissionKey) {
+  if (!req.membershipRole) {
+    throw new ForbiddenError("No tenant role is associated with this request.");
   }
+  const hasPermission = req.permissions
+    ? req.permissions.includes(permission)
+    : roleHasPermission(req.membershipRole, permission);
+  if (!hasPermission) {
+    throw new ForbiddenError("You do not have permission to perform this action.");
+  }
+}
 
-  await assertEntityExists(req, parsed.data.entityType, parsed.data.entityId);
+activityLogsRouter.get(
+  "/",
+  requireAuth,
+  requireTenant,
+  requirePermission("dashboard.view"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    const first = Math.min(Number(req.query.first) || 20, 50);
+    const entityType = typeof req.query.entityType === "string" ? req.query.entityType.trim() : "";
+    const entityId = typeof req.query.entityId === "string" ? req.query.entityId.trim() : "";
+    const conditions = [eq(activityLogs.businessId, bid)];
+    if (entityType) conditions.push(eq(activityLogs.entityType, entityType));
+    if (entityId) conditions.push(eq(activityLogs.entityId, entityId));
+    const list = await db
+      .select({
+        id: activityLogs.id,
+        action: activityLogs.action,
+        entityType: activityLogs.entityType,
+        entityId: activityLogs.entityId,
+        userId: activityLogs.userId,
+        metadata: activityLogs.metadata,
+        createdAt: activityLogs.createdAt,
+      })
+      .from(activityLogs)
+      .where(and(...conditions))
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(first);
+    const records = list.map(serializeActivityLogRecord);
+    res.json({ records });
+  })
+);
 
-  const metadata =
-    parsed.data.kind === "note"
-      ? { body: parsed.data.body ?? "" }
-      : parsed.data.kind === "media"
-        ? { label: parsed.data.label ?? "", url: parsed.data.url ?? "" }
-        : {
-            itemId: parsed.data.itemId ?? "",
-            label: parsed.data.label ?? "",
-            completed: parsed.data.kind === "checklist_add" ? false : parsed.data.completed ?? false,
-          };
+activityLogsRouter.post(
+  "/",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = createActivitySchema.safeParse(req.body);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
 
-  const action =
-    parsed.data.kind === "note"
-      ? `${parsed.data.entityType}.note_added`
-      : parsed.data.kind === "media"
-        ? `${parsed.data.entityType}.media_added`
-        : parsed.data.kind === "checklist_add"
-          ? `${parsed.data.entityType}.checklist_item_added`
-          : parsed.data.completed
-            ? `${parsed.data.entityType}.checklist_item_completed`
-            : `${parsed.data.entityType}.checklist_item_reopened`;
+    if (parsed.data.entityType === "job") {
+      assertRequestPermission(req, "jobs.write");
+    } else {
+      assertRequestPermission(req, "appointments.write");
+    }
 
-  await createRequestActivityLog(req, {
-    businessId: businessId(req),
-    action,
-    entityType: parsed.data.entityType,
-    entityId: parsed.data.entityId,
-    metadata,
-  });
+    await assertEntityExists(req, parsed.data.entityType, parsed.data.entityId);
 
-  res.status(201).json({ ok: true });
-});
+    const metadata =
+      parsed.data.kind === "note"
+        ? { body: parsed.data.body ?? "" }
+        : parsed.data.kind === "media"
+          ? { label: parsed.data.label ?? "", url: parsed.data.url ?? "" }
+          : {
+              itemId: parsed.data.itemId ?? "",
+              label: parsed.data.label ?? "",
+              completed: parsed.data.kind === "checklist_add" ? false : parsed.data.completed ?? false,
+            };
+
+    const action =
+      parsed.data.kind === "note"
+        ? `${parsed.data.entityType}.note_added`
+        : parsed.data.kind === "media"
+          ? `${parsed.data.entityType}.media_added`
+          : parsed.data.kind === "checklist_add"
+            ? `${parsed.data.entityType}.checklist_item_added`
+            : parsed.data.completed
+              ? `${parsed.data.entityType}.checklist_item_completed`
+              : `${parsed.data.entityType}.checklist_item_reopened`;
+
+    await createRequestActivityLog(req, {
+      businessId: businessId(req),
+      action,
+      entityType: parsed.data.entityType,
+      entityId: parsed.data.entityId,
+      metadata,
+    });
+
+    res.status(201).json({ ok: true });
+  })
+);

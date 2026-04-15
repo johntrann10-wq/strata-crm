@@ -4,7 +4,7 @@ import path from "path";
 import tailwindcss from "@tailwindcss/vite";
 
 function publicApiOrigin(env: Record<string, string>): string {
-  return env.VITE_API_URL?.trim() || env.NEXT_PUBLIC_API_URL?.trim() || env.STRATA_API_ORIGIN?.trim() || "";
+  return env.VITE_API_URL?.trim() || env.NEXT_PUBLIC_API_URL?.trim() || "";
 }
 
 /** Dev server proxies `/api` to the backend; target from VITE_API_URL / NEXT_PUBLIC_API_URL (see `.env.example`). */
@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    envPrefix: ["VITE_", "NEXT_PUBLIC_", "STRATA_"],
+    envPrefix: ["VITE_", "NEXT_PUBLIC_"],
     plugins: [reactRouter(), tailwindcss()],
     ...(mode === "development"
       ? {

@@ -42,6 +42,7 @@ const resetPasswordSchema = z.object({
 export const authRouter = Router();
 
 const signInLimiter = createRateLimiter({
+  id: "auth_sign_in",
   windowMs: 15 * 60 * 1000,
   max: 8,
   message: "Too many sign-in attempts. Please wait a few minutes and try again.",
@@ -52,6 +53,7 @@ const signInLimiter = createRateLimiter({
 });
 
 const signUpLimiter = createRateLimiter({
+  id: "auth_sign_up",
   windowMs: 60 * 60 * 1000,
   max: 6,
   message: "Too many sign-up attempts. Please wait a bit before trying again.",
@@ -61,6 +63,7 @@ const signUpLimiter = createRateLimiter({
   },
 });
 const forgotPasswordLimiter = createRateLimiter({
+  id: "auth_forgot_password",
   windowMs: 30 * 60 * 1000,
   max: 6,
   message: "Too many password reset requests. Please wait a bit before trying again.",
@@ -71,18 +74,21 @@ const forgotPasswordLimiter = createRateLimiter({
 });
 
 const resetPasswordLimiter = createRateLimiter({
+  id: "auth_reset_password",
   windowMs: 30 * 60 * 1000,
   max: 12,
   message: "Too many password reset attempts. Please wait a bit before trying again.",
 });
 
 const googleOAuthStartLimiter = createRateLimiter({
+  id: "auth_google_start",
   windowMs: 10 * 60 * 1000,
   max: 30,
   message: "Too many Google sign-in attempts. Please try again shortly.",
 });
 
 const googleOAuthCallbackLimiter = createRateLimiter({
+  id: "auth_google_callback",
   windowMs: 10 * 60 * 1000,
   max: 30,
   message: "Too many Google callback attempts. Please try again shortly.",
@@ -173,6 +179,12 @@ export function resolveGoogleStateRedirect(input: unknown): string {
   } catch {
     return "/signed-in";
   }
+}
+
+export function buildPostAuthRedirectUrl(frontendUrl: string, redirectPath: string, token: string): string {
+  const baseRedirect = `${frontendUrl}${redirectPath}`;
+  const separator = baseRedirect.includes("#") ? "&" : "#";
+  return `${baseRedirect}${separator}authToken=${encodeURIComponent(token)}`;
 }
 
 export function resolveFrontendBaseUrl(_req: Request): string {
@@ -927,8 +939,6 @@ authRouter.get(
     setAuthCookie(res, token, req);
     const redirectPath = resolveGoogleStateRedirect(req.query.state);
     const frontendUrl = resolveFrontendBaseUrl(req);
-    const baseRedirect = `${frontendUrl}${redirectPath}`;
-    const separator = baseRedirect.includes("#") ? "&" : "#";
-    res.redirect(`${baseRedirect}${separator}authToken=${encodeURIComponent(token)}`);
+    res.redirect(buildPostAuthRedirectUrl(frontendUrl, redirectPath, token));
   })
 );

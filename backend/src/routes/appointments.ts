@@ -19,7 +19,13 @@ import { isEmailConfigured } from "../lib/env.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
 import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
-import { buildPublicAppUrl, buildPublicDocumentUrl, createPublicDocumentToken, verifyPublicDocumentToken } from "../lib/publicDocumentAccess.js";
+import {
+  buildPublicAppUrl,
+  buildPublicDocumentUrl,
+  createPublicDocumentToken,
+  isPublicDocumentTokenCurrent,
+  verifyPublicDocumentToken,
+} from "../lib/publicDocumentAccess.js";
 import { createAppointmentDepositCheckoutSession, retrieveCheckoutSession, retrieveConnectAccount } from "../lib/stripe.js";
 import { renderAppointmentHtml } from "../lib/appointmentTemplate.js";
 import { scheduleGoogleCalendarAppointmentSync } from "../lib/googleCalendar.js";
@@ -31,10 +37,35 @@ export const appointmentsRouter = Router({ mergeParams: true });
 const CALENDAR_BLOCK_PREFIX = "[[calendar-block:";
 
 const appointmentConfirmationLimiter = createRateLimiter({
+  id: "appointment_confirmation_send",
   windowMs: 10 * 60 * 1000,
   max: 8,
   message: "Too many appointment confirmations sent. Please wait a bit before trying again.",
-  key: ({ businessId, ip, path }) => `email:appointment:${businessId ?? ip}:${path}`,
+  key: ({ businessId, userId, ip, path }) => `email:appointment:${businessId ?? "none"}:${userId ?? ip}:${path}`,
+});
+
+const appointmentDepositSessionLimiter = createRateLimiter({
+  id: "appointment_deposit_session",
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  message: "Too many deposit payment attempts. Please wait a bit before trying again.",
+  key: ({ businessId, userId, ip, path }) => `payment:appointment-deposit:${businessId ?? "none"}:${userId ?? ip}:${path}`,
+});
+
+const publicAppointmentDepositSessionLimiter = createRateLimiter({
+  id: "public_appointment_deposit_session",
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  message: "Too many payment attempts. Please wait a bit before trying again.",
+  key: ({ ip, path }) => `public:appointment-deposit:${ip}:${path}`,
+});
+
+const publicAppointmentChangeRequestLimiter = createRateLimiter({
+  id: "public_appointment_change_request",
+  windowMs: 15 * 60 * 1000,
+  max: 6,
+  message: "Too many change requests. Please wait a bit before trying again.",
+  key: ({ ip, path }) => `public:appointment-change:${ip}:${path}`,
 });
 
 export function canDeleteAppointmentWithInvoiceStatuses(
@@ -2029,7 +2060,11 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("
   if (parsed.data.applyAdminFee !== undefined) updates.applyAdminFee = parsed.data.applyAdminFee;
   if (parsed.data.notes != null) updates.notes = parsed.data.notes.trim() || null;
   if (parsed.data.internalNotes != null) updates.internalNotes = parsed.data.internalNotes.trim() || null;
-  const [updated] = await db.update(appointments).set(updates as Record<string, unknown>).where(eq(appointments.id, req.params.id)).returning();
+  const [updated] = await db
+    .update(appointments)
+    .set(updates as Record<string, unknown>)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .returning();
   if (
     updated &&
     (parsed.data.taxRate !== undefined ||
@@ -2207,7 +2242,13 @@ appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant,
   });
 }));
 
-appointmentsRouter.post("/:id/create-deposit-payment-session", requireAuth, requireTenant, requirePermission("payments.write"), wrapAsync(async (req: Request, res: Response) => {
+appointmentsRouter.post(
+  "/:id/create-deposit-payment-session",
+  appointmentDepositSessionLimiter.middleware,
+  requireAuth,
+  requireTenant,
+  requirePermission("payments.write"),
+  wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [appointment] = await db
     .select({
@@ -2340,7 +2381,8 @@ appointmentsRouter.post("/:id/confirm-stripe-deposit-session", requireAuth, requ
     confirmed,
     depositSatisfied: postConfirmFinance?.depositSatisfied === true,
   });
-}));
+  })
+);
 
 appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant, requirePermission("payments.write"), wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
@@ -2435,7 +2477,7 @@ appointmentsRouter.post("/:id/reverseDepositPayment", requireAuth, requireTenant
   });
 }));
 
-appointmentsRouter.post("/:id/public-request-change", express.urlencoded({ extended: false }), wrapAsync(async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/public-request-change", publicAppointmentChangeRequestLimiter.middleware, express.urlencoded({ extended: false }), wrapAsync(async (req: Request, res: Response) => {
   const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
   const access = verifyPublicDocumentToken(token, { kind: "appointment", entityId: req.params.id });
   if (!access) throw new ForbiddenError("Appointment access link is invalid or expired.");
@@ -2478,7 +2520,7 @@ appointmentsRouter.post("/:id/public-request-change", express.urlencoded({ exten
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, access.businessId)))
     .limit(1);
   if (!appointment) throw new NotFoundError("Appointment not found.");
-  if (appointment.publicTokenVersion != null && access.ver !== appointment.publicTokenVersion) {
+  if (!isPublicDocumentTokenCurrent(access, appointment.publicTokenVersion)) {
     throw new ForbiddenError("Appointment access link is invalid or expired.");
   }
 
@@ -2594,7 +2636,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, access.businessId)))
     .limit(1);
   if (!appointment) throw new NotFoundError("Appointment not found.");
-  if (appointment.publicTokenVersion != null && access.ver !== appointment.publicTokenVersion) {
+  if (!isPublicDocumentTokenCurrent(access, appointment.publicTokenVersion)) {
     throw new ForbiddenError("Appointment access link is invalid or expired.");
   }
 
@@ -2724,7 +2766,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
   res.send(html);
 }));
 
-appointmentsRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Response) => {
+appointmentsRouter.get("/:id/public-pay", publicAppointmentDepositSessionLimiter.middleware, wrapAsync(async (req: Request, res: Response) => {
   const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
   const access = verifyPublicDocumentToken(token, { kind: "appointment", entityId: req.params.id });
   if (!access) throw new ForbiddenError("Appointment access link is invalid or expired.");
@@ -2741,7 +2783,7 @@ appointmentsRouter.get("/:id/public-pay", wrapAsync(async (req: Request, res: Re
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, access.businessId)))
     .limit(1);
   if (!appointment) throw new NotFoundError("Appointment not found.");
-  if (appointment.publicTokenVersion != null && access.ver !== appointment.publicTokenVersion) {
+  if (!isPublicDocumentTokenCurrent(access, appointment.publicTokenVersion)) {
     throw new ForbiddenError("Appointment access link is invalid or expired.");
   }
 
@@ -2890,7 +2932,11 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, require
   const updates: Record<string, unknown> = { status, updatedAt: new Date() };
   if (status === "cancelled") updates.cancelledAt = new Date();
   if (status === "completed") updates.completedAt = new Date();
-  const [updated] = await db.update(appointments).set(updates as Record<string, unknown>).where(eq(appointments.id, req.params.id)).returning();
+  const [updated] = await db
+    .update(appointments)
+    .set(updates as Record<string, unknown>)
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .returning();
   if (updated) {
     await createRequestActivityLog(req, {
       businessId: bid,
@@ -3120,3 +3166,38 @@ appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, requirePermis
   }
   res.json(updated);
 });
+
+appointmentsRouter.post(
+  "/:id/revoke-public-access",
+  requireAuth,
+  requireTenant,
+  requirePermission("appointments.write"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const bid = businessId(req);
+    const [updated] = await db
+      .update(appointments)
+      .set({
+        publicTokenVersion: sql`coalesce(${appointments.publicTokenVersion}, 1) + 1`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+      .returning({
+        id: appointments.id,
+        publicTokenVersion: appointments.publicTokenVersion,
+      });
+    if (!updated) throw new NotFoundError("Appointment not found.");
+
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "appointment.public_access_revoked",
+      entityType: "appointment",
+      entityId: updated.id,
+      metadata: {
+        publicTokenVersion: updated.publicTokenVersion,
+        source: "staff_action",
+      },
+    });
+
+    res.json({ ok: true, id: updated.id, publicTokenVersion: updated.publicTokenVersion });
+  })
+);

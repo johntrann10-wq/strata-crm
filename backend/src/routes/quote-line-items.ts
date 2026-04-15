@@ -128,7 +128,11 @@ quoteLineItemsRouter.patch("/:id", requireAuth, requireTenant, requirePermission
   }
 
   const updated = await db.transaction(async (tx) => {
-    const [row] = await tx.update(quoteLineItems).set(updates as Record<string, unknown>).where(eq(quoteLineItems.id, req.params.id)).returning();
+    const [row] = await tx
+      .update(quoteLineItems)
+      .set(updates as Record<string, unknown>)
+      .where(and(eq(quoteLineItems.id, req.params.id), eq(quoteLineItems.quoteId, existing.quoteId)))
+      .returning();
     if (!row) throw new NotFoundError("Quote line item not found.");
     await recalculateQuoteTotals(tx, existing.quoteId);
     return row;
@@ -146,7 +150,9 @@ quoteLineItemsRouter.delete("/:id", requireAuth, requireTenant, requirePermissio
 
   const qid = existing.quoteId;
   await db.transaction(async (tx) => {
-    await tx.delete(quoteLineItems).where(eq(quoteLineItems.id, req.params.id));
+    await tx
+      .delete(quoteLineItems)
+      .where(and(eq(quoteLineItems.id, req.params.id), eq(quoteLineItems.quoteId, qid)));
     await recalculateQuoteTotals(tx, qid);
   });
   res.status(204).send();

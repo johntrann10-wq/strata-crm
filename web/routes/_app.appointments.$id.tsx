@@ -1574,20 +1574,22 @@ export default function AppointmentDetail() {
             </Button>
           ) : null}
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
-            onClick={() => setShowDeleteDialog(true)}
-            disabled={isActionLoading}
-          >
-            {deletingAppointment ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4 mr-2" />
-            )}
-            {isInternalAppointment ? "Delete Block" : "Delete Appointment"}
-          </Button>
+          {permissions.has("appointments.write") ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
+              onClick={() => setShowDeleteDialog(true)}
+              disabled={isActionLoading}
+            >
+              {deletingAppointment ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              {isInternalAppointment ? "Delete Block" : "Delete Appointment"}
+            </Button>
+          ) : null}
 
           {canQuickCompleteAppointment && (
             <Button
@@ -1777,19 +1779,21 @@ export default function AppointmentDetail() {
               </Button>
             ) : null}
 
-              <Button
-                variant="outline"
-                className="w-full justify-center border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
-                onClick={() => setShowDeleteDialog(true)}
-                disabled={isActionLoading}
-              >
-                {deletingAppointment ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4 mr-2" />
-                )}
-                {isInternalAppointment ? "Delete Block" : "Delete Appointment"}
-              </Button>
+              {permissions.has("appointments.write") ? (
+                <Button
+                  variant="outline"
+                  className="w-full justify-center border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => setShowDeleteDialog(true)}
+                  disabled={isActionLoading}
+                >
+                  {deletingAppointment ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  {isInternalAppointment ? "Delete Block" : "Delete Appointment"}
+                </Button>
+              ) : null}
 
             {canQuickCompleteAppointment ? (
               <Button
@@ -1935,17 +1939,19 @@ export default function AppointmentDetail() {
                     ) : null}
                   </>
                 ) : null}
-                <Button
-                  variant="outline"
-                  className="justify-start border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => {
-                    setShowMobileActions(false);
-                    setShowDeleteDialog(true);
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  {isInternalAppointment ? "Delete block" : "Delete appointment"}
-                </Button>
+                {permissions.has("appointments.write") ? (
+                  <Button
+                    variant="outline"
+                    className="justify-start border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => {
+                      setShowMobileActions(false);
+                      setShowDeleteDialog(true);
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {isInternalAppointment ? "Delete block" : "Delete appointment"}
+                  </Button>
+                ) : null}
                 {hasRecordedPayment ? (
                   <Button
                     variant="outline"

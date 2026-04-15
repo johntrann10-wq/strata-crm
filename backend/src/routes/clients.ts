@@ -67,10 +67,11 @@ const sendPortalSchema = z.object({
 });
 
 const clientPortalLimiter = createRateLimiter({
+  id: "client_portal_send",
   windowMs: 10 * 60 * 1000,
   max: 6,
   message: "Too many portal emails sent. Please wait a bit before trying again.",
-  key: ({ businessId, ip, path }) => `email:client-portal:${businessId ?? ip}:${path}`,
+  key: ({ businessId, userId, ip, path }) => `email:client-portal:${businessId ?? "none"}:${userId ?? ip}:${path}`,
 });
 
 /** Empty strings clear optional text fields on PATCH. */
@@ -442,10 +443,20 @@ clientsRouter.delete("/:id", requireAuth, requireTenant, requirePermission("cust
   if (!existing) throw new NotFoundError("Client not found.");
   const now = new Date();
   await db.transaction(async (tx) => {
-    await tx.update(clients).set({ deletedAt: now, updatedAt: now }).where(eq(clients.id, req.params.id));
-    await tx.update(vehicles).set({ deletedAt: now, updatedAt: now }).where(eq(vehicles.clientId, req.params.id));
+    await tx
+      .update(clients)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(clients.id, req.params.id), eq(clients.businessId, bid)));
+    await tx
+      .update(vehicles)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(vehicles.clientId, req.params.id), eq(vehicles.businessId, bid)));
   });
-  const [updated] = await db.select().from(clients).where(eq(clients.id, req.params.id)).limit(1);
+  const [updated] = await db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.id, req.params.id), eq(clients.businessId, bid)))
+    .limit(1);
   logger.info("Client archived", { clientId: req.params.id, businessId: bid });
   await createRequestActivityLog(req, {
     businessId: bid,

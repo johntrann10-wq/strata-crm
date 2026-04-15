@@ -21,6 +21,13 @@ const configuredApiOrigin =
   process.env.VITE_API_URL?.trim() || process.env.NEXT_PUBLIC_API_URL?.trim() || "";
 const configuredApiHost = configuredApiOrigin ? new URL(configuredApiOrigin).host.toLowerCase() : "";
 const forbidden = [{ re: /strata\.gadget\.app/i, msg: "strata.gadget.app (legacy Gadget host)" }];
+const forbiddenSecrets = [
+  { re: /\bsk_(live|test)_[A-Za-z0-9]+\b/i, msg: "Stripe secret key" },
+  { re: /\bwhsec_[A-Za-z0-9]+\b/i, msg: "Stripe webhook secret" },
+  { re: /\bre_[A-Za-z0-9]{8,}\b/i, msg: "Resend API key" },
+  { re: /\bghp_[A-Za-z0-9]{20,}\b/i, msg: "GitHub personal access token" },
+  { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/i, msg: "private key material" },
+];
 
 if (configuredApiHost && configuredApiHost !== "localhost" && configuredApiHost !== "127.0.0.1") {
   forbidden.push({
@@ -45,6 +52,13 @@ function walk(dir) {
     for (const { re, msg, allow } of forbidden) {
       if (re.test(contents) && !(allow && allow.test(contents))) {
         console.error(`[verify-client-bundle] Forbidden pattern (${msg}) in ${filePath}`);
+        process.exit(1);
+      }
+    }
+
+    for (const { re, msg } of forbiddenSecrets) {
+      if (re.test(contents)) {
+        console.error(`[verify-client-bundle] Client bundle appears to contain ${msg} in ${filePath}`);
         process.exit(1);
       }
     }

@@ -106,7 +106,7 @@ function invoiceBalance(invoice: Record<string, unknown>): number {
 }
 
 export default function VehicleDetailPage() {
-  const { currentLocationId } = useOutletContext<AuthOutletContext>();
+  const { currentLocationId, permissions } = useOutletContext<AuthOutletContext>();
   const { id, vehicleId } = useParams<{ id: string; vehicleId: string }>();
   const [searchParams] = useSearchParams();
   const location = useLocation();
@@ -234,18 +234,18 @@ export default function VehicleDetailPage() {
     }
   }, [updateResult.error]);
 
-  useEffect(() => {
-    if (deleteResult.data) {
-      toast.success("Vehicle deleted");
-      navigate(returnTo);
-    }
-  }, [deleteResult.data, navigate, returnTo]);
+    useEffect(() => {
+      if (deleteResult.data) {
+        toast.success("Vehicle archived");
+        navigate(returnTo);
+      }
+    }, [deleteResult.data, navigate, returnTo]);
 
-  useEffect(() => {
-    if (deleteResult.error) {
-      toast.error(deleteResult.error.message ?? "Failed to delete vehicle");
-    }
-  }, [deleteResult.error]);
+    useEffect(() => {
+      if (deleteResult.error) {
+        toast.error(deleteResult.error.message ?? "Failed to archive vehicle");
+      }
+    }, [deleteResult.error]);
 
   const handleSave = () => {
     update({
@@ -710,14 +710,16 @@ export default function VehicleDetailPage() {
 
                 <Separator />
                 <div className="flex justify-start">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                    onClick={() => setShowDeleteDialog(true)}
-                  >
-                    Delete Vehicle
-                  </Button>
+                    {permissions.has("vehicles.write") ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                        onClick={() => setShowDeleteDialog(true)}
+                      >
+                        Archive Vehicle
+                      </Button>
+                    ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -815,9 +817,9 @@ export default function VehicleDetailPage() {
         <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Vehicle?</AlertDialogTitle>
+              <AlertDialogTitle>Archive Vehicle?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently remove this vehicle. This cannot be undone.
+                  This will archive the vehicle and remove it from active workflows while preserving any linked history.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -827,8 +829,8 @@ export default function VehicleDetailPage() {
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 {deleteResult.fetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Delete
-              </AlertDialogAction>
+                  Archive
+                </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

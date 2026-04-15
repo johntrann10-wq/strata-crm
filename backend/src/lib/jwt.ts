@@ -1,4 +1,5 @@
-import jwt from "jsonwebtoken";
+import { randomUUID } from "crypto";
+import jwt, { type SignOptions } from "jsonwebtoken";
 
 const JWT_ISSUER = "strata-backend";
 const ACCESS_TOKEN_AUDIENCE = "strata-api";
@@ -35,12 +36,16 @@ export function verifyAccessToken(token: string): { userId?: string; ver?: numbe
   }
 }
 
-export function createScopedPublicDocumentToken<T extends Record<string, unknown>>(payload: T): string {
+export function createScopedPublicDocumentToken<T extends Record<string, unknown>>(
+  payload: T,
+  options?: { expiresIn?: SignOptions["expiresIn"] }
+): string {
   return jwt.sign(payload, requireJwtSecret(), {
     algorithm: "HS256",
     audience: PUBLIC_DOCUMENT_AUDIENCE,
-    expiresIn: "14d",
+    expiresIn: options?.expiresIn ?? "14d",
     issuer: JWT_ISSUER,
+    jwtid: randomUUID(),
   });
 }
 
