@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, useOutletContext } from "react-router";
+import { isRouteErrorResponse, Link, Outlet, useLocation, useOutletContext, useRouteError } from "react-router";
 import { Navigation } from "@/components/public/nav";
 import { buttonVariants } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
@@ -170,6 +170,77 @@ export default function PublicLayout() {
           </div>
         </footer>
       ) : null}
+    </div>
+  );
+}
+
+function publicErrorDetails(error: unknown): { title: string; message: string; canRetry: boolean } {
+  if (isRouteErrorResponse(error)) {
+    return {
+      title: `${error.status} ${error.statusText}`,
+      message: "This page is unavailable right now. Please refresh and try again.",
+      canRetry: true,
+    };
+  }
+
+  if (error instanceof Error) {
+    const detail = error.message.trim();
+    const lower = detail.toLowerCase();
+    const isRouteChunkFailure =
+      lower.includes("route module") ||
+      lower.includes("failed to fetch dynamically imported module") ||
+      lower.includes("failed to load module script") ||
+      lower.includes("importing a module script failed");
+
+    if (isRouteChunkFailure) {
+      return {
+        title: "Page update in progress",
+        message: "This page just updated. Refresh once to load the latest version.",
+        canRetry: true,
+      };
+    }
+
+    return {
+      title: "Unable to load page",
+      message: detail || "This page is unavailable right now. Please try again in a moment.",
+      canRetry: true,
+    };
+  }
+
+  return {
+    title: "Unable to load page",
+    message: "This page is unavailable right now. Please try again in a moment.",
+    canRetry: true,
+  };
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const { title, message, canRetry } = publicErrorDetails(error);
+
+  return (
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_48%,#f8fafc_100%)]">
+      <div className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center px-4 py-10 text-center sm:px-6">
+        <div className="w-full rounded-[1.75rem] border border-slate-200/80 bg-white/95 px-6 py-8 shadow-[0_24px_60px_rgba(15,23,42,0.08),0_2px_12px_rgba(15,23,42,0.04)] sm:px-8">
+          <p className="text-[0.72rem] font-medium uppercase tracking-[0.18em] text-slate-500">Service Request</p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{title}</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">{message}</p>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            {canRetry ? (
+              <button
+                type="button"
+                className={cn(buttonVariants({ size: "lg" }), "rounded-2xl")}
+                onClick={() => window.location.reload()}
+              >
+                Refresh page
+              </button>
+            ) : null}
+            <Link to="/" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "rounded-2xl")}>
+              Back to Strata
+            </Link>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

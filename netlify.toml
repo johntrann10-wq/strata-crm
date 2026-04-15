@@ -7,6 +7,16 @@
   # SPA uses relative /api; edge function forwards to STRATA_API_ORIGIN (set in Netlify UI).
   VITE_ALLOW_RELATIVE_API = "true"
 
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
 # Forward /api/* to STRATA_API_ORIGIN (see netlify/edge-functions/strata-api-proxy.ts)
 [[edge_functions]]
   path = "/api/*"
