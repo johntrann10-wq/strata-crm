@@ -175,6 +175,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   booking_slot_interval_minutes integer DEFAULT 15,
   booking_buffer_minutes integer,
   booking_capacity_per_slot integer,
+  booking_urgency_enabled boolean DEFAULT false,
   integration_webhook_enabled boolean DEFAULT false,
   integration_webhook_url text,
   integration_webhook_secret text,
@@ -254,6 +255,7 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_blackout_dates text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_slot_interval_minutes integer DEFAULT 15;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_buffer_minutes integer;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_capacity_per_slot integer;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_urgency_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_url text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_secret text;

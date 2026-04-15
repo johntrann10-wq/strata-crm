@@ -145,6 +145,7 @@ const createSchema = z.object({
   bookingSlotIntervalMinutes: z.number().int().min(15).max(120).optional(),
   bookingBufferMinutes: z.number().int().min(0).max(240).nullable().optional(),
   bookingCapacityPerSlot: z.number().int().min(1).max(12).nullable().optional(),
+  bookingUrgencyEnabled: z.boolean().optional(),
   monthlyRevenueGoal: z.coerce.number().min(0).max(100000000).nullable().optional(),
   monthlyJobsGoal: z.number().int().min(0).max(100000).nullable().optional(),
   integrationWebhookEnabled: z.boolean().optional(),
@@ -773,6 +774,7 @@ type PublicBookingConfigPayload = {
   businessName: string;
   businessType: string | null;
   timezone: string;
+  urgencyEnabled: boolean;
   title: string;
   subtitle: string;
   confirmationMessage: string | null;
@@ -851,6 +853,7 @@ export function buildPublicBookingConfigResponse(params: {
     | "bookingAllowCustomerNotes"
     | "bookingShowPrices"
     | "bookingShowDurations"
+    | "bookingUrgencyEnabled"
   >;
   services: PublicBookingConfigPayload["services"];
   locations: PublicBookingConfigPayload["locations"];
@@ -861,6 +864,7 @@ export function buildPublicBookingConfigResponse(params: {
     businessName: business.name,
     businessType: business.type,
     timezone: business.timezone ?? "America/Los_Angeles",
+    urgencyEnabled: business.bookingUrgencyEnabled ?? false,
     title: buildBookingPageTitle(business),
     subtitle: buildBookingPageSubtitle(business),
     confirmationMessage: cleanOptionalText(business.bookingConfirmationMessage ?? undefined),
@@ -1357,6 +1361,7 @@ function coerceBusinessRecord(
     bookingSlotIntervalMinutes: record.bookingSlotIntervalMinutes ?? 15,
     bookingBufferMinutes: record.bookingBufferMinutes ?? null,
     bookingCapacityPerSlot: record.bookingCapacityPerSlot ?? null,
+    bookingUrgencyEnabled: record.bookingUrgencyEnabled ?? false,
     monthlyRevenueGoal: record.monthlyRevenueGoal ?? null,
     monthlyJobsGoal: record.monthlyJobsGoal ?? null,
     integrationWebhookEnabled: record.integrationWebhookEnabled ?? false,
@@ -1433,6 +1438,7 @@ export function serializeBusiness(record: BusinessRecord) {
     bookingSlotIntervalMinutes: record.bookingSlotIntervalMinutes ?? 15,
     bookingBufferMinutes: record.bookingBufferMinutes ?? null,
     bookingCapacityPerSlot: record.bookingCapacityPerSlot ?? null,
+    bookingUrgencyEnabled: record.bookingUrgencyEnabled ?? false,
     billingAccessState: record.billingAccessState ?? null,
     trialStartedAt: record.trialStartedAt ?? null,
     billingSetupError: record.billingSetupError ?? null,
@@ -2984,6 +2990,7 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       bookingSlotIntervalMinutes: parsed.data.bookingSlotIntervalMinutes ?? 15,
       bookingBufferMinutes: parsed.data.bookingBufferMinutes ?? null,
       bookingCapacityPerSlot: parsed.data.bookingCapacityPerSlot ?? null,
+      bookingUrgencyEnabled: parsed.data.bookingUrgencyEnabled ?? false,
       monthlyRevenueGoal:
         parsed.data.monthlyRevenueGoal != null ? String(parsed.data.monthlyRevenueGoal) : null,
       monthlyJobsGoal: parsed.data.monthlyJobsGoal ?? null,
@@ -3238,6 +3245,9 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.bookingCapacityPerSlot !== undefined) {
     updates.bookingCapacityPerSlot = parsed.data.bookingCapacityPerSlot ?? null;
+  }
+  if (parsed.data.bookingUrgencyEnabled !== undefined) {
+    updates.bookingUrgencyEnabled = parsed.data.bookingUrgencyEnabled ?? false;
   }
   if (parsed.data.monthlyRevenueGoal !== undefined) {
     updates.monthlyRevenueGoal =

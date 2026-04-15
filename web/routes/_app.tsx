@@ -19,6 +19,7 @@ import type { Route } from "./+types/_app";
 import {
   LayoutDashboard,
   Calendar,
+  CalendarCheck2,
   Users,
   ClipboardList,
   FileText,
@@ -161,6 +162,7 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
     label: "Catalog & Admin",
     items: [
       { icon: Wrench, label: "Services", href: "/services", end: false, module: "services", permission: "services.read", description: "Manage services, packages, and pricing structure." },
+      { icon: CalendarCheck2, label: "Booking page", href: "/app/booking", end: false, permission: "settings.read", description: "Shape the live booking flow, branding, and conversion settings." },
       { icon: Settings, label: "Settings", href: "/settings", end: false, permission: "settings.read", description: "Update team, locations, business profile, and billing." },
     ],
   },

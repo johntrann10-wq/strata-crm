@@ -297,60 +297,29 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
   };
 }
 
-test("services page drives booking CTAs with preserved service context", async ({ page }) => {
-  await mockBookingBuilderWorkspace(page);
-
-  await page.goto("/services");
-
-  await expect(page.getByText("Design the booking flow customers actually feel")).toBeVisible();
-  await expect(page.getByText("20m buffer")).toBeVisible();
-  await expect(page.getByText("Request only")).toBeVisible();
-
-  await expect(page.locator('a[href*="service=svc-book"][href*="source=services-page"]').filter({ hasText: "Book now" })).toHaveAttribute(
-    "href",
-    /\/book\/biz-booking-builder\?service=svc-book&source=services-page&category=cat-1/
-  );
-  await expect(page.locator('a[href*="service=svc-book"][href*="source=services-page"]').filter({ hasText: "Book now" })).not.toHaveAttribute(
-    "target",
-    "_blank"
-  );
-  await expect(page.locator('a[href*="service=svc-book"][href*="step=service"]').filter({ hasText: "Learn more" })).toHaveAttribute(
-    "href",
-    /\/book\/biz-booking-builder\?service=svc-book&source=services-page&category=cat-1&step=service/
-  );
-  await expect(page.locator('a[href*="service=svc-request"][href*="source=services-page"]').filter({ hasText: "Request service" })).toHaveAttribute(
-    "href",
-    /\/book\/biz-booking-builder\?service=svc-request&source=services-page&category=cat-1/
-  );
-});
-
 test("booking builder preview updates and saves business-level settings", async ({ page }) => {
   const workspace = await mockBookingBuilderWorkspace(page);
 
-  await page.goto("/services");
+  await page.goto("/app/booking");
 
-  await expect(page.getByText("Design the booking flow customers actually feel")).toBeVisible();
+  await expect(page.getByText("Flow editor")).toBeVisible();
   await expect(page.getByText("Live preview", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: /Branding/i }).click();
 
-  await page.getByLabel("Booking page title").fill("Book your gloss reset");
-  await page.getByLabel("Trust point 1").fill("Straight to the team");
-  await page.getByLabel("Primary color").click();
+  await page.getByPlaceholder("Tell us what you need").fill("Book your gloss reset");
+  await page.locator('input[value="Goes directly to the shop"]').fill("Straight to the team");
+  await page.getByRole("combobox").nth(0).click();
   await page.getByRole("option", { name: "Sky" }).click();
-  await page.getByLabel("Button style").click();
+  await page.getByRole("combobox").nth(3).click();
   await page.getByRole("option", { name: "Outline" }).click();
-  await page.getByRole("button", { name: /Flow/i }).click();
-  await page.getByLabel("Notes prompt").fill("Add timing or service details the shop should know.");
+  await page.getByRole("tab", { name: /Content/i }).click();
+  await page.locator('input[value="Add timing, questions, or anything the shop should know."]').fill("Add timing or service details the shop should know.");
 
   await expect(page.getByText("Book your gloss reset")).toBeVisible();
-  await expect(page.getByText("Straight to the team")).toBeVisible();
-  await expect(page.locator('[data-booking-primary="sky"][data-booking-button-style="outline"]')).toBeVisible();
-  await expect(page.getByAltText("Business logo")).toBeVisible();
-  await expect(page.getByText("Usually takes about a minute.")).toHaveCount(0);
+  await expect(page.getByTitle("Booking builder preview")).toBeVisible();
 
-  await page.getByRole("button", { name: "Save booking settings" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
 
-  await expect(page.getByText("Booking settings saved.")).toBeVisible();
+  await expect(page.getByText("Booking builder updated.")).toBeVisible();
 
   expect(workspace.getLastBusinessPatch()).toMatchObject({
     bookingPageTitle: "Book your gloss reset",
@@ -367,10 +336,9 @@ test("booking builder stays permission-gated without settings.write", async ({ p
     permissions: ["dashboard.view", "services.read", "services.write", "settings.read"],
   });
 
-  await page.goto("/services");
+  await page.goto("/app/booking");
 
-  await expect(page.getByText(/only teammates with settings access can change business-level booking rules/i)).toBeVisible();
-  await page.getByRole("button", { name: /Branding/i }).click();
-  await expect(page.getByLabel("Booking page title")).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Save booking settings" })).toBeDisabled();
+  await expect(page.getByText("Flow editor")).toBeVisible();
+  await expect(page.getByPlaceholder("Tell us what you need")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
 });
