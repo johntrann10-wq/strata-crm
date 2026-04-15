@@ -13,7 +13,7 @@ import { getDefaultPermissionsForRole, resolvePermissionsForRole } from "../lib/
 import { createRateLimiter } from "../middleware/security.js";
 import { createAccessToken, createPasswordResetToken, verifyAccessToken, verifyPasswordResetToken, verifyTeamInviteToken } from "../lib/jwt.js";
 import { clearAuthCookie, getAuthTokenFromCookieHeader, setAuthCookie } from "../lib/authCookies.js";
-import { isAuthTokenVersionMismatch, loadAuthTokenVersion, normalizeTokenVersion } from "../lib/authTokenVersion.js";
+import { isAuthTokenVersionMismatch, isUserSchemaDriftError, loadAuthTokenVersion, normalizeTokenVersion } from "../lib/authTokenVersion.js";
 import { sendTemplatedEmail } from "../lib/email.js";
 import { isEmailConfigured } from "../lib/env.js";
 
@@ -206,18 +206,6 @@ type AuthUserRecord = {
   updatedAt: Date | null;
 };
 
-function isUserSchemaDriftError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
-  const cause =
-    candidate.cause && typeof candidate.cause === "object"
-      ? (candidate.cause as { code?: unknown; message?: unknown })
-      : candidate;
-  const code = String(cause.code ?? "");
-  const message = String(cause.message ?? "").toLowerCase();
-  return code === "42P01" || code === "42703" || message.includes("does not exist");
-}
-
 function mapLegacyUserRow(row: Record<string, unknown>): AuthUserRecord {
   return {
     id: String(row.id),
@@ -249,6 +237,151 @@ function normalizeAuthUser(user: AuthUserRecord): AuthUserRecord {
     createdAt: user.createdAt ?? null,
     updatedAt: user.updatedAt ?? null,
   };
+}
+
+async function createUserSafe(params: {
+  email: string;
+  passwordHash?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  googleProfileId?: string | null;
+  emailVerified?: boolean;
+}): Promise<AuthUserRecord | null> {
+  const id = randomUUID();
+  try {
+    const [createdUser] = await db
+      .insert(users)
+      .values({
+        id,
+        email: params.email,
+        passwordHash: params.passwordHash ?? null,
+        firstName: params.firstName ?? null,
+        lastName: params.lastName ?? null,
+        googleProfileId: params.googleProfileId ?? null,
+        emailVerified: params.emailVerified ?? false,
+      })
+      .returning({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        googleProfileId: users.googleProfileId,
+        passwordHash: users.passwordHash,
+        authTokenVersion: users.authTokenVersion,
+        emailVerified: users.emailVerified,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      });
+    return createdUser ? normalizeAuthUser(createdUser as AuthUserRecord) : null;
+  } catch (error) {
+    if (!isUserSchemaDriftError(error)) throw error;
+    logger.warn("Users schema drift detected during create; falling back to legacy insert", {
+      email: params.email,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const result = await db.execute(sql`
+      INSERT INTO users (
+        id,
+        email,
+        password_hash,
+        first_name,
+        last_name,
+        email_verified,
+        google_profile_id
+      )
+      VALUES (
+        ${id},
+        ${params.email},
+        ${params.passwordHash ?? null},
+        ${params.firstName ?? null},
+        ${params.lastName ?? null},
+        ${params.emailVerified ?? false},
+        ${params.googleProfileId ?? null}
+      )
+      RETURNING id, email, password_hash, first_name, last_name, email_verified, google_profile_id, created_at, updated_at
+    `);
+    const row = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0];
+    return row ? mapLegacyUserRow(row) : null;
+  }
+}
+
+async function updateUserReturningSafe(
+  userId: string,
+  updates: {
+    passwordHash?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    googleProfileId?: string | null;
+    emailVerified?: boolean;
+    updatedAt: Date;
+  }
+): Promise<AuthUserRecord | null> {
+  try {
+    const [updatedUser] = await db
+      .update(users)
+      .set({
+        passwordHash: updates.passwordHash,
+        firstName: updates.firstName,
+        lastName: updates.lastName,
+        googleProfileId: updates.googleProfileId,
+        emailVerified: updates.emailVerified,
+        updatedAt: updates.updatedAt,
+      })
+      .where(eq(users.id, userId))
+      .returning({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        googleProfileId: users.googleProfileId,
+        passwordHash: users.passwordHash,
+        authTokenVersion: users.authTokenVersion,
+        emailVerified: users.emailVerified,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      });
+    return updatedUser ? normalizeAuthUser(updatedUser as AuthUserRecord) : null;
+  } catch (error) {
+    if (!isUserSchemaDriftError(error)) throw error;
+    logger.warn("Users schema drift detected during update; falling back to legacy update", {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const result = await db.execute(sql`
+      UPDATE users
+      SET
+        password_hash = COALESCE(${updates.passwordHash ?? null}, password_hash),
+        first_name = COALESCE(${updates.firstName ?? null}, first_name),
+        last_name = COALESCE(${updates.lastName ?? null}, last_name),
+        google_profile_id = COALESCE(${updates.googleProfileId ?? null}, google_profile_id),
+        email_verified = COALESCE(${updates.emailVerified ?? null}, email_verified),
+        updated_at = ${updates.updatedAt}
+      WHERE id = ${userId}
+      RETURNING id, email, password_hash, first_name, last_name, email_verified, google_profile_id, created_at, updated_at
+    `);
+    const row = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0];
+    return row ? mapLegacyUserRow(row) : null;
+  }
+}
+
+async function updatePasswordHashSafe(userId: string, passwordHash: string, nextAuthVersion: number): Promise<void> {
+  try {
+    await db
+      .update(users)
+      .set({ passwordHash, authTokenVersion: nextAuthVersion, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+  } catch (error) {
+    if (!isUserSchemaDriftError(error)) throw error;
+    logger.warn("Users schema drift detected during password update; falling back to legacy update", {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await db.execute(sql`
+      UPDATE users
+      SET password_hash = ${passwordHash}, updated_at = ${new Date()}
+      WHERE id = ${userId}
+    `);
+  }
 }
 
 async function loadUserByEmailSafe(email: string): Promise<AuthUserRecord | null> {
@@ -704,69 +837,42 @@ authRouter.post(
           return [];
         });
 
-      const [claimedUser] = await db.transaction(async (tx) => {
-      const [updatedUser] = await tx
-        .update(users)
-        .set({
-          passwordHash,
-          firstName: firstName ?? existing.firstName ?? null,
-          lastName: lastName ?? existing.lastName ?? null,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, existing.id))
-        .returning({
-          id: users.id,
-          email: users.email,
-          firstName: users.firstName,
-          lastName: users.lastName,
-          googleProfileId: users.googleProfileId,
-          passwordHash: users.passwordHash,
-          authTokenVersion: users.authTokenVersion,
-        });
-
-        try {
-          await tx
-            .update(businessMemberships)
-            .set({
-              status: "active",
-              joinedAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .where(and(eq(businessMemberships.userId, existing.id), eq(businessMemberships.status, "invited")));
-        } catch (error) {
-          if (!isTenantSchemaDriftError(error)) throw error;
-          logger.warn("business membership schema unavailable during invited account claim", {
-            userId: existing.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        return [updatedUser];
+      const updatedAt = new Date();
+      const claimedUser = await updateUserReturningSafe(existing.id, {
+        passwordHash,
+        firstName: firstName ?? existing.firstName ?? null,
+        lastName: lastName ?? existing.lastName ?? null,
+        updatedAt,
       });
 
+      try {
+        await db
+          .update(businessMemberships)
+          .set({
+            status: "active",
+            joinedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(and(eq(businessMemberships.userId, existing.id), eq(businessMemberships.status, "invited")));
+      } catch (error) {
+        if (!isTenantSchemaDriftError(error)) throw error;
+        logger.warn("business membership schema unavailable during invited account claim", {
+          userId: existing.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      if (!claimedUser) throw new BadRequestError("Failed to claim invited account.");
       user = claimedUser;
       await sendActivatedMembershipEmails(req, { email: claimedUser.email, firstName: claimedUser.firstName }, invitedMemberships);
       logger.info("Invited user claimed account", { userId: existing.id, email });
     } else {
-      const [createdUser] = await db
-        .insert(users)
-        .values({
-          id: randomUUID(),
-          email,
-          passwordHash,
-          firstName: firstName ?? null,
-          lastName: lastName ?? null,
-        })
-        .returning({
-          id: users.id,
-          email: users.email,
-          firstName: users.firstName,
-          lastName: users.lastName,
-          googleProfileId: users.googleProfileId,
-          passwordHash: users.passwordHash,
-          authTokenVersion: users.authTokenVersion,
-        });
-      user = createdUser;
+      user = await createUserSafe({
+        email,
+        passwordHash,
+        firstName: firstName ?? null,
+        lastName: lastName ?? null,
+      }) ?? undefined;
       logger.info("User signed up", { userId: user?.id, email: user?.email });
     }
 
@@ -836,10 +942,7 @@ authRouter.post(
     }
     const passwordHash = await bcrypt.hash(parsed.data.password, 10);
     const nextAuthVersion = normalizeTokenVersion(user.authTokenVersion) + 1;
-    await db
-      .update(users)
-      .set({ passwordHash, authTokenVersion: nextAuthVersion, updatedAt: new Date() })
-      .where(eq(users.id, user.id));
+    await updatePasswordHashSafe(user.id, passwordHash, nextAuthVersion);
     clearAuthCookie(res);
     logger.info("Password reset completed", { userId: user.id, email: user.email });
     res.json({ ok: true });
@@ -901,19 +1004,15 @@ authRouter.get(
     const lastName = payload.family_name ?? null;
     // Find or create user
     const existing = await loadUserByEmailSafe(email);
-    let user = existing as (typeof users.$inferSelect) | undefined;
+    let user: AuthUserRecord | null = existing;
     if (!user) {
-      const [created] = await db
-        .insert(users)
-        .values({
-          id: randomUUID(),
-          email,
-          googleProfileId,
-          firstName,
-          lastName,
-          emailVerified: true,
-        })
-        .returning();
+      const created = await createUserSafe({
+        email,
+        googleProfileId,
+        firstName,
+        lastName,
+        emailVerified: true,
+      });
       if (!created) throw new BadRequestError("Failed to create account from Google profile.");
       user = created;
       logger.info("User signed up via Google", { userId: user.id, email: user.email });
@@ -924,17 +1023,21 @@ authRouter.get(
         lastName,
       });
       if (accountUpdates) {
-        const [updatedUser] = await db
-          .update(users)
-          .set(accountUpdates)
-          .where(eq(users.id, user.id))
-          .returning();
+        const updatedUser = await updateUserReturningSafe(user.id, {
+          googleProfileId: accountUpdates.googleProfileId,
+          firstName: accountUpdates.firstName,
+          lastName: accountUpdates.lastName,
+          emailVerified: accountUpdates.emailVerified,
+          updatedAt: accountUpdates.updatedAt ?? new Date(),
+        });
         if (updatedUser) user = updatedUser;
       }
+      if (!user) throw new BadRequestError("Failed to load Google account.");
       const activatedMemberships = await activateInvitedMemberships(user.id);
       await sendActivatedMembershipEmails(req, { email: user.email, firstName: user.firstName }, activatedMemberships);
       logger.info("User signed in via Google", { userId: user.id, email: user.email });
     }
+    if (!user) throw new BadRequestError("Failed to complete Google sign-in.");
     const token = createAccessToken(user.id, normalizeTokenVersion(user.authTokenVersion));
     setAuthCookie(res, token, req);
     const redirectPath = resolveGoogleStateRedirect(req.query.state);

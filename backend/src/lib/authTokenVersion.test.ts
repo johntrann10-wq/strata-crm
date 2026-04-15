@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAuthTokenVersionMismatch, normalizeTokenVersion } from "./authTokenVersion.js";
+import { isAuthTokenVersionMismatch, isUserSchemaDriftError, normalizeTokenVersion } from "./authTokenVersion.js";
 
 describe("authTokenVersion helpers", () => {
   it("normalizes token versions safely", () => {
@@ -15,5 +15,11 @@ describe("authTokenVersion helpers", () => {
     expect(isAuthTokenVersionMismatch(undefined, 1)).toBe(false);
     expect(isAuthTokenVersionMismatch(undefined, 2)).toBe(true);
     expect(isAuthTokenVersionMismatch(1, null)).toBe(false);
+  });
+
+  it("recognizes missing-column user schema drift errors", () => {
+    expect(isUserSchemaDriftError({ code: "42703" })).toBe(true);
+    expect(isUserSchemaDriftError({ message: "column auth_token_version does not exist" })).toBe(true);
+    expect(isUserSchemaDriftError({ code: "23505" })).toBe(false);
   });
 });

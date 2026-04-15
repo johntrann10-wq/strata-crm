@@ -3,7 +3,7 @@ import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
 import { logger } from "./logger.js";
 
-function isUserSchemaDriftError(error: unknown): boolean {
+export function isUserSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
   const cause =
@@ -46,4 +46,3 @@ export function isAuthTokenVersionMismatch(
   if (currentVersion == null) return false;
   return normalizeTokenVersion(tokenVersion) !== currentVersion;
 }
-
