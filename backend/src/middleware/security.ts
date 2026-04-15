@@ -29,6 +29,21 @@ type RateLimiterOptions = {
   prefix?: string;
 };
 
+export function coerceRateLimitResetAtMs(value: unknown, fallbackMs: number): number {
+  if (value instanceof Date) {
+    const parsed = value.getTime();
+    return Number.isFinite(parsed) ? parsed : fallbackMs;
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : fallbackMs;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : fallbackMs;
+  }
+  return fallbackMs;
+}
+
 function normalizeIp(req: Request): string {
   const rawIp = req.ip || req.socket.remoteAddress || "unknown";
   return rawIp.replace(/^::ffff:/, "").trim() || "unknown";
@@ -126,7 +141,7 @@ function logRateLimitEvent(req: Request, options: RateLimiterOptions, key: strin
 async function consumeDatabaseRateLimit(params: {
   key: string;
   windowMs: number;
-}): Promise<{ count: number; resetAt: Date }> {
+}): Promise<{ count: number; resetAtMs: number }> {
   const now = new Date();
   const resetAt = new Date(now.getTime() + params.windowMs);
   const result = await db.execute(sql`
@@ -138,10 +153,11 @@ async function consumeDatabaseRateLimit(params: {
       "updated_at" = ${now}
     RETURNING "count", "reset_at";
   `);
-  const row = (result as { rows?: Array<{ count?: number | string; reset_at?: Date }> }).rows?.[0];
+  const row = (result as { rows?: Array<{ count?: number | string; reset_at?: unknown }> }).rows?.[0];
+  const fallbackMs = resetAt.getTime();
   return {
     count: Number(row?.count ?? 1),
-    resetAt: row?.reset_at ?? resetAt,
+    resetAtMs: coerceRateLimitResetAtMs(row?.reset_at, fallbackMs),
   };
 }
 
@@ -252,16 +268,16 @@ export function createRateLimiter(options: RateLimiterOptions) {
     });
 
     try {
-      const { count, resetAt } = await consumeDatabaseRateLimit({
+      const { count, resetAtMs } = await consumeDatabaseRateLimit({
         key,
         windowMs: resolvedOptions.windowMs,
       });
       if (count > resolvedOptions.max) {
-        const retryAfterSeconds = Math.max(1, Math.ceil((resetAt.getTime() - Date.now()) / 1000));
+        const retryAfterSeconds = Math.max(1, Math.ceil((resetAtMs - Date.now()) / 1000));
         setRateLimitHeaders(res, {
           limit: resolvedOptions.max,
           remaining: 0,
-          resetAt: resetAt.getTime(),
+          resetAt: resetAtMs,
           retryAfterSeconds,
         });
         logRateLimitEvent(req, resolvedOptions, key, retryAfterSeconds);
@@ -271,7 +287,7 @@ export function createRateLimiter(options: RateLimiterOptions) {
       setRateLimitHeaders(res, {
         limit: resolvedOptions.max,
         remaining: resolvedOptions.max - count,
-        resetAt: resetAt.getTime(),
+        resetAt: resetAtMs,
       });
       next();
     } catch (error) {

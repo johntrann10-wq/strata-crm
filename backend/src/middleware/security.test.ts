@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
-import { createInMemoryRateLimiter, createRateLimiter } from "./security.js";
+import { coerceRateLimitResetAtMs, createInMemoryRateLimiter, createRateLimiter } from "./security.js";
 
 function createMockResponse() {
   const headers = new Map<string, string>();
@@ -152,5 +152,22 @@ describe("createRateLimiter", () => {
       delete process.env.RATE_LIMIT_AUTH_SIGN_IN_MAX;
       delete process.env.RATE_LIMIT_AUTH_SIGN_IN_WINDOW_MS;
     }
+  });
+});
+
+describe("coerceRateLimitResetAtMs", () => {
+  it("accepts database timestamps that come back as strings", () => {
+    const fallbackMs = Date.UTC(2026, 3, 14, 12, 0, 0);
+
+    expect(
+      coerceRateLimitResetAtMs("2026-04-14T12:05:00.000Z", fallbackMs)
+    ).toBe(Date.parse("2026-04-14T12:05:00.000Z"));
+  });
+
+  it("falls back safely for invalid timestamp values", () => {
+    const fallbackMs = Date.UTC(2026, 3, 14, 12, 0, 0);
+
+    expect(coerceRateLimitResetAtMs("not-a-date", fallbackMs)).toBe(fallbackMs);
+    expect(coerceRateLimitResetAtMs(undefined, fallbackMs)).toBe(fallbackMs);
   });
 });
