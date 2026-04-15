@@ -1,8 +1,20 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { businessMemberships, businesses, clients, users } from "../db/schema.js";
-import { and, eq, sql } from "drizzle-orm";
+import {
+  appointmentServices,
+  appointments,
+  businessMemberships,
+  businesses,
+  clients,
+  locations,
+  serviceCategories,
+  serviceAddonLinks,
+  services,
+  users,
+  vehicles,
+} from "../db/schema.js";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
@@ -23,9 +35,25 @@ import { createActivityLog } from "../lib/activity.js";
 import { buildLeadNotes } from "../lib/leads.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 import { isEmailConfigured, isStripeConfigured } from "../lib/env.js";
-import { sendLeadAutoResponse, sendLeadFollowUpAlert } from "../lib/email.js";
+import { sendAppointmentConfirmation, sendLeadAutoResponse, sendLeadFollowUpAlert } from "../lib/email.js";
 import { ensureBusinessTrialSubscription } from "../lib/billingLifecycle.js";
 import { hasFullBillingAccess } from "../lib/billingAccess.js";
+import {
+  buildSlotsForDate,
+  normalizeBookingDayIndexes,
+  normalizeBookingServiceMode,
+  parseTimeToMinutes,
+  resolveCustomerBookingMode,
+  resolveBookingFlow,
+  toBookingDurationMinutes,
+  toBookingLeadTimeHours,
+  toBookingWindowDays,
+  type BookingDefaultFlow,
+} from "../lib/booking.js";
+import { countOverlappingAppointments } from "../lib/appointmentOverlap.js";
+import { buildPublicAppUrl, buildPublicDocumentUrl, createPublicDocumentToken } from "../lib/publicDocumentAccess.js";
+import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
+import { calculateAppointmentFinanceTotals } from "../lib/revenueTotals.js";
 
 export const businessesRouter = Router({ mergeParams: true });
 type BusinessRecord = typeof businesses.$inferSelect;
@@ -82,6 +110,28 @@ const createSchema = z.object({
   automationLapsedClientsEnabled: z.boolean().optional(),
   automationLapsedClientMonths: z.number().int().min(1).max(36).optional(),
   bookingRequestUrl: z.string().url().nullable().optional(),
+  bookingEnabled: z.boolean().optional(),
+  bookingDefaultFlow: z.enum(["request", "self_book"]).optional(),
+  bookingPageTitle: z.string().max(120).nullable().optional(),
+  bookingPageSubtitle: z.string().max(280).nullable().optional(),
+  bookingConfirmationMessage: z.string().max(280).nullable().optional(),
+  bookingTrustBulletPrimary: z.string().max(80).nullable().optional(),
+  bookingTrustBulletSecondary: z.string().max(80).nullable().optional(),
+  bookingTrustBulletTertiary: z.string().max(80).nullable().optional(),
+  bookingNotesPrompt: z.string().max(160).nullable().optional(),
+  bookingRequireEmail: z.boolean().optional(),
+  bookingRequirePhone: z.boolean().optional(),
+  bookingRequireVehicle: z.boolean().optional(),
+  bookingAllowCustomerNotes: z.boolean().optional(),
+  bookingShowPrices: z.boolean().optional(),
+  bookingShowDurations: z.boolean().optional(),
+  bookingAvailableDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  bookingAvailableStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  bookingAvailableEndTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  bookingBlackoutDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(90).optional(),
+  bookingSlotIntervalMinutes: z.number().int().min(15).max(120).optional(),
+  bookingBufferMinutes: z.number().int().min(0).max(240).nullable().optional(),
+  bookingCapacityPerSlot: z.number().int().min(1).max(12).nullable().optional(),
   monthlyRevenueGoal: z.coerce.number().min(0).max(100000000).nullable().optional(),
   monthlyJobsGoal: z.number().int().min(0).max(100000).nullable().optional(),
   integrationWebhookEnabled: z.boolean().optional(),
@@ -119,6 +169,67 @@ const publicLeadCaptureSchema = z.object({
   campaign: z.string().trim().max(120).optional().or(z.literal("")),
   marketingOptIn: z.boolean().optional(),
   website: z.string().max(0).optional(), // honeypot
+});
+
+const publicBookingConfigLimiter = createRateLimiter({
+  id: "public_booking_config",
+  windowMs: 60 * 1000,
+  max: 90,
+  message: "Please try again shortly.",
+});
+
+const publicBookingAvailabilityLimiter = createRateLimiter({
+  id: "public_booking_availability",
+  windowMs: 60 * 1000,
+  max: 120,
+  message: "Please refresh availability in a moment.",
+});
+
+const publicBookingSubmitLimiter = createRateLimiter({
+  id: "public_booking_submit",
+  windowMs: 15 * 60 * 1000,
+  max: 12,
+  key: ({ ip, path, body }) => {
+    const email =
+      body && typeof body === "object" && typeof (body as Record<string, unknown>).email === "string"
+        ? String((body as Record<string, unknown>).email).trim().toLowerCase()
+        : "";
+    return `${path}:${ip}:${email}`;
+  },
+  message: "Too many booking attempts. Please wait a few minutes and try again.",
+});
+
+const publicBookingAvailabilityQuerySchema = z.object({
+  serviceId: z.string().uuid("Select a valid service."),
+  addonServiceIds: z.string().trim().optional(),
+  locationId: z.string().uuid().optional(),
+  serviceMode: z.enum(["in_shop", "mobile"]).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Select a valid date."),
+});
+
+const publicBookingSubmitSchema = z.object({
+  serviceId: z.string().uuid("Select a valid service."),
+  addonServiceIds: z.array(z.string().uuid()).optional(),
+  locationId: z.string().uuid().optional(),
+  serviceMode: z.enum(["in_shop", "mobile"]).optional(),
+  startTime: z.string().datetime().optional(),
+  firstName: z.string().trim().min(1, "First name is required.").max(80),
+  lastName: z.string().trim().min(1, "Last name is required.").max(80),
+  email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
+  phone: z.string().trim().max(40).optional().or(z.literal("")),
+  vehicleYear: z.preprocess((value) => (value === "" ? undefined : value), z.coerce.number().int().min(1900).max(2100).optional()),
+  vehicleMake: z.string().trim().max(80).optional().or(z.literal("")),
+  vehicleModel: z.string().trim().max(80).optional().or(z.literal("")),
+  vehicleColor: z.string().trim().max(80).optional().or(z.literal("")),
+  serviceAddress: z.string().trim().max(120).optional().or(z.literal("")),
+  serviceCity: z.string().trim().max(80).optional().or(z.literal("")),
+  serviceState: z.string().trim().max(40).optional().or(z.literal("")),
+  serviceZip: z.string().trim().max(20).optional().or(z.literal("")),
+  notes: z.string().trim().max(1200).optional().or(z.literal("")),
+  marketingOptIn: z.boolean().optional(),
+  source: z.string().trim().max(120).optional().or(z.literal("")),
+  campaign: z.string().trim().max(120).optional().or(z.literal("")),
+  website: z.string().max(0).optional(),
 });
 
 const publicLeadConfigLimiter = createRateLimiter({
@@ -200,6 +311,574 @@ function cleanOptionalText(value: string | undefined): string | null {
   return normalized ? normalized : null;
 }
 
+function normalizeBookingDefaultFlowValue(value: string | null | undefined): BookingDefaultFlow {
+  return value === "self_book" ? "self_book" : "request";
+}
+
+function normalizeBookingTrustBullet(
+  value: string | null | undefined,
+  fallback: string,
+): string {
+  return cleanOptionalText(value ?? undefined) ?? fallback;
+}
+
+function normalizeBookingNotesPrompt(value: string | null | undefined): string {
+  return cleanOptionalText(value ?? undefined) ?? "Add timing, questions, or anything the shop should know.";
+}
+
+function parseStoredNumberArray(raw: string | null | undefined): number[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => Number(item))
+      .filter((item) => Number.isInteger(item));
+  } catch {
+    return [];
+  }
+}
+
+function parseStoredStringArray(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function normalizeBlackoutDates(raw: string | null | undefined): Set<string> {
+  return new Set(
+    parseStoredStringArray(raw).filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
+  );
+}
+
+function resolveBookingSchedule(business: {
+  operatingHours?: string | null;
+  bookingAvailableDays?: string | null;
+  bookingAvailableStartTime?: string | null;
+  bookingAvailableEndTime?: string | null;
+  bookingBlackoutDates?: string | null;
+  bookingSlotIntervalMinutes?: number | null;
+  bookingBufferMinutes?: number | null;
+  appointmentBufferMinutes?: number | null;
+  bookingCapacityPerSlot?: number | null;
+  calendarBlockCapacityPerSlot?: number | null;
+}) {
+  const dayIndexes = normalizeBookingDayIndexes(parseStoredNumberArray(business.bookingAvailableDays));
+  const openTime =
+    parseTimeToMinutes(business.bookingAvailableStartTime ?? "") != null
+      ? business.bookingAvailableStartTime ?? null
+      : null;
+  const closeTime =
+    parseTimeToMinutes(business.bookingAvailableEndTime ?? "") != null
+      ? business.bookingAvailableEndTime ?? null
+      : null;
+  return {
+    availableDayIndexes: dayIndexes,
+    openTime,
+    closeTime,
+    incrementMinutes: Math.max(15, Math.min(Number(business.bookingSlotIntervalMinutes ?? 15), 120)),
+    bufferMinutes: Math.max(
+      0,
+      Math.min(Number(business.bookingBufferMinutes ?? business.appointmentBufferMinutes ?? 15), 240)
+    ),
+    slotCapacity: Math.max(
+      1,
+      Math.min(Number(business.bookingCapacityPerSlot ?? business.calendarBlockCapacityPerSlot ?? 1), 12)
+    ),
+    blackoutDates: normalizeBlackoutDates(business.bookingBlackoutDates),
+  };
+}
+
+function normalizeLeadSourceValue(source: string | null | undefined): Parameters<typeof buildLeadNotes>[0]["source"] {
+  const normalized = (source ?? "").trim().toLowerCase();
+  if (!normalized) return "website";
+  if (["website", "phone", "walk_in", "referral", "instagram", "facebook", "google", "repeat_customer", "other"].includes(normalized)) {
+    return normalized as Parameters<typeof buildLeadNotes>[0]["source"];
+  }
+  if (normalized.includes("instagram")) return "instagram";
+  if (normalized.includes("facebook")) return "facebook";
+  if (normalized.includes("google")) return "google";
+  if (normalized.includes("referral")) return "referral";
+  if (normalized.includes("phone")) return "phone";
+  return "website";
+}
+
+function parsePublicBookingDate(value: string): Date {
+  const [yearRaw, monthRaw, dayRaw] = value.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const parsed = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    throw new BadRequestError("Select a valid booking date.");
+  }
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+}
+
+function startOfLocalDay(date: Date): Date {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildBookingPageTitle(business: { bookingPageTitle?: string | null; name?: string | null }): string {
+  return business.bookingPageTitle?.trim() || `Book with ${business.name?.trim() || "the shop"}`;
+}
+
+function buildBookingPageSubtitle(business: { bookingPageSubtitle?: string | null }): string {
+  return business.bookingPageSubtitle?.trim() || "Choose the service you need, share your vehicle details, and lock in the next step without the back-and-forth.";
+}
+
+async function loadPublicBookingBusiness(id: string) {
+  const business = await loadBusinessById(id);
+  if (!business) return null;
+  if (process.env.BILLING_ENFORCED === "true" && isStripeConfigured()) {
+    if (
+      !hasFullBillingAccess(business.billingAccessState) &&
+      business.subscriptionStatus !== "active" &&
+      business.subscriptionStatus !== "trialing"
+    ) {
+      return null;
+    }
+  }
+  return business;
+}
+
+type PublicBookingServiceRecord = {
+  id: string;
+  name: string;
+  price: string | null;
+  durationMinutes: number | null;
+  categoryId: string | null;
+  categoryLabel: string | null;
+  sortOrder: number | null;
+  isAddon: boolean | null;
+  taxable: boolean | null;
+  active: boolean | null;
+  bookingEnabled: boolean | null;
+  bookingFlowType: string | null;
+  bookingDescription: string | null;
+  bookingDepositAmount: string | null;
+  bookingLeadTimeHours: number | null;
+  bookingWindowDays: number | null;
+  bookingServiceMode: string | null;
+  bookingAvailableDays: string | null;
+  bookingAvailableStartTime: string | null;
+  bookingAvailableEndTime: string | null;
+  bookingCapacityPerSlot: number | null;
+  bookingFeatured: boolean | null;
+  bookingHidePrice: boolean | null;
+  bookingHideDuration: boolean | null;
+};
+
+let publicBookingServiceColumnsPromise: Promise<Set<string>> | null = null;
+
+async function getPublicBookingServiceColumns(): Promise<Set<string>> {
+  if (!publicBookingServiceColumnsPromise) {
+    publicBookingServiceColumnsPromise = db
+      .execute(sql`
+        select column_name
+        from information_schema.columns
+        where table_schema = 'public' and table_name = 'services'
+      `)
+      .then((result) => {
+        const rows = (result as { rows?: Array<{ column_name?: string }> }).rows ?? [];
+        return new Set(rows.map((row) => row.column_name).filter((value): value is string => Boolean(value)));
+      })
+      .catch((error) => {
+        publicBookingServiceColumnsPromise = null;
+        throw error;
+      });
+  }
+  return publicBookingServiceColumnsPromise;
+}
+
+async function listPublicBookingServices(businessId: string): Promise<{
+  services: PublicBookingServiceRecord[];
+  addonLinks: Array<{ id: string; parentServiceId: string; addonServiceId: string; sortOrder: number | null }>;
+}> {
+  const columns = await getPublicBookingServiceColumns();
+  const rows = await db
+    .select({
+      id: services.id,
+      name: services.name,
+      price: services.price,
+      durationMinutes: services.durationMinutes,
+      categoryId: services.categoryId,
+      categoryLabel: sql<string | null>`coalesce(${serviceCategories.name}, null)`,
+      sortOrder: services.sortOrder,
+      isAddon: services.isAddon,
+      taxable: services.taxable,
+      active: services.active,
+      bookingEnabled: services.bookingEnabled,
+      bookingFlowType: services.bookingFlowType,
+      bookingDescription: services.bookingDescription,
+      bookingDepositAmount: services.bookingDepositAmount,
+      bookingLeadTimeHours: services.bookingLeadTimeHours,
+      bookingWindowDays: services.bookingWindowDays,
+      bookingServiceMode: columns.has("booking_service_mode") ? services.bookingServiceMode : sql<string | null>`'in_shop'`,
+      bookingAvailableDays: columns.has("booking_available_days") ? services.bookingAvailableDays : sql<string | null>`null`,
+      bookingAvailableStartTime: columns.has("booking_available_start_time") ? services.bookingAvailableStartTime : sql<string | null>`null`,
+      bookingAvailableEndTime: columns.has("booking_available_end_time") ? services.bookingAvailableEndTime : sql<string | null>`null`,
+      bookingCapacityPerSlot: columns.has("booking_capacity_per_slot") ? services.bookingCapacityPerSlot : sql<number | null>`null`,
+      bookingFeatured: columns.has("booking_featured") ? services.bookingFeatured : sql<boolean | null>`false`,
+      bookingHidePrice: columns.has("booking_hide_price") ? services.bookingHidePrice : sql<boolean | null>`false`,
+      bookingHideDuration: columns.has("booking_hide_duration") ? services.bookingHideDuration : sql<boolean | null>`false`,
+    })
+    .from(services)
+    .leftJoin(serviceCategories, eq(services.categoryId, serviceCategories.id))
+      .where(and(eq(services.businessId, businessId), eq(services.active, true)))
+      .orderBy(
+        columns.has("booking_featured") ? desc(services.bookingFeatured) : sql`1`,
+        asc(serviceCategories.sortOrder),
+        asc(services.sortOrder),
+        asc(services.name)
+      );
+
+  const addonLinkRows = await db
+    .select({
+      id: serviceAddonLinks.id,
+      parentServiceId: serviceAddonLinks.parentServiceId,
+      addonServiceId: serviceAddonLinks.addonServiceId,
+      sortOrder: serviceAddonLinks.sortOrder,
+    })
+    .from(serviceAddonLinks)
+    .where(eq(serviceAddonLinks.businessId, businessId))
+    .orderBy(asc(serviceAddonLinks.sortOrder), asc(serviceAddonLinks.createdAt));
+
+  return {
+    services: rows,
+    addonLinks: addonLinkRows,
+  };
+}
+
+function formatBookingDateTime(value: Date, timeZone: string | null | undefined): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timeZone ?? "America/Los_Angeles",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function bookingServicePrice(service: Pick<PublicBookingServiceRecord, "price">): number {
+  const numeric = Number(service.price ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function bookingServiceDeposit(service: Pick<PublicBookingServiceRecord, "bookingDepositAmount">): number {
+  const numeric = Number(service.bookingDepositAmount ?? 0);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+function parseStoredServiceBookingDays(raw: string | null | undefined): Set<number> | null {
+  return normalizeBookingDayIndexes(parseStoredNumberArray(raw));
+}
+
+function formatBookingTime(value: Date, timeZone: string | null | undefined): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timeZone ?? "America/Los_Angeles",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function buildVehicleSummary(params: {
+  year?: number | null;
+  make?: string | null;
+  model?: string | null;
+}): string | null {
+  return (
+    buildVehicleDisplayName({
+      year: params.year ?? null,
+      make: params.make ?? null,
+      model: params.model ?? null,
+    }) || null
+  );
+}
+
+function resolveBookingServicesSelection(params: {
+  businessDefaultFlow: string | null | undefined;
+  baseServiceId: string;
+  addonServiceIds: string[];
+  services: PublicBookingServiceRecord[];
+  addonLinks: Array<{ parentServiceId: string; addonServiceId: string }>;
+}) {
+  const serviceById = new Map(params.services.map((service) => [service.id, service]));
+  const baseService = serviceById.get(params.baseServiceId);
+  if (!baseService || baseService.active === false || baseService.isAddon === true || baseService.bookingEnabled !== true) {
+    throw new BadRequestError("This service is not available for booking.");
+  }
+
+  const linkedAddonIds = new Set(
+    params.addonLinks.filter((link) => link.parentServiceId === baseService.id).map((link) => link.addonServiceId)
+  );
+  const addonServices = params.addonServiceIds.map((serviceId) => {
+    const addon = serviceById.get(serviceId);
+    if (!addon || addon.active === false || !linkedAddonIds.has(serviceId)) {
+      throw new BadRequestError("One of the selected add-ons is no longer available.");
+    }
+    return addon;
+  });
+
+  const allServices = [baseService, ...addonServices];
+  const effectiveFlow = resolveBookingFlow({
+    businessDefaultFlow: params.businessDefaultFlow,
+    serviceFlowType: baseService.bookingFlowType,
+  });
+  const subtotal = allServices.reduce((sum, service) => sum + bookingServicePrice(service), 0);
+  const depositAmount = allServices.reduce((sum, service) => sum + bookingServiceDeposit(service), 0);
+  const durationMinutes = allServices.reduce(
+    (sum, service) => sum + toBookingDurationMinutes(service.durationMinutes),
+    0
+  );
+  const leadTimeHours = Math.max(
+    toBookingLeadTimeHours(baseService.bookingLeadTimeHours),
+    ...addonServices.map((service) => toBookingLeadTimeHours(service.bookingLeadTimeHours))
+  );
+  const bookingWindowDays = Math.min(
+    toBookingWindowDays(baseService.bookingWindowDays),
+    ...addonServices.map((service) => toBookingWindowDays(service.bookingWindowDays))
+  );
+  const applyTax = allServices.some((service) => service.taxable === true);
+
+  return {
+    baseService,
+    addonServices,
+    allServices,
+    effectiveFlow,
+    subtotal,
+    depositAmount,
+    durationMinutes,
+    leadTimeHours,
+    bookingWindowDays,
+    serviceMode: normalizeBookingServiceMode(baseService.bookingServiceMode),
+    availableDayIndexes: parseStoredServiceBookingDays(baseService.bookingAvailableDays),
+    openTime:
+      parseTimeToMinutes(baseService.bookingAvailableStartTime ?? "") != null
+        ? baseService.bookingAvailableStartTime ?? null
+        : null,
+    closeTime:
+      parseTimeToMinutes(baseService.bookingAvailableEndTime ?? "") != null
+        ? baseService.bookingAvailableEndTime ?? null
+        : null,
+    slotCapacity:
+      baseService.bookingCapacityPerSlot != null
+        ? Math.max(1, Math.min(Number(baseService.bookingCapacityPerSlot ?? 1), 12))
+        : null,
+    applyTax,
+    title: baseService.name,
+    serviceSummary: allServices.map((service) => service.name).join(", "),
+  };
+}
+
+function isSlotAvailable(params: {
+  slotStart: Date;
+  durationMinutes: number;
+  bufferMinutes: number;
+  appointmentCapacity: number;
+  blockCapacity: number;
+  existingRows: Array<{ startTime: Date; endTime: Date | null; internalNotes: string | null }>;
+}) {
+  const appointmentEnd = new Date(params.slotStart.getTime() + params.durationMinutes * 60 * 1000);
+  const blockingEnd = new Date(appointmentEnd.getTime() + params.bufferMinutes * 60 * 1000);
+
+  let overlappingAppointments = 0;
+  let overlappingBlocks = 0;
+  for (const row of params.existingRows) {
+    const rowEnd =
+      row.endTime && row.endTime.getTime() > row.startTime.getTime()
+        ? row.endTime
+        : new Date(row.startTime.getTime() + 60 * 60 * 1000);
+    const overlaps = row.startTime.getTime() < blockingEnd.getTime() && rowEnd.getTime() > params.slotStart.getTime();
+    if (!overlaps) continue;
+    if (String(row.internalNotes ?? "").trim().startsWith("[[calendar-block")) {
+      overlappingBlocks += 1;
+    } else {
+      overlappingAppointments += 1;
+    }
+  }
+
+  return overlappingAppointments < params.appointmentCapacity && overlappingBlocks < params.blockCapacity;
+}
+
+async function findOrCreatePublicClient(params: {
+  businessId: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  marketingOptIn: boolean;
+  notes?: string | null;
+  internalNotes?: string | null;
+}) {
+  const existing =
+    params.email || params.phone
+      ? await db
+          .select()
+          .from(clients)
+          .where(
+            and(
+              eq(clients.businessId, params.businessId),
+              isNull(clients.deletedAt),
+              or(
+                params.email ? eq(clients.email, params.email) : sql`false`,
+                params.phone ? eq(clients.phone, params.phone) : sql`false`
+              )
+            )
+          )
+          .orderBy(desc(clients.updatedAt))
+          .limit(1)
+      : [];
+
+  if (existing[0]) {
+    const client = existing[0];
+    const updates: Record<string, unknown> = {
+      updatedAt: new Date(),
+    };
+    if (!client.email && params.email) updates.email = params.email;
+    if (!client.phone && params.phone) updates.phone = params.phone;
+    if (!client.address && params.address) updates.address = params.address;
+    if (!client.city && params.city) updates.city = params.city;
+    if (!client.state && params.state) updates.state = params.state;
+    if (!client.zip && params.zip) updates.zip = params.zip;
+    if (!client.notes && params.notes) updates.notes = params.notes;
+    if (!client.internalNotes && params.internalNotes) updates.internalNotes = params.internalNotes;
+    if (params.marketingOptIn && client.marketingOptIn !== true) updates.marketingOptIn = true;
+    if (Object.keys(updates).length > 1) {
+      const [updated] = await db
+        .update(clients)
+        .set(updates)
+        .where(and(eq(clients.id, client.id), eq(clients.businessId, params.businessId)))
+        .returning();
+      return updated ?? client;
+    }
+    return client;
+  }
+
+  const [created] = await db
+    .insert(clients)
+    .values({
+      id: randomUUID(),
+      businessId: params.businessId,
+      firstName: params.firstName,
+      lastName: params.lastName,
+      email: params.email,
+      phone: params.phone,
+      address: params.address ?? null,
+      city: params.city ?? null,
+      state: params.state ?? null,
+      zip: params.zip ?? null,
+      notes: params.notes ?? null,
+      internalNotes: params.internalNotes ?? null,
+      marketingOptIn: params.marketingOptIn,
+    })
+    .returning();
+
+  if (!created) throw new BadRequestError("Could not save this customer.");
+  return created;
+}
+
+async function findOrCreatePublicVehicle(params: {
+  businessId: string;
+  clientId: string;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  color: string | null;
+}) {
+  if (!params.make || !params.model) return null;
+
+  const existing = await db
+    .select()
+    .from(vehicles)
+    .where(
+      and(
+        eq(vehicles.businessId, params.businessId),
+        eq(vehicles.clientId, params.clientId),
+        eq(vehicles.make, params.make),
+        eq(vehicles.model, params.model),
+        params.year != null ? eq(vehicles.year, params.year) : sql`true`,
+        isNull(vehicles.deletedAt)
+      )
+    )
+    .orderBy(desc(vehicles.updatedAt))
+    .limit(1);
+
+  if (existing[0]) return existing[0];
+
+  const [created] = await db
+    .insert(vehicles)
+    .values({
+      id: randomUUID(),
+      businessId: params.businessId,
+      clientId: params.clientId,
+      year: params.year ?? null,
+      make: params.make,
+      model: params.model,
+      color: params.color ?? null,
+    })
+    .returning();
+
+  return created ?? null;
+}
+
+async function listPublicBookingLocations(businessId: string) {
+  return db
+    .select({
+      id: locations.id,
+      name: locations.name,
+      address: locations.address,
+      active: locations.active,
+    })
+    .from(locations)
+    .where(and(eq(locations.businessId, businessId), eq(locations.active, true)))
+    .orderBy(asc(locations.name));
+}
+
+function bookingSuccessMessage(params: {
+  businessMessage: string | null | undefined;
+  mode: BookingDefaultFlow;
+}): string {
+  const custom = params.businessMessage?.trim();
+  if (custom) return custom;
+  return params.mode === "self_book"
+    ? "Your appointment is booked. You can review the confirmation details right away."
+    : "Your request is with the shop. They can follow up with the next step soon.";
+}
+
 function coerceBusinessRecord(
   record: Pick<BusinessRecord, "id" | "ownerId" | "name" | "type"> &
     Partial<BusinessRecord>
@@ -248,6 +927,28 @@ function coerceBusinessRecord(
     automationLapsedClientsEnabled: record.automationLapsedClientsEnabled ?? false,
     automationLapsedClientMonths: record.automationLapsedClientMonths ?? 6,
     bookingRequestUrl: record.bookingRequestUrl ?? null,
+    bookingEnabled: record.bookingEnabled ?? false,
+    bookingDefaultFlow: record.bookingDefaultFlow ?? "request",
+    bookingPageTitle: record.bookingPageTitle ?? null,
+    bookingPageSubtitle: record.bookingPageSubtitle ?? null,
+    bookingConfirmationMessage: record.bookingConfirmationMessage ?? null,
+    bookingTrustBulletPrimary: record.bookingTrustBulletPrimary ?? null,
+    bookingTrustBulletSecondary: record.bookingTrustBulletSecondary ?? null,
+    bookingTrustBulletTertiary: record.bookingTrustBulletTertiary ?? null,
+    bookingNotesPrompt: record.bookingNotesPrompt ?? null,
+    bookingRequireEmail: record.bookingRequireEmail ?? false,
+    bookingRequirePhone: record.bookingRequirePhone ?? false,
+    bookingRequireVehicle: record.bookingRequireVehicle ?? true,
+    bookingAllowCustomerNotes: record.bookingAllowCustomerNotes ?? true,
+    bookingShowPrices: record.bookingShowPrices ?? true,
+    bookingShowDurations: record.bookingShowDurations ?? true,
+    bookingAvailableDays: record.bookingAvailableDays ?? null,
+    bookingAvailableStartTime: record.bookingAvailableStartTime ?? null,
+    bookingAvailableEndTime: record.bookingAvailableEndTime ?? null,
+    bookingBlackoutDates: record.bookingBlackoutDates ?? null,
+    bookingSlotIntervalMinutes: record.bookingSlotIntervalMinutes ?? 15,
+    bookingBufferMinutes: record.bookingBufferMinutes ?? null,
+    bookingCapacityPerSlot: record.bookingCapacityPerSlot ?? null,
     monthlyRevenueGoal: record.monthlyRevenueGoal ?? null,
     monthlyJobsGoal: record.monthlyJobsGoal ?? null,
     integrationWebhookEnabled: record.integrationWebhookEnabled ?? false,
@@ -297,6 +998,28 @@ export function serializeBusiness(record: BusinessRecord) {
     integrationWebhookEvents,
     reviewRequestUrl: record.reviewRequestUrl ?? null,
     bookingRequestUrl: record.bookingRequestUrl ?? null,
+    bookingEnabled: record.bookingEnabled ?? false,
+    bookingDefaultFlow: record.bookingDefaultFlow ?? "request",
+    bookingPageTitle: record.bookingPageTitle ?? null,
+    bookingPageSubtitle: record.bookingPageSubtitle ?? null,
+    bookingConfirmationMessage: record.bookingConfirmationMessage ?? null,
+    bookingTrustBulletPrimary: record.bookingTrustBulletPrimary ?? null,
+    bookingTrustBulletSecondary: record.bookingTrustBulletSecondary ?? null,
+    bookingTrustBulletTertiary: record.bookingTrustBulletTertiary ?? null,
+    bookingNotesPrompt: record.bookingNotesPrompt ?? null,
+    bookingRequireEmail: record.bookingRequireEmail ?? false,
+    bookingRequirePhone: record.bookingRequirePhone ?? false,
+    bookingRequireVehicle: record.bookingRequireVehicle ?? true,
+    bookingAllowCustomerNotes: record.bookingAllowCustomerNotes ?? true,
+    bookingShowPrices: record.bookingShowPrices ?? true,
+    bookingShowDurations: record.bookingShowDurations ?? true,
+    bookingAvailableDays: parseStoredNumberArray(record.bookingAvailableDays),
+    bookingAvailableStartTime: record.bookingAvailableStartTime ?? null,
+    bookingAvailableEndTime: record.bookingAvailableEndTime ?? null,
+    bookingBlackoutDates: parseStoredStringArray(record.bookingBlackoutDates),
+    bookingSlotIntervalMinutes: record.bookingSlotIntervalMinutes ?? 15,
+    bookingBufferMinutes: record.bookingBufferMinutes ?? null,
+    bookingCapacityPerSlot: record.bookingCapacityPerSlot ?? null,
     billingAccessState: record.billingAccessState ?? null,
     trialStartedAt: record.trialStartedAt ?? null,
     billingSetupError: record.billingSetupError ?? null,
@@ -356,6 +1079,28 @@ async function ensureBusinessAutomationColumns(): Promise<void> {
           ADD COLUMN IF NOT EXISTS notification_abandoned_quote_email_enabled boolean DEFAULT true,
           ADD COLUMN IF NOT EXISTS notification_review_request_email_enabled boolean DEFAULT true,
           ADD COLUMN IF NOT EXISTS notification_lapsed_client_email_enabled boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS booking_enabled boolean DEFAULT false,
+          ADD COLUMN IF NOT EXISTS booking_default_flow text DEFAULT 'request',
+          ADD COLUMN IF NOT EXISTS booking_page_title text,
+          ADD COLUMN IF NOT EXISTS booking_page_subtitle text,
+          ADD COLUMN IF NOT EXISTS booking_confirmation_message text,
+          ADD COLUMN IF NOT EXISTS booking_trust_bullet_primary text,
+          ADD COLUMN IF NOT EXISTS booking_trust_bullet_secondary text,
+          ADD COLUMN IF NOT EXISTS booking_trust_bullet_tertiary text,
+          ADD COLUMN IF NOT EXISTS booking_notes_prompt text,
+          ADD COLUMN IF NOT EXISTS booking_require_email boolean DEFAULT false,
+          ADD COLUMN IF NOT EXISTS booking_require_phone boolean DEFAULT false,
+          ADD COLUMN IF NOT EXISTS booking_require_vehicle boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS booking_allow_customer_notes boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS booking_show_prices boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS booking_show_durations boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS booking_available_days text,
+          ADD COLUMN IF NOT EXISTS booking_available_start_time text,
+          ADD COLUMN IF NOT EXISTS booking_available_end_time text,
+          ADD COLUMN IF NOT EXISTS booking_blackout_dates text,
+          ADD COLUMN IF NOT EXISTS booking_slot_interval_minutes integer DEFAULT 15,
+          ADD COLUMN IF NOT EXISTS booking_buffer_minutes integer,
+          ADD COLUMN IF NOT EXISTS booking_capacity_per_slot integer,
           ADD COLUMN IF NOT EXISTS monthly_revenue_goal decimal(12, 2) DEFAULT NULL,
           ADD COLUMN IF NOT EXISTS monthly_jobs_goal integer DEFAULT NULL,
           ADD COLUMN IF NOT EXISTS billing_access_state text,
@@ -476,6 +1221,699 @@ async function loadBusinessByOwner(ownerId: string): Promise<BusinessRecord | nu
 }
 
 businessesRouter.get(
+  "/:id/public-booking-config",
+  publicBookingConfigLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
+
+    const business = await loadPublicBookingBusiness(parsed.data.id);
+    if (!business || business.bookingEnabled !== true) {
+      throw new NotFoundError("Online booking is not available for this business.");
+    }
+
+    const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
+    const locations = await listPublicBookingLocations(business.id);
+    const baseServices = publicServices
+      .filter((service) => service.active !== false && service.isAddon !== true && service.bookingEnabled === true)
+      .map((service) => ({
+        id: service.id,
+        name: service.name,
+        categoryId: service.categoryId,
+        categoryLabel: service.categoryLabel,
+        description: cleanOptionalText(service.bookingDescription ?? undefined),
+        price: bookingServicePrice(service),
+        durationMinutes: toBookingDurationMinutes(service.durationMinutes),
+        effectiveFlow: resolveBookingFlow({
+          businessDefaultFlow: business.bookingDefaultFlow,
+          serviceFlowType: service.bookingFlowType,
+        }),
+        depositAmount: bookingServiceDeposit(service),
+        leadTimeHours: toBookingLeadTimeHours(service.bookingLeadTimeHours),
+        bookingWindowDays: toBookingWindowDays(service.bookingWindowDays),
+        serviceMode: normalizeBookingServiceMode(service.bookingServiceMode),
+        featured: service.bookingFeatured === true,
+        showPrice: service.bookingHidePrice !== true,
+        showDuration: service.bookingHideDuration !== true,
+        addons: addonLinks
+          .filter((link) => link.parentServiceId === service.id)
+          .map((link) => publicServices.find((candidate) => candidate.id === link.addonServiceId))
+          .filter((candidate): candidate is PublicBookingServiceRecord => Boolean(candidate))
+          .filter((candidate) => candidate.active !== false)
+          .map((candidate) => ({
+            id: candidate.id,
+            name: candidate.name,
+            price: bookingServicePrice(candidate),
+            durationMinutes: toBookingDurationMinutes(candidate.durationMinutes),
+            depositAmount: bookingServiceDeposit(candidate),
+            description: cleanOptionalText(candidate.bookingDescription ?? undefined),
+            featured: candidate.bookingFeatured === true,
+            showPrice: candidate.bookingHidePrice !== true,
+            showDuration: candidate.bookingHideDuration !== true,
+          })),
+      }));
+
+    if (baseServices.length === 0) {
+      throw new NotFoundError("No services are currently available for booking.");
+    }
+
+    res.json({
+      businessId: business.id,
+      businessName: business.name,
+      businessType: business.type,
+      timezone: business.timezone ?? "America/Los_Angeles",
+      title: buildBookingPageTitle(business),
+      subtitle: buildBookingPageSubtitle(business),
+      confirmationMessage: cleanOptionalText(business.bookingConfirmationMessage ?? undefined),
+      defaultFlow: normalizeBookingDefaultFlowValue(business.bookingDefaultFlow),
+      trustPoints: [
+        normalizeBookingTrustBullet(business.bookingTrustBulletPrimary, "Goes directly to the shop"),
+        normalizeBookingTrustBullet(
+          business.bookingTrustBulletSecondary,
+          business.bookingDefaultFlow === "self_book" ? "Quick confirmation" : "Quick follow-up"
+        ),
+        normalizeBookingTrustBullet(business.bookingTrustBulletTertiary, "Secure and simple"),
+      ],
+      notesPrompt: normalizeBookingNotesPrompt(business.bookingNotesPrompt),
+      requireEmail: business.bookingRequireEmail ?? false,
+      requirePhone: business.bookingRequirePhone ?? false,
+      requireVehicle: business.bookingRequireVehicle ?? true,
+      allowCustomerNotes: business.bookingAllowCustomerNotes ?? true,
+      showPrices: business.bookingShowPrices ?? true,
+      showDurations: business.bookingShowDurations ?? true,
+      locations: locations.map((location) => ({
+        id: location.id,
+        name: location.name,
+        address: location.address,
+      })),
+      services: baseServices,
+    });
+  })
+);
+
+businessesRouter.get(
+  "/:id/public-booking-availability",
+  publicBookingAvailabilityLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsedParams = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError(parsedParams.error.issues[0]?.message ?? "Invalid business.");
+    const parsedQuery = publicBookingAvailabilityQuerySchema.safeParse(req.query ?? {});
+    if (!parsedQuery.success) throw new BadRequestError(parsedQuery.error.issues[0]?.message ?? "Invalid booking availability request.");
+
+    const business = await loadPublicBookingBusiness(parsedParams.data.id);
+    if (!business || business.bookingEnabled !== true) {
+      throw new NotFoundError("Online booking is not available for this business.");
+    }
+
+    const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
+    const addonServiceIds = Array.from(
+      new Set(
+        String(parsedQuery.data.addonServiceIds ?? "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
+      )
+    );
+    const selection = resolveBookingServicesSelection({
+      businessDefaultFlow: business.bookingDefaultFlow,
+      baseServiceId: parsedQuery.data.serviceId,
+      addonServiceIds,
+      services: publicServices,
+      addonLinks,
+    });
+    const requestedServiceMode = resolveCustomerBookingMode({
+      serviceMode: selection.serviceMode,
+      requestedMode: parsedQuery.data.serviceMode,
+    });
+
+    const date = parsePublicBookingDate(parsedQuery.data.date);
+    const today = startOfLocalDay(new Date());
+    const lastAllowedDate = addDays(today, selection.bookingWindowDays - 1);
+    if (date.getTime() < today.getTime() || date.getTime() > lastAllowedDate.getTime()) {
+      throw new BadRequestError("Choose a booking date inside the available window.");
+    }
+    const bookingSchedule = resolveBookingSchedule(business);
+    if (bookingSchedule.blackoutDates.has(toDateKey(date))) {
+      res.json({
+        effectiveFlow: selection.effectiveFlow,
+        serviceMode: requestedServiceMode,
+        timezone: business.timezone ?? "America/Los_Angeles",
+        date: toDateKey(date),
+        slots: [],
+        durationMinutes: selection.durationMinutes,
+        subtotal: selection.subtotal,
+        depositAmount: selection.depositAmount,
+      });
+      return;
+    }
+
+    if (selection.effectiveFlow !== "self_book") {
+      res.json({
+        effectiveFlow: selection.effectiveFlow,
+        serviceMode: requestedServiceMode,
+        timezone: business.timezone ?? "America/Los_Angeles",
+        date: toDateKey(date),
+        slots: [],
+      });
+      return;
+    }
+
+    if (requestedServiceMode === "in_shop" && parsedQuery.data.locationId) {
+      const activeLocations = await listPublicBookingLocations(business.id);
+      const matchesLocation = activeLocations.some((location) => location.id === parsedQuery.data.locationId);
+      if (!matchesLocation) {
+        throw new BadRequestError("Select a valid booking location.");
+      }
+    }
+
+    const dayStart = startOfLocalDay(date);
+    const dayEnd = addDays(dayStart, 1);
+    const existingRows = await db
+      .select({
+        startTime: appointments.startTime,
+        endTime: appointments.endTime,
+        internalNotes: appointments.internalNotes,
+      })
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.businessId, business.id),
+          sql`${appointments.status} NOT IN ('cancelled', 'no-show')`,
+          sql`${appointments.startTime} < ${dayEnd}`,
+          sql`coalesce(${appointments.endTime}, ${appointments.startTime} + interval '1 hour') > ${dayStart}`
+        )
+      )
+      .orderBy(asc(appointments.startTime));
+
+    const slotCapacity = bookingSchedule.slotCapacity;
+    const slots = buildSlotsForDate({
+      date,
+      operatingHours: business.operatingHours,
+      durationMinutes: selection.durationMinutes,
+      leadTimeHours: selection.leadTimeHours,
+      incrementMinutes: bookingSchedule.incrementMinutes,
+      availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
+      openTime: selection.openTime ?? bookingSchedule.openTime,
+      closeTime: selection.closeTime ?? bookingSchedule.closeTime,
+      now: new Date(),
+    }).filter((slotStart) =>
+      isSlotAvailable({
+        slotStart,
+        durationMinutes: selection.durationMinutes,
+        bufferMinutes: bookingSchedule.bufferMinutes,
+        appointmentCapacity: selection.slotCapacity ?? slotCapacity,
+        blockCapacity: selection.slotCapacity ?? slotCapacity,
+        existingRows,
+      })
+    );
+
+    res.json({
+      effectiveFlow: selection.effectiveFlow,
+      serviceMode: requestedServiceMode,
+      timezone: business.timezone ?? "America/Los_Angeles",
+      date: toDateKey(date),
+      slots: slots.map((slot) => ({
+        startTime: slot.toISOString(),
+        label: formatBookingTime(slot, business.timezone),
+      })),
+      durationMinutes: selection.durationMinutes,
+      subtotal: selection.subtotal,
+      depositAmount: selection.depositAmount,
+    });
+  })
+);
+
+businessesRouter.post(
+  "/:id/public-bookings",
+  publicBookingSubmitLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsedParams = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError(parsedParams.error.issues[0]?.message ?? "Invalid business.");
+    const parsedBody = publicBookingSubmitSchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) throw new BadRequestError(parsedBody.error.issues[0]?.message ?? "Invalid booking submission.");
+    if (parsedBody.data.website && parsedBody.data.website.trim()) {
+      res.status(202).json({ ok: true, accepted: true });
+      return;
+    }
+
+    const business = await loadPublicBookingBusiness(parsedParams.data.id);
+    if (!business || business.bookingEnabled !== true) {
+      throw new NotFoundError("Online booking is not available for this business.");
+    }
+
+    const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
+    const selection = resolveBookingServicesSelection({
+      businessDefaultFlow: business.bookingDefaultFlow,
+      baseServiceId: parsedBody.data.serviceId,
+      addonServiceIds: Array.from(new Set(parsedBody.data.addonServiceIds ?? [])),
+      services: publicServices,
+      addonLinks,
+    });
+    const requestedServiceMode = resolveCustomerBookingMode({
+      serviceMode: selection.serviceMode,
+      requestedMode: parsedBody.data.serviceMode,
+    });
+
+    const email = cleanOptionalText(parsedBody.data.email);
+    const phone = cleanOptionalText(parsedBody.data.phone);
+    if (!email && !phone) {
+      throw new BadRequestError("Add at least an email or phone number so the shop can follow up.");
+    }
+    if ((business.bookingRequireEmail ?? false) && !email) {
+      throw new BadRequestError("Add an email address so the shop can confirm the booking.");
+    }
+    if ((business.bookingRequirePhone ?? false) && !phone) {
+      throw new BadRequestError("Add the best phone number so the shop can confirm the booking.");
+    }
+
+    const vehicleMake = cleanOptionalText(parsedBody.data.vehicleMake);
+    const vehicleModel = cleanOptionalText(parsedBody.data.vehicleModel);
+    const vehicleColor = cleanOptionalText(parsedBody.data.vehicleColor);
+    const vehicleYear = parsedBody.data.vehicleYear ?? null;
+    if ((business.bookingRequireVehicle ?? true) && (!vehicleMake || !vehicleModel)) {
+      throw new BadRequestError("Add the vehicle make and model to continue.");
+    }
+
+    const normalizedSource = normalizeLeadSourceValue(parsedBody.data.source);
+    const campaign = cleanOptionalText(parsedBody.data.campaign);
+    const customerNotes = cleanOptionalText(parsedBody.data.notes);
+    const serviceAddress = cleanOptionalText(parsedBody.data.serviceAddress);
+    const serviceCity = cleanOptionalText(parsedBody.data.serviceCity);
+    const serviceState = cleanOptionalText(parsedBody.data.serviceState);
+    const serviceZip = cleanOptionalText(parsedBody.data.serviceZip);
+    const vehicleSummary = buildVehicleSummary({
+      year: vehicleYear,
+      make: vehicleMake,
+      model: vehicleModel,
+    });
+
+    if (requestedServiceMode === "mobile" && !serviceAddress) {
+      throw new BadRequestError("Add the service address for mobile or on-site bookings.");
+    }
+
+    if (requestedServiceMode === "in_shop" && parsedBody.data.locationId) {
+      const activeLocations = await listPublicBookingLocations(business.id);
+      const matchesLocation = activeLocations.some((location) => location.id === parsedBody.data.locationId);
+      if (!matchesLocation) {
+        throw new BadRequestError("Select a valid booking location.");
+      }
+    }
+
+    if (selection.effectiveFlow === "request") {
+      const nextStepHours = Math.max(1, Math.min(Number(business.automationUncontactedLeadHours ?? 2), 168));
+      const [createdLead] = await db
+        .insert(clients)
+        .values({
+          businessId: business.id,
+          firstName: parsedBody.data.firstName.trim(),
+          lastName: parsedBody.data.lastName.trim(),
+          email,
+          phone,
+          address: requestedServiceMode === "mobile" ? serviceAddress : null,
+          city: requestedServiceMode === "mobile" ? serviceCity : null,
+          state: requestedServiceMode === "mobile" ? serviceState : null,
+          zip: requestedServiceMode === "mobile" ? serviceZip : null,
+          notes: buildLeadNotes({
+            status: "new",
+            source: normalizedSource,
+            serviceInterest: selection.serviceSummary,
+            nextStep: `Contact within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
+            summary: [
+              customerNotes,
+              requestedServiceMode === "mobile"
+                ? [serviceAddress, serviceCity, serviceState, serviceZip].filter(Boolean).join(", ")
+                : null,
+              campaign ? `Campaign: ${campaign}` : null,
+              "Submitted from the public booking request flow.",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+            vehicle: vehicleSummary ?? "",
+          }),
+          internalNotes: [
+            "Public booking request",
+            `Service mode: ${requestedServiceMode}`,
+            requestedServiceMode === "in_shop" && parsedBody.data.locationId ? `Location: ${parsedBody.data.locationId}` : null,
+            campaign ? `Campaign: ${campaign}` : null,
+            cleanOptionalText(parsedBody.data.source) ? `Source detail: ${cleanOptionalText(parsedBody.data.source)}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          marketingOptIn: parsedBody.data.marketingOptIn ?? true,
+        })
+        .returning();
+
+      if (!createdLead) throw new BadRequestError("Could not save this booking request.");
+
+      if (vehicleMake && vehicleModel) {
+        await db.insert(vehicles).values({
+          id: randomUUID(),
+          businessId: business.id,
+          clientId: createdLead.id,
+          year: vehicleYear,
+          make: vehicleMake,
+          model: vehicleModel,
+          color: vehicleColor ?? null,
+        });
+      }
+
+      await createActivityLog({
+        businessId: business.id,
+        action: "booking.request_created",
+        entityType: "client",
+        entityId: createdLead.id,
+        metadata: {
+          source: normalizedSource,
+          campaign,
+          bookingFlow: "request",
+          serviceMode: requestedServiceMode,
+          serviceSummary: selection.serviceSummary,
+        },
+      });
+
+      const clientName = `${createdLead.firstName} ${createdLead.lastName}`.trim();
+      const followUpTasks: Array<Promise<unknown>> = [];
+      if (business.leadAutoResponseEnabled) {
+        if (business.leadAutoResponseEmailEnabled && email && isEmailConfigured()) {
+          followUpTasks.push(
+            sendLeadAutoResponse({
+              to: email,
+              businessId: business.id,
+              clientName,
+              businessName: business.name,
+              serviceInterest: selection.serviceSummary,
+              responseWindow: `within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
+            }).catch((error) => {
+              warnOnce(`booking:auto-response-email:${createdLead.id}`, "booking request auto-response email failed", {
+                businessId: business.id,
+                clientId: createdLead.id,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            })
+          );
+        }
+
+        if (business.leadAutoResponseSmsEnabled && phone) {
+          followUpTasks.push(
+            enqueueTwilioTemplateSms({
+              businessId: business.id,
+              templateSlug: "lead_auto_response",
+              to: phone,
+              vars: {
+                clientName,
+                businessName: business.name,
+                serviceInterest: selection.serviceSummary,
+                responseWindow: `within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
+              },
+              entityType: "client",
+              entityId: createdLead.id,
+            }).catch((error) => {
+              warnOnce(`booking:auto-response-sms:${createdLead.id}`, "booking request auto-response sms failed", {
+                businessId: business.id,
+                clientId: createdLead.id,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            })
+          );
+        }
+      }
+
+      const followUpRecipient = cleanOptionalText(business.email ?? undefined);
+      if (followUpRecipient && isEmailConfigured()) {
+        followUpTasks.push(
+          sendLeadFollowUpAlert({
+            to: followUpRecipient,
+            businessId: business.id,
+            businessName: business.name,
+            ownerName: "Team",
+            clientName,
+            clientEmail: email,
+            clientPhone: phone,
+            vehicle: vehicleSummary,
+            serviceInterest: selection.serviceSummary,
+            summary: customerNotes,
+          }).catch((error) => {
+            warnOnce(`booking:follow-up-alert:${createdLead.id}`, "booking request follow-up alert failed", {
+              businessId: business.id,
+              clientId: createdLead.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          })
+        );
+      }
+
+      await Promise.all(followUpTasks);
+
+      res.status(201).json({
+        ok: true,
+        accepted: true,
+        mode: "request",
+        leadId: createdLead.id,
+        message: bookingSuccessMessage({
+          businessMessage: business.bookingConfirmationMessage,
+          mode: "request",
+        }),
+      });
+      return;
+    }
+
+    if (!parsedBody.data.startTime) {
+      throw new BadRequestError("Choose an available time to continue.");
+    }
+
+    const startTime = new Date(parsedBody.data.startTime);
+    if (Number.isNaN(startTime.getTime())) {
+      throw new BadRequestError("Choose a valid start time.");
+    }
+
+    const selectedDate = startOfLocalDay(startTime);
+    const today = startOfLocalDay(new Date());
+    const lastAllowedDate = addDays(today, selection.bookingWindowDays - 1);
+    if (selectedDate.getTime() < today.getTime() || selectedDate.getTime() > lastAllowedDate.getTime()) {
+      throw new BadRequestError("Choose a booking date inside the available window.");
+    }
+    const bookingSchedule = resolveBookingSchedule(business);
+    if (bookingSchedule.blackoutDates.has(toDateKey(selectedDate))) {
+      throw new BadRequestError("This date is unavailable for online booking.");
+    }
+
+    const dayStart = startOfLocalDay(startTime);
+    const dayEnd = addDays(dayStart, 1);
+    const existingRows = await db
+      .select({
+        startTime: appointments.startTime,
+        endTime: appointments.endTime,
+        internalNotes: appointments.internalNotes,
+      })
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.businessId, business.id),
+          sql`${appointments.status} NOT IN ('cancelled', 'no-show')`,
+          sql`${appointments.startTime} < ${dayEnd}`,
+          sql`coalesce(${appointments.endTime}, ${appointments.startTime} + interval '1 hour') > ${dayStart}`
+        )
+      )
+      .orderBy(asc(appointments.startTime));
+
+    const slotCapacity = bookingSchedule.slotCapacity;
+    const allowedSlots = buildSlotsForDate({
+      date: selectedDate,
+      operatingHours: business.operatingHours,
+      durationMinutes: selection.durationMinutes,
+      leadTimeHours: selection.leadTimeHours,
+      incrementMinutes: bookingSchedule.incrementMinutes,
+      availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
+      openTime: selection.openTime ?? bookingSchedule.openTime,
+      closeTime: selection.closeTime ?? bookingSchedule.closeTime,
+      now: new Date(),
+    }).filter((slotStart) =>
+      isSlotAvailable({
+        slotStart,
+        durationMinutes: selection.durationMinutes,
+        bufferMinutes: bookingSchedule.bufferMinutes,
+        appointmentCapacity: selection.slotCapacity ?? slotCapacity,
+        blockCapacity: selection.slotCapacity ?? slotCapacity,
+        existingRows,
+      })
+    );
+
+    const matchesAvailableSlot = allowedSlots.some((slot) => slot.getTime() === startTime.getTime());
+    if (!matchesAvailableSlot) {
+      throw new BadRequestError("That time is no longer available. Refresh availability and choose another slot.");
+    }
+
+    const appointmentEnd = new Date(startTime.getTime() + selection.durationMinutes * 60 * 1000);
+    const overlappingAppointments = await countOverlappingAppointments({
+      businessId: business.id,
+      startTime,
+      endTime: appointmentEnd,
+    });
+    if (overlappingAppointments >= (selection.slotCapacity ?? slotCapacity)) {
+      throw new BadRequestError("That time is no longer available. Refresh availability and choose another slot.");
+    }
+
+    const finance = calculateAppointmentFinanceTotals({
+      subtotal: selection.subtotal,
+      taxRate: Number(business.defaultTaxRate ?? 0),
+      applyTax: selection.applyTax,
+      adminFeeRate: Number(business.defaultAdminFee ?? 0),
+      applyAdminFee: business.defaultAdminFeeEnabled ?? false,
+    });
+
+    const client = await findOrCreatePublicClient({
+      businessId: business.id,
+      firstName: parsedBody.data.firstName.trim(),
+      lastName: parsedBody.data.lastName.trim(),
+      email,
+      phone,
+      address: requestedServiceMode === "mobile" ? serviceAddress : null,
+      city: requestedServiceMode === "mobile" ? serviceCity : null,
+      state: requestedServiceMode === "mobile" ? serviceState : null,
+      zip: requestedServiceMode === "mobile" ? serviceZip : null,
+      notes: customerNotes,
+      internalNotes: [
+        "Public online booking",
+        `Service mode: ${requestedServiceMode}`,
+        campaign ? `Campaign: ${campaign}` : null,
+        cleanOptionalText(parsedBody.data.source) ? `Source detail: ${cleanOptionalText(parsedBody.data.source)}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      marketingOptIn: parsedBody.data.marketingOptIn ?? true,
+    });
+
+    const vehicle = await findOrCreatePublicVehicle({
+      businessId: business.id,
+      clientId: client.id,
+      year: vehicleYear,
+      make: vehicleMake,
+      model: vehicleModel,
+      color: vehicleColor,
+    });
+
+    const appointmentId = randomUUID();
+    const [createdAppointment] = await db
+      .insert(appointments)
+      .values({
+        id: appointmentId,
+        businessId: business.id,
+        clientId: client.id,
+        vehicleId: vehicle?.id ?? null,
+        locationId: requestedServiceMode === "in_shop" ? parsedBody.data.locationId ?? null : null,
+        title: selection.title,
+        startTime,
+        endTime: appointmentEnd,
+        jobStartTime: startTime,
+        expectedCompletionTime: appointmentEnd,
+        subtotal: String(finance.subtotal.toFixed(2)),
+        taxRate: String(finance.taxRate.toFixed(2)),
+        taxAmount: String(finance.taxAmount.toFixed(2)),
+        applyTax: finance.applyTax,
+        adminFeeRate: String(finance.adminFeeRate.toFixed(2)),
+        adminFeeAmount: String(finance.adminFeeAmount.toFixed(2)),
+        applyAdminFee: finance.applyAdminFee,
+        totalPrice: String(finance.totalPrice.toFixed(2)),
+        depositAmount: String(selection.depositAmount.toFixed(2)),
+        notes: customerNotes,
+        vehicleOnSite: requestedServiceMode === "in_shop",
+        internalNotes: [
+          "Public online booking",
+          `Booking flow: self_book`,
+          `Service mode: ${requestedServiceMode}`,
+          requestedServiceMode === "mobile"
+            ? `Service address: ${[serviceAddress, serviceCity, serviceState, serviceZip].filter(Boolean).join(", ")}`
+            : null,
+          campaign ? `Campaign: ${campaign}` : null,
+          cleanOptionalText(parsedBody.data.source) ? `Source detail: ${cleanOptionalText(parsedBody.data.source)}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      })
+      .returning({
+        id: appointments.id,
+        publicTokenVersion: appointments.publicTokenVersion,
+      });
+
+    if (!createdAppointment) {
+      throw new BadRequestError("Could not create this appointment.");
+    }
+
+    const serviceRows = selection.allServices.map((service) => ({
+      id: randomUUID(),
+      appointmentId: createdAppointment.id,
+      serviceId: service.id,
+      quantity: 1,
+      unitPrice: service.price,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    if (serviceRows.length > 0) {
+      await db.insert(appointmentServices).values(serviceRows);
+    }
+
+    const publicToken = createPublicDocumentToken({
+      kind: "appointment",
+      entityId: createdAppointment.id,
+      businessId: business.id,
+      tokenVersion: createdAppointment.publicTokenVersion ?? 1,
+    });
+    const confirmationUrl = buildPublicDocumentUrl(
+      `/api/appointments/${encodeURIComponent(createdAppointment.id)}/public-html?token=${encodeURIComponent(publicToken)}`
+    );
+    const portalUrl = buildPublicAppUrl(`/portal/${encodeURIComponent(publicToken)}`);
+
+    await createActivityLog({
+      businessId: business.id,
+      action: "booking.public_booked",
+      entityType: "appointment",
+      entityId: createdAppointment.id,
+      metadata: {
+        source: normalizedSource,
+        campaign,
+        serviceSummary: selection.serviceSummary,
+        locationId: parsedBody.data.locationId ?? null,
+      },
+    });
+
+    if (email && isEmailConfigured() && (business.notificationAppointmentConfirmationEmailEnabled ?? true)) {
+      sendAppointmentConfirmation({
+        to: email,
+        businessId: business.id,
+        clientName: `${client.firstName} ${client.lastName}`.trim(),
+        businessName: business.name,
+        dateTime: formatBookingDateTime(startTime, business.timezone),
+        vehicle: vehicleSummary,
+        serviceSummary: selection.serviceSummary,
+        confirmationUrl,
+        portalUrl,
+      }).catch((error) => {
+        warnOnce(`booking:appointment-confirmation:${createdAppointment.id}`, "public booking confirmation email failed", {
+          businessId: business.id,
+          appointmentId: createdAppointment.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+
+    res.status(201).json({
+      ok: true,
+      accepted: true,
+      mode: "self_book",
+      appointmentId: createdAppointment.id,
+      confirmationUrl,
+      portalUrl,
+      scheduledFor: formatBookingDateTime(startTime, business.timezone),
+      depositAmount: selection.depositAmount,
+      message: bookingSuccessMessage({
+        businessMessage: business.bookingConfirmationMessage,
+        mode: "self_book",
+      }),
+    });
+  })
+);
+
+businessesRouter.get(
   "/:id/public-lead-config",
   publicLeadConfigLimiter.middleware,
   wrapAsync(async (req: Request, res: Response) => {
@@ -521,19 +1959,7 @@ businessesRouter.post(
       throw new BadRequestError("Add at least an email or phone number so the shop can follow up.");
     }
 
-    const normalizedSource = (() => {
-      const source = (parsedBody.data.source ?? "").trim().toLowerCase();
-      if (!source) return "website";
-      if (["website", "phone", "walk_in", "referral", "instagram", "facebook", "google", "repeat_customer", "other"].includes(source)) {
-        return source;
-      }
-      if (source.includes("instagram")) return "instagram";
-      if (source.includes("facebook")) return "facebook";
-      if (source.includes("google")) return "google";
-      if (source.includes("referral")) return "referral";
-      if (source.includes("phone")) return "phone";
-      return "website";
-    })() as Parameters<typeof buildLeadNotes>[0]["source"];
+    const normalizedSource = normalizeLeadSourceValue(parsedBody.data.source);
 
     const campaign = cleanOptionalText(parsedBody.data.campaign);
     const serviceInterest = cleanOptionalText(parsedBody.data.serviceInterest);
@@ -730,6 +2156,14 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
   ) {
     throw new BadRequestError("Automation send window start and end hours cannot be the same.");
   }
+  if (
+    parsed.data.bookingAvailableStartTime &&
+    parsed.data.bookingAvailableEndTime &&
+    parseTimeToMinutes(parsed.data.bookingAvailableStartTime) ===
+      parseTimeToMinutes(parsed.data.bookingAvailableEndTime)
+  ) {
+    throw new BadRequestError("Booking start and end times cannot be the same.");
+  }
   if (parsed.data.integrationWebhookEnabled && !parsed.data.integrationWebhookUrl?.trim()) {
     throw new BadRequestError("Add a webhook endpoint URL before enabling signed webhooks.");
   }
@@ -787,6 +2221,30 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       automationLapsedClientsEnabled: parsed.data.automationLapsedClientsEnabled ?? false,
       automationLapsedClientMonths: parsed.data.automationLapsedClientMonths ?? 6,
       bookingRequestUrl: parsed.data.bookingRequestUrl ?? null,
+      bookingEnabled: parsed.data.bookingEnabled ?? false,
+      bookingDefaultFlow: parsed.data.bookingDefaultFlow ?? "request",
+      bookingPageTitle: parsed.data.bookingPageTitle?.trim() || null,
+      bookingPageSubtitle: parsed.data.bookingPageSubtitle?.trim() || null,
+      bookingConfirmationMessage: parsed.data.bookingConfirmationMessage?.trim() || null,
+      bookingTrustBulletPrimary: parsed.data.bookingTrustBulletPrimary?.trim() || null,
+      bookingTrustBulletSecondary: parsed.data.bookingTrustBulletSecondary?.trim() || null,
+      bookingTrustBulletTertiary: parsed.data.bookingTrustBulletTertiary?.trim() || null,
+      bookingNotesPrompt: parsed.data.bookingNotesPrompt?.trim() || null,
+      bookingRequireEmail: parsed.data.bookingRequireEmail ?? false,
+      bookingRequirePhone: parsed.data.bookingRequirePhone ?? false,
+      bookingRequireVehicle: parsed.data.bookingRequireVehicle ?? true,
+      bookingAllowCustomerNotes: parsed.data.bookingAllowCustomerNotes ?? true,
+      bookingShowPrices: parsed.data.bookingShowPrices ?? true,
+      bookingShowDurations: parsed.data.bookingShowDurations ?? true,
+      bookingAvailableDays:
+        parsed.data.bookingAvailableDays !== undefined ? JSON.stringify(parsed.data.bookingAvailableDays) : null,
+      bookingAvailableStartTime: parsed.data.bookingAvailableStartTime ?? null,
+      bookingAvailableEndTime: parsed.data.bookingAvailableEndTime ?? null,
+      bookingBlackoutDates:
+        parsed.data.bookingBlackoutDates !== undefined ? JSON.stringify(parsed.data.bookingBlackoutDates) : null,
+      bookingSlotIntervalMinutes: parsed.data.bookingSlotIntervalMinutes ?? 15,
+      bookingBufferMinutes: parsed.data.bookingBufferMinutes ?? null,
+      bookingCapacityPerSlot: parsed.data.bookingCapacityPerSlot ?? null,
       monthlyRevenueGoal:
         parsed.data.monthlyRevenueGoal != null ? String(parsed.data.monthlyRevenueGoal) : null,
       monthlyJobsGoal: parsed.data.monthlyJobsGoal ?? null,
@@ -961,6 +2419,72 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   if (parsed.data.bookingRequestUrl !== undefined) {
     updates.bookingRequestUrl = parsed.data.bookingRequestUrl?.trim() || null;
   }
+  if (parsed.data.bookingEnabled !== undefined) {
+    updates.bookingEnabled = parsed.data.bookingEnabled ?? false;
+  }
+  if (parsed.data.bookingDefaultFlow !== undefined) {
+    updates.bookingDefaultFlow = parsed.data.bookingDefaultFlow ?? "request";
+  }
+  if (parsed.data.bookingPageTitle !== undefined) {
+    updates.bookingPageTitle = parsed.data.bookingPageTitle?.trim() || null;
+  }
+  if (parsed.data.bookingPageSubtitle !== undefined) {
+    updates.bookingPageSubtitle = parsed.data.bookingPageSubtitle?.trim() || null;
+  }
+  if (parsed.data.bookingConfirmationMessage !== undefined) {
+    updates.bookingConfirmationMessage = parsed.data.bookingConfirmationMessage?.trim() || null;
+  }
+  if (parsed.data.bookingTrustBulletPrimary !== undefined) {
+    updates.bookingTrustBulletPrimary = parsed.data.bookingTrustBulletPrimary?.trim() || null;
+  }
+  if (parsed.data.bookingTrustBulletSecondary !== undefined) {
+    updates.bookingTrustBulletSecondary = parsed.data.bookingTrustBulletSecondary?.trim() || null;
+  }
+  if (parsed.data.bookingTrustBulletTertiary !== undefined) {
+    updates.bookingTrustBulletTertiary = parsed.data.bookingTrustBulletTertiary?.trim() || null;
+  }
+  if (parsed.data.bookingNotesPrompt !== undefined) {
+    updates.bookingNotesPrompt = parsed.data.bookingNotesPrompt?.trim() || null;
+  }
+  if (parsed.data.bookingRequireEmail !== undefined) {
+    updates.bookingRequireEmail = parsed.data.bookingRequireEmail ?? false;
+  }
+  if (parsed.data.bookingRequirePhone !== undefined) {
+    updates.bookingRequirePhone = parsed.data.bookingRequirePhone ?? false;
+  }
+  if (parsed.data.bookingRequireVehicle !== undefined) {
+    updates.bookingRequireVehicle = parsed.data.bookingRequireVehicle ?? true;
+  }
+  if (parsed.data.bookingAllowCustomerNotes !== undefined) {
+    updates.bookingAllowCustomerNotes = parsed.data.bookingAllowCustomerNotes ?? true;
+  }
+  if (parsed.data.bookingShowPrices !== undefined) {
+    updates.bookingShowPrices = parsed.data.bookingShowPrices ?? true;
+  }
+  if (parsed.data.bookingShowDurations !== undefined) {
+    updates.bookingShowDurations = parsed.data.bookingShowDurations ?? true;
+  }
+  if (parsed.data.bookingAvailableDays !== undefined) {
+    updates.bookingAvailableDays = JSON.stringify(parsed.data.bookingAvailableDays ?? []);
+  }
+  if (parsed.data.bookingAvailableStartTime !== undefined) {
+    updates.bookingAvailableStartTime = parsed.data.bookingAvailableStartTime ?? null;
+  }
+  if (parsed.data.bookingAvailableEndTime !== undefined) {
+    updates.bookingAvailableEndTime = parsed.data.bookingAvailableEndTime ?? null;
+  }
+  if (parsed.data.bookingBlackoutDates !== undefined) {
+    updates.bookingBlackoutDates = JSON.stringify(parsed.data.bookingBlackoutDates ?? []);
+  }
+  if (parsed.data.bookingSlotIntervalMinutes !== undefined) {
+    updates.bookingSlotIntervalMinutes = parsed.data.bookingSlotIntervalMinutes ?? 15;
+  }
+  if (parsed.data.bookingBufferMinutes !== undefined) {
+    updates.bookingBufferMinutes = parsed.data.bookingBufferMinutes ?? null;
+  }
+  if (parsed.data.bookingCapacityPerSlot !== undefined) {
+    updates.bookingCapacityPerSlot = parsed.data.bookingCapacityPerSlot ?? null;
+  }
   if (parsed.data.monthlyRevenueGoal !== undefined) {
     updates.monthlyRevenueGoal =
       parsed.data.monthlyRevenueGoal != null ? String(parsed.data.monthlyRevenueGoal) : null;
@@ -1004,6 +2528,23 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
       : existing.bookingRequestUrl ?? null;
   if (nextLapsedAutomationEnabled && !nextBookingRequestUrl) {
     throw new BadRequestError("Add a booking link before enabling lapsed client automations.");
+  }
+  const nextBookingStartTime =
+    parsed.data.bookingAvailableStartTime !== undefined
+      ? parsed.data.bookingAvailableStartTime ?? null
+      : existing.bookingAvailableStartTime ?? null;
+  const nextBookingEndTime =
+    parsed.data.bookingAvailableEndTime !== undefined
+      ? parsed.data.bookingAvailableEndTime ?? null
+      : existing.bookingAvailableEndTime ?? null;
+  if (
+    nextBookingStartTime &&
+    nextBookingEndTime &&
+    parseTimeToMinutes(nextBookingStartTime) != null &&
+    parseTimeToMinutes(nextBookingEndTime) != null &&
+    parseTimeToMinutes(nextBookingStartTime) === parseTimeToMinutes(nextBookingEndTime)
+  ) {
+    throw new BadRequestError("Booking start and end times cannot be the same.");
   }
   const nextWebhookEnabled = parsed.data.integrationWebhookEnabled ?? existing.integrationWebhookEnabled ?? false;
   const nextWebhookUrl =

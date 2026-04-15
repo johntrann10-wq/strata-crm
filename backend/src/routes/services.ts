@@ -17,6 +17,7 @@ import {
   LEGACY_SERVICE_CATEGORIES,
   type LegacyServiceCategory,
 } from "../lib/serviceCategories.js";
+import { normalizeBookingServiceMode, parseTimeToMinutes } from "../lib/booking.js";
 
 export const servicesRouter = Router({ mergeParams: true });
 
@@ -36,6 +37,20 @@ type ServiceRow = {
   sortOrder: number | null;
   taxable: boolean | null;
   isAddon: boolean | null;
+  bookingEnabled: boolean | null;
+  bookingFlowType: string | null;
+  bookingDescription: string | null;
+  bookingDepositAmount: string | null;
+  bookingLeadTimeHours: number | null;
+  bookingWindowDays: number | null;
+  bookingServiceMode: string | null;
+  bookingAvailableDays: number[] | null;
+  bookingAvailableStartTime: string | null;
+  bookingAvailableEndTime: string | null;
+  bookingCapacityPerSlot: number | null;
+  bookingFeatured: boolean | null;
+  bookingHidePrice: boolean | null;
+  bookingHideDuration: boolean | null;
   active: boolean | null;
   createdAt: Date;
   updatedAt: Date;
@@ -131,6 +146,20 @@ function buildLegacyServiceSelectColumns(columns: Set<string>): string {
     columns.has("sort_order") ? `s."sort_order" as "sortOrder"` : `0::integer as "sortOrder"`,
     columns.has("taxable") ? `s."taxable" as "taxable"` : `true as "taxable"`,
     columns.has("is_addon") ? `s."is_addon" as "isAddon"` : `false as "isAddon"`,
+    columns.has("booking_enabled") ? `s."booking_enabled" as "bookingEnabled"` : `false as "bookingEnabled"`,
+    columns.has("booking_flow_type") ? `s."booking_flow_type" as "bookingFlowType"` : `'inherit'::text as "bookingFlowType"`,
+    columns.has("booking_description") ? `s."booking_description" as "bookingDescription"` : `null::text as "bookingDescription"`,
+    columns.has("booking_deposit_amount") ? `s."booking_deposit_amount" as "bookingDepositAmount"` : `'0'::numeric as "bookingDepositAmount"`,
+    columns.has("booking_lead_time_hours") ? `s."booking_lead_time_hours" as "bookingLeadTimeHours"` : `0::integer as "bookingLeadTimeHours"`,
+    columns.has("booking_window_days") ? `s."booking_window_days" as "bookingWindowDays"` : `30::integer as "bookingWindowDays"`,
+    columns.has("booking_service_mode") ? `s."booking_service_mode" as "bookingServiceMode"` : `'in_shop'::text as "bookingServiceMode"`,
+    columns.has("booking_available_days") ? `s."booking_available_days" as "bookingAvailableDays"` : `null::text as "bookingAvailableDays"`,
+    columns.has("booking_available_start_time") ? `s."booking_available_start_time" as "bookingAvailableStartTime"` : `null::text as "bookingAvailableStartTime"`,
+    columns.has("booking_available_end_time") ? `s."booking_available_end_time" as "bookingAvailableEndTime"` : `null::text as "bookingAvailableEndTime"`,
+    columns.has("booking_capacity_per_slot") ? `s."booking_capacity_per_slot" as "bookingCapacityPerSlot"` : `null::integer as "bookingCapacityPerSlot"`,
+    columns.has("booking_featured") ? `s."booking_featured" as "bookingFeatured"` : `false as "bookingFeatured"`,
+    columns.has("booking_hide_price") ? `s."booking_hide_price" as "bookingHidePrice"` : `false as "bookingHidePrice"`,
+    columns.has("booking_hide_duration") ? `s."booking_hide_duration" as "bookingHideDuration"` : `false as "bookingHideDuration"`,
     columns.has("active") ? `s."active" as "active"` : `true as "active"`,
     columns.has("created_at") ? `s."created_at" as "createdAt"` : `now() as "createdAt"`,
     columns.has("updated_at") ? `s."updated_at" as "updatedAt"` : `now() as "updatedAt"`,
@@ -197,6 +226,19 @@ async function getLegacyCompatibleService(id: string, bid: string, columns: Set<
   const rows = (result as { rows?: Array<Record<string, unknown>> }).rows ?? [];
   const row = rows[0];
   return row ? normalizeServiceRecord(row as any) : null;
+}
+
+function parseStoredNumberArray(raw: string | null | undefined): number[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => Number(item))
+      .filter((item) => Number.isInteger(item) && item >= 0 && item <= 6);
+  } catch {
+    return [];
+  }
 }
 
 type ServicePayload = z.infer<typeof createSchema>;
@@ -274,6 +316,62 @@ async function insertLegacyServiceRecord(
     insertColumns.push("is_addon");
     insertValues.push(body.isAddon ?? false);
   }
+  if (columns.has("booking_enabled")) {
+    insertColumns.push("booking_enabled");
+    insertValues.push(body.bookingEnabled ?? false);
+  }
+  if (columns.has("booking_flow_type")) {
+    insertColumns.push("booking_flow_type");
+    insertValues.push(body.bookingFlowType ?? "inherit");
+  }
+  if (columns.has("booking_description")) {
+    insertColumns.push("booking_description");
+    insertValues.push(body.bookingDescription ?? null);
+  }
+  if (columns.has("booking_deposit_amount")) {
+    insertColumns.push("booking_deposit_amount");
+    insertValues.push(String(body.bookingDepositAmount ?? 0));
+  }
+  if (columns.has("booking_lead_time_hours")) {
+    insertColumns.push("booking_lead_time_hours");
+    insertValues.push(body.bookingLeadTimeHours ?? 0);
+  }
+  if (columns.has("booking_window_days")) {
+    insertColumns.push("booking_window_days");
+    insertValues.push(body.bookingWindowDays ?? 30);
+  }
+  if (columns.has("booking_service_mode")) {
+    insertColumns.push("booking_service_mode");
+    insertValues.push(body.bookingServiceMode ?? "in_shop");
+  }
+  if (columns.has("booking_available_days")) {
+    insertColumns.push("booking_available_days");
+    insertValues.push(body.bookingAvailableDays ? JSON.stringify(body.bookingAvailableDays) : null);
+  }
+  if (columns.has("booking_available_start_time")) {
+    insertColumns.push("booking_available_start_time");
+    insertValues.push(body.bookingAvailableStartTime ?? null);
+  }
+  if (columns.has("booking_available_end_time")) {
+    insertColumns.push("booking_available_end_time");
+    insertValues.push(body.bookingAvailableEndTime ?? null);
+  }
+  if (columns.has("booking_capacity_per_slot")) {
+    insertColumns.push("booking_capacity_per_slot");
+    insertValues.push(body.bookingCapacityPerSlot ?? null);
+  }
+  if (columns.has("booking_featured")) {
+    insertColumns.push("booking_featured");
+    insertValues.push(body.bookingFeatured ?? false);
+  }
+  if (columns.has("booking_hide_price")) {
+    insertColumns.push("booking_hide_price");
+    insertValues.push(body.bookingHidePrice ?? false);
+  }
+  if (columns.has("booking_hide_duration")) {
+    insertColumns.push("booking_hide_duration");
+    insertValues.push(body.bookingHideDuration ?? false);
+  }
   if (columns.has("active")) {
     insertColumns.push("active");
     insertValues.push(body.active ?? true);
@@ -329,6 +427,51 @@ async function updateLegacyServiceRecord(
   }
   if (body.taxable !== undefined && columns.has("taxable")) updates.push({ column: "taxable", value: body.taxable });
   if (body.isAddon !== undefined && columns.has("is_addon")) updates.push({ column: "is_addon", value: body.isAddon });
+  if (body.bookingEnabled !== undefined && columns.has("booking_enabled")) {
+    updates.push({ column: "booking_enabled", value: body.bookingEnabled });
+  }
+  if (body.bookingFlowType !== undefined && columns.has("booking_flow_type")) {
+    updates.push({ column: "booking_flow_type", value: body.bookingFlowType });
+  }
+  if (body.bookingDescription !== undefined && columns.has("booking_description")) {
+    updates.push({ column: "booking_description", value: body.bookingDescription });
+  }
+  if (body.bookingDepositAmount !== undefined && columns.has("booking_deposit_amount")) {
+    updates.push({ column: "booking_deposit_amount", value: String(body.bookingDepositAmount ?? 0) });
+  }
+  if (body.bookingLeadTimeHours !== undefined && columns.has("booking_lead_time_hours")) {
+    updates.push({ column: "booking_lead_time_hours", value: body.bookingLeadTimeHours });
+  }
+  if (body.bookingWindowDays !== undefined && columns.has("booking_window_days")) {
+    updates.push({ column: "booking_window_days", value: body.bookingWindowDays });
+  }
+  if (body.bookingServiceMode !== undefined && columns.has("booking_service_mode")) {
+    updates.push({ column: "booking_service_mode", value: body.bookingServiceMode });
+  }
+  if (body.bookingAvailableDays !== undefined && columns.has("booking_available_days")) {
+    updates.push({
+      column: "booking_available_days",
+      value: body.bookingAvailableDays ? JSON.stringify(body.bookingAvailableDays) : null,
+    });
+  }
+  if (body.bookingAvailableStartTime !== undefined && columns.has("booking_available_start_time")) {
+    updates.push({ column: "booking_available_start_time", value: body.bookingAvailableStartTime ?? null });
+  }
+  if (body.bookingAvailableEndTime !== undefined && columns.has("booking_available_end_time")) {
+    updates.push({ column: "booking_available_end_time", value: body.bookingAvailableEndTime ?? null });
+  }
+  if (body.bookingCapacityPerSlot !== undefined && columns.has("booking_capacity_per_slot")) {
+    updates.push({ column: "booking_capacity_per_slot", value: body.bookingCapacityPerSlot ?? null });
+  }
+  if (body.bookingFeatured !== undefined && columns.has("booking_featured")) {
+    updates.push({ column: "booking_featured", value: body.bookingFeatured });
+  }
+  if (body.bookingHidePrice !== undefined && columns.has("booking_hide_price")) {
+    updates.push({ column: "booking_hide_price", value: body.bookingHidePrice });
+  }
+  if (body.bookingHideDuration !== undefined && columns.has("booking_hide_duration")) {
+    updates.push({ column: "booking_hide_duration", value: body.bookingHideDuration });
+  }
   if (body.active !== undefined && columns.has("active")) updates.push({ column: "active", value: body.active });
   if (columns.has("updated_at")) updates.push({ column: "updated_at", value: new Date() });
 
@@ -355,6 +498,20 @@ function normalizeServiceRecord(row: {
   sortOrder?: number | null;
   taxable?: boolean | null;
   isAddon?: boolean | null;
+  bookingEnabled?: boolean | null;
+  bookingFlowType?: string | null;
+  bookingDescription?: string | null;
+  bookingDepositAmount?: string | null;
+  bookingLeadTimeHours?: number | null;
+  bookingWindowDays?: number | null;
+  bookingServiceMode?: string | null;
+  bookingAvailableDays?: string | null;
+  bookingAvailableStartTime?: string | null;
+  bookingAvailableEndTime?: string | null;
+  bookingCapacityPerSlot?: number | null;
+  bookingFeatured?: boolean | null;
+  bookingHidePrice?: boolean | null;
+  bookingHideDuration?: boolean | null;
   active?: boolean | null;
   createdAt: Date;
   updatedAt: Date;
@@ -378,6 +535,22 @@ function normalizeServiceRecord(row: {
     sortOrder: row.sortOrder ?? 0,
     taxable: row.taxable ?? true,
     isAddon: row.isAddon ?? false,
+    bookingEnabled: row.bookingEnabled ?? false,
+    bookingFlowType: row.bookingFlowType ?? "inherit",
+    bookingDescription: row.bookingDescription ?? null,
+    bookingDepositAmount: row.bookingDepositAmount ?? "0",
+    bookingLeadTimeHours: row.bookingLeadTimeHours ?? 0,
+    bookingWindowDays: row.bookingWindowDays ?? 30,
+    bookingServiceMode: normalizeBookingServiceMode(row.bookingServiceMode),
+    bookingAvailableDays: parseStoredNumberArray(row.bookingAvailableDays),
+    bookingAvailableStartTime:
+      parseTimeToMinutes(row.bookingAvailableStartTime ?? "") != null ? row.bookingAvailableStartTime ?? null : null,
+    bookingAvailableEndTime:
+      parseTimeToMinutes(row.bookingAvailableEndTime ?? "") != null ? row.bookingAvailableEndTime ?? null : null,
+    bookingCapacityPerSlot: row.bookingCapacityPerSlot ?? null,
+    bookingFeatured: row.bookingFeatured ?? false,
+    bookingHidePrice: row.bookingHidePrice ?? false,
+    bookingHideDuration: row.bookingHideDuration ?? false,
     active: row.active ?? true,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -391,6 +564,20 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
   const hasSortOrder = serviceColumns.has("sort_order");
   const hasTaxable = serviceColumns.has("taxable");
   const hasIsAddon = serviceColumns.has("is_addon");
+  const hasBookingEnabled = serviceColumns.has("booking_enabled");
+  const hasBookingFlowType = serviceColumns.has("booking_flow_type");
+  const hasBookingDescription = serviceColumns.has("booking_description");
+  const hasBookingDepositAmount = serviceColumns.has("booking_deposit_amount");
+  const hasBookingLeadTimeHours = serviceColumns.has("booking_lead_time_hours");
+  const hasBookingWindowDays = serviceColumns.has("booking_window_days");
+  const hasBookingServiceMode = serviceColumns.has("booking_service_mode");
+  const hasBookingAvailableDays = serviceColumns.has("booking_available_days");
+  const hasBookingAvailableStartTime = serviceColumns.has("booking_available_start_time");
+  const hasBookingAvailableEndTime = serviceColumns.has("booking_available_end_time");
+  const hasBookingCapacityPerSlot = serviceColumns.has("booking_capacity_per_slot");
+  const hasBookingFeatured = serviceColumns.has("booking_featured");
+  const hasBookingHidePrice = serviceColumns.has("booking_hide_price");
+  const hasBookingHideDuration = serviceColumns.has("booking_hide_duration");
   const hasActive = serviceColumns.has("active");
   const conditions = [eq(services.businessId, bid)];
   if (typeof activeFilter === "boolean" && hasActive) conditions.push(eq(services.active, activeFilter));
@@ -411,6 +598,20 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
         sortOrder: hasSortOrder ? services.sortOrder : sql<number | null>`0`,
         taxable: hasTaxable ? services.taxable : sql<boolean | null>`true`,
         isAddon: hasIsAddon ? services.isAddon : sql<boolean | null>`false`,
+        bookingEnabled: hasBookingEnabled ? services.bookingEnabled : sql<boolean | null>`false`,
+        bookingFlowType: hasBookingFlowType ? services.bookingFlowType : sql<string | null>`'inherit'`,
+        bookingDescription: hasBookingDescription ? services.bookingDescription : sql<string | null>`null`,
+        bookingDepositAmount: hasBookingDepositAmount ? services.bookingDepositAmount : sql<string | null>`'0'`,
+        bookingLeadTimeHours: hasBookingLeadTimeHours ? services.bookingLeadTimeHours : sql<number | null>`0`,
+        bookingWindowDays: hasBookingWindowDays ? services.bookingWindowDays : sql<number | null>`30`,
+        bookingServiceMode: hasBookingServiceMode ? services.bookingServiceMode : sql<string | null>`'in_shop'`,
+        bookingAvailableDays: hasBookingAvailableDays ? services.bookingAvailableDays : sql<string | null>`null`,
+        bookingAvailableStartTime: hasBookingAvailableStartTime ? services.bookingAvailableStartTime : sql<string | null>`null`,
+        bookingAvailableEndTime: hasBookingAvailableEndTime ? services.bookingAvailableEndTime : sql<string | null>`null`,
+        bookingCapacityPerSlot: hasBookingCapacityPerSlot ? services.bookingCapacityPerSlot : sql<number | null>`null`,
+        bookingFeatured: hasBookingFeatured ? services.bookingFeatured : sql<boolean | null>`false`,
+        bookingHidePrice: hasBookingHidePrice ? services.bookingHidePrice : sql<boolean | null>`false`,
+        bookingHideDuration: hasBookingHideDuration ? services.bookingHideDuration : sql<boolean | null>`false`,
         active: hasActive ? services.active : sql<boolean | null>`true`,
         createdAt: services.createdAt,
         updatedAt: services.updatedAt,
@@ -443,6 +644,20 @@ async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRo
   const hasSortOrder = serviceColumns.has("sort_order");
   const hasTaxable = serviceColumns.has("taxable");
   const hasIsAddon = serviceColumns.has("is_addon");
+  const hasBookingEnabled = serviceColumns.has("booking_enabled");
+  const hasBookingFlowType = serviceColumns.has("booking_flow_type");
+  const hasBookingDescription = serviceColumns.has("booking_description");
+  const hasBookingDepositAmount = serviceColumns.has("booking_deposit_amount");
+  const hasBookingLeadTimeHours = serviceColumns.has("booking_lead_time_hours");
+  const hasBookingWindowDays = serviceColumns.has("booking_window_days");
+  const hasBookingServiceMode = serviceColumns.has("booking_service_mode");
+  const hasBookingAvailableDays = serviceColumns.has("booking_available_days");
+  const hasBookingAvailableStartTime = serviceColumns.has("booking_available_start_time");
+  const hasBookingAvailableEndTime = serviceColumns.has("booking_available_end_time");
+  const hasBookingCapacityPerSlot = serviceColumns.has("booking_capacity_per_slot");
+  const hasBookingFeatured = serviceColumns.has("booking_featured");
+  const hasBookingHidePrice = serviceColumns.has("booking_hide_price");
+  const hasBookingHideDuration = serviceColumns.has("booking_hide_duration");
   const hasActive = serviceColumns.has("active");
 
   try {
@@ -461,6 +676,20 @@ async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRo
         sortOrder: hasSortOrder ? services.sortOrder : sql<number | null>`0`,
         taxable: hasTaxable ? services.taxable : sql<boolean | null>`true`,
         isAddon: hasIsAddon ? services.isAddon : sql<boolean | null>`false`,
+        bookingEnabled: hasBookingEnabled ? services.bookingEnabled : sql<boolean | null>`false`,
+        bookingFlowType: hasBookingFlowType ? services.bookingFlowType : sql<string | null>`'inherit'`,
+        bookingDescription: hasBookingDescription ? services.bookingDescription : sql<string | null>`null`,
+        bookingDepositAmount: hasBookingDepositAmount ? services.bookingDepositAmount : sql<string | null>`'0'`,
+        bookingLeadTimeHours: hasBookingLeadTimeHours ? services.bookingLeadTimeHours : sql<number | null>`0`,
+        bookingWindowDays: hasBookingWindowDays ? services.bookingWindowDays : sql<number | null>`30`,
+        bookingServiceMode: hasBookingServiceMode ? services.bookingServiceMode : sql<string | null>`'in_shop'`,
+        bookingAvailableDays: hasBookingAvailableDays ? services.bookingAvailableDays : sql<string | null>`null`,
+        bookingAvailableStartTime: hasBookingAvailableStartTime ? services.bookingAvailableStartTime : sql<string | null>`null`,
+        bookingAvailableEndTime: hasBookingAvailableEndTime ? services.bookingAvailableEndTime : sql<string | null>`null`,
+        bookingCapacityPerSlot: hasBookingCapacityPerSlot ? services.bookingCapacityPerSlot : sql<number | null>`null`,
+        bookingFeatured: hasBookingFeatured ? services.bookingFeatured : sql<boolean | null>`false`,
+        bookingHidePrice: hasBookingHidePrice ? services.bookingHidePrice : sql<boolean | null>`false`,
+        bookingHideDuration: hasBookingHideDuration ? services.bookingHideDuration : sql<boolean | null>`false`,
         active: hasActive ? services.active : sql<boolean | null>`true`,
         createdAt: services.createdAt,
         updatedAt: services.updatedAt,
@@ -486,6 +715,20 @@ const createSchema = z.object({
   notes: z.string().nullable().optional(),
   taxable: z.boolean().optional(),
   isAddon: z.boolean().optional(),
+  bookingEnabled: z.boolean().optional(),
+  bookingFlowType: z.enum(["inherit", "request", "self_book"]).optional(),
+  bookingDescription: z.string().max(280).nullable().optional(),
+  bookingDepositAmount: z.coerce.number().min(0).max(100000).optional(),
+  bookingLeadTimeHours: z.coerce.number().int().min(0).max(336).optional(),
+  bookingWindowDays: z.coerce.number().int().min(1).max(180).optional(),
+  bookingServiceMode: z.enum(["in_shop", "mobile", "both"]).optional(),
+  bookingAvailableDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  bookingAvailableStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  bookingAvailableEndTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  bookingCapacityPerSlot: z.coerce.number().int().min(1).max(12).nullable().optional(),
+  bookingFeatured: z.boolean().optional(),
+  bookingHidePrice: z.boolean().optional(),
+  bookingHideDuration: z.boolean().optional(),
   active: z.boolean().optional(),
   business: z.object({ _link: z.string().uuid() }).optional(),
 });
@@ -501,6 +744,20 @@ const patchSchema = z
     notes: z.union([z.string(), z.null()]).optional(),
     taxable: z.boolean().optional(),
     isAddon: z.boolean().optional(),
+    bookingEnabled: z.boolean().optional(),
+    bookingFlowType: z.enum(["inherit", "request", "self_book"]).optional(),
+    bookingDescription: z.union([z.string().max(280), z.null()]).optional(),
+    bookingDepositAmount: z.coerce.number().min(0).max(100000).optional(),
+    bookingLeadTimeHours: z.coerce.number().int().min(0).max(336).optional(),
+    bookingWindowDays: z.coerce.number().int().min(1).max(180).optional(),
+    bookingServiceMode: z.enum(["in_shop", "mobile", "both"]).optional(),
+    bookingAvailableDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+    bookingAvailableStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+    bookingAvailableEndTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+    bookingCapacityPerSlot: z.coerce.number().int().min(1).max(12).nullable().optional(),
+    bookingFeatured: z.boolean().optional(),
+    bookingHidePrice: z.boolean().optional(),
+    bookingHideDuration: z.boolean().optional(),
     active: z.boolean().optional(),
   })
   .strict();
@@ -570,9 +827,23 @@ servicesRouter.post(
           notes: encodeLegacyServiceNotes(body.notes ?? null, resolvedCategory.legacyCategory),
           taxable: body.taxable ?? true,
           isAddon: body.isAddon ?? false,
-          active: body.active ?? true,
-          createdAt,
-          updatedAt: createdAt,
+          bookingEnabled: body.bookingEnabled ?? false,
+          bookingFlowType: body.bookingFlowType ?? "inherit",
+          bookingDescription: body.bookingDescription?.trim() || null,
+          bookingDepositAmount: String(body.bookingDepositAmount ?? 0),
+          bookingLeadTimeHours: body.bookingLeadTimeHours ?? 0,
+          bookingWindowDays: body.bookingWindowDays ?? 30,
+          bookingServiceMode: body.bookingServiceMode ?? "in_shop",
+          bookingAvailableDays: body.bookingAvailableDays ? JSON.stringify(body.bookingAvailableDays) : null,
+          bookingAvailableStartTime: body.bookingAvailableStartTime ?? null,
+          bookingAvailableEndTime: body.bookingAvailableEndTime ?? null,
+          bookingCapacityPerSlot: body.bookingCapacityPerSlot ?? null,
+          bookingFeatured: body.bookingFeatured ?? false,
+          bookingHidePrice: body.bookingHidePrice ?? false,
+          bookingHideDuration: body.bookingHideDuration ?? false,
+            active: body.active ?? true,
+            createdAt,
+            updatedAt: createdAt,
         })
         .returning({ id: services.id });
       createdId = created?.id ?? null;
@@ -641,7 +912,23 @@ servicesRouter.patch(
             : {}),
           ...(body.taxable !== undefined ? { taxable: body.taxable } : {}),
           ...(body.isAddon !== undefined ? { isAddon: body.isAddon } : {}),
-          ...(body.active !== undefined ? { active: body.active } : {}),
+          ...(body.bookingEnabled !== undefined ? { bookingEnabled: body.bookingEnabled } : {}),
+          ...(body.bookingFlowType !== undefined ? { bookingFlowType: body.bookingFlowType } : {}),
+            ...(body.bookingDescription !== undefined
+              ? { bookingDescription: body.bookingDescription?.trim() || null }
+              : {}),
+            ...(body.bookingDepositAmount !== undefined ? { bookingDepositAmount: String(body.bookingDepositAmount) } : {}),
+            ...(body.bookingLeadTimeHours !== undefined ? { bookingLeadTimeHours: body.bookingLeadTimeHours } : {}),
+            ...(body.bookingWindowDays !== undefined ? { bookingWindowDays: body.bookingWindowDays } : {}),
+            ...(body.bookingServiceMode !== undefined ? { bookingServiceMode: body.bookingServiceMode } : {}),
+            ...(body.bookingAvailableDays !== undefined ? { bookingAvailableDays: JSON.stringify(body.bookingAvailableDays ?? []) } : {}),
+            ...(body.bookingAvailableStartTime !== undefined ? { bookingAvailableStartTime: body.bookingAvailableStartTime ?? null } : {}),
+            ...(body.bookingAvailableEndTime !== undefined ? { bookingAvailableEndTime: body.bookingAvailableEndTime ?? null } : {}),
+            ...(body.bookingCapacityPerSlot !== undefined ? { bookingCapacityPerSlot: body.bookingCapacityPerSlot ?? null } : {}),
+            ...(body.bookingFeatured !== undefined ? { bookingFeatured: body.bookingFeatured } : {}),
+            ...(body.bookingHidePrice !== undefined ? { bookingHidePrice: body.bookingHidePrice } : {}),
+            ...(body.bookingHideDuration !== undefined ? { bookingHideDuration: body.bookingHideDuration } : {}),
+            ...(body.active !== undefined ? { active: body.active } : {}),
           updatedAt: new Date(),
         })
         .where(eq(services.id, req.params.id));

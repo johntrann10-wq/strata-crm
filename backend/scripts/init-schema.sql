@@ -142,6 +142,28 @@ CREATE TABLE IF NOT EXISTS businesses (
   automation_lapsed_clients_enabled boolean DEFAULT false,
   automation_lapsed_client_months integer DEFAULT 6,
   booking_request_url text,
+  booking_enabled boolean DEFAULT false,
+  booking_default_flow text DEFAULT 'request',
+  booking_page_title text,
+  booking_page_subtitle text,
+  booking_confirmation_message text,
+  booking_trust_bullet_primary text,
+  booking_trust_bullet_secondary text,
+  booking_trust_bullet_tertiary text,
+  booking_notes_prompt text,
+  booking_require_email boolean DEFAULT false,
+  booking_require_phone boolean DEFAULT false,
+  booking_require_vehicle boolean DEFAULT true,
+  booking_allow_customer_notes boolean DEFAULT true,
+  booking_show_prices boolean DEFAULT true,
+  booking_show_durations boolean DEFAULT true,
+  booking_available_days text,
+  booking_available_start_time text,
+  booking_available_end_time text,
+  booking_blackout_dates text,
+  booking_slot_interval_minutes integer DEFAULT 15,
+  booking_buffer_minutes integer,
+  booking_capacity_per_slot integer,
   integration_webhook_enabled boolean DEFAULT false,
   integration_webhook_url text,
   integration_webhook_secret text,
@@ -199,6 +221,28 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_abandoned_quote_hours
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_lapsed_clients_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_lapsed_client_months integer DEFAULT 6;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_url text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_default_flow text DEFAULT 'request';
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_page_title text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_page_subtitle text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_confirmation_message text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_trust_bullet_primary text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_trust_bullet_secondary text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_trust_bullet_tertiary text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_notes_prompt text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_require_email boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_require_phone boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_require_vehicle boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_allow_customer_notes boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_show_prices boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_show_durations boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_available_days text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_available_start_time text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_available_end_time text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_blackout_dates text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_slot_interval_minutes integer DEFAULT 15;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_buffer_minutes integer;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_capacity_per_slot integer;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_url text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_secret text;
@@ -348,6 +392,20 @@ CREATE TABLE IF NOT EXISTS services (
   price decimal(12,2) DEFAULT 0,
   duration_minutes integer,
   active boolean DEFAULT true,
+  booking_enabled boolean DEFAULT false,
+  booking_flow_type text DEFAULT 'inherit',
+  booking_description text,
+  booking_deposit_amount decimal(12,2) DEFAULT 0,
+  booking_lead_time_hours integer DEFAULT 0,
+  booking_window_days integer DEFAULT 30,
+  booking_service_mode text DEFAULT 'in_shop',
+  booking_available_days text,
+  booking_available_start_time text,
+  booking_available_end_time text,
+  booking_capacity_per_slot integer,
+  booking_featured boolean DEFAULT false,
+  booking_hide_price boolean DEFAULT false,
+  booking_hide_duration boolean DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -375,6 +433,20 @@ ALTER TABLE services ADD COLUMN IF NOT EXISTS notes text;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS category service_category DEFAULT 'other';
 ALTER TABLE services ADD COLUMN IF NOT EXISTS taxable boolean DEFAULT true;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS is_addon boolean DEFAULT false;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_enabled boolean DEFAULT false;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_flow_type text DEFAULT 'inherit';
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_description text;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_deposit_amount decimal(12,2) DEFAULT 0;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_lead_time_hours integer DEFAULT 0;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_window_days integer DEFAULT 30;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_service_mode text DEFAULT 'in_shop';
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_days text;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_start_time text;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_end_time text;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_capacity_per_slot integer;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_featured boolean DEFAULT false;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_hide_price boolean DEFAULT false;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_hide_duration boolean DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS service_categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

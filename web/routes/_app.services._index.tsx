@@ -4,7 +4,7 @@ import { useAction, useFindMany } from "../hooks/useApi";
 import { api } from "../api";
 import type { AuthOutletContext } from "./_app";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +31,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "../components/shared/EmptyState";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import { PageHeader } from "../components/shared/PageHeader";
@@ -38,7 +39,11 @@ import { cn } from "@/lib/utils";
 import {
   ArrowDown,
   ArrowUp,
+  CalendarCheck2,
+  Copy,
+  ExternalLink,
   FolderKanban,
+  Globe,
   Package,
   Pencil,
   Plus,
@@ -48,6 +53,7 @@ import {
 import { toast } from "sonner";
 import { formatServiceCategory } from "../lib/serviceCatalog";
 import { QuarterHourDurationGrid } from "../components/appointments/SchedulingControls";
+import { getBusinessTypeWorkspaceDefaults } from "../lib/businessTypeWorkspaceDefaults";
 
 const UNCATEGORIZED_VALUE = "__uncategorized__";
 
@@ -64,6 +70,46 @@ type ServiceRecord = {
   isAddon: boolean | null;
   taxable: boolean | null;
   notes: string | null;
+  bookingEnabled: boolean | null;
+  bookingFlowType: "inherit" | "request" | "self_book" | null;
+  bookingDescription: string | null;
+  bookingDepositAmount: number | null;
+  bookingLeadTimeHours: number | null;
+  bookingWindowDays: number | null;
+  bookingServiceMode: "in_shop" | "mobile" | "both" | null;
+  bookingAvailableDays: number[] | null;
+  bookingAvailableStartTime: string | null;
+  bookingAvailableEndTime: string | null;
+  bookingCapacityPerSlot: number | null;
+  bookingFeatured: boolean | null;
+  bookingHidePrice: boolean | null;
+  bookingHideDuration: boolean | null;
+};
+
+type BusinessBookingSettings = {
+  bookingEnabled: boolean;
+  bookingDefaultFlow: "request" | "self_book";
+  bookingPageTitle: string;
+  bookingPageSubtitle: string;
+  bookingConfirmationMessage: string;
+  bookingTrustBulletPrimary: string;
+  bookingTrustBulletSecondary: string;
+  bookingTrustBulletTertiary: string;
+  bookingNotesPrompt: string;
+  bookingRequireEmail: boolean;
+  bookingRequirePhone: boolean;
+  bookingRequireVehicle: boolean;
+  bookingAllowCustomerNotes: boolean;
+  bookingShowPrices: boolean;
+  bookingShowDurations: boolean;
+  bookingAvailableDays: number[];
+  bookingAvailableStartTime: string;
+  bookingAvailableEndTime: string;
+  bookingBlackoutDatesText: string;
+  bookingSlotIntervalMinutes: number;
+  bookingBufferMinutes: string;
+  bookingCapacityPerSlot: string;
+  notificationAppointmentConfirmationEmailEnabled: boolean;
 };
 
 type CategoryRecord = {
@@ -89,6 +135,20 @@ type ServiceFormData = {
   notes: string;
   taxable: boolean;
   isAddon: boolean;
+  bookingEnabled: boolean;
+  bookingFlowType: "inherit" | "request" | "self_book";
+  bookingDescription: string;
+  bookingDepositAmount: string;
+  bookingLeadTimeHours: string;
+  bookingWindowDays: string;
+  bookingServiceMode: "in_shop" | "mobile" | "both";
+  bookingAvailableDays: number[];
+  bookingAvailableStartTime: string;
+  bookingAvailableEndTime: string;
+  bookingCapacityPerSlot: string;
+  bookingFeatured: boolean;
+  bookingHidePrice: boolean;
+  bookingHideDuration: boolean;
 };
 
 const defaultServiceFormData: ServiceFormData = {
@@ -99,7 +159,57 @@ const defaultServiceFormData: ServiceFormData = {
   notes: "",
   taxable: true,
   isAddon: false,
+  bookingEnabled: false,
+  bookingFlowType: "inherit",
+  bookingDescription: "",
+  bookingDepositAmount: "",
+  bookingLeadTimeHours: "0",
+  bookingWindowDays: "30",
+  bookingServiceMode: "in_shop",
+  bookingAvailableDays: [],
+  bookingAvailableStartTime: "",
+  bookingAvailableEndTime: "",
+  bookingCapacityPerSlot: "",
+  bookingFeatured: false,
+  bookingHidePrice: false,
+  bookingHideDuration: false,
 };
+
+const defaultBookingSettings: BusinessBookingSettings = {
+  bookingEnabled: false,
+  bookingDefaultFlow: "request",
+  bookingPageTitle: "",
+  bookingPageSubtitle: "",
+  bookingConfirmationMessage: "",
+  bookingTrustBulletPrimary: "Goes directly to the shop",
+  bookingTrustBulletSecondary: "Quick follow-up",
+  bookingTrustBulletTertiary: "Secure and simple",
+  bookingNotesPrompt: "Add timing, questions, or anything the shop should know.",
+  bookingRequireEmail: false,
+  bookingRequirePhone: false,
+  bookingRequireVehicle: true,
+  bookingAllowCustomerNotes: true,
+  bookingShowPrices: true,
+  bookingShowDurations: true,
+  bookingAvailableDays: [1, 2, 3, 4, 5],
+  bookingAvailableStartTime: "",
+  bookingAvailableEndTime: "",
+  bookingBlackoutDatesText: "",
+  bookingSlotIntervalMinutes: 15,
+  bookingBufferMinutes: "",
+  bookingCapacityPerSlot: "",
+  notificationAppointmentConfirmationEmailEnabled: true,
+};
+
+const BOOKING_DAY_OPTIONS = [
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+  { value: 0, label: "Sun" },
+] as const;
 
 type ServiceTab = "active" | "inactive";
 
@@ -153,6 +263,68 @@ function serviceToFormData(service: ServiceRecord): ServiceFormData {
     notes: service.notes ?? "",
     taxable: service.taxable ?? true,
     isAddon: service.isAddon ?? false,
+    bookingEnabled: service.bookingEnabled === true,
+    bookingFlowType: service.bookingFlowType ?? "inherit",
+    bookingDescription: service.bookingDescription ?? "",
+    bookingDepositAmount:
+      service.bookingDepositAmount != null && Number(service.bookingDepositAmount) > 0
+        ? String(service.bookingDepositAmount)
+        : "",
+    bookingLeadTimeHours: String(service.bookingLeadTimeHours ?? 0),
+    bookingWindowDays: String(service.bookingWindowDays ?? 30),
+    bookingServiceMode: service.bookingServiceMode ?? "in_shop",
+    bookingAvailableDays: service.bookingAvailableDays ?? [],
+    bookingAvailableStartTime: service.bookingAvailableStartTime ?? "",
+    bookingAvailableEndTime: service.bookingAvailableEndTime ?? "",
+    bookingCapacityPerSlot:
+      service.bookingCapacityPerSlot != null && Number(service.bookingCapacityPerSlot) > 0
+        ? String(service.bookingCapacityPerSlot)
+        : "",
+    bookingFeatured: service.bookingFeatured === true,
+    bookingHidePrice: service.bookingHidePrice === true,
+    bookingHideDuration: service.bookingHideDuration === true,
+  };
+}
+
+function businessToBookingSettings(record: Partial<BusinessBookingSettings> | null | undefined): BusinessBookingSettings {
+  return {
+    bookingEnabled: record?.bookingEnabled ?? false,
+    bookingDefaultFlow: record?.bookingDefaultFlow === "self_book" ? "self_book" : "request",
+    bookingPageTitle: record?.bookingPageTitle ?? "",
+    bookingPageSubtitle: record?.bookingPageSubtitle ?? "",
+    bookingConfirmationMessage: record?.bookingConfirmationMessage ?? "",
+    bookingTrustBulletPrimary: record?.bookingTrustBulletPrimary ?? "Goes directly to the shop",
+    bookingTrustBulletSecondary: record?.bookingTrustBulletSecondary ?? "Quick follow-up",
+    bookingTrustBulletTertiary: record?.bookingTrustBulletTertiary ?? "Secure and simple",
+    bookingNotesPrompt: record?.bookingNotesPrompt ?? "Add timing, questions, or anything the shop should know.",
+    bookingRequireEmail: record?.bookingRequireEmail ?? false,
+    bookingRequirePhone: record?.bookingRequirePhone ?? false,
+    bookingRequireVehicle: record?.bookingRequireVehicle ?? true,
+    bookingAllowCustomerNotes: record?.bookingAllowCustomerNotes ?? true,
+    bookingShowPrices: record?.bookingShowPrices ?? true,
+    bookingShowDurations: record?.bookingShowDurations ?? true,
+    bookingAvailableDays:
+      Array.isArray((record as { bookingAvailableDays?: number[] | null })?.bookingAvailableDays) &&
+      (record as { bookingAvailableDays?: number[] | null }).bookingAvailableDays!.length > 0
+        ? [...new Set((record as { bookingAvailableDays?: number[] | null }).bookingAvailableDays)]
+        : [1, 2, 3, 4, 5],
+    bookingAvailableStartTime: (record as { bookingAvailableStartTime?: string | null })?.bookingAvailableStartTime ?? "",
+    bookingAvailableEndTime: (record as { bookingAvailableEndTime?: string | null })?.bookingAvailableEndTime ?? "",
+    bookingBlackoutDatesText: Array.isArray((record as { bookingBlackoutDates?: string[] | null })?.bookingBlackoutDates)
+      ? ((record as { bookingBlackoutDates?: string[] | null }).bookingBlackoutDates ?? []).join("\n")
+      : "",
+    bookingSlotIntervalMinutes: Number((record as { bookingSlotIntervalMinutes?: number | null })?.bookingSlotIntervalMinutes ?? 15) || 15,
+    bookingBufferMinutes:
+      (record as { bookingBufferMinutes?: number | null })?.bookingBufferMinutes != null
+        ? String((record as { bookingBufferMinutes?: number | null }).bookingBufferMinutes)
+        : "",
+    bookingCapacityPerSlot:
+      (record as { bookingCapacityPerSlot?: number | null })?.bookingCapacityPerSlot != null
+        ? String((record as { bookingCapacityPerSlot?: number | null }).bookingCapacityPerSlot)
+        : "",
+    notificationAppointmentConfirmationEmailEnabled:
+      (record as { notificationAppointmentConfirmationEmailEnabled?: boolean | null })
+        ?.notificationAppointmentConfirmationEmailEnabled ?? true,
   };
 }
 
@@ -180,6 +352,40 @@ function filterServices(
     const matchesSearch = normalizedSearch ? haystack.includes(normalizedSearch) : true;
     return matchesActive && matchesCategory && matchesSearch;
   });
+}
+
+function parseBookingBlackoutDatesText(value: string): string[] {
+  return value
+    .split(/[\n,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+}
+
+function bookingModeLabel(
+  service: Pick<ServiceRecord, "bookingFlowType">,
+  defaultFlow: BusinessBookingSettings["bookingDefaultFlow"],
+) {
+  const effective = service.bookingFlowType === "self_book" || service.bookingFlowType === "request"
+    ? service.bookingFlowType
+    : defaultFlow;
+  return effective === "self_book" ? "Book now" : "Request service";
+}
+
+function serviceModeLabel(mode: ServiceRecord["bookingServiceMode"] | ServiceFormData["bookingServiceMode"]) {
+  if (mode === "mobile") return "Mobile / on-site";
+  if (mode === "both") return "Mobile or in-shop";
+  return "In-shop";
+}
+
+function buildPublicBookingHref(bookingUrl: string, service: Pick<ServiceRecord, "id" | "categoryId">, options?: { step?: "service" }) {
+  const params = new URLSearchParams({
+    service: service.id,
+    source: "services-page",
+  });
+  if (service.categoryId) params.set("category", service.categoryId);
+  if (options?.step) params.set("step", options.step);
+  return `${bookingUrl}?${params.toString()}`;
 }
 
 function groupServicesByCategory(
@@ -354,6 +560,244 @@ function ServiceForm({
           </Label>
         </div>
       </div>
+
+      <div className="rounded-2xl border bg-muted/25 p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold">Public booking</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Control whether this service shows on the booking page and whether customers can book it instantly or request approval.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="svc-booking-enabled" className="text-xs text-muted-foreground">
+              Show online
+            </Label>
+            <Switch
+              id="svc-booking-enabled"
+              checked={formData.bookingEnabled}
+              onCheckedChange={(checked) => onChange({ ...formData, bookingEnabled: checked })}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor="svc-booking-flow">Booking flow</Label>
+            <Select
+              value={formData.bookingFlowType}
+              onValueChange={(value) =>
+                onChange({
+                  ...formData,
+                  bookingFlowType: value as ServiceFormData["bookingFlowType"],
+                })
+              }
+            >
+              <SelectTrigger id="svc-booking-flow">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="inherit">Use business default</SelectItem>
+                <SelectItem value="self_book">Customers can book instantly</SelectItem>
+                <SelectItem value="request">Review requests first</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="svc-booking-deposit">Deposit ($)</Label>
+            <Input
+              id="svc-booking-deposit"
+              type="number"
+              min="0"
+              step="0.01"
+              value={formData.bookingDepositAmount}
+              onChange={(e) => onChange({ ...formData, bookingDepositAmount: e.target.value })}
+              placeholder="0.00"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor="svc-booking-lead-time">Lead time (hours)</Label>
+            <Input
+              id="svc-booking-lead-time"
+              type="number"
+              min="0"
+              max="336"
+              step="1"
+              value={formData.bookingLeadTimeHours}
+              onChange={(e) => onChange({ ...formData, bookingLeadTimeHours: e.target.value })}
+              placeholder="0"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="svc-booking-window">Booking window (days)</Label>
+            <Input
+              id="svc-booking-window"
+              type="number"
+              min="1"
+              max="180"
+              step="1"
+              value={formData.bookingWindowDays}
+              onChange={(e) => onChange({ ...formData, bookingWindowDays: e.target.value })}
+              placeholder="30"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor="svc-booking-mode">Service mode</Label>
+            <Select
+              value={formData.bookingServiceMode}
+              onValueChange={(value) =>
+                onChange({
+                  ...formData,
+                  bookingServiceMode: value as ServiceFormData["bookingServiceMode"],
+                })
+              }
+            >
+              <SelectTrigger id="svc-booking-mode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="in_shop">In-shop only</SelectItem>
+                <SelectItem value="mobile">Mobile / on-site only</SelectItem>
+                <SelectItem value="both">Let the customer choose</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="svc-booking-capacity">Capacity per slot</Label>
+            <Input
+              id="svc-booking-capacity"
+              type="number"
+              min="1"
+              max="12"
+              step="1"
+              value={formData.bookingCapacityPerSlot}
+              onChange={(e) => onChange({ ...formData, bookingCapacityPerSlot: e.target.value })}
+              placeholder="Use business default"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2">
+          <Label>Booking days</Label>
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+            {BOOKING_DAY_OPTIONS.map((day) => {
+              const checked = formData.bookingAvailableDays.includes(day.value);
+              return (
+                <label
+                  key={day.value}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
+                    checked ? "border-orange-300 bg-orange-50 text-orange-900" : "border-slate-200 bg-white text-slate-600"
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={checked}
+                    onChange={() =>
+                      onChange({
+                        ...formData,
+                        bookingAvailableDays: checked
+                          ? formData.bookingAvailableDays.filter((value) => value !== day.value)
+                          : [...formData.bookingAvailableDays, day.value].sort(),
+                      })
+                    }
+                  />
+                  {day.label}
+                </label>
+              );
+            })}
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">Leave blank to use the business booking schedule.</p>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor="svc-booking-start">Service window start</Label>
+            <Input
+              id="svc-booking-start"
+              type="time"
+              value={formData.bookingAvailableStartTime}
+              onChange={(e) => onChange({ ...formData, bookingAvailableStartTime: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="svc-booking-end">Service window end</Label>
+            <Input
+              id="svc-booking-end"
+              type="time"
+              value={formData.bookingAvailableEndTime}
+              onChange={(e) => onChange({ ...formData, bookingAvailableEndTime: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2">
+          <Label htmlFor="svc-booking-description">Booking description</Label>
+          <Textarea
+            id="svc-booking-description"
+            value={formData.bookingDescription}
+            onChange={(e) => onChange({ ...formData, bookingDescription: e.target.value })}
+            placeholder="Short public-facing copy for the booking page."
+            rows={3}
+          />
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="flex items-start gap-3 rounded-xl border bg-white/80 p-3">
+            <Checkbox
+              id="svc-booking-featured"
+              checked={formData.bookingFeatured}
+              onCheckedChange={(checked) => onChange({ ...formData, bookingFeatured: checked === true })}
+              className="mt-1"
+            />
+            <div className="space-y-1">
+              <Label htmlFor="svc-booking-featured" className="cursor-pointer text-sm font-medium">
+                Feature first
+              </Label>
+              <p className="text-xs leading-5 text-muted-foreground">Push this service to the top of the public booking page.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 rounded-xl border bg-white/80 p-3">
+            <Checkbox
+              id="svc-booking-hide-price"
+              checked={formData.bookingHidePrice}
+              onCheckedChange={(checked) => onChange({ ...formData, bookingHidePrice: checked === true })}
+              className="mt-1"
+            />
+            <div className="space-y-1">
+              <Label htmlFor="svc-booking-hide-price" className="cursor-pointer text-sm font-medium">
+                Hide price
+              </Label>
+              <p className="text-xs leading-5 text-muted-foreground">Keep this service visible while holding pricing back.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 rounded-xl border bg-white/80 p-3">
+            <Checkbox
+              id="svc-booking-hide-duration"
+              checked={formData.bookingHideDuration}
+              onCheckedChange={(checked) => onChange({ ...formData, bookingHideDuration: checked === true })}
+              className="mt-1"
+            />
+            <div className="space-y-1">
+              <Label htmlFor="svc-booking-hide-duration" className="cursor-pointer text-sm font-medium">
+                Hide duration
+              </Label>
+              <p className="text-xs leading-5 text-muted-foreground">Useful when the job needs review before timing is promised.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border bg-white/80 p-3 text-xs leading-5 text-muted-foreground">
+          Linked add-ons below become the booking flow&apos;s “Frequently added” recommendations. Use them for clean upsells, not clutter.
+        </div>
+      </div>
     </div>
   );
 }
@@ -365,6 +809,414 @@ function MetricCard({ label, value, detail }: { label: string; value: string; de
         <p className="text-sm font-medium text-muted-foreground">{label}</p>
         <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
         <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BookingRulePill({ active, children }: { active: boolean; children: React.ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2.5 py-1 text-[0.68rem] font-medium tracking-[0.08em] uppercase",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-slate-200 bg-white text-slate-500"
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function BookingBuilderCard({
+  value,
+  onChange,
+  onSave,
+  saving,
+  dirty,
+  bookingUrl,
+  bookableServicesCount,
+  selfBookServicesCount,
+  previewServices,
+  businessType,
+  canEdit,
+}: {
+  value: BusinessBookingSettings;
+  onChange: (value: BusinessBookingSettings) => void;
+  onSave: () => void;
+  saving: boolean;
+  dirty: boolean;
+  bookingUrl: string | null;
+  bookableServicesCount: number;
+  selfBookServicesCount: number;
+  previewServices: ServiceRecord[];
+  businessType: string | null;
+  canEdit: boolean;
+}) {
+  const typeDefaults = getBusinessTypeWorkspaceDefaults(businessType);
+  const copyBookingUrl = async () => {
+    if (!bookingUrl || typeof navigator === "undefined" || !navigator.clipboard) return;
+    await navigator.clipboard.writeText(bookingUrl);
+    toast.success("Booking link copied.");
+  };
+  const toggleDay = (day: number) => {
+    const next = value.bookingAvailableDays.includes(day)
+      ? value.bookingAvailableDays.filter((entry) => entry !== day)
+      : [...value.bookingAvailableDays, day];
+    onChange({ ...value, bookingAvailableDays: next });
+  };
+  const previewTrustPoints = [
+    value.bookingTrustBulletPrimary.trim() || "Goes directly to the shop",
+    value.bookingTrustBulletSecondary.trim() || (value.bookingDefaultFlow === "self_book" ? "Quick confirmation" : "Quick follow-up"),
+    value.bookingTrustBulletTertiary.trim() || "Secure and simple",
+  ];
+  const featuredPreviewServices = previewServices
+    .filter((service) => service.bookingEnabled === true && service.active !== false && service.isAddon !== true)
+    .sort((left, right) => {
+      if ((left.bookingFeatured === true) !== (right.bookingFeatured === true)) {
+        return left.bookingFeatured === true ? -1 : 1;
+      }
+      return (left.sortOrder ?? 0) - (right.sortOrder ?? 0);
+    })
+    .slice(0, 4);
+
+  return (
+    <Card className="overflow-hidden border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] shadow-sm">
+      <CardHeader className="border-b bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.08),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.9),rgba(248,250,252,0.6))]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-orange-700">
+              <CalendarCheck2 className="h-4 w-4" />
+              Online booking
+            </div>
+            <div>
+              <CardTitle className="text-2xl tracking-tight">Turn your service catalog into a booking page</CardTitle>
+              <CardDescription className="mt-2 max-w-2xl text-sm leading-6">
+                Choose whether customers book instantly or request approval, then tune the public page around the services you already run every day.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <BookingRulePill active={value.bookingEnabled}>{value.bookingEnabled ? "Booking live" : "Booking off"}</BookingRulePill>
+              <BookingRulePill active={bookableServicesCount > 0}>{bookableServicesCount} services online</BookingRulePill>
+              <BookingRulePill active={selfBookServicesCount > 0}>{selfBookServicesCount} instant-book services</BookingRulePill>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-white/80 p-4 shadow-sm lg:w-[320px]">
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Public page</p>
+            <p className="mt-2 text-sm font-medium text-foreground">{bookingUrl ?? "Booking link appears after the page is enabled."}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => void copyBookingUrl()} disabled={!bookingUrl}>
+                <Copy className="mr-1.5 h-3.5 w-3.5" />
+                Copy link
+              </Button>
+              <Button type="button" size="sm" asChild disabled={!bookingUrl}>
+                <a href={bookingUrl ?? "#"} target="_blank" rel="noreferrer">
+                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                  Open page
+                </a>
+              </Button>
+            </div>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Default posture</p>
+              <p className="mt-1 text-sm leading-6 text-slate-700">{typeDefaults.bookingSettingsLabel}</p>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-6 p-6">
+        {!canEdit ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+            This role can view booking setup, but only teammates with settings access can change business-level booking rules.
+          </div>
+        ) : null}
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_380px]">
+          <div className="space-y-5">
+            <div className="rounded-2xl border bg-white/90 p-5 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-slate-950">Publish & routing</p>
+                  <p className="text-sm leading-6 text-slate-600">Control whether customers book instantly, send a request, or let each service decide.</p>
+                </div>
+                <div className="flex items-center gap-3 rounded-full border bg-slate-50 px-3 py-2">
+                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Live</span>
+                  <Switch checked={value.bookingEnabled} onCheckedChange={(checked) => onChange({ ...value, bookingEnabled: checked })} disabled={!canEdit} />
+                </div>
+              </div>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="booking-default-flow">Default booking mode</Label>
+                  <Select
+                    value={value.bookingDefaultFlow}
+                    onValueChange={(next) => onChange({ ...value, bookingDefaultFlow: next as BusinessBookingSettings["bookingDefaultFlow"] })}
+                    disabled={!canEdit}
+                  >
+                    <SelectTrigger id="booking-default-flow">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="request">Request only by default</SelectItem>
+                      <SelectItem value="self_book">Direct booking by default</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs leading-5 text-slate-500">Services can still override this one by one.</p>
+                </div>
+                <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                  <Checkbox
+                    id="booking-confirmation-email-enabled"
+                    checked={value.notificationAppointmentConfirmationEmailEnabled}
+                    onCheckedChange={(checked) => onChange({ ...value, notificationAppointmentConfirmationEmailEnabled: checked === true })}
+                    className="mt-1"
+                    disabled={!canEdit}
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="booking-confirmation-email-enabled" className="cursor-pointer text-sm font-medium text-slate-950">
+                      Send confirmation email after direct booking
+                    </Label>
+                    <p className="text-xs leading-5 text-slate-500">Uses Strata&apos;s existing appointment confirmation email when a customer books instantly.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border bg-white/90 p-5 shadow-sm">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-950">Public page content</p>
+                <p className="text-sm leading-6 text-slate-600">Shape the booking page headline, reassurance copy, and success message without overloading the customer.</p>
+              </div>
+              <div className="mt-5 grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="booking-page-title">Booking page title</Label>
+                  <Input id="booking-page-title" value={value.bookingPageTitle} onChange={(event) => onChange({ ...value, bookingPageTitle: event.target.value })} placeholder="Tell us what you need" disabled={!canEdit} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="booking-page-subtitle">Intro text</Label>
+                  <Textarea id="booking-page-subtitle" rows={3} value={value.bookingPageSubtitle} onChange={(event) => onChange({ ...value, bookingPageSubtitle: event.target.value })} placeholder="Share a few details and the shop can follow up with the right next step." disabled={!canEdit} />
+                </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="booking-trust-primary">Trust point 1</Label>
+                    <Input id="booking-trust-primary" value={value.bookingTrustBulletPrimary} onChange={(event) => onChange({ ...value, bookingTrustBulletPrimary: event.target.value })} placeholder="Goes directly to the shop" disabled={!canEdit} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="booking-trust-secondary">Trust point 2</Label>
+                    <Input id="booking-trust-secondary" value={value.bookingTrustBulletSecondary} onChange={(event) => onChange({ ...value, bookingTrustBulletSecondary: event.target.value })} placeholder="Quick follow-up" disabled={!canEdit} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="booking-trust-tertiary">Trust point 3</Label>
+                    <Input id="booking-trust-tertiary" value={value.bookingTrustBulletTertiary} onChange={(event) => onChange({ ...value, bookingTrustBulletTertiary: event.target.value })} placeholder="Secure and simple" disabled={!canEdit} />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="booking-confirmation-message">Confirmation message</Label>
+                  <Textarea id="booking-confirmation-message" rows={3} value={value.bookingConfirmationMessage} onChange={(event) => onChange({ ...value, bookingConfirmationMessage: event.target.value })} placeholder="Your appointment is booked. You can review the confirmation details right away." disabled={!canEdit} />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border bg-white/90 p-5 shadow-sm">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-950">Customer intake</p>
+                <p className="text-sm leading-6 text-slate-600">Keep the form fast while making sure the shop gets the information it really needs.</p>
+              </div>
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                {[
+                  { id: "booking-require-email", label: "Require email address", checked: value.bookingRequireEmail, description: "Useful when confirmations and follow-up should land in email.", key: "bookingRequireEmail" as const },
+                  { id: "booking-require-phone", label: "Require phone number", checked: value.bookingRequirePhone, description: "Useful when the team confirms timing by call or text.", key: "bookingRequirePhone" as const },
+                  { id: "booking-require-vehicle", label: "Require vehicle details", checked: value.bookingRequireVehicle, description: "Keep make and model required before the request lands.", key: "bookingRequireVehicle" as const },
+                  { id: "booking-allow-notes", label: "Allow customer notes", checked: value.bookingAllowCustomerNotes, description: "Let customers add timing, questions, or job context.", key: "bookingAllowCustomerNotes" as const },
+                  { id: "booking-show-prices", label: "Show pricing by default", checked: value.bookingShowPrices, description: "Services can still hide pricing individually.", key: "bookingShowPrices" as const },
+                  { id: "booking-show-durations", label: "Show durations by default", checked: value.bookingShowDurations, description: "Services can still hide timing individually.", key: "bookingShowDurations" as const },
+                ].map((item) => (
+                  <div key={item.id} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                    <Checkbox
+                      id={item.id}
+                      checked={item.checked}
+                      onCheckedChange={(checked) => onChange({ ...value, [item.key]: checked === true })}
+                      className="mt-1"
+                      disabled={!canEdit}
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor={item.id} className="cursor-pointer text-sm font-medium text-slate-950">{item.label}</Label>
+                      <p className="text-xs leading-5 text-slate-500">{item.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 grid gap-2">
+                <Label htmlFor="booking-notes-prompt">Notes prompt</Label>
+                <Input id="booking-notes-prompt" value={value.bookingNotesPrompt} onChange={(event) => onChange({ ...value, bookingNotesPrompt: event.target.value })} placeholder="Add timing, questions, or anything the shop should know." disabled={!canEdit || !value.bookingAllowCustomerNotes} />
+                <p className="text-xs leading-5 text-slate-500">Shown above the final notes field when customer notes are enabled.</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border bg-white/90 p-5 shadow-sm">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-950">Availability controls</p>
+                <p className="text-sm leading-6 text-slate-600">Set the booking-only schedule without changing the rest of the app. Service-level lead time and window still apply on top.</p>
+              </div>
+              <div className="mt-5 space-y-5">
+                <div className="space-y-2">
+                  <Label>Available days</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {BOOKING_DAY_OPTIONS.map((day) => {
+                      const active = value.bookingAvailableDays.includes(day.value);
+                      return (
+                        <Button
+                          key={day.value}
+                          type="button"
+                          variant={active ? "default" : "outline"}
+                          size="sm"
+                          className={cn(active ? "bg-slate-950 text-white hover:bg-slate-900" : "")}
+                          onClick={() => toggleDay(day.value)}
+                          disabled={!canEdit}
+                        >
+                          {day.label}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="booking-start-time">Window start</Label>
+                    <Input id="booking-start-time" type="time" value={value.bookingAvailableStartTime} onChange={(event) => onChange({ ...value, bookingAvailableStartTime: event.target.value })} disabled={!canEdit} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="booking-end-time">Window end</Label>
+                    <Input id="booking-end-time" type="time" value={value.bookingAvailableEndTime} onChange={(event) => onChange({ ...value, bookingAvailableEndTime: event.target.value })} disabled={!canEdit} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="booking-slot-interval">Slot interval</Label>
+                    <Select
+                      value={String(value.bookingSlotIntervalMinutes)}
+                      onValueChange={(next) => onChange({ ...value, bookingSlotIntervalMinutes: Number(next) })}
+                      disabled={!canEdit}
+                    >
+                      <SelectTrigger id="booking-slot-interval">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[15, 30, 45, 60].map((minutes) => (
+                          <SelectItem key={minutes} value={String(minutes)}>{minutes} minutes</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="booking-buffer">Booking buffer</Label>
+                    <Input id="booking-buffer" type="number" min="0" max="240" step="5" value={value.bookingBufferMinutes} onChange={(event) => onChange({ ...value, bookingBufferMinutes: event.target.value })} placeholder="Use main schedule buffer" disabled={!canEdit} />
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="booking-capacity">Max bookings per slot</Label>
+                    <Input id="booking-capacity" type="number" min="1" max="12" step="1" value={value.bookingCapacityPerSlot} onChange={(event) => onChange({ ...value, bookingCapacityPerSlot: event.target.value })} placeholder="Use calendar capacity" disabled={!canEdit} />
+                    <p className="text-xs leading-5 text-slate-500">Useful for fast-turn work or multi-bay shops.</p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="booking-blackout-dates">Blackout dates</Label>
+                    <Textarea id="booking-blackout-dates" rows={4} value={value.bookingBlackoutDatesText} onChange={(event) => onChange({ ...value, bookingBlackoutDatesText: event.target.value })} placeholder={"2026-04-15\n2026-05-27"} disabled={!canEdit} />
+                    <p className="text-xs leading-5 text-slate-500">One date per line in YYYY-MM-DD format.</p>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-600">
+                  If you offer both in-shop and mobile service, use locations to represent each service mode. The booking flow automatically shows a location step when more than one active location is available.
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-950">Service-level controls stay on each service card</p>
+                <p className="text-sm leading-6 text-slate-600">Featured placement, service-specific mode, deposits, booking descriptions, lead time, and price/duration visibility are handled per service below.</p>
+              </div>
+              <div className="hidden gap-2 lg:flex">
+                <BookingRulePill active={bookableServicesCount > 0}>{bookableServicesCount} services live</BookingRulePill>
+                <BookingRulePill active={selfBookServicesCount > 0}>{selfBookServicesCount} instant-book</BookingRulePill>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <Card className="sticky top-6 border-slate-200/80 bg-white/95 shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg">Live preview</CardTitle>
+                <CardDescription>See how the public booking page reads before you publish changes.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="overflow-hidden rounded-[1.8rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,252,0.98))] shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+                  <div className="border-b border-slate-100 px-5 py-5">
+                    <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-orange-600">Online booking</p>
+                    <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-slate-950">
+                      {value.bookingPageTitle.trim() || "Tell us what you need"}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {value.bookingPageSubtitle.trim() || "Share a few details and the shop can follow up with the right next step."}
+                    </p>
+                  </div>
+                  <div className="grid gap-2 px-5 py-4">
+                    {previewTrustPoints.map((point) => (
+                      <div key={point} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm text-slate-700">
+                        <Globe className="h-3.5 w-3.5 text-orange-600" />
+                        <span>{point}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Separator />
+                  <div className="space-y-3 px-5 py-4">
+                    {featuredPreviewServices.length > 0 ? (
+                      featuredPreviewServices.map((service) => (
+                        <div key={service.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-medium text-slate-950">{service.name}</p>
+                                {service.bookingFeatured ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
+                              </div>
+                              {service.bookingDescription ? <p className="text-sm leading-6 text-slate-600">{service.bookingDescription}</p> : null}
+                            </div>
+                            <Badge variant="outline">{bookingModeLabel(service, value.bookingDefaultFlow)}</Badge>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-600">
+                            {value.bookingShowPrices && service.bookingHidePrice !== true ? <span>{formatPrice(service.price)}</span> : null}
+                            {value.bookingShowDurations && service.bookingHideDuration !== true && service.durationMinutes ? <span>{formatDuration(service.durationMinutes)}</span> : null}
+                            {Number(service.bookingDepositAmount ?? 0) > 0 ? <span>{formatPrice(service.bookingDepositAmount ?? 0)} deposit</span> : null}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-600">
+                        Turn on booking for at least one service below to preview what customers can book.
+                      </div>
+                    )}
+                  </div>
+                  <div className="border-t border-slate-100 bg-slate-50/80 px-5 py-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Confirmation</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-700">
+                      {value.bookingConfirmationMessage.trim() ||
+                        (value.bookingDefaultFlow === "self_book"
+                          ? "Your appointment is booked. You can review the confirmation details right away."
+                          : "Your request is with the shop. They can follow up with the next step soon.")}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm leading-6 text-slate-600">
+            Save business-level booking settings here, then fine-tune visibility, featured placement, mode, and deposits on individual services below.
+          </p>
+          <Button type="button" onClick={onSave} disabled={saving || !dirty || !canEdit}>
+            {saving ? "Saving booking settings..." : "Save booking settings"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -404,6 +1256,9 @@ function ActiveToggle({
 
 function ServiceCard({
   service,
+  bookingUrl,
+  defaultBookingFlow,
+  canEdit,
   onEdit,
   onToggle,
   isToggling,
@@ -413,6 +1268,9 @@ function ServiceCard({
   moveDisabledDown,
 }: {
   service: ServiceRecord;
+  bookingUrl: string | null;
+  defaultBookingFlow: BusinessBookingSettings["bookingDefaultFlow"];
+  canEdit: boolean;
   onEdit: (service: ServiceRecord) => void;
   onToggle: (service: ServiceRecord) => void;
   isToggling: boolean;
@@ -422,43 +1280,80 @@ function ServiceCard({
   moveDisabledDown: boolean;
 }) {
   const durationStr = formatDuration(service.durationMinutes);
+  const effectiveBookingCta = bookingModeLabel(service, defaultBookingFlow);
+  const primaryBookingHref = service.bookingEnabled === true && bookingUrl ? buildPublicBookingHref(bookingUrl, service) : null;
+  const detailBookingHref =
+    service.bookingEnabled === true && bookingUrl
+      ? buildPublicBookingHref(bookingUrl, service, { step: "service" })
+      : null;
+  const bookingModeBadge =
+    service.bookingEnabled === true
+      ? service.bookingFlowType === "self_book"
+        ? "Instant book"
+        : service.bookingFlowType === "request"
+          ? "Request only"
+          : "Uses default flow"
+      : null;
 
   return (
     <div
       className="flex items-center justify-between rounded-lg border bg-card p-4 transition-colors hover:bg-accent/30"
-      onClick={() => onEdit(service)}
+      onClick={() => { if (canEdit) onEdit(service); }}
     >
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="truncate font-medium text-sm">{service.name}</span>
           {service.isAddon ? <Badge variant="secondary">Add-on</Badge> : null}
           <Badge variant="outline">{service.categoryLabel ?? formatServiceCategory(service.category)}</Badge>
+          {service.bookingEnabled === true ? <Badge variant="outline">{serviceModeLabel(service.bookingServiceMode)}</Badge> : null}
+          {service.bookingFeatured === true ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
+          {bookingModeBadge ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">{bookingModeBadge}</Badge> : null}
         </div>
         <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{formatPrice(service.price)}</span>
-          {durationStr ? <span>{durationStr}</span> : null}
+          {service.bookingHidePrice !== true ? <span className="font-medium text-foreground">{formatPrice(service.price)}</span> : <span>Price hidden</span>}
+          {service.bookingHideDuration !== true && durationStr ? <span>{durationStr}</span> : null}
           {service.taxable ? <span>Taxable</span> : null}
+          {service.bookingEnabled === true && Number(service.bookingDepositAmount ?? 0) > 0 ? (
+            <span>{formatPrice(service.bookingDepositAmount ?? 0)} deposit</span>
+          ) : null}
+          {service.bookingEnabled === true && (service.bookingAvailableDays?.length ?? 0) > 0 ? <span>{service.bookingAvailableDays?.length} booking days</span> : null}
         </div>
       </div>
 
       <div className="ml-4 flex items-center gap-2">
-        <Button size="icon" variant="outline" onClick={(e) => { e.stopPropagation(); onMoveUp(); }} disabled={moveDisabledUp}>
+        {primaryBookingHref ? (
+          <Button size="sm" asChild onClick={(e) => e.stopPropagation()}>
+            <a href={primaryBookingHref} target="_blank" rel="noreferrer">
+              {effectiveBookingCta}
+            </a>
+          </Button>
+        ) : null}
+        {detailBookingHref ? (
+          <Button size="sm" variant="outline" asChild onClick={(e) => e.stopPropagation()}>
+            <a href={detailBookingHref} target="_blank" rel="noreferrer">
+              Learn more
+            </a>
+          </Button>
+        ) : null}
+        <Button size="icon" variant="outline" onClick={(e) => { e.stopPropagation(); onMoveUp(); }} disabled={moveDisabledUp || !canEdit}>
           <ArrowUp className="h-3.5 w-3.5" />
         </Button>
-        <Button size="icon" variant="outline" onClick={(e) => { e.stopPropagation(); onMoveDown(); }} disabled={moveDisabledDown}>
+        <Button size="icon" variant="outline" onClick={(e) => { e.stopPropagation(); onMoveDown(); }} disabled={moveDisabledDown || !canEdit}>
           <ArrowDown className="h-3.5 w-3.5" />
         </Button>
-        <Button size="icon" variant="outline" onClick={(e) => { e.stopPropagation(); onEdit(service); }}>
+        <Button size="icon" variant="outline" onClick={(e) => { e.stopPropagation(); onEdit(service); }} disabled={!canEdit}>
           <Pencil className="h-3.5 w-3.5" />
         </Button>
-        <ActiveToggle active={service.active !== false} onToggle={() => onToggle(service)} loading={isToggling} />
+        <ActiveToggle active={service.active !== false} onToggle={() => onToggle(service)} loading={isToggling || !canEdit} />
       </div>
     </div>
   );
 }
 
 export default function ServicesPage() {
-  const { businessId } = useOutletContext<AuthOutletContext>();
+  const { businessId, businessType, permissions } = useOutletContext<AuthOutletContext>();
+  const canEditServices = permissions.has("services.write");
+  const canEditBookingSettings = permissions.has("settings.write");
   const [search, setSearch] = useState("");
   const [isSmallViewport, setIsSmallViewport] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -487,6 +1382,9 @@ export default function ServicesPage() {
   const [editFormData, setEditFormData] = useState<ServiceFormData>(defaultServiceFormData);
   const [newAddonServiceId, setNewAddonServiceId] = useState<string>("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [bookingSettings, setBookingSettings] = useState<BusinessBookingSettings>(defaultBookingSettings);
+  const [bookingSettingsLoaded, setBookingSettingsLoaded] = useState<BusinessBookingSettings>(defaultBookingSettings);
+  const [bookingSettingsLoading, setBookingSettingsLoading] = useState(false);
 
   const [{ data: categoriesData, fetching: categoriesFetching }, refetchCategories] = useFindMany(api.serviceCategory, {
     first: 100,
@@ -508,6 +1406,7 @@ export default function ServicesPage() {
   const [{ fetching: updateCategoryFetching }, runUpdateCategory] = useAction(api.serviceCategory.update);
   const [{ fetching: deleteCategoryFetching }, runDeleteCategory] = useAction(api.serviceCategory.delete);
   const [{ fetching: reorderCategoryFetching }, runReorderCategory] = useAction(api.serviceCategory.reorder);
+  const [{ fetching: updateBusinessFetching }, runUpdateBusiness] = useAction(api.business.update);
 
   const [{ fetching: createServiceFetching }, runCreateService] = useAction(api.service.create);
   const [{ fetching: updateServiceFetching }, runUpdateService] = useAction(api.service.update);
@@ -550,6 +1449,37 @@ export default function ServicesPage() {
       .catch(() => {
         if (!cancelled) setSupportsCategoryManagement(false);
       });
+    return () => {
+      cancelled = true;
+    };
+  }, [businessId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!businessId) {
+      setBookingSettings(defaultBookingSettings);
+      setBookingSettingsLoaded(defaultBookingSettings);
+      return;
+    }
+
+    setBookingSettingsLoading(true);
+    api.business
+      .findOne(businessId)
+      .then((record) => {
+        if (cancelled) return;
+        const normalized = businessToBookingSettings(record as Partial<BusinessBookingSettings>);
+        setBookingSettings(normalized);
+        setBookingSettingsLoaded(normalized);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          toast.error("Could not load booking settings.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBookingSettingsLoading(false);
+      });
+
     return () => {
       cancelled = true;
     };
@@ -603,9 +1533,34 @@ export default function ServicesPage() {
     () => getServiceMetrics(services, deleteCategory),
     [services, deleteCategory]
   );
+  const bookingEnabledServicesCount = useMemo(
+    () => services.filter((service) => service.active !== false && service.isAddon !== true && service.bookingEnabled === true).length,
+    [services]
+  );
+  const selfBookServicesCount = useMemo(
+    () =>
+      services.filter(
+        (service) =>
+          service.active !== false &&
+          service.isAddon !== true &&
+          service.bookingEnabled === true &&
+          (service.bookingFlowType === "self_book" ||
+            (service.bookingFlowType !== "request" && bookingSettings.bookingDefaultFlow === "self_book"))
+      ).length,
+    [bookingSettings.bookingDefaultFlow, services]
+  );
   const isFirstLoad = (servicesFetching || categoriesFetching) && !servicesData && !categoriesData;
+  const bookingUrl = useMemo(() => {
+    if (!businessId || typeof window === "undefined") return null;
+    return `${window.location.origin}/book/${businessId}`;
+  }, [businessId]);
+  const bookingSettingsDirty = useMemo(
+    () => JSON.stringify(bookingSettings) !== JSON.stringify(bookingSettingsLoaded),
+    [bookingSettings, bookingSettingsLoaded]
+  );
 
   const openCreateService = (categoryId?: string | null) => {
+    if (!canEditServices) return;
     setCreateFormData({ ...defaultServiceFormData, categoryId: categoryId ?? UNCATEGORIZED_VALUE });
     setCreateServiceOpen(true);
   };
@@ -682,7 +1637,21 @@ export default function ServicesPage() {
       notes: createFormData.notes.trim() || null,
       taxable: createFormData.taxable,
       isAddon: createFormData.isAddon,
-      business: businessId ? { _link: businessId } : undefined,
+      bookingEnabled: createFormData.bookingEnabled,
+      bookingFlowType: createFormData.bookingFlowType,
+        bookingDescription: createFormData.bookingDescription.trim() || null,
+        bookingDepositAmount: createFormData.bookingDepositAmount ? parseFloat(createFormData.bookingDepositAmount) : 0,
+        bookingLeadTimeHours: createFormData.bookingLeadTimeHours ? parseInt(createFormData.bookingLeadTimeHours, 10) : 0,
+        bookingWindowDays: createFormData.bookingWindowDays ? parseInt(createFormData.bookingWindowDays, 10) : 30,
+        bookingServiceMode: createFormData.bookingServiceMode,
+        bookingAvailableDays: createFormData.bookingAvailableDays,
+        bookingAvailableStartTime: createFormData.bookingAvailableStartTime || null,
+        bookingAvailableEndTime: createFormData.bookingAvailableEndTime || null,
+        bookingCapacityPerSlot: createFormData.bookingCapacityPerSlot ? parseInt(createFormData.bookingCapacityPerSlot, 10) : null,
+        bookingFeatured: createFormData.bookingFeatured,
+        bookingHidePrice: createFormData.bookingHidePrice,
+        bookingHideDuration: createFormData.bookingHideDuration,
+        business: businessId ? { _link: businessId } : undefined,
     });
     if (result.error) return toast.error(result.error.message);
     toast.success("Service created.");
@@ -703,7 +1672,21 @@ export default function ServicesPage() {
       notes: editFormData.notes.trim() || null,
       taxable: editFormData.taxable,
       isAddon: editFormData.isAddon,
-    });
+      bookingEnabled: editFormData.bookingEnabled,
+      bookingFlowType: editFormData.bookingFlowType,
+        bookingDescription: editFormData.bookingDescription.trim() || null,
+        bookingDepositAmount: editFormData.bookingDepositAmount ? parseFloat(editFormData.bookingDepositAmount) : 0,
+        bookingLeadTimeHours: editFormData.bookingLeadTimeHours ? parseInt(editFormData.bookingLeadTimeHours, 10) : 0,
+        bookingWindowDays: editFormData.bookingWindowDays ? parseInt(editFormData.bookingWindowDays, 10) : 30,
+        bookingServiceMode: editFormData.bookingServiceMode,
+        bookingAvailableDays: editFormData.bookingAvailableDays,
+        bookingAvailableStartTime: editFormData.bookingAvailableStartTime || null,
+        bookingAvailableEndTime: editFormData.bookingAvailableEndTime || null,
+        bookingCapacityPerSlot: editFormData.bookingCapacityPerSlot ? parseInt(editFormData.bookingCapacityPerSlot, 10) : null,
+        bookingFeatured: editFormData.bookingFeatured,
+        bookingHidePrice: editFormData.bookingHidePrice,
+        bookingHideDuration: editFormData.bookingHideDuration,
+      });
     if (result.error) return toast.error(result.error.message);
     toast.success("Service updated.");
     setEditService(null);
@@ -771,6 +1754,44 @@ export default function ServicesPage() {
     toast.error("Category management will work after the latest database update is applied.");
   };
 
+  const handleSaveBookingSettings = async () => {
+    if (!businessId || !canEditBookingSettings) return;
+    const result = await runUpdateBusiness({
+      id: businessId,
+      bookingEnabled: bookingSettings.bookingEnabled,
+      bookingDefaultFlow: bookingSettings.bookingDefaultFlow,
+      bookingPageTitle: bookingSettings.bookingPageTitle.trim() || null,
+      bookingPageSubtitle: bookingSettings.bookingPageSubtitle.trim() || null,
+      bookingConfirmationMessage: bookingSettings.bookingConfirmationMessage.trim() || null,
+      bookingTrustBulletPrimary: bookingSettings.bookingTrustBulletPrimary.trim() || null,
+      bookingTrustBulletSecondary: bookingSettings.bookingTrustBulletSecondary.trim() || null,
+      bookingTrustBulletTertiary: bookingSettings.bookingTrustBulletTertiary.trim() || null,
+      bookingNotesPrompt: bookingSettings.bookingNotesPrompt.trim() || null,
+      bookingRequireEmail: bookingSettings.bookingRequireEmail,
+      bookingRequirePhone: bookingSettings.bookingRequirePhone,
+      bookingRequireVehicle: bookingSettings.bookingRequireVehicle,
+      bookingAllowCustomerNotes: bookingSettings.bookingAllowCustomerNotes,
+      bookingShowPrices: bookingSettings.bookingShowPrices,
+      bookingShowDurations: bookingSettings.bookingShowDurations,
+      bookingAvailableDays: bookingSettings.bookingAvailableDays,
+      bookingAvailableStartTime: bookingSettings.bookingAvailableStartTime || null,
+      bookingAvailableEndTime: bookingSettings.bookingAvailableEndTime || null,
+      bookingBlackoutDates: parseBookingBlackoutDatesText(bookingSettings.bookingBlackoutDatesText),
+      bookingSlotIntervalMinutes: bookingSettings.bookingSlotIntervalMinutes,
+      bookingBufferMinutes: bookingSettings.bookingBufferMinutes ? Number(bookingSettings.bookingBufferMinutes) : null,
+      bookingCapacityPerSlot: bookingSettings.bookingCapacityPerSlot ? Number(bookingSettings.bookingCapacityPerSlot) : null,
+      notificationAppointmentConfirmationEmailEnabled:
+        bookingSettings.notificationAppointmentConfirmationEmailEnabled,
+      bookingRequestUrl: bookingUrl,
+    });
+    if (result.error) {
+      toast.error(result.error.message);
+      return;
+    }
+    setBookingSettingsLoaded(bookingSettings);
+    toast.success("Booking settings saved.");
+  };
+
   return (
     <div className="page-content page-section max-w-6xl">
       <PageHeader
@@ -780,11 +1801,12 @@ export default function ServicesPage() {
             <Button
               variant="outline"
               onClick={() => (supportsCategoryManagement ? setCreateCategoryOpen(true) : showCategoryManagementUnavailable())}
+              disabled={!canEditServices}
             >
               <FolderKanban className="mr-2 h-4 w-4" />
               Add Category
             </Button>
-            <Button onClick={() => openCreateService()}>
+            <Button onClick={() => openCreateService()} disabled={!canEditServices}>
               <Plus className="mr-2 h-4 w-4" />
               Add Service
             </Button>
@@ -792,9 +1814,24 @@ export default function ServicesPage() {
         }
       />
 
+      <BookingBuilderCard
+        value={bookingSettings}
+        onChange={setBookingSettings}
+        onSave={() => void handleSaveBookingSettings()}
+        saving={updateBusinessFetching || bookingSettingsLoading}
+        dirty={bookingSettingsDirty}
+        bookingUrl={bookingUrl}
+        bookableServicesCount={bookingEnabledServicesCount}
+        selfBookServicesCount={selfBookServicesCount}
+        previewServices={services}
+        businessType={businessType}
+        canEdit={canEditBookingSettings}
+      />
+
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricCard label="Categories" value={String(categories.length)} detail="Active service groups" />
-        <MetricCard label="Active services" value={String(activeServicesCount)} detail="Bookable catalog services" />
+        <MetricCard label="Active services" value={String(activeServicesCount)} detail="Live catalog services" />
+        <MetricCard label="Booking-ready" value={String(bookingEnabledServicesCount)} detail="Visible on the booking page" />
         <MetricCard label="Add-ons" value={String(activeAddonCount)} detail="Optional extras on file" />
       </div>
 
@@ -888,11 +1925,14 @@ export default function ServicesPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {group.services.map((service, index) => (
-                  <ServiceCard
-                    key={service.id}
-                    service={service}
-                    onEdit={(record) => { setEditService(record); setEditFormData(serviceToFormData(record)); setNewAddonServiceId(""); }}
-                    onToggle={handleToggleActive}
+                    <ServiceCard
+                      key={service.id}
+                      service={service}
+                      bookingUrl={bookingUrl}
+                      defaultBookingFlow={bookingSettings.bookingDefaultFlow}
+                      canEdit={canEditServices}
+                      onEdit={(record) => { setEditService(record); setEditFormData(serviceToFormData(record)); setNewAddonServiceId(""); }}
+                      onToggle={handleToggleActive}
                     isToggling={togglingId === service.id}
                     onMoveUp={() => void moveService(group.id, service.id, -1)}
                     onMoveDown={() => void moveService(group.id, service.id, 1)}
@@ -1068,8 +2108,8 @@ export default function ServicesPage() {
             <Separator className="my-4" />
             <div className="space-y-3">
               <div>
-                <p className="text-sm font-medium">Optional add-ons</p>
-                <p className="mt-1 text-xs text-muted-foreground">Link other services so this service can act like a reusable package.</p>
+                <p className="text-sm font-medium">Frequently added services</p>
+                <p className="mt-1 text-xs text-muted-foreground">Link related services so the booking flow can recommend clean, relevant upsells.</p>
               </div>
               {linkedAddonRecords.length > 0 ? (
                 <div className="space-y-2">

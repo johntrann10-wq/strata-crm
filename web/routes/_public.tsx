@@ -14,7 +14,8 @@ export default function PublicLayout() {
   const supportEmail = "support@stratacrm.app";
   const supportHours = "Mon-Fri 9am-5pm PST";
   const extendedSupportHours = "Mon-Sun 8am-8pm PST";
-  const isStandalonePublicFlow = location.pathname.startsWith("/lead/");
+  const isStandalonePublicFlow =
+    location.pathname.startsWith("/lead/") || location.pathname.startsWith("/book/");
 
   return (
     <div className="flex h-full flex-col">
