@@ -1,7 +1,6 @@
 {
   "installCommand": "npm install --legacy-peer-deps",
   "buildCommand": "npm run build",
-  "framework": "react-router",
   "outputDirectory": "build/client",
   "headers": [
     {
@@ -27,6 +26,10 @@
     {
       "source": "/api/:path*",
       "destination": "/api/[...path].ts"
+    },
+    {
+      "source": "/((?!api/|assets/|marketing/|qa/|favicon\\.svg$|apple-touch-icon\\.png$|robots\\.txt$|sitemap\\.xml$|googleb90dd9f849dc96e5\\.html$|social-preview\\.png$).*)",
+      "destination": "/index.html"
     }
   ]
 }
