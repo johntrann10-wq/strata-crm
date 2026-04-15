@@ -2,6 +2,7 @@
   "installCommand": "npm install --legacy-peer-deps",
   "buildCommand": "npm run build",
   "framework": "react-router",
+  "outputDirectory": "build/client",
   "headers": [
     {
       "source": "/assets/(.*)",
@@ -22,10 +23,10 @@
       ]
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "^/api/(.*)$",
-      "dest": "/api/[...path].ts"
+      "source": "/api/:path*",
+      "destination": "/api/[...path].ts"
     }
   ]
 }
