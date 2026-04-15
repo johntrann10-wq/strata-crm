@@ -1015,133 +1015,141 @@ function BookingBuilderCard({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-slate-950 p-2 shadow-[0_28px_60px_rgba(15,23,42,0.16)]">
-          <div className="overflow-hidden rounded-[1.6rem] bg-[radial-gradient(circle_at_top,rgba(249,115,22,0.12),transparent_30%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]">
-            <div className="flex items-center gap-1.5 border-b border-slate-100 px-5 py-3">
-              <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-            </div>
-            <div className="space-y-4 border-b border-slate-100 px-5 py-5">
-              <Badge variant="secondary" className="rounded-full border border-orange-200 bg-orange-50 text-orange-700">
-                Online Booking
-              </Badge>
-              <div className="space-y-2">
-                <h3 className="text-[1.45rem] font-semibold tracking-[-0.04em] text-slate-950">
-                  {value.bookingPageTitle.trim() || "Tell us what you need"}
-                </h3>
-                <p className="text-sm leading-6 text-slate-600">
-                  {value.bookingPageSubtitle.trim() || "Share a few details and the shop can follow up with the right next step."}
-                </p>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {previewTrustPoints.map((point, index) => {
-                  const Icon = index === 0 ? Globe : index === 1 ? CalendarCheck2 : Wrench;
-                  return (
-                    <div key={point} className="rounded-[1rem] border border-slate-200 bg-white/92 px-3 py-3 shadow-sm">
-                      <div className="flex items-center gap-2 text-orange-600">
-                        <Icon className="h-3.5 w-3.5" />
-                        <span className="text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Trust</span>
-                      </div>
-                      <p className="mt-2 text-sm font-medium leading-5 text-slate-800">{point}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="border-b border-slate-100 px-5 py-4">
-              <div className="grid gap-2 sm:grid-cols-5">
-                {previewStepLabels.map((step, index) => (
-                  <div
-                    key={step}
-                    className={cn(
-                      "rounded-[1rem] border px-3 py-2 text-[0.7rem] font-semibold uppercase tracking-[0.14em]",
-                      index === 0 ? "border-orange-300 bg-orange-50 text-orange-700" : "border-slate-200 bg-white text-slate-500"
-                    )}
-                  >
-                    {step}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-3 px-5 py-4">
-              {previewHeroService ? (
-                <div className="rounded-[1.45rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary" className="rounded-full border border-orange-200 bg-orange-50 text-orange-700">
-                          {bookingModeLabel(previewHeroService, value.bookingDefaultFlow)}
-                        </Badge>
-                        {previewHeroService.bookingFeatured ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
-                      </div>
-                      <p className="text-base font-semibold tracking-[-0.02em] text-slate-950">{previewHeroService.name}</p>
-                      <p className="text-sm leading-6 text-slate-600">
-                        {previewHeroService.bookingDescription || "Selected service stays visible while the customer moves through the flow."}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="rounded-full bg-white">
-                      {serviceModeLabel(previewHeroService.bookingServiceMode)}
-                    </Badge>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                    {value.bookingShowPrices && previewHeroService.bookingHidePrice !== true ? (
-                      <ServiceMetaPill label="Starting at" value={formatPrice(previewHeroService.price)} tone="warm" />
-                    ) : null}
-                    {value.bookingShowDurations && previewHeroService.bookingHideDuration !== true && previewHeroService.durationMinutes ? (
-                      <ServiceMetaPill label="Estimated time" value={formatDuration(previewHeroService.durationMinutes)} />
-                    ) : null}
-                    <ServiceMetaPill
-                      label="Next step"
-                      value={value.bookingDefaultFlow === "self_book" ? "Choose a live slot" : "Send a request"}
-                      tone={value.bookingDefaultFlow === "self_book" ? "success" : "neutral"}
-                    />
-                  </div>
+      <CardContent className="space-y-4 px-4 pb-5 pt-0">
+        <div className="flex justify-center">
+          <div className="relative w-[222px] sm:w-[240px] lg:w-[222px] xl:w-[236px]">
+            <div className="absolute left-[-3px] top-[74px] h-9 w-[3px] rounded-full bg-black/90" />
+            <div className="absolute left-[-3px] top-[118px] h-14 w-[3px] rounded-full bg-black/90" />
+            <div className="absolute left-[-3px] top-[180px] h-14 w-[3px] rounded-full bg-black/90" />
+            <div className="rounded-[2.5rem] bg-black p-[6px] shadow-[0_24px_52px_rgba(15,23,42,0.16)] ring-1 ring-black/90">
+              <div className="relative overflow-hidden rounded-[2.15rem] border border-slate-200 bg-[radial-gradient(circle_at_top,rgba(249,115,22,0.10),transparent_26%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]">
+                <div className="absolute left-1/2 top-2.5 z-20 h-5 w-16 -translate-x-1/2 rounded-full bg-black shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]" />
+                <div className="flex items-center gap-1.5 border-b border-slate-100 px-3.5 pb-2.5 pt-9">
+                  <span className="h-2 w-2 rounded-full bg-rose-400" />
+                  <span className="h-2 w-2 rounded-full bg-amber-300" />
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
                 </div>
-              ) : null}
-              {previewServiceList.length > 0 ? (
-                previewServiceList.map((service, index) => (
-                  <div
-                    key={service.id}
-                    className={cn(
-                      "rounded-[1.3rem] border px-4 py-4 shadow-sm",
-                      index === 0 ? "border-orange-200 bg-orange-50/45" : "border-slate-200 bg-white"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-slate-950">{service.name}</p>
-                          {service.bookingFeatured ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
+                <div className="space-y-3 border-b border-slate-100 px-3.5 py-3.5">
+                  <Badge variant="secondary" className="rounded-full border border-orange-200 bg-orange-50 text-[10px] text-orange-700">
+                    Online Booking
+                  </Badge>
+                  <div className="space-y-1.5">
+                    <h3 className="text-[1.02rem] font-semibold tracking-[-0.04em] text-slate-950">
+                      {value.bookingPageTitle.trim() || "Tell us what you need"}
+                    </h3>
+                    <p className="text-[11px] leading-5 text-slate-600">
+                      {value.bookingPageSubtitle.trim() || "Share a few details and the shop can follow up with the right next step."}
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    {previewTrustPoints.map((point, index) => {
+                      const Icon = index === 0 ? Globe : index === 1 ? CalendarCheck2 : Wrench;
+                      return (
+                        <div key={point} className="rounded-[0.95rem] border border-slate-200 bg-white/92 px-2.5 py-2.5 shadow-sm">
+                          <div className="flex items-center gap-1.5 text-orange-600">
+                            <Icon className="h-3 w-3" />
+                            <span className="text-[0.58rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Trust</span>
+                          </div>
+                          <p className="mt-1.5 text-[11px] font-medium leading-4.5 text-slate-800">{point}</p>
                         </div>
-                        {service.bookingDescription ? <p className="text-sm leading-6 text-slate-600">{service.bookingDescription}</p> : null}
-                      </div>
-                      <Badge variant="outline" className="rounded-full bg-white">
-                        {bookingModeLabel(service, value.bookingDefaultFlow)}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-600">
-                      {value.bookingShowPrices && service.bookingHidePrice !== true ? <span>{formatPrice(service.price)}</span> : null}
-                      {value.bookingShowDurations && service.bookingHideDuration !== true && service.durationMinutes ? <span>{formatDuration(service.durationMinutes)}</span> : null}
-                      {Number(service.bookingDepositAmount ?? 0) > 0 ? <span>{formatPrice(service.bookingDepositAmount ?? 0)} deposit</span> : null}
-                    </div>
+                      );
+                    })}
                   </div>
-                ))
-              ) : (
-                <div className="rounded-[1.4rem] border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-600">
-                  Turn on booking for at least one service below to preview what customers can book.
                 </div>
-              )}
-            </div>
-            <div className="border-t border-slate-100 bg-slate-50/80 px-5 py-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Confirmation</p>
-              <p className="mt-2 text-sm leading-6 text-slate-700">
-                {value.bookingConfirmationMessage.trim() ||
-                  (value.bookingDefaultFlow === "self_book"
-                    ? "Your appointment is booked. You can review the confirmation details right away."
-                    : "Your request is with the shop. They can follow up with the next step soon.")}
-              </p>
+                <div className="border-b border-slate-100 px-3.5 py-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    {previewStepLabels.map((step, index) => (
+                      <div
+                        key={step}
+                        className={cn(
+                          "rounded-[0.95rem] border px-2.5 py-2 text-[0.6rem] font-semibold uppercase tracking-[0.13em]",
+                          index === 0 ? "border-orange-300 bg-orange-50 text-orange-700" : "border-slate-200 bg-white text-slate-500"
+                        )}
+                      >
+                        {step}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2.5 px-3.5 py-3.5">
+                  {previewHeroService ? (
+                    <div className="rounded-[1.2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] p-3 shadow-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge variant="secondary" className="rounded-full border border-orange-200 bg-orange-50 text-[10px] text-orange-700">
+                              {bookingModeLabel(previewHeroService, value.bookingDefaultFlow)}
+                            </Badge>
+                            {previewHeroService.bookingFeatured ? <Badge className="bg-orange-50 text-[10px] text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
+                          </div>
+                          <p className="text-sm font-semibold tracking-[-0.02em] text-slate-950">{previewHeroService.name}</p>
+                          <p className="text-[11px] leading-5 text-slate-600">
+                            {previewHeroService.bookingDescription || "Selected service stays visible while the customer moves through the flow."}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="rounded-full bg-white px-2 py-0.5 text-[10px]">
+                          {serviceModeLabel(previewHeroService.bookingServiceMode)}
+                        </Badge>
+                      </div>
+                      <div className="mt-2.5 grid gap-2">
+                        {value.bookingShowPrices && previewHeroService.bookingHidePrice !== true ? (
+                          <ServiceMetaPill label="Starting at" value={formatPrice(previewHeroService.price)} tone="warm" />
+                        ) : null}
+                        {value.bookingShowDurations && previewHeroService.bookingHideDuration !== true && previewHeroService.durationMinutes ? (
+                          <ServiceMetaPill label="Estimated time" value={formatDuration(previewHeroService.durationMinutes)} />
+                        ) : null}
+                        <ServiceMetaPill
+                          label="Next step"
+                          value={value.bookingDefaultFlow === "self_book" ? "Choose a live slot" : "Send a request"}
+                          tone={value.bookingDefaultFlow === "self_book" ? "success" : "neutral"}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                  {previewServiceList.length > 0 ? (
+                    previewServiceList.map((service, index) => (
+                      <div
+                        key={service.id}
+                        className={cn(
+                          "rounded-[1.1rem] border px-3 py-3 shadow-sm",
+                          index === 0 ? "border-orange-200 bg-orange-50/35" : "border-slate-200 bg-white"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="text-[12px] font-medium text-slate-950">{service.name}</p>
+                              {service.bookingFeatured ? <Badge className="bg-orange-50 px-1.5 py-0.5 text-[10px] text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
+                            </div>
+                            {service.bookingDescription ? <p className="text-[10px] leading-4.5 text-slate-600">{service.bookingDescription}</p> : null}
+                          </div>
+                          <Badge variant="outline" className="rounded-full bg-white px-2 py-0.5 text-[10px]">
+                            {bookingModeLabel(service, value.bookingDefaultFlow)}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-600">
+                          {value.bookingShowPrices && service.bookingHidePrice !== true ? <span>{formatPrice(service.price)}</span> : null}
+                          {value.bookingShowDurations && service.bookingHideDuration !== true && service.durationMinutes ? <span>{formatDuration(service.durationMinutes)}</span> : null}
+                          {Number(service.bookingDepositAmount ?? 0) > 0 ? <span>{formatPrice(service.bookingDepositAmount ?? 0)} deposit</span> : null}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-[1.15rem] border border-dashed border-slate-300 px-3 py-4 text-[11px] text-slate-600">
+                      Turn on booking for at least one service below to preview what customers can book.
+                    </div>
+                  )}
+                </div>
+                <div className="border-t border-slate-100 bg-slate-50/80 px-3.5 py-3.5">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Confirmation</p>
+                  <p className="mt-1.5 text-[11px] leading-5 text-slate-700">
+                    {value.bookingConfirmationMessage.trim() ||
+                      (value.bookingDefaultFlow === "self_book"
+                        ? "Your appointment is booked. You can review the confirmation details right away."
+                        : "Your request is with the shop. They can follow up with the next step soon.")}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1255,7 +1263,7 @@ function BookingBuilderCard({
           {showMobilePreview ? <div className="lg:hidden">{renderPreview()}</div> : null}
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.14fr)_390px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_340px]">
           <div className="space-y-5">
             {activeTab === "flow" ? (
             <BuilderSection
