@@ -295,7 +295,7 @@ test("services page drives booking CTAs with preserved service context", async (
 
   await page.goto("/services");
 
-  await expect(page.getByText("Turn your service catalog into a booking page")).toBeVisible();
+  await expect(page.getByText("Turn your service catalog into a booking flow")).toBeVisible();
 
   await expect(page.locator('a[href*="service=svc-book"][href*="source=services-page"]').filter({ hasText: "Book now" })).toHaveAttribute(
     "href",
@@ -316,8 +316,9 @@ test("booking builder preview updates and saves business-level settings", async 
 
   await page.goto("/services");
 
-  await expect(page.getByText("Turn your service catalog into a booking page")).toBeVisible();
-  await expect(page.getByText("Live preview")).toBeVisible();
+  await expect(page.getByText("Turn your service catalog into a booking flow")).toBeVisible();
+  await expect(page.getByText("Live preview", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Branding & Content/i }).click();
 
   await page.getByLabel("Booking page title").fill("Book your gloss reset");
   await page.getByLabel("Trust point 1").fill("Straight to the team");
@@ -347,6 +348,7 @@ test("booking builder stays permission-gated without settings.write", async ({ p
   await page.goto("/services");
 
   await expect(page.getByText(/only teammates with settings access can change business-level booking rules/i)).toBeVisible();
+  await page.getByRole("button", { name: /Branding & Content/i }).click();
   await expect(page.getByLabel("Booking page title")).toBeDisabled();
   await expect(page.getByRole("button", { name: "Save booking settings" })).toBeDisabled();
 });
