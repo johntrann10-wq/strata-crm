@@ -3,13 +3,13 @@ import type { FormEvent } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { API_BASE } from "@/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Clock3, Loader2, MessageSquareMore, ShieldCheck } from "lucide-react";
 
 type LeadConfig = {
   businessId: string;
@@ -139,80 +139,96 @@ export default function PublicLeadCapturePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.18),transparent_30%),linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)]">
-      <div className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <Card className="border-slate-200/80 bg-white/90 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
-            <CardHeader className="space-y-4">
-              <Badge variant="secondary" className="w-fit">
-                Service request
-              </Badge>
-              <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
-                  {loading ? "Loading request form..." : `Contact ${config?.businessName ?? "the shop"}`}
-                </h1>
-                <p className="max-w-xl text-sm leading-6 text-slate-600">
-                  Share a few details about your vehicle or service needs and the shop can follow up with the right next step.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-start gap-3">
-                  <ShieldCheck className="mt-0.5 h-5 w-5 text-emerald-600" />
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-slate-900">Quick and secure</p>
-                    <p className="text-sm text-slate-600">
-                      Your request goes straight to the shop so they can call, quote, or book without asking you to repeat everything.
-                    </p>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(251,146,60,0.14),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.06),transparent_30%),linear-gradient(180deg,#f8fafc_0%,#f1f5f9_44%,#f8fafc_100%)]">
+      <div className="mx-auto flex min-h-screen max-w-4xl flex-col justify-center px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+        <div className="space-y-6 sm:space-y-7">
+          <header className="space-y-4 text-center sm:space-y-5 sm:text-left">
+            <Badge variant="secondary" className="rounded-full px-3 py-1 text-[0.68rem] uppercase tracking-[0.18em] shadow-sm">
+              Service Request
+            </Badge>
+            <div className="space-y-2.5">
+              <h1 className="max-w-2xl text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.65rem] sm:leading-[1.02]">
+                Tell us what you need
+              </h1>
+              <p className="max-w-xl text-sm leading-6 text-slate-600 sm:text-base sm:leading-7">
+                Share a few details and the shop can follow up with the right next step.
+              </p>
+              <p className="text-[0.72rem] font-medium uppercase tracking-[0.18em] text-slate-500">
+                {loading ? "Preparing your request form" : `For ${config?.businessName ?? "the shop"}`}
+              </p>
+            </div>
+          </header>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                icon: MessageSquareMore,
+                title: "Goes directly to the shop",
+                body: "Sent straight to the team.",
+              },
+              {
+                icon: Clock3,
+                title: "Quick follow-up",
+                body: "A fast way to get a response.",
+              },
+              {
+                icon: ShieldCheck,
+                title: "Secure and simple",
+                body: "Share only what they need.",
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={item.title}
+                  className="flex items-start gap-3 rounded-[1.2rem] border border-white/80 bg-white/80 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-sm"
+                >
+                  <div className="rounded-xl bg-orange-50 p-2.5 text-orange-600 ring-1 ring-orange-100">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold tracking-[-0.01em] text-slate-950">{item.title}</p>
+                    <p className="mt-1 text-sm leading-5 text-slate-600">{item.body}</p>
                   </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm text-slate-600">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="font-medium text-slate-900">What helps most</p>
-                <p className="mt-1">
-                  A phone number or email, your vehicle if you know it, and a quick note about the work you want done.
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="font-medium text-slate-900">Request reference</p>
-                <p className="mt-1">
-                  This helps the shop keep track of where your request came from so they can follow up properly.
-                </p>
-                <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
-                  {source}
-                  {campaign ? ` | ${campaign}` : ""}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+              );
+            })}
+          </div>
 
-          <Card className="border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.1)]">
-            <CardHeader>
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Tell the shop what you need</h2>
-              <p className="text-sm text-slate-600">This only takes about a minute.</p>
+          <Card className="overflow-hidden border-slate-200/85 bg-white/96 shadow-[0_26px_70px_rgba(15,23,42,0.08),0_2px_10px_rgba(15,23,42,0.04)]">
+            <div className="h-1.5 w-full bg-[linear-gradient(90deg,rgba(249,115,22,0.95),rgba(251,146,60,0.88),rgba(15,23,42,0.9))]" />
+            <CardHeader className="space-y-2.5 border-b border-slate-100/90 pb-5 sm:pb-6">
+              <CardTitle className="text-[1.45rem] font-semibold tracking-[-0.03em] text-slate-950 sm:text-[1.65rem]">Your details</CardTitle>
+              <CardDescription className="max-w-lg text-sm leading-6 text-slate-600">
+                Usually takes about a minute.
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-5 sm:pt-6">
               {loading ? (
-                <div className="flex items-center gap-3 rounded-xl border border-dashed px-4 py-6 text-sm text-slate-600">
+                <div className="flex items-center gap-3 rounded-[1.15rem] border border-dashed border-slate-300/90 bg-slate-50/80 px-4 py-6 text-sm text-slate-600">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading request form...
                 </div>
               ) : error && !submitted ? (
-                <div className="space-y-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-900">
-                  <p>{error}</p>
+                <div className="space-y-4 rounded-[1.2rem] border border-rose-200 bg-rose-50 px-5 py-5 text-sm text-rose-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-rose-950">This request form is unavailable right now.</p>
+                    <p>{error}</p>
+                  </div>
                   <Button asChild variant="outline">
                     <a href="/">Back to Strata</a>
                   </Button>
                 </div>
               ) : submitted ? (
-                <div className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-5">
+                <div className="space-y-5 rounded-[1.35rem] border border-emerald-200 bg-[linear-gradient(180deg,#f0fdf4_0%,#ecfdf3_100%)] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
                   <div className="flex items-start gap-3">
-                    <ShieldCheck className="mt-0.5 h-5 w-5 text-emerald-700" />
-                    <div>
-                      <p className="text-base font-semibold text-emerald-950">Request received</p>
-                      <p className="mt-1 text-sm text-emerald-900">
-                        {config?.businessName ?? "The shop"} has your information and can follow up with you soon.
+                    <div className="rounded-2xl bg-emerald-100 p-2.5 text-emerald-700">
+                      <CheckCircle2 className="h-5 w-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-base font-semibold text-emerald-950">Request sent</p>
+                      <p className="text-sm leading-6 text-emerald-900">
+                        {config?.businessName ?? "The shop"} has your details and can follow up soon.
                       </p>
                     </div>
                   </div>
@@ -221,7 +237,7 @@ export default function PublicLeadCapturePage() {
                   </Button>
                 </div>
               ) : (
-                <form className="space-y-4" onSubmit={handleSubmit}>
+                <form className="space-y-6" onSubmit={handleSubmit}>
                   <input
                     type="text"
                     name="website"
@@ -231,100 +247,131 @@ export default function PublicLeadCapturePage() {
                     tabIndex={-1}
                     autoComplete="off"
                   />
+
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <Label htmlFor="lead-first-name">First name</Label>
                       <Input
                         id="lead-first-name"
                         value={form.firstName}
                         onChange={(e) => setForm((current) => ({ ...current, firstName: e.target.value }))}
+                        placeholder="Jamie"
+                        className="h-11 rounded-2xl bg-slate-50/60 px-4 shadow-none focus-visible:bg-white"
                         required
                       />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <Label htmlFor="lead-last-name">Last name</Label>
                       <Input
                         id="lead-last-name"
                         value={form.lastName}
                         onChange={(e) => setForm((current) => ({ ...current, lastName: e.target.value }))}
+                        placeholder="Rivera"
+                        className="h-11 rounded-2xl bg-slate-50/60 px-4 shadow-none focus-visible:bg-white"
                         required
                       />
                     </div>
                   </div>
+
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="lead-email">Email</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-email">Email address</Label>
                       <Input
                         id="lead-email"
                         type="email"
                         value={form.email}
                         onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}
                         placeholder="you@example.com"
+                        className="h-11 rounded-2xl bg-slate-50/60 px-4 shadow-none focus-visible:bg-white"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="lead-phone">Phone</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-phone">Best phone number</Label>
                       <Input
                         id="lead-phone"
                         type="tel"
                         value={form.phone}
                         onChange={(e) => setForm((current) => ({ ...current, phone: e.target.value }))}
-                        placeholder="Best number to reach you"
+                        placeholder="(555) 111-2222"
+                        className="h-11 rounded-2xl bg-slate-50/60 px-4 shadow-none focus-visible:bg-white"
                       />
                     </div>
                   </div>
+
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="lead-vehicle">Vehicle if known</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-vehicle">Vehicle</Label>
                       <Input
                         id="lead-vehicle"
                         value={form.vehicle}
                         onChange={(e) => setForm((current) => ({ ...current, vehicle: e.target.value }))}
-                        placeholder="2022 Model Y, F-150, 911..."
+                        placeholder="2022 BMW X5"
+                        className="h-11 rounded-2xl bg-slate-50/60 px-4 shadow-none focus-visible:bg-white"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="lead-service">Service interest</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-service">Service needed</Label>
                       <Input
                         id="lead-service"
                         value={form.serviceInterest}
                         onChange={(e) => setForm((current) => ({ ...current, serviceInterest: e.target.value }))}
-                        placeholder="Tint, coating, maintenance, quote..."
+                        placeholder="Paint correction"
+                        className="h-11 rounded-2xl bg-slate-50/60 px-4 shadow-none focus-visible:bg-white"
                       />
                     </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="lead-summary">How can the shop help?</Label>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="lead-summary">Additional details</Label>
                     <Textarea
                       id="lead-summary"
                       value={form.summary}
                       onChange={(e) => setForm((current) => ({ ...current, summary: e.target.value }))}
                       rows={5}
-                      className="resize-none"
-                      placeholder="Share timing, questions, concerns, or anything the shop should know before reaching out."
+                      className="min-h-[132px] resize-none rounded-2xl bg-slate-50/60 px-4 py-3.5 shadow-none focus-visible:bg-white"
+                      placeholder="Timing, questions, or anything the shop should know."
                     />
+                    <p className="text-xs leading-5 text-slate-500">
+                      Add timing, questions, or anything the shop should know.
+                    </p>
                   </div>
-                  <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+
+                  <div className="flex items-start gap-3 rounded-[1.2rem] border border-slate-200 bg-slate-50/85 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
                     <Checkbox
                       id="lead-marketing-opt-in"
                       checked={form.marketingOptIn}
                       onCheckedChange={(checked) => setForm((current) => ({ ...current, marketingOptIn: checked === true }))}
                       className="mt-0.5"
                     />
-                    <div className="space-y-1">
-                      <Label htmlFor="lead-marketing-opt-in" className="cursor-pointer">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="lead-marketing-opt-in" className="cursor-pointer text-sm font-medium text-slate-950">
                         It&apos;s okay for this shop to follow up with me
                       </Label>
-                      <p className="text-xs text-slate-600">
+                      <p className="text-xs leading-5 text-slate-600">
                         This allows the shop to follow up about your request and related service updates.
                       </p>
                     </div>
                   </div>
-                  {error ? <p className="text-sm text-rose-700">{error}</p> : null}
-                  <Button type="submit" className="w-full sm:w-auto" disabled={submitting}>
-                    {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Submit request
-                  </Button>
+
+                  {error ? (
+                    <div className="rounded-[1.15rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+                      {error}
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-col gap-3 border-t border-slate-100 pt-1 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs leading-5 text-slate-500">
+                      The shop can follow up by email or phone.
+                    </p>
+                    <Button
+                      type="submit"
+                      className="h-11 w-full min-w-[180px] rounded-2xl px-5 text-sm font-semibold shadow-[0_14px_30px_rgba(249,115,22,0.2)] sm:w-auto"
+                      disabled={submitting}
+                    >
+                      {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      {submitting ? "Sending request..." : "Send request"}
+                    </Button>
+                  </div>
                 </form>
               )}
             </CardContent>
