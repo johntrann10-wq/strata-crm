@@ -152,10 +152,13 @@ describe("password recovery integration", () => {
         password: "FreshPass456!",
       });
 
+    const setCookieHeader = res.headers["set-cookie"];
+    const cookieHeaderValue = Array.isArray(setCookieHeader) ? setCookieHeader.join(";") : String(setCookieHeader ?? "");
+
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
-    expect(res.headers["set-cookie"]?.join(";")).toMatch(/strata_auth=;/i);
-    expect(res.headers["set-cookie"]?.join(";")).toMatch(/expires=thu, 01 jan 1970/i);
+    expect(cookieHeaderValue).toMatch(/strata_auth=;/i);
+    expect(cookieHeaderValue).toMatch(/expires=thu, 01 jan 1970/i);
     expect(updateCalls).toHaveLength(1);
     expect(updateCalls[0]?.authTokenVersion).toBe(2);
     expect(updateCalls[0]?.passwordHash).toBeTypeOf("string");
