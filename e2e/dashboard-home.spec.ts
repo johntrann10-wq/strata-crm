@@ -34,7 +34,7 @@ test.describe("Dashboard home", () => {
     await page.goto("/sign-up");
     await page.locator("#email").fill(email);
     await page.locator("#password").fill(password);
-    await page.getByRole("button", { name: /sign up with email/i }).click();
+    await page.getByRole("button", { name: /start free trial/i }).last().click();
     await page.waitForFunction(() => window.localStorage.getItem("authToken"), null, { timeout: 20000 });
     await page.goto("/onboarding");
     await finishOnboarding(page);

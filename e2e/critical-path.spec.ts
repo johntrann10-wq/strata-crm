@@ -36,7 +36,7 @@ test.describe("Critical path (smoke)", () => {
     await expect(page.locator("#password")).toBeVisible();
     await page.locator("#email").fill(email);
     await page.locator("#password").fill(password);
-    await page.getByRole("button", { name: /sign up with email/i }).click();
+    await page.getByRole("button", { name: /start free trial/i }).last().click();
 
     // Sign-up doesn't navigate by itself; continue to onboarding directly.
     await page.waitForFunction(() => window.localStorage.getItem("authToken"), null, { timeout: 20000 });

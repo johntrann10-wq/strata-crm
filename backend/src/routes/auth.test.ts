@@ -22,6 +22,16 @@ describe("auth route helper logic", () => {
     expect(resolveGoogleStateRedirect(JSON.stringify({ redirectPath: "/signed-in" }))).toBe("/signed-in");
   });
 
+  it("builds post-auth redirects with a hash token instead of a query token", async () => {
+    const { buildPostAuthRedirectUrl } = await import("./auth.js");
+    expect(buildPostAuthRedirectUrl("https://app.strata.test", "/signed-in", "abc123")).toBe(
+      "https://app.strata.test/signed-in#authToken=abc123"
+    );
+    expect(buildPostAuthRedirectUrl("https://app.strata.test", "/signed-in#tab=billing", "abc123")).toBe(
+      "https://app.strata.test/signed-in#tab=billing&authToken=abc123"
+    );
+  });
+
   it("uses the configured frontend origin for security-sensitive links", async () => {
     const { resolveFrontendBaseUrl } = await import("./auth.js");
     const previous = process.env.FRONTEND_URL;

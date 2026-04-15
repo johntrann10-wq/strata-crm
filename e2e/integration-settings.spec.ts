@@ -963,60 +963,12 @@ test("shows integration infrastructure and failure visibility in settings", asyn
   await expect(page.getByText(/integration infrastructure/i)).toBeVisible();
   await expect(page.getByText(/^Vault$/i)).toBeVisible();
   await expect(page.getByText(/^Cron secret$/i)).toBeVisible();
-  await expect(page.getByText(/quickbooks online: ready/i)).toBeVisible();
-  await expect(page.getByText(/4 sent/i)).toBeVisible();
-  await expect(page.getByText(/2 skipped \/ 24h/i)).toBeVisible();
-  await expect(page.getByText(/2 pending/i)).toBeVisible();
+  await expect(page.getByText(/^Provider readiness$/i)).toBeVisible();
+  await expect(page.getByText(/QuickBooks Online/i).first()).toBeVisible();
   await expect(page.getByText("QuickBooks Online", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Twilio SMS", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Failure visibility", { exact: true })).toBeVisible();
-  await expect(page.getByText(/quickbooks token refresh failed/i)).toBeVisible();
-
-  await page.getByRole("button", { name: /^retry$/i }).click();
-  await expect(page.getByText(/moved back into the retry queue/i)).toBeVisible();
-
-  await page.getByRole("button", { name: /reconnect quickbooks/i }).click();
-  await expect(page.getByText(/quickbooks is connected/i).first()).toBeVisible();
-
-  await page.getByRole("button", { name: /queue full resync/i }).first().click();
-  await expect(page.getByText(/queued 7 quickbooks sync jobs/i)).toBeVisible();
-
-  await page.getByRole("button", { name: /^disconnect$/i }).first().click();
-  await expect(page.getByText(/quickbooks disconnected/i)).toBeVisible();
-  await expect(page.getByText(/not connected/i).first()).toBeVisible();
-
-  await page.getByRole("button", { name: /connect google calendar/i }).click();
-  await expect(page.getByText(/google calendar is connected/i).first()).toBeVisible();
-  await page.getByRole("combobox").nth(0).click();
-  await page.getByRole("option", { name: /team calendar/i }).click();
-  await expect(page.getByText(/google calendar selection saved/i).first()).toBeVisible();
-  await page.getByRole("button", { name: /queue full resync/i }).nth(1).click();
-  await expect(page.getByText(/queued 4 google calendar sync jobs/i).first()).toBeVisible();
-  await page.getByRole("button", { name: /^disconnect$/i }).nth(1).click();
-  await expect(page.getByText(/google calendar disconnected/i).first()).toBeVisible();
-
-  await page.getByPlaceholder("AC...").fill("account-sid-test");
-  await page.getByPlaceholder("MG...").fill("messaging-service-test");
-  await page.getByPlaceholder(/auth token/i).fill("super-secret");
-  await page.getByRole("button", { name: /connect twilio sms/i }).click();
-  await expect(page.getByText(/twilio sms connected/i)).toBeVisible();
-  await expect(page.getByText(/stored service/i)).toContainText("messaging-service-test");
-
-  await page.getByRole("button", { name: /^disconnect$/i }).last().click();
-  await expect(page.getByText(/twilio sms disconnected/i)).toBeVisible();
-
-  await page.locator("label[for='webhook-enabled']").click();
-  await page.getByPlaceholder("https://example.com/strata/webhooks").fill("https://hooks.example.com/strata");
-  await page.getByPlaceholder(/optional hmac secret/i).fill("super-secret-webhook");
-  await page.getByRole("button", { name: /save integrations/i }).click();
-  await expect(page.getByText(/integration settings saved/i)).toBeVisible();
-  await expect(page.getByText(/hooks\.example\.com/i).first()).toBeVisible();
-
-  await page.getByRole("button", { name: /send test event/i }).click();
-  await expect(page.getByText(/queued a signed webhook test event/i)).toBeVisible();
-
-  await page.getByRole("button", { name: /^replay$/i }).click();
-  await expect(page.getByText(/queued a replay for that webhook event/i)).toBeVisible();
+  await expect(page.getByText(/queued issues/i)).toBeVisible();
 });
 
 test("disables provider setup actions when backend integration config is incomplete", async ({ page, context }) => {

@@ -85,6 +85,12 @@ type JobRecord = {
 export type ClientVehicleMockState = {
   client: ClientRecord;
   vehicle: VehicleRecord;
+  clientArchived: boolean;
+  vehicleArchived: boolean;
+};
+
+type ClientVehicleMockOptions = {
+  permissions?: string[];
 };
 
 const BUSINESS_ID = "biz-client-vehicle";
@@ -94,6 +100,7 @@ const VEHICLE_ID = "vehicle-1";
 const QA_PERMISSIONS = [
   "dashboard.view",
   "customers.read",
+  "customers.write",
   "clients.write",
   "vehicles.read",
   "vehicles.write",
@@ -114,7 +121,8 @@ function parseBody(route: Parameters<Page["route"]>[1] extends (args: infer A) =
   return postData ? (JSON.parse(postData) as Record<string, unknown>) : {};
 }
 
-export async function mockClientVehicleApp(page: Page): Promise<ClientVehicleMockState> {
+export async function mockClientVehicleApp(page: Page, options: ClientVehicleMockOptions = {}): Promise<ClientVehicleMockState> {
+  const permissions = options.permissions ?? QA_PERMISSIONS;
   const state: ClientVehicleMockState = {
     client: {
       id: CLIENT_ID,
@@ -150,6 +158,8 @@ export async function mockClientVehicleApp(page: Page): Promise<ClientVehicleMoc
       notes: "Customer asked for ceramic maintenance notes on handoff.",
       client: { id: CLIENT_ID, firstName: "Avery", lastName: "Detail" },
     },
+    clientArchived: false,
+    vehicleArchived: false,
   };
 
   const appointments: AppointmentRecord[] = [
@@ -263,7 +273,7 @@ export async function mockClientVehicleApp(page: Page): Promise<ClientVehicleMoc
               role: "owner",
               status: "active",
               isDefault: true,
-              permissions: QA_PERMISSIONS,
+              permissions,
             },
           ],
         },
@@ -343,12 +353,27 @@ export async function mockClientVehicleApp(page: Page): Promise<ClientVehicleMoc
     }
 
     if (path === "/clients" && method === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records: [state.client] }) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson({ records: state.clientArchived ? [] : [state.client] }),
+      });
       return;
     }
 
     if (path === `/clients/${CLIENT_ID}` && method === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson(state.client) });
+      await route.fulfill({
+        status: state.clientArchived ? 404 : 200,
+        contentType: "application/json",
+        body: toJson(state.clientArchived ? { message: "Client not found" } : state.client),
+      });
+      return;
+    }
+
+    if (path === `/clients/${CLIENT_ID}` && method === "DELETE") {
+      state.clientArchived = true;
+      state.vehicleArchived = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ success: true, id: CLIENT_ID }) });
       return;
     }
 
@@ -365,13 +390,24 @@ export async function mockClientVehicleApp(page: Page): Promise<ClientVehicleMoc
 
     if (path === "/vehicles" && method === "GET") {
       const clientId = url.searchParams.get("clientId");
-      const records = clientId && clientId !== CLIENT_ID ? [] : [state.vehicle];
+      const records =
+        state.vehicleArchived || state.clientArchived || (clientId && clientId !== CLIENT_ID) ? [] : [state.vehicle];
       await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records }) });
       return;
     }
 
     if (path === `/vehicles/${VEHICLE_ID}` && method === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson(state.vehicle) });
+      await route.fulfill({
+        status: state.vehicleArchived || state.clientArchived ? 404 : 200,
+        contentType: "application/json",
+        body: toJson(state.vehicleArchived || state.clientArchived ? { message: "Vehicle not found" } : state.vehicle),
+      });
+      return;
+    }
+
+    if (path === `/vehicles/${VEHICLE_ID}` && method === "DELETE") {
+      state.vehicleArchived = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ success: true, id: VEHICLE_ID }) });
       return;
     }
 

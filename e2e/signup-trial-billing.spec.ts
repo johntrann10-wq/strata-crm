@@ -5,7 +5,7 @@ test("signup stays card-free and focuses on account creation", async ({ page }) 
 
   await expect(page.locator("#email")).toBeVisible();
   await expect(page.locator("#password")).toBeVisible();
-  await expect(page.getByRole("button", { name: /sign up with email/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /start free trial/i }).last()).toBeVisible();
 
   await expect(page.getByLabel(/card number/i)).toHaveCount(0);
   await expect(page.getByPlaceholder(/card number/i)).toHaveCount(0);

@@ -183,6 +183,11 @@ type BillingMockState = {
   activityLogs: ActivityLogRecord[];
 };
 
+type BillingMockOptions = {
+  permissions?: string[];
+  seedAppointmentInvoiceStatus?: "draft" | "sent" | "partial" | "paid" | "void";
+};
+
 const BUSINESS_ID = "biz-billing";
 const USER_ID = "owner-1";
 const QA_PERMISSIONS = [
@@ -190,6 +195,7 @@ const QA_PERMISSIONS = [
   "customers.read",
   "vehicles.read",
   "appointments.read",
+  "appointments.write",
   "quotes.read",
   "quotes.write",
   "invoices.read",
@@ -519,7 +525,8 @@ function buildAppointmentRecord(id: string, payload: Record<string, any>): Appoi
   };
 }
 
-export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> {
+export async function mockBillingFlowApp(page: Page, options: BillingMockOptions = {}): Promise<BillingMockState> {
+  const permissions = options.permissions ?? QA_PERMISSIONS;
   const seededAppointment = buildAppointmentRecord("appointment-seeded-1", {
     clientId: client.id,
     vehicleId: vehicle.id,
@@ -553,6 +560,28 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
     appointments: [seededAppointment, computedAmountAppointment],
     activityLogs: [],
   };
+
+  if (options.seedAppointmentInvoiceStatus) {
+    const seededInvoice = buildInvoiceRecord("invoice-seeded-1", {
+      clientId: client.id,
+      appointmentId: seededAppointment.id,
+      status: options.seedAppointmentInvoiceStatus,
+      lineItems: [{ description: "Paint correction follow-up", quantity: 1, unitPrice: seededAppointment.totalPrice }],
+      taxRate: 0,
+      discountAmount: 0,
+      dueDate: "2026-04-18T08:00:00.000Z",
+    });
+    seededInvoice.lastSentAt =
+      options.seedAppointmentInvoiceStatus === "sent" || options.seedAppointmentInvoiceStatus === "partial" || options.seedAppointmentInvoiceStatus === "paid"
+        ? "2026-04-11T18:00:00.000Z"
+        : null;
+    if (options.seedAppointmentInvoiceStatus === "paid") {
+      seededInvoice.paidAt = "2026-04-12T18:00:00.000Z";
+      seededInvoice.lastPaidAt = seededInvoice.paidAt;
+    }
+    state.invoices.push(seededInvoice);
+    seededAppointment.invoicedAt = "2026-04-11T18:00:00.000Z";
+  }
 
   await page.route("**/api/auth/sign-in", async (route) => {
     await route.fulfill({
@@ -601,7 +630,7 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
               role: "owner",
               status: "active",
               isDefault: true,
-              permissions: QA_PERMISSIONS,
+              permissions,
             },
           ],
         },
@@ -836,6 +865,44 @@ export async function mockBillingFlowApp(page: Page): Promise<BillingMockState> 
         status: found ? 200 : 404,
         contentType: "application/json",
         body: toJson(found ?? { message: "Appointment not found" }),
+      });
+      return;
+    }
+
+    if (path.match(/^\/appointments\/[^/]+$/) && method === "DELETE") {
+      const appointmentId = path.split("/")[2];
+      const appointment = state.appointments.find((entry) => entry.id === appointmentId);
+      if (!appointment) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: toJson({ message: "Appointment not found" }),
+        });
+        return;
+      }
+
+      const blockingInvoice = state.invoices.find(
+        (invoice) => invoice.appointmentId === appointmentId && invoice.status !== "void"
+      );
+      if (blockingInvoice) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: toJson({
+            message: "This appointment can't be deleted because it has linked invoices. Void or remove the invoice first.",
+          }),
+        });
+        return;
+      }
+
+      state.appointments = state.appointments.filter((entry) => entry.id !== appointmentId);
+      state.activityLogs = state.activityLogs.filter(
+        (entry) => !(entry.entityType === "appointment" && entry.entityId === appointmentId)
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson({ success: true, id: appointmentId }),
       });
       return;
     }

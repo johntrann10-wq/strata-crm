@@ -49,8 +49,14 @@ describe("createInMemoryRateLimiter", () => {
 
     expect(next).toHaveBeenCalledTimes(2);
     expect(res.status).toHaveBeenCalledWith(429);
-    expect(res.json).toHaveBeenCalledWith({ message: "Slow down" });
+    expect(res.json).toHaveBeenCalledWith({
+      code: "RATE_LIMITED",
+      message: "Slow down",
+      retryAfterSeconds: expect.any(Number),
+    });
     expect(headers.get("Retry-After")).toBeDefined();
+    expect(headers.get("X-RateLimit-Limit")).toBe("2");
+    expect(headers.get("X-RateLimit-Remaining")).toBe("0");
   });
 
   it("supports custom keys so sign-in limits can include normalized email", () => {
@@ -110,5 +116,41 @@ describe("createRateLimiter", () => {
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(res.status).toHaveBeenCalledWith(429);
+  });
+
+  it("supports environment overrides for route-specific limits", async () => {
+    process.env.RATE_LIMIT_AUTH_SIGN_IN_MAX = "1";
+    process.env.RATE_LIMIT_AUTH_SIGN_IN_WINDOW_MS = "30000";
+
+    try {
+      const limiter = createRateLimiter({
+        id: "auth_sign_in",
+        windowMs: 60_000,
+        max: 5,
+        store: "memory",
+        message: "Slow down",
+      });
+      const req = {
+        ip: "127.0.0.1",
+        method: "POST",
+        path: "/auth/sign-in",
+        body: { email: "owner@example.com" },
+        headers: {},
+        socket: { remoteAddress: "127.0.0.1" },
+      } as unknown as Request;
+
+      const next = vi.fn();
+      await limiter.middleware(req, createMockResponse().res, next);
+
+      const { res, headers } = createMockResponse();
+      await limiter.middleware(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(headers.get("X-RateLimit-Limit")).toBe("1");
+    } finally {
+      delete process.env.RATE_LIMIT_AUTH_SIGN_IN_MAX;
+      delete process.env.RATE_LIMIT_AUTH_SIGN_IN_WINDOW_MS;
+    }
   });
 });
