@@ -1746,14 +1746,6 @@ export default function PublicBookingPage() {
     "Quick follow-up",
     "Secure and simple",
   ]).slice(0, 3);
-  const saveStateLabel =
-    draftStatus === "saving"
-      ? "Saving..."
-      : draftStatus === "saved" && relativeDraftStatusLabel
-        ? relativeDraftStatusLabel
-        : selectedService
-          ? "Draft lead capture is active."
-          : "Choose a service to begin.";
   const bookingPrimaryColor = String(
     bookingBrandTheme.style["--booking-primary" as keyof typeof bookingBrandTheme.style] ?? "#ea580c"
   );
@@ -1848,19 +1840,6 @@ export default function PublicBookingPage() {
         .bp-step-label {
           text-align: center; font-size: 9.5px;
           color: var(--l); padding: 2px 0 4px; font-weight: 500;
-        }
-        .bp-save {
-          width: max-content; max-width: calc(100% - 32px);
-          margin: 0 auto 12px;
-          border: 1px solid var(--cb);
-          background: var(--cs);
-          color: var(--ci);
-          border-radius: 999px;
-          padding: 6px 12px;
-          font-size: 10px; font-weight: 700;
-          display: flex; align-items: center; justify-content: center;
-          gap: 6px;
-          text-align: center;
         }
         .svc-card {
           border: 1.5px solid var(--b); border-radius: 12px;
@@ -2110,10 +2089,6 @@ export default function PublicBookingPage() {
                     </div>
 
                     <div className="bp-step-label">Step {currentStep + 1} of {steps.length} - {activeStep?.label}</div>
-                    <div className="bp-save">
-                      <Sparkles size={11} />
-                      <span>{saveStateLabel}</span>
-                    </div>
 
                     <div className="hidden">
                       <CompactStepRail
