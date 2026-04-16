@@ -4,10 +4,12 @@ import { useParams, useSearchParams } from "react-router";
 import { API_BASE } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { trackEvent } from "@/lib/analytics";
 import {
@@ -299,6 +301,22 @@ function formatBookingDatePill(value: string) {
     dayNumber: new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(date),
     weekday: new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date),
   };
+}
+
+function parseDateValue(value: string | null | undefined) {
+  if (!value) return undefined;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function formatCalendarTriggerLabel(value: string | null | undefined) {
+  const date = parseDateValue(value);
+  if (!date) return "Open calendar";
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }
 
 function toDateInputValue(offsetDays = 0) {
@@ -1739,7 +1757,7 @@ export default function PublicBookingPage() {
               <Label htmlFor="booking-date">
                 {effectiveFlow === "self_book" ? "Preferred date" : "Preferred date (optional)"}
               </Label>
-              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-4">
                 {suggestedBookingDates.map((dateValue) => {
                   const isActive = (form.bookingDate || defaultBookingDate) === dateValue;
                   const formattedDate = formatBookingDatePill(dateValue);
@@ -1755,7 +1773,7 @@ export default function PublicBookingPage() {
                         }))
                       }
                       className={cn(
-                        "min-w-[84px] shrink-0 rounded-[18px] border px-3 py-3 text-left transition-all motion-reduce:transition-none",
+                        "rounded-[18px] border px-2.5 py-3 text-left transition-all motion-reduce:transition-none",
                         isActive
                           ? "border-[color:var(--booking-primary)] bg-[var(--booking-primary-soft)] shadow-[0_10px_22px_rgba(15,23,42,0.06)]"
                           : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
@@ -1772,8 +1790,62 @@ export default function PublicBookingPage() {
                   );
                 })}
               </div>
-              <div className="grid gap-2 sm:max-w-xs">
+              <div className="grid gap-2 sm:max-w-sm">
                 <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Need another day?</p>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-12 justify-between rounded-2xl border-slate-200 bg-white px-4 text-left font-medium text-slate-950 shadow-none"
+                    >
+                      <span className="flex items-center gap-2 overflow-hidden">
+                        <CalendarDays className="h-4 w-4 shrink-0 text-slate-500" />
+                        <span className="truncate">
+                          {formatCalendarTriggerLabel(
+                            form.bookingDate || (effectiveFlow === "self_book" ? defaultBookingDate : "")
+                          )}
+                        </span>
+                      </span>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                        Calendar
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[min(92vw,22rem)] rounded-[20px] border-slate-200 bg-white p-2 shadow-[0_24px_60px_rgba(15,23,42,0.14)]"
+                    align="center"
+                    sideOffset={8}
+                  >
+                    <Calendar
+                      mode="single"
+                      selected={parseDateValue(form.bookingDate || (effectiveFlow === "self_book" ? defaultBookingDate : ""))}
+                      onSelect={(date) => {
+                        if (!date) return;
+                        const nextValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                        setForm((current) => ({ ...current, bookingDate: nextValue, startTime: "" }));
+                      }}
+                      defaultMonth={parseDateValue(form.bookingDate || defaultBookingDate)}
+                      disabled={(date) => {
+                        const dateValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                        if (dateValue < minBookingDate || dateValue > maxBookingDate) return true;
+                        if (effectiveAvailabilityDayIndexes?.length && !effectiveAvailabilityDayIndexes.includes(date.getDay())) return true;
+                        return false;
+                      }}
+                      className="mx-auto"
+                      classNames={{
+                        root: "w-full",
+                        months: "w-full",
+                        month: "w-full gap-3",
+                        table: "w-full",
+                        head_row: "grid grid-cols-7",
+                        row: "grid grid-cols-7 mt-2",
+                        cell: "h-10 w-full",
+                        day: "h-10 w-full",
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
                 <Input
                   id="booking-date"
                   type="date"
@@ -1783,7 +1855,9 @@ export default function PublicBookingPage() {
                   onChange={(event) =>
                     setForm((current) => ({ ...current, bookingDate: event.target.value, startTime: "" }))
                   }
-                  className="h-12 rounded-2xl bg-slate-50"
+                  className="sr-only"
+                  aria-hidden="true"
+                  tabIndex={-1}
                 />
               </div>
             </div>
