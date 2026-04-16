@@ -243,36 +243,36 @@ test("public booking flow supports self-booking end to end", async ({ page }) =>
 
   await page.goto("/book/biz-book?utm_source=instagram&utm_campaign=spring-detail");
 
-  await expect(page.getByRole("heading", { name: /tell us what you need/i })).toBeVisible();
+  await expect(page.getByText("Tell us what you need").first()).toBeVisible();
   await expect(page.locator('[data-booking-primary="sky"][data-booking-accent="blue"][data-booking-background="mist"][data-booking-button-style="outline"]')).toBeVisible();
-  await expect(page.getByAltText("North Star Detail logo")).toBeVisible();
-  await page.getByRole("button", { name: "Book now" }).click();
+  await expect(page.locator(".bp-logo-img")).toBeVisible();
+  await page.locator(".svc-card").filter({ hasText: "Full Detail" }).click();
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What will we be working on?" })).toBeVisible();
 
   await page.getByLabel("Vehicle make *").fill("BMW");
   await page.getByLabel("Vehicle model *").fill("X5");
   await expect.poll(() => draftMock.getUpdateCount()).toBeGreaterThan(0);
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
 
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Where and when works best?" })).toBeVisible();
   await page.getByLabel("Preferred date").fill("2026-04-20");
-  await page.getByRole("button", { name: "10:00 AM" }).click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.locator(".tc").filter({ hasText: "10:00 AM" }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
 
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "How should the shop reach you?" })).toBeVisible();
   await page.getByLabel("First name").fill("Jamie");
   await page.getByLabel("Last name").fill("Rivera");
   await page.getByLabel("Email address").fill("jamie@example.com");
   await page.getByLabel("Best phone number *").fill("(555) 111-2222");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
 
-  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Review and confirm" })).toBeVisible();
+  await expect(page.getByLabel("Additional details")).toBeVisible();
   await expect(page.locator("div").filter({ hasText: "Deposit" }).getByText("$50.00").first()).toBeVisible();
   await page.getByRole("button", { name: /engine bay/i }).click();
   await page.getByLabel("Additional details").fill("Please focus on the interior.");
-  await page.getByRole("button", { name: "Book appointment" }).click();
+  await page.getByRole("button", { name: "Book now" }).click();
 
-  await expect(page.getByText("Appointment booked")).toBeVisible();
+  await expect(page.getByText("You're booked!")).toBeVisible();
   expect(postedPayload).toMatchObject({
     draftResumeToken: draftMock.resumeToken,
     serviceId: "svc-1",
@@ -362,20 +362,21 @@ test("public booking supports request-only services on mobile", async ({ page })
 
   await page.goto("/book/biz-request");
 
-  await expect(page.getByRole("heading", { name: /tell us what you need/i })).toBeVisible();
-  await page.getByRole("button", { name: "Request service" }).click();
+  await expect(page.getByText("Tell us what you need").first()).toBeVisible();
+  await page.locator(".svc-card").filter({ hasText: "Windshield tint" }).click();
   await page.getByLabel("Vehicle make *").fill("Tesla");
   await page.getByLabel("Vehicle model *").fill("Model Y");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Where and when works best?" })).toBeVisible();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
   await page.getByLabel("First name").fill("Taylor");
   await page.getByLabel("Last name").fill("Morgan");
   await page.getByLabel("Email address").fill("taylor@example.com");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Send request" }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
+  await expect(page.getByLabel("Additional details")).toBeVisible();
+  await page.getByRole("button", { name: /send request/i }).click();
 
-  await expect(page.getByText("Request sent")).toBeVisible();
+  await expect(page.getByText("Request sent!")).toBeVisible();
 });
 
 test("service query param carries service and category context into the booking flow", async ({ page }) => {
@@ -385,7 +386,7 @@ test("service query param carries service and category context into the booking 
   await expect(page.getByRole("button", { name: "Detailing" })).toBeVisible();
   await expect(page.locator("form").getByText("Full Detail").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Full Detail" })).toBeVisible();
-  await expect(page.getByText("Book instantly").first()).toBeVisible();
+  await expect(page.getByText(/instant|book instantly/i).first()).toBeVisible();
   await expect(page.getByText("$50.00 deposit").first()).toBeVisible();
   await expect(page.getByText("$275.00").first()).toBeVisible();
   await expect(page.getByText("3h").first()).toBeVisible();
@@ -401,7 +402,7 @@ test("booking drafts autosave once intent is meaningful and resume on return", a
   const draftMock = await mockBookingDrafts(page, { resumeToken: "resume-booking-1" });
 
   await page.goto("/book/biz-book");
-  await page.getByRole("button", { name: "Book now" }).click();
+  await page.locator(".svc-card").filter({ hasText: "Full Detail" }).click();
   await page.getByLabel("Vehicle make *").fill("BMW");
   await page.getByLabel("Vehicle model *").fill("X5");
 
@@ -411,13 +412,13 @@ test("booking drafts autosave once intent is meaningful and resume on return", a
     vehicleMake: "BMW",
     vehicleModel: "X5",
   });
-  await expect(page.getByText(/saving|saved/i).first()).toBeVisible();
+  await expect(page.getByText(/saving|saved/i)).toBeVisible();
 
   await page.reload();
   await expect.poll(() => draftMock.getAbandonCount()).toBeGreaterThan(0);
   await expect(page.getByLabel("Vehicle make *")).toHaveValue("BMW");
   await expect(page.getByLabel("Vehicle model *")).toHaveValue("X5");
-  await expect(page.getByText(/saving|saved/i).first()).toBeVisible();
+  await expect(page.getByText(/saving|saved/i)).toBeVisible();
 });
 
 test("invalid public booking states fail with a clean unavailable message", async ({ page }) => {
@@ -547,13 +548,13 @@ test("hybrid services support mobile booking mode and submit address details cle
 
   await page.goto("/book/biz-hybrid?service=svc-hybrid");
 
-  await expect(page.locator('[data-slot="card"]').filter({ hasText: "Ceramic maintenance" }).getByText("Ceramic maintenance", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Ceramic maintenance").first()).toBeVisible();
   await expect(page.getByText("12h notice").first()).toBeVisible();
   await expect(page.getByText("30m buffer").first()).toBeVisible();
   await page.getByLabel("Vehicle make *").fill("Rivian");
   await page.getByLabel("Vehicle model *").fill("R1S");
   await expect.poll(() => draftMock.getUpdateCount()).toBeGreaterThan(0);
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
 
   await expect(page.getByRole("button", { name: /in-shop visit/i })).toBeVisible();
   await page.getByRole("button", { name: /mobile \/ on-site/i }).click();
@@ -562,19 +563,19 @@ test("hybrid services support mobile booking mode and submit address details cle
   await page.getByLabel("State").fill("CA");
   await page.getByLabel("ZIP").fill("92618");
   await page.getByLabel("Preferred date").fill("2026-04-21");
-  await page.getByRole("button", { name: "11:00 AM" }).click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.locator(".tc").filter({ hasText: "11:00 AM" }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
 
   await page.getByLabel("First name").fill("Jordan");
   await page.getByLabel("Last name").fill("Lane");
   await page.getByLabel("Email address").fill("jordan@example.com");
   await page.getByLabel("Best phone number *").fill("(555) 333-1212");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
 
-  await expect(page.getByRole("heading", { name: /frequently added/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /wheel coating top-up/i })).toBeVisible();
   await expect(page.getByText(/r1s/i)).toBeVisible();
   await page.getByRole("button", { name: /wheel coating top-up/i }).click();
-  await page.getByRole("button", { name: "Book appointment" }).click();
+  await page.getByRole("button", { name: "Book now" }).click();
 
   expect(availabilityRequestUrl).toContain("serviceMode=mobile");
   expect(postedPayload).toMatchObject({
@@ -589,6 +590,6 @@ test("hybrid services support mobile booking mode and submit address details cle
     vehicleMake: "Rivian",
     vehicleModel: "R1S",
   });
-  await expect(page.getByText("Appointment booked")).toBeVisible();
+  await expect(page.getByText("You're booked!")).toBeVisible();
   await expect.poll(() => draftMock.getUpdateCount()).toBeGreaterThan(0);
 });

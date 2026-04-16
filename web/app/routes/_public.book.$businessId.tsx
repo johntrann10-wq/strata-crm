@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { trackEvent } from "@/lib/analytics";
 import {
@@ -1440,57 +1439,32 @@ export default function PublicBookingPage() {
   ) : null;
 
   const renderServiceCard = (service: BookingService, featured?: boolean) => {
-    const active = service.id === form.serviceId;
     return (
       <div
         key={service.id}
-        className={cn(
-          "rounded-[1.35rem] border bg-white p-4 text-left shadow-[0_10px_24px_rgba(15,23,42,0.035)] transition-all motion-reduce:transition-none",
-          active
-            ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] shadow-[0_14px_28px_rgba(15,23,42,0.09)]"
-            : "border-slate-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 motion-reduce:hover:translate-y-0"
-        )}
+        className={cn("svc-card", form.serviceId === service.id && "sel")}
+        style={form.serviceId === service.id ? { borderColor: "var(--c)" } : undefined}
+        onClick={() => handleServiceSelect(service.id)}
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-base font-semibold tracking-[-0.02em] text-slate-950">{service.name}</p>
-              {featured ? (
-                <Badge variant="outline" className="border-[color:var(--booking-accent-border)] bg-[var(--booking-accent-soft)] text-[color:var(--booking-accent-ink)]">
-                  Featured
-                </Badge>
-              ) : null}
-              <Badge
-                variant="secondary"
-                className={cn(
-                  "rounded-full",
-                  service.effectiveFlow === "self_book"
-                    ? "bg-emerald-50 text-emerald-700"
-                    : "bg-slate-100 text-slate-700"
-                )}
-              >
-                {service.effectiveFlow === "self_book" ? "Book instantly" : "Request review"}
-              </Badge>
-            </div>
-            {service.description ? <p className="text-sm leading-6 text-slate-600">{service.description}</p> : null}
-            <div className="flex flex-wrap gap-2.5 text-sm text-slate-600">
-              <Badge variant="outline" className="rounded-full bg-white">
-                {service.serviceMode === "mobile"
-                  ? "Mobile / on-site"
-                  : service.serviceMode === "both"
-                    ? "Mobile or in-shop"
-                    : "In-shop"}
-              </Badge>
-              {config?.showPrices && service.showPrice ? <span className="font-medium text-slate-950">{formatPrice(service.price)}</span> : null}
-              {config?.showDurations && service.showDuration ? <span>{formatDuration(service.durationMinutes)}</span> : null}
-              {service.depositAmount > 0 ? <span>{formatPrice(service.depositAmount)} deposit</span> : null}
-              {service.leadTimeHours > 0 ? <span>{formatLeadTimeLabel(service.leadTimeHours)}</span> : null}
-              {service.bufferMinutes > 0 ? <span>{service.bufferMinutes}m buffer</span> : null}
-            </div>
+        <div style={{ minWidth: 0 }}>
+          <div className="sv-n">{service.name}</div>
+          <div className="sv-m">{service.description}</div>
+          <div className="sv-badges">
+            <span className={service.effectiveFlow === "self_book" ? "badge b-g" : "badge b-gr"}>
+              {service.effectiveFlow === "self_book" ? "Instant" : "Request"}
+            </span>
+            {featured ? <span className="badge b-gr">Featured</span> : null}
           </div>
-          <Button type="button" onClick={() => handleServiceSelect(service.id)} className={cn("min-w-[148px] rounded-xl", bookingBrandTheme.primaryButtonClassName)}>
-            {service.effectiveFlow === "self_book" ? "Book now" : "Request service"}
-          </Button>
+        </div>
+        <div style={{ flexShrink: 0, textAlign: "right" }}>
+          {config?.showPrices && service.showPrice ? (
+            <div className="sv-p" style={{ color: "var(--c)" }}>
+              {formatPrice(service.price)}
+            </div>
+          ) : null}
+          {config?.showDurations && service.showDuration ? (
+            <div className="sv-d">{formatDuration(service.durationMinutes)}</div>
+          ) : null}
         </div>
       </div>
     );
@@ -1534,7 +1508,7 @@ export default function PublicBookingPage() {
                 <p className="text-sm font-semibold text-slate-950">Featured services</p>
                 <Badge variant="outline">{featuredServices.length} highlighted</Badge>
               </div>
-              <div className="grid gap-3">{featuredServices.map((service) => renderServiceCard(service, true))}</div>
+              <div>{featuredServices.map((service) => renderServiceCard(service, true))}</div>
             </div>
           ) : null}
 
@@ -1550,7 +1524,7 @@ export default function PublicBookingPage() {
                 <p className="text-sm font-semibold text-slate-950">{group.title}</p>
                 <Badge variant="outline">{group.services.length} options</Badge>
               </div>
-              <div className="grid gap-3">{group.services.map((service) => renderServiceCard(service))}</div>
+              <div>{group.services.map((service) => renderServiceCard(service))}</div>
             </div>
           ))}
         </div>
@@ -1659,11 +1633,18 @@ export default function PublicBookingPage() {
                 {availabilityLoading ? <div className="flex items-center gap-3 rounded-[1.2rem] border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" />Loading live availability...</div> : null}
                 {!availabilityLoading && availabilityError ? <div className="rounded-[1.2rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-800">{availabilityError}</div> : null}
                 {!availabilityLoading && !availabilityError && availability?.slots.length ? (
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="time-grid">
                     {availability.slots.map((slot) => (
-                      <button key={slot.startTime} type="button" onClick={() => setForm((current) => ({ ...current, startTime: slot.startTime }))} className={cn("rounded-[1.15rem] border px-4 py-4 text-left text-sm transition-all motion-reduce:transition-none", form.startTime === slot.startTime ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] text-[color:var(--booking-primary-ink)] shadow-[0_12px_28px_rgba(15,23,42,0.12)]" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50")}>
-                        <span className="font-medium">{slot.label}</span>
-                      </button>
+                      <div
+                        key={slot.startTime}
+                        className={cn("tc", form.startTime === slot.startTime && "sel")}
+                        style={form.startTime === slot.startTime
+                          ? { background: "var(--c)", borderColor: "var(--c)", color: "#fff" }
+                          : undefined}
+                        onClick={() => setForm((current) => ({ ...current, startTime: slot.startTime }))}
+                      >
+                        {slot.label}
+                      </div>
                     ))}
                   </div>
                 ) : null}
@@ -1770,6 +1751,28 @@ export default function PublicBookingPage() {
         : selectedService
           ? "Draft lead capture is active."
           : "Choose a service to begin.";
+  const bookingPrimaryColor = String(
+    bookingBrandTheme.style["--booking-primary" as keyof typeof bookingBrandTheme.style] ?? "#ea580c"
+  );
+  const bookingPrimarySoft = String(
+    bookingBrandTheme.style["--booking-primary-soft" as keyof typeof bookingBrandTheme.style] ?? "#fff7ed"
+  );
+  const bookingPrimarySoftBorder = String(
+    bookingBrandTheme.style["--booking-primary-soft-border" as keyof typeof bookingBrandTheme.style] ?? "#fdba74"
+  );
+  const bookingPrimaryInk = String(
+    bookingBrandTheme.style["--booking-primary-ink" as keyof typeof bookingBrandTheme.style] ?? "#9a3412"
+  );
+  const heroStyle =
+    bookingBrandTheme.tokens.backgroundToneToken === "mist"
+      ? { background: "#F8FBFF", borderBottom: "1px solid var(--b)" }
+      : bookingBrandTheme.tokens.backgroundToneToken === "sand"
+        ? { background: "#FCFAF6", borderBottom: "1px solid var(--b)" }
+        : bookingBrandTheme.tokens.backgroundToneToken === "slate"
+          ? { background: "#F8FAFC", borderBottom: "1px solid var(--b)" }
+          : { background: "#FFFDF8", borderBottom: "1px solid var(--b)" };
+  const heroTextColor = "var(--t)";
+  const heroMutedColor = "var(--m)";
 
   return (
     <div
@@ -1777,67 +1780,335 @@ export default function PublicBookingPage() {
       data-booking-accent={bookingBrandTheme.tokens.accentColorToken}
       data-booking-background={bookingBrandTheme.tokens.backgroundToneToken}
       data-booking-button-style={bookingBrandTheme.tokens.buttonStyleToken}
-      style={bookingBrandTheme.style}
+      style={{
+        ...bookingBrandTheme.style,
+        "--c": bookingPrimaryColor,
+        "--cs": bookingPrimarySoft,
+        "--cb": bookingPrimarySoftBorder,
+        "--ci": bookingPrimaryInk,
+        "--t": "#0A0A0F",
+        "--m": "#64748B",
+        "--l": "#94A3B8",
+        "--b": "#E8EAF0",
+        "--s": "#F8F9FC",
+        "--w": "#FFFFFF",
+        "--ok": "#059669",
+        "--oks": "#ECFDF5",
+        "--okb": "#A7F3D0",
+      }}
       className="min-h-screen bg-[radial-gradient(circle_at_top,var(--booking-page-halo),transparent_26%),linear-gradient(180deg,var(--booking-page)_0%,var(--booking-page-muted)_44%,var(--booking-page)_100%)]"
     >
+      <style>{`
+        .bp-hero {
+          padding: 18px 16px 14px;
+          text-align: center;
+        }
+        .bp-logo {
+          width: 44px; height: 44px; border-radius: 11px;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 18px; font-weight: 700; color: #fff;
+          margin: 0 auto 9px;
+        }
+        .bp-logo-img {
+          width: 44px; height: 44px; border-radius: 11px;
+          object-fit: contain; border: 1px solid var(--b);
+          display: block; margin: 0 auto 9px;
+        }
+        .bp-biz {
+          font-size: 15px; font-weight: 700; letter-spacing: -.025em;
+        }
+        .bp-tag {
+          font-size: 11px; margin-top: 2px;
+        }
+        .bp-trust {
+          display: flex; justify-content: center;
+          gap: 12px; margin-top: 8px; flex-wrap: wrap;
+        }
+        .bp-ti {
+          font-size: 10.5px; font-weight: 600;
+          display: flex; align-items: center; gap: 3px;
+        }
+        .bp-prog  { padding: 10px 16px 0; }
+        .bp-track { height: 2.5px; background: #EEF0F6; border-radius: 2px; }
+        .bp-fill  { height: 100%; border-radius: 2px; transition: width .3s ease; }
+        .bp-dots-row {
+          display: flex; justify-content: center;
+          gap: 5px; padding: 6px 0 0;
+        }
+        .bp-dot {
+          width: 5px; height: 5px;
+          border-radius: 50%; transition: background .2s;
+        }
+        .bp-step-label {
+          text-align: center; font-size: 9.5px;
+          color: var(--l); padding: 2px 0 4px; font-weight: 500;
+        }
+        .svc-card {
+          border: 1.5px solid var(--b); border-radius: 12px;
+          padding: 11px 13px; margin-bottom: 7px;
+          cursor: pointer; display: flex;
+          justify-content: space-between; align-items: center;
+          gap: 8px; background: var(--w); transition: all .12s;
+          user-select: none; -webkit-user-select: none;
+        }
+        .svc-card:active { transform: scale(.97); }
+        .svc-card.sel    { background: var(--cs); }
+        .sv-n { font-size: 12.5px; font-weight: 700; color: var(--t); }
+        .sv-m { font-size: 10.5px; color: var(--m); margin-top: 2px; }
+        .sv-badges { display: flex; gap: 3px; margin-top: 4px; }
+        .sv-p { font-size: 13px; font-weight: 700; }
+        .sv-d { font-size: 10px; color: var(--l); margin-top: 1px; }
+        .badge   { font-size: 9px; font-weight: 700; padding: 1.5px 6px; border-radius: 20px; border: 1px solid; display: inline-flex; }
+        .b-g     { background: #ECFDF5; border-color: #A7F3D0; color: #065F46; }
+        .b-gr    { background: #F3F4F6; border-color: #E5E7EB; color: #374151; }
+        .time-grid {
+          display: grid; grid-template-columns: 1fr 1fr;
+          gap: 5px; margin-bottom: 12px;
+        }
+        .tc {
+          border: 1.5px solid var(--b); border-radius: 8px;
+          padding: 8px; text-align: center;
+          font-size: 11.5px; font-weight: 700;
+          cursor: pointer; transition: all .12s;
+          background: var(--w); color: var(--t);
+          user-select: none;
+        }
+        .tc:active { transform: scale(.95); }
+        .bp-foot {
+          position: sticky; bottom: 0;
+          background: rgba(255,255,255,.95);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          border-top: 1px solid var(--b);
+          padding: 9px 14px;
+          display: flex; align-items: center;
+          justify-content: space-between; gap: 8px;
+          z-index: 20;
+        }
+        .bf-meta p {
+          font-size: 12px; font-weight: 700;
+          overflow: hidden; text-overflow: ellipsis;
+          white-space: nowrap; max-width: 160px;
+          color: var(--t); margin: 0;
+        }
+        .bf-meta small {
+          font-size: 9.5px; color: var(--l);
+          display: block; margin-top: 1px;
+        }
+        .bf-btns { display: flex; gap: 5px; flex-shrink: 0; }
+        .bf-back {
+          padding: 8px 12px; border-radius: 8px;
+          font-size: 12px; font-weight: 600;
+          border: 1.5px solid var(--b); background: var(--w);
+          color: var(--t); cursor: pointer; min-height: 38px;
+          font-family: inherit;
+        }
+        .bf-next {
+          padding: 8px 16px; border-radius: 8px;
+          font-size: 12px; font-weight: 700;
+          border: none; color: #fff; cursor: pointer;
+          min-height: 38px; min-width: 100px;
+          font-family: inherit;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .bf-next:disabled { opacity: .45; cursor: not-allowed; }
+        .bf-next:active:not(:disabled),
+        .bf-back:active { transform: scale(.96); }
+        .portal { padding-bottom: 40px; }
+        .portal-hero {
+          padding: 22px 16px 18px; text-align: center;
+          background: linear-gradient(180deg, var(--oks) 0%, var(--w) 100%);
+          border-bottom: 1px solid var(--okb);
+        }
+        .check-ring {
+          width: 52px; height: 52px; border-radius: 50%;
+          background: var(--ok);
+          display: flex; align-items: center; justify-content: center;
+          margin: 0 auto 10px;
+        }
+        .check-ring svg { display: block; }
+        .portal-pill {
+          display: inline-flex; font-size: 10px; font-weight: 700;
+          padding: 3px 10px; border-radius: 20px;
+          background: var(--oks); border: 1px solid var(--okb); color: var(--ok);
+          margin-bottom: 7px; text-transform: uppercase; letter-spacing: .05em;
+        }
+        .portal-h {
+          font-size: 19px; font-weight: 700;
+          letter-spacing: -.035em; color: var(--t);
+        }
+        .portal-m {
+          font-size: 12px; color: var(--m); margin-top: 4px;
+          line-height: 1.6; max-width: 260px;
+          margin-left: auto; margin-right: auto;
+        }
+        .detail-card {
+          margin: 12px 14px 0;
+          border: 1.5px solid var(--b); border-radius: 10px;
+          overflow: hidden; background: var(--w);
+        }
+        .detail-head {
+          padding: 8px 12px; background: var(--s);
+          border-bottom: 1px solid var(--b);
+          display: flex; justify-content: space-between; align-items: center;
+        }
+        .detail-head-l {
+          font-size: 9.5px; font-weight: 700;
+          text-transform: uppercase; letter-spacing: .07em; color: var(--l);
+        }
+        .detail-price { font-size: 12.5px; font-weight: 700; }
+        .detail-row {
+          display: flex; align-items: center; gap: 9px;
+          padding: 9px 12px; border-bottom: 1px solid #F3F5F9;
+        }
+        .detail-row:last-child { border: none; }
+        .di {
+          width: 28px; height: 28px; border-radius: 7px;
+          background: var(--s);
+          display: flex; align-items: center; justify-content: center;
+          flex-shrink: 0; color: var(--m);
+        }
+        .dl { font-size: 10px; color: var(--l); display: block; font-weight: 500; }
+        .dv-t { font-size: 12.5px; font-weight: 600; color: var(--t); display: block; margin-top: 1px; }
+        .next-wrap { margin: 12px 14px 0; }
+        .next-label {
+          font-size: 9.5px; font-weight: 700;
+          text-transform: uppercase; letter-spacing: .07em;
+          color: var(--l); margin-bottom: 7px;
+        }
+        .next-item {
+          display: flex; align-items: flex-start; gap: 9px;
+          padding: 10px 12px; border-radius: 10px;
+          background: var(--w); border: 1.5px solid var(--b);
+          margin-bottom: 6px;
+        }
+        .next-num {
+          width: 20px; height: 20px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 9.5px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+        }
+        .next-text strong {
+          display: block; font-size: 12px; font-weight: 600;
+          color: var(--t); line-height: 1.3;
+        }
+        .next-text span {
+          display: block; font-size: 10.5px; color: var(--m);
+          margin-top: 2px; line-height: 1.4;
+        }
+        .portal-actions {
+          margin: 12px 14px 0;
+          display: flex; flex-direction: column; gap: 6px;
+        }
+        .pa-p {
+          width: 100%; padding: 12px; border-radius: 11px;
+          font-size: 13px; font-weight: 700; color: #fff;
+          border: none; cursor: pointer; min-height: 46px;
+          display: flex; align-items: center; justify-content: center;
+          text-decoration: none; font-family: inherit;
+        }
+        .pa-s {
+          width: 100%; padding: 11px; border-radius: 11px;
+          font-size: 13px; font-weight: 600; color: var(--t);
+          border: 1.5px solid var(--b); background: var(--w);
+          cursor: pointer; min-height: 44px; font-family: inherit;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .pa-g {
+          background: none; border: none; color: var(--l);
+          font-size: 11.5px; font-weight: 600; cursor: pointer;
+          padding: 6px; width: 100%; text-align: center;
+          font-family: inherit;
+        }
+        .pa-p:active, .pa-s:active { transform: scale(.98); }
+      `}</style>
       <div className="mx-auto max-w-7xl px-4 pb-32 pt-5 sm:px-6 lg:px-8 lg:pt-8">
         <div className="space-y-4">
           {!loading && !pageError ? (
             <div className="mx-auto max-w-4xl space-y-4">
-              <div className="overflow-hidden rounded-[1.85rem] border border-slate-200/80 bg-white/95 px-5 py-6 text-center shadow-[0_22px_54px_rgba(15,23,42,0.07)] sm:px-8 sm:py-8">
-                <div className="flex flex-col items-center gap-3">
+              <div className="overflow-hidden rounded-[24px] border border-[var(--b)] bg-[var(--w)] shadow-[0_22px_54px_rgba(15,23,42,0.07)]">
+                <div className="bp-hero" style={heroStyle}>
                   {config?.branding.logoUrl ? (
-                    <img
-                      src={config.branding.logoUrl}
-                      alt={`${config.businessName} logo`}
-                      className="h-12 w-12 rounded-2xl border border-slate-200 bg-white object-contain p-1.5 shadow-sm"
-                    />
+                    <img src={config.branding.logoUrl} className="bp-logo-img" alt="" />
+                  ) : (
+                    <div className="bp-logo" style={{ background: "var(--c)" }}>
+                      {config?.businessName?.[0] ?? "S"}
+                    </div>
+                  )}
+
+                  <div className="bp-biz" style={{ color: heroTextColor }}>
+                    {config?.title || config?.businessName}
+                  </div>
+                  {config?.subtitle ? (
+                    <div className="bp-tag" style={{ color: heroMutedColor }}>
+                      {config.subtitle}
+                    </div>
                   ) : null}
-                  <Badge variant="secondary" className="rounded-full border border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] px-3 py-1 text-[0.68rem] uppercase tracking-[0.18em] text-[color:var(--booking-primary-ink)]">
-                    Online booking
-                  </Badge>
-                  <div className="space-y-2">
-                    <p className="text-[0.72rem] font-medium uppercase tracking-[0.18em] text-slate-500">{config?.businessName ?? "The shop"}</p>
-                    <h1 className="text-2xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.1rem]">
-                      {config?.title ?? "Tell us what you need"}
-                    </h1>
-                    <p className="mx-auto max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-                      {config?.subtitle || "Share a few details and the shop can follow up with the right next step."}
-                    </p>
+
+                  <div className="bp-trust">
+                    {heroTrustPoints.map((point, i) => (
+                      <span key={i} className="bp-ti" style={{ color: heroTextColor }}>
+                        {i === 0 && <ShieldCheck size={12} />}
+                        {i === 1 && <Clock3 size={12} />}
+                        {i === 2 && <Sparkles size={12} />}
+                        {point}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="hidden">
+                    {heroTrustPoints.map((point, index) => {
+                      const item =
+                        index === 0
+                          ? { icon: ShieldCheck, detail: "Straight to the shop" }
+                          : index === 1
+                            ? { icon: Clock3, detail: effectiveFlow === "self_book" ? "Quick confirmation" : "Fast follow-up" }
+                            : { icon: Sparkles, detail: "Simple and secure" };
+                      return <TrustPoint key={`hidden-${point}-${index}`} title={point} detail={item.detail} icon={item.icon} />;
+                    })}
                   </div>
                 </div>
-                <div className="mt-5 grid gap-2 sm:grid-cols-3">
-                  {heroTrustPoints.map((point, index) => {
-                    const item =
-                      index === 0
-                        ? { icon: ShieldCheck, detail: "Straight to the shop" }
-                        : index === 1
-                          ? { icon: Clock3, detail: effectiveFlow === "self_book" ? "Quick confirmation" : "Fast follow-up" }
-                          : { icon: Sparkles, detail: "Simple and secure" };
-                    return <TrustPoint key={point} title={point} detail={item.detail} icon={item.icon} />;
-                  })}
-                </div>
-                <div className="mt-5 flex flex-col gap-3">
-                  <div className="flex flex-col items-center justify-between gap-2 text-xs text-slate-500 sm:flex-row">
-                    <span>{saveStateLabel}</span>
-                    <span>{selectedService ? `Working on ${selectedService.name}` : "Choose a service to start"}</span>
-                  </div>
-                  {!result ? (
-                    <>
-                      <Progress className="h-2.5 rounded-full bg-[var(--booking-primary-soft)] [&_[data-slot=progress-indicator]]:bg-[var(--booking-primary)]" value={stepProgress} />
+
+                {!result ? (
+                  <>
+                    <div className="bp-prog">
+                      <div className="bp-track">
+                        <div
+                          className="bp-fill"
+                          style={{ width: `${stepProgress}%`, background: "var(--c)" }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bp-dots-row">
+                      {steps.map((_, i) => (
+                        <div
+                          key={i}
+                          className="bp-dot"
+                          style={{ background: i <= currentStep ? "var(--c)" : "#E2E6F0" }}
+                        />
+                      ))}
+                    </div>
+
+                    <div className="bp-step-label">
+                      Step {currentStep + 1} of {steps.length} — {activeStep?.label}
+                    </div>
+                    <div className="pb-3 text-center text-[10px] font-medium text-[var(--l)]">
+                      {saveStateLabel}
+                    </div>
+
+                    <div className="hidden">
                       <CompactStepRail
                         steps={steps}
                         currentStep={currentStep}
                         onSelect={moveToStep}
                         canNavigate={(index) => steps[index]?.key === "service" || Boolean(selectedService)}
                       />
-                    </>
-                  ) : null}
-                </div>
+                    </div>
+                  </>
+                ) : null}
               </div>
 
               {config?.urgencyEnabled && !result ? (
-                <div className="rounded-[1.25rem] border border-[color:var(--booking-accent-border)] bg-[var(--booking-accent-soft)]/70 px-4 py-3 text-sm text-[color:var(--booking-accent-ink)] shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+                <div className="rounded-[12px] border border-[var(--cb)] bg-[var(--cs)] px-4 py-3 text-[11px] font-semibold text-[var(--ci)] shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
                   <div className="flex items-start gap-3">
                     <Clock3 className="mt-0.5 h-4 w-4 shrink-0" />
                     <p>
@@ -1856,27 +2127,167 @@ export default function PublicBookingPage() {
               {loading ? <Card className="overflow-hidden border-slate-200/80 bg-white/96 shadow-[0_22px_54px_rgba(15,23,42,0.07)]"><CardContent className="flex items-center gap-3 p-6 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" />Loading booking page...</CardContent></Card> : null}
               {!loading && pageError && !config ? <Card className="border-rose-200/90 bg-rose-50/95 shadow-sm"><CardContent className="space-y-3 p-6 text-sm text-rose-900"><p className="font-semibold tracking-[-0.01em] text-rose-950">This booking page is unavailable right now.</p><p>{pageError}</p></CardContent></Card> : null}
               {!loading && !pageError && result ? (
-                <Card className="overflow-hidden border-emerald-200/90 bg-[linear-gradient(180deg,#f0fdf4_0%,#ecfdf3_100%)] shadow-[0_18px_42px_rgba(5,150,105,0.08)]">
-                  <CardContent className="space-y-5 p-6 sm:p-7">
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-2xl bg-emerald-100 p-2.5 text-emerald-700"><CheckCircle2 className="h-5 w-5" /></div>
-                      <div className="space-y-1">
-                        <p className="text-lg font-semibold text-emerald-950">{result.mode === "self_book" ? "Appointment booked" : "Request sent"}</p>
-                        <p className="text-sm leading-6 text-emerald-900">{result.message}</p>
-                        {result.scheduledFor ? <p className="text-sm font-medium text-emerald-950">{result.scheduledFor}</p> : null}
+                <div className="portal">
+                  <div className="portal-hero">
+                    <div className="check-ring">
+                      <CheckCircle2 className="hidden" />
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20,6 9,17 4,12" />
+                      </svg>
+                    </div>
+                    <div className="portal-pill">
+                      {result.mode === "self_book" ? "✓ Confirmed" : "✓ Sent"}
+                    </div>
+                    <div className="portal-h">
+                      {result.mode === "self_book" ? "You're booked!" : "Request sent!"}
+                    </div>
+                    <div className="portal-m">{result.message}</div>
+                  </div>
+
+                  <div className="detail-card">
+                    <div className="detail-head">
+                      <span className="detail-head-l">Booking details</span>
+                      {config?.showPrices && selectedService ? (
+                        <span className="detail-price" style={{ color: "var(--c)" }}>
+                          {formatPrice(selectedService.price)}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {selectedService ? (
+                      <div className="detail-row">
+                        <div className="di">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
+                          </svg>
+                        </div>
+                        <div>
+                          <span className="dl">Service</span>
+                          <span className="dv-t">{selectedService.name}</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="grid gap-3 rounded-[1.3rem] border border-emerald-200/80 bg-white/70 p-4 text-sm text-emerald-950">
-                      {selectedService ? <div className="flex items-center justify-between gap-4"><span className="text-emerald-800">Service</span><span className="font-medium">{selectedService.name}</span></div> : null}
-                      {selectedTimeLabel && result.mode === "self_book" ? <div className="flex items-center justify-between gap-4"><span className="text-emerald-800">Time</span><span className="font-medium">{selectedTimeLabel}</span></div> : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {result.confirmationUrl ? <Button asChild><a href={result.confirmationUrl} target="_blank" rel="noreferrer">View confirmation</a></Button> : null}
-                      {result.portalUrl ? <Button asChild variant="outline"><a href={result.portalUrl} target="_blank" rel="noreferrer">Open customer portal</a></Button> : null}
-                      <Button variant="ghost" onClick={() => setResult(null)}>Book another service</Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                    ) : null}
+
+                    {result.scheduledFor || form.bookingDate ? (
+                      <div className="detail-row">
+                        <div className="di">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                            <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+                          </svg>
+                        </div>
+                        <div>
+                          <span className="dl">Date</span>
+                          <span className="dv-t">{result.scheduledFor || form.bookingDate}</span>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {selectedTimeLabel && result.mode === "self_book" ? (
+                      <div className="detail-row">
+                        <div className="di">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                            <circle cx="12" cy="12" r="10" /><polyline points="12,6 12,12 16,14" />
+                          </svg>
+                        </div>
+                        <div>
+                          <span className="dl">Time</span>
+                          <span className="dv-t">{selectedTimeLabel}</span>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {config?.showDurations && selectedService ? (
+                      <div className="detail-row">
+                        <div className="di">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                          </svg>
+                        </div>
+                        <div>
+                          <span className="dl">Duration</span>
+                          <span className="dv-t">{formatDuration(selectedService.durationMinutes)}</span>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="next-wrap">
+                    <div className="next-label">What happens next</div>
+
+                    {result.mode === "self_book" ? (
+                      <>
+                        <div className="next-item">
+                          <div className="next-num" style={{ background: "var(--cs)", color: "var(--c)" }}>1</div>
+                          <div className="next-text">
+                            <strong>Confirmation email sent</strong>
+                            <span>Check your inbox — it has your details and a portal link.</span>
+                          </div>
+                        </div>
+                        <div className="next-item">
+                          <div className="next-num" style={{ background: "var(--cs)", color: "var(--c)" }}>2</div>
+                          <div className="next-text">
+                            <strong>Add to your calendar</strong>
+                            <span>Save the time so you don't forget.</span>
+                          </div>
+                        </div>
+                        <div className="next-item">
+                          <div className="next-num" style={{ background: "var(--cs)", color: "var(--c)" }}>3</div>
+                          <div className="next-text">
+                            <strong>Day of your appointment</strong>
+                            <span>Show up at the agreed time. We'll be ready.</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="next-item">
+                          <div className="next-num" style={{ background: "var(--cs)", color: "var(--c)" }}>1</div>
+                          <div className="next-text">
+                            <strong>Request received</strong>
+                            <span>The team has your details and will review shortly.</span>
+                          </div>
+                        </div>
+                        <div className="next-item">
+                          <div className="next-num" style={{ background: "var(--cs)", color: "var(--c)" }}>2</div>
+                          <div className="next-text">
+                            <strong>Confirmation coming</strong>
+                            <span>You'll get an email or text with a confirmed time.</span>
+                          </div>
+                        </div>
+                        <div className="next-item">
+                          <div className="next-num" style={{ background: "var(--cs)", color: "var(--c)" }}>3</div>
+                          <div className="next-text">
+                            <strong>Show up ready</strong>
+                            <span>Once confirmed, just show up at the scheduled time.</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="portal-actions">
+                    {result.confirmationUrl ? (
+                      <a href={result.confirmationUrl} target="_blank" rel="noreferrer" className="pa-p" style={{ background: "var(--c)" }}>
+                        Open booking portal →
+                      </a>
+                    ) : null}
+                    {result.portalUrl && !result.confirmationUrl ? (
+                      <a href={result.portalUrl} target="_blank" rel="noreferrer" className="pa-p" style={{ background: "var(--c)" }}>
+                        Open customer portal →
+                      </a>
+                    ) : null}
+                    <button className="pa-s" type="button" onClick={() => {}}>
+                      Add to calendar
+                    </button>
+                    <button
+                      type="button"
+                      className="pa-g"
+                      onClick={() => setResult(null)}
+                    >
+                      ↩ Book another service
+                    </button>
+                  </div>
+                </div>
               ) : null}
               {!loading && !pageError && !result ? (
                 <form id="public-booking-form" onSubmit={handleSubmit} className="space-y-6">
@@ -1948,25 +2359,52 @@ export default function PublicBookingPage() {
     </div>
 
       {!loading && !pageError && !result ? (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200/75 bg-white/92 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold tracking-[-0.015em] text-slate-950">{selectedService ? selectedService.name : "Choose a service to get started"}</p>
-              <p className="text-[11px] text-slate-500">{effectiveFlow === "self_book" ? "Availability is checked again at confirm." : "The shop gets the request with the details it needs."}</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {currentStep > 0 ? <Button key={`footer-back-${activeStep?.key ?? currentStep}`} type="button" variant="outline" onClick={() => moveToStep(currentStep - 1)} className="rounded-xl border-slate-200 bg-white"><ArrowLeft className="mr-2 h-4 w-4" />Back</Button> : null}
-              {currentStep < steps.length - 1 ? (
-                <Button key={`footer-continue-${activeStep?.key ?? currentStep}`} type="button" onClick={handleNext} className={cn("min-w-[150px] rounded-xl shadow-[0_14px_28px_rgba(15,23,42,0.12)]", bookingBrandTheme.primaryButtonClassName)}>
-                  Continue
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              ) : (
-                <Button key={`footer-submit-${activeStep?.key ?? currentStep}`} type="submit" form="public-booking-form" disabled={submitButtonDisabled} className={cn("min-w-[180px] rounded-xl shadow-[0_16px_30px_rgba(15,23,42,0.14)]", bookingBrandTheme.primaryButtonClassName)}>
-                  {submitting ? effectiveFlow === "self_book" ? "Booking..." : "Sending request..." : effectiveFlow === "self_book" ? "Book appointment" : "Send request"}
-                </Button>
-              )}
-            </div>
+        <div className="bp-foot">
+          <div className="bf-meta">
+            <p>{selectedService ? selectedService.name : "Choose a service"}</p>
+            <small>
+              {effectiveFlow === "self_book"
+                ? "Availability checked at confirm"
+                : "Shop confirms timing with you"}
+            </small>
+          </div>
+          <div className="bf-btns">
+            {currentStep > 0 ? (
+              <button
+                key={`footer-back-${activeStep?.key ?? currentStep}`}
+                type="button"
+                className="bf-back"
+                onClick={() => moveToStep(currentStep - 1)}
+              >
+                <ArrowLeft className="hidden" />
+                ← Back
+              </button>
+            ) : null}
+            {currentStep < steps.length - 1 ? (
+              <button
+                key={`footer-continue-${activeStep?.key ?? currentStep}`}
+                type="button"
+                className="bf-next"
+                style={{ background: "var(--c)" }}
+                onClick={handleNext}
+              >
+                <ArrowRight className="hidden" />
+                Continue →
+              </button>
+            ) : (
+              <button
+                key={`footer-submit-${activeStep?.key ?? currentStep}`}
+                type="submit"
+                form="public-booking-form"
+                className="bf-next"
+                style={{ background: "var(--c)" }}
+                disabled={submitting || (effectiveFlow === "self_book" && !form.startTime)}
+              >
+                {submitting
+                  ? (effectiveFlow === "self_book" ? "Booking..." : "Sending...")
+                  : (effectiveFlow === "self_book" ? "Book now" : "Send request")}
+              </button>
+            )}
           </div>
         </div>
       ) : null}
