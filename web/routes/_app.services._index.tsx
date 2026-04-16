@@ -210,8 +210,8 @@ const defaultBookingSettings: BusinessBookingSettings = {
   bookingShowPrices: true,
   bookingShowDurations: true,
   bookingAvailableDays: [1, 2, 3, 4, 5],
-  bookingAvailableStartTime: "",
-  bookingAvailableEndTime: "",
+  bookingAvailableStartTime: "09:00",
+  bookingAvailableEndTime: "19:00",
   bookingBlackoutDatesText: "",
   bookingSlotIntervalMinutes: 15,
   bookingBufferMinutes: "",
@@ -228,6 +228,14 @@ const BOOKING_DAY_OPTIONS = [
   { value: 6, label: "Sat" },
   { value: 0, label: "Sun" },
 ] as const;
+
+function formatBookingDaySummary(days: number[] | null | undefined): string {
+  const normalized = Array.isArray(days) ? [...new Set(days)] : [];
+  if (normalized.length === 0 || normalized.length === BOOKING_DAY_OPTIONS.length) return "Every day";
+  return BOOKING_DAY_OPTIONS.filter((day) => normalized.includes(day.value))
+    .map((day) => day.label)
+    .join(", ");
+}
 
 type ServiceTab = "active" | "inactive";
 
@@ -263,6 +271,18 @@ function formatPrice(price: number | string): string {
   }).format(Number(price ?? 0));
 }
 
+function formatAvailabilityTimeLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return value;
+  const hours = Number(match[1]);
+  const minutes = match[2];
+  if (Number.isNaN(hours) || hours < 0 || hours > 23) return value;
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${minutes} ${period}`;
+}
+
 function formatDuration(minutes: number | null): string {
   if (!minutes || minutes <= 0) return "";
   const hours = Math.floor(minutes / 60);
@@ -272,7 +292,21 @@ function formatDuration(minutes: number | null): string {
   return `${mins}m`;
 }
 
-function serviceToFormData(service: ServiceRecord): ServiceFormData {
+function buildServiceFormDefaults(
+  bookingSettings: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">
+): ServiceFormData {
+  return {
+    ...defaultServiceFormData,
+    bookingAvailableDays: [...bookingSettings.bookingAvailableDays],
+    bookingAvailableStartTime: bookingSettings.bookingAvailableStartTime,
+    bookingAvailableEndTime: bookingSettings.bookingAvailableEndTime,
+  };
+}
+
+function serviceToFormData(
+  service: ServiceRecord,
+  bookingSettings: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">
+): ServiceFormData {
   return {
     name: service.name ?? "",
     price: service.price != null ? String(service.price) : "",
@@ -291,9 +325,12 @@ function serviceToFormData(service: ServiceRecord): ServiceFormData {
     bookingLeadTimeHours: String(service.bookingLeadTimeHours ?? 0),
     bookingWindowDays: String(service.bookingWindowDays ?? 30),
     bookingServiceMode: service.bookingServiceMode ?? "in_shop",
-    bookingAvailableDays: service.bookingAvailableDays ?? [],
-    bookingAvailableStartTime: service.bookingAvailableStartTime ?? "",
-    bookingAvailableEndTime: service.bookingAvailableEndTime ?? "",
+    bookingAvailableDays:
+      Array.isArray(service.bookingAvailableDays) && service.bookingAvailableDays.length > 0
+        ? service.bookingAvailableDays
+        : [...bookingSettings.bookingAvailableDays],
+    bookingAvailableStartTime: service.bookingAvailableStartTime ?? bookingSettings.bookingAvailableStartTime,
+    bookingAvailableEndTime: service.bookingAvailableEndTime ?? bookingSettings.bookingAvailableEndTime,
     bookingBufferMinutes:
       service.bookingBufferMinutes != null && Number(service.bookingBufferMinutes) >= 0
         ? String(service.bookingBufferMinutes)
@@ -343,8 +380,10 @@ function businessToBookingSettings(record: Partial<BusinessBookingSettings> | nu
       (record as { bookingAvailableDays?: number[] | null }).bookingAvailableDays!.length > 0
         ? [...new Set((record as { bookingAvailableDays?: number[] | null }).bookingAvailableDays)]
         : [1, 2, 3, 4, 5],
-    bookingAvailableStartTime: (record as { bookingAvailableStartTime?: string | null })?.bookingAvailableStartTime ?? "",
-    bookingAvailableEndTime: (record as { bookingAvailableEndTime?: string | null })?.bookingAvailableEndTime ?? "",
+    bookingAvailableStartTime:
+      (record as { bookingAvailableStartTime?: string | null })?.bookingAvailableStartTime ?? "09:00",
+    bookingAvailableEndTime:
+      (record as { bookingAvailableEndTime?: string | null })?.bookingAvailableEndTime ?? "19:00",
     bookingBlackoutDatesText: Array.isArray((record as { bookingBlackoutDates?: string[] | null })?.bookingBlackoutDates)
       ? ((record as { bookingBlackoutDates?: string[] | null }).bookingBlackoutDates ?? []).join("\n")
       : "",
@@ -508,11 +547,17 @@ function ServiceForm({
   formData,
   onChange,
   categoryOptions,
+  bookingDefaults,
 }: {
   formData: ServiceFormData;
   onChange: (data: ServiceFormData) => void;
   categoryOptions: Array<{ value: string; label: string }>;
+  bookingDefaults: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">;
 }) {
+  const bookingDefaultsLabel = `${formatBookingDaySummary(bookingDefaults.bookingAvailableDays)} • ${
+    formatAvailabilityTimeLabel(bookingDefaults.bookingAvailableStartTime) || "Start time"
+  } to ${formatAvailabilityTimeLabel(bookingDefaults.bookingAvailableEndTime) || "End time"}`;
+
   return (
     <div className="grid gap-4 py-2">
       <div className="grid gap-2">
@@ -599,9 +644,12 @@ function ServiceForm({
       <div className="rounded-2xl border bg-muted/25 p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold">Public booking</p>
+            <p className="text-sm font-semibold">Public Booking Options</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Control whether this service shows on the booking page and whether customers can book it instantly or request approval.
+              These settings start with your business booking defaults, then can be adjusted here for this service when needed.
+            </p>
+            <p className="mt-2 text-xs font-medium text-muted-foreground">
+              Business defaults: {bookingDefaultsLabel}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -762,7 +810,9 @@ function ServiceForm({
               );
             })}
           </div>
-          <p className="text-xs leading-5 text-muted-foreground">Leave blank to use the business booking schedule.</p>
+          <p className="text-xs leading-5 text-muted-foreground">
+            Starts with the business booking schedule and can be adjusted here for this service.
+          </p>
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -1303,7 +1353,10 @@ export default function ServicesPage() {
 
   const openCreateService = (categoryId?: string | null) => {
     if (!canEditServices) return;
-    setCreateFormData({ ...defaultServiceFormData, categoryId: categoryId ?? UNCATEGORIZED_VALUE });
+    setCreateFormData({
+      ...buildServiceFormDefaults(bookingSettings),
+      categoryId: categoryId ?? UNCATEGORIZED_VALUE,
+    });
     setCreateServiceOpen(true);
   };
 
@@ -1399,7 +1452,7 @@ export default function ServicesPage() {
     if (result.error) return toast.error(result.error.message);
     toast.success("Service created.");
     setCreateServiceOpen(false);
-    setCreateFormData(defaultServiceFormData);
+    setCreateFormData(buildServiceFormDefaults(bookingSettings));
     void refetchServices();
   };
 
@@ -1571,10 +1624,16 @@ export default function ServicesPage() {
             label="Availability defaults"
             value={
               bookingSettings.bookingAvailableStartTime || bookingSettings.bookingAvailableEndTime
-                ? `${bookingSettings.bookingAvailableStartTime || "Start"}-${bookingSettings.bookingAvailableEndTime || "End"}`
+                ? `${formatAvailabilityTimeLabel(bookingSettings.bookingAvailableStartTime) || "Start time"} to ${
+                    formatAvailabilityTimeLabel(bookingSettings.bookingAvailableEndTime) || "end time"
+                  }`
                 : "Uses builder defaults"
             }
-            detail={bookingSettingsLoading ? "Loading booking settings..." : "Service-specific overrides still live on each service card below."}
+            detail={
+              bookingSettingsLoading
+                ? "Loading booking settings..."
+                : "These business hours feed public booking by default, and each service can adjust them below."
+            }
           />
         </CardContent>
       </Card>
@@ -1682,7 +1741,7 @@ export default function ServicesPage() {
                       bookingUrl={bookingUrl}
                       defaultBookingFlow={bookingSettings.bookingDefaultFlow}
                       canEdit={canEditServices}
-                      onEdit={(record) => { setEditService(record); setEditFormData(serviceToFormData(record)); setNewAddonServiceId(""); }}
+                      onEdit={(record) => { setEditService(record); setEditFormData(serviceToFormData(record, bookingSettings)); setNewAddonServiceId(""); }}
                       onToggle={handleToggleActive}
                     isToggling={togglingId === service.id}
                     onMoveUp={() => void moveService(group.id, service.id, -1)}
@@ -1837,7 +1896,12 @@ export default function ServicesPage() {
             <DialogDescription>Create a service and place it in the right category right away.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateService}>
-            <ServiceForm formData={createFormData} onChange={setCreateFormData} categoryOptions={categoryOptions} />
+            <ServiceForm
+              formData={createFormData}
+              onChange={setCreateFormData}
+              categoryOptions={categoryOptions}
+              bookingDefaults={bookingSettings}
+            />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateServiceOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={createServiceFetching}>{createServiceFetching ? "Creating..." : "Create Service"}</Button>
@@ -1855,7 +1919,12 @@ export default function ServicesPage() {
             <DialogDescription>Update service details, move it between categories, or manage add-ons.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleUpdateService}>
-            <ServiceForm formData={editFormData} onChange={setEditFormData} categoryOptions={categoryOptions} />
+            <ServiceForm
+              formData={editFormData}
+              onChange={setEditFormData}
+              categoryOptions={categoryOptions}
+              bookingDefaults={bookingSettings}
+            />
             <Separator className="my-4" />
             <div className="space-y-3">
               <div>
@@ -1937,7 +2006,7 @@ export default function ServicesPage() {
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {packageSummaries.map((summary) => (
-                <button key={summary.service.id} type="button" onClick={() => { setEditService(summary.service); setEditFormData(serviceToFormData(summary.service)); }} className="rounded-xl border bg-card p-4 text-left transition-colors hover:bg-accent/30">
+                <button key={summary.service.id} type="button" onClick={() => { setEditService(summary.service); setEditFormData(serviceToFormData(summary.service, bookingSettings)); }} className="rounded-xl border bg-card p-4 text-left transition-colors hover:bg-accent/30">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">

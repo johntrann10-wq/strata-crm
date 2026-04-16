@@ -119,6 +119,16 @@ const TIMEZONES = [
   { value: "Pacific/Honolulu", label: "Hawaii Time (HT) - Honolulu" },
 ];
 
+const BOOKING_DAY_OPTIONS = [
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+  { value: 0, label: "Sun" },
+] as const;
+
 const BILLING_FEATURES = [
   "Appointments & calendar",
   "Client & vehicle CRM",
@@ -1825,7 +1835,10 @@ export default function SettingsPage() {
     };
   }, [canViewDiagnostics]);
 
-  const handleFieldChange = (field: keyof BusinessSettingsFormData, value: string | number | boolean) => {
+  const handleFieldChange = (
+    field: keyof BusinessSettingsFormData,
+    value: string | number | boolean | number[]
+  ) => {
     setFormData((current) => ({ ...current, [field]: value }));
   };
 
@@ -2478,6 +2491,9 @@ export default function SettingsPage() {
         appointmentBufferMinutes: formData.appointmentBufferMinutes,
         calendarBlockCapacityPerSlot: formData.calendarBlockCapacityPerSlot,
         timezone: formData.timezone || null,
+        bookingAvailableDays: formData.bookingAvailableDays,
+        bookingAvailableStartTime: formData.bookingAvailableStartTime || null,
+        bookingAvailableEndTime: formData.bookingAvailableEndTime || null,
       });
       toast.success("Settings saved successfully.");
     } catch (error: any) {
@@ -2824,6 +2840,73 @@ export default function SettingsPage() {
                     <p className="text-xs text-muted-foreground">
                       New appointments start here unless a calendar click or direct link pre-fills a different time.
                     </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border/70 bg-muted/15 p-4">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold text-foreground">Public Booking Operating Days &amp; Hours</h3>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      These business defaults power the public booking page first. Each service can start from these hours and then be adjusted if it needs its own availability.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    <div className="space-y-1.5">
+                      <Label>Operating days</Label>
+                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                        {BOOKING_DAY_OPTIONS.map((day) => {
+                          const checked = formData.bookingAvailableDays.includes(day.value);
+                          return (
+                            <label
+                              key={day.value}
+                              className={cn(
+                                "flex cursor-pointer items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
+                                checked
+                                  ? "border-primary/35 bg-primary/10 text-primary"
+                                  : "border-slate-200 bg-white text-slate-600"
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                className="sr-only"
+                                checked={checked}
+                                onChange={() =>
+                                  handleFieldChange(
+                                    "bookingAvailableDays",
+                                    checked
+                                      ? formData.bookingAvailableDays.filter((value) => value !== day.value)
+                                      : [...formData.bookingAvailableDays, day.value].sort()
+                                  )
+                                }
+                              />
+                              {day.label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="bookingAvailableStartTime">Public booking start time</Label>
+                        <Input
+                          id="bookingAvailableStartTime"
+                          type="time"
+                          value={formData.bookingAvailableStartTime}
+                          onChange={(e) => handleFieldChange("bookingAvailableStartTime", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="bookingAvailableEndTime">Public booking end time</Label>
+                        <Input
+                          id="bookingAvailableEndTime"
+                          type="time"
+                          value={formData.bookingAvailableEndTime}
+                          onChange={(e) => handleFieldChange("bookingAvailableEndTime", e.target.value)}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 

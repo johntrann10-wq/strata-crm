@@ -15,6 +15,9 @@ export interface BusinessSettingsFormData {
   appointmentBufferMinutes: number;
   calendarBlockCapacityPerSlot: number;
   timezone: string;
+  bookingAvailableDays: number[];
+  bookingAvailableStartTime: string;
+  bookingAvailableEndTime: string;
 }
 
 export const DEFAULT_BUSINESS_SETTINGS_FORM: BusinessSettingsFormData = {
@@ -34,6 +37,9 @@ export const DEFAULT_BUSINESS_SETTINGS_FORM: BusinessSettingsFormData = {
   appointmentBufferMinutes: 15,
   calendarBlockCapacityPerSlot: 1,
   timezone: "America/New_York",
+  bookingAvailableDays: [1, 2, 3, 4, 5],
+  bookingAvailableStartTime: "09:00",
+  bookingAvailableEndTime: "19:00",
 };
 
 type BusinessSettingsSource = Partial<BusinessSettingsFormData> | null | undefined;
@@ -54,6 +60,14 @@ export function businessSettingsFormFromSource(source: BusinessSettingsSource) {
       source?.calendarBlockCapacityPerSlot ?? DEFAULT_BUSINESS_SETTINGS_FORM.calendarBlockCapacityPerSlot,
     currency: source?.currency ?? DEFAULT_BUSINESS_SETTINGS_FORM.currency,
     timezone: source?.timezone ?? DEFAULT_BUSINESS_SETTINGS_FORM.timezone,
+    bookingAvailableDays:
+      Array.isArray(source?.bookingAvailableDays) && source.bookingAvailableDays.length > 0
+        ? [...new Set(source.bookingAvailableDays)]
+        : DEFAULT_BUSINESS_SETTINGS_FORM.bookingAvailableDays,
+    bookingAvailableStartTime:
+      source?.bookingAvailableStartTime ?? DEFAULT_BUSINESS_SETTINGS_FORM.bookingAvailableStartTime,
+    bookingAvailableEndTime:
+      source?.bookingAvailableEndTime ?? DEFAULT_BUSINESS_SETTINGS_FORM.bookingAvailableEndTime,
   };
 
   return {
