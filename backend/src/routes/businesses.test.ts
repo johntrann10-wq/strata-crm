@@ -47,6 +47,7 @@ describe("business route serialization", () => {
         bookingShowPrices: true,
         bookingShowDurations: true,
         bookingUrgencyEnabled: true,
+        bookingUrgencyText: "Only 3 spots left this week",
       },
       locations: [{ id: "loc_123", name: "Main Shop", address: "123 Main St" }],
       services: [
@@ -90,6 +91,7 @@ describe("business route serialization", () => {
       businessName: "Coastline Detail Co.",
       defaultFlow: "self_book",
       urgencyEnabled: true,
+      urgencyText: "Only 3 spots left this week",
       branding: {
         logoUrl: "https://cdn.example.com/logo.png",
         primaryColorToken: "sky",

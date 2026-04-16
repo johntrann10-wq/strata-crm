@@ -146,6 +146,7 @@ const createSchema = z.object({
   bookingBufferMinutes: z.number().int().min(0).max(240).nullable().optional(),
   bookingCapacityPerSlot: z.number().int().min(1).max(12).nullable().optional(),
   bookingUrgencyEnabled: z.boolean().optional(),
+  bookingUrgencyText: z.string().max(160).nullable().optional(),
   monthlyRevenueGoal: z.coerce.number().min(0).max(100000000).nullable().optional(),
   monthlyJobsGoal: z.number().int().min(0).max(100000).nullable().optional(),
   integrationWebhookEnabled: z.boolean().optional(),
@@ -699,7 +700,7 @@ function toDateKey(date: Date): string {
 }
 
 function buildBookingPageTitle(business: { bookingPageTitle?: string | null; name?: string | null }): string {
-  return business.bookingPageTitle?.trim() || `Book with ${business.name?.trim() || "the shop"}`;
+  return business.bookingPageTitle?.trim() || business.name?.trim() || "The shop";
 }
 
 function normalizeBookingBrandLogoUrl(value: string | null | undefined) {
@@ -724,6 +725,10 @@ function normalizeBookingBrandButtonStyleToken(value: string | null | undefined)
 
 function buildBookingPageSubtitle(business: { bookingPageSubtitle?: string | null }): string {
   return business.bookingPageSubtitle?.trim() || "Choose the service you need, share your vehicle details, and lock in the next step without the back-and-forth.";
+}
+
+function buildBookingUrgencyText(business: { bookingUrgencyText?: string | null }): string {
+  return business.bookingUrgencyText?.trim() || "Only 3 spots left this week";
 }
 
 async function loadPublicBookingBusiness(id: string) {
@@ -775,6 +780,7 @@ type PublicBookingConfigPayload = {
   businessType: string | null;
   timezone: string;
   urgencyEnabled: boolean;
+  urgencyText: string | null;
   title: string;
   subtitle: string;
   confirmationMessage: string | null;
@@ -854,6 +860,7 @@ export function buildPublicBookingConfigResponse(params: {
     | "bookingShowPrices"
     | "bookingShowDurations"
     | "bookingUrgencyEnabled"
+    | "bookingUrgencyText"
   >;
   services: PublicBookingConfigPayload["services"];
   locations: PublicBookingConfigPayload["locations"];
@@ -865,6 +872,7 @@ export function buildPublicBookingConfigResponse(params: {
     businessType: business.type,
     timezone: business.timezone ?? "America/Los_Angeles",
     urgencyEnabled: business.bookingUrgencyEnabled ?? false,
+    urgencyText: business.bookingUrgencyEnabled ? buildBookingUrgencyText(business) : null,
     title: buildBookingPageTitle(business),
     subtitle: buildBookingPageSubtitle(business),
     confirmationMessage: cleanOptionalText(business.bookingConfirmationMessage ?? undefined),
@@ -1362,6 +1370,7 @@ function coerceBusinessRecord(
     bookingBufferMinutes: record.bookingBufferMinutes ?? null,
     bookingCapacityPerSlot: record.bookingCapacityPerSlot ?? null,
     bookingUrgencyEnabled: record.bookingUrgencyEnabled ?? false,
+    bookingUrgencyText: record.bookingUrgencyText ?? null,
     monthlyRevenueGoal: record.monthlyRevenueGoal ?? null,
     monthlyJobsGoal: record.monthlyJobsGoal ?? null,
     integrationWebhookEnabled: record.integrationWebhookEnabled ?? false,
@@ -1439,6 +1448,7 @@ export function serializeBusiness(record: BusinessRecord) {
     bookingBufferMinutes: record.bookingBufferMinutes ?? null,
     bookingCapacityPerSlot: record.bookingCapacityPerSlot ?? null,
     bookingUrgencyEnabled: record.bookingUrgencyEnabled ?? false,
+    bookingUrgencyText: record.bookingUrgencyText ?? null,
     billingAccessState: record.billingAccessState ?? null,
     trialStartedAt: record.trialStartedAt ?? null,
     billingSetupError: record.billingSetupError ?? null,
@@ -2991,6 +3001,7 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       bookingBufferMinutes: parsed.data.bookingBufferMinutes ?? null,
       bookingCapacityPerSlot: parsed.data.bookingCapacityPerSlot ?? null,
       bookingUrgencyEnabled: parsed.data.bookingUrgencyEnabled ?? false,
+      bookingUrgencyText: parsed.data.bookingUrgencyText?.trim() || null,
       monthlyRevenueGoal:
         parsed.data.monthlyRevenueGoal != null ? String(parsed.data.monthlyRevenueGoal) : null,
       monthlyJobsGoal: parsed.data.monthlyJobsGoal ?? null,
@@ -3248,6 +3259,9 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.bookingUrgencyEnabled !== undefined) {
     updates.bookingUrgencyEnabled = parsed.data.bookingUrgencyEnabled ?? false;
+  }
+  if (parsed.data.bookingUrgencyText !== undefined) {
+    updates.bookingUrgencyText = parsed.data.bookingUrgencyText?.trim() || null;
   }
   if (parsed.data.monthlyRevenueGoal !== undefined) {
     updates.monthlyRevenueGoal =

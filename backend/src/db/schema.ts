@@ -199,6 +199,7 @@ export const businesses = pgTable("businesses", {
   bookingBufferMinutes: integer("booking_buffer_minutes"),
   bookingCapacityPerSlot: integer("booking_capacity_per_slot"),
   bookingUrgencyEnabled: boolean("booking_urgency_enabled").default(false),
+  bookingUrgencyText: text("booking_urgency_text"),
   monthlyRevenueGoal: decimal("monthly_revenue_goal", { precision: 12, scale: 2 }),
   monthlyJobsGoal: integer("monthly_jobs_goal"),
   integrationWebhookEnabled: boolean("integration_webhook_enabled").default(false),

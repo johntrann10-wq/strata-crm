@@ -118,6 +118,7 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
     bookingSlotIntervalMinutes: 15,
     bookingBufferMinutes: 15,
     bookingCapacityPerSlot: 1,
+    bookingUrgencyText: "Only 3 spots left this week",
     notificationAppointmentConfirmationEmailEnabled: true,
   };
 
@@ -305,7 +306,7 @@ test("booking builder preview updates and saves business-level settings", async 
   await expect(page.getByText("Flow editor")).toBeVisible();
   await expect(page.getByText("Live preview", { exact: true })).toBeVisible();
 
-  await page.getByPlaceholder("Tell us what you need").fill("Book your gloss reset");
+  await page.getByPlaceholder("Spark Studio").fill("Book your gloss reset");
   await page.locator('input[value="Goes directly to the shop"]').fill("Straight to the team");
   await page.getByRole("combobox").nth(0).click();
   await page.getByRole("option", { name: "Sky" }).click();
@@ -313,6 +314,8 @@ test("booking builder preview updates and saves business-level settings", async 
   await page.getByRole("option", { name: "Outline" }).click();
   await page.getByRole("tab", { name: /Content/i }).click();
   await page.locator('input[value="Add timing, questions, or anything the shop should know."]').fill("Add timing or service details the shop should know.");
+  await page.getByRole("tab", { name: /Convert/i }).click();
+  await page.getByPlaceholder("Only 3 spots left this week").fill("Only 2 opening spots this week");
 
   await expect(page.getByText("Book your gloss reset")).toBeVisible();
   await expect(page.getByTitle("Booking builder preview")).toBeVisible();
@@ -325,6 +328,7 @@ test("booking builder preview updates and saves business-level settings", async 
     bookingPageTitle: "Book your gloss reset",
     bookingTrustBulletPrimary: "Straight to the team",
     bookingNotesPrompt: "Add timing or service details the shop should know.",
+    bookingUrgencyText: "Only 2 opening spots this week",
     bookingBrandPrimaryColorToken: "sky",
     bookingBrandButtonStyleToken: "outline",
     bookingRequestUrl: expect.stringContaining(`/book/${BUSINESS_ID}`),
@@ -339,6 +343,6 @@ test("booking builder stays permission-gated without settings.write", async ({ p
   await page.goto("/app/booking");
 
   await expect(page.getByText("Flow editor")).toBeVisible();
-  await expect(page.getByPlaceholder("Tell us what you need")).toBeDisabled();
+  await expect(page.getByPlaceholder("Spark Studio")).toBeDisabled();
   await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
 });

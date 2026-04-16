@@ -23,9 +23,11 @@ import {
   CheckCircle2,
   Clock3,
   Loader2,
+  Star,
   ShieldCheck,
   Sparkles,
   UserRound,
+  Users,
 } from "lucide-react";
 
 type BookingAddon = {
@@ -68,6 +70,7 @@ type BookingConfig = {
   timezone: string;
   title: string;
   subtitle: string;
+  urgencyText: string | null;
   confirmationMessage: string | null;
   branding: BookingBrandingTokens;
   trustPoints: string[];
@@ -1370,11 +1373,11 @@ export default function PublicBookingPage() {
   }
 
   const selectedServiceSummary = selectedService ? (
-    <div className="rounded-[1.45rem] border border-[color:var(--booking-primary-soft-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.995),var(--booking-primary-soft))] p-5 shadow-[0_14px_30px_rgba(15,23,42,0.05)] sm:p-6">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-4">
+    <div className="rounded-[18px] border border-[var(--b)] bg-[linear-gradient(180deg,rgba(255,255,255,0.995),var(--booking-primary-soft))] p-4 shadow-[0_12px_28px_rgba(15,23,42,0.045)] sm:p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="rounded-full border border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] text-[color:var(--booking-primary-ink)]">
+            <Badge variant="secondary" className="rounded-full border border-[color:var(--booking-primary-soft-border)] bg-white/90 text-[color:var(--booking-primary-ink)] shadow-sm">
               {effectiveFlow === "self_book" ? "Book instantly" : "Request review"}
             </Badge>
             <Badge variant="outline" className="rounded-full border-slate-200 bg-white/90">
@@ -1387,8 +1390,8 @@ export default function PublicBookingPage() {
             ) : null}
           </div>
           <div className="space-y-1.5">
-            <h2 className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">{selectedService.name}</h2>
-            <p className="max-w-2xl text-sm leading-6 text-slate-600">{selectedService.description || nextStepMessage}</p>
+            <h2 className="text-[1.35rem] font-semibold tracking-[-0.04em] text-slate-950">{selectedService.name}</h2>
+            <p className="max-w-2xl text-[13px] leading-6 text-slate-600">{selectedService.description || nextStepMessage}</p>
             {selectedService.leadTimeHours > 0 || totalBufferMinutes > 0 ? (
               <div className="flex flex-wrap gap-2 pt-1">
                 {selectedService.leadTimeHours > 0 ? (
@@ -1406,18 +1409,18 @@ export default function PublicBookingPage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             {canShowSelectedPrice ? (
-              <div className="rounded-[1.05rem] border border-slate-200/85 bg-white/88 px-4 py-3">
+              <div className="rounded-[14px] border border-slate-200/85 bg-white/92 px-4 py-3">
                 <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Starting at</p>
                 <p className="mt-1 text-base font-semibold text-slate-950">{formatPrice(subtotal)}</p>
               </div>
             ) : null}
             {canShowSelectedDuration ? (
-              <div className="rounded-[1.05rem] border border-slate-200/85 bg-white/88 px-4 py-3">
+              <div className="rounded-[14px] border border-slate-200/85 bg-white/92 px-4 py-3">
                 <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Estimated time</p>
                 <p className="mt-1 text-base font-semibold text-slate-950">{formatDuration(totalDuration)}</p>
               </div>
             ) : null}
-            <div className="rounded-[1.05rem] border border-slate-200/85 bg-white/88 px-4 py-3">
+            <div className="rounded-[14px] border border-slate-200/85 bg-white/92 px-4 py-3">
               <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Next step</p>
               <p className="mt-1 text-sm leading-6 text-slate-700">{summaryPromise}</p>
             </div>
@@ -1475,11 +1478,11 @@ export default function PublicBookingPage() {
 
     if (activeStep.key === "service") {
       return (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {categoryOptions.length > 1 ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-slate-950">Browse services</p>
+                <p className="text-sm font-semibold text-slate-950">Choose a service</p>
                 <Badge variant="outline">{visibleServices.length} available</Badge>
               </div>
               <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
@@ -1773,6 +1776,8 @@ export default function PublicBookingPage() {
           : { background: "#FFFDF8", borderBottom: "1px solid var(--b)" };
   const heroTextColor = "var(--t)";
   const heroMutedColor = "var(--m)";
+  const displayPortalName = config?.title?.trim() || config?.businessName || "Strata";
+  const displayPortalTagline = config?.subtitle?.trim() || "Professional automotive services";
 
   return (
     <div
@@ -1800,32 +1805,33 @@ export default function PublicBookingPage() {
     >
       <style>{`
         .bp-hero {
-          padding: 18px 16px 14px;
+          padding: 28px 20px 16px;
           text-align: center;
         }
         .bp-logo {
-          width: 44px; height: 44px; border-radius: 11px;
+          width: 54px; height: 54px; border-radius: 14px;
           display: flex; align-items: center; justify-content: center;
-          font-size: 18px; font-weight: 700; color: #fff;
-          margin: 0 auto 9px;
+          font-size: 22px; font-weight: 700; color: #fff;
+          margin: 0 auto 10px;
         }
         .bp-logo-img {
-          width: 44px; height: 44px; border-radius: 11px;
+          width: 54px; height: 54px; border-radius: 14px;
           object-fit: contain; border: 1px solid var(--b);
-          display: block; margin: 0 auto 9px;
+          display: block; margin: 0 auto 10px;
         }
         .bp-biz {
-          font-size: 15px; font-weight: 700; letter-spacing: -.025em;
+          font-size: 30px; font-weight: 700; letter-spacing: -.04em;
+          line-height: 1.1;
         }
         .bp-tag {
-          font-size: 11px; margin-top: 2px;
+          font-size: 13px; margin-top: 6px;
         }
         .bp-trust {
           display: flex; justify-content: center;
-          gap: 12px; margin-top: 8px; flex-wrap: wrap;
+          gap: 16px; margin-top: 14px; flex-wrap: wrap;
         }
         .bp-ti {
-          font-size: 10.5px; font-weight: 600;
+          font-size: 12px; font-weight: 600;
           display: flex; align-items: center; gap: 3px;
         }
         .bp-prog  { padding: 10px 16px 0; }
@@ -1842,6 +1848,19 @@ export default function PublicBookingPage() {
         .bp-step-label {
           text-align: center; font-size: 9.5px;
           color: var(--l); padding: 2px 0 4px; font-weight: 500;
+        }
+        .bp-save {
+          width: max-content; max-width: calc(100% - 32px);
+          margin: 0 auto 12px;
+          border: 1px solid var(--cb);
+          background: var(--cs);
+          color: var(--ci);
+          border-radius: 999px;
+          padding: 6px 12px;
+          font-size: 10px; font-weight: 700;
+          display: flex; align-items: center; justify-content: center;
+          gap: 6px;
+          text-align: center;
         }
         .svc-card {
           border: 1.5px solid var(--b); border-radius: 12px;
@@ -1880,7 +1899,7 @@ export default function PublicBookingPage() {
           backdrop-filter: blur(14px);
           -webkit-backdrop-filter: blur(14px);
           border-top: 1px solid var(--b);
-          padding: 9px 14px;
+          padding: 10px 14px;
           display: flex; align-items: center;
           justify-content: space-between; gap: 8px;
           z-index: 20;
@@ -1914,6 +1933,8 @@ export default function PublicBookingPage() {
         .bf-next:disabled { opacity: .45; cursor: not-allowed; }
         .bf-next:active:not(:disabled),
         .bf-back:active { transform: scale(.96); }
+        .bf-next svg,
+        .bf-back svg { width: 13px; height: 13px; }
         .portal { padding-bottom: 40px; }
         .portal-hero {
           padding: 22px 16px 18px; text-align: center;
@@ -2021,10 +2042,10 @@ export default function PublicBookingPage() {
         }
         .pa-p:active, .pa-s:active { transform: scale(.98); }
       `}</style>
-      <div className="mx-auto max-w-7xl px-4 pb-32 pt-5 sm:px-6 lg:px-8 lg:pt-8">
+      <div className="mx-auto max-w-[760px] px-4 pb-32 pt-5 sm:px-6 lg:px-8 lg:pt-8">
         <div className="space-y-4">
           {!loading && !pageError ? (
-            <div className="mx-auto max-w-4xl space-y-4">
+            <div className="mx-auto max-w-[720px] space-y-4">
               <div className="overflow-hidden rounded-[24px] border border-[var(--b)] bg-[var(--w)] shadow-[0_22px_54px_rgba(15,23,42,0.07)]">
                 <div className="bp-hero" style={heroStyle}>
                   {config?.branding.logoUrl ? (
@@ -2036,20 +2057,20 @@ export default function PublicBookingPage() {
                   )}
 
                   <div className="bp-biz" style={{ color: heroTextColor }}>
-                    {config?.title || config?.businessName}
+                    {displayPortalName}
                   </div>
-                  {config?.subtitle ? (
+                  {displayPortalTagline ? (
                     <div className="bp-tag" style={{ color: heroMutedColor }}>
-                      {config.subtitle}
+                      {displayPortalTagline}
                     </div>
                   ) : null}
 
                   <div className="bp-trust">
                     {heroTrustPoints.map((point, i) => (
                       <span key={i} className="bp-ti" style={{ color: heroTextColor }}>
-                        {i === 0 && <ShieldCheck size={12} />}
-                        {i === 1 && <Clock3 size={12} />}
-                        {i === 2 && <Sparkles size={12} />}
+                        {i === 0 && <Star size={12} fill="currentColor" strokeWidth={1.8} className="text-amber-500" />}
+                        {i === 1 && <Users size={12} className="text-slate-400" />}
+                        {i === 2 && <ShieldCheck size={12} className="text-slate-400" />}
                         {point}
                       </span>
                     ))}
@@ -2088,11 +2109,10 @@ export default function PublicBookingPage() {
                       ))}
                     </div>
 
-                    <div className="bp-step-label">
-                      Step {currentStep + 1} of {steps.length} — {activeStep?.label}
-                    </div>
-                    <div className="pb-3 text-center text-[10px] font-medium text-[var(--l)]">
-                      {saveStateLabel}
+                    <div className="bp-step-label">Step {currentStep + 1} of {steps.length} - {activeStep?.label}</div>
+                    <div className="bp-save">
+                      <Sparkles size={11} />
+                      <span>{saveStateLabel}</span>
                     </div>
 
                     <div className="hidden">
@@ -2109,20 +2129,16 @@ export default function PublicBookingPage() {
 
               {config?.urgencyEnabled && !result ? (
                 <div className="rounded-[12px] border border-[var(--cb)] bg-[var(--cs)] px-4 py-3 text-[11px] font-semibold text-[var(--ci)] shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-                  <div className="flex items-start gap-3">
-                    <Clock3 className="mt-0.5 h-4 w-4 shrink-0" />
-                    <p>
-                      {effectiveFlow === "self_book"
-                        ? "Popular times can go quickly. Your draft stays saved while you move through the booking."
-                        : "High-intent requests move faster when the service, vehicle, and timing details are filled in."}
-                    </p>
+                  <div className="flex items-center justify-center gap-2 text-center">
+                    <Sparkles size={12} />
+                    <p>{config.urgencyText || "Only 3 spots left this week"}</p>
                   </div>
                 </div>
               ) : null}
             </div>
           ) : null}
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="grid gap-6">
             <div className="space-y-6">
               {loading ? <Card className="overflow-hidden border-slate-200/80 bg-white/96 shadow-[0_22px_54px_rgba(15,23,42,0.07)]"><CardContent className="flex items-center gap-3 p-6 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" />Loading booking page...</CardContent></Card> : null}
               {!loading && pageError && !config ? <Card className="border-rose-200/90 bg-rose-50/95 shadow-sm"><CardContent className="space-y-3 p-6 text-sm text-rose-900"><p className="font-semibold tracking-[-0.01em] text-rose-950">This booking page is unavailable right now.</p><p>{pageError}</p></CardContent></Card> : null}
@@ -2135,9 +2151,7 @@ export default function PublicBookingPage() {
                         <polyline points="20,6 9,17 4,12" />
                       </svg>
                     </div>
-                    <div className="portal-pill">
-                      {result.mode === "self_book" ? "✓ Confirmed" : "✓ Sent"}
-                    </div>
+                    <div className="portal-pill">{result.mode === "self_book" ? "Confirmed" : "Sent"}</div>
                     <div className="portal-h">
                       {result.mode === "self_book" ? "You're booked!" : "Request sent!"}
                     </div>
@@ -2220,7 +2234,7 @@ export default function PublicBookingPage() {
                           <div className="next-num" style={{ background: "var(--cs)", color: "var(--c)" }}>1</div>
                           <div className="next-text">
                             <strong>Confirmation email sent</strong>
-                            <span>Check your inbox — it has your details and a portal link.</span>
+                            <span>Check your inbox. It has your details and a portal link.</span>
                           </div>
                         </div>
                         <div className="next-item">
@@ -2268,12 +2282,12 @@ export default function PublicBookingPage() {
                   <div className="portal-actions">
                     {result.confirmationUrl ? (
                       <a href={result.confirmationUrl} target="_blank" rel="noreferrer" className="pa-p" style={{ background: "var(--c)" }}>
-                        Open booking portal →
+                        Open booking portal
                       </a>
                     ) : null}
                     {result.portalUrl && !result.confirmationUrl ? (
                       <a href={result.portalUrl} target="_blank" rel="noreferrer" className="pa-p" style={{ background: "var(--c)" }}>
-                        Open customer portal →
+                        Open customer portal
                       </a>
                     ) : null}
                     <button className="pa-s" type="button" onClick={() => {}}>
@@ -2284,28 +2298,37 @@ export default function PublicBookingPage() {
                       className="pa-g"
                       onClick={() => setResult(null)}
                     >
-                      ↩ Book another service
+                      Book another service
                     </button>
                   </div>
                 </div>
               ) : null}
               {!loading && !pageError && !result ? (
                 <form id="public-booking-form" onSubmit={handleSubmit} className="space-y-6">
-                  <Card className="overflow-hidden border-slate-200/80 bg-white/97 shadow-[0_26px_64px_rgba(15,23,42,0.07),0_4px_14px_rgba(15,23,42,0.035)]">
-                    <div className="h-1 w-full bg-[linear-gradient(90deg,var(--booking-primary),var(--booking-accent-ink),var(--booking-primary-strong))]" />
-                    <CardHeader className="space-y-5 border-b border-slate-100/90 pb-5">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                  {currentStep > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => moveToStep(currentStep - 1)}
+                      className="inline-flex items-center gap-2 text-[13px] font-medium text-slate-400 transition-colors hover:text-slate-600"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      <span>{steps[currentStep - 1]?.title ?? "Back"}</span>
+                    </button>
+                  ) : null}
+                  <Card className="overflow-hidden border-slate-200/70 bg-white/96 shadow-[0_18px_46px_rgba(15,23,42,0.055)]">
+                    <CardHeader className="space-y-4 border-b border-slate-100/90 pb-4">
+                      <div className="flex flex-col gap-3">
                         <div className="space-y-1">
-                          <CardTitle className="text-2xl tracking-[-0.035em] sm:text-[2rem]">{activeStep?.title}</CardTitle>
-                          <CardDescription className="max-w-2xl text-sm leading-6 text-slate-600">{activeStep?.description}</CardDescription>
-                        </div>
-                        <div className="rounded-full border border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-[color:var(--booking-primary-ink)]">
-                          Step {Math.min(currentStep + 1, steps.length)} of {steps.length}
+                          <div className="mb-2 inline-flex rounded-full border border-[color:var(--cb)] bg-[var(--cs)] px-2.5 py-1 text-[10px] font-semibold text-[var(--ci)]">
+                            Step {Math.min(currentStep + 1, steps.length)} of {steps.length}
+                          </div>
+                          <CardTitle className="text-[1.95rem] tracking-[-0.045em] sm:text-[2.15rem]">{activeStep?.title}</CardTitle>
+                          <CardDescription className="max-w-2xl text-[14px] leading-6 text-slate-500">{activeStep?.description}</CardDescription>
                         </div>
                       </div>
-                      {selectedServiceSummary}
+                      {currentStep > 0 ? selectedServiceSummary : null}
                     </CardHeader>
-                    <CardContent className="space-y-6 px-5 pb-5 pt-6 sm:px-6">
+                    <CardContent className="space-y-6 px-5 pb-6 pt-5 sm:px-6">
                       <div className="transition-opacity duration-200 motion-reduce:transition-none">{renderStepBody()}</div>
                       {stepError ? <div className="rounded-[1.05rem] border border-amber-200/90 bg-amber-50/95 px-4 py-3 text-sm leading-6 text-amber-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">{stepError}</div> : null}
                       {submitError ? <div className="rounded-[1.05rem] border border-rose-200/90 bg-rose-50/95 px-4 py-3 text-sm leading-6 text-rose-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">{submitError}</div> : null}
@@ -2315,7 +2338,7 @@ export default function PublicBookingPage() {
               ) : null}
             </div>
             <div className="space-y-6">
-            <div className="hidden lg:block">
+            <div className="hidden">
               <Card className="sticky top-8 overflow-hidden border-slate-200/75 bg-[var(--booking-summary)] shadow-[0_20px_44px_rgba(15,23,42,0.07)]">
                 <div className="h-1 w-full bg-[linear-gradient(90deg,var(--booking-primary-strong),var(--booking-primary))]" />
                 <CardHeader>
@@ -2376,8 +2399,8 @@ export default function PublicBookingPage() {
                 className="bf-back"
                 onClick={() => moveToStep(currentStep - 1)}
               >
-                <ArrowLeft className="hidden" />
-                ← Back
+                <ArrowLeft />
+                <span>Back</span>
               </button>
             ) : null}
             {currentStep < steps.length - 1 ? (
@@ -2388,8 +2411,8 @@ export default function PublicBookingPage() {
                 style={{ background: "var(--c)" }}
                 onClick={handleNext}
               >
-                <ArrowRight className="hidden" />
-                Continue →
+                <span>Continue</span>
+                <ArrowRight />
               </button>
             ) : (
               <button

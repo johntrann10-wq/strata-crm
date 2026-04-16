@@ -384,15 +384,13 @@ test("service query param carries service and category context into the booking 
   await page.goto("/book/biz-book?service=svc-1&category=cat-1&source=services-page&step=service");
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What service do you need?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Detailing" })).toBeVisible();
-  await expect(page.locator("form").getByText("Full Detail").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Full Detail" })).toBeVisible();
+  await expect(page.locator(".svc-card.sel").getByText("Full Detail")).toBeVisible();
   await expect(page.getByText(/instant|book instantly/i).first()).toBeVisible();
-  await expect(page.getByText("$50.00 deposit").first()).toBeVisible();
   await expect(page.getByText("$275.00").first()).toBeVisible();
   await expect(page.getByText("3h").first()).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Full Detail" })).toBeVisible();
+  await expect(page.locator(".svc-card.sel").getByText("Full Detail")).toBeVisible();
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What service do you need?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Detailing" })).toBeVisible();
 });

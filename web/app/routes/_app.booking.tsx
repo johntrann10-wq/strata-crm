@@ -55,6 +55,7 @@ type BusinessBookingBuilderRecord = {
   bookingShowDurations?: boolean | null;
   notificationAppointmentConfirmationEmailEnabled?: boolean | null;
   bookingUrgencyEnabled?: boolean | null;
+  bookingUrgencyText?: string | null;
   bookingSlotIntervalMinutes?: number | null;
   bookingBufferMinutes?: number | null;
   bookingCapacityPerSlot?: number | null;
@@ -83,6 +84,7 @@ type BookingBuilderFormState = {
   bookingShowDurations: boolean;
   notificationAppointmentConfirmationEmailEnabled: boolean;
   bookingUrgencyEnabled: boolean;
+  bookingUrgencyText: string;
   bookingSlotIntervalMinutes: 15 | 30 | 45 | 60;
   bookingBufferMinutes: string;
   bookingCapacityPerSlot: string;
@@ -111,6 +113,7 @@ const defaultForm: BookingBuilderFormState = {
   bookingShowDurations: true,
   notificationAppointmentConfirmationEmailEnabled: true,
   bookingUrgencyEnabled: false,
+  bookingUrgencyText: "Only 3 spots left this week",
   bookingSlotIntervalMinutes: 15,
   bookingBufferMinutes: "",
   bookingCapacityPerSlot: "",
@@ -143,6 +146,7 @@ function toForm(record?: BusinessBookingBuilderRecord | null): BookingBuilderFor
     notificationAppointmentConfirmationEmailEnabled:
       record?.notificationAppointmentConfirmationEmailEnabled !== false,
     bookingUrgencyEnabled: record?.bookingUrgencyEnabled === true,
+    bookingUrgencyText: record?.bookingUrgencyText ?? defaultForm.bookingUrgencyText,
     bookingSlotIntervalMinutes:
       record?.bookingSlotIntervalMinutes === 30 ||
       record?.bookingSlotIntervalMinutes === 45 ||
@@ -278,6 +282,7 @@ export default function BookingBuilderPage() {
       bookingShowDurations: form.bookingShowDurations,
       notificationAppointmentConfirmationEmailEnabled: form.notificationAppointmentConfirmationEmailEnabled,
       bookingUrgencyEnabled: form.bookingUrgencyEnabled,
+      bookingUrgencyText: form.bookingUrgencyText.trim() || null,
       bookingSlotIntervalMinutes: form.bookingSlotIntervalMinutes,
       bookingBufferMinutes: form.bookingBufferMinutes.trim() ? Number(form.bookingBufferMinutes) : null,
       bookingCapacityPerSlot: form.bookingCapacityPerSlot.trim() ? Number(form.bookingCapacityPerSlot) : null,
@@ -362,16 +367,16 @@ export default function BookingBuilderPage() {
               </TabsList>
 
               <TabsContent value="branding" className="space-y-3">
-                <Field label="Page title"><Input value={form.bookingPageTitle} onChange={(e) => updateField("bookingPageTitle", e.target.value)} placeholder="Tell us what you need" disabled={!canEdit} /></Field>
-                <Field label="Page subtitle"><Input value={form.bookingPageSubtitle} onChange={(e) => updateField("bookingPageSubtitle", e.target.value)} placeholder="Share a few details and the shop can follow up." disabled={!canEdit} /></Field>
+                <Field label="Portal name"><Input value={form.bookingPageTitle} onChange={(e) => updateField("bookingPageTitle", e.target.value)} placeholder="Spark Studio" disabled={!canEdit} /></Field>
+                <Field label="Tagline"><Input value={form.bookingPageSubtitle} onChange={(e) => updateField("bookingPageSubtitle", e.target.value)} placeholder="Professional photography & video" disabled={!canEdit} /></Field>
                 <Field label="Logo URL"><Input value={form.bookingBrandLogoUrl} onChange={(e) => updateField("bookingBrandLogoUrl", e.target.value)} placeholder="https://..." disabled={!canEdit} /></Field>
                 <Field label="Primary color"><Select value={form.bookingBrandPrimaryColorToken} onValueChange={(next) => updateField("bookingBrandPrimaryColorToken", next as BookingBrandPrimaryColorToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandPrimaryColorOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
                 <Field label="Accent color"><Select value={form.bookingBrandAccentColorToken} onValueChange={(next) => updateField("bookingBrandAccentColorToken", next as BookingBrandAccentColorToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandAccentColorOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
                 <Field label="Background tone"><Select value={form.bookingBrandBackgroundToneToken} onValueChange={(next) => updateField("bookingBrandBackgroundToneToken", next as BookingBrandBackgroundToneToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandBackgroundToneOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
                 <Field label="Button style"><Select value={form.bookingBrandButtonStyleToken} onValueChange={(next) => updateField("bookingBrandButtonStyleToken", next as BookingBrandButtonStyleToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandButtonStyleOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
-                <Field label="Trust bullet 1"><Input value={form.bookingTrustBulletPrimary} onChange={(e) => updateField("bookingTrustBulletPrimary", e.target.value)} disabled={!canEdit} /></Field>
-                <Field label="Trust bullet 2"><Input value={form.bookingTrustBulletSecondary} onChange={(e) => updateField("bookingTrustBulletSecondary", e.target.value)} disabled={!canEdit} /></Field>
-                <Field label="Trust bullet 3"><Input value={form.bookingTrustBulletTertiary} onChange={(e) => updateField("bookingTrustBulletTertiary", e.target.value)} disabled={!canEdit} /></Field>
+                <Field label="Meta line 1"><Input value={form.bookingTrustBulletPrimary} onChange={(e) => updateField("bookingTrustBulletPrimary", e.target.value)} placeholder="5.0" disabled={!canEdit} /></Field>
+                <Field label="Meta line 2"><Input value={form.bookingTrustBulletSecondary} onChange={(e) => updateField("bookingTrustBulletSecondary", e.target.value)} placeholder="200+ clients" disabled={!canEdit} /></Field>
+                <Field label="Meta line 3"><Input value={form.bookingTrustBulletTertiary} onChange={(e) => updateField("bookingTrustBulletTertiary", e.target.value)} placeholder="Verified" disabled={!canEdit} /></Field>
               </TabsContent>
 
               <TabsContent value="content" className="space-y-3">
@@ -398,6 +403,7 @@ export default function BookingBuilderPage() {
 
               <TabsContent value="convert" className="space-y-3">
                 <ToggleRow id="urgency-enabled" label="Urgency cues" description="Enable urgency messaging on the public booking page." checked={form.bookingUrgencyEnabled} onCheckedChange={(next) => updateField("bookingUrgencyEnabled", next)} disabled={!canEdit} />
+                <Field label="Urgency message"><Input value={form.bookingUrgencyText} onChange={(e) => updateField("bookingUrgencyText", e.target.value)} placeholder="Only 3 spots left this week" disabled={!canEdit} /></Field>
                 <Field label="Slot interval"><Select value={String(form.bookingSlotIntervalMinutes)} onValueChange={(next) => updateField("bookingSlotIntervalMinutes", Number(next) as 15 | 30 | 45 | 60)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="15">15 minutes</SelectItem><SelectItem value="30">30 minutes</SelectItem><SelectItem value="45">45 minutes</SelectItem><SelectItem value="60">60 minutes</SelectItem></SelectContent></Select></Field>
                 <Field label="Buffer minutes"><Input inputMode="numeric" value={form.bookingBufferMinutes} onChange={(e) => updateField("bookingBufferMinutes", e.target.value)} placeholder="15" disabled={!canEdit} /></Field>
                 <Field label="Capacity per slot"><Input inputMode="numeric" value={form.bookingCapacityPerSlot} onChange={(e) => updateField("bookingCapacityPerSlot", e.target.value)} placeholder="1" disabled={!canEdit} /></Field>
