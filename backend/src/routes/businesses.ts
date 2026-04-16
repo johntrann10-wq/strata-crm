@@ -40,13 +40,17 @@ import { sendAppointmentConfirmation, sendLeadAutoResponse, sendLeadFollowUpAler
 import { ensureBusinessTrialSubscription } from "../lib/billingLifecycle.js";
 import { hasFullBillingAccess } from "../lib/billingAccess.js";
 import {
+  addDaysInTimeZone,
   buildSlotsForDate,
+  formatDateKeyInTimeZone,
   normalizeBookingDayIndexes,
   normalizeBookingServiceMode,
+  parseDateKeyInTimeZone,
   parseOperatingHours,
   parseTimeToMinutes,
   resolveCustomerBookingMode,
   resolveBookingFlow,
+  startOfDayInTimeZone,
   toBookingBufferMinutes,
   toBookingDurationMinutes,
   toBookingLeadTimeHours,
@@ -663,37 +667,30 @@ function normalizeLeadSourceValue(source: string | null | undefined): Parameters
   return "website";
 }
 
-function parsePublicBookingDate(value: string): Date {
-  const [yearRaw, monthRaw, dayRaw] = value.split("-");
-  const year = Number(yearRaw);
-  const month = Number(monthRaw);
-  const day = Number(dayRaw);
-  const parsed = new Date(year, month - 1, day);
-  if (
-    Number.isNaN(parsed.getTime()) ||
-    parsed.getFullYear() !== year ||
-    parsed.getMonth() !== month - 1 ||
-    parsed.getDate() !== day
-  ) {
+function parsePublicBookingDate(value: string, timezone: string): Date {
+  try {
+    return parseDateKeyInTimeZone(value, timezone);
+  } catch {
     throw new BadRequestError("Select a valid booking date.");
   }
-  parsed.setHours(0, 0, 0, 0);
-  return parsed;
 }
 
-function startOfLocalDay(date: Date): Date {
+function startOfLocalDay(date: Date, timezone?: string): Date {
+  if (timezone) return startOfDayInTimeZone(date, timezone);
   const next = new Date(date);
   next.setHours(0, 0, 0, 0);
   return next;
 }
 
-function addDays(date: Date, days: number): Date {
+function addDays(date: Date, days: number, timezone?: string): Date {
+  if (timezone) return addDaysInTimeZone(date, timezone, days);
   const next = new Date(date);
   next.setDate(next.getDate() + days);
   return next;
 }
 
-function toDateKey(date: Date): string {
+function toDateKey(date: Date, timezone?: string): string {
+  if (timezone) return formatDateKeyInTimeZone(date, timezone);
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -1805,6 +1802,7 @@ businessesRouter.post(
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
+    const bookingTimezone = business.timezone ?? "America/Los_Angeles";
 
     const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
     const selection = resolveBookingServicesSelection({
@@ -2170,6 +2168,7 @@ businessesRouter.get(
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
+    const bookingTimezone = business.timezone ?? "America/Los_Angeles";
 
     const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
     const addonServiceIds = Array.from(
@@ -2193,19 +2192,19 @@ businessesRouter.get(
       requestedMode: parsedQuery.data.serviceMode,
     });
 
-    const date = parsePublicBookingDate(parsedQuery.data.date);
-    const today = startOfLocalDay(new Date());
-    const lastAllowedDate = addDays(today, selection.bookingWindowDays - 1);
+    const date = parsePublicBookingDate(parsedQuery.data.date, bookingTimezone);
+    const today = startOfLocalDay(new Date(), bookingTimezone);
+    const lastAllowedDate = addDays(today, selection.bookingWindowDays - 1, bookingTimezone);
     if (date.getTime() < today.getTime() || date.getTime() > lastAllowedDate.getTime()) {
       throw new BadRequestError("Choose a booking date inside the available window.");
     }
     const bookingSchedule = resolveBookingSchedule(business);
-    if (bookingSchedule.blackoutDates.has(toDateKey(date))) {
+    if (bookingSchedule.blackoutDates.has(toDateKey(date, bookingTimezone))) {
       res.json({
         effectiveFlow: selection.effectiveFlow,
         serviceMode: requestedServiceMode,
-        timezone: business.timezone ?? "America/Los_Angeles",
-        date: toDateKey(date),
+        timezone: bookingTimezone,
+        date: toDateKey(date, bookingTimezone),
         slots: [],
         durationMinutes: selection.durationMinutes,
         subtotal: selection.subtotal,
@@ -2218,8 +2217,8 @@ businessesRouter.get(
       res.json({
         effectiveFlow: selection.effectiveFlow,
         serviceMode: requestedServiceMode,
-        timezone: business.timezone ?? "America/Los_Angeles",
-        date: toDateKey(date),
+        timezone: bookingTimezone,
+        date: toDateKey(date, bookingTimezone),
         slots: [],
       });
       return;
@@ -2233,8 +2232,8 @@ businessesRouter.get(
       }
     }
 
-    const dayStart = startOfLocalDay(date);
-    const dayEnd = addDays(dayStart, 1);
+    const dayStart = startOfLocalDay(date, bookingTimezone);
+    const dayEnd = addDays(dayStart, 1, bookingTimezone);
     const existingRows = await db
       .select({
         startTime: appointments.startTime,
@@ -2262,6 +2261,7 @@ businessesRouter.get(
       availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
       openTime: selection.openTime ?? bookingSchedule.openTime,
       closeTime: selection.closeTime ?? bookingSchedule.closeTime,
+      timezone: bookingTimezone,
       now: new Date(),
     }).filter((slotStart) =>
       isSlotAvailable({
@@ -2274,15 +2274,15 @@ businessesRouter.get(
       })
     );
 
-    res.json({
-      effectiveFlow: selection.effectiveFlow,
-      serviceMode: requestedServiceMode,
-      timezone: business.timezone ?? "America/Los_Angeles",
-      date: toDateKey(date),
-      slots: slots.map((slot) => ({
-        startTime: slot.toISOString(),
-        label: formatBookingTime(slot, business.timezone),
-      })),
+      res.json({
+        effectiveFlow: selection.effectiveFlow,
+        serviceMode: requestedServiceMode,
+        timezone: bookingTimezone,
+        date: toDateKey(date, bookingTimezone),
+        slots: slots.map((slot) => ({
+          startTime: slot.toISOString(),
+          label: formatBookingTime(slot, bookingTimezone),
+        })),
       durationMinutes: selection.durationMinutes,
       subtotal: selection.subtotal,
       depositAmount: selection.depositAmount,
@@ -2307,6 +2307,7 @@ businessesRouter.post(
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
+    const bookingTimezone = business.timezone ?? "America/Los_Angeles";
 
     const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
     const selection = resolveBookingServicesSelection({
@@ -2547,19 +2548,19 @@ businessesRouter.post(
       throw new BadRequestError("Choose a valid start time.");
     }
 
-    const selectedDate = startOfLocalDay(startTime);
-    const today = startOfLocalDay(new Date());
-    const lastAllowedDate = addDays(today, selection.bookingWindowDays - 1);
+    const selectedDate = startOfLocalDay(startTime, bookingTimezone);
+    const today = startOfLocalDay(new Date(), bookingTimezone);
+    const lastAllowedDate = addDays(today, selection.bookingWindowDays - 1, bookingTimezone);
     if (selectedDate.getTime() < today.getTime() || selectedDate.getTime() > lastAllowedDate.getTime()) {
       throw new BadRequestError("Choose a booking date inside the available window.");
     }
     const bookingSchedule = resolveBookingSchedule(business);
-    if (bookingSchedule.blackoutDates.has(toDateKey(selectedDate))) {
+    if (bookingSchedule.blackoutDates.has(toDateKey(selectedDate, bookingTimezone))) {
       throw new BadRequestError("This date is unavailable for online booking.");
     }
 
-    const dayStart = startOfLocalDay(startTime);
-    const dayEnd = addDays(dayStart, 1);
+    const dayStart = startOfLocalDay(startTime, bookingTimezone);
+    const dayEnd = addDays(dayStart, 1, bookingTimezone);
     const existingRows = await db
       .select({
         startTime: appointments.startTime,
@@ -2587,6 +2588,7 @@ businessesRouter.post(
       availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
       openTime: selection.openTime ?? bookingSchedule.openTime,
       closeTime: selection.closeTime ?? bookingSchedule.closeTime,
+      timezone: bookingTimezone,
       now: new Date(),
     }).filter((slotStart) =>
       isSlotAvailable({

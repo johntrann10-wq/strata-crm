@@ -89,6 +89,18 @@ describe("booking helpers", () => {
     expect(saturdaySlots).toHaveLength(0);
   });
 
+  it("builds slots in the requested business timezone instead of the server timezone", () => {
+    const slots = buildSlotsForDate({
+      date: new Date("2026-04-20T07:00:00.000Z"),
+      operatingHours: "Mon-Fri 09:00-19:00",
+      durationMinutes: 60,
+      timezone: "America/Los_Angeles",
+      now: new Date("2026-04-19T12:00:00.000Z"),
+    });
+
+    expect(slots[0]?.toISOString()).toBe("2026-04-20T16:00:00.000Z");
+  });
+
   it("parses valid time strings and rejects invalid ones", () => {
     expect(parseTimeToMinutes("09:30")).toBe(570);
     expect(parseTimeToMinutes("25:00")).toBeNull();
