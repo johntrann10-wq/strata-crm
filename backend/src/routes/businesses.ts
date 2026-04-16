@@ -226,7 +226,7 @@ const publicBookingSubmitSchema = z.object({
   serviceId: z.string().uuid("Select a valid service."),
   addonServiceIds: z.array(z.string().uuid()).optional(),
   draftResumeToken: z.string().trim().max(255).optional().or(z.literal("")),
-  locationId: z.string().uuid().optional(),
+  locationId: z.string().uuid().optional().or(z.literal("")),
   serviceMode: z.enum(["in_shop", "mobile"]).optional(),
   startTime: z.string().datetime().optional(),
   firstName: z.string().trim().min(1, "First name is required.").max(80),
@@ -2253,6 +2253,7 @@ businessesRouter.post(
     const campaign = cleanOptionalText(parsedBody.data.campaign);
     const customerNotes = cleanOptionalText(parsedBody.data.notes);
     const draftResumeToken = cleanOptionalText(parsedBody.data.draftResumeToken);
+    const locationId = cleanOptionalText(parsedBody.data.locationId);
     const serviceAddress = cleanOptionalText(parsedBody.data.serviceAddress);
     const serviceCity = cleanOptionalText(parsedBody.data.serviceCity);
     const serviceState = cleanOptionalText(parsedBody.data.serviceState);
@@ -2267,9 +2268,9 @@ businessesRouter.post(
       throw new BadRequestError("Add the service address for mobile or on-site bookings.");
     }
 
-    if (requestedServiceMode === "in_shop" && parsedBody.data.locationId) {
+    if (requestedServiceMode === "in_shop" && locationId) {
       const activeLocations = await listPublicBookingLocations(business.id);
-      const matchesLocation = activeLocations.some((location) => location.id === parsedBody.data.locationId);
+      const matchesLocation = activeLocations.some((location) => location.id === locationId);
       if (!matchesLocation) {
         throw new BadRequestError("Select a valid booking location.");
       }
@@ -2309,7 +2310,7 @@ businessesRouter.post(
           internalNotes: [
             "Public booking request",
             `Service mode: ${requestedServiceMode}`,
-            requestedServiceMode === "in_shop" && parsedBody.data.locationId ? `Location: ${parsedBody.data.locationId}` : null,
+            requestedServiceMode === "in_shop" && locationId ? `Location: ${locationId}` : null,
             campaign ? `Campaign: ${campaign}` : null,
             cleanOptionalText(parsedBody.data.source) ? `Source detail: ${cleanOptionalText(parsedBody.data.source)}` : null,
           ]
@@ -2567,7 +2568,7 @@ businessesRouter.post(
         businessId: business.id,
         clientId: client.id,
         vehicleId: vehicle?.id ?? null,
-        locationId: requestedServiceMode === "in_shop" ? parsedBody.data.locationId ?? null : null,
+        locationId: requestedServiceMode === "in_shop" ? locationId ?? null : null,
         title: selection.title,
         startTime,
         endTime: appointmentEnd,
@@ -2635,13 +2636,13 @@ businessesRouter.post(
       action: "booking.public_booked",
       entityType: "appointment",
       entityId: createdAppointment.id,
-      metadata: {
-        source: normalizedSource,
-        campaign,
-        serviceSummary: selection.serviceSummary,
-        locationId: parsedBody.data.locationId ?? null,
-      },
-    });
+        metadata: {
+          source: normalizedSource,
+          campaign,
+          serviceSummary: selection.serviceSummary,
+          locationId: locationId ?? null,
+        },
+      });
 
     if (email && isEmailConfigured() && (business.notificationAppointmentConfirmationEmailEnabled ?? true)) {
       sendAppointmentConfirmation({

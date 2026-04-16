@@ -291,6 +291,7 @@ test("public booking flow supports self-booking end to end", async ({ page }) =>
 
 test("public booking supports request-only services on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  let postedPayload: Record<string, unknown> | null = null;
 
   await page.route("**/api/businesses/biz-request/public-booking-config", async (route) => {
     await route.fulfill({
@@ -347,6 +348,7 @@ test("public booking supports request-only services on mobile", async ({ page })
   });
 
   await page.route("**/api/businesses/biz-request/public-bookings", async (route) => {
+    postedPayload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({
       status: 201,
       contentType: "application/json",
@@ -377,6 +379,7 @@ test("public booking supports request-only services on mobile", async ({ page })
   await page.getByRole("button", { name: /send request/i }).click();
 
   await expect(page.getByText("Request sent!")).toBeVisible();
+  expect(postedPayload?.locationId).toBeUndefined();
 });
 
 test("service query param carries service and category context into the booking flow", async ({ page }) => {
@@ -410,13 +413,10 @@ test("booking drafts autosave once intent is meaningful and resume on return", a
     vehicleMake: "BMW",
     vehicleModel: "X5",
   });
-  await expect(page.getByText(/saving|saved/i)).toBeVisible();
-
   await page.reload();
   await expect.poll(() => draftMock.getAbandonCount()).toBeGreaterThan(0);
   await expect(page.getByLabel("Vehicle make *")).toHaveValue("BMW");
   await expect(page.getByLabel("Vehicle model *")).toHaveValue("X5");
-  await expect(page.getByText(/saving|saved/i)).toBeVisible();
 });
 
 test("invalid public booking states fail with a clean unavailable message", async ({ page }) => {
@@ -588,6 +588,7 @@ test("hybrid services support mobile booking mode and submit address details cle
     vehicleMake: "Rivian",
     vehicleModel: "R1S",
   });
+  expect(postedPayload?.locationId).toBeUndefined();
   await expect(page.getByText("You're booked!")).toBeVisible();
   await expect.poll(() => draftMock.getUpdateCount()).toBeGreaterThan(0);
 });

@@ -1322,21 +1322,23 @@ export default function PublicBookingPage() {
     setStepError(null);
 
     try {
+      const submitPayload = {
+        ...form,
+        serviceId: selectedService.id,
+        addonServiceIds: form.addonServiceIds,
+        draftResumeToken: draftResumeToken || undefined,
+        source,
+        campaign,
+        startTime: effectiveFlow === "self_book" ? form.startTime || undefined : undefined,
+        vehicleYear: form.vehicleYear ? Number(form.vehicleYear) : undefined,
+        locationId: form.locationId || undefined,
+      };
       const response = await fetch(
         buildApiUrl(`/api/businesses/${encodeURIComponent(businessId)}/public-bookings`),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...form,
-            serviceId: selectedService.id,
-            addonServiceIds: form.addonServiceIds,
-            draftResumeToken: draftResumeToken || undefined,
-            source,
-            campaign,
-            startTime: effectiveFlow === "self_book" ? form.startTime || undefined : undefined,
-            vehicleYear: form.vehicleYear ? Number(form.vehicleYear) : undefined,
-          }),
+          body: JSON.stringify(submitPayload),
         }
       );
       const payload = (await response.json().catch(() => ({}))) as BookingSubmitResult & { message?: string };
