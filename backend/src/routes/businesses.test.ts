@@ -117,4 +117,22 @@ describe("business route serialization", () => {
     expect(payload.services[0]).not.toHaveProperty("internalNotes");
     expect(payload.services[0].addons[0]).not.toHaveProperty("notes");
   });
+
+  it("treats booking as publicly available when bookable services exist", async () => {
+    const { hasBookablePublicServices } = await import("./businesses.js");
+
+    expect(
+      hasBookablePublicServices([
+        { active: true, isAddon: false, bookingEnabled: true },
+        { active: true, isAddon: true, bookingEnabled: true },
+      ])
+    ).toBe(true);
+
+    expect(
+      hasBookablePublicServices([
+        { active: true, isAddon: false, bookingEnabled: false },
+        { active: true, isAddon: true, bookingEnabled: true },
+      ])
+    ).toBe(false);
+  });
 });

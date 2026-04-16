@@ -746,6 +746,32 @@ async function loadPublicBookingBusiness(id: string) {
   return business;
 }
 
+export function hasBookablePublicServices(
+  services: Array<Pick<PublicBookingServiceRecord, "active" | "isAddon" | "bookingEnabled">>
+) {
+  return services.some((service) => service.active !== false && service.isAddon !== true && service.bookingEnabled === true);
+}
+
+async function loadAccessiblePublicBookingBusiness(id: string) {
+  const business = await loadPublicBookingBusiness(id);
+  if (!business) return null;
+  if (business.bookingEnabled === true) return business;
+
+  const { services: publicServices } = await listPublicBookingServices(business.id);
+  if (!hasBookablePublicServices(publicServices)) {
+    return business;
+  }
+
+  warnOnce("businesses:public-booking:inferred-enabled", "public booking inferred from service configuration despite business toggle drift", {
+    businessId: business.id,
+  });
+
+  return {
+    ...business,
+    bookingEnabled: true,
+  };
+}
+
 type PublicBookingServiceRecord = {
   id: string;
   name: string;
@@ -1661,7 +1687,7 @@ businessesRouter.get(
     const parsed = publicBookingDraftParamsSchema.safeParse(req.params);
     if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid draft link.");
 
-    const business = await loadPublicBookingBusiness(parsed.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
@@ -1690,7 +1716,7 @@ businessesRouter.post(
     const parsedBody = publicBookingDraftSaveSchema.safeParse(req.body ?? {});
     if (!parsedBody.success) throw new BadRequestError(parsedBody.error.issues[0]?.message ?? "Invalid booking draft.");
 
-    const business = await loadPublicBookingBusiness(parsedParams.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsedParams.data.id);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
@@ -1911,7 +1937,7 @@ businessesRouter.post(
     const parsed = publicBookingDraftParamsSchema.safeParse(req.params);
     if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid draft link.");
 
-    const business = await loadPublicBookingBusiness(parsed.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
@@ -1972,7 +1998,7 @@ businessesRouter.get(
     const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
     if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
 
-    const business = await loadPublicBookingBusiness(parsed.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
@@ -2047,7 +2073,7 @@ businessesRouter.get(
     const parsedQuery = publicBookingAvailabilityQuerySchema.safeParse(req.query ?? {});
     if (!parsedQuery.success) throw new BadRequestError(parsedQuery.error.issues[0]?.message ?? "Invalid booking availability request.");
 
-    const business = await loadPublicBookingBusiness(parsedParams.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsedParams.data.id);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
@@ -2183,7 +2209,7 @@ businessesRouter.post(
       return;
     }
 
-    const business = await loadPublicBookingBusiness(parsedParams.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsedParams.data.id);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
