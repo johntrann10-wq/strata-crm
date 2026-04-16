@@ -218,6 +218,28 @@ function ToggleRow({
   );
 }
 
+function getUnsupportedBookingBuilderKeys(message: string | undefined): string[] {
+  if (!message) return [];
+  const trimmed = message.trim();
+  const supportedKeys = ["bookingBufferMinutes", "bookingCapacityPerSlot"] as const;
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (Array.isArray(parsed)) {
+      const discovered = parsed.flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const keys = (item as { keys?: unknown }).keys;
+        return Array.isArray(keys) ? keys.filter((key): key is string => typeof key === "string") : [];
+      });
+      return supportedKeys.filter((key) => discovered.includes(key));
+    }
+  } catch {
+    // Fall through to string matching.
+  }
+
+  return supportedKeys.filter((key) => trimmed.includes(key));
+}
+
 export default function BookingBuilderPage() {
   const { businessId, permissions } = useOutletContext<AuthOutletContext>();
   const canRead = permissions.has("settings.read");
@@ -258,9 +280,6 @@ export default function BookingBuilderPage() {
 
   const saveChanges = async () => {
     if (!businessId || !canEdit) return;
-    const supportsBookingBufferMinutes = !!businessRecord && Object.prototype.hasOwnProperty.call(businessRecord, "bookingBufferMinutes");
-    const supportsBookingCapacityPerSlot =
-      !!businessRecord && Object.prototype.hasOwnProperty.call(businessRecord, "bookingCapacityPerSlot");
     const payload = {
       id: businessId,
       bookingEnabled: form.bookingEnabled,
@@ -288,14 +307,34 @@ export default function BookingBuilderPage() {
       bookingUrgencyText: form.bookingUrgencyText.trim() || null,
       bookingSlotIntervalMinutes: form.bookingSlotIntervalMinutes,
       bookingRequestUrl: bookingUrl || null,
-      ...((form.bookingBufferMinutes.trim() || supportsBookingBufferMinutes)
-        ? { bookingBufferMinutes: form.bookingBufferMinutes.trim() ? Number(form.bookingBufferMinutes) : null }
+      ...(form.bookingBufferMinutes.trim()
+        ? { bookingBufferMinutes: Number(form.bookingBufferMinutes) }
         : {}),
-      ...((form.bookingCapacityPerSlot.trim() || supportsBookingCapacityPerSlot)
-        ? { bookingCapacityPerSlot: form.bookingCapacityPerSlot.trim() ? Number(form.bookingCapacityPerSlot) : null }
+      ...(form.bookingCapacityPerSlot.trim()
+        ? { bookingCapacityPerSlot: Number(form.bookingCapacityPerSlot) }
         : {}),
     };
-    const result = await runUpdateBusiness(payload);
+    let result = await runUpdateBusiness(payload);
+    const unsupportedKeys = getUnsupportedBookingBuilderKeys(result.error?.message);
+    const droppedAdvancedFields =
+      unsupportedKeys.length > 0
+        ? unsupportedKeys.filter((key) => key in payload)
+        : [];
+
+    if (droppedAdvancedFields.length > 0) {
+      const retryPayload = { ...payload };
+      for (const key of droppedAdvancedFields) {
+        delete retryPayload[key];
+      }
+      result = await runUpdateBusiness(retryPayload);
+      if (!result.error) {
+        setPreviewNonce((current) => current + 1);
+        toast.success("Booking builder updated. Buffer and capacity settings will save after the backend finishes updating.");
+        void refetchBusiness();
+        return;
+      }
+    }
+
     if (result.error) {
       toast.error(result.error.message);
       return;
