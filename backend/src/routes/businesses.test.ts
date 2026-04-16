@@ -48,6 +48,10 @@ describe("business route serialization", () => {
         bookingShowDurations: true,
         bookingUrgencyEnabled: true,
         bookingUrgencyText: "Only 3 spots left this week",
+        bookingAvailableDays: "[1,2,3,4,5]",
+        bookingAvailableStartTime: "08:00",
+        bookingAvailableEndTime: "17:00",
+        operatingHours: "Mon-Fri 08:00-17:00",
       },
       locations: [{ id: "loc_123", name: "Main Shop", address: "123 Main St" }],
       services: [
@@ -68,6 +72,9 @@ describe("business route serialization", () => {
           featured: true,
           showPrice: true,
           showDuration: true,
+          availableDayIndexes: null,
+          openTime: null,
+          closeTime: null,
           addons: [
             {
               id: "addon_123",

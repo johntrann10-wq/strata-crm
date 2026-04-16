@@ -60,6 +60,9 @@ type BookingService = {
   featured: boolean;
   showPrice: boolean;
   showDuration: boolean;
+  availableDayIndexes: number[] | null;
+  openTime: string | null;
+  closeTime: string | null;
   addons: BookingAddon[];
 };
 
@@ -83,6 +86,11 @@ type BookingConfig = {
   showPrices: boolean;
   showDurations: boolean;
   urgencyEnabled: boolean;
+  availabilityDefaults: {
+    dayIndexes: number[];
+    openTime: string | null;
+    closeTime: string | null;
+  };
   locations: Array<{ id: string; name: string; address: string | null }>;
   services: BookingService[];
 };
@@ -216,6 +224,81 @@ function formatLeadTimeLabel(hours: number) {
     return `${days}d notice`;
   }
   return `${hours}h notice`;
+}
+
+const BOOKING_DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+function formatTimeValueLabel(value: string | null | undefined) {
+  if (!value) return null;
+  const [hoursRaw, minutesRaw] = value.split(":");
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${String(minutes).padStart(2, "0")} ${period}`;
+}
+
+function formatAvailabilityDays(dayIndexes: number[] | null | undefined) {
+  if (!Array.isArray(dayIndexes) || dayIndexes.length === 0) return "Daily";
+  if (dayIndexes.length === 7) return "Daily";
+  const sorted = [...dayIndexes].sort((left, right) => left - right);
+  const weekdays = [1, 2, 3, 4, 5];
+  if (sorted.length === weekdays.length && weekdays.every((day, index) => sorted[index] === day)) return "Mon-Fri";
+  return sorted.map((dayIndex) => BOOKING_DAY_SHORT[dayIndex] ?? "").filter(Boolean).join(", ");
+}
+
+function formatAvailabilityWindow(dayIndexes: number[] | null | undefined, openTime: string | null | undefined, closeTime: string | null | undefined) {
+  const dayLabel = formatAvailabilityDays(dayIndexes);
+  const openLabel = formatTimeValueLabel(openTime);
+  const closeLabel = formatTimeValueLabel(closeTime);
+  if (openLabel && closeLabel) return `${dayLabel} • ${openLabel} to ${closeLabel}`;
+  return dayLabel;
+}
+
+function buildSuggestedBookingDates(params: {
+  minDate: string;
+  maxDate: string;
+  allowedDayIndexes: number[] | null | undefined;
+  selectedDate: string;
+  limit?: number;
+}) {
+  const start = new Date(`${params.minDate}T00:00:00`);
+  const end = new Date(`${params.maxDate}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start.getTime() > end.getTime()) return [];
+  const allowedDays = Array.isArray(params.allowedDayIndexes) && params.allowedDayIndexes.length > 0
+    ? new Set(params.allowedDayIndexes)
+    : null;
+  const results: string[] = [];
+  const cursor = new Date(start);
+
+  while (cursor.getTime() <= end.getTime() && results.length < (params.limit ?? 7)) {
+    if (!allowedDays || allowedDays.has(cursor.getDay())) {
+      results.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`);
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  if (params.selectedDate && !results.includes(params.selectedDate)) {
+    const selected = new Date(`${params.selectedDate}T00:00:00`);
+    if (!Number.isNaN(selected.getTime()) && selected.getTime() >= start.getTime() && selected.getTime() <= end.getTime()) {
+      results.unshift(params.selectedDate);
+    }
+  }
+
+  return Array.from(new Set(results)).slice(0, params.limit ?? 7);
+}
+
+function formatBookingDatePill(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return { month: "", dayNumber: value, weekday: "" };
+  }
+  return {
+    month: new Intl.DateTimeFormat("en-US", { month: "short" }).format(date),
+    dayNumber: new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(date),
+    weekday: new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date),
+  };
 }
 
 function toDateInputValue(offsetDays = 0) {
@@ -831,6 +914,28 @@ export default function PublicBookingPage() {
       ),
     [selectedService?.bookingWindowDays, selectedService?.leadTimeHours]
   );
+  const effectiveAvailabilityDayIndexes = useMemo(
+    () => selectedService?.availableDayIndexes ?? config?.availabilityDefaults?.dayIndexes ?? null,
+    [config?.availabilityDefaults?.dayIndexes, selectedService?.availableDayIndexes]
+  );
+  const effectiveOpenTime = selectedService?.openTime ?? config?.availabilityDefaults?.openTime ?? null;
+  const effectiveCloseTime = selectedService?.closeTime ?? config?.availabilityDefaults?.closeTime ?? null;
+  const availabilityWindowLabel = useMemo(
+    () => formatAvailabilityWindow(effectiveAvailabilityDayIndexes, effectiveOpenTime, effectiveCloseTime),
+    [effectiveAvailabilityDayIndexes, effectiveOpenTime, effectiveCloseTime]
+  );
+  const suggestedBookingDates = useMemo(
+    () =>
+      buildSuggestedBookingDates({
+        minDate: minBookingDate,
+        maxDate: maxBookingDate,
+        allowedDayIndexes: effectiveAvailabilityDayIndexes,
+        selectedDate: form.bookingDate,
+        limit: 8,
+      }),
+    [effectiveAvailabilityDayIndexes, form.bookingDate, maxBookingDate, minBookingDate]
+  );
+  const defaultBookingDate = suggestedBookingDates[0] ?? minBookingDate;
 
   useEffect(() => {
     if (!selectedService) {
@@ -853,7 +958,7 @@ export default function PublicBookingPage() {
       return;
     }
 
-    const date = form.bookingDate || minBookingDate;
+    const date = form.bookingDate || defaultBookingDate;
     let cancelled = false;
     setAvailabilityLoading(true);
     setAvailabilityError(null);
@@ -909,7 +1014,7 @@ export default function PublicBookingPage() {
     form.bookingDate,
     form.locationId,
     form.serviceMode,
-    minBookingDate,
+    defaultBookingDate,
     selectedService,
     subtotal,
     totalDeposit,
@@ -1620,12 +1725,67 @@ export default function PublicBookingPage() {
 
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-slate-950">{effectiveFlow === "self_book" ? "Choose a date and time" : "Share your timing"}</p>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-950">
+                  {effectiveFlow === "self_book" ? "Choose a day and time" : "Share your timing"}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {availabilityWindowLabel}
+                </p>
+              </div>
               {effectiveFlow === "self_book" && availability?.slots.length ? <Badge variant="outline">{availability.slots.length} times</Badge> : null}
             </div>
-            <div className="grid gap-2 sm:max-w-xs">
-              <Label htmlFor="booking-date">{effectiveFlow === "self_book" ? "Preferred date" : "Preferred date (optional)"}</Label>
-              <Input id="booking-date" type="date" min={minBookingDate} max={maxBookingDate} value={form.bookingDate || (effectiveFlow === "self_book" ? minBookingDate : "")} onChange={(event) => setForm((current) => ({ ...current, bookingDate: event.target.value, startTime: "" }))} className="h-12 rounded-2xl bg-slate-50" />
+            <div className="space-y-3">
+              <Label htmlFor="booking-date">
+                {effectiveFlow === "self_book" ? "Preferred date" : "Preferred date (optional)"}
+              </Label>
+              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                {suggestedBookingDates.map((dateValue) => {
+                  const isActive = (form.bookingDate || defaultBookingDate) === dateValue;
+                  const formattedDate = formatBookingDatePill(dateValue);
+                  return (
+                    <button
+                      key={dateValue}
+                      type="button"
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          bookingDate: dateValue,
+                          startTime: "",
+                        }))
+                      }
+                      className={cn(
+                        "min-w-[84px] shrink-0 rounded-[18px] border px-3 py-3 text-left transition-all motion-reduce:transition-none",
+                        isActive
+                          ? "border-[color:var(--booking-primary)] bg-[var(--booking-primary-soft)] shadow-[0_10px_22px_rgba(15,23,42,0.06)]"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      )}
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        {formattedDate.month}
+                      </p>
+                      <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950">
+                        {formattedDate.dayNumber}
+                      </p>
+                      <p className="text-[11px] text-slate-500">{formattedDate.weekday}</p>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="grid gap-2 sm:max-w-xs">
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Need another day?</p>
+                <Input
+                  id="booking-date"
+                  type="date"
+                  min={minBookingDate}
+                  max={maxBookingDate}
+                  value={form.bookingDate || (effectiveFlow === "self_book" ? defaultBookingDate : "")}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, bookingDate: event.target.value, startTime: "" }))
+                  }
+                  className="h-12 rounded-2xl bg-slate-50"
+                />
+              </div>
             </div>
             {selectedService?.leadTimeHours ? (
               <p className="text-xs text-slate-500">
@@ -1638,9 +1798,13 @@ export default function PublicBookingPage() {
                 {availabilityLoading ? <div className="flex items-center gap-3 rounded-[1.2rem] border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" />Loading live availability...</div> : null}
                 {!availabilityLoading && availabilityError ? <div className="rounded-[1.2rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-800">{availabilityError}</div> : null}
                 {!availabilityLoading && !availabilityError && availability?.slots.length ? (
-                  <div className="time-grid">
-                    {availability.slots.map((slot) => (
-                      <div
+                  <div className="space-y-3">
+                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+                      Available times
+                    </p>
+                    <div className="time-grid">
+                      {availability.slots.map((slot) => (
+                        <div
                         key={slot.startTime}
                         className={cn("tc", form.startTime === slot.startTime && "sel")}
                         style={form.startTime === slot.startTime
@@ -1649,14 +1813,15 @@ export default function PublicBookingPage() {
                         onClick={() => setForm((current) => ({ ...current, startTime: slot.startTime }))}
                       >
                         {slot.label}
-                      </div>
-                    ))}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
-                {!availabilityLoading && !availabilityError && !availability?.slots.length ? <div className="rounded-[1.2rem] border border-dashed border-slate-300 px-4 py-5 text-sm leading-6 text-slate-600">No live times are available on that date. Try another day or switch to a request-style service.</div> : null}
+                {!availabilityLoading && !availabilityError && !availability?.slots.length ? <div className="rounded-[1.2rem] border border-dashed border-slate-300 px-4 py-5 text-sm leading-6 text-slate-600">No live times are open for that day. Pick another date above and we&apos;ll refresh the schedule.</div> : null}
               </>
             ) : (
-              <StepHint icon={Clock3} text="This service is reviewed by the shop before anything is scheduled. Add a preferred date if you have one, or keep moving and use the notes field in the final step." />
+              <StepHint icon={Clock3} text="This service is reviewed by the shop before anything is scheduled. Pick a preferred day if you have one, or keep moving and use the notes field in the final step." />
             )}
           </div>
         </div>

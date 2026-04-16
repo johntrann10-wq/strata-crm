@@ -303,6 +303,30 @@ function buildServiceFormDefaults(
   };
 }
 
+function dayIndexesMatch(left: number[], right: number[]) {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+function buildInheritedAvailabilityPayload(
+  formData: Pick<ServiceFormData, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">,
+  bookingSettings: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">
+) {
+  return {
+    bookingAvailableDays: dayIndexesMatch(formData.bookingAvailableDays, bookingSettings.bookingAvailableDays)
+      ? []
+      : formData.bookingAvailableDays,
+    bookingAvailableStartTime:
+      formData.bookingAvailableStartTime === bookingSettings.bookingAvailableStartTime
+        ? null
+        : formData.bookingAvailableStartTime || null,
+    bookingAvailableEndTime:
+      formData.bookingAvailableEndTime === bookingSettings.bookingAvailableEndTime
+        ? null
+        : formData.bookingAvailableEndTime || null,
+  };
+}
+
 function serviceToFormData(
   service: ServiceRecord,
   bookingSettings: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">
@@ -1424,6 +1448,7 @@ export default function ServicesPage() {
   const handleCreateService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createFormData.name.trim() || !createFormData.price) return toast.error("Please fill in all required fields.");
+    const inheritedAvailability = buildInheritedAvailabilityPayload(createFormData, bookingSettings);
     const result = await runCreateService({
       name: createFormData.name.trim(),
       price: parseFloat(createFormData.price),
@@ -1439,9 +1464,9 @@ export default function ServicesPage() {
         bookingLeadTimeHours: createFormData.bookingLeadTimeHours ? parseInt(createFormData.bookingLeadTimeHours, 10) : 0,
         bookingWindowDays: createFormData.bookingWindowDays ? parseInt(createFormData.bookingWindowDays, 10) : 30,
         bookingServiceMode: createFormData.bookingServiceMode,
-        bookingAvailableDays: createFormData.bookingAvailableDays,
-        bookingAvailableStartTime: createFormData.bookingAvailableStartTime || null,
-        bookingAvailableEndTime: createFormData.bookingAvailableEndTime || null,
+        bookingAvailableDays: inheritedAvailability.bookingAvailableDays,
+        bookingAvailableStartTime: inheritedAvailability.bookingAvailableStartTime,
+        bookingAvailableEndTime: inheritedAvailability.bookingAvailableEndTime,
         bookingBufferMinutes: createFormData.bookingBufferMinutes ? parseInt(createFormData.bookingBufferMinutes, 10) : null,
         bookingCapacityPerSlot: createFormData.bookingCapacityPerSlot ? parseInt(createFormData.bookingCapacityPerSlot, 10) : null,
         bookingFeatured: createFormData.bookingFeatured,
@@ -1459,6 +1484,7 @@ export default function ServicesPage() {
   const handleUpdateService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editService || !editFormData.name.trim() || !editFormData.price) return toast.error("Please fill in all required fields.");
+    const inheritedAvailability = buildInheritedAvailabilityPayload(editFormData, bookingSettings);
     const result = await runUpdateService({
       id: editService.id,
       name: editFormData.name.trim(),
@@ -1475,9 +1501,9 @@ export default function ServicesPage() {
         bookingLeadTimeHours: editFormData.bookingLeadTimeHours ? parseInt(editFormData.bookingLeadTimeHours, 10) : 0,
         bookingWindowDays: editFormData.bookingWindowDays ? parseInt(editFormData.bookingWindowDays, 10) : 30,
         bookingServiceMode: editFormData.bookingServiceMode,
-        bookingAvailableDays: editFormData.bookingAvailableDays,
-        bookingAvailableStartTime: editFormData.bookingAvailableStartTime || null,
-        bookingAvailableEndTime: editFormData.bookingAvailableEndTime || null,
+        bookingAvailableDays: inheritedAvailability.bookingAvailableDays,
+        bookingAvailableStartTime: inheritedAvailability.bookingAvailableStartTime,
+        bookingAvailableEndTime: inheritedAvailability.bookingAvailableEndTime,
         bookingBufferMinutes: editFormData.bookingBufferMinutes ? parseInt(editFormData.bookingBufferMinutes, 10) : null,
         bookingCapacityPerSlot: editFormData.bookingCapacityPerSlot ? parseInt(editFormData.bookingCapacityPerSlot, 10) : null,
         bookingFeatured: editFormData.bookingFeatured,

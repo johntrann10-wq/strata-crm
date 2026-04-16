@@ -43,6 +43,7 @@ import {
   buildSlotsForDate,
   normalizeBookingDayIndexes,
   normalizeBookingServiceMode,
+  parseOperatingHours,
   parseTimeToMinutes,
   resolveCustomerBookingMode,
   resolveBookingFlow,
@@ -800,6 +801,78 @@ type PublicBookingServiceRecord = {
   bookingHideDuration: boolean | null;
 };
 
+function sortedDayIndexes(value: Set<number> | null | undefined): number[] | null {
+  if (!value || value.size === 0) return null;
+  return Array.from(value).sort((left, right) => left - right);
+}
+
+function bookingDaySetsMatch(left: Set<number> | null | undefined, right: Set<number> | null | undefined): boolean {
+  const leftSorted = sortedDayIndexes(left) ?? [];
+  const rightSorted = sortedDayIndexes(right) ?? [];
+  if (leftSorted.length !== rightSorted.length) return false;
+  return leftSorted.every((dayIndex, index) => dayIndex === rightSorted[index]);
+}
+
+function minutesToTimeValue(value: number): string {
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function resolvePublicBookingAvailabilityDefaults(business: Pick<
+  BusinessRecord,
+  "operatingHours" | "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime"
+>) {
+  const bookingSchedule = resolveBookingSchedule(business);
+  const parsedOperatingHours = parseOperatingHours(business.operatingHours);
+  return {
+    dayIndexes:
+      sortedDayIndexes(bookingSchedule.availableDayIndexes) ??
+      Array.from(parsedOperatingHours.dayIndexes).sort((left, right) => left - right),
+    openTime: bookingSchedule.openTime ?? minutesToTimeValue(parsedOperatingHours.openMinutes),
+    closeTime: bookingSchedule.closeTime ?? minutesToTimeValue(parsedOperatingHours.closeMinutes),
+  };
+}
+
+function sanitizeServiceScheduleOverrides(
+  service: Pick<
+    PublicBookingServiceRecord,
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime"
+  >,
+  businessSchedule: Pick<ReturnType<typeof resolveBookingSchedule>, "availableDayIndexes" | "openTime" | "closeTime">
+) {
+  const rawDayIndexes = parseStoredServiceBookingDays(service.bookingAvailableDays);
+  const rawOpenTime =
+    parseTimeToMinutes(service.bookingAvailableStartTime ?? "") != null
+      ? service.bookingAvailableStartTime ?? null
+      : null;
+  const rawCloseTime =
+    parseTimeToMinutes(service.bookingAvailableEndTime ?? "") != null
+      ? service.bookingAvailableEndTime ?? null
+      : null;
+  const matchesLegacySeededDefaults =
+    bookingDaySetsMatch(rawDayIndexes, new Set([1, 2, 3, 4, 5])) &&
+    rawOpenTime === "09:00" &&
+    rawCloseTime === "19:00" &&
+    (!bookingDaySetsMatch(rawDayIndexes, businessSchedule.availableDayIndexes) ||
+      rawOpenTime !== businessSchedule.openTime ||
+      rawCloseTime !== businessSchedule.closeTime);
+
+  if (matchesLegacySeededDefaults) {
+    return {
+      availableDayIndexes: null,
+      openTime: null,
+      closeTime: null,
+    };
+  }
+
+  return {
+    availableDayIndexes: bookingDaySetsMatch(rawDayIndexes, businessSchedule.availableDayIndexes) ? null : rawDayIndexes,
+    openTime: rawOpenTime && rawOpenTime === businessSchedule.openTime ? null : rawOpenTime,
+    closeTime: rawCloseTime && rawCloseTime === businessSchedule.closeTime ? null : rawCloseTime,
+  };
+}
+
 type PublicBookingConfigPayload = {
   businessId: string;
   businessName: string;
@@ -826,6 +899,11 @@ type PublicBookingConfigPayload = {
   allowCustomerNotes: boolean;
   showPrices: boolean;
   showDurations: boolean;
+  availabilityDefaults: {
+    dayIndexes: number[];
+    openTime: string | null;
+    closeTime: string | null;
+  };
   locations: Array<{ id: string; name: string; address: string | null }>;
   services: Array<{
     id: string;
@@ -844,6 +922,9 @@ type PublicBookingConfigPayload = {
     featured: boolean;
     showPrice: boolean;
     showDuration: boolean;
+    availableDayIndexes: number[] | null;
+    openTime: string | null;
+    closeTime: string | null;
     addons: Array<{
       id: string;
       name: string;
@@ -887,11 +968,16 @@ export function buildPublicBookingConfigResponse(params: {
     | "bookingShowDurations"
     | "bookingUrgencyEnabled"
     | "bookingUrgencyText"
+    | "operatingHours"
+    | "bookingAvailableDays"
+    | "bookingAvailableStartTime"
+    | "bookingAvailableEndTime"
   >;
   services: PublicBookingConfigPayload["services"];
   locations: PublicBookingConfigPayload["locations"];
 }): PublicBookingConfigPayload {
   const { business, services, locations } = params;
+  const availabilityDefaults = resolvePublicBookingAvailabilityDefaults(business);
   return {
     businessId: business.id,
     businessName: business.name,
@@ -925,6 +1011,7 @@ export function buildPublicBookingConfigResponse(params: {
     allowCustomerNotes: business.bookingAllowCustomerNotes ?? true,
     showPrices: business.bookingShowPrices ?? true,
     showDurations: business.bookingShowDurations ?? true,
+    availabilityDefaults,
     locations,
     services,
   };
@@ -1061,6 +1148,7 @@ function buildVehicleSummary(params: {
 
 function resolveBookingServicesSelection(params: {
   businessDefaultFlow: string | null | undefined;
+  businessSchedule: Pick<ReturnType<typeof resolveBookingSchedule>, "availableDayIndexes" | "openTime" | "closeTime">;
   baseServiceId: string;
   addonServiceIds: string[];
   services: PublicBookingServiceRecord[];
@@ -1106,6 +1194,7 @@ function resolveBookingServicesSelection(params: {
   const explicitBufferOverrides = allServices
     .map((service) => service.bookingBufferMinutes)
     .filter((value): value is number => Number.isFinite(value));
+  const serviceScheduleOverrides = sanitizeServiceScheduleOverrides(baseService, params.businessSchedule);
 
   return {
     baseService,
@@ -1122,15 +1211,9 @@ function resolveBookingServicesSelection(params: {
         ? Math.max(...explicitBufferOverrides.map((value) => toBookingBufferMinutes(value)))
         : null,
     serviceMode: normalizeBookingServiceMode(baseService.bookingServiceMode),
-    availableDayIndexes: parseStoredServiceBookingDays(baseService.bookingAvailableDays),
-    openTime:
-      parseTimeToMinutes(baseService.bookingAvailableStartTime ?? "") != null
-        ? baseService.bookingAvailableStartTime ?? null
-        : null,
-    closeTime:
-      parseTimeToMinutes(baseService.bookingAvailableEndTime ?? "") != null
-        ? baseService.bookingAvailableEndTime ?? null
-        : null,
+    availableDayIndexes: serviceScheduleOverrides.availableDayIndexes,
+    openTime: serviceScheduleOverrides.openTime,
+    closeTime: serviceScheduleOverrides.closeTime,
     slotCapacity:
       baseService.bookingCapacityPerSlot != null
         ? Math.max(1, Math.min(Number(baseService.bookingCapacityPerSlot ?? 1), 12))
@@ -1726,6 +1809,7 @@ businessesRouter.post(
     const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
     const selection = resolveBookingServicesSelection({
       businessDefaultFlow: business.bookingDefaultFlow,
+      businessSchedule: resolveBookingSchedule(business),
       baseServiceId: parsedBody.data.serviceId,
       addonServiceIds: Array.from(new Set(parsedBody.data.addonServiceIds ?? [])),
       services: publicServices,
@@ -2006,47 +2090,54 @@ businessesRouter.get(
     }
 
     const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
+    const businessSchedule = resolveBookingSchedule(business);
     const locations = await listPublicBookingLocations(business.id);
     const baseServices = publicServices
       .filter((service) => service.active !== false && service.isAddon !== true && service.bookingEnabled === true)
-      .map((service) => ({
-        id: service.id,
-        name: service.name,
-        categoryId: service.categoryId,
-        categoryLabel: service.categoryLabel,
-        description: cleanOptionalText(service.bookingDescription ?? undefined),
-        price: bookingServicePrice(service),
-        durationMinutes: toBookingDurationMinutes(service.durationMinutes),
-        effectiveFlow: resolveBookingFlow({
-          businessDefaultFlow: business.bookingDefaultFlow,
-          serviceFlowType: service.bookingFlowType,
-        }),
-        depositAmount: bookingServiceDeposit(service),
-        leadTimeHours: toBookingLeadTimeHours(service.bookingLeadTimeHours),
-        bookingWindowDays: toBookingWindowDays(service.bookingWindowDays),
-        bufferMinutes: toBookingBufferMinutes(service.bookingBufferMinutes),
-        serviceMode: normalizeBookingServiceMode(service.bookingServiceMode),
-        featured: service.bookingFeatured === true,
-        showPrice: service.bookingHidePrice !== true,
-        showDuration: service.bookingHideDuration !== true,
-        addons: addonLinks
-          .filter((link) => link.parentServiceId === service.id)
-          .map((link) => publicServices.find((candidate) => candidate.id === link.addonServiceId))
-          .filter((candidate): candidate is PublicBookingServiceRecord => Boolean(candidate))
-          .filter((candidate) => candidate.active !== false)
-          .map((candidate) => ({
-            id: candidate.id,
-            name: candidate.name,
-            price: bookingServicePrice(candidate),
-            durationMinutes: toBookingDurationMinutes(candidate.durationMinutes),
-            depositAmount: bookingServiceDeposit(candidate),
-            bufferMinutes: toBookingBufferMinutes(candidate.bookingBufferMinutes),
-            description: cleanOptionalText(candidate.bookingDescription ?? undefined),
-            featured: candidate.bookingFeatured === true,
-            showPrice: candidate.bookingHidePrice !== true,
-            showDuration: candidate.bookingHideDuration !== true,
-          })),
-      }));
+      .map((service) => {
+        const serviceScheduleOverrides = sanitizeServiceScheduleOverrides(service, businessSchedule);
+        return {
+          id: service.id,
+          name: service.name,
+          categoryId: service.categoryId,
+          categoryLabel: service.categoryLabel,
+          description: cleanOptionalText(service.bookingDescription ?? undefined),
+          price: bookingServicePrice(service),
+          durationMinutes: toBookingDurationMinutes(service.durationMinutes),
+          effectiveFlow: resolveBookingFlow({
+            businessDefaultFlow: business.bookingDefaultFlow,
+            serviceFlowType: service.bookingFlowType,
+          }),
+          depositAmount: bookingServiceDeposit(service),
+          leadTimeHours: toBookingLeadTimeHours(service.bookingLeadTimeHours),
+          bookingWindowDays: toBookingWindowDays(service.bookingWindowDays),
+          bufferMinutes: toBookingBufferMinutes(service.bookingBufferMinutes),
+          serviceMode: normalizeBookingServiceMode(service.bookingServiceMode),
+          featured: service.bookingFeatured === true,
+          showPrice: service.bookingHidePrice !== true,
+          showDuration: service.bookingHideDuration !== true,
+          availableDayIndexes: sortedDayIndexes(serviceScheduleOverrides.availableDayIndexes),
+          openTime: serviceScheduleOverrides.openTime,
+          closeTime: serviceScheduleOverrides.closeTime,
+          addons: addonLinks
+            .filter((link) => link.parentServiceId === service.id)
+            .map((link) => publicServices.find((candidate) => candidate.id === link.addonServiceId))
+            .filter((candidate): candidate is PublicBookingServiceRecord => Boolean(candidate))
+            .filter((candidate) => candidate.active !== false)
+            .map((candidate) => ({
+              id: candidate.id,
+              name: candidate.name,
+              price: bookingServicePrice(candidate),
+              durationMinutes: toBookingDurationMinutes(candidate.durationMinutes),
+              depositAmount: bookingServiceDeposit(candidate),
+              bufferMinutes: toBookingBufferMinutes(candidate.bookingBufferMinutes),
+              description: cleanOptionalText(candidate.bookingDescription ?? undefined),
+              featured: candidate.bookingFeatured === true,
+              showPrice: candidate.bookingHidePrice !== true,
+              showDuration: candidate.bookingHideDuration !== true,
+            })),
+        };
+      });
 
     if (baseServices.length === 0) {
       throw new NotFoundError("No services are currently available for booking.");
@@ -2091,6 +2182,7 @@ businessesRouter.get(
     );
     const selection = resolveBookingServicesSelection({
       businessDefaultFlow: business.bookingDefaultFlow,
+      businessSchedule: resolveBookingSchedule(business),
       baseServiceId: parsedQuery.data.serviceId,
       addonServiceIds,
       services: publicServices,
@@ -2219,6 +2311,7 @@ businessesRouter.post(
     const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
     const selection = resolveBookingServicesSelection({
       businessDefaultFlow: business.bookingDefaultFlow,
+      businessSchedule: resolveBookingSchedule(business),
       baseServiceId: parsedBody.data.serviceId,
       addonServiceIds: Array.from(new Set(parsedBody.data.addonServiceIds ?? [])),
       services: publicServices,
