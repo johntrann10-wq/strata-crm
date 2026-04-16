@@ -170,61 +170,82 @@ export function QuarterHourDurationGrid({
   maxMinutes = 12 * 60,
   className,
 }: QuarterHourDurationGridProps) {
-  const options = buildQuarterHourDurationOptions(maxMinutes);
-  const quickPickMinutes = [30, 60, 90, 120, 180, 240].filter((minutes) => minutes <= maxMinutes);
-  const quickPickOptions = quickPickMinutes.map((minutes) => ({
-    value: String(minutes),
-    label: formatDurationMinutes(minutes),
+  const parsedValue = Number.parseInt(value, 10);
+  const safeValue = Number.isFinite(parsedValue) && parsedValue > 0 ? Math.min(parsedValue, maxMinutes) : 0;
+  const selectedHours = Math.floor(safeValue / 60);
+  const selectedMinutes = safeValue % 60;
+  const maxHours = Math.floor(maxMinutes / 60);
+  const maxRemainderMinutes = maxMinutes % 60;
+
+  const hourOptions = Array.from({ length: maxHours + 1 }, (_, index) => ({
+    value: String(index),
+    label: index === 1 ? "1 hour" : `${index} hours`,
   }));
+
+  const minuteOptions = [0, 15, 30, 45]
+    .filter((minutes) => (selectedHours < maxHours ? true : minutes <= maxRemainderMinutes))
+    .map((minutes) => ({
+      value: String(minutes),
+      label: minutes === 0 ? "0 min" : `${minutes} min`,
+    }));
+
+  const updateDuration = (hoursValue: number, minutesValue: number) => {
+    const totalMinutes = hoursValue * 60 + minutesValue;
+    if (totalMinutes <= 0) {
+      onChange(allowEmpty ? "" : "15");
+      return;
+    }
+
+    onChange(String(Math.min(totalMinutes, maxMinutes)));
+  };
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-        {allowEmpty ? (
-          <button
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">
+          {safeValue > 0 ? `Estimated duration: ${formatDurationMinutes(safeValue)}` : emptyLabel}
+        </p>
+        {allowEmpty && safeValue > 0 ? (
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            className="h-auto px-0 text-xs text-muted-foreground hover:text-foreground"
             onClick={() => onChange("")}
-            className={cn(
-              "min-h-11 rounded-xl border px-3 py-2 text-left text-sm font-medium transition-colors sm:min-h-10 sm:rounded-full sm:px-3 sm:py-1 sm:text-xs",
-              value === ""
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-background text-muted-foreground hover:bg-muted/40"
-            )}
           >
-            {emptyLabel}
-          </button>
+            Clear duration
+          </Button>
         ) : null}
-        {quickPickOptions.map((option) => {
-          const isSelected = value === option.value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onChange(option.value)}
-              className={cn(
-                "min-h-11 rounded-xl border px-3 py-2 text-left text-sm font-medium transition-colors sm:min-h-10 sm:rounded-full sm:px-3 sm:py-1 sm:text-xs",
-                isSelected
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-background text-foreground hover:bg-muted/40"
-              )}
-            >
-              {option.label}
-            </button>
-          );
-        })}
       </div>
-      <div className="space-y-1.5">
-        <p className="text-xs font-medium text-muted-foreground">Need a different duration?</p>
-        <ResponsiveSelect
-          value={value}
-          onValueChange={onChange}
-          options={options}
-          allowEmpty={allowEmpty}
-          placeholder={allowEmpty ? emptyLabel : "Select duration"}
-          triggerClassName="h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
-          nativeClassName="border-input/90 h-11 w-full appearance-none rounded-xl border bg-background/85 px-3.5 py-2 pr-10 text-base font-normal shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40"
-          contentClassName="max-h-72"
-        />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-muted-foreground">Hours</p>
+          <ResponsiveSelect
+            value={String(selectedHours)}
+            onValueChange={(nextValue) => updateDuration(Number(nextValue), selectedMinutes)}
+            options={hourOptions}
+            placeholder="Hours"
+            triggerClassName="h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm font-medium shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+            nativeClassName="border-input/90 h-11 w-full appearance-none rounded-xl border bg-background/85 px-3.5 py-2 pr-10 text-base font-normal shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-muted-foreground">Minutes</p>
+          <ResponsiveSelect
+            value={String(selectedMinutes)}
+            onValueChange={(nextValue) => updateDuration(selectedHours, Number(nextValue))}
+            options={minuteOptions}
+            placeholder="Minutes"
+            triggerClassName="h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm font-medium shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+            nativeClassName="border-input/90 h-11 w-full appearance-none rounded-xl border bg-background/85 px-3.5 py-2 pr-10 text-base font-normal shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40"
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-muted-foreground">Set the service length in clean 15-minute increments.</p>
+        {allowEmpty ? (
+          <p className="text-xs text-muted-foreground">Leave both fields at zero if this service should not have a preset duration.</p>
+        ) : null}
       </div>
     </div>
   );
