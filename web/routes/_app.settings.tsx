@@ -76,6 +76,7 @@ import {
 } from "../lib/runtimeErrors";
 import { PageHeader } from "../components/shared/PageHeader";
 import { buildQuarterHourOptions } from "../components/appointments/SchedulingControls";
+import { cn } from "@/lib/utils";
 import {
   getBillingAccessLabel,
   getTrialDaysLeft,
