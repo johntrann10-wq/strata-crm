@@ -4,6 +4,7 @@ import { CalendarIcon, ChevronDown, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ResponsiveSelect } from "@/components/ui/responsive-select";
 import {
   Select,
   SelectContent,
@@ -11,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useSmallViewport } from "@/lib/useSmallViewport";
 import { cn } from "@/lib/utils";
 
 export function toDateInputValue(date: Date | string | null | undefined): string {
@@ -73,7 +75,7 @@ type ResponsiveTimeSelectProps = {
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   placeholder: string;
-  useNative: boolean;
+  useNative?: boolean;
   allowEmpty?: boolean;
   desktopClassName?: string;
   mobileClassName?: string;
@@ -92,6 +94,8 @@ export function ResponsiveTimeSelect({
   mobileClassName,
   mobileIcon = "left",
 }: ResponsiveTimeSelectProps) {
+  const isSmallViewport = useSmallViewport();
+  const shouldUseNative = useNative ?? isSmallViewport;
   const resolvedDesktopClassName =
     desktopClassName ??
     "h-11 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
@@ -99,7 +103,7 @@ export function ResponsiveTimeSelect({
     mobileClassName ??
     "border-input/90 h-11 w-full appearance-none rounded-xl border bg-background/85 px-3.5 py-2 pr-10 text-base font-normal shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40";
 
-  if (useNative) {
+  if (shouldUseNative) {
     return (
       <div className="relative">
         <select
@@ -167,25 +171,30 @@ export function QuarterHourDurationGrid({
   className,
 }: QuarterHourDurationGridProps) {
   const options = buildQuarterHourDurationOptions(maxMinutes);
+  const quickPickMinutes = [30, 60, 90, 120, 180, 240].filter((minutes) => minutes <= maxMinutes);
+  const quickPickOptions = quickPickMinutes.map((minutes) => ({
+    value: String(minutes),
+    label: formatDurationMinutes(minutes),
+  }));
 
   return (
-    <div className={cn("space-y-2", className)}>
-      {allowEmpty ? (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          className={cn(
-            "inline-flex rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-            value === ""
-              ? "border-primary bg-primary/10 text-primary"
-              : "border-border bg-background text-muted-foreground hover:bg-muted/40"
-          )}
-        >
-          {emptyLabel}
-        </button>
-      ) : null}
-      <div className="grid max-h-56 grid-cols-3 gap-2 overflow-y-auto pr-1 sm:grid-cols-4 lg:grid-cols-6">
-        {options.map((option) => {
+    <div className={cn("space-y-3", className)}>
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        {allowEmpty ? (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className={cn(
+              "min-h-11 rounded-xl border px-3 py-2 text-left text-sm font-medium transition-colors sm:min-h-10 sm:rounded-full sm:px-3 sm:py-1 sm:text-xs",
+              value === ""
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-background text-muted-foreground hover:bg-muted/40"
+            )}
+          >
+            {emptyLabel}
+          </button>
+        ) : null}
+        {quickPickOptions.map((option) => {
           const isSelected = value === option.value;
           return (
             <button
@@ -193,7 +202,7 @@ export function QuarterHourDurationGrid({
               type="button"
               onClick={() => onChange(option.value)}
               className={cn(
-                "rounded-xl border px-2 py-2 text-center text-xs font-medium transition-colors",
+                "min-h-11 rounded-xl border px-3 py-2 text-left text-sm font-medium transition-colors sm:min-h-10 sm:rounded-full sm:px-3 sm:py-1 sm:text-xs",
                 isSelected
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border bg-background text-foreground hover:bg-muted/40"
@@ -203,6 +212,19 @@ export function QuarterHourDurationGrid({
             </button>
           );
         })}
+      </div>
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium text-muted-foreground">Need a different duration?</p>
+        <ResponsiveSelect
+          value={value}
+          onValueChange={onChange}
+          options={options}
+          allowEmpty={allowEmpty}
+          placeholder={allowEmpty ? emptyLabel : "Select duration"}
+          triggerClassName="h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+          nativeClassName="border-input/90 h-11 w-full appearance-none rounded-xl border bg-background/85 px-3.5 py-2 pr-10 text-base font-normal shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40"
+          contentClassName="max-h-72"
+        />
       </div>
     </div>
   );

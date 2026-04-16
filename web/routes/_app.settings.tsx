@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { ResponsiveSelect } from "@/components/ui/responsive-select";
 import {
   Card,
   CardContent,
@@ -1323,6 +1324,10 @@ export default function SettingsPage() {
     String(DEFAULT_BUSINESS_SETTINGS_FORM.calendarBlockCapacityPerSlot)
   );
   const appointmentTimeOptions = useMemo(() => buildQuarterHourOptions(), []);
+  const formSelectTriggerClassName =
+    "h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
+  const mobileTimeInputClassName =
+    "h-11 text-base [font-variant-numeric:tabular-nums] sm:h-10 sm:text-sm [color-scheme:light] [&::-webkit-date-and-time-value]:text-left [&::-webkit-date-and-time-value]:min-h-[1.25rem] [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0";
   const [automationSettings, setAutomationSettings] = useState<AutomationSettingsForm>(
     DEFAULT_AUTOMATION_SETTINGS
   );
@@ -2618,18 +2623,14 @@ export default function SettingsPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="type">Business Type</Label>
-                    <Select value={formData.type} onValueChange={(value) => handleFieldChange("type", value)}>
-                      <SelectTrigger id="type">
-                        <SelectValue placeholder="Select a type..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {BUSINESS_TYPES.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <ResponsiveSelect
+                      id="type"
+                      value={formData.type}
+                      onValueChange={(value) => handleFieldChange("type", value)}
+                      placeholder="Select a type..."
+                      options={BUSINESS_TYPES}
+                      triggerClassName={formSelectTriggerClassName}
+                    />
                   </div>
                 </div>
 
@@ -2823,21 +2824,14 @@ export default function SettingsPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="defaultAppointmentStartTime">Default Appointment Time</Label>
-                    <Select
+                    <ResponsiveSelect
+                      id="defaultAppointmentStartTime"
                       value={formData.defaultAppointmentStartTime}
                       onValueChange={(value) => handleFieldChange("defaultAppointmentStartTime", value)}
-                    >
-                      <SelectTrigger id="defaultAppointmentStartTime">
-                        <SelectValue placeholder="Select a default time..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {appointmentTimeOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="Select a default time..."
+                      options={appointmentTimeOptions}
+                      triggerClassName={formSelectTriggerClassName}
+                    />
                     <p className="text-xs text-muted-foreground">
                       New appointments start here unless a calendar click or direct link pre-fills a different time.
                     </p>
@@ -2894,6 +2888,7 @@ export default function SettingsPage() {
                         <Input
                           id="bookingAvailableStartTime"
                           type="time"
+                          className={mobileTimeInputClassName}
                           value={formData.bookingAvailableStartTime}
                           onChange={(e) => handleFieldChange("bookingAvailableStartTime", e.target.value)}
                         />
@@ -2903,6 +2898,7 @@ export default function SettingsPage() {
                         <Input
                           id="bookingAvailableEndTime"
                           type="time"
+                          className={mobileTimeInputClassName}
                           value={formData.bookingAvailableEndTime}
                           onChange={(e) => handleFieldChange("bookingAvailableEndTime", e.target.value)}
                         />
@@ -2914,18 +2910,14 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="timezone">Timezone</Label>
-                    <Select value={formData.timezone} onValueChange={(value) => handleFieldChange("timezone", value)}>
-                      <SelectTrigger id="timezone">
-                        <SelectValue placeholder="Select timezone..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TIMEZONES.map((timezone) => (
-                          <SelectItem key={timezone.value} value={timezone.value}>
-                            {timezone.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <ResponsiveSelect
+                      id="timezone"
+                      value={formData.timezone}
+                      onValueChange={(value) => handleFieldChange("timezone", value)}
+                      placeholder="Select timezone..."
+                      options={TIMEZONES}
+                      triggerClassName={formSelectTriggerClassName}
+                    />
                   </div>
                 </div>
 

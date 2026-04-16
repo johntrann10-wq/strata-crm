@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ResponsiveSelect } from "@/components/ui/responsive-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -581,6 +582,11 @@ function ServiceForm({
   const bookingDefaultsLabel = `${formatBookingDaySummary(bookingDefaults.bookingAvailableDays)} • ${
     formatAvailabilityTimeLabel(bookingDefaults.bookingAvailableStartTime) || "Start time"
   } to ${formatAvailabilityTimeLabel(bookingDefaults.bookingAvailableEndTime) || "End time"}`;
+  const formSelectTriggerClassName =
+    "h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
+  const mobileTimeInputClassName =
+    "h-11 text-base [font-variant-numeric:tabular-nums] sm:h-10 sm:text-sm [color-scheme:light] [&::-webkit-date-and-time-value]:text-left [&::-webkit-date-and-time-value]:min-h-[1.25rem] [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0";
+  const bookingDefaultsDisplayLabel = bookingDefaultsLabel.replace("â€¢", "-");
 
   return (
     <div className="grid gap-4 py-2">
@@ -619,18 +625,14 @@ function ServiceForm({
       </div>
       <div className="grid gap-2">
         <Label htmlFor="svc-category">Category</Label>
-        <Select value={formData.categoryId} onValueChange={(value) => onChange({ ...formData, categoryId: value })}>
-          <SelectTrigger id="svc-category">
-            <SelectValue placeholder="Select category" />
-          </SelectTrigger>
-          <SelectContent>
-            {categoryOptions.map((category) => (
-              <SelectItem key={category.value} value={category.value}>
-                {category.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <ResponsiveSelect
+          id="svc-category"
+          value={formData.categoryId}
+          onValueChange={(value) => onChange({ ...formData, categoryId: value })}
+          placeholder="Select category"
+          options={categoryOptions}
+          triggerClassName={formSelectTriggerClassName}
+        />
       </div>
       <div className="grid gap-2">
         <Label htmlFor="svc-notes">Notes</Label>
@@ -673,7 +675,7 @@ function ServiceForm({
               These settings start with your business booking defaults, then can be adjusted here for this service when needed.
             </p>
             <p className="mt-2 text-xs font-medium text-muted-foreground">
-              Business defaults: {bookingDefaultsLabel}
+              Business defaults: {bookingDefaultsDisplayLabel}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -691,7 +693,8 @@ function ServiceForm({
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
             <Label htmlFor="svc-booking-flow">Booking flow</Label>
-            <Select
+            <ResponsiveSelect
+              id="svc-booking-flow"
               value={formData.bookingFlowType}
               onValueChange={(value) =>
                 onChange({
@@ -699,16 +702,14 @@ function ServiceForm({
                   bookingFlowType: value as ServiceFormData["bookingFlowType"],
                 })
               }
-            >
-              <SelectTrigger id="svc-booking-flow">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="inherit">Use business default</SelectItem>
-                <SelectItem value="self_book">Customers can book instantly</SelectItem>
-                <SelectItem value="request">Review requests first</SelectItem>
-              </SelectContent>
-            </Select>
+              placeholder="Select booking flow"
+              options={[
+                { value: "inherit", label: "Use business default" },
+                { value: "self_book", label: "Customers can book instantly" },
+                { value: "request", label: "Review requests first" },
+              ]}
+              triggerClassName={formSelectTriggerClassName}
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="svc-booking-deposit">Deposit ($)</Label>
@@ -756,7 +757,8 @@ function ServiceForm({
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <div className="grid gap-2">
             <Label htmlFor="svc-booking-mode">Service mode</Label>
-            <Select
+            <ResponsiveSelect
+              id="svc-booking-mode"
               value={formData.bookingServiceMode}
               onValueChange={(value) =>
                 onChange({
@@ -764,16 +766,14 @@ function ServiceForm({
                   bookingServiceMode: value as ServiceFormData["bookingServiceMode"],
                 })
               }
-            >
-              <SelectTrigger id="svc-booking-mode">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="in_shop">In-shop only</SelectItem>
-                <SelectItem value="mobile">Mobile / on-site only</SelectItem>
-                <SelectItem value="both">Let the customer choose</SelectItem>
-              </SelectContent>
-            </Select>
+              placeholder="Select service mode"
+              options={[
+                { value: "in_shop", label: "In-shop only" },
+                { value: "mobile", label: "Mobile / on-site only" },
+                { value: "both", label: "Let the customer choose" },
+              ]}
+              triggerClassName={formSelectTriggerClassName}
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="svc-booking-buffer">Buffer after booking (minutes)</Label>
@@ -845,6 +845,7 @@ function ServiceForm({
             <Input
               id="svc-booking-start"
               type="time"
+              className={mobileTimeInputClassName}
               value={formData.bookingAvailableStartTime}
               onChange={(e) => onChange({ ...formData, bookingAvailableStartTime: e.target.value })}
             />
@@ -854,6 +855,7 @@ function ServiceForm({
             <Input
               id="svc-booking-end"
               type="time"
+              className={mobileTimeInputClassName}
               value={formData.bookingAvailableEndTime}
               onChange={(e) => onChange({ ...formData, bookingAvailableEndTime: e.target.value })}
             />
@@ -1916,7 +1918,7 @@ export default function ServicesPage() {
 
       <Dialog open={createServiceOpen} onOpenChange={setCreateServiceOpen}>
         <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]">
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Add Service</DialogTitle>
             <DialogDescription>Create a service and place it in the right category right away.</DialogDescription>
@@ -1928,7 +1930,7 @@ export default function ServicesPage() {
               categoryOptions={categoryOptions}
               bookingDefaults={bookingSettings}
             />
-            <DialogFooter>
+            <DialogFooter className="mt-6">
               <Button type="button" variant="outline" onClick={() => setCreateServiceOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={createServiceFetching}>{createServiceFetching ? "Creating..." : "Create Service"}</Button>
             </DialogFooter>
@@ -1939,7 +1941,7 @@ export default function ServicesPage() {
 
       <Dialog open={Boolean(editService)} onOpenChange={(open) => !open && setEditService(null)}>
         <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]">
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Edit Service</DialogTitle>
             <DialogDescription>Update service details, move it between categories, or manage add-ons.</DialogDescription>
@@ -1974,15 +1976,25 @@ export default function ServicesPage() {
               ) : (
                 <p className="text-xs text-muted-foreground">No add-ons linked yet.</p>
               )}
-              <div className="flex gap-2">
-                <Select value={newAddonServiceId} onValueChange={setNewAddonServiceId}>
-                  <SelectTrigger className="flex-1"><SelectValue placeholder="Select a service to link as an add-on" /></SelectTrigger>
-                  <SelectContent>
-                    {services.filter((service) => editService && service.id !== editService.id && service.active !== false && !linkedAddonRecords.some((link) => link.addonServiceId === service.id)).map((service) => (
-                      <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <ResponsiveSelect
+                  value={newAddonServiceId}
+                  onValueChange={setNewAddonServiceId}
+                  placeholder="Select a service to link as an add-on"
+                  options={services
+                    .filter(
+                      (service) =>
+                        editService &&
+                        service.id !== editService.id &&
+                        service.active !== false &&
+                        !linkedAddonRecords.some((link) => link.addonServiceId === service.id)
+                    )
+                    .map((service) => ({
+                      value: service.id,
+                      label: service.name,
+                    }))}
+                  triggerClassName="h-10 flex-1 rounded-xl border-input/90 bg-background/85 px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+                />
                 <Button type="button" variant="outline" onClick={() => void handleAddAddonLink()} disabled={!newAddonServiceId || createAddonLinkFetching}>
                   <Plus className="mr-1 h-3.5 w-3.5" />
                   Add
