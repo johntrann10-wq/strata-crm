@@ -1561,6 +1561,8 @@ async function ensureBusinessAutomationColumns(): Promise<void> {
           ADD COLUMN IF NOT EXISTS booking_slot_interval_minutes integer DEFAULT 15,
           ADD COLUMN IF NOT EXISTS booking_buffer_minutes integer,
           ADD COLUMN IF NOT EXISTS booking_capacity_per_slot integer,
+          ADD COLUMN IF NOT EXISTS booking_urgency_enabled boolean DEFAULT false,
+          ADD COLUMN IF NOT EXISTS booking_urgency_text text,
           ADD COLUMN IF NOT EXISTS monthly_revenue_goal decimal(12, 2) DEFAULT NULL,
           ADD COLUMN IF NOT EXISTS monthly_jobs_goal integer DEFAULT NULL,
           ADD COLUMN IF NOT EXISTS billing_access_state text,

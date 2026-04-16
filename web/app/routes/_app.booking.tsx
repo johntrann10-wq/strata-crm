@@ -258,7 +258,10 @@ export default function BookingBuilderPage() {
 
   const saveChanges = async () => {
     if (!businessId || !canEdit) return;
-    const result = await runUpdateBusiness({
+    const supportsBookingBufferMinutes = !!businessRecord && Object.prototype.hasOwnProperty.call(businessRecord, "bookingBufferMinutes");
+    const supportsBookingCapacityPerSlot =
+      !!businessRecord && Object.prototype.hasOwnProperty.call(businessRecord, "bookingCapacityPerSlot");
+    const payload = {
       id: businessId,
       bookingEnabled: form.bookingEnabled,
       bookingPageTitle: form.bookingPageTitle.trim() || null,
@@ -284,10 +287,15 @@ export default function BookingBuilderPage() {
       bookingUrgencyEnabled: form.bookingUrgencyEnabled,
       bookingUrgencyText: form.bookingUrgencyText.trim() || null,
       bookingSlotIntervalMinutes: form.bookingSlotIntervalMinutes,
-      bookingBufferMinutes: form.bookingBufferMinutes.trim() ? Number(form.bookingBufferMinutes) : null,
-      bookingCapacityPerSlot: form.bookingCapacityPerSlot.trim() ? Number(form.bookingCapacityPerSlot) : null,
       bookingRequestUrl: bookingUrl || null,
-    });
+      ...((form.bookingBufferMinutes.trim() || supportsBookingBufferMinutes)
+        ? { bookingBufferMinutes: form.bookingBufferMinutes.trim() ? Number(form.bookingBufferMinutes) : null }
+        : {}),
+      ...((form.bookingCapacityPerSlot.trim() || supportsBookingCapacityPerSlot)
+        ? { bookingCapacityPerSlot: form.bookingCapacityPerSlot.trim() ? Number(form.bookingCapacityPerSlot) : null }
+        : {}),
+    };
+    const result = await runUpdateBusiness(payload);
     if (result.error) {
       toast.error(result.error.message);
       return;
