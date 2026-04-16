@@ -3370,26 +3370,30 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
       if (parsed.data.staffCount !== undefined) legacyUpdates.staffCount = parsed.data.staffCount ?? null;
       if (parsed.data.operatingHours !== undefined) legacyUpdates.operatingHours = parsed.data.operatingHours ?? null;
 
-      const [legacyUpdated] = await db
-        .update(businesses)
-        .set(legacyUpdates)
-        .where(eq(businesses.id, req.params.id))
-        .returning({
-          id: businesses.id,
-          ownerId: businesses.ownerId,
-          name: businesses.name,
-          type: businesses.type,
-          email: businesses.email,
-          phone: businesses.phone,
-          address: businesses.address,
-          city: businesses.city,
-          state: businesses.state,
-          zip: businesses.zip,
-          staffCount: businesses.staffCount,
-          operatingHours: businesses.operatingHours,
-          createdAt: businesses.createdAt,
-        });
-      updated = legacyUpdated ? coerceBusinessRecord(legacyUpdated) : undefined;
+      if (Object.keys(legacyUpdates).length === 0) {
+        updated = existing;
+      } else {
+        const [legacyUpdated] = await db
+          .update(businesses)
+          .set(legacyUpdates)
+          .where(eq(businesses.id, req.params.id))
+          .returning({
+            id: businesses.id,
+            ownerId: businesses.ownerId,
+            name: businesses.name,
+            type: businesses.type,
+            email: businesses.email,
+            phone: businesses.phone,
+            address: businesses.address,
+            city: businesses.city,
+            state: businesses.state,
+            zip: businesses.zip,
+            staffCount: businesses.staffCount,
+            operatingHours: businesses.operatingHours,
+            createdAt: businesses.createdAt,
+          });
+        updated = legacyUpdated ? coerceBusinessRecord(legacyUpdated) : undefined;
+      }
     } else {
       warnOnce("businesses:update:schema-repaired", "business update retried after repairing missing automation columns", {
         businessId: req.params.id,
