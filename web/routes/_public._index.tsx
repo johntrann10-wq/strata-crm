@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import {
   ArrowRight,
@@ -146,6 +146,56 @@ export function meta() {
     { name: "twitter:image", content: socialImageUrl },
     { name: "twitter:image:alt", content: "Strata CRM preview showing scheduling, CRM, and invoicing for automotive service businesses." },
   ];
+}
+
+type DeviceFrameProps = {
+  children: ReactNode;
+  className?: string;
+  screenClassName?: string;
+};
+
+function LaptopScreenshotFrame({ children, className, screenClassName }: DeviceFrameProps) {
+  return (
+    <div className={cn("relative isolate mx-auto w-full drop-shadow-[0_32px_70px_rgba(15,23,42,0.16)]", className)}>
+      <div
+        className={cn(
+          "absolute left-[10.9%] top-[3.1%] h-[75.2%] w-[76.8%] overflow-hidden rounded-[12px] bg-slate-50 sm:rounded-[16px] lg:rounded-[20px]",
+          screenClassName
+        )}
+      >
+        {children}
+      </div>
+      <img
+        src="/marketing/strata-ui/laptop-frame-overlay.png"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none relative z-10 block w-full select-none"
+        loading="lazy"
+      />
+    </div>
+  );
+}
+
+function PhoneScreenshotFrame({ children, className, screenClassName }: DeviceFrameProps) {
+  return (
+    <div className={cn("relative isolate mx-auto w-full drop-shadow-[0_24px_50px_rgba(15,23,42,0.18)]", className)}>
+      <div
+        className={cn(
+          "absolute left-[9.7%] top-[4.6%] h-[90.9%] w-[80.5%] overflow-hidden rounded-[14%] bg-slate-50",
+          screenClassName
+        )}
+      >
+        {children}
+      </div>
+      <img
+        src="/marketing/strata-ui/iphone-frame-overlay.png"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none relative z-10 block w-full select-none"
+        loading="lazy"
+      />
+    </div>
+  );
 }
 
 export default function LandingPage() {
@@ -359,23 +409,25 @@ export default function LandingPage() {
             <p className="text-sm font-medium text-gray-500">30-day free trial | No card required | Founder pricing $29/mo</p>
           </div>
 
-          <div className="relative">
-            <div className="overflow-hidden rounded-[32px] border border-orange-100 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
-              <img
-                src="/marketing/strata-ui/hero-desktop-calendar.png"
-                alt="Strata calendar with month overview and active appointments."
-                className="h-full w-full object-cover"
-                loading="eager"
-              />
+          <div className="relative px-2 pb-16 sm:px-4 sm:pb-20">
+            <div className="rounded-[36px] border border-orange-100/80 bg-[radial-gradient(circle_at_top,#fff7ed_0%,#ffffff_52%,#fff1e8_100%)] p-4 shadow-[0_24px_70px_rgba(15,23,42,0.08)] sm:p-6">
+              <LaptopScreenshotFrame className="max-w-[44rem]">
+                <img
+                  src="/marketing/strata-ui/hero-desktop-calendar.png"
+                  alt="Strata calendar with month overview and active appointments."
+                  className="h-full w-full object-cover object-left-top"
+                  loading="eager"
+                />
+              </LaptopScreenshotFrame>
             </div>
-            <div className="absolute -bottom-8 right-4 w-36 rounded-[26px] border border-orange-100 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.18)] sm:right-8 sm:w-44 lg:w-52">
+            <PhoneScreenshotFrame className="absolute -bottom-1 right-0 w-28 sm:right-4 sm:w-36 lg:w-40">
               <img
                 src="/marketing/strata-ui/hero-mobile-appointment.png"
                 alt="Strata mobile appointment details."
-                className="h-full w-full rounded-[26px] object-cover"
+                className="h-full w-full object-cover object-top"
                 loading="eager"
               />
-            </div>
+            </PhoneScreenshotFrame>
           </div>
         </div>
       </section>
@@ -437,45 +489,18 @@ export default function LandingPage() {
             </div>
 
             <div className="sticky top-24 h-fit">
-              <div className="relative overflow-visible rounded-[32px] border border-orange-100 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
-                <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[32px] bg-white">
-                  <img
-                    src={displayedFeature.desktopImage}
-                    alt={displayedFeature.desktopAlt}
-                    className="absolute inset-0 h-full w-full object-cover"
-                    onLoad={() => handleImageLoad(displayedFeature.desktopImage)}
-                    loading="lazy"
-                  />
-                  {queuedFeature ? (
-                    <div
-                      className={cn(
-                        "absolute inset-0 transform-gpu transition-all duration-650 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
-                        isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
-                      )}
-                    >
+              <div className="relative overflow-visible rounded-[36px] border border-orange-100/80 bg-[radial-gradient(circle_at_top,#fff7ed_0%,#ffffff_52%,#fff1e8_100%)] p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+                <div className="relative pr-12 pb-10">
+                  <LaptopScreenshotFrame>
+                    <div className="relative h-full w-full">
                       <img
-                        src={queuedFeature.desktopImage}
-                        alt={queuedFeature.desktopAlt}
+                        src={displayedFeature.desktopImage}
+                        alt={displayedFeature.desktopAlt}
                         className="absolute inset-0 h-full w-full object-cover"
-                        onLoad={() => handleImageLoad(queuedFeature.desktopImage)}
+                        onLoad={() => handleImageLoad(displayedFeature.desktopImage)}
                         loading="lazy"
                       />
-                    </div>
-                  ) : null}
-                </div>
-                {displayedFeature.mobileImage || queuedFeature?.mobileImage ? (
-                  <div className="absolute -bottom-8 right-6 aspect-[390/844] w-36 overflow-hidden rounded-[26px] border border-orange-100 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.18)] sm:w-44 lg:w-52">
-                    <div className="relative h-full w-full">
-                      {displayedFeature.mobileImage ? (
-                        <img
-                          src={displayedFeature.mobileImage}
-                          alt={displayedFeature.mobileAlt ?? "Strata mobile preview"}
-                          className="absolute inset-0 h-full w-full object-cover"
-                          onLoad={() => handleImageLoad(displayedFeature.mobileImage)}
-                          loading="lazy"
-                        />
-                      ) : null}
-                      {queuedFeature?.mobileImage ? (
+                      {queuedFeature ? (
                         <div
                           className={cn(
                             "absolute inset-0 transform-gpu transition-all duration-650 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
@@ -483,17 +508,48 @@ export default function LandingPage() {
                           )}
                         >
                           <img
-                            src={queuedFeature.mobileImage}
-                            alt={queuedFeature.mobileAlt ?? "Strata mobile preview"}
+                            src={queuedFeature.desktopImage}
+                            alt={queuedFeature.desktopAlt}
                             className="absolute inset-0 h-full w-full object-cover"
-                            onLoad={() => handleImageLoad(queuedFeature.mobileImage)}
+                            onLoad={() => handleImageLoad(queuedFeature.desktopImage)}
                             loading="lazy"
                           />
                         </div>
                       ) : null}
                     </div>
-                  </div>
-                ) : null}
+                  </LaptopScreenshotFrame>
+                  {displayedFeature.mobileImage || queuedFeature?.mobileImage ? (
+                    <PhoneScreenshotFrame className="absolute -bottom-1 right-0 w-36 lg:w-40">
+                      <div className="relative h-full w-full">
+                        {displayedFeature.mobileImage ? (
+                          <img
+                            src={displayedFeature.mobileImage}
+                            alt={displayedFeature.mobileAlt ?? "Strata mobile preview"}
+                            className="absolute inset-0 h-full w-full object-cover"
+                            onLoad={() => handleImageLoad(displayedFeature.mobileImage)}
+                            loading="lazy"
+                          />
+                        ) : null}
+                        {queuedFeature?.mobileImage ? (
+                          <div
+                            className={cn(
+                              "absolute inset-0 transform-gpu transition-all duration-650 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
+                              isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
+                            )}
+                          >
+                            <img
+                              src={queuedFeature.mobileImage}
+                              alt={queuedFeature.mobileAlt ?? "Strata mobile preview"}
+                              className="absolute inset-0 h-full w-full object-cover"
+                              onLoad={() => handleImageLoad(queuedFeature.mobileImage)}
+                              loading="lazy"
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    </PhoneScreenshotFrame>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
@@ -519,33 +575,37 @@ export default function LandingPage() {
                 </button>
               ))}
             </div>
-            <div className="relative overflow-visible rounded-[28px] border border-orange-100 bg-white shadow-[0_16px_50px_rgba(15,23,42,0.1)]">
-              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[28px] bg-white">
-                <img
-                  src={displayedFeature.desktopImage}
-                  alt={displayedFeature.desktopAlt}
-                  className="absolute inset-0 h-full w-full object-cover"
-                  onLoad={() => handleImageLoad(displayedFeature.desktopImage)}
-                  loading="lazy"
-                />
-                {queuedFeature ? (
-                  <div
-                    className={cn(
-                      "absolute inset-0 transform-gpu transition-all duration-650 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
-                      isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
-                    )}
-                  >
+            <div className="rounded-[32px] border border-orange-100 bg-white/95 p-4 shadow-[0_18px_54px_rgba(15,23,42,0.08)]">
+              <div className="relative overflow-visible px-1 pb-10">
+                <LaptopScreenshotFrame>
+                  <div className="relative h-full w-full">
                     <img
-                      src={queuedFeature.desktopImage}
-                      alt={queuedFeature.desktopAlt}
+                      src={displayedFeature.desktopImage}
+                      alt={displayedFeature.desktopAlt}
                       className="absolute inset-0 h-full w-full object-cover"
-                      onLoad={() => handleImageLoad(queuedFeature.desktopImage)}
+                      onLoad={() => handleImageLoad(displayedFeature.desktopImage)}
                       loading="lazy"
                     />
+                    {queuedFeature ? (
+                      <div
+                        className={cn(
+                          "absolute inset-0 transform-gpu transition-all duration-650 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none",
+                          isTransitioning ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.99]"
+                        )}
+                      >
+                        <img
+                          src={queuedFeature.desktopImage}
+                          alt={queuedFeature.desktopAlt}
+                          className="absolute inset-0 h-full w-full object-cover"
+                          onLoad={() => handleImageLoad(queuedFeature.desktopImage)}
+                          loading="lazy"
+                        />
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
+                </LaptopScreenshotFrame>
                 {displayedFeature.mobileImage || queuedFeature?.mobileImage ? (
-                  <div className="absolute -bottom-6 right-4 aspect-[390/844] w-28 overflow-hidden rounded-[22px] border border-orange-100 bg-white shadow-[0_14px_30px_rgba(15,23,42,0.18)]">
+                  <PhoneScreenshotFrame className="absolute -bottom-2 right-1 w-24 sm:w-28">
                     <div className="relative h-full w-full">
                       {displayedFeature.mobileImage ? (
                         <img
@@ -573,10 +633,10 @@ export default function LandingPage() {
                         </div>
                       ) : null}
                     </div>
-                  </div>
+                  </PhoneScreenshotFrame>
                 ) : null}
               </div>
-              <div className="px-4 pb-5 pt-6 space-y-2">
+              <div className="space-y-2 px-2 pb-2 pt-4">
                 <h3 className="text-base font-semibold text-gray-950">{activeFeature?.title}</h3>
                 <p className="text-sm leading-6 text-gray-600">{activeFeature?.description}</p>
               </div>
