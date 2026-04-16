@@ -47,6 +47,7 @@ type ServiceRow = {
   bookingAvailableDays: number[] | null;
   bookingAvailableStartTime: string | null;
   bookingAvailableEndTime: string | null;
+  bookingBufferMinutes: number | null;
   bookingCapacityPerSlot: number | null;
   bookingFeatured: boolean | null;
   bookingHidePrice: boolean | null;
@@ -156,6 +157,7 @@ function buildLegacyServiceSelectColumns(columns: Set<string>): string {
     columns.has("booking_available_days") ? `s."booking_available_days" as "bookingAvailableDays"` : `null::text as "bookingAvailableDays"`,
     columns.has("booking_available_start_time") ? `s."booking_available_start_time" as "bookingAvailableStartTime"` : `null::text as "bookingAvailableStartTime"`,
     columns.has("booking_available_end_time") ? `s."booking_available_end_time" as "bookingAvailableEndTime"` : `null::text as "bookingAvailableEndTime"`,
+    columns.has("booking_buffer_minutes") ? `s."booking_buffer_minutes" as "bookingBufferMinutes"` : `null::integer as "bookingBufferMinutes"`,
     columns.has("booking_capacity_per_slot") ? `s."booking_capacity_per_slot" as "bookingCapacityPerSlot"` : `null::integer as "bookingCapacityPerSlot"`,
     columns.has("booking_featured") ? `s."booking_featured" as "bookingFeatured"` : `false as "bookingFeatured"`,
     columns.has("booking_hide_price") ? `s."booking_hide_price" as "bookingHidePrice"` : `false as "bookingHidePrice"`,
@@ -356,6 +358,10 @@ async function insertLegacyServiceRecord(
     insertColumns.push("booking_available_end_time");
     insertValues.push(body.bookingAvailableEndTime ?? null);
   }
+  if (columns.has("booking_buffer_minutes")) {
+    insertColumns.push("booking_buffer_minutes");
+    insertValues.push(body.bookingBufferMinutes ?? null);
+  }
   if (columns.has("booking_capacity_per_slot")) {
     insertColumns.push("booking_capacity_per_slot");
     insertValues.push(body.bookingCapacityPerSlot ?? null);
@@ -460,6 +466,9 @@ async function updateLegacyServiceRecord(
   if (body.bookingAvailableEndTime !== undefined && columns.has("booking_available_end_time")) {
     updates.push({ column: "booking_available_end_time", value: body.bookingAvailableEndTime ?? null });
   }
+  if (body.bookingBufferMinutes !== undefined && columns.has("booking_buffer_minutes")) {
+    updates.push({ column: "booking_buffer_minutes", value: body.bookingBufferMinutes ?? null });
+  }
   if (body.bookingCapacityPerSlot !== undefined && columns.has("booking_capacity_per_slot")) {
     updates.push({ column: "booking_capacity_per_slot", value: body.bookingCapacityPerSlot ?? null });
   }
@@ -508,6 +517,7 @@ function normalizeServiceRecord(row: {
   bookingAvailableDays?: string | null;
   bookingAvailableStartTime?: string | null;
   bookingAvailableEndTime?: string | null;
+  bookingBufferMinutes?: number | null;
   bookingCapacityPerSlot?: number | null;
   bookingFeatured?: boolean | null;
   bookingHidePrice?: boolean | null;
@@ -547,6 +557,7 @@ function normalizeServiceRecord(row: {
       parseTimeToMinutes(row.bookingAvailableStartTime ?? "") != null ? row.bookingAvailableStartTime ?? null : null,
     bookingAvailableEndTime:
       parseTimeToMinutes(row.bookingAvailableEndTime ?? "") != null ? row.bookingAvailableEndTime ?? null : null,
+    bookingBufferMinutes: row.bookingBufferMinutes ?? null,
     bookingCapacityPerSlot: row.bookingCapacityPerSlot ?? null,
     bookingFeatured: row.bookingFeatured ?? false,
     bookingHidePrice: row.bookingHidePrice ?? false,
@@ -574,6 +585,7 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
   const hasBookingAvailableDays = serviceColumns.has("booking_available_days");
   const hasBookingAvailableStartTime = serviceColumns.has("booking_available_start_time");
   const hasBookingAvailableEndTime = serviceColumns.has("booking_available_end_time");
+  const hasBookingBufferMinutes = serviceColumns.has("booking_buffer_minutes");
   const hasBookingCapacityPerSlot = serviceColumns.has("booking_capacity_per_slot");
   const hasBookingFeatured = serviceColumns.has("booking_featured");
   const hasBookingHidePrice = serviceColumns.has("booking_hide_price");
@@ -608,6 +620,7 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
         bookingAvailableDays: hasBookingAvailableDays ? services.bookingAvailableDays : sql<string | null>`null`,
         bookingAvailableStartTime: hasBookingAvailableStartTime ? services.bookingAvailableStartTime : sql<string | null>`null`,
         bookingAvailableEndTime: hasBookingAvailableEndTime ? services.bookingAvailableEndTime : sql<string | null>`null`,
+        bookingBufferMinutes: hasBookingBufferMinutes ? services.bookingBufferMinutes : sql<number | null>`null`,
         bookingCapacityPerSlot: hasBookingCapacityPerSlot ? services.bookingCapacityPerSlot : sql<number | null>`null`,
         bookingFeatured: hasBookingFeatured ? services.bookingFeatured : sql<boolean | null>`false`,
         bookingHidePrice: hasBookingHidePrice ? services.bookingHidePrice : sql<boolean | null>`false`,
@@ -654,6 +667,7 @@ async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRo
   const hasBookingAvailableDays = serviceColumns.has("booking_available_days");
   const hasBookingAvailableStartTime = serviceColumns.has("booking_available_start_time");
   const hasBookingAvailableEndTime = serviceColumns.has("booking_available_end_time");
+  const hasBookingBufferMinutes = serviceColumns.has("booking_buffer_minutes");
   const hasBookingCapacityPerSlot = serviceColumns.has("booking_capacity_per_slot");
   const hasBookingFeatured = serviceColumns.has("booking_featured");
   const hasBookingHidePrice = serviceColumns.has("booking_hide_price");
@@ -686,6 +700,7 @@ async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRo
         bookingAvailableDays: hasBookingAvailableDays ? services.bookingAvailableDays : sql<string | null>`null`,
         bookingAvailableStartTime: hasBookingAvailableStartTime ? services.bookingAvailableStartTime : sql<string | null>`null`,
         bookingAvailableEndTime: hasBookingAvailableEndTime ? services.bookingAvailableEndTime : sql<string | null>`null`,
+        bookingBufferMinutes: hasBookingBufferMinutes ? services.bookingBufferMinutes : sql<number | null>`null`,
         bookingCapacityPerSlot: hasBookingCapacityPerSlot ? services.bookingCapacityPerSlot : sql<number | null>`null`,
         bookingFeatured: hasBookingFeatured ? services.bookingFeatured : sql<boolean | null>`false`,
         bookingHidePrice: hasBookingHidePrice ? services.bookingHidePrice : sql<boolean | null>`false`,
@@ -725,6 +740,7 @@ const createSchema = z.object({
   bookingAvailableDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   bookingAvailableStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
   bookingAvailableEndTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  bookingBufferMinutes: z.coerce.number().int().min(0).max(240).nullable().optional(),
   bookingCapacityPerSlot: z.coerce.number().int().min(1).max(12).nullable().optional(),
   bookingFeatured: z.boolean().optional(),
   bookingHidePrice: z.boolean().optional(),
@@ -754,6 +770,7 @@ const patchSchema = z
     bookingAvailableDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
     bookingAvailableStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
     bookingAvailableEndTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+    bookingBufferMinutes: z.coerce.number().int().min(0).max(240).nullable().optional(),
     bookingCapacityPerSlot: z.coerce.number().int().min(1).max(12).nullable().optional(),
     bookingFeatured: z.boolean().optional(),
     bookingHidePrice: z.boolean().optional(),
