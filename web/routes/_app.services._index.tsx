@@ -877,6 +877,32 @@ function BookingRulePill({ active, children }: { active: boolean; children: Reac
   );
 }
 
+function ServiceMetaPill({
+  label,
+  value,
+  tone = "cool",
+}: {
+  label: string;
+  value: string;
+  tone?: "cool" | "warm" | "success" | "neutral";
+}) {
+  const toneClasses =
+    tone === "warm"
+      ? "border-amber-200 bg-amber-50/80 text-amber-900"
+      : tone === "success"
+        ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
+        : tone === "neutral"
+          ? "border-slate-200 bg-slate-50 text-slate-800"
+          : "border-slate-200 bg-white/90 text-slate-900";
+
+  return (
+    <div className={cn("rounded-2xl border px-3.5 py-3 shadow-sm", toneClasses)}>
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold tracking-[-0.01em]">{value}</p>
+    </div>
+  );
+}
+
 function BuilderSection({
   eyebrow,
   title,
