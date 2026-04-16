@@ -156,44 +156,41 @@ type DeviceFrameProps = {
 
 function LaptopScreenshotFrame({ children, className, screenClassName }: DeviceFrameProps) {
   return (
-    <div className={cn("relative isolate mx-auto w-full drop-shadow-[0_32px_70px_rgba(15,23,42,0.16)]", className)}>
-      <div
-        className={cn(
-          "absolute left-[10.9%] top-[3.1%] h-[75.2%] w-[76.8%] overflow-hidden rounded-[12px] bg-slate-50 sm:rounded-[16px] lg:rounded-[20px]",
-          screenClassName
-        )}
-      >
-        {children}
+    <div className={cn("relative isolate mx-auto w-full aspect-[495/294]", className)}>
+      <div className="absolute inset-x-[11%] top-[4.5%] bottom-[10.8%] rounded-[24px] bg-[linear-gradient(180deg,#1f2937_0%,#0f172a_72%,#111827_100%)] p-[1.2%] shadow-[0_28px_60px_rgba(15,23,42,0.18)]">
+        <div
+          className={cn(
+            "relative h-full w-full overflow-hidden rounded-[20px] bg-slate-50 ring-1 ring-white/10",
+            screenClassName
+          )}
+        >
+          {children}
+        </div>
       </div>
-      <img
-        src="/marketing/strata-ui/laptop-frame-overlay.png"
-        alt=""
-        aria-hidden="true"
-        className="pointer-events-none relative z-10 block w-full select-none"
-        loading="lazy"
-      />
+      <div className="absolute inset-x-[8%] bottom-[10.5%] h-[1.4%] rounded-full bg-white/8" />
+      <div className="absolute inset-x-[1.5%] bottom-[3.5%] h-[8.6%] rounded-b-[999px] rounded-t-[28px] bg-[linear-gradient(180deg,#6b7280_0%,#1f2937_24%,#0f172a_65%,#374151_100%)] shadow-[0_16px_30px_rgba(15,23,42,0.14)]" />
+      <div className="absolute left-1/2 bottom-[5.9%] h-[1.6%] w-[14%] -translate-x-1/2 rounded-full bg-black/35" />
+      <div className="absolute inset-x-[7%] bottom-[2.3%] h-[2.6%] rounded-b-[999px] bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(15,23,42,0))]" />
     </div>
   );
 }
 
 function PhoneScreenshotFrame({ children, className, screenClassName }: DeviceFrameProps) {
   return (
-    <div className={cn("relative isolate mx-auto w-full drop-shadow-[0_24px_50px_rgba(15,23,42,0.18)]", className)}>
+    <div className={cn("relative isolate mx-auto w-full aspect-[195/374]", className)}>
+      <div className="absolute inset-0 rounded-[18%] bg-[linear-gradient(145deg,#475569_0%,#111827_18%,#020617_44%,#1f2937_70%,#64748b_100%)] shadow-[0_24px_48px_rgba(15,23,42,0.22)]" />
+      <div className="absolute inset-[1.5%] rounded-[17%] bg-[linear-gradient(145deg,#0f172a_0%,#1e293b_48%,#111827_100%)]" />
       <div
         className={cn(
-          "absolute left-[9.7%] top-[4.6%] h-[90.9%] w-[80.5%] overflow-hidden rounded-[14%] bg-slate-50",
+          "absolute left-[8.8%] right-[8.8%] top-[4.4%] bottom-[4.4%] overflow-hidden rounded-[14%] bg-slate-50 ring-1 ring-black/5",
           screenClassName
         )}
       >
         {children}
       </div>
-      <img
-        src="/marketing/strata-ui/iphone-frame-overlay.png"
-        alt=""
-        aria-hidden="true"
-        className="pointer-events-none relative z-10 block w-full select-none"
-        loading="lazy"
-      />
+      <div className="absolute left-1/2 top-[6.5%] z-10 h-[4.4%] w-[30%] -translate-x-1/2 rounded-full bg-black/90 shadow-[0_1px_2px_rgba(255,255,255,0.08)]" />
+      <div className="absolute right-[2.6%] top-[24%] h-[14%] w-[1.8%] rounded-full bg-white/15" />
+      <div className="absolute left-[2.7%] top-[19%] h-[10%] w-[1.6%] rounded-full bg-white/10" />
     </div>
   );
 }
