@@ -388,14 +388,14 @@ export default function LandingPage() {
                 />
               </ScreenshotSurface>
             </div>
-            <ScreenshotSurface className="absolute -bottom-7 right-0 w-36 aspect-[390/760] sm:right-2 sm:w-44 lg:w-48">
+            <div className="pointer-events-none absolute -bottom-10 right-0 w-40 sm:right-1 sm:w-52 lg:-bottom-14 lg:right-3 lg:w-64">
               <img
-                src="/marketing/strata-ui/mobile-calendar.png"
-                alt="Strata mobile calendar month view."
-                className="block h-full w-full object-cover object-top"
+                src="/marketing/strata-ui/hero-phone-angled.png"
+                alt="Strata mobile calendar shown in an angled phone render."
+                className="block h-auto w-full"
                 loading="eager"
               />
-            </ScreenshotSurface>
+            </div>
           </div>
         </div>
       </section>
