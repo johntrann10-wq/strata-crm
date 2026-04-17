@@ -353,6 +353,31 @@ describe("business route serialization", () => {
     ).toBe(false);
   });
 
+  it("respects an explicit booking-page disable even when services stay booking-ready", async () => {
+    const { resolvePublicBookingEnabledState } = await import("./businesses.js");
+
+    expect(
+      resolvePublicBookingEnabledState({
+        businessBookingEnabled: false,
+        hasBookableServices: true,
+      })
+    ).toBe(false);
+
+    expect(
+      resolvePublicBookingEnabledState({
+        businessBookingEnabled: true,
+        hasBookableServices: false,
+      })
+    ).toBe(true);
+
+    expect(
+      resolvePublicBookingEnabledState({
+        businessBookingEnabled: null,
+        hasBookableServices: true,
+      })
+    ).toBe(true);
+  });
+
   it("allows builder preview access for signed-in settings users without exposing disabled booking publicly", async () => {
     const { isAuthorizedPublicBookingPreviewRequest } = await import("./businesses.js");
 

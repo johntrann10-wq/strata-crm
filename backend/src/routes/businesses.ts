@@ -1742,6 +1742,15 @@ export function hasBookablePublicServices(
   return services.some((service) => service.active !== false && service.isAddon !== true && service.bookingEnabled === true);
 }
 
+export function resolvePublicBookingEnabledState(params: {
+  businessBookingEnabled: boolean | null | undefined;
+  hasBookableServices: boolean;
+}) {
+  if (params.businessBookingEnabled === true) return true;
+  if (params.businessBookingEnabled === false) return false;
+  return params.hasBookableServices;
+}
+
 async function loadAccessiblePublicBookingBusiness(id: string, req?: Request) {
   const business = await loadBusinessById(id);
   if (!business) return null;
@@ -1761,14 +1770,18 @@ async function loadAccessiblePublicBookingBusiness(id: string, req?: Request) {
       bookingEnabled: true,
     };
   }
-  if (business.bookingEnabled === true) return business;
+  if (business.bookingEnabled === true || business.bookingEnabled === false) return business;
 
   const { services: publicServices } = await listPublicBookingServices(business.id);
-  if (!hasBookablePublicServices(publicServices)) {
+  const shouldEnablePublicBooking = resolvePublicBookingEnabledState({
+    businessBookingEnabled: business.bookingEnabled,
+    hasBookableServices: hasBookablePublicServices(publicServices),
+  });
+  if (!shouldEnablePublicBooking) {
     return business;
   }
 
-  warnOnce("businesses:public-booking:inferred-enabled", "public booking inferred from service configuration despite business toggle drift", {
+  warnOnce("businesses:public-booking:inferred-enabled", "public booking inferred from service configuration for legacy business state", {
     businessId: business.id,
   });
 

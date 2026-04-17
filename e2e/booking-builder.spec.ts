@@ -500,6 +500,31 @@ test("booking builder preview updates and saves business-level settings", async 
   });
 });
 
+test("booking builder can disable the booking page and save the off state", async ({ page }) => {
+  const workspace = await mockBookingBuilderWorkspace(page);
+
+  await page.goto("/app/booking");
+
+  const statusWidget = page.getByText("Status", { exact: true }).locator("../..");
+  const statusPanel = page.getByText("Status", { exact: true }).locator("..");
+  await expect(page.getByText("Live preview", { exact: true })).toBeVisible();
+  await expect(statusPanel.getByText("Live", { exact: true })).toBeVisible();
+
+  await statusWidget.locator("label").click();
+  await expect(statusPanel.getByText("Disabled", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  await expect(page.getByText("Booking builder updated.")).toBeVisible();
+
+  expect(workspace.getLastBusinessPatch()).toMatchObject({
+    bookingEnabled: false,
+  });
+  expect(workspace.getBusinessRecord()).toMatchObject({
+    bookingEnabled: false,
+  });
+});
+
 test("booking builder stays permission-gated without settings.write", async ({ page }) => {
   await mockBookingBuilderWorkspace(page, {
     permissions: ["dashboard.view", "services.read", "services.write", "settings.read"],
