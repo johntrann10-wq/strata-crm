@@ -9,6 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import {
+  resolvePublicShareMetadata,
+  usePublicShareMeta,
+  type PublicShareMetadataPayload,
+} from "@/lib/publicShareMeta";
 import { CheckCircle2, Clock3, Loader2, MessageSquareMore, ShieldCheck } from "lucide-react";
 
 type LeadConfig = {
@@ -60,6 +65,7 @@ export default function PublicLeadCapturePage() {
   const { businessId } = useParams();
   const [searchParams] = useSearchParams();
   const [config, setConfig] = useState<LeadConfig | null>(null);
+  const [shareMetadataPayload, setShareMetadataPayload] = useState<PublicShareMetadataPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +112,38 @@ export default function PublicLeadCapturePage() {
     [searchParams]
   );
   const campaign = useMemo(() => searchParams.get("campaign") || searchParams.get("utm_campaign") || "", [searchParams]);
+  const resolvedShareMetadata = useMemo(() => {
+    if (typeof window === "undefined" || !shareMetadataPayload) return null;
+    return resolvePublicShareMetadata(shareMetadataPayload, window.location.origin, window.location.search);
+  }, [shareMetadataPayload]);
+
+  usePublicShareMeta(resolvedShareMetadata);
+
+  useEffect(() => {
+    if (!businessId) {
+      setShareMetadataPayload(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    fetch(buildApiUrl(`/api/businesses/${encodeURIComponent(businessId)}/public-lead-share-metadata`))
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as PublicShareMetadataPayload & { message?: string };
+        if (!response.ok) throw new Error(payload.message || "Could not load share metadata.");
+        return payload;
+      })
+      .then((payload) => {
+        if (!cancelled) setShareMetadataPayload(payload);
+      })
+      .catch(() => {
+        if (!cancelled) setShareMetadataPayload(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [businessId]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

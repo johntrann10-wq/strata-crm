@@ -1,14 +1,23 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useOutletContext } from "react-router";
-import { Copy, ExternalLink, LoaderCircle, Trash2, Upload } from "lucide-react";
+import { Copy, ExternalLink, LoaderCircle, RotateCcw, RotateCw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "../../api";
 import { useAction, useFindMany, useFindOne } from "../../hooks/useApi";
 import type { AuthOutletContext } from "../../routes/_app";
+import { BookingBrandLogo } from "@/components/booking/BookingBrandLogo";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,9 +28,14 @@ import { cn } from "@/lib/utils";
 import {
   bookingBrandAccentColorOptions,
   bookingBrandBackgroundToneOptions,
+  bookingBrandLogoBackgroundPlateOptions,
+  bookingBrandLogoFitModeOptions,
   bookingBrandButtonStyleOptions,
   bookingBrandPrimaryColorOptions,
+  defaultBookingBrandLogoTransform,
+  normalizeBookingBrandLogoTransform,
   resolveBookingBrandTheme,
+  type BookingBrandLogoTransform,
   type BookingBrandAccentColorToken,
   type BookingBrandBackgroundToneToken,
   type BookingBrandButtonStyleToken,
@@ -45,6 +59,7 @@ type BusinessBookingBuilderRecord = {
   bookingPageTitle?: string | null;
   bookingPageSubtitle?: string | null;
   bookingBrandLogoUrl?: string | null;
+  bookingBrandLogoTransform?: BookingBrandLogoTransform | null;
   bookingBrandPrimaryColorToken?: BookingBrandPrimaryColorToken | null;
   bookingBrandAccentColorToken?: BookingBrandAccentColorToken | null;
   bookingBrandBackgroundToneToken?: BookingBrandBackgroundToneToken | null;
@@ -83,6 +98,7 @@ type BookingBuilderFormState = {
   bookingPageTitle: string;
   bookingPageSubtitle: string;
   bookingBrandLogoUrl: string;
+  bookingBrandLogoTransform: BookingBrandLogoTransform;
   bookingBrandPrimaryColorToken: BookingBrandPrimaryColorToken;
   bookingBrandAccentColorToken: BookingBrandAccentColorToken;
   bookingBrandBackgroundToneToken: BookingBrandBackgroundToneToken;
@@ -122,6 +138,7 @@ const defaultForm: BookingBuilderFormState = {
   bookingPageTitle: "",
   bookingPageSubtitle: "",
   bookingBrandLogoUrl: "",
+  bookingBrandLogoTransform: defaultBookingBrandLogoTransform,
   bookingBrandPrimaryColorToken: "orange",
   bookingBrandAccentColorToken: "amber",
   bookingBrandBackgroundToneToken: "ivory",
@@ -190,6 +207,7 @@ function toForm(record?: BusinessBookingBuilderRecord | null): BookingBuilderFor
     bookingPageTitle: record?.bookingPageTitle ?? "",
     bookingPageSubtitle: record?.bookingPageSubtitle ?? "",
     bookingBrandLogoUrl: record?.bookingBrandLogoUrl ?? "",
+    bookingBrandLogoTransform: normalizeBookingBrandLogoTransform(record?.bookingBrandLogoTransform),
     bookingBrandPrimaryColorToken: record?.bookingBrandPrimaryColorToken ?? "orange",
     bookingBrandAccentColorToken: record?.bookingBrandAccentColorToken ?? "amber",
     bookingBrandBackgroundToneToken: record?.bookingBrandBackgroundToneToken ?? "ivory",
@@ -248,6 +266,8 @@ function toBrandingTokens(form: BookingBuilderFormState): BookingBrandingTokens 
     accentColorToken: form.bookingBrandAccentColorToken,
     backgroundToneToken: form.bookingBrandBackgroundToneToken,
     buttonStyleToken: form.bookingBrandButtonStyleToken,
+    logoUrl: form.bookingBrandLogoUrl.trim() || null,
+    logoTransform: form.bookingBrandLogoTransform,
   };
 }
 
@@ -351,8 +371,8 @@ function getUnsupportedBookingBuilderKeys(message: string | undefined): string[]
 }
 
 const MAX_BOOKING_LOGO_FILE_BYTES = 4 * 1024 * 1024;
-const MAX_BOOKING_LOGO_DIMENSION = 512;
-const MAX_BOOKING_LOGO_DATA_URL_LENGTH = 260_000;
+const MAX_BOOKING_LOGO_DIMENSION = 1200;
+const MAX_BOOKING_LOGO_DATA_URL_LENGTH = 400_000;
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -428,6 +448,14 @@ async function buildBookingLogoDataUrl(file: File): Promise<string> {
   return dataUrl;
 }
 
+function createFreshLogoTransform(current?: BookingBrandLogoTransform | null): BookingBrandLogoTransform {
+  return {
+    ...defaultBookingBrandLogoTransform,
+    fitMode: current?.fitMode ?? defaultBookingBrandLogoTransform.fitMode,
+    backgroundPlate: current?.backgroundPlate ?? defaultBookingBrandLogoTransform.backgroundPlate,
+  };
+}
+
 export default function BookingBuilderPage() {
   const { businessId, permissions } = useOutletContext<AuthOutletContext>();
   const canRead = permissions.has("settings.read");
@@ -440,11 +468,24 @@ export default function BookingBuilderPage() {
   const [previewNonce, setPreviewNonce] = useState(0);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("live");
   const [logoUploading, setLogoUploading] = useState(false);
+  const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+  const [logoEditorSourceUrl, setLogoEditorSourceUrl] = useState<string>("");
+  const [logoEditorTransform, setLogoEditorTransform] = useState<BookingBrandLogoTransform>(
+    defaultBookingBrandLogoTransform
+  );
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [serviceForm, setServiceForm] = useState<BookingBuilderServiceFormState>(
     buildServiceFormState(null)
   );
   const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const logoEditorFrameRef = useRef<HTMLDivElement | null>(null);
+  const logoDragStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startOffsetX: number;
+    startOffsetY: number;
+  } | null>(null);
 
   const [{ data: business, fetching, error }, refetchBusiness] = useFindOne(api.business, businessId ?? "", {
     pause: !businessId || !canRead,
@@ -515,6 +556,7 @@ export default function BookingBuilderPage() {
   );
   const dirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(savedForm), [form, savedForm]);
   const bookingTheme = useMemo(() => resolveBookingBrandTheme(toBrandingTokens(form)), [form]);
+  const brandingPreviewTokens = useMemo(() => toBrandingTokens(form), [form]);
   const businessRequestSettings = useMemo<BookingRequestSettings>(
     () => ({
       requireExactTime: form.bookingRequestRequireExactTime,
@@ -559,6 +601,70 @@ export default function BookingBuilderPage() {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  const openLogoEditor = (sourceUrl: string, transform: BookingBrandLogoTransform) => {
+    setLogoEditorSourceUrl(sourceUrl);
+    setLogoEditorTransform(normalizeBookingBrandLogoTransform(transform));
+    setLogoEditorOpen(true);
+  };
+
+  const applyLogoEditor = () => {
+    if (!logoEditorSourceUrl.trim()) return;
+    updateField("bookingBrandLogoUrl", logoEditorSourceUrl.trim());
+    updateField("bookingBrandLogoTransform", normalizeBookingBrandLogoTransform(logoEditorTransform));
+    setLogoEditorOpen(false);
+    toast.success("Logo framing updated.");
+  };
+
+  const handleLogoEditorPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!logoEditorFrameRef.current) return;
+    logoDragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startOffsetX: logoEditorTransform.offsetX,
+      startOffsetY: logoEditorTransform.offsetY,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const resetLogoEditor = () => {
+    setLogoEditorTransform(createFreshLogoTransform(logoEditorTransform));
+  };
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const dragState = logoDragStateRef.current;
+      const frameElement = logoEditorFrameRef.current;
+      if (!dragState || !frameElement || dragState.pointerId !== event.pointerId) return;
+      const bounds = frameElement.getBoundingClientRect();
+      const width = Math.max(bounds.width, 1);
+      const height = Math.max(bounds.height, 1);
+      const nextOffsetX = dragState.startOffsetX + (event.clientX - dragState.startX) / (width * 0.18);
+      const nextOffsetY = dragState.startOffsetY + (event.clientY - dragState.startY) / (height * 0.18);
+      setLogoEditorTransform((current) =>
+        normalizeBookingBrandLogoTransform({
+          ...current,
+          offsetX: nextOffsetX,
+          offsetY: nextOffsetY,
+        })
+      );
+    };
+
+    const finishDrag = (event: PointerEvent) => {
+      if (!logoDragStateRef.current || logoDragStateRef.current.pointerId !== event.pointerId) return;
+      logoDragStateRef.current = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", finishDrag);
+    window.addEventListener("pointercancel", finishDrag);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishDrag);
+      window.removeEventListener("pointercancel", finishDrag);
+    };
+  }, [logoEditorTransform.offsetX, logoEditorTransform.offsetY]);
+
   const saveChanges = async () => {
     if (!businessId || !canEdit) return;
     const payload = {
@@ -567,6 +673,9 @@ export default function BookingBuilderPage() {
       bookingPageTitle: form.bookingPageTitle.trim() || null,
       bookingPageSubtitle: form.bookingPageSubtitle.trim() || null,
       bookingBrandLogoUrl: form.bookingBrandLogoUrl.trim() || null,
+      bookingBrandLogoTransform: form.bookingBrandLogoUrl.trim()
+        ? normalizeBookingBrandLogoTransform(form.bookingBrandLogoTransform)
+        : null,
       bookingBrandPrimaryColorToken: form.bookingBrandPrimaryColorToken,
       bookingBrandAccentColorToken: form.bookingBrandAccentColorToken,
       bookingBrandBackgroundToneToken: form.bookingBrandBackgroundToneToken,
@@ -683,8 +792,8 @@ export default function BookingBuilderPage() {
     setLogoUploading(true);
     try {
       const nextLogoUrl = await buildBookingLogoDataUrl(file);
-      updateField("bookingBrandLogoUrl", nextLogoUrl);
-      toast.success("Logo added to the booking page.");
+      openLogoEditor(nextLogoUrl, createFreshLogoTransform(form.bookingBrandLogoTransform));
+      toast.success("Logo ready to frame.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not upload that logo.");
     } finally {
@@ -764,17 +873,15 @@ export default function BookingBuilderPage() {
                       disabled={!canEdit || logoUploading}
                     />
                     <div className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                        {form.bookingBrandLogoUrl ? (
-                          <img src={form.bookingBrandLogoUrl} alt="" className="h-full w-full object-contain p-2" />
-                        ) : (
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">No logo</div>
-                        )}
-                      </div>
+                      <BookingBrandLogo
+                        businessName={form.bookingPageTitle.trim() || businessRecord?.name || "Strata"}
+                        branding={brandingPreviewTokens}
+                        preset="builder_thumb"
+                      />
                       <div className="min-w-0 flex-1 space-y-1">
-                        <p className="text-sm font-semibold text-slate-950">Upload a logo image</p>
+                        <p className="text-sm font-semibold text-slate-950">Upload and frame a logo</p>
                         <p className="text-xs leading-5 text-slate-500">
-                          PNG, JPG, WEBP, or SVG. We optimize the image before saving it to your booking page.
+                          PNG, JPG, WEBP, or SVG. Reposition, crop, and rotate once so booking, email, and sharing stay consistent.
                         </p>
                       </div>
                     </div>
@@ -791,14 +898,83 @@ export default function BookingBuilderPage() {
                       </Button>
                       <Button
                         type="button"
+                        variant="outline"
+                        onClick={() =>
+                          form.bookingBrandLogoUrl
+                            ? openLogoEditor(form.bookingBrandLogoUrl, form.bookingBrandLogoTransform)
+                            : logoInputRef.current?.click()
+                        }
+                        disabled={!canEdit || logoUploading}
+                        className="sm:w-auto"
+                      >
+                        Adjust crop
+                      </Button>
+                      <Button
+                        type="button"
                         variant="ghost"
-                        onClick={() => updateField("bookingBrandLogoUrl", "")}
+                        onClick={() => {
+                          updateField("bookingBrandLogoUrl", "");
+                          updateField("bookingBrandLogoTransform", defaultBookingBrandLogoTransform);
+                        }}
                         disabled={!canEdit || !form.bookingBrandLogoUrl || logoUploading}
                         className="sm:w-auto"
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Remove image
                       </Button>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Adaptive previews</p>
+                        <p className="text-sm leading-6 text-slate-600">
+                          These previews use the saved fit, plate, crop, and rotation rules before customers ever see the page.
+                        </p>
+                      </div>
+                      <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                        {[
+                          {
+                            key: "booking",
+                            label: "Booking header",
+                            copy: "Primary storefront mark at the top of the page.",
+                            preset: "hero" as const,
+                          },
+                          {
+                            key: "confirmation",
+                            label: "Confirmation state",
+                            copy: "Keeps the post-submit view polished and familiar.",
+                            preset: "confirmation" as const,
+                          },
+                          {
+                            key: "email",
+                            label: "Email header",
+                            copy: "Client-facing mailer lockup with a safe plate.",
+                            preset: "email" as const,
+                          },
+                          {
+                            key: "share",
+                            label: "Social preview",
+                            copy: "Composed for link cards and share previews.",
+                            preset: "share" as const,
+                          },
+                        ].map((preview) => (
+                          <div
+                            key={preview.key}
+                            className="rounded-[1.25rem] border border-slate-200/80 bg-slate-50/85 p-4"
+                          >
+                            <div className="flex items-start gap-4">
+                              <BookingBrandLogo
+                                businessName={form.bookingPageTitle.trim() || businessRecord?.name || "Strata"}
+                                branding={brandingPreviewTokens}
+                                preset={preview.preset}
+                              />
+                              <div className="min-w-0 space-y-1">
+                                <p className="text-sm font-semibold text-slate-950">{preview.label}</p>
+                                <p className="text-xs leading-5 text-slate-500">{preview.copy}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </Field>
@@ -1221,6 +1397,253 @@ export default function BookingBuilderPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={logoEditorOpen} onOpenChange={setLogoEditorOpen}>
+        <DialogContent className="max-w-[1120px] border-slate-200/80 bg-white/98 p-0 sm:max-w-[1120px]">
+          <DialogHeader className="border-b border-slate-200/80 px-6 pt-6">
+            <DialogTitle>Logo crop and framing</DialogTitle>
+            <DialogDescription>
+              Drag to reposition, rotate in fine steps, and choose the fit that should carry through the booking page, confirmation view, emails, and social previews.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="border-b border-slate-200/80 bg-slate-50/70 p-6 lg:border-r lg:border-b-0">
+              <div className="space-y-4 rounded-[2rem] border border-slate-200/80 bg-[radial-gradient(circle_at_top,rgba(251,146,60,0.14),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Editor canvas</p>
+                  <p className="text-sm leading-6 text-slate-600">
+                    Drag inside the frame to set the visible crop. Wordmarks get a wider stage automatically.
+                  </p>
+                </div>
+                <div className="flex min-h-[380px] items-center justify-center rounded-[1.75rem] border border-slate-200/80 bg-slate-950/[0.03] p-6">
+                  <div ref={logoEditorFrameRef} className="inline-flex">
+                    <BookingBrandLogo
+                      businessName={form.bookingPageTitle.trim() || businessRecord?.name || "Strata"}
+                      branding={{
+                        ...brandingPreviewTokens,
+                        logoUrl: logoEditorSourceUrl || null,
+                        logoTransform: logoEditorTransform,
+                      }}
+                      preset="editor"
+                      onPointerDown={handleLogoEditorPointerDown}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  {[
+                    {
+                      key: "booking",
+                      label: "Booking header",
+                      preset: "hero" as const,
+                    },
+                    {
+                      key: "confirmation",
+                      label: "Confirmation",
+                      preset: "confirmation" as const,
+                    },
+                    {
+                      key: "email",
+                      label: "Email header",
+                      preset: "email" as const,
+                    },
+                    {
+                      key: "share",
+                      label: "Social share",
+                      preset: "share" as const,
+                    },
+                  ].map((preview) => (
+                    <div
+                      key={preview.key}
+                      className="rounded-[1.25rem] border border-slate-200/80 bg-white/90 p-4"
+                    >
+                      <div className="flex min-h-[128px] items-center justify-center rounded-[1rem] border border-dashed border-slate-200 bg-slate-50/70">
+                        <BookingBrandLogo
+                          businessName={form.bookingPageTitle.trim() || businessRecord?.name || "Strata"}
+                          branding={{
+                            ...brandingPreviewTokens,
+                            logoUrl: logoEditorSourceUrl || null,
+                            logoTransform: logoEditorTransform,
+                          }}
+                          preset={preview.preset}
+                        />
+                      </div>
+                      <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        {preview.label}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-5 px-6 py-6">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                <Field label="Fit mode">
+                  <Select
+                    value={logoEditorTransform.fitMode}
+                    onValueChange={(value) =>
+                      setLogoEditorTransform((current) =>
+                        normalizeBookingBrandLogoTransform({
+                          ...current,
+                          fitMode: value as BookingBrandLogoTransform["fitMode"],
+                        })
+                      )
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {bookingBrandLogoFitModeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field label="Background plate">
+                  <Select
+                    value={logoEditorTransform.backgroundPlate}
+                    onValueChange={(value) =>
+                      setLogoEditorTransform((current) =>
+                        normalizeBookingBrandLogoTransform({
+                          ...current,
+                          backgroundPlate: value as BookingBrandLogoTransform["backgroundPlate"],
+                        })
+                      )
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {bookingBrandLogoBackgroundPlateOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+
+              <div className="space-y-2 rounded-[1.25rem] border border-slate-200/80 bg-slate-50/80 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Zoom
+                  </Label>
+                  <span className="text-sm font-medium text-slate-700">{Math.round(logoEditorTransform.zoom * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="4"
+                  step="0.01"
+                  value={logoEditorTransform.zoom}
+                  onChange={(event) =>
+                    setLogoEditorTransform((current) =>
+                      normalizeBookingBrandLogoTransform({
+                        ...current,
+                        zoom: Number(event.target.value),
+                      })
+                    )
+                  }
+                  className="w-full accent-slate-900"
+                />
+              </div>
+
+              <div className="space-y-2 rounded-[1.25rem] border border-slate-200/80 bg-slate-50/80 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Rotation
+                  </Label>
+                  <span className="text-sm font-medium text-slate-700">{logoEditorTransform.rotationDeg.toFixed(1)}°</span>
+                </div>
+                <input
+                  type="range"
+                  min="-45"
+                  max="45"
+                  step="0.5"
+                  value={logoEditorTransform.rotationDeg}
+                  onChange={(event) =>
+                    setLogoEditorTransform((current) =>
+                      normalizeBookingBrandLogoTransform({
+                        ...current,
+                        rotationDeg: Number(event.target.value),
+                      })
+                    )
+                  }
+                  className="w-full accent-slate-900"
+                />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setLogoEditorTransform((current) =>
+                        normalizeBookingBrandLogoTransform({
+                          ...current,
+                          rotationDeg: current.rotationDeg - 90,
+                        })
+                      )
+                    }
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Rotate -90°
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setLogoEditorTransform((current) =>
+                        normalizeBookingBrandLogoTransform({
+                          ...current,
+                          rotationDeg: current.rotationDeg + 90,
+                        })
+                      )
+                    }
+                  >
+                    <RotateCw className="mr-2 h-4 w-4" />
+                    Rotate +90°
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-[1.25rem] border border-slate-200/80 bg-white p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Positioning</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Drag inside the canvas to choose the crop focus. Transparent marks usually look best on Auto or Light plate.
+                </p>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                  <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-sm text-slate-600">
+                    Horizontal offset: {logoEditorTransform.offsetX.toFixed(2)}
+                  </div>
+                  <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-sm text-slate-600">
+                    Vertical offset: {logoEditorTransform.offsetY.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t border-slate-200/80 px-6 py-5">
+            <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <Button type="button" variant="ghost" onClick={resetLogoEditor}>
+                Reset framing
+              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button type="button" variant="outline" onClick={() => setLogoEditorOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={applyLogoEditor} disabled={!logoEditorSourceUrl.trim()}>
+                  Save logo framing
+                </Button>
+              </div>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

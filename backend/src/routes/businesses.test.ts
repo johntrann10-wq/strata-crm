@@ -119,7 +119,7 @@ describe("business route serialization", () => {
       urgencyEnabled: true,
       urgencyText: "Only 3 spots left this week",
       branding: {
-        logoUrl: "https://cdn.example.com/logo.png",
+        logoUrl: "http://localhost:5173/api/businesses/biz_123/public-booking-brand-logo",
         primaryColorToken: "sky",
         accentColorToken: "blue",
         backgroundToneToken: "mist",
@@ -193,7 +193,68 @@ describe("business route serialization", () => {
       services: [],
     });
 
-    expect(payload.branding.logoUrl).toBe(uploadedLogo);
+    expect(payload.branding.logoUrl).toBe("http://localhost:5173/api/businesses/biz_456/public-booking-brand-logo");
+  });
+
+  it("builds branded booking share metadata without leaking internal fields", async () => {
+    const { buildPublicBookingShareMetadataResponse } = await import("./businesses.js");
+    const payload = buildPublicBookingShareMetadataResponse({
+      id: "biz_123",
+      name: "Coastline Detail Co.",
+      bookingPageTitle: "Book online in minutes",
+      bookingPageSubtitle: "Choose a service, share your vehicle, and request the right time without the back-and-forth.",
+      bookingBrandLogoUrl: "https://cdn.example.com/logo.png",
+    });
+
+    expect(payload).toEqual({
+      businessId: "biz_123",
+      businessName: "Coastline Detail Co.",
+      title: "Book online in minutes | Coastline Detail Co.",
+      description: "Choose a service, share your vehicle, and request the right time without the back-and-forth.",
+      canonicalPath: "/book/biz_123",
+      imagePath: "/api/businesses/biz_123/public-brand-image",
+      imageAlt: "Coastline Detail Co. logo for online booking",
+    });
+  });
+
+  it("builds branded lead share metadata with a clean fallback title", async () => {
+    const { buildPublicLeadShareMetadataResponse } = await import("./businesses.js");
+    const payload = buildPublicLeadShareMetadataResponse({
+      id: "biz_999",
+      name: "Northline Auto Spa",
+      bookingBrandLogoUrl: null,
+    });
+
+    expect(payload).toEqual({
+      businessId: "biz_999",
+      businessName: "Northline Auto Spa",
+      title: "Request service | Northline Auto Spa",
+      description: "Share a few details so Northline Auto Spa can review the request and follow up with the right next step.",
+      canonicalPath: "/lead/biz_999",
+      imagePath: null,
+      imageAlt: "Northline Auto Spa logo for service requests",
+    });
+  });
+
+  it("decodes uploaded booking brand images for public sharing", async () => {
+    const { resolvePublicBookingBrandImageAsset } = await import("./businesses.js");
+    const asset = resolvePublicBookingBrandImageAsset("data:image/webp;base64,UklGRlIAAABXRUJQVlA4WAoAAAAQAAAABwAABwAAQUxQSAIAAAAA");
+
+    expect(asset).not.toBeNull();
+    expect(asset).toMatchObject({
+      kind: "inline",
+      contentType: "image/webp",
+    });
+  });
+
+  it("keeps remote booking brand images shareable through a stable public URL", async () => {
+    const { resolvePublicBookingBrandImageAsset } = await import("./businesses.js");
+    const asset = resolvePublicBookingBrandImageAsset("https://cdn.example.com/logo.png");
+
+    expect(asset).toEqual({
+      kind: "redirect",
+      url: "https://cdn.example.com/logo.png",
+    });
   });
 
   it("treats booking as publicly available when bookable services exist", async () => {

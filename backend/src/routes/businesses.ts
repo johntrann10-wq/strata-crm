@@ -88,6 +88,15 @@ import {
   type BookingDraftStatus,
 } from "../lib/bookingDrafts.js";
 import {
+  buildPublicBookingBrandLogoUrl,
+  bookingBrandLogoBackgroundPlates,
+  bookingBrandLogoFitModes,
+  parseBookingBrandLogoTransform,
+  resolveBookingBrandLogoPlateStyles,
+  serializeBookingBrandLogoTransform,
+  type BookingBrandLogoTransform,
+} from "../lib/bookingBranding.js";
+import {
   buildPublicBookingRequestUrl,
   createBookingRequestToken,
   verifyCurrentBookingRequestToken,
@@ -132,8 +141,21 @@ function isValidBookingBrandLogoUrl(value: string): boolean {
 
 const bookingBrandLogoSchema = z
   .string()
-  .max(260_000)
+  .max(400_000)
   .refine((value) => isValidBookingBrandLogoUrl(value), "Logo must be an uploaded image or valid URL.")
+  .nullable()
+  .optional();
+
+const bookingBrandLogoTransformSchema = z
+  .object({
+    version: z.literal(1).optional(),
+    fitMode: z.enum(bookingBrandLogoFitModes).optional(),
+    backgroundPlate: z.enum(bookingBrandLogoBackgroundPlates).optional(),
+    rotationDeg: z.number().min(-180).max(180).optional(),
+    zoom: z.number().min(1).max(4).optional(),
+    offsetX: z.number().min(-2).max(2).optional(),
+    offsetY: z.number().min(-2).max(2).optional(),
+  })
   .nullable()
   .optional();
 
@@ -209,6 +231,7 @@ const createSchema = z.object({
   bookingTrustBulletTertiary: z.string().max(80).nullable().optional(),
   bookingNotesPrompt: z.string().max(160).nullable().optional(),
   bookingBrandLogoUrl: bookingBrandLogoSchema,
+  bookingBrandLogoTransform: bookingBrandLogoTransformSchema,
   bookingBrandPrimaryColorToken: z.enum(["orange", "sky", "emerald", "rose", "slate"]).optional(),
   bookingBrandAccentColorToken: z.enum(["amber", "blue", "mint", "violet", "stone"]).optional(),
   bookingBrandBackgroundToneToken: z.enum(["ivory", "mist", "sand", "slate"]).optional(),
@@ -474,6 +497,20 @@ const publicLeadConfigLimiter = createRateLimiter({
   message: "Please try again shortly.",
 });
 
+const publicShareMetadataLimiter = createRateLimiter({
+  id: "public_share_metadata",
+  windowMs: 60 * 1000,
+  max: 120,
+  message: "Please try again shortly.",
+});
+
+const publicBrandImageLimiter = createRateLimiter({
+  id: "public_brand_image",
+  windowMs: 60 * 1000,
+  max: 180,
+  message: "Please try again shortly.",
+});
+
 const publicLeadSubmitLimiter = createRateLimiter({
   id: "public_lead_submit",
   windowMs: 15 * 60 * 1000,
@@ -497,6 +534,7 @@ async function loadPublicLeadBusiness(id: string) {
         name: businesses.name,
         type: businesses.type,
         timezone: businesses.timezone,
+        bookingBrandLogoUrl: businesses.bookingBrandLogoUrl,
         email: businesses.email,
         phone: businesses.phone,
         leadCaptureEnabled: businesses.leadCaptureEnabled,
@@ -1392,8 +1430,262 @@ function normalizeBookingBrandButtonStyleToken(value: string | null | undefined)
   return value === "soft" || value === "outline" ? value : "solid";
 }
 
+function parseDataUrlImage(
+  value: string
+): { contentType: string; body: Buffer } | null {
+  const match = value.match(
+    /^data:(image\/(?:png|jpeg|jpg|webp|gif|svg\+xml))(?:;charset=[^;,]+)?;base64,([a-z0-9+/=]+)$/i
+  );
+  if (!match) return null;
+  const contentType = match[1].toLowerCase() === "image/jpg" ? "image/jpeg" : match[1].toLowerCase();
+  try {
+    return {
+      contentType,
+      body: Buffer.from(match[2], "base64"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function escapeSvgText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/'/g, "&#39;");
+}
+
+function resolveBookingPreviewLogoSource(
+  business: Pick<BusinessRecord, "id" | "bookingBrandLogoUrl">
+): string | null {
+  const logoUrl = normalizeBookingBrandLogoUrl(business.bookingBrandLogoUrl);
+  if (!logoUrl) return null;
+  return bookingBrandLogoDataUrlPattern.test(logoUrl) ? logoUrl : buildPublicBookingBrandLogoUrl(business.id);
+}
+
+function renderPublicBookingPreviewSvg(
+  business: Pick<
+    BusinessRecord,
+    | "id"
+    | "name"
+    | "bookingPageTitle"
+    | "bookingPageSubtitle"
+    | "bookingTrustBulletPrimary"
+    | "bookingTrustBulletSecondary"
+    | "bookingTrustBulletTertiary"
+    | "bookingBrandLogoUrl"
+    | "bookingBrandLogoTransform"
+    | "bookingBrandPrimaryColorToken"
+    | "bookingBrandAccentColorToken"
+    | "bookingBrandBackgroundToneToken"
+  >
+) {
+  const title = buildBookingPageTitle(business);
+  const subtitle = buildBookingPageSubtitle(business);
+  const transform = parseBookingBrandLogoTransform(business.bookingBrandLogoTransform);
+  const logoSource = resolveBookingPreviewLogoSource(business);
+  const plate = resolveBookingBrandLogoPlateStyles(transform.backgroundPlate);
+  const trustPoints = [
+    normalizeBookingTrustBullet(business.bookingTrustBulletPrimary, "Goes directly to the shop"),
+    normalizeBookingTrustBullet(business.bookingTrustBulletSecondary, "Quick follow-up"),
+    normalizeBookingTrustBullet(business.bookingTrustBulletTertiary, "Secure and simple"),
+  ];
+
+  const primary =
+    normalizeBookingBrandPrimaryColorToken(business.bookingBrandPrimaryColorToken) === "sky"
+      ? { solid: "#0284c7", soft: "#e0f2fe" }
+      : normalizeBookingBrandPrimaryColorToken(business.bookingBrandPrimaryColorToken) === "emerald"
+        ? { solid: "#059669", soft: "#d1fae5" }
+        : normalizeBookingBrandPrimaryColorToken(business.bookingBrandPrimaryColorToken) === "rose"
+          ? { solid: "#e11d48", soft: "#ffe4e6" }
+          : normalizeBookingBrandPrimaryColorToken(business.bookingBrandPrimaryColorToken) === "slate"
+            ? { solid: "#0f172a", soft: "#e2e8f0" }
+            : { solid: "#ea580c", soft: "#ffedd5" };
+  const accent =
+    normalizeBookingBrandAccentColorToken(business.bookingBrandAccentColorToken) === "blue"
+      ? "#dbeafe"
+      : normalizeBookingBrandAccentColorToken(business.bookingBrandAccentColorToken) === "mint"
+        ? "#d1fae5"
+        : normalizeBookingBrandAccentColorToken(business.bookingBrandAccentColorToken) === "violet"
+          ? "#ede9fe"
+          : normalizeBookingBrandAccentColorToken(business.bookingBrandAccentColorToken) === "stone"
+            ? "#f5f5f4"
+            : "#fef3c7";
+  const background =
+    normalizeBookingBrandBackgroundToneToken(business.bookingBrandBackgroundToneToken) === "mist"
+      ? { page: "#f7fbff", muted: "#ecf5ff" }
+      : normalizeBookingBrandBackgroundToneToken(business.bookingBrandBackgroundToneToken) === "sand"
+        ? { page: "#fcfaf6", muted: "#f5eee2" }
+        : normalizeBookingBrandBackgroundToneToken(business.bookingBrandBackgroundToneToken) === "slate"
+          ? { page: "#f8fafc", muted: "#eef2f7" }
+          : { page: "#fffdf8", muted: "#fff3e8" };
+
+  const frame =
+    transform.fitMode === "wordmark"
+      ? { x: 790, y: 110, width: 320, height: 120, radius: 30, padding: 22 }
+      : transform.fitMode === "cover"
+        ? { x: 770, y: 98, width: 340, height: 210, radius: 34, padding: 0 }
+        : { x: 810, y: 92, width: 260, height: 260, radius: 34, padding: 20 };
+  const innerX = frame.x + frame.padding;
+  const innerY = frame.y + frame.padding;
+  const innerWidth = frame.width - frame.padding * 2;
+  const innerHeight = frame.height - frame.padding * 2;
+  const centerX = innerX + innerWidth / 2;
+  const centerY = innerY + innerHeight / 2;
+  const translateX = Math.round(transform.offsetX * innerWidth * 0.18 * 100) / 100;
+  const translateY = Math.round(transform.offsetY * innerHeight * 0.18 * 100) / 100;
+  const preserveAspectRatio = transform.fitMode === "cover" ? "xMidYMid slice" : "xMidYMid meet";
+  const logoMarkup = logoSource
+    ? `<rect x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" rx="${frame.radius}" fill="${plate.background}" stroke="${plate.border}" stroke-width="1.5" />
+       <clipPath id="logo-clip">
+         <rect x="${innerX}" y="${innerY}" width="${innerWidth}" height="${innerHeight}" rx="${Math.max(frame.radius - frame.padding, 0)}" />
+       </clipPath>
+       <g clip-path="url(#logo-clip)">
+         <g transform="translate(${translateX} ${translateY})">
+           <g transform="rotate(${transform.rotationDeg} ${centerX} ${centerY})">
+             <g transform="translate(${centerX} ${centerY}) scale(${transform.zoom}) translate(${-centerX} ${-centerY})">
+               <image href="${escapeSvgText(logoSource)}" x="${innerX}" y="${innerY}" width="${innerWidth}" height="${innerHeight}" preserveAspectRatio="${preserveAspectRatio}" />
+             </g>
+           </g>
+         </g>
+       </g>`
+    : `<rect x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" rx="${frame.radius}" fill="${plate.monogramBackground}" />
+       <text x="${frame.x + frame.width / 2}" y="${frame.y + frame.height / 2 + 22}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${transform.fitMode === "contain" ? 104 : 76}" font-weight="700" fill="${plate.monogramForeground}">${escapeSvgText((business.name?.trim() || "S").slice(0, 1).toUpperCase())}</text>`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="88" y1="64" x2="1136" y2="574" gradientUnits="userSpaceOnUse">
+      <stop stop-color="${background.page}" />
+      <stop offset="1" stop-color="${background.muted}" />
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#ffffff" stop-opacity="0.98" />
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.9" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" rx="40" fill="url(#bg)" />
+  <circle cx="1032" cy="108" r="124" fill="${accent}" fill-opacity="0.55" />
+  <circle cx="167" cy="534" r="168" fill="${primary.soft}" fill-opacity="0.72" />
+  <rect x="42" y="42" width="1116" height="546" rx="34" fill="url(#panel)" stroke="rgba(226,232,240,0.92)" />
+  <text x="94" y="126" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="${primary.solid}" letter-spacing="2.4">BOOK ONLINE</text>
+  <text x="94" y="188" font-family="Arial, sans-serif" font-size="56" font-weight="700" fill="#0f172a">${escapeSvgText(title)}</text>
+  <text x="94" y="232" font-family="Arial, sans-serif" font-size="24" font-weight="600" fill="#334155">${escapeSvgText(business.name?.trim() || "Strata shop")}</text>
+  <foreignObject x="94" y="268" width="560" height="120">
+    <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Arial, sans-serif; font-size: 24px; line-height: 1.55; color: #475569;">
+      ${escapeSvgText(subtitle)}
+    </div>
+  </foreignObject>
+  <g>
+    <rect x="94" y="444" width="170" height="44" rx="22" fill="${primary.soft}" stroke="${primary.solid}" stroke-opacity="0.14" />
+    <text x="179" y="472" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#0f172a">${escapeSvgText(trustPoints[0])}</text>
+    <rect x="278" y="444" width="184" height="44" rx="22" fill="#ffffff" stroke="rgba(203,213,225,0.96)" />
+    <text x="370" y="472" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#334155">${escapeSvgText(trustPoints[1])}</text>
+    <rect x="476" y="444" width="198" height="44" rx="22" fill="#ffffff" stroke="rgba(203,213,225,0.96)" />
+    <text x="575" y="472" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#334155">${escapeSvgText(trustPoints[2])}</text>
+  </g>
+  ${logoMarkup}
+  <rect x="760" y="372" width="360" height="148" rx="28" fill="#ffffff" stroke="rgba(226,232,240,0.96)" />
+  <text x="790" y="420" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#64748b" letter-spacing="1.6">CLIENT BOOKING FLOW</text>
+  <text x="790" y="456" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#0f172a">Choose a service</text>
+  <text x="790" y="494" font-family="Arial, sans-serif" font-size="22" font-weight="600" fill="#334155">Share your vehicle</text>
+  <text x="790" y="530" font-family="Arial, sans-serif" font-size="22" font-weight="600" fill="#334155">Lock in the next step</text>
+</svg>`;
+}
+
 function buildBookingPageSubtitle(business: { bookingPageSubtitle?: string | null }): string {
   return business.bookingPageSubtitle?.trim() || "Choose the service you need, share your vehicle details, and lock in the next step without the back-and-forth.";
+}
+
+function withBusinessSuffix(baseTitle: string, businessName: string | null | undefined) {
+  const normalizedBusinessName = cleanOptionalText(businessName ?? undefined);
+  if (!normalizedBusinessName) return baseTitle;
+  const lowerBase = baseTitle.toLowerCase();
+  if (lowerBase.includes(normalizedBusinessName.toLowerCase())) return baseTitle;
+  return `${baseTitle} | ${normalizedBusinessName}`;
+}
+
+export type PublicShareMetadataPayload = {
+  businessId: string;
+  businessName: string;
+  title: string;
+  description: string;
+  canonicalPath: string;
+  imagePath: string | null;
+  imageAlt: string;
+};
+
+function buildPublicBrandImagePath(businessId: string) {
+  return `/api/businesses/${encodeURIComponent(businessId)}/public-brand-image`;
+}
+
+export function buildPublicBookingShareMetadataResponse(business: Pick<
+  BusinessRecord,
+  "id" | "name" | "bookingPageTitle" | "bookingPageSubtitle" | "bookingBrandLogoUrl"
+>): PublicShareMetadataPayload {
+  const businessName = business.name?.trim() || "The shop";
+  return {
+    businessId: business.id,
+    businessName,
+    title: withBusinessSuffix(buildBookingPageTitle(business), business.name),
+    description: buildBookingPageSubtitle(business),
+    canonicalPath: `/book/${encodeURIComponent(business.id)}`,
+    imagePath: `/api/businesses/${encodeURIComponent(business.id)}/public-booking-preview.svg`,
+    imageAlt: `${businessName} booking page preview`,
+  };
+}
+
+export function buildPublicLeadShareMetadataResponse(business: Pick<
+  BusinessRecord,
+  "id" | "name" | "bookingBrandLogoUrl"
+>): PublicShareMetadataPayload {
+  const businessName = business.name?.trim() || "The shop";
+  return {
+    businessId: business.id,
+    businessName,
+    title: `Request service | ${businessName}`,
+    description: `Share a few details so ${businessName} can review the request and follow up with the right next step.`,
+    canonicalPath: `/lead/${encodeURIComponent(business.id)}`,
+    imagePath: cleanOptionalText(business.bookingBrandLogoUrl ?? undefined) ? buildPublicBrandImagePath(business.id) : null,
+    imageAlt: `${businessName} logo for service requests`,
+  };
+}
+
+type PublicBrandImageAsset =
+  | { kind: "redirect"; url: string }
+  | { kind: "inline"; contentType: string; buffer: Buffer };
+
+const bookingBrandLogoDataUrlCapturePattern =
+  /^data:(image\/(?:png|jpeg|jpg|webp|gif|svg\+xml))(?:;charset=[^;,]+)?;base64,([a-z0-9+/=]+)$/i;
+
+export function resolvePublicBookingBrandImageAsset(
+  value: string | null | undefined
+): PublicBrandImageAsset | null {
+  const normalized = cleanOptionalText(value ?? undefined);
+  if (!normalized) return null;
+
+  const dataMatch = normalized.match(bookingBrandLogoDataUrlCapturePattern);
+  if (dataMatch) {
+    const contentType = dataMatch[1]?.toLowerCase() === "image/jpg" ? "image/jpeg" : dataMatch[1]!.toLowerCase();
+    return {
+      kind: "inline",
+      contentType,
+      buffer: Buffer.from(dataMatch[2]!, "base64"),
+    };
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return { kind: "redirect", url: parsed.toString() };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 function buildBookingUrgencyText(business: { bookingUrgencyText?: string | null }): string {
@@ -1629,6 +1921,7 @@ type PublicBookingConfigPayload = {
   };
   branding: {
     logoUrl: string | null;
+    logoTransform: BookingBrandLogoTransform;
     primaryColorToken: "orange" | "sky" | "emerald" | "rose" | "slate";
     accentColorToken: "amber" | "blue" | "mint" | "violet" | "stone";
     backgroundToneToken: "ivory" | "mist" | "sand" | "slate";
@@ -1718,6 +2011,7 @@ export function buildPublicBookingConfigResponse(params: {
     | "bookingTrustBulletTertiary"
     | "bookingNotesPrompt"
     | "bookingBrandLogoUrl"
+    | "bookingBrandLogoTransform"
     | "bookingBrandPrimaryColorToken"
     | "bookingBrandAccentColorToken"
     | "bookingBrandBackgroundToneToken"
@@ -1754,7 +2048,10 @@ export function buildPublicBookingConfigResponse(params: {
     defaultFlow: normalizeBookingDefaultFlowValue(business.bookingDefaultFlow),
     requestSettings,
     branding: {
-      logoUrl: normalizeBookingBrandLogoUrl(business.bookingBrandLogoUrl),
+      logoUrl: normalizeBookingBrandLogoUrl(business.bookingBrandLogoUrl)
+        ? buildPublicBookingBrandLogoUrl(business.id)
+        : null,
+      logoTransform: parseBookingBrandLogoTransform(business.bookingBrandLogoTransform),
       primaryColorToken: normalizeBookingBrandPrimaryColorToken(business.bookingBrandPrimaryColorToken),
       accentColorToken: normalizeBookingBrandAccentColorToken(business.bookingBrandAccentColorToken),
       backgroundToneToken: normalizeBookingBrandBackgroundToneToken(business.bookingBrandBackgroundToneToken),
@@ -2858,6 +3155,7 @@ function coerceBusinessRecord(
     bookingTrustBulletTertiary: record.bookingTrustBulletTertiary ?? null,
     bookingNotesPrompt: record.bookingNotesPrompt ?? null,
     bookingBrandLogoUrl: record.bookingBrandLogoUrl ?? null,
+    bookingBrandLogoTransform: parseBookingBrandLogoTransform(record.bookingBrandLogoTransform),
     bookingBrandPrimaryColorToken: record.bookingBrandPrimaryColorToken ?? "orange",
     bookingBrandAccentColorToken: record.bookingBrandAccentColorToken ?? "amber",
     bookingBrandBackgroundToneToken: record.bookingBrandBackgroundToneToken ?? "ivory",
@@ -2946,6 +3244,7 @@ export function serializeBusiness(record: BusinessRecord) {
     bookingTrustBulletTertiary: record.bookingTrustBulletTertiary ?? null,
     bookingNotesPrompt: record.bookingNotesPrompt ?? null,
     bookingBrandLogoUrl: record.bookingBrandLogoUrl ?? null,
+    bookingBrandLogoTransform: parseBookingBrandLogoTransform(record.bookingBrandLogoTransform),
     bookingBrandPrimaryColorToken: record.bookingBrandPrimaryColorToken ?? "orange",
     bookingBrandAccentColorToken: record.bookingBrandAccentColorToken ?? "amber",
     bookingBrandBackgroundToneToken: record.bookingBrandBackgroundToneToken ?? "ivory",
@@ -3508,6 +3807,59 @@ businessesRouter.post(
 );
 
 businessesRouter.get(
+  "/:id/public-booking-brand-logo",
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
+
+    const business = await loadBusinessById(parsed.data.id);
+    if (!business) throw new NotFoundError("Business not found.");
+
+    const logoUrl = normalizeBookingBrandLogoUrl(business.bookingBrandLogoUrl);
+    if (!logoUrl) throw new NotFoundError("Logo not found.");
+
+    const dataUrl = parseDataUrlImage(logoUrl);
+    res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+
+    if (dataUrl) {
+      res.type(dataUrl.contentType).send(dataUrl.body);
+      return;
+    }
+
+    res.redirect(307, logoUrl);
+  })
+);
+
+businessesRouter.get(
+  "/:id/public-booking-preview.svg",
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
+
+    const business = await loadBusinessById(parsed.data.id);
+    if (!business) throw new NotFoundError("Business not found.");
+
+    res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+    res.type("image/svg+xml").send(
+      renderPublicBookingPreviewSvg({
+        id: business.id,
+        name: business.name,
+        bookingPageTitle: business.bookingPageTitle,
+        bookingPageSubtitle: business.bookingPageSubtitle,
+        bookingTrustBulletPrimary: business.bookingTrustBulletPrimary,
+        bookingTrustBulletSecondary: business.bookingTrustBulletSecondary,
+        bookingTrustBulletTertiary: business.bookingTrustBulletTertiary,
+        bookingBrandLogoUrl: business.bookingBrandLogoUrl,
+        bookingBrandLogoTransform: business.bookingBrandLogoTransform,
+        bookingBrandPrimaryColorToken: business.bookingBrandPrimaryColorToken,
+        bookingBrandAccentColorToken: business.bookingBrandAccentColorToken,
+        bookingBrandBackgroundToneToken: business.bookingBrandBackgroundToneToken,
+      })
+    );
+  })
+);
+
+businessesRouter.get(
   "/:id/public-booking-config",
   publicBookingConfigLimiter.middleware,
   wrapAsync(async (req: Request, res: Response) => {
@@ -3597,6 +3949,50 @@ businessesRouter.get(
         services: baseServices,
       })
     );
+  })
+);
+
+businessesRouter.get(
+  "/:id/public-booking-share-metadata",
+  publicShareMetadataLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
+
+    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id);
+    if (!business || business.bookingEnabled !== true) {
+      throw new NotFoundError("Online booking is not available for this business.");
+    }
+
+    res.json(buildPublicBookingShareMetadataResponse(business));
+  })
+);
+
+businessesRouter.get(
+  "/:id/public-brand-image",
+  publicBrandImageLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
+
+    const bookingBusiness = await loadAccessiblePublicBookingBusiness(parsed.data.id);
+    const leadBusiness = bookingBusiness ? null : await loadPublicLeadBusiness(parsed.data.id);
+    const logoSource = bookingBusiness?.bookingBrandLogoUrl ?? leadBusiness?.bookingBrandLogoUrl ?? null;
+    const asset = resolvePublicBookingBrandImageAsset(logoSource);
+
+    if (!asset) {
+      throw new NotFoundError("This business does not have a public brand image.");
+    }
+
+    res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+
+    if (asset.kind === "redirect") {
+      res.redirect(302, asset.url);
+      return;
+    }
+
+    res.setHeader("Content-Type", asset.contentType);
+    res.send(asset.buffer);
   })
 );
 
@@ -5459,6 +5855,22 @@ businessesRouter.get(
   })
 );
 
+businessesRouter.get(
+  "/:id/public-lead-share-metadata",
+  publicShareMetadataLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
+
+    const business = await loadPublicLeadBusiness(parsed.data.id);
+    if (!business || !business.leadCaptureEnabled) {
+      throw new NotFoundError("Lead capture is not available for this business.");
+    }
+
+    res.json(buildPublicLeadShareMetadataResponse(business));
+  })
+);
+
 businessesRouter.post(
   "/:id/public-leads",
   publicLeadSubmitLimiter.middleware,
@@ -5767,6 +6179,10 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       bookingTrustBulletTertiary: parsed.data.bookingTrustBulletTertiary?.trim() || null,
       bookingNotesPrompt: parsed.data.bookingNotesPrompt?.trim() || null,
       bookingBrandLogoUrl: parsed.data.bookingBrandLogoUrl?.trim() || null,
+      bookingBrandLogoTransform:
+        parsed.data.bookingBrandLogoTransform != null
+          ? serializeBookingBrandLogoTransform(parsed.data.bookingBrandLogoTransform)
+          : null,
       bookingBrandPrimaryColorToken: normalizeBookingBrandPrimaryColorToken(parsed.data.bookingBrandPrimaryColorToken),
       bookingBrandAccentColorToken: normalizeBookingBrandAccentColorToken(parsed.data.bookingBrandAccentColorToken),
       bookingBrandBackgroundToneToken: normalizeBookingBrandBackgroundToneToken(parsed.data.bookingBrandBackgroundToneToken),
@@ -6025,6 +6441,12 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.bookingBrandLogoUrl !== undefined) {
     updates.bookingBrandLogoUrl = parsed.data.bookingBrandLogoUrl?.trim() || null;
+  }
+  if (parsed.data.bookingBrandLogoTransform !== undefined) {
+    updates.bookingBrandLogoTransform =
+      parsed.data.bookingBrandLogoTransform != null
+        ? serializeBookingBrandLogoTransform(parsed.data.bookingBrandLogoTransform)
+        : null;
   }
   if (parsed.data.bookingBrandPrimaryColorToken !== undefined) {
     updates.bookingBrandPrimaryColorToken = normalizeBookingBrandPrimaryColorToken(parsed.data.bookingBrandPrimaryColorToken);

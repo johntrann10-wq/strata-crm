@@ -21,3 +21,11 @@
 [[edge_functions]]
   path = "/api/*"
   function = "strata-api-proxy"
+
+[[edge_functions]]
+  path = "/book/*"
+  function = "public-share-preview"
+
+[[edge_functions]]
+  path = "/lead/*"
+  function = "public-share-preview"

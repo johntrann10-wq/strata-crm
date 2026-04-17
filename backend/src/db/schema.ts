@@ -221,6 +221,7 @@ export const businesses = pgTable("businesses", {
   bookingTrustBulletTertiary: text("booking_trust_bullet_tertiary"),
   bookingNotesPrompt: text("booking_notes_prompt"),
   bookingBrandLogoUrl: text("booking_brand_logo_url"),
+  bookingBrandLogoTransform: text("booking_brand_logo_transform"),
   bookingBrandPrimaryColorToken: text("booking_brand_primary_color_token").default("orange"),
   bookingBrandAccentColorToken: text("booking_brand_accent_color_token").default("amber"),
   bookingBrandBackgroundToneToken: text("booking_brand_background_tone_token").default("ivory"),

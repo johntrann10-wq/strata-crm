@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { API_BASE } from "@/api";
+import { BookingBrandLogo } from "@/components/booking/BookingBrandLogo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -22,6 +23,11 @@ import {
   resolveBookingBrandTheme,
   type BookingBrandingTokens,
 } from "@/lib/bookingBranding";
+import {
+  resolvePublicShareMetadata,
+  usePublicShareMeta,
+  type PublicShareMetadataPayload,
+} from "@/lib/publicShareMeta";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
@@ -797,7 +803,16 @@ function toCategoryFilterValue(categoryId: string | null | undefined) {
   return categoryId || UNCATEGORIZED_CATEGORY;
 }
 
-export function meta() {
+const publicSiteUrl = "https://stratacrm.app";
+
+export function meta({ params }: { params: { businessId?: string } }) {
+  const businessId = params.businessId?.trim();
+  const previewUrl = businessId
+    ? `${publicSiteUrl}/api/businesses/${encodeURIComponent(businessId)}/public-booking-preview.svg`
+    : `${publicSiteUrl}/social-preview.png?v=20260416c`;
+  const canonicalUrl = businessId
+    ? `${publicSiteUrl}/book/${encodeURIComponent(businessId)}`
+    : `${publicSiteUrl}/book`;
   return [
     { title: "Book online | Strata" },
     {
@@ -805,6 +820,12 @@ export function meta() {
       content:
         "Choose a service, share your vehicle, and move through a faster booking flow without the back-and-forth.",
     },
+    { property: "og:url", content: canonicalUrl },
+    { property: "og:image", content: previewUrl },
+    { property: "og:image:secure_url", content: previewUrl },
+    { property: "og:image:alt", content: "Booking page preview" },
+    { name: "twitter:image", content: previewUrl },
+    { name: "twitter:image:alt", content: "Booking page preview" },
   ];
 }
 
@@ -812,6 +833,7 @@ export default function PublicBookingPage() {
   const { businessId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const [config, setConfig] = useState<BookingConfig | null>(null);
+  const [shareMetadataPayload, setShareMetadataPayload] = useState<PublicShareMetadataPayload | null>(null);
   const [form, setForm] = useState<BookingFormState>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -850,6 +872,10 @@ export default function PublicBookingPage() {
     () => searchParams.get("campaign") || searchParams.get("utm_campaign") || "",
     [searchParams]
   );
+  const resolvedShareMetadata = useMemo(() => {
+    if (typeof window === "undefined" || !shareMetadataPayload) return null;
+    return resolvePublicShareMetadata(shareMetadataPayload, window.location.origin, window.location.search);
+  }, [shareMetadataPayload]);
   const requestedServiceId = searchParams.get("service");
   const requestedCategoryId = searchParams.get("category");
   const requestedStep = searchParams.get("step");
@@ -873,6 +899,34 @@ export default function PublicBookingPage() {
       return config?.timezone || "America/Los_Angeles";
     }
   }, [config?.timezone]);
+
+  usePublicShareMeta(resolvedShareMetadata);
+
+  useEffect(() => {
+    if (!businessId) {
+      setShareMetadataPayload(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    fetch(buildApiUrl(`/api/businesses/${encodeURIComponent(businessId)}/public-booking-share-metadata`))
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as PublicShareMetadataPayload & { message?: string };
+        if (!response.ok) throw new Error(payload.message || "Could not load booking share metadata.");
+        return payload;
+      })
+      .then((payload) => {
+        if (!cancelled) setShareMetadataPayload(payload);
+      })
+      .catch(() => {
+        if (!cancelled) setShareMetadataPayload(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [businessId]);
 
   useEffect(() => {
     if (!draftSavedAt) return;
@@ -3185,16 +3239,9 @@ export default function PublicBookingPage() {
           padding: 28px 20px 16px;
           text-align: center;
         }
-        .bp-logo {
-          width: 54px; height: 54px; border-radius: 14px;
-          display: flex; align-items: center; justify-content: center;
-          font-size: 22px; font-weight: 700; color: #fff;
-          margin: 0 auto 10px;
-        }
-        .bp-logo-img {
-          width: 54px; height: 54px; border-radius: 14px;
-          object-fit: contain; border: 1px solid var(--b);
-          display: block; margin: 0 auto 10px;
+        .bp-hero-mark {
+          display: inline-flex;
+          margin: 0 auto 12px;
         }
         .bp-biz {
           font-size: 30px; font-weight: 700; letter-spacing: -.04em;
@@ -3401,13 +3448,12 @@ export default function PublicBookingPage() {
             <div className="mx-auto max-w-[720px] space-y-4">
               <div className="overflow-hidden rounded-[24px] border border-[var(--b)] bg-[var(--w)] shadow-[0_22px_54px_rgba(15,23,42,0.07)]">
                 <div className="bp-hero" style={heroStyle}>
-                  {config?.branding.logoUrl ? (
-                    <img src={config.branding.logoUrl} className="bp-logo-img" alt="" />
-                  ) : (
-                    <div className="bp-logo" style={{ background: "var(--c)" }}>
-                      {config?.businessName?.[0] ?? "S"}
-                    </div>
-                  )}
+                  <BookingBrandLogo
+                    businessName={config?.businessName || displayPortalName}
+                    branding={config?.branding}
+                    preset="hero"
+                    className="bp-hero-mark"
+                  />
 
                   <div className="bp-biz" style={{ color: heroTextColor }}>
                     {displayPortalName}
@@ -3494,6 +3540,15 @@ export default function PublicBookingPage() {
               {!loading && !pageError && result ? (
                 <div className="portal">
                   <div className="portal-hero">
+                    {config ? (
+                      <div className="mb-4 flex justify-center">
+                        <BookingBrandLogo
+                          businessName={config.businessName || displayPortalName}
+                          branding={config.branding}
+                          preset="confirmation"
+                        />
+                      </div>
+                    ) : null}
                     <div className="check-ring">
                       <Check className="check-ring-icon" aria-hidden="true" />
                     </div>
