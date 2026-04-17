@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const pricingTitle = "Strata CRM Pricing | Affordable Automotive Shop Software";
 const pricingDescription =
-  "See Strata CRM pricing for automotive service businesses. Founder pricing is $29/month with a 30-day free trial and no card required. Public pricing will move to $79/month.";
+  "See Strata CRM pricing for automotive service businesses. Founder pricing is $29/month with a 30-day free trial and no card required. Public pricing will move to $95/month.";
 
 const pricingSchema = {
   "@context": "https://schema.org",
@@ -68,7 +68,7 @@ const pricingSchema = {
           name: "How much does Strata CRM cost?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Founder pricing is $29 per month with a 30-day free trial and no card required. Public pricing will move to $79 per month.",
+            text: "Founder pricing is $29 per month with a 30-day free trial and no card required. Public pricing will move to $95 per month.",
           },
         },
         {
@@ -94,7 +94,7 @@ const included = [
 
 const pricingAssurances = [
   "30-day free trial with no card required to see the workflow in action",
-  "Founder pricing at $29 per month with a clear path to public pricing at $79",
+  "Founder pricing at $29 per month with a clear path to public pricing at $95",
   "One plan instead of feature tiers that hold back core operations",
 ];
 
@@ -230,7 +230,7 @@ export default function PricingPage() {
                 <span className="pb-2 text-base text-white/72">per month</span>
               </div>
               <p className="mt-3 text-sm leading-6 text-white/72">
-                Founder pricing. Public pricing moves to $79/month. Start with a 30-day free trial and no card required.
+                Founder pricing. Public pricing moves to $95/month. Start with a 30-day free trial and no card required.
               </p>
               <div className="mt-6 space-y-3">
                 {included.slice(0, 3).map((item) => (

@@ -51,7 +51,7 @@ const navigationItems: NavItems = [
     type: "item",
     title: "Pricing",
     href: "/pricing",
-    description: "Founder pricing $29/mo, public $79/mo, 30-day trial.",
+    description: "Founder pricing $29/mo, public $95/mo, 30-day trial.",
   },
 ];
 

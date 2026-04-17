@@ -166,7 +166,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
                 Sign in
               </Link>
             </div>
-            <p className="text-sm text-gray-500">30-day free trial • No card required • Founder pricing $29/mo (public $79/mo)</p>
+            <p className="text-sm text-gray-500">30-day free trial • No card required • Founder pricing $29/mo (public $95/mo)</p>
           </div>
 
           <div className="rounded-[28px] border border-orange-200/80 bg-white/95 p-5 shadow-[0_20px_70px_rgba(249,115,22,0.12)] sm:p-6">
