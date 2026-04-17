@@ -226,6 +226,70 @@ async function mockSelfBooking(page: import("@playwright/test").Page) {
   });
 }
 
+async function mockCategoryHeavyBooking(page: import("@playwright/test").Page) {
+  const categoryDefinitions = [
+    { categoryId: "cat-1", categoryLabel: "Detailing Essentials", serviceId: "svc-cat-1", serviceName: "Express detail" },
+    { categoryId: "cat-2", categoryLabel: "Ceramic Coating", serviceId: "svc-cat-2", serviceName: "Ceramic refresh" },
+    { categoryId: "cat-3", categoryLabel: "Window Tint", serviceId: "svc-cat-3", serviceName: "Two-door tint" },
+    { categoryId: "cat-4", categoryLabel: "Interior Reset", serviceId: "svc-cat-4", serviceName: "Cabin reset" },
+    { categoryId: "cat-5", categoryLabel: "Maintenance Wash", serviceId: "svc-cat-5", serviceName: "Maintenance wash" },
+    { categoryId: "cat-6", categoryLabel: "Paint Correction", serviceId: "svc-cat-6", serviceName: "Single-stage correction" },
+    { categoryId: "cat-7", categoryLabel: "Luxury Protection Packages", serviceId: "svc-cat-7", serviceName: "Graphene shield" },
+  ];
+
+  await page.route("**/api/businesses/biz-categories/public-booking-config", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        businessId: "biz-categories",
+        businessName: "North Star Studio",
+        businessType: "auto_detailing",
+        timezone: "America/Los_Angeles",
+        title: "Tell us what you need",
+        subtitle: "Choose the service you need, share your vehicle details, and lock in the next step without the back-and-forth.",
+        confirmationMessage: null,
+        trustPoints: ["Goes directly to the shop", "Quick follow-up", "Secure and simple"],
+        notesPrompt: "Add timing, questions, or anything the shop should know.",
+        branding: {
+          logoUrl: null,
+          primaryColorToken: "sky",
+          accentColorToken: "blue",
+          backgroundToneToken: "mist",
+          buttonStyleToken: "outline",
+        },
+        defaultFlow: "self_book",
+        requireEmail: false,
+        requirePhone: true,
+        requireVehicle: true,
+        allowCustomerNotes: true,
+        showPrices: true,
+        showDurations: true,
+        locations: [{ id: "loc-1", name: "Main Shop", address: "Irvine, CA" }],
+        services: categoryDefinitions.map((category, index) => ({
+          id: category.serviceId,
+          name: category.serviceName,
+          categoryId: category.categoryId,
+          categoryLabel: category.categoryLabel,
+          description: `Premium ${category.serviceName.toLowerCase()} service.`,
+          price: 145 + index * 20,
+          durationMinutes: 60 + index * 15,
+          effectiveFlow: "self_book",
+          depositAmount: 25,
+          leadTimeHours: 0,
+          bookingWindowDays: 30,
+          bufferMinutes: 0,
+          serviceMode: "in_shop",
+          featured: false,
+          showPrice: true,
+          showDuration: true,
+          addons: [],
+        })),
+      }),
+    });
+  });
+}
+
 test("service cards expand in place before selection", async ({ page }) => {
   await mockSelfBooking(page);
 
@@ -247,6 +311,27 @@ test("service cards expand in place before selection", async ({ page }) => {
 
   await serviceCard.getByRole("button", { name: "Select" }).click();
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What will we be working on?" })).toBeVisible();
+});
+
+test("mobile category selector stays contained with many categories", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockCategoryHeavyBooking(page);
+
+  await page.goto("/book/biz-categories");
+
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What service do you need?" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.getByRole("button", { name: "Browse all" }).click();
+  const categorySheet = page.locator('[data-slot="sheet-content"]');
+  await expect(categorySheet).toBeVisible();
+  await categorySheet.getByRole("button", { name: /Luxury Protection Packages/i }).click();
+
+  await expect(page.getByText("Luxury Protection Packages").first()).toBeVisible();
+  await expect(page.getByText("1 available")).toBeVisible();
+  await expect(page.locator('[data-service-card="svc-cat-7"]')).toBeVisible();
+  await expect(page.locator('[data-service-card="svc-cat-1"]')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test("public booking flow supports self-booking end to end", async ({ page }) => {
