@@ -15,6 +15,14 @@
   - Placement: Hero mobile screenshot card and scheduling mobile preview
 
 ## Showcase
+- `desktop-booking-page.png`
+  - Route: `/book/biz-booking-marketing`
+  - Message: Desktop booking page with service selection, service summaries, and a live booking summary panel.
+  - Placement: Homepage booking section desktop proof
+- `mobile-booking-page.png`
+  - Route: `/book/biz-booking-marketing`
+  - Message: Branded public booking page with service selection, expandable service details, and vehicle-aware intake.
+  - Placement: Homepage booking section
 - `desktop-invoice.png`
   - Route: `/invoices/inv-2041`
   - Message: Clear, professional invoice workflow with line items and payment status.

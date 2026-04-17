@@ -9,6 +9,7 @@ import {
   Receipt,
   ShieldCheck,
   Smartphone,
+  Sparkles,
   TrendingUp,
   UserCheck,
   Users,
@@ -21,7 +22,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 
 const homeTitle = "Automotive Service CRM | Strata";
 const homeDescription =
-  "Strata is a scheduling-first CRM for automotive service businesses. Manage appointments, customers, vehicles, quotes, invoices, deposits, and payments in one clean system.";
+  "Strata is a scheduling-first CRM for automotive service businesses. Manage appointments, customers, vehicles, branded booking pages, quotes, invoices, deposits, and payments in one clean system.";
 
 const featureRail = [
   {
@@ -66,7 +67,7 @@ type FeaturePreview = (typeof featureRail)[number];
 
 const trustStrip = [
   { icon: Wrench, label: "Built for owner-operated shops" },
-  { icon: Smartphone, label: "Mobile-ready pages for daily use" },
+  { icon: Smartphone, label: "Mobile-ready booking and customer pages" },
   { icon: CreditCard, label: "Stripe-powered deposits and payments" },
   { icon: ShieldCheck, label: "Customer portal + public approvals" },
   { icon: Users, label: "Role-based team access" },
@@ -104,6 +105,11 @@ const platformCards = [
     icon: ExternalLink,
   },
   {
+    title: "Branded Booking Pages",
+    description: "Run direct-book or request-first booking with branded public pages and cleaner sharing.",
+    icon: Sparkles,
+  },
+  {
     title: "Finance Dashboard",
     description: "Track revenue, expenses, and collections health.",
     icon: TrendingUp,
@@ -114,6 +120,80 @@ const platformCards = [
     icon: UserCheck,
   },
 ];
+
+const bookingPageHighlights = [
+  {
+    title: "Direct-book or request-first",
+    description: "Offer instant scheduling, request review, or mixed-mode services from the same page.",
+    icon: CalendarDays,
+  },
+  {
+    title: "Branded to your shop",
+    description: "Use your logo, colors, and clean public links so the booking page feels like your business.",
+    icon: Sparkles,
+  },
+  {
+    title: "Mobile-friendly by default",
+    description: "Customers can choose a service, add their vehicle, and keep moving without fighting a giant form.",
+    icon: Smartphone,
+  },
+  {
+    title: "Capture context upfront",
+    description: "Collect vehicle details, notes, and service context before the job ever hits your schedule.",
+    icon: ShieldCheck,
+  },
+] as const;
+
+const bookingFlowSteps = [
+  {
+    step: "01",
+    title: "Choose a service",
+    description: "Customers start with a clear service list instead of a generic contact form.",
+  },
+  {
+    step: "02",
+    title: "Add vehicle context",
+    description: "Vehicle details and notes are collected before the request ever reaches your team.",
+  },
+  {
+    step: "03",
+    title: "Confirm or request a time",
+    description: "Run direct booking, request-only review, or mixed-mode scheduling without extra friction.",
+  },
+] as const;
+
+const bookingControlModes = [
+  {
+    title: "Instant booking",
+    description: "Let customers lock in a real open slot on the spot.",
+    icon: CalendarDays,
+  },
+  {
+    title: "Review first",
+    description: "Approve requests yourself when you want tighter control over the schedule.",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Mixed by service",
+    description: "Use direct-book for some services and request-review for the work that needs a closer look.",
+    icon: Sparkles,
+  },
+] as const;
+
+const bookingOutcomeCards = [
+  {
+    title: "Instant booking",
+    description: "Pick a service, choose a live slot, and confirm the job on the spot when the service can be booked directly.",
+    points: ["Live slots", "Deposit-ready"],
+    icon: CalendarDays,
+  },
+  {
+    title: "Request review",
+    description: "Request a preferred day and time, then let the shop approve it or send alternate times without making the customer restart.",
+    points: ["Preferred timing", "Alternates built in"],
+    icon: ShieldCheck,
+  },
+] as const;
 
 const homeSchema = {
   "@context": "https://schema.org",
@@ -354,7 +434,7 @@ export default function LandingPage() {
                 A cleaner CRM for automotive service businesses
               </h1>
               <p className="max-w-xl text-lg leading-8 text-gray-600 sm:text-xl">
-                Schedule work, track customers and vehicles, send estimates and invoices, and collect deposits and payments in one modern system
+                Schedule work, track customers and vehicles, run branded online booking, send estimates and invoices, and collect deposits and payments in one modern system
                 built for the day-to-day shop flow.
               </p>
               <p className="text-sm font-medium text-gray-500">
@@ -409,7 +489,7 @@ export default function LandingPage() {
               See how Strata runs the day-to-day shop flow.
             </h2>
             <p className="mx-auto max-w-2xl text-base leading-7 text-gray-600">
-              Every view is built around scheduling clarity, customer context, and billing follow-through.
+              Every view is built around scheduling clarity, branded customer touchpoints, and billing follow-through.
             </p>
           </div>
 
@@ -603,6 +683,154 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section id="booking" className="px-5 pb-16 sm:px-6 sm:pb-20 lg:px-8 lg:pb-24">
+        <div className="mx-auto max-w-6xl rounded-[36px] border border-orange-100/80 bg-[linear-gradient(180deg,rgba(255,248,240,0.82),rgba(255,255,255,0.98))] p-6 shadow-[0_22px_60px_rgba(15,23,42,0.08)] sm:p-8 lg:p-10">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1.02fr)_minmax(320px,0.98fr)] lg:items-center">
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Booking page</p>
+                <h2 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
+                  Online booking that feels like your business, not a generic form.
+                </h2>
+                <p className="max-w-2xl text-base leading-7 text-gray-600">
+                  Let customers choose a service, add their vehicle, and either book instantly or request a real time from one clean, branded booking flow that works beautifully on mobile.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {bookingPageHighlights.map((item) => (
+                  <div
+                    key={item.title}
+                    className="rounded-[24px] border border-orange-100 bg-white/92 p-4 shadow-[0_10px_26px_rgba(15,23,42,0.04)]"
+                  >
+                    <item.icon className="h-5 w-5 text-orange-600" />
+                    <h3 className="mt-3 text-base font-semibold text-gray-950">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-gray-600">{item.description}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-[26px] border border-orange-100/90 bg-white/92 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.04)] sm:p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-700">How it flows</p>
+                  <p className="text-xs font-medium text-gray-500">Built to keep mobile intake moving</p>
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  {bookingFlowSteps.map((item) => (
+                    <div
+                      key={item.step}
+                      className="rounded-[20px] border border-orange-100 bg-[linear-gradient(180deg,rgba(255,250,246,0.96),rgba(255,255,255,0.96))] p-4"
+                    >
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-700">{item.step}</p>
+                      <h3 className="mt-2 text-sm font-semibold text-gray-950">{item.title}</h3>
+                      <p className="mt-2 text-sm leading-6 text-gray-600">{item.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-[26px] border border-orange-100/90 bg-[linear-gradient(180deg,rgba(255,252,249,0.98),rgba(255,255,255,0.96))] p-4 shadow-[0_12px_28px_rgba(15,23,42,0.04)] sm:p-5">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-700">How you run it</p>
+                  <h3 className="text-lg font-semibold tracking-tight text-gray-950">Choose the booking rules that fit the service.</h3>
+                  <p className="text-sm leading-6 text-gray-600">
+                    Run the page as instant booking, request-first review, or a mix of both depending on what the job needs.
+                  </p>
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  {bookingControlModes.map((item) => (
+                    <div
+                      key={item.title}
+                      className="rounded-[20px] border border-orange-100 bg-white/94 p-4 shadow-[0_8px_20px_rgba(15,23,42,0.03)]"
+                    >
+                      <item.icon className="h-5 w-5 text-orange-600" />
+                      <h4 className="mt-3 text-sm font-semibold text-gray-950">{item.title}</h4>
+                      <p className="mt-2 text-sm leading-6 text-gray-600">{item.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Link
+                  to="/sign-up"
+                  className={cn(
+                    buttonVariants({ size: "lg" }),
+                    "min-h-[52px] rounded-2xl bg-orange-600 px-7 text-base font-semibold text-white shadow-[0_12px_30px_rgba(234,88,12,0.25)] hover:bg-orange-600"
+                  )}
+                  onClick={() => trackEvent("landing_cta_clicked", { placement: "booking_section", target: "sign_up" })}
+                >
+                  Build your booking page
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+                <p className="text-sm font-medium text-gray-500">
+                  One booking page. Instant slots when you want them. Review-first scheduling when you need it.
+                </p>
+              </div>
+            </div>
+
+            <div className="relative">
+              <div className="relative overflow-hidden rounded-[32px] border border-orange-100/80 bg-[radial-gradient(circle_at_top,rgba(255,243,231,0.98)_0%,rgba(255,255,255,0.96)_52%,rgba(255,246,239,0.92)_100%)] p-6 shadow-[0_22px_60px_rgba(15,23,42,0.08)] sm:p-8">
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(circle_at_top,rgba(251,146,60,0.18)_0%,rgba(251,146,60,0)_72%)]" />
+                <div className="relative z-10 space-y-4">
+                  <div className="space-y-2 text-center sm:text-left">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-700">
+                      What your customer actually sees
+                    </p>
+                    <h3 className="text-lg font-semibold tracking-tight text-gray-950">
+                      A branded booking flow that can close instantly or hand off cleanly.
+                    </h3>
+                    <p className="text-sm leading-6 text-gray-600">
+                      Customers can browse services, expand details, and keep moving without falling into a vague contact form or a clunky scheduling handoff.
+                    </p>
+                  </div>
+                  <div className="relative mx-auto w-full max-w-[36rem] pb-14 sm:pb-16">
+                    <ScreenshotSurface className="w-full">
+                      <img
+                        src="/marketing/strata-ui/desktop-booking-page.png"
+                        alt="Strata public booking page on desktop showing branded service selection and booking summary."
+                        className="block h-auto w-full"
+                        loading="lazy"
+                      />
+                    </ScreenshotSurface>
+                    <ScreenshotSurface className="absolute -bottom-1 right-0 w-[42%] max-w-[14rem] shadow-[0_22px_46px_rgba(15,23,42,0.14)]">
+                      <img
+                        src="/marketing/strata-ui/mobile-booking-page.png"
+                        alt="Strata public booking page on mobile showing branded service selection and vehicle-aware intake."
+                        className="block h-auto w-full"
+                        loading="lazy"
+                      />
+                    </ScreenshotSurface>
+                  </div>
+                </div>
+                <div className="relative z-10 mt-5 grid gap-3 sm:grid-cols-2">
+                  {bookingOutcomeCards.map((group) => (
+                    <div
+                      key={group.title}
+                      className="rounded-[22px] border border-orange-100 bg-white/92 p-4 text-left shadow-[0_8px_20px_rgba(15,23,42,0.05)]"
+                    >
+                      <group.icon className="h-5 w-5 text-orange-600" />
+                      <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-700">{group.title}</p>
+                      <p className="mt-2 text-sm leading-6 text-gray-600">{group.description}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {group.points.map((point) => (
+                          <div
+                            key={point}
+                            className="rounded-full border border-orange-100 bg-orange-50/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-700"
+                          >
+                            {point}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="px-5 py-16 sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="mb-10 text-center">
@@ -681,6 +909,14 @@ export default function LandingPage() {
               </AccordionTrigger>
               <AccordionContent className="pb-4 text-sm text-gray-600">
                 Send estimates and invoices with public approval links, collect deposits, and let clients pay through the customer portal.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="booking" className="rounded-2xl border border-orange-100 bg-white px-4">
+              <AccordionTrigger className="py-4 text-left text-sm font-semibold">
+                Branded booking pages with direct-book and request flows
+              </AccordionTrigger>
+              <AccordionContent className="pb-4 text-sm text-gray-600">
+                Shops can run public booking pages with logo framing, branded previews, request-only or direct-book paths, and cleaner shareable links that stay on-brand.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="automation" className="rounded-2xl border border-orange-100 bg-white px-4">
