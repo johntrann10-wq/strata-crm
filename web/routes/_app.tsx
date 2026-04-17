@@ -908,6 +908,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   );
 
   const resetClientAuthState = useCallback(() => {
+    clearAuthState();
     setClientUserId(null);
     setTenantBusinesses([]);
     setCurrentBusinessIdState(null);

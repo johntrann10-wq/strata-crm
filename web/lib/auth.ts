@@ -2,6 +2,7 @@ const CURRENT_BUSINESS_ID_KEY = "currentBusinessId";
 const CURRENT_LOCATION_ID_KEY = "currentLocationId";
 const AUTH_EVENT_CHANNEL_KEY = "authEventChannel";
 const SESSION_AUTH_TOKEN_KEY = "strataSessionAuthToken";
+const LEGACY_AUTH_TOKEN_KEY = "authToken";
 let inMemoryAuthToken: string | null = null;
 
 function safeLocalStorageGet(key: string): string | null {
@@ -80,6 +81,7 @@ export function persistAuthState(token: string, detail?: unknown): void {
 export function clearAuthToken(): void {
   inMemoryAuthToken = null;
   safeSessionStorageRemove(SESSION_AUTH_TOKEN_KEY);
+  safeLocalStorageRemove(LEGACY_AUTH_TOKEN_KEY);
 }
 
 export function getCurrentBusinessId(): string | null {
