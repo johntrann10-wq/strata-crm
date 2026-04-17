@@ -124,7 +124,7 @@ const homeSchema = {
 };
 
 export function meta() {
-  const socialImageUrl = "https://stratacrm.app/social-preview.png?v=20260404a";
+  const socialImageUrl = "https://stratacrm.app/social-preview.png?v=20260416b";
   return [
     { title: homeTitle },
     { name: "description", content: homeDescription },
@@ -659,7 +659,6 @@ export default function LandingPage() {
       <section className="px-5 pb-20 sm:px-6 sm:pb-24 lg:px-8">
         <div className="mx-auto max-w-5xl rounded-[28px] border border-orange-100 bg-white/90 p-6 shadow-[0_16px_50px_rgba(15,23,42,0.06)] sm:p-8">
           <div className="mb-6 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Built for real workflows</p>
             <h2 className="text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
               The product depth you need, without the overhead.
             </h2>
