@@ -344,7 +344,7 @@ export default function LandingPage() {
           }}
         />
 
-        <div className="relative z-10 mx-auto grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-center">
+        <div className="relative z-10 mx-auto grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.82fr)] lg:items-center">
           <div className="space-y-6">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">
               Built for owner-operated automotive service businesses
@@ -374,28 +374,18 @@ export default function LandingPage() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </div>
-            <p className="text-sm font-medium text-gray-500">30-day free trial | No card required | Founder pricing $29/mo</p>
+            <p className="text-sm font-medium text-gray-500">30-day free trial | No card required</p>
           </div>
 
-          <div className="relative px-2 pb-16 sm:px-4 sm:pb-20">
-            <div className="rounded-[36px] border border-orange-100/80 bg-[radial-gradient(circle_at_top,#fff7ed_0%,#ffffff_52%,#fff1e8_100%)] p-4 shadow-[0_24px_70px_rgba(15,23,42,0.08)] sm:p-6">
-              <ScreenshotSurface className="mx-auto max-w-[44rem]">
-                <img
-                  src="/marketing/strata-ui/hero-desktop-calendar.png"
-                  alt="Strata calendar with month overview and active appointments."
-                  className="block h-auto w-full object-cover object-left-top"
-                  loading="eager"
-                />
-              </ScreenshotSurface>
-            </div>
-            <div className="pointer-events-none absolute -bottom-10 right-0 w-40 sm:right-1 sm:w-52 lg:-bottom-14 lg:right-3 lg:w-64">
-              <img
-                src="/marketing/strata-ui/hero-phone-angled.png"
-                alt="Strata mobile calendar shown in an angled phone render."
-                className="block h-auto w-full"
-                loading="eager"
-              />
-            </div>
+          <div className="relative flex min-h-[26rem] items-center justify-center px-2 sm:min-h-[32rem] lg:min-h-[40rem] lg:justify-end lg:px-0">
+            <div className="pointer-events-none absolute inset-x-2 inset-y-8 rounded-[48px] bg-[radial-gradient(circle_at_52%_30%,rgba(255,255,255,0.96)_0%,rgba(255,248,242,0.92)_34%,rgba(255,248,242,0.5)_58%,rgba(255,248,242,0)_78%)] blur-2xl" />
+            <div className="pointer-events-none absolute left-1/2 top-[54%] h-[18rem] w-[18rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(251,146,60,0.18)_0%,rgba(251,146,60,0.08)_34%,rgba(251,146,60,0)_72%)] sm:h-[22rem] sm:w-[22rem] lg:left-[58%] lg:h-[26rem] lg:w-[26rem]" />
+            <img
+              src="/marketing/strata-ui/hero-phone-angled.png"
+              alt="Strata mobile calendar shown in an angled phone render."
+              className="relative z-10 mx-auto w-full max-w-[21rem] mix-blend-multiply drop-shadow-[0_36px_54px_rgba(154,74,12,0.18)] sm:max-w-[24rem] lg:mx-0 lg:max-w-[30rem]"
+              loading="eager"
+            />
           </div>
         </div>
       </section>
@@ -645,9 +635,6 @@ export default function LandingPage() {
                 Simple pricing with a 30-day free trial.
               </h2>
               <p className="text-base leading-7 text-gray-600">No card required to start.</p>
-              <div className="flex flex-wrap gap-3 text-sm font-semibold text-gray-700">
-                <span className="rounded-full border border-orange-100 bg-orange-50 px-4 py-2">Founder pricing $29/mo</span>
-              </div>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-stretch">
               <Link
