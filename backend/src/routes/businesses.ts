@@ -3381,6 +3381,7 @@ async function ensureBusinessAutomationColumns(): Promise<void> {
           ADD COLUMN IF NOT EXISTS booking_trust_bullet_tertiary text,
           ADD COLUMN IF NOT EXISTS booking_notes_prompt text,
           ADD COLUMN IF NOT EXISTS booking_brand_logo_url text,
+          ADD COLUMN IF NOT EXISTS booking_brand_logo_transform text,
           ADD COLUMN IF NOT EXISTS booking_brand_primary_color_token text DEFAULT 'orange',
           ADD COLUMN IF NOT EXISTS booking_brand_accent_color_token text DEFAULT 'amber',
           ADD COLUMN IF NOT EXISTS booking_brand_background_tone_token text DEFAULT 'ivory',

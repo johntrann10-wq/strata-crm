@@ -480,6 +480,7 @@ export default function BookingBuilderPage() {
   );
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const logoEditorFrameRef = useRef<HTMLDivElement | null>(null);
+  const lastSavedServerFormRef = useRef<BookingBuilderFormState | null>(null);
   const logoDragStateRef = useRef<{
     pointerId: number;
     startX: number;
@@ -514,9 +515,17 @@ export default function BookingBuilderPage() {
   useEffect(() => {
     if (!businessRecord) return;
     const next = toForm(businessRecord);
+    if (lastSavedServerFormRef.current && !formsMatch(next, lastSavedServerFormRef.current)) {
+      return;
+    }
+    lastSavedServerFormRef.current = null;
     setForm((current) => (formsMatch(current, next) ? current : next));
     setSavedForm((current) => (formsMatch(current, next) ? current : next));
   }, [businessRecord]);
+
+  useEffect(() => {
+    lastSavedServerFormRef.current = null;
+  }, [businessId]);
 
   useEffect(() => {
     if (!services.length) {
@@ -600,6 +609,16 @@ export default function BookingBuilderPage() {
 
   const updateField = <K extends keyof BookingBuilderFormState>(key: K, value: BookingBuilderFormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const applySavedBusinessState = (record: unknown, fallback: BookingBuilderFormState) => {
+    const next =
+      record && typeof record === "object"
+        ? toForm(record as BusinessBookingBuilderRecord)
+        : fallback;
+    lastSavedServerFormRef.current = next;
+    setForm((current) => (formsMatch(current, next) ? current : next));
+    setSavedForm((current) => (formsMatch(current, next) ? current : next));
   };
 
   const openLogoEditor = (sourceUrl: string, transform: BookingBrandLogoTransform) => {
@@ -731,6 +750,7 @@ export default function BookingBuilderPage() {
       }
       result = await runUpdateBusiness(retryPayload);
       if (!result.error) {
+        applySavedBusinessState(result.data, form);
         setPreviewNonce((current) => current + 1);
         toast.success("Booking builder updated. Buffer and capacity settings will save after the backend finishes updating.");
         void refetchBusiness();
@@ -742,7 +762,7 @@ export default function BookingBuilderPage() {
       toast.error(result.error.message);
       return;
     }
-    setSavedForm(form);
+    applySavedBusinessState(result.data, form);
     setPreviewNonce((current) => current + 1);
     toast.success("Booking builder updated.");
     void refetchBusiness();
@@ -923,59 +943,6 @@ export default function BookingBuilderPage() {
                         <Trash2 className="mr-2 h-4 w-4" />
                         Remove image
                       </Button>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-                      <div className="space-y-1">
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Adaptive previews</p>
-                        <p className="text-sm leading-6 text-slate-600">
-                          These previews use the saved fit, plate, crop, and rotation rules before customers ever see the page.
-                        </p>
-                      </div>
-                      <div className="mt-4 grid gap-3 xl:grid-cols-2">
-                        {[
-                          {
-                            key: "booking",
-                            label: "Booking header",
-                            copy: "Primary storefront mark at the top of the page.",
-                            preset: "hero" as const,
-                          },
-                          {
-                            key: "confirmation",
-                            label: "Confirmation state",
-                            copy: "Keeps the post-submit view polished and familiar.",
-                            preset: "confirmation" as const,
-                          },
-                          {
-                            key: "email",
-                            label: "Email header",
-                            copy: "Client-facing mailer lockup with a safe plate.",
-                            preset: "email" as const,
-                          },
-                          {
-                            key: "share",
-                            label: "Social preview",
-                            copy: "Composed for link cards and share previews.",
-                            preset: "share" as const,
-                          },
-                        ].map((preview) => (
-                          <div
-                            key={preview.key}
-                            className="rounded-[1.25rem] border border-slate-200/80 bg-slate-50/85 p-4"
-                          >
-                            <div className="flex items-start gap-4">
-                              <BookingBrandLogo
-                                businessName={form.bookingPageTitle.trim() || businessRecord?.name || "Strata"}
-                                branding={brandingPreviewTokens}
-                                preset={preview.preset}
-                              />
-                              <div className="min-w-0 space-y-1">
-                                <p className="text-sm font-semibold text-slate-950">{preview.label}</p>
-                                <p className="text-xs leading-5 text-slate-500">{preview.copy}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
                     </div>
                   </div>
                 </Field>

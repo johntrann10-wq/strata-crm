@@ -256,22 +256,97 @@ function buildBusinessLogoTransformCss(params: {
 
 async function getBusinessContactVars(businessId: string | null | undefined): Promise<TemplateVars> {
   if (!businessId) return { ...defaultBusinessLogoVars };
-  const [business] = await db
-    .select({
-      id: businesses.id,
-      name: businesses.name,
-      email: businesses.email,
-      phone: businesses.phone,
-      address: businesses.address,
-      city: businesses.city,
-      state: businesses.state,
-      zip: businesses.zip,
-      bookingBrandLogoUrl: businesses.bookingBrandLogoUrl,
-      bookingBrandLogoTransform: businesses.bookingBrandLogoTransform,
-    })
-    .from(businesses)
-    .where(eq(businesses.id, businessId))
-    .limit(1);
+  let business:
+    | {
+        id: string;
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+        address: string | null;
+        city: string | null;
+        state: string | null;
+        zip: string | null;
+        bookingBrandLogoUrl: string | null;
+        bookingBrandLogoTransform: string | null;
+      }
+    | undefined;
+
+  try {
+    [business] = await db
+      .select({
+        id: businesses.id,
+        name: businesses.name,
+        email: businesses.email,
+        phone: businesses.phone,
+        address: businesses.address,
+        city: businesses.city,
+        state: businesses.state,
+        zip: businesses.zip,
+        bookingBrandLogoUrl: businesses.bookingBrandLogoUrl,
+        bookingBrandLogoTransform: businesses.bookingBrandLogoTransform,
+      })
+      .from(businesses)
+      .where(eq(businesses.id, businessId))
+      .limit(1);
+  } catch (error) {
+    if (!isEmailSchemaDriftError(error)) throw error;
+    logger.warn("Email branding query missing booking logo transform column; falling back without transform", {
+      businessId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    try {
+      const [fallbackBusiness] = await db
+        .select({
+          id: businesses.id,
+          name: businesses.name,
+          email: businesses.email,
+          phone: businesses.phone,
+          address: businesses.address,
+          city: businesses.city,
+          state: businesses.state,
+          zip: businesses.zip,
+          bookingBrandLogoUrl: businesses.bookingBrandLogoUrl,
+        })
+        .from(businesses)
+        .where(eq(businesses.id, businessId))
+        .limit(1);
+      business = fallbackBusiness
+        ? {
+            ...fallbackBusiness,
+            bookingBrandLogoTransform: null,
+          }
+        : undefined;
+    } catch (fallbackError) {
+      if (!isEmailSchemaDriftError(fallbackError)) throw fallbackError;
+      logger.warn("Email branding query missing booking logo columns; falling back to contact details only", {
+        businessId,
+        error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+      });
+
+      const [contactOnlyBusiness] = await db
+        .select({
+          id: businesses.id,
+          name: businesses.name,
+          email: businesses.email,
+          phone: businesses.phone,
+          address: businesses.address,
+          city: businesses.city,
+          state: businesses.state,
+          zip: businesses.zip,
+        })
+        .from(businesses)
+        .where(eq(businesses.id, businessId))
+        .limit(1);
+      business = contactOnlyBusiness
+        ? {
+            ...contactOnlyBusiness,
+            bookingBrandLogoUrl: null,
+            bookingBrandLogoTransform: null,
+          }
+        : undefined;
+    }
+  }
 
   const businessAddress = [business?.address, business?.city, business?.state, business?.zip].filter(Boolean).join(", ");
   const transform = parseBookingBrandLogoTransform(business?.bookingBrandLogoTransform);
