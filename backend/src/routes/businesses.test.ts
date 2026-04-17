@@ -290,8 +290,8 @@ describe("business route serialization", () => {
       title: "Book online in minutes | Coastline Detail Co.",
       description: "Choose a service, share your vehicle, and request the right time without the back-and-forth.",
       canonicalPath: "/book/biz_123",
-      imagePath: "/api/businesses/biz_123/public-booking-preview.svg",
-      imageAlt: "Coastline Detail Co. booking page preview",
+      imagePath: null,
+      imageAlt: "Strata CRM booking preview",
     });
   });
 

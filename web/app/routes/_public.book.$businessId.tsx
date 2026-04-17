@@ -25,6 +25,7 @@ import {
   type BookingBrandingTokens,
 } from "@/lib/bookingBranding";
 import {
+  publicSocialPreviewVersion,
   resolvePublicShareMetadata,
   usePublicShareMeta,
   type PublicShareMetadataPayload,
@@ -833,9 +834,7 @@ const publicSiteUrl = "https://stratacrm.app";
 
 export function meta({ params }: { params: { businessId?: string } }) {
   const businessId = params.businessId?.trim();
-  const previewUrl = businessId
-    ? `${publicSiteUrl}/api/businesses/${encodeURIComponent(businessId)}/public-booking-preview.svg`
-    : `${publicSiteUrl}/social-preview.png?v=20260416c`;
+  const previewUrl = `${publicSiteUrl}/social-preview.png?v=${publicSocialPreviewVersion}`;
   const canonicalUrl = businessId
     ? `${publicSiteUrl}/book/${encodeURIComponent(businessId)}`
     : `${publicSiteUrl}/book`;

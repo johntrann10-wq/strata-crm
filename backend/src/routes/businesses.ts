@@ -1643,8 +1643,8 @@ export function buildPublicBookingShareMetadataResponse(business: Pick<
     title: withBusinessSuffix(buildBookingPageTitle(business), business.name),
     description: buildBookingPageSubtitle(business),
     canonicalPath: `/book/${encodeURIComponent(business.id)}`,
-    imagePath: `/api/businesses/${encodeURIComponent(business.id)}/public-booking-preview.svg`,
-    imageAlt: `${businessName} booking page preview`,
+    imagePath: null,
+    imageAlt: "Strata CRM booking preview",
   };
 }
 
