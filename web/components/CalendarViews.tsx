@@ -152,7 +152,10 @@ export function formatTime(date: Date): string {
   return `${hour}:${min} ${ampm}`;
 }
 
-export function getMonthGrid(date: Date): Date[][] {
+export function getMonthGrid(
+  date: Date,
+  options?: { trimTrailingFullNextMonthWeek?: boolean }
+): Date[][] {
   const year = date.getFullYear();
   const month = date.getMonth();
   const startDow = new Date(year, month, 1).getDay();
@@ -165,6 +168,16 @@ export function getMonthGrid(date: Date): Date[][] {
       day++;
     }
     grid.push(week);
+  }
+  if (options?.trimTrailingFullNextMonthWeek) {
+    while (
+      grid.length > 0 &&
+      !grid[grid.length - 1]?.some(
+        (gridDay) => gridDay.getFullYear() === year && gridDay.getMonth() === month
+      )
+    ) {
+      grid.pop();
+    }
   }
   return grid;
 }
@@ -831,7 +844,13 @@ export function MonthView({
 }: MonthViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hoverPreviewRef = useRef<HTMLDivElement | null>(null);
-  const grid = useMemo(() => getMonthGrid(currentDate), [currentDate]);
+  const grid = useMemo(
+    () =>
+      getMonthGrid(currentDate, {
+        trimTrailingFullNextMonthWeek: isMobileLayout,
+      }),
+    [currentDate, isMobileLayout]
+  );
   const today = useMemo(() => new Date(), []);
   const visibleAppointments = useMemo(() => getVisibleCalendarAppointments(appointments), [appointments]);
   const historicalAppointments = useMemo(() => getHistoricalCalendarAppointments(appointments), [appointments]);
@@ -957,7 +976,10 @@ export function MonthView({
         ))}
       </div>
 
-      <div className="grid h-[22.75rem] min-h-[22.75rem] min-w-0 grid-rows-6 overflow-hidden [grid-template-rows:repeat(6,minmax(0,1fr))] sm:h-[24rem] sm:min-h-[24rem] md:h-[28rem] md:min-h-[28rem] md:flex-1 md:auto-rows-fr md:[grid-template-rows:repeat(6,minmax(0,1fr))] xl:h-[30rem] xl:min-h-[30rem]">
+      <div
+        className="grid min-h-0 min-w-0 flex-1 overflow-hidden"
+        style={{ gridTemplateRows: `repeat(${grid.length}, minmax(0, 1fr))` }}
+      >
         {grid.map((week, wi) => (
           <div key={wi} className="grid min-h-0 grid-cols-7 border-b border-border/60 last:border-b-0">
             {week.map((day, di) => {

@@ -16,6 +16,7 @@ import {
   type ApptRecord,
   ConflictBanner,
   DayView,
+  getMonthGrid,
   MonthView,
   detectConflicts,
   getCalendarAppointmentAmount,
@@ -735,6 +736,15 @@ export default function CalendarPage() {
       }, 0),
     [selectedMonthAppointments, selectedMonthRange]
   );
+  const mobileMonthWeekCount = useMemo(
+    () =>
+      getMonthGrid(visibleMonthDate, {
+        trimTrailingFullNextMonthWeek: true,
+      }).length,
+    [visibleMonthDate]
+  );
+  const mobileMonthHeightClassName =
+    mobileMonthWeekCount >= 6 ? "h-[25.5rem]" : mobileMonthWeekCount === 5 ? "h-[21.75rem]" : "h-[18rem]";
   const busiestMonthDay = useMemo(() => {
     const counts = new Map<string, { date: Date; count: number }>();
     for (const appointment of selectedMonthAppointments) {
@@ -980,7 +990,7 @@ export default function CalendarPage() {
               className={cn(
                 "overflow-hidden",
                 view === "month"
-                  ? "h-[25.5rem] sm:h-[23rem] xl:h-[clamp(26rem,48dvh,38rem)]"
+                  ? `${mobileMonthHeightClassName} sm:h-[23rem] xl:h-[clamp(26rem,48dvh,38rem)]`
                   : "h-[21.5rem] sm:h-[23rem] xl:h-[clamp(24rem,46dvh,34rem)]"
               )}
             >
