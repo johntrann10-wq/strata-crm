@@ -121,6 +121,8 @@ test.describe("Multi-day job calendar QA - desktop", () => {
     await expect(page.getByRole("heading", { name: /New Appointment/i })).toBeVisible();
     await selectServiceFromSearch(page, "Full Front PPF");
     await page.getByText(/Multi-day \/ on-site job/i).click();
+    await expect(page.locator("#expected-completion-date")).toHaveValue("2026-03-31");
+    await expect(page.locator("#expected-completion-time")).toContainText("1:00 PM");
     await page.locator("#expected-completion-date").fill("2026-04-02");
     await chooseTime(page, "expected-completion-time", "4:00 PM");
     await page.getByRole("button", { name: /Save Appointment|Save$/i }).first().click();

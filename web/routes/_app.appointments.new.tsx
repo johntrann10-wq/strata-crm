@@ -341,6 +341,8 @@ export default function NewAppointmentPage() {
   const hasPrefilledFromQuote = useRef(false);
   const hasSeededBusinessFinanceDefaults = useRef(false);
   const hasSeededBusinessDefaultStartTime = useRef(false);
+  const expectedCompletionDateTouchedRef = useRef(false);
+  const expectedCompletionTimeTouchedRef = useRef(false);
   const [ignoreClientPrefill, setIgnoreClientPrefill] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState<string>("");
   const [debouncedClientQuery, setDebouncedClientQuery] = useState<string>("");
@@ -589,6 +591,13 @@ export default function NewAppointmentPage() {
     };
   }, [expectedCompletionDate, jobStartDate]);
 
+  const suggestedExpectedCompletionDateTime = useMemo(() => {
+    if (startDateTime && effectiveDuration > 0) {
+      return addMinutes(startDateTime, effectiveDuration);
+    }
+    return startDateTime ?? dropOffDateTime;
+  }, [dropOffDateTime, effectiveDuration, startDateTime]);
+
   const handleMultiDayRangeChange = useCallback((range: DateRange | undefined) => {
     if (!range?.from) {
       setJobStartDate("");
@@ -599,6 +608,7 @@ export default function NewAppointmentPage() {
     const from = format(range.from, "yyyy-MM-dd");
     const to = format(range.to ?? range.from, "yyyy-MM-dd");
     setJobStartDate(from);
+    expectedCompletionDateTouchedRef.current = true;
     setExpectedCompletionDate(to);
 
     if (!selectedDate) {
@@ -612,16 +622,50 @@ export default function NewAppointmentPage() {
     }
   }, [selectedDate]);
 
+  const handleExpectedCompletionDateChange = useCallback((value: string) => {
+    expectedCompletionDateTouchedRef.current = true;
+    setExpectedCompletionDate(value);
+  }, []);
+
+  const handleExpectedCompletionTimeChange = useCallback((value: string) => {
+    expectedCompletionTimeTouchedRef.current = true;
+    setExpectedCompletionTime(value);
+  }, []);
+
+  const seedExpectedCompletionFromEstimate = useCallback(() => {
+    if (!suggestedExpectedCompletionDateTime) return;
+    setExpectedCompletionDate(format(suggestedExpectedCompletionDateTime, "yyyy-MM-dd"));
+    setExpectedCompletionTime(format(suggestedExpectedCompletionDateTime, "HH:mm"));
+  }, [suggestedExpectedCompletionDateTime]);
+
+  const handleEnableMultiDayJob = useCallback(() => {
+    expectedCompletionDateTouchedRef.current = false;
+    expectedCompletionTimeTouchedRef.current = false;
+    setIsMultiDayJob(true);
+    seedExpectedCompletionFromEstimate();
+  }, [seedExpectedCompletionFromEstimate]);
+
   useEffect(() => {
     if (!selectedDate) return;
     const yyyyMmDd = format(selectedDate, "yyyy-MM-dd");
     setJobStartDate((current) => current || yyyyMmDd);
     setJobStartTime((current) => current || startTime);
-    if (isMultiDayJob) {
-      setExpectedCompletionDate((current) => current || format(addMinutes(selectedDate, 24 * 60), "yyyy-MM-dd"));
-      setExpectedCompletionTime((current) => current || startTime);
-    }
   }, [isMultiDayJob, selectedDate, startTime]);
+
+  useEffect(() => {
+    if (!isMultiDayJob) {
+      expectedCompletionDateTouchedRef.current = false;
+      expectedCompletionTimeTouchedRef.current = false;
+      return;
+    }
+    if (!suggestedExpectedCompletionDateTime) return;
+    if (!expectedCompletionDateTouchedRef.current) {
+      setExpectedCompletionDate(format(suggestedExpectedCompletionDateTime, "yyyy-MM-dd"));
+    }
+    if (!expectedCompletionTimeTouchedRef.current) {
+      setExpectedCompletionTime(format(suggestedExpectedCompletionDateTime, "HH:mm"));
+    }
+  }, [isMultiDayJob, suggestedExpectedCompletionDateTime]);
 
   useEffect(() => {
     if (!isMultiDayJob || !selectedDate || !jobStartDate || !jobStartTime || !startTime) return;
@@ -1756,7 +1800,7 @@ export default function NewAppointmentPage() {
                         "flex items-start gap-3 rounded-xl border p-3 text-left transition-colors",
                         isMultiDayJob ? "border-primary bg-primary/5" : "border-border bg-background"
                       )}
-                      onClick={() => setIsMultiDayJob(true)}
+                      onClick={handleEnableMultiDayJob}
                     >
                       <SelectionIndicator checked={isMultiDayJob} />
                       <div>
@@ -1836,7 +1880,7 @@ export default function NewAppointmentPage() {
                             id="expected-completion-date"
                             type="date"
                             value={expectedCompletionDate}
-                            onChange={(event) => setExpectedCompletionDate(event.target.value)}
+                            onChange={(event) => handleExpectedCompletionDateChange(event.target.value)}
                             className={dateInputClassName}
                           />
                         </div>
@@ -1845,7 +1889,7 @@ export default function NewAppointmentPage() {
                           <ResponsiveTimeSelect
                             id="expected-completion-time"
                             value={expectedCompletionTime}
-                            onChange={setExpectedCompletionTime}
+                            onChange={handleExpectedCompletionTimeChange}
                             options={timeOptions}
                             placeholder="Select a time"
                             desktopClassName={timeSelectTriggerClassName}
