@@ -1042,12 +1042,13 @@ export function MonthView({
                         <div className="mt-1 min-h-0 flex-1 space-y-1 overflow-hidden pt-1">
                           {dayDensityItems
                             .slice(0, 2)
-                            .map((appointment) => (
+                            .map((appointment, index) => (
                               <div
                                 key={`${appointment.id}-${day.toISOString()}-label`}
                                 className={cn(
                                   "truncate rounded-md bg-muted/[0.16] px-1.5 py-0.5 font-medium text-foreground/85",
-                                  "hidden text-[10px] sm:block"
+                                  "text-[10px]",
+                                  index === 0 ? "hidden sm:block" : "hidden xl:block"
                                 )}
                               >
                                 {apptLabel(appointment)}
@@ -1058,7 +1059,7 @@ export function MonthView({
                         <div className="min-h-0 flex-1" />
                       )}
 
-                      <div className="mt-auto overflow-visible space-y-1 pt-1 pb-2 sm:pt-2 sm:pb-2.5">
+                      <div className="mt-auto min-h-[1rem] shrink-0 overflow-visible space-y-1 pt-1 pb-2 sm:min-h-[1.15rem] sm:pt-2 sm:pb-2.5">
                         <DayStatusDots appointments={dayDensityItems} />
                       </div>
                     </div>

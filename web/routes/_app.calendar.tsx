@@ -745,6 +745,7 @@ export default function CalendarPage() {
   );
   const mobileMonthHeightClassName =
     mobileMonthWeekCount >= 6 ? "h-[25.5rem]" : mobileMonthWeekCount === 5 ? "h-[21.75rem]" : "h-[18rem]";
+  const desktopMonthHeightClassName = "sm:h-[31rem] lg:h-[34rem] xl:h-[clamp(35rem,56dvh,42rem)]";
   const busiestMonthDay = useMemo(() => {
     const counts = new Map<string, { date: Date; count: number }>();
     for (const appointment of selectedMonthAppointments) {
@@ -990,7 +991,7 @@ export default function CalendarPage() {
               className={cn(
                 "overflow-hidden",
                 view === "month"
-                  ? `${mobileMonthHeightClassName} sm:h-[23rem] xl:h-[clamp(26rem,48dvh,38rem)]`
+                  ? `${mobileMonthHeightClassName} ${desktopMonthHeightClassName}`
                   : "h-[21.5rem] sm:h-[23rem] xl:h-[clamp(24rem,46dvh,34rem)]"
               )}
             >
