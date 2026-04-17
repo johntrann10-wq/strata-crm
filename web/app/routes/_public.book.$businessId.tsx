@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { API_BASE } from "@/api";
@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { trackEvent } from "@/lib/analytics";
 import {
@@ -30,6 +31,7 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  ListFilter,
   Loader2,
   Star,
   ShieldCheck,
@@ -823,6 +825,7 @@ export default function PublicBookingPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [serviceCategoryFilter, setServiceCategoryFilter] = useState<string>("all");
   const [expandedServiceId, setExpandedServiceId] = useState<string>("");
+  const [mobileCategorySheetOpen, setMobileCategorySheetOpen] = useState(false);
   const [draftHydrating, setDraftHydrating] = useState(true);
   const [draftStatus, setDraftStatus] = useState<DraftStatus>("idle");
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
@@ -835,6 +838,7 @@ export default function PublicBookingPage() {
   const [submittedService, setSubmittedService] = useState<BookingService | null>(null);
   const didHydrateQueryRef = useRef<string | null>(null);
   const restoredDraftRef = useRef<string | null>(null);
+  const syncedQueryStateRef = useRef<string | null>(null);
   const lastServerDraftSignatureRef = useRef<string | null>(null);
   const abandonSentForTokenRef = useRef<string | null>(null);
 
@@ -853,6 +857,15 @@ export default function PublicBookingPage() {
   const builderPreviewFlow = searchParams.get("builderPreviewFlow");
   const builderPreviewStep = searchParams.get("builderPreviewStep");
   const isBuilderPreview = Boolean(builderPreviewToken);
+  const bookingQueryStateKey = useMemo(
+    () =>
+      JSON.stringify({
+        service: requestedServiceId ?? "",
+        category: requestedCategoryId ?? "",
+        step: requestedStep ?? "",
+      }),
+    [requestedCategoryId, requestedServiceId, requestedStep]
+  );
   const detectedCustomerTimezone = useMemo(() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || config?.timezone || "America/Los_Angeles";
@@ -896,11 +909,137 @@ export default function PublicBookingPage() {
       if (updates.step) next.set("step", updates.step);
       else next.delete("step");
     }
+    if (next.toString() === searchParams.toString()) return;
     setSearchParams(next, { replace: true, preventScrollReset: true });
   };
 
+  const requestedBookingState = useMemo(() => {
+    if (!config) {
+      return {
+        requestedService: "",
+        requestedCategory: "",
+        requestedServiceRecord: null as BookingService | null,
+        initialCategory: "all",
+        initialStep: 0,
+      };
+    }
+
+    const requestedService =
+      requestedServiceId && config.services.some((service) => service.id === requestedServiceId)
+        ? requestedServiceId
+        : "";
+    const requestedCategory =
+      requestedCategoryId &&
+      config.services.some((service) => toCategoryFilterValue(service.categoryId) === requestedCategoryId)
+        ? requestedCategoryId
+        : "";
+    const requestedServiceRecord = requestedService
+      ? config.services.find((service) => service.id === requestedService) ?? null
+      : null;
+    const initialCategory =
+      requestedCategory || (requestedServiceRecord ? toCategoryFilterValue(requestedServiceRecord.categoryId) : "all");
+
+    return {
+      requestedService,
+      requestedCategory,
+      requestedServiceRecord,
+      initialCategory,
+      initialStep: requestedService ? (requestedStep === "service" ? 0 : 1) : 0,
+    };
+  }, [config, requestedCategoryId, requestedServiceId, requestedStep]);
+
+  const applyQueryState = useCallback(
+    (state = requestedBookingState) => {
+      if (!config) return;
+
+      const nextCategory = state.initialCategory || "all";
+      const nextExpandedServiceId =
+        requestedStep === "service" && state.requestedService ? state.requestedService : "";
+      const nextServiceId = state.requestedService;
+      const nextServiceRecord = state.requestedServiceRecord;
+
+      setServiceCategoryFilter((current) => (current === nextCategory ? current : nextCategory));
+      setExpandedServiceId((current) => (current === nextExpandedServiceId ? current : nextExpandedServiceId));
+      setCurrentStep((current) => {
+        const shouldPreserveCurrentStep =
+          Boolean(nextServiceId) &&
+          current > 0 &&
+          form.serviceId === nextServiceId &&
+          requestedStep !== "service";
+        const nextStep = shouldPreserveCurrentStep ? current : state.initialStep;
+        return current === nextStep ? current : nextStep;
+      });
+      setForm((current) => {
+        const serviceChanged = current.serviceId !== nextServiceId;
+        const nextServiceMode =
+          nextServiceRecord?.serviceMode === "mobile"
+            ? "mobile"
+            : nextServiceRecord?.serviceMode === "both"
+              ? current.serviceMode
+              : "in_shop";
+        const nextLocationId =
+          nextServiceRecord?.serviceMode === "mobile"
+            ? ""
+            : config.locations.length === 1
+              ? config.locations[0].id
+              : current.locationId;
+
+        if (!nextServiceId) {
+          if (
+            !current.serviceId &&
+            current.addonServiceIds.length === 0 &&
+            !current.bookingDate &&
+            !current.startTime &&
+            !current.requestedTimeEnd &&
+            !current.requestedTimeLabel
+          ) {
+            return current;
+          }
+
+          return {
+            ...current,
+            serviceId: "",
+            addonServiceIds: [],
+            bookingDate: "",
+            startTime: "",
+            requestedTimeEnd: "",
+            requestedTimeLabel: "",
+          };
+        }
+
+        if (!serviceChanged && current.serviceMode === nextServiceMode && current.locationId === nextLocationId) {
+          return current;
+        }
+
+        if (!serviceChanged) {
+          return {
+            ...current,
+            serviceId: nextServiceId,
+            serviceMode: nextServiceMode,
+            locationId: nextLocationId,
+          };
+        }
+
+        return {
+          ...current,
+          serviceId: nextServiceId,
+          addonServiceIds: [],
+          bookingDate: "",
+          startTime: "",
+          requestedTimeEnd: "",
+          requestedTimeLabel: "",
+          flexibility: "same_day_flexible",
+          serviceMode: nextServiceMode,
+          locationId: nextLocationId,
+        };
+      });
+    },
+    [config, form.serviceId, requestedBookingState, requestedStep]
+  );
+
   useEffect(() => {
     if (!businessId) {
+      setConfig(null);
       setPageError("This booking page link is invalid.");
       setLoading(false);
       setDraftHydrating(false);
@@ -908,6 +1047,11 @@ export default function PublicBookingPage() {
     }
 
     let cancelled = false;
+    didHydrateQueryRef.current = null;
+    restoredDraftRef.current = null;
+    syncedQueryStateRef.current = null;
+    lastServerDraftSignatureRef.current = null;
+    abandonSentForTokenRef.current = null;
     setLoading(true);
     setDraftHydrating(true);
     setPageError(null);
@@ -922,251 +1066,268 @@ export default function PublicBookingPage() {
       })
       .then((payload) => {
         if (cancelled) return;
-
-        const requestedService =
-          requestedServiceId && payload.services.some((service) => service.id === requestedServiceId)
-            ? requestedServiceId
-            : "";
-        const requestedCategory =
-          requestedCategoryId &&
-          payload.services.some((service) => toCategoryFilterValue(service.categoryId) === requestedCategoryId)
-            ? requestedCategoryId
-            : "";
-        const requestedServiceRecord = requestedService
-          ? payload.services.find((service) => service.id === requestedService) ?? null
-          : null;
-        const initialCategory =
-          requestedCategory ||
-          (requestedServiceRecord ? toCategoryFilterValue(requestedServiceRecord.categoryId) : "all");
-
         setConfig(payload);
-
-        if (isBuilderPreview) {
-          const previewService =
-            (builderPreviewFlow === "request"
-              ? payload.services.find((service) => service.effectiveFlow === "request")
-              : null) ??
-            requestedServiceRecord ??
-            payload.services[0] ??
-            null;
-          const previewCategory = previewService
-            ? toCategoryFilterValue(previewService.categoryId)
-            : "all";
-          const previewStepIndex =
-            builderPreviewStep === "review"
-              ? 4
-              : builderPreviewStep === "schedule"
-                ? 2
-                : previewService
-                  ? 1
-                  : 0;
-          const previewDate = previewService
-            ? toDateInputValue(Math.max(Math.ceil((previewService.leadTimeHours ?? 0) / 24), 0))
-            : "";
-          const previewOpenTime = previewService?.openTime ?? payload.availabilityDefaults.openTime ?? null;
-          const previewCloseTime = previewService?.closeTime ?? payload.availabilityDefaults.closeTime ?? null;
-          const previewExactSlot =
-            previewDate && previewService
-              ? buildRequestExactTimeOptions({
-                  bookingDate: previewDate,
-                  openTime: previewOpenTime,
-                  closeTime: previewCloseTime,
-                  durationMinutes: previewService.durationMinutes,
-                })[0] ?? null
-              : null;
-
-          setServiceCategoryFilter(previewCategory);
-          setExpandedServiceId("");
-          setRequestTimeMode("exact");
-          setForm({
-            ...emptyForm(),
-            serviceId: previewService?.id ?? "",
-            serviceMode: previewService?.serviceMode === "mobile" ? "mobile" : "in_shop",
-            locationId:
-              previewService?.serviceMode === "mobile"
-                ? ""
-                : payload.locations.length === 1
-                  ? payload.locations[0].id
-                  : "",
-            bookingDate: previewStepIndex >= 2 ? previewDate : "",
-            startTime: previewStepIndex >= 2 ? previewExactSlot?.startTime ?? "" : "",
-            requestedTimeEnd: previewStepIndex >= 2 ? previewExactSlot?.endTime ?? "" : "",
-            customerTimezone:
-              (() => {
-                try {
-                  return Intl.DateTimeFormat().resolvedOptions().timeZone || payload.timezone || "America/Los_Angeles";
-                } catch {
-                  return payload.timezone || "America/Los_Angeles";
-                }
-              })(),
-            vehicleYear: previewStepIndex >= 4 ? "2022" : "",
-            vehicleMake: previewStepIndex >= 4 ? "Tesla" : "",
-            vehicleModel: previewStepIndex >= 4 ? "Model Y" : "",
-            vehicleColor: previewStepIndex >= 4 ? "Black" : "",
-            firstName: previewStepIndex >= 4 ? "Alex" : "",
-            lastName: previewStepIndex >= 4 ? "Morgan" : "",
-            email: previewStepIndex >= 4 ? "alex@example.com" : "",
-            phone: previewStepIndex >= 4 ? "(555) 555-0188" : "",
-            notes:
-              previewStepIndex >= 4
-                ? "Please keep me posted if a nearby slot works better."
-                : "",
-          });
-          setCurrentStep(previewStepIndex);
-          return;
-        }
-
-        const hydrationKey = businessId ?? "";
-        if (didHydrateQueryRef.current !== hydrationKey) {
-          didHydrateQueryRef.current = hydrationKey;
-          setServiceCategoryFilter(initialCategory || "all");
-          setExpandedServiceId(requestedStep === "service" && requestedService ? requestedService : "");
-          setForm((current) => ({
-            ...current,
-            serviceId: requestedService || current.serviceId,
-            serviceMode: requestedServiceRecord?.serviceMode === "mobile" ? "mobile" : current.serviceMode,
-            locationId: payload.locations.length === 1 ? payload.locations[0].id : current.locationId,
-          }));
-          setCurrentStep(requestedService ? (requestedStep === "service" ? 0 : 1) : 0);
-        }
-
-        if (restoredDraftRef.current !== hydrationKey && typeof window !== "undefined") {
-          restoredDraftRef.current = hydrationKey;
-          try {
-            const raw = window.localStorage.getItem(buildDraftStorageKey(hydrationKey));
-            if (!raw) return;
-            const snapshot = JSON.parse(raw) as DraftSnapshot;
-            if (!snapshot?.form) return;
-            const canRestoreSnapshot =
-              !requestedService || !snapshot.form.serviceId || snapshot.form.serviceId === requestedService;
-            if (!canRestoreSnapshot) return;
-
-            const applyDraft = (draft: BookingDraftResponse, options?: { announceResume?: boolean }) => {
-              const restoredService = draft.form.serviceId
-                ? payload.services.find((service) => service.id === draft.form.serviceId)
-                : null;
-              const nextCategory =
-                draft.serviceCategoryFilter ||
-                (restoredService ? toCategoryFilterValue(restoredService.categoryId) : "all");
-
-              setForm({
-                ...emptyForm(),
-                ...draft.form,
-                locationId:
-                  draft.form.locationId ||
-                  (payload.locations.length === 1 && draft.form.serviceMode !== "mobile"
-                    ? payload.locations[0].id
-                    : draft.form.locationId),
-              });
-              setServiceCategoryFilter(nextCategory);
-              setExpandedServiceId(draft.expandedServiceId || "");
-              setCurrentStep(Math.max(0, Math.min(draft.currentStep ?? 0, 4)));
-              setDraftResumeToken(draft.resumeToken ?? null);
-              setDraftServerId(draft.draftId ?? null);
-              setDraftLifecycleStatus(draft.status ?? null);
-              setDraftStatus("saved");
-              setDraftSavedAt(draft.savedAt ?? null);
-              setSavedNow(Date.now());
-              lastServerDraftSignatureRef.current = buildServerDraftSignature({
-                form: {
-                  ...emptyForm(),
-                  ...draft.form,
-                },
-                currentStep: Math.max(0, Math.min(draft.currentStep ?? 0, 4)),
-                serviceCategoryFilter: nextCategory,
-                expandedServiceId: draft.expandedServiceId || "",
-                source,
-                campaign,
-              });
-
-              if (options?.announceResume) {
-                trackEvent("booking_draft_resumed", {
-                  business_id: hydrationKey,
-                  status: draft.status,
-                });
-              }
-            };
-
-            const localDraft: BookingDraftResponse = {
-              draftId: snapshot.draftId ?? "",
-              resumeToken: snapshot.resumeToken ?? "",
-              status: snapshot.serverStatus ?? "anonymous_draft",
-              savedAt: snapshot.serverSavedAt ?? snapshot.savedAt,
-              currentStep: snapshot.currentStep ?? 0,
-              serviceCategoryFilter: snapshot.serviceCategoryFilter || "all",
-              expandedServiceId: snapshot.expandedServiceId || "",
-              form: {
-                ...emptyForm(),
-                ...snapshot.form,
-              },
-            };
-
-            if (hasLocalDraftProgress({
-              form: localDraft.form,
-              currentStep: localDraft.currentStep,
-              serviceCategoryFilter: localDraft.serviceCategoryFilter,
-              expandedServiceId: localDraft.expandedServiceId,
-            })) {
-              applyDraft(localDraft);
-            }
-
-            if (snapshot.resumeToken) {
-              fetch(
-                buildApiUrl(
-                  `/api/businesses/${encodeURIComponent(hydrationKey)}/public-booking-drafts/${encodeURIComponent(
-                    snapshot.resumeToken
-                  )}`
-                )
-              )
-                .then(async (response) => {
-                  if (!response.ok) return null;
-                  const payload = (await response.json().catch(() => null)) as
-                    | { draft?: BookingDraftResponse }
-                    | null;
-                  return payload?.draft ?? null;
-                })
-                .then((serverDraft) => {
-                  if (!serverDraft || cancelled) return;
-                  applyDraft(serverDraft, { announceResume: true });
-                })
-                .catch(() => {
-                  // local draft remains the fallback
-                });
-            }
-          } catch {
-            // ignore invalid local draft state
-          }
-        }
       })
       .catch((fetchError) => {
         if (!cancelled) {
           setPageError(
             fetchError instanceof Error ? fetchError.message : "This booking page is unavailable right now."
           );
+          setDraftHydrating(false);
         }
       })
       .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-          window.setTimeout(() => {
-            setDraftHydrating(false);
-          }, 0);
-        }
+        if (!cancelled) setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
+  }, [businessId]);
+
+  useEffect(() => {
+    if (!config || !businessId || !isBuilderPreview) return;
+
+    const previewService =
+      (builderPreviewFlow === "request"
+        ? config.services.find((service) => service.effectiveFlow === "request")
+        : null) ??
+      requestedBookingState.requestedServiceRecord ??
+      config.services[0] ??
+      null;
+    const previewCategory = previewService ? toCategoryFilterValue(previewService.categoryId) : "all";
+    const previewStepIndex =
+      builderPreviewStep === "review" ? 4 : builderPreviewStep === "schedule" ? 2 : previewService ? 1 : 0;
+    const previewDate = previewService
+      ? toDateInputValue(Math.max(Math.ceil((previewService.leadTimeHours ?? 0) / 24), 0))
+      : "";
+    const previewOpenTime = previewService?.openTime ?? config.availabilityDefaults.openTime ?? null;
+    const previewCloseTime = previewService?.closeTime ?? config.availabilityDefaults.closeTime ?? null;
+    const previewExactSlot =
+      previewDate && previewService
+        ? buildRequestExactTimeOptions({
+            bookingDate: previewDate,
+            openTime: previewOpenTime,
+            closeTime: previewCloseTime,
+            durationMinutes: previewService.durationMinutes,
+          })[0] ?? null
+        : null;
+
+    setServiceCategoryFilter(previewCategory);
+    setExpandedServiceId("");
+    setRequestTimeMode("exact");
+    setForm({
+      ...emptyForm(),
+      serviceId: previewService?.id ?? "",
+      serviceMode: previewService?.serviceMode === "mobile" ? "mobile" : "in_shop",
+      locationId:
+        previewService?.serviceMode === "mobile"
+          ? ""
+          : config.locations.length === 1
+            ? config.locations[0].id
+            : "",
+      bookingDate: previewStepIndex >= 2 ? previewDate : "",
+      startTime: previewStepIndex >= 2 ? previewExactSlot?.startTime ?? "" : "",
+      requestedTimeEnd: previewStepIndex >= 2 ? previewExactSlot?.endTime ?? "" : "",
+      customerTimezone:
+        (() => {
+          try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone || config.timezone || "America/Los_Angeles";
+          } catch {
+            return config.timezone || "America/Los_Angeles";
+          }
+        })(),
+      vehicleYear: previewStepIndex >= 4 ? "2022" : "",
+      vehicleMake: previewStepIndex >= 4 ? "Tesla" : "",
+      vehicleModel: previewStepIndex >= 4 ? "Model Y" : "",
+      vehicleColor: previewStepIndex >= 4 ? "Black" : "",
+      firstName: previewStepIndex >= 4 ? "Alex" : "",
+      lastName: previewStepIndex >= 4 ? "Morgan" : "",
+      email: previewStepIndex >= 4 ? "alex@example.com" : "",
+      phone: previewStepIndex >= 4 ? "(555) 555-0188" : "",
+      notes:
+        previewStepIndex >= 4 ? "Please keep me posted if a nearby slot works better." : "",
+    });
+    setCurrentStep(previewStepIndex);
+    setDraftHydrating(false);
   }, [
+    businessId,
     builderPreviewFlow,
     builderPreviewStep,
+    config,
+    isBuilderPreview,
+    requestedBookingState.requestedServiceRecord,
+  ]);
+
+  useEffect(() => {
+    if (!config || !businessId || isBuilderPreview) return;
+    const hydrationKey = businessId;
+    if (didHydrateQueryRef.current === hydrationKey) return;
+
+    didHydrateQueryRef.current = hydrationKey;
+    syncedQueryStateRef.current = bookingQueryStateKey;
+    applyQueryState();
+
+    const finishDraftHydration = () => {
+      window.setTimeout(() => {
+        setDraftHydrating(false);
+      }, 0);
+    };
+
+    if (restoredDraftRef.current === hydrationKey || typeof window === "undefined") {
+      finishDraftHydration();
+      return;
+    }
+
+    restoredDraftRef.current = hydrationKey;
+
+    try {
+      const raw = window.localStorage.getItem(buildDraftStorageKey(hydrationKey));
+      if (raw) {
+        const snapshot = JSON.parse(raw) as DraftSnapshot;
+        const canRestoreSnapshot =
+          snapshot?.form &&
+          (!requestedBookingState.requestedService ||
+            !snapshot.form.serviceId ||
+            snapshot.form.serviceId === requestedBookingState.requestedService);
+
+        if (snapshot?.form && canRestoreSnapshot) {
+          const applyDraft = (draft: BookingDraftResponse, options?: { announceResume?: boolean }) => {
+            const restoredService = draft.form.serviceId
+              ? config.services.find((service) => service.id === draft.form.serviceId)
+              : null;
+            const nextCategory =
+              draft.serviceCategoryFilter ||
+              (restoredService ? toCategoryFilterValue(restoredService.categoryId) : "all");
+
+            setForm({
+              ...emptyForm(),
+              ...draft.form,
+              locationId:
+                draft.form.locationId ||
+                (config.locations.length === 1 && draft.form.serviceMode !== "mobile"
+                  ? config.locations[0].id
+                  : draft.form.locationId),
+            });
+            setServiceCategoryFilter(nextCategory);
+            setExpandedServiceId(draft.expandedServiceId || "");
+            setCurrentStep(Math.max(0, Math.min(draft.currentStep ?? 0, 4)));
+            setDraftResumeToken(draft.resumeToken ?? null);
+            setDraftServerId(draft.draftId ?? null);
+            setDraftLifecycleStatus(draft.status ?? null);
+            setDraftStatus("saved");
+            setDraftSavedAt(draft.savedAt ?? null);
+            setSavedNow(Date.now());
+            lastServerDraftSignatureRef.current = buildServerDraftSignature({
+              form: {
+                ...emptyForm(),
+                ...draft.form,
+              },
+              currentStep: Math.max(0, Math.min(draft.currentStep ?? 0, 4)),
+              serviceCategoryFilter: nextCategory,
+              expandedServiceId: draft.expandedServiceId || "",
+              source,
+              campaign,
+            });
+
+            if (options?.announceResume) {
+              trackEvent("booking_draft_resumed", {
+                business_id: hydrationKey,
+                status: draft.status,
+              });
+            }
+          };
+
+          const localDraft: BookingDraftResponse = {
+            draftId: snapshot.draftId ?? "",
+            resumeToken: snapshot.resumeToken ?? "",
+            status: snapshot.serverStatus ?? "anonymous_draft",
+            savedAt: snapshot.serverSavedAt ?? snapshot.savedAt,
+            currentStep: snapshot.currentStep ?? 0,
+            serviceCategoryFilter: snapshot.serviceCategoryFilter || "all",
+            expandedServiceId: snapshot.expandedServiceId || "",
+            form: {
+              ...emptyForm(),
+              ...snapshot.form,
+            },
+          };
+
+          if (
+            hasLocalDraftProgress({
+              form: localDraft.form,
+              currentStep: localDraft.currentStep,
+              serviceCategoryFilter: localDraft.serviceCategoryFilter,
+              expandedServiceId: localDraft.expandedServiceId,
+            })
+          ) {
+            applyDraft(localDraft);
+          }
+
+          if (snapshot.resumeToken) {
+            fetch(
+              buildApiUrl(
+                `/api/businesses/${encodeURIComponent(hydrationKey)}/public-booking-drafts/${encodeURIComponent(
+                  snapshot.resumeToken
+                )}`
+              )
+            )
+              .then(async (response) => {
+                if (!response.ok) return null;
+                const payload = (await response.json().catch(() => null)) as
+                  | { draft?: BookingDraftResponse }
+                  | null;
+                return payload?.draft ?? null;
+              })
+              .then((serverDraft) => {
+                if (!serverDraft) return;
+                applyDraft(serverDraft, { announceResume: true });
+              })
+              .catch(() => {
+                // local draft remains the fallback
+              });
+          }
+        }
+      }
+    } catch {
+      // ignore invalid local draft state
+    } finally {
+      finishDraftHydration();
+    }
+  }, [
+    applyQueryState,
+    bookingQueryStateKey,
     businessId,
     campaign,
+    config,
     isBuilderPreview,
-    requestedCategoryId,
-    requestedServiceId,
-    requestedStep,
+    requestedBookingState,
     source,
+  ]);
+
+  useEffect(() => {
+    if (!config || !businessId || isBuilderPreview) return;
+    if (didHydrateQueryRef.current !== businessId) return;
+    if (draftHydrating) return;
+    if (syncedQueryStateRef.current === bookingQueryStateKey) return;
+
+    if (form.serviceId !== requestedBookingState.requestedService) {
+      setRequestTimeMode("exact");
+      setSubmittedForm(null);
+      setSubmittedService(null);
+      setResult(null);
+    }
+
+    applyQueryState();
+    syncedQueryStateRef.current = bookingQueryStateKey;
+  }, [
+    applyQueryState,
+    bookingQueryStateKey,
+    businessId,
+    config,
+    draftHydrating,
+    form.serviceId,
+    isBuilderPreview,
+    requestedBookingState,
   ]);
 
   const selectedService = useMemo(
@@ -1649,16 +1810,29 @@ export default function PublicBookingPage() {
   ]);
 
   const categoryOptions = useMemo(() => {
-    const seen = new Set<string>();
-    const options = [{ value: "all", label: "All services" }];
-    for (const service of config?.services ?? []) {
+    const options = new Map<string, { value: string; label: string; count: number }>();
+    const services = config?.services ?? [];
+    options.set("all", { value: "all", label: "All services", count: services.length });
+    for (const service of services) {
       const value = toCategoryFilterValue(service.categoryId);
-      if (seen.has(value)) continue;
-      seen.add(value);
-      options.push({ value, label: service.categoryLabel ?? "Popular services" });
+      const existing = options.get(value);
+      if (existing) existing.count += 1;
+      else options.set(value, { value, label: service.categoryLabel ?? "Popular services", count: 1 });
     }
-    return options;
+    return [...options.values()];
   }, [config?.services]);
+  const selectedCategoryOption = useMemo(
+    () => categoryOptions.find((option) => option.value === serviceCategoryFilter) ?? categoryOptions[0] ?? null,
+    [categoryOptions, serviceCategoryFilter]
+  );
+  const mobileCategoryUsesSheet = categoryOptions.length > 5;
+  const mobileQuickCategoryOptions = useMemo(() => {
+    if (!mobileCategoryUsesSheet) return categoryOptions;
+    const quickOptions = categoryOptions.slice(0, 4);
+    if (!selectedCategoryOption) return quickOptions;
+    if (quickOptions.some((option) => option.value === selectedCategoryOption.value)) return quickOptions;
+    return [...quickOptions.slice(0, 3), selectedCategoryOption];
+  }, [categoryOptions, mobileCategoryUsesSheet, selectedCategoryOption]);
 
   const visibleServices = useMemo(() => {
     return (config?.services ?? []).filter((service) =>
@@ -1687,6 +1861,11 @@ export default function PublicBookingPage() {
     () => config?.locations.find((location) => location.id === form.locationId) ?? null,
     [config?.locations, form.locationId]
   );
+
+  useEffect(() => {
+    if (activeStep.key !== "service") setMobileCategorySheetOpen(false);
+  }, [activeStep.key]);
+
   const bookingBrandTheme = useMemo(
     () => resolveBookingBrandTheme(config?.branding),
     [config?.branding]
@@ -1744,6 +1923,7 @@ export default function PublicBookingPage() {
 
   const handleCategoryChange = (value: string) => {
     setServiceCategoryFilter(value);
+    setMobileCategorySheetOpen(false);
     setExpandedServiceId((current) => {
       if (!current || value === "all") return current;
       const expandedService = config?.services.find((entry) => entry.id === current) ?? null;
@@ -2223,21 +2403,136 @@ export default function PublicBookingPage() {
       return (
         <div className="space-y-5">
           {categoryOptions.length > 1 ? (
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-hidden">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-slate-950">Choose a service</p>
                 <Badge variant="outline">{visibleServices.length} available</Badge>
               </div>
-              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              <div className="sm:hidden">
+                {mobileCategoryUsesSheet ? (
+                  <>
+                    <div className="overflow-hidden rounded-[1.3rem] border border-slate-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(248,250,252,0.95))] p-3 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
+                      <div className="flex flex-col gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Category</p>
+                          <p className="mt-1 truncate text-sm font-semibold tracking-[-0.02em] text-slate-950">
+                            {selectedCategoryOption?.label ?? "All services"}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            {selectedCategoryOption
+                              ? `${selectedCategoryOption.count} service${selectedCategoryOption.count === 1 ? "" : "s"} in this lane`
+                              : "Browse every category without pushing the layout out of frame."}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMobileCategorySheetOpen(true)}
+                          className="h-10 w-full rounded-full border-slate-200 bg-white/90 px-3 text-xs font-semibold text-slate-700 shadow-sm"
+                        >
+                          <ListFilter className="mr-1.5 h-3.5 w-3.5" />
+                          Browse all
+                        </Button>
+                      </div>
+                      <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto overscroll-x-contain px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        {mobileQuickCategoryOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            data-category-filter={option.value}
+                            onClick={() => handleCategoryChange(option.value)}
+                            className={cn(
+                              "max-w-[10.75rem] shrink-0 truncate rounded-full border px-3.5 py-2 text-sm font-medium transition-all motion-reduce:transition-none",
+                              serviceCategoryFilter === option.value
+                                ? "border-slate-900 bg-slate-900 text-white shadow-[0_10px_22px_rgba(15,23,42,0.14)]"
+                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Sheet open={mobileCategorySheetOpen} onOpenChange={setMobileCategorySheetOpen}>
+                      <SheetContent side="bottom" className="rounded-t-[1.75rem] border-slate-200/90 bg-white/98 p-0">
+                        <SheetHeader className="border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.94),rgba(255,255,255,0.98))]">
+                          <SheetTitle>Browse categories</SheetTitle>
+                          <SheetDescription>
+                            Jump between service lanes without letting the category rail spill off screen.
+                          </SheetDescription>
+                        </SheetHeader>
+                        <div className="grid gap-2 px-5 pb-6 pt-4">
+                          {categoryOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              data-category-filter={option.value}
+                              onClick={() => handleCategoryChange(option.value)}
+                              className={cn(
+                                "flex w-full items-center justify-between gap-3 rounded-[1.15rem] border px-4 py-3 text-left transition-all motion-reduce:transition-none",
+                                serviceCategoryFilter === option.value
+                                  ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] shadow-[0_12px_26px_rgba(15,23,42,0.06)]"
+                                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                              )}
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-slate-950">{option.label}</p>
+                                <p className="mt-1 text-xs leading-5 text-slate-500">
+                                  {option.count} service{option.count === 1 ? "" : "s"}
+                                </p>
+                              </div>
+                              {serviceCategoryFilter === option.value ? (
+                                <Check className="h-4 w-4 shrink-0 text-[color:var(--booking-primary-strong)]" />
+                              ) : null}
+                            </button>
+                          ))}
+                        </div>
+                      </SheetContent>
+                    </Sheet>
+                  </>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {categoryOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        data-category-filter={option.value}
+                        onClick={() => handleCategoryChange(option.value)}
+                        className={cn(
+                          "min-w-0 rounded-[1rem] border px-3 py-3 text-left transition-all motion-reduce:transition-none",
+                          serviceCategoryFilter === option.value
+                            ? "border-slate-900 bg-slate-900 text-white shadow-[0_10px_22px_rgba(15,23,42,0.14)]"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                        )}
+                      >
+                        <p className="truncate text-sm font-semibold">{option.label}</p>
+                        <p
+                          className={cn(
+                            "mt-1 text-xs leading-5",
+                            serviceCategoryFilter === option.value ? "text-white/80" : "text-slate-500"
+                          )}
+                        >
+                          {option.count} service{option.count === 1 ? "" : "s"}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="hidden flex-wrap gap-2 sm:flex">
                 {categoryOptions.map((option) => (
                   <button
                     key={option.value}
                     type="button"
+                    data-category-filter={option.value}
                     onClick={() => handleCategoryChange(option.value)}
                     className={cn(
-                      "shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+                      "max-w-full rounded-full border px-4 py-2 text-sm font-medium transition-all motion-reduce:transition-none",
                       serviceCategoryFilter === option.value
-                        ? "border-slate-900 bg-slate-900 text-white"
+                        ? "border-slate-900 bg-slate-900 text-white shadow-[0_10px_22px_rgba(15,23,42,0.12)]"
                         : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                     )}
                   >
