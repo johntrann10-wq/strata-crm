@@ -378,12 +378,12 @@ export default function LandingPage() {
           </div>
 
           <div className="relative flex min-h-[26rem] items-center justify-center px-2 sm:min-h-[32rem] lg:min-h-[40rem] lg:justify-end lg:px-0">
-            <div className="pointer-events-none absolute inset-x-2 inset-y-8 rounded-[48px] bg-[radial-gradient(circle_at_52%_30%,rgba(255,255,255,0.96)_0%,rgba(255,248,242,0.92)_34%,rgba(255,248,242,0.5)_58%,rgba(255,248,242,0)_78%)] blur-2xl" />
-            <div className="pointer-events-none absolute left-1/2 top-[54%] h-[18rem] w-[18rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(251,146,60,0.18)_0%,rgba(251,146,60,0.08)_34%,rgba(251,146,60,0)_72%)] sm:h-[22rem] sm:w-[22rem] lg:left-[58%] lg:h-[26rem] lg:w-[26rem]" />
+            <div className="pointer-events-none absolute left-1/2 top-[54%] h-[18rem] w-[18rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(251,146,60,0.16)_0%,rgba(251,146,60,0.07)_36%,rgba(251,146,60,0)_74%)] blur-xl sm:h-[22rem] sm:w-[22rem] lg:left-[58%] lg:h-[26rem] lg:w-[26rem]" />
+            <div className="pointer-events-none absolute left-[46%] top-[28%] h-[9rem] w-[9rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.5)_0%,rgba(255,255,255,0)_72%)] blur-2xl sm:h-[11rem] sm:w-[11rem] lg:left-[54%] lg:h-[13rem] lg:w-[13rem]" />
             <img
-              src="/marketing/strata-ui/hero-phone-angled.png"
+              src="/marketing/strata-ui/hero-phone-angled-transparent.png"
               alt="Strata mobile calendar shown in an angled phone render."
-              className="relative z-10 mx-auto w-full max-w-[21rem] mix-blend-multiply drop-shadow-[0_36px_54px_rgba(154,74,12,0.18)] sm:max-w-[24rem] lg:mx-0 lg:max-w-[30rem]"
+              className="relative z-10 mx-auto w-full max-w-[21rem] drop-shadow-[0_32px_52px_rgba(63,32,12,0.22)] sm:max-w-[24rem] lg:mx-0 lg:max-w-[30rem]"
               loading="eager"
             />
           </div>
