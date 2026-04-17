@@ -1539,14 +1539,11 @@ function renderPublicBookingPreviewSvg(
   const preserveAspectRatio = transform.fitMode === "cover" ? "xMidYMid slice" : "xMidYMid meet";
   const logoMarkup = logoSource
     ? `<rect x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" rx="${frame.radius}" fill="${plate.background}" stroke="${plate.border}" stroke-width="1.5" />
-       <clipPath id="logo-clip">
-         <rect x="${innerX}" y="${innerY}" width="${innerWidth}" height="${innerHeight}" rx="${Math.max(frame.radius - frame.padding, 0)}" />
-       </clipPath>
        <g clip-path="url(#logo-clip)">
          <g transform="translate(${translateX} ${translateY})">
            <g transform="rotate(${transform.rotationDeg} ${centerX} ${centerY})">
              <g transform="translate(${centerX} ${centerY}) scale(${transform.zoom}) translate(${-centerX} ${-centerY})">
-               <image href="${escapeSvgText(logoSource)}" x="${innerX}" y="${innerY}" width="${innerWidth}" height="${innerHeight}" preserveAspectRatio="${preserveAspectRatio}" />
+                <image href="${escapeSvgText(logoSource)}" x="${innerX}" y="${innerY}" width="${innerWidth}" height="${innerHeight}" preserveAspectRatio="${preserveAspectRatio}" />
              </g>
            </g>
          </g>
@@ -1565,6 +1562,13 @@ function renderPublicBookingPreviewSvg(
       <stop stop-color="#ffffff" stop-opacity="0.98" />
       <stop offset="1" stop-color="#ffffff" stop-opacity="0.9" />
     </linearGradient>
+    ${
+      logoSource
+        ? `<clipPath id="logo-clip">
+      <rect x="${innerX}" y="${innerY}" width="${innerWidth}" height="${innerHeight}" rx="${Math.max(frame.radius - frame.padding, 0)}" />
+    </clipPath>`
+        : ""
+    }
   </defs>
   <rect width="1200" height="630" rx="40" fill="url(#bg)" />
   <circle cx="1032" cy="108" r="124" fill="${accent}" fill-opacity="0.55" />
@@ -3155,7 +3159,7 @@ function coerceBusinessRecord(
     bookingTrustBulletTertiary: record.bookingTrustBulletTertiary ?? null,
     bookingNotesPrompt: record.bookingNotesPrompt ?? null,
     bookingBrandLogoUrl: record.bookingBrandLogoUrl ?? null,
-    bookingBrandLogoTransform: parseBookingBrandLogoTransform(record.bookingBrandLogoTransform),
+    bookingBrandLogoTransform: record.bookingBrandLogoTransform ?? null,
     bookingBrandPrimaryColorToken: record.bookingBrandPrimaryColorToken ?? "orange",
     bookingBrandAccentColorToken: record.bookingBrandAccentColorToken ?? "amber",
     bookingBrandBackgroundToneToken: record.bookingBrandBackgroundToneToken ?? "ivory",

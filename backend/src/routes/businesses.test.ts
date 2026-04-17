@@ -46,6 +46,8 @@ describe("business route serialization", () => {
         bookingTrustBulletTertiary: "Secure and simple",
         bookingNotesPrompt: "Add timing, questions, or anything the shop should know.",
         bookingBrandLogoUrl: "https://cdn.example.com/logo.png",
+        bookingBrandLogoTransform:
+          '{"version":1,"fitMode":"wordmark","backgroundPlate":"light","rotationDeg":3,"zoom":1.12,"offsetX":0.18,"offsetY":-0.08}',
         bookingBrandPrimaryColorToken: "sky",
         bookingBrandAccentColorToken: "blue",
         bookingBrandBackgroundToneToken: "mist",
@@ -120,6 +122,15 @@ describe("business route serialization", () => {
       urgencyText: "Only 3 spots left this week",
       branding: {
         logoUrl: "http://localhost:5173/api/businesses/biz_123/public-booking-brand-logo",
+        logoTransform: {
+          version: 1,
+          fitMode: "wordmark",
+          backgroundPlate: "light",
+          rotationDeg: 3,
+          zoom: 1.12,
+          offsetX: 0.18,
+          offsetY: -0.08,
+        },
         primaryColorToken: "sky",
         accentColorToken: "blue",
         backgroundToneToken: "mist",
@@ -144,7 +155,7 @@ describe("business route serialization", () => {
     expect(payload.services[0].addons[0]).not.toHaveProperty("notes");
   });
 
-  it("preserves uploaded booking logo images in the public config payload", async () => {
+  it("publishes uploaded booking logo images through the public config endpoint", async () => {
     const { buildPublicBookingConfigResponse } = await import("./businesses.js");
     const uploadedLogo = "data:image/webp;base64,UklGRlIAAABXRUJQVlA4WAoAAAAQAAAABwAABwAAQUxQSAIAAAAA";
     const payload = buildPublicBookingConfigResponse({
@@ -172,6 +183,7 @@ describe("business route serialization", () => {
         bookingTrustBulletTertiary: "Secure request",
         bookingNotesPrompt: "Anything else we should know?",
         bookingBrandLogoUrl: uploadedLogo,
+        bookingBrandLogoTransform: null,
         bookingBrandPrimaryColorToken: "orange",
         bookingBrandAccentColorToken: "amber",
         bookingBrandBackgroundToneToken: "ivory",
@@ -194,6 +206,15 @@ describe("business route serialization", () => {
     });
 
     expect(payload.branding.logoUrl).toBe("http://localhost:5173/api/businesses/biz_456/public-booking-brand-logo");
+    expect(payload.branding.logoTransform).toEqual({
+      version: 1,
+      fitMode: "contain",
+      backgroundPlate: "auto",
+      rotationDeg: 0,
+      zoom: 1,
+      offsetX: 0,
+      offsetY: 0,
+    });
   });
 
   it("builds branded booking share metadata without leaking internal fields", async () => {
@@ -212,8 +233,8 @@ describe("business route serialization", () => {
       title: "Book online in minutes | Coastline Detail Co.",
       description: "Choose a service, share your vehicle, and request the right time without the back-and-forth.",
       canonicalPath: "/book/biz_123",
-      imagePath: "/api/businesses/biz_123/public-brand-image",
-      imageAlt: "Coastline Detail Co. logo for online booking",
+      imagePath: "/api/businesses/biz_123/public-booking-preview.svg",
+      imageAlt: "Coastline Detail Co. booking page preview",
     });
   });
 
