@@ -2357,7 +2357,7 @@ export default function PublicBookingPage() {
         data-selected={isSelected ? "true" : "false"}
         data-expanded={isExpanded ? "true" : "false"}
         className={cn(
-          "mb-3 overflow-hidden rounded-[1.35rem] border bg-white/96 shadow-[0_14px_28px_rgba(15,23,42,0.05)] transition-[border-color,box-shadow,background-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none last:mb-0",
+          "mb-3 w-full min-w-0 max-w-full overflow-hidden rounded-[1.35rem] border bg-white/96 shadow-[0_14px_28px_rgba(15,23,42,0.05)] transition-[border-color,box-shadow,background-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none last:mb-0",
           isSelected
             ? "border-[color:var(--booking-primary-soft-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.985),var(--booking-primary-soft))] shadow-[0_20px_40px_rgba(15,23,42,0.08)]"
             : isExpanded
@@ -2365,7 +2365,7 @@ export default function PublicBookingPage() {
               : "border-slate-200/85 hover:border-slate-300 hover:shadow-[0_18px_34px_rgba(15,23,42,0.06)]"
         )}
       >
-        <div className="flex flex-col gap-4 p-4 sm:p-5">
+        <div className="min-w-0 flex flex-col gap-4 p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <button
               id={toggleId}
@@ -2506,9 +2506,9 @@ export default function PublicBookingPage() {
 
     if (activeStep.key === "service") {
       return (
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5 overflow-x-hidden">
           {categoryOptions.length > 1 ? (
-            <div className="space-y-3 overflow-hidden">
+            <div className="min-w-0 space-y-3 overflow-hidden">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-slate-950">Choose a service</p>
                 <Badge variant="outline">{visibleServices.length} available</Badge>
@@ -2517,7 +2517,7 @@ export default function PublicBookingPage() {
                 {mobileCategoryUsesSheet ? (
                   <>
                     <div className="overflow-hidden rounded-[1.3rem] border border-slate-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(248,250,252,0.95))] p-3 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
-                      <div className="flex flex-col gap-3">
+                      <div className="min-w-0 flex flex-col gap-3">
                         <div className="min-w-0">
                           <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Category</p>
                           <p className="mt-1 truncate text-sm font-semibold tracking-[-0.02em] text-slate-950">
@@ -2540,7 +2540,7 @@ export default function PublicBookingPage() {
                           Browse all
                         </Button>
                       </div>
-                      <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto overscroll-x-contain px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
                         {mobileQuickCategoryOptions.map((option) => (
                           <button
                             key={option.value}
@@ -2548,13 +2548,13 @@ export default function PublicBookingPage() {
                             data-category-filter={option.value}
                             onClick={() => handleCategoryChange(option.value)}
                             className={cn(
-                              "max-w-[10.75rem] shrink-0 truncate rounded-full border px-3.5 py-2 text-sm font-medium transition-all motion-reduce:transition-none",
+                              "min-w-0 rounded-[1rem] border px-3 py-2.5 text-left text-sm font-medium transition-all motion-reduce:transition-none",
                               serviceCategoryFilter === option.value
                                 ? "border-slate-900 bg-slate-900 text-white shadow-[0_10px_22px_rgba(15,23,42,0.14)]"
                                 : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                             )}
                           >
-                            {option.label}
+                            <span className="block truncate">{option.label}</span>
                           </button>
                         ))}
                       </div>
@@ -2650,7 +2650,7 @@ export default function PublicBookingPage() {
 
           <div
             data-service-step-scroll=""
-            className="max-h-[min(52dvh,32rem)] space-y-5 overflow-y-auto overscroll-contain pb-1 pr-1 [scrollbar-gutter:stable] sm:max-h-none sm:overflow-visible sm:pb-0 sm:pr-0 sm:[scrollbar-gutter:auto]"
+            className="min-w-0 max-h-[min(52dvh,32rem)] space-y-5 overflow-x-hidden overflow-y-auto overscroll-contain pb-1 pr-1 [scrollbar-gutter:stable] sm:max-h-none sm:overflow-visible sm:pb-0 sm:pr-0 sm:[scrollbar-gutter:auto]"
           >
             {featuredServices.length > 0 ? (
               <div className="space-y-3">
