@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("public booking page applies branded share metadata without duplicate OG tags", async ({ page, baseURL }) => {
-  await page.route("**/api/businesses/biz-share/public-booking-config", async (route) => {
+  await page.route("**/api/businesses/biz-share/public-booking-config**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -86,7 +86,7 @@ test("public booking page applies branded share metadata without duplicate OG ta
     });
   });
 
-  await page.route("**/api/businesses/biz-share/public-booking-share-metadata", async (route) => {
+  await page.route("**/api/businesses/biz-share/public-booking-share-metadata**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -102,23 +102,53 @@ test("public booking page applies branded share metadata without duplicate OG ta
     });
   });
 
-  await page.goto("/book/biz-share?service=svc-1&utm_source=test");
+  await page.goto("/book/biz-share?service=svc-1&utm_source=test&ref=secret");
   await expect(page.getByText("Book online in minutes")).toBeVisible();
 
   await expect(page).toHaveTitle("Book online in minutes | Coastline Detail Co.");
 
+  const ogTitle = page.locator('meta[property="og:title"]');
+  const ogDescription = page.locator('meta[property="og:description"]');
   const ogUrl = page.locator('meta[property="og:url"]');
   const ogImage = page.locator('meta[property="og:image"]');
+  const twitterTitle = page.locator('meta[name="twitter:title"]');
+  const twitterDescription = page.locator('meta[name="twitter:description"]');
+  const twitterUrl = page.locator('meta[name="twitter:url"]');
+  const twitterImage = page.locator('meta[name="twitter:image"]');
   const canonical = page.locator('link[rel="canonical"]');
 
+  await expect(ogTitle).toHaveCount(1);
+  await expect(ogDescription).toHaveCount(1);
   await expect(ogUrl).toHaveCount(1);
   await expect(ogImage).toHaveCount(1);
+  await expect(twitterTitle).toHaveCount(1);
+  await expect(twitterDescription).toHaveCount(1);
+  await expect(twitterUrl).toHaveCount(1);
+  await expect(twitterImage).toHaveCount(1);
   await expect(canonical).toHaveCount(1);
 
   const expectedUrl = `${baseURL}/book/biz-share?service=svc-1`;
+  await expect(ogTitle).toHaveAttribute("content", "Book online in minutes | Coastline Detail Co.");
+  await expect(ogDescription).toHaveAttribute(
+    "content",
+    "Choose a service, share your vehicle, and request the right time without the back-and-forth."
+  );
   await expect(ogUrl).toHaveAttribute("content", expectedUrl);
   await expect(canonical).toHaveAttribute("href", expectedUrl);
   await expect(ogImage).toHaveAttribute("content", `${baseURL}/api/businesses/biz-share/public-brand-image`);
+  await expect(twitterTitle).toHaveAttribute("content", "Book online in minutes | Coastline Detail Co.");
+  await expect(twitterDescription).toHaveAttribute(
+    "content",
+    "Choose a service, share your vehicle, and request the right time without the back-and-forth."
+  );
+  await expect(twitterUrl).toHaveAttribute("content", expectedUrl);
+  await expect(twitterImage).toHaveAttribute("content", `${baseURL}/api/businesses/biz-share/public-brand-image`);
+
+  const html = await page.content();
+  expect(html).toContain('property="og:title"');
+  expect(html).toContain('property="og:description"');
+  expect(html).not.toContain("utm_source=test");
+  expect(html).not.toContain("ref=secret");
 });
 
 test("public lead page applies branded share metadata with a clean canonical URL", async ({ page, baseURL }) => {
@@ -156,10 +186,16 @@ test("public lead page applies branded share metadata with a clean canonical URL
   await expect(page.getByRole("heading", { name: "Tell us what you need" })).toBeVisible();
 
   await expect(page).toHaveTitle("Request service | Northline Auto Spa");
+  await expect(page.locator('meta[property="og:title"]')).toHaveCount(1);
+  await expect(page.locator('meta[property="og:description"]')).toHaveCount(1);
   await expect(page.locator('meta[property="og:url"]')).toHaveAttribute("content", `${baseURL}/lead/biz-lead`);
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${baseURL}/lead/biz-lead`);
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
     "content",
     `${baseURL}/social-preview.png?v=20260416c`
   );
+  await expect(page.locator('meta[name="twitter:url"]')).toHaveAttribute("content", `${baseURL}/lead/biz-lead`);
+
+  const html = await page.content();
+  expect(html).not.toContain("utm_campaign=spring");
 });

@@ -1,6 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const BUSINESS_ID = "biz-booking-builder";
+const uploadedLogoSvg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120" viewBox="0 0 320 120">
+  <rect width="320" height="120" rx="24" fill="#0f172a"/>
+  <circle cx="56" cy="60" r="28" fill="#f97316"/>
+  <text x="100" y="72" font-size="34" font-family="Arial, sans-serif" font-weight="700" fill="#ffffff">North Star</text>
+</svg>`;
 
 type MockOptions = {
   permissions?: string[];
@@ -101,6 +107,15 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
     bookingTrustBulletTertiary: "Secure and simple",
     bookingNotesPrompt: "Add timing, questions, or anything the shop should know.",
     bookingBrandLogoUrl: "https://cdn.example.com/logo.png",
+    bookingBrandLogoTransform: {
+      version: 1,
+      fitMode: "contain",
+      backgroundPlate: "auto",
+      rotationDeg: 0,
+      zoom: 1,
+      offsetX: 0,
+      offsetY: 0,
+    },
     bookingBrandPrimaryColorToken: "orange",
     bookingBrandAccentColorToken: "amber",
     bookingBrandBackgroundToneToken: "ivory",
@@ -135,6 +150,8 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
     urgencyText: businessRecord.bookingUrgencyText,
     confirmationMessage: businessRecord.bookingConfirmationMessage,
     branding: {
+      logoUrl: businessRecord.bookingBrandLogoUrl,
+      logoTransform: businessRecord.bookingBrandLogoTransform,
       primaryColorToken: businessRecord.bookingBrandPrimaryColorToken,
       accentColorToken: businessRecord.bookingBrandAccentColorToken,
       backgroundToneToken: businessRecord.bookingBrandBackgroundToneToken,
@@ -386,12 +403,47 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
     });
   });
 
+  await page.route(`**/api/businesses/${BUSINESS_ID}/public-booking-share-metadata**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: toJson({
+        businessId: BUSINESS_ID,
+        businessName: businessRecord.name,
+        title: `${businessRecord.bookingPageTitle} | ${businessRecord.name}`,
+        description: businessRecord.bookingPageSubtitle,
+        canonicalPath: `/book/${BUSINESS_ID}`,
+        imagePath: "/api/businesses/biz-booking-builder/public-booking-preview.svg",
+        imageAlt: `${businessRecord.name} booking page preview`,
+      }),
+    });
+  });
+
+  await page.route(`**/api/businesses/${BUSINESS_ID}/public-booking-availability**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: toJson({
+        effectiveFlow: "self_book",
+        timezone: "America/Los_Angeles",
+        date: "2026-04-22",
+        slots: [{ startTime: "2026-04-22T17:00:00.000Z", label: "10:00 AM" }],
+        durationMinutes: 180,
+        subtotal: 275,
+        depositAmount: 50,
+      }),
+    });
+  });
+
   return {
     getLastBusinessPatch() {
       return businessPatchBodies.at(-1) ?? null;
     },
     getPublicBookingConfigRequestUrls() {
       return [...publicBookingConfigRequestUrls];
+    },
+    getBusinessRecord() {
+      return { ...businessRecord };
     },
   };
 }
@@ -457,5 +509,75 @@ test("booking builder stays permission-gated without settings.write", async ({ p
 
   await expect(page.getByText("Flow editor")).toBeVisible();
   await expect(page.getByPlaceholder("Spark Studio")).toBeDisabled();
+  await expect(page.getByRole("button", { name: /replace image/i })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /adjust crop/i })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+});
+
+test("booking builder uploads, crops, rotates, saves, and previews logos without leaking settings access", async ({ page }) => {
+  const workspace = await mockBookingBuilderWorkspace(page);
+
+  await page.goto("/app/booking");
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "north-star-logo.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from(uploadedLogoSvg),
+  });
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Logo crop and framing")).toBeVisible();
+
+  await dialog.getByRole("combobox").first().click();
+  await page.getByRole("option", { name: "Wide wordmark" }).click();
+  await dialog.getByRole("combobox").nth(1).click();
+  await page.getByRole("option", { name: "Dark plate" }).click();
+
+  await dialog.locator('input[aria-label="Logo zoom"]').evaluate((element) => {
+    const input = element as HTMLInputElement;
+    const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    valueSetter?.call(input, "1.75");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await dialog.locator('input[aria-label="Logo rotation"]').evaluate((element) => {
+    const input = element as HTMLInputElement;
+    const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    valueSetter?.call(input, "12.5");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  const editorFrame = dialog.locator('[data-booking-logo-frame="editor"]');
+  const frameBox = await editorFrame.boundingBox();
+  if (!frameBox) throw new Error("Expected logo editor frame to render.");
+  await page.mouse.move(frameBox.x + frameBox.width / 2, frameBox.y + frameBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(frameBox.x + frameBox.width / 2 + 48, frameBox.y + frameBox.height / 2 - 22, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(dialog.locator('[data-logo-preview="share"] [data-booking-logo-image="share"]')).toBeVisible();
+  await dialog.getByRole("button", { name: "Save logo framing" }).click();
+  await expect(dialog).toBeHidden();
+
+  await expect(page.locator('[data-booking-logo-image="builder_thumb"]')).toBeVisible();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Booking builder updated.")).toBeVisible();
+
+  const lastPatch = workspace.getLastBusinessPatch();
+  expect(lastPatch).toMatchObject({
+    bookingBrandLogoUrl: expect.stringContaining("data:image/svg+xml;base64,"),
+    bookingBrandLogoTransform: expect.objectContaining({
+      fitMode: "wordmark",
+      backgroundPlate: "dark",
+      rotationDeg: 12.5,
+      zoom: 1.75,
+    }),
+  });
+  expect(Number((lastPatch?.bookingBrandLogoTransform as { offsetX?: number } | undefined)?.offsetX ?? 0)).not.toBe(0);
+
+  const preview = page.frameLocator('iframe[title="Booking builder preview"]');
+  await expect(preview.locator('[data-booking-logo-image="hero"]')).toBeVisible();
+  await expect(preview.locator('[data-booking-logo-fallback="hero"]')).toHaveCount(0);
+  expect(workspace.getBusinessRecord().bookingBrandLogoUrl).toContain("data:image/svg+xml;base64,");
 });

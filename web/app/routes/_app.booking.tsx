@@ -1424,6 +1424,7 @@ export default function BookingBuilderPage() {
                     <div
                       key={preview.key}
                       className="rounded-[1.25rem] border border-slate-200/80 bg-white/90 p-4"
+                      data-logo-preview={preview.key}
                     >
                       <div className="flex min-h-[128px] items-center justify-center rounded-[1rem] border border-dashed border-slate-200 bg-slate-50/70">
                         <BookingBrandLogo
@@ -1506,6 +1507,7 @@ export default function BookingBuilderPage() {
                   min="1"
                   max="4"
                   step="0.01"
+                  aria-label="Logo zoom"
                   value={logoEditorTransform.zoom}
                   onChange={(event) =>
                     setLogoEditorTransform((current) =>
@@ -1531,6 +1533,7 @@ export default function BookingBuilderPage() {
                   min="-45"
                   max="45"
                   step="0.5"
+                  aria-label="Logo rotation"
                   value={logoEditorTransform.rotationDeg}
                   onChange={(event) =>
                     setLogoEditorTransform((current) =>

@@ -71,13 +71,14 @@ export function BookingBrandLogo({
   }, [source]);
 
   return (
-    <div className={cn("inline-flex", className)}>
+    <div className={cn("inline-flex", className)} data-booking-logo-root="">
       <div
         className={cn(
           "relative overflow-hidden",
           onPointerDown ? "cursor-grab active:cursor-grabbing touch-none" : "",
           frameClassName
         )}
+        data-booking-logo-frame={preset}
         style={frameStyle}
         onPointerDown={onPointerDown}
       >
@@ -87,6 +88,7 @@ export function BookingBrandLogo({
             alt={alt}
             draggable={false}
             className="absolute select-none"
+            data-booking-logo-image={preset}
             style={imageStyle}
             onError={() => setImageFailed(true)}
           />
@@ -94,6 +96,7 @@ export function BookingBrandLogo({
           <div
             aria-hidden="true"
             className="absolute inset-0 flex items-center justify-center"
+            data-booking-logo-fallback={preset}
             style={{
               background: plate.monogramBackground,
               color: plate.monogramForeground,

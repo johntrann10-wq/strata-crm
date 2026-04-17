@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
 
+const inlineBookingLogo =
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMjAiIGhlaWdodD0iMTIwIiB2aWV3Qm94PSIwIDAgMzIwIDEyMCI+PHJlY3Qgd2lkdGg9IjMyMCIgaGVpZ2h0PSIxMjAiIHJ4PSIyNCIgZmlsbD0iIzBmMTcyYSIvPjxjaXJjbGUgY3g9IjU2IiBjeT0iNjAiIHI9IjI4IiBmaWxsPSIjMzg5OWZjIi8+PHRleHQgeD0iMTAwIiB5PSI3MiIgZm9udC1zaXplPSIzNCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjZmZmZmZmIj5Ob3J0aCBTdGFyPC90ZXh0Pjwvc3ZnPg==";
+
 async function mockBookingDrafts(page: import("@playwright/test").Page, options?: { resumeToken?: string }) {
   const resumeToken = options?.resumeToken ?? "draft-token";
   let updateCount = 0;
@@ -138,7 +141,46 @@ async function mockBookingDrafts(page: import("@playwright/test").Page, options?
   };
 }
 
+async function mockPublicBookingShareMetadata(
+  page: import("@playwright/test").Page,
+  businessId: string,
+  options?: {
+    businessName?: string;
+    title?: string;
+    description?: string;
+    imagePath?: string | null;
+    imageAlt?: string;
+  }
+) {
+  const businessName = options?.businessName ?? "North Star Detail";
+  const title = options?.title ?? `Tell us what you need | ${businessName}`;
+  const description =
+    options?.description ??
+    "Choose the service you need, share your vehicle details, and lock in the next step without the back-and-forth.";
+
+  await page.route(`**/api/businesses/${businessId}/public-booking-share-metadata**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        businessId,
+        businessName,
+        title,
+        description,
+        canonicalPath: `/book/${businessId}`,
+        imagePath: options?.imagePath ?? `/api/businesses/${businessId}/public-brand-image`,
+        imageAlt: options?.imageAlt ?? `${businessName} logo for online booking`,
+      }),
+    });
+  });
+}
+
 async function mockSelfBooking(page: import("@playwright/test").Page) {
+  await mockPublicBookingShareMetadata(page, "biz-book", {
+    businessName: "North Star Detail",
+    title: "Tell us what you need | North Star Detail",
+  });
+
   await page.route("**/api/businesses/biz-book/public-booking-config", async (route) => {
     await route.fulfill({
       status: 200,
@@ -154,7 +196,7 @@ async function mockSelfBooking(page: import("@playwright/test").Page) {
         trustPoints: ["Goes directly to the shop", "Quick follow-up", "Secure and simple"],
         notesPrompt: "Add timing, questions, or anything the shop should know.",
         branding: {
-          logoUrl: "https://cdn.example.com/north-star-detail-logo.png",
+          logoUrl: inlineBookingLogo,
           primaryColorToken: "sky",
           accentColorToken: "blue",
           backgroundToneToken: "mist",
@@ -237,6 +279,11 @@ async function mockCategoryHeavyBooking(page: import("@playwright/test").Page) {
     { categoryId: "cat-7", categoryLabel: "Luxury Protection Packages", serviceId: "svc-cat-7", serviceName: "Graphene shield" },
   ];
 
+  await mockPublicBookingShareMetadata(page, "biz-categories", {
+    businessName: "North Star Studio",
+    title: "Tell us what you need | North Star Studio",
+  });
+
   await page.route("**/api/businesses/biz-categories/public-booking-config", async (route) => {
     await route.fulfill({
       status: 200,
@@ -309,8 +356,42 @@ test("service cards expand in place before selection", async ({ page }) => {
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What service do you need?" })).toBeVisible();
   await expect(page).toHaveURL(/\/book\/biz-book$/);
 
+  await detailsToggle.click();
+
+  await expect(serviceCard).toHaveAttribute("data-expanded", "false");
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What service do you need?" })).toBeVisible();
+  await expect(page).toHaveURL(/\/book\/biz-book$/);
+
   await serviceCard.getByRole("button", { name: "Select" }).click();
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What will we be working on?" })).toBeVisible();
+});
+
+test("public booking interactions stay client-side without a document refresh", async ({ page }) => {
+  await mockSelfBooking(page);
+  const draftMock = await mockBookingDrafts(page, { resumeToken: "no-refresh-token" });
+
+  let documentRequestCount = 0;
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") {
+      documentRequestCount += 1;
+    }
+  });
+
+  await page.goto("/book/biz-book");
+  documentRequestCount = 0;
+
+  const serviceCard = page.locator('[data-service-card="svc-1"]');
+  await serviceCard.locator('button[aria-controls="booking-service-details-svc-1"]').click();
+  await serviceCard.locator('button[aria-controls="booking-service-details-svc-1"]').click();
+  await serviceCard.getByRole("button", { name: "Select" }).click();
+  await page.getByLabel("Vehicle make *").fill("BMW");
+  await page.getByLabel("Vehicle model *").fill("X5");
+  await expect.poll(() => draftMock.getUpdateCount()).toBeGreaterThan(0);
+  await page.getByRole("button", { name: /continue/i }).click();
+
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Where and when works best?" })).toBeVisible();
+  expect(documentRequestCount).toBe(0);
+  expect(await page.evaluate(() => window.performance.getEntriesByType("navigation").length)).toBe(1);
 });
 
 test("mobile category selector stays contained with many categories", async ({ page }) => {
@@ -331,7 +412,23 @@ test("mobile category selector stays contained with many categories", async ({ p
   await expect(page.getByText("1 available")).toBeVisible();
   await expect(page.locator('[data-service-card="svc-cat-7"]')).toBeVisible();
   await expect(page.locator('[data-service-card="svc-cat-1"]')).toHaveCount(0);
+  await expect(categorySheet).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("public booking keeps interactions usable when reduced motion is requested", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await mockSelfBooking(page);
+
+  await page.goto("/book/biz-book");
+
+  const serviceCard = page.locator('[data-service-card="svc-1"]');
+  const detailsToggle = serviceCard.locator('button[aria-controls="booking-service-details-svc-1"]');
+  await detailsToggle.click();
+  await expect(serviceCard).toHaveAttribute("data-expanded", "true");
+  expect(await detailsToggle.locator("svg").evaluate((element) => getComputedStyle(element).transitionProperty)).toBe("none");
+  await serviceCard.getByRole("button", { name: "Select" }).click();
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What will we be working on?" })).toBeVisible();
 });
 
 test("public booking flow supports self-booking end to end", async ({ page }) => {
@@ -361,7 +458,7 @@ test("public booking flow supports self-booking end to end", async ({ page }) =>
 
   await expect(page.getByText("Tell us what you need").first()).toBeVisible();
   await expect(page.locator('[data-booking-primary="sky"][data-booking-accent="blue"][data-booking-background="mist"][data-booking-button-style="outline"]')).toBeVisible();
-  await expect(page.locator(".bp-logo-img")).toBeVisible();
+  await expect(page.locator('[data-booking-logo-image="hero"]')).toBeVisible();
   await page.locator('[data-service-card="svc-1"]').getByRole("button", { name: "Select" }).click();
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What will we be working on?" })).toBeVisible();
 
@@ -389,6 +486,7 @@ test("public booking flow supports self-booking end to end", async ({ page }) =>
   await page.getByRole("button", { name: "Book now" }).click();
 
   await expect(page.getByText("You're booked!")).toBeVisible();
+  await expect(page.locator('[data-booking-logo-image="confirmation"]')).toBeVisible();
   expect(postedPayload).toMatchObject({
     draftResumeToken: draftMock.resumeToken,
     serviceId: "svc-1",
@@ -409,6 +507,12 @@ test("public booking supports request-only services on mobile", async ({ page })
   await page.setViewportSize({ width: 390, height: 844 });
   const draftMock = await mockBookingDrafts(page);
   let postedPayload: Record<string, unknown> | null = null;
+
+  await mockPublicBookingShareMetadata(page, "biz-request", {
+    businessName: "North Star Tint",
+    title: "Tell us what you need | North Star Tint",
+    description: "Share the service details and the shop can confirm the best next step.",
+  });
 
   await page.route("**/api/businesses/biz-request/public-booking-config", async (route) => {
     await route.fulfill({
@@ -547,6 +651,12 @@ test("public booking supports request-only services on mobile", async ({ page })
 
 test("mixed-mode services keep request and direct-book flows separate", async ({ page }) => {
   const draftMock = await mockBookingDrafts(page, { resumeToken: "mixed-mode-token" });
+
+  await mockPublicBookingShareMetadata(page, "biz-mixed", {
+    businessName: "North Star Studio",
+    title: "Tell us what you need | North Star Studio",
+    description: "Choose the right path for this service without losing context.",
+  });
 
   await page.route("**/api/businesses/biz-mixed/public-booking-config", async (route) => {
     await route.fulfill({
@@ -737,6 +847,13 @@ test("booking drafts autosave once intent is meaningful and resume on return", a
 });
 
 test("invalid public booking states fail with a clean unavailable message", async ({ page }) => {
+  await mockPublicBookingShareMetadata(page, "biz-off", {
+    businessName: "Offline Shop",
+    title: "Tell us what you need | Offline Shop",
+    description: "Online booking is unavailable for this business.",
+    imagePath: null,
+  });
+
   await page.route("**/api/businesses/biz-off/public-booking-config", async (route) => {
     await route.fulfill({
       status: 404,
@@ -757,6 +874,11 @@ test("hybrid services support mobile booking mode and submit address details cle
   const draftMock = await mockBookingDrafts(page, { resumeToken: "hybrid-draft-token" });
   let availabilityRequestUrl = "";
   let postedPayload: Record<string, unknown> | null = null;
+
+  await mockPublicBookingShareMetadata(page, "biz-hybrid", {
+    businessName: "North Star Coatings",
+    title: "Tell us what you need | North Star Coatings",
+  });
 
   await page.route("**/api/businesses/biz-hybrid/public-booking-config", async (route) => {
     await route.fulfill({
