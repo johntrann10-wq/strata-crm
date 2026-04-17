@@ -383,7 +383,7 @@ export default function LandingPage() {
             <img
               src="/marketing/strata-ui/hero-phone-angled-transparent.png"
               alt="Strata mobile calendar shown in an angled phone render."
-              className="relative z-10 mx-auto w-full max-w-[21rem] drop-shadow-[0_32px_52px_rgba(63,32,12,0.22)] sm:max-w-[24rem] lg:mx-0 lg:max-w-[30rem]"
+              className="relative z-10 mx-auto w-full max-w-[21rem] sm:max-w-[24rem] lg:mx-0 lg:max-w-[30rem]"
               loading="eager"
             />
           </div>
