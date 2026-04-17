@@ -175,7 +175,10 @@ async function mockPublicBookingShareMetadata(
   });
 }
 
-async function mockSelfBooking(page: import("@playwright/test").Page) {
+async function mockSelfBooking(
+  page: import("@playwright/test").Page,
+  options?: { serviceDescription?: string }
+) {
   await mockPublicBookingShareMetadata(page, "biz-book", {
     businessName: "North Star Detail",
     title: "Tell us what you need | North Star Detail",
@@ -216,7 +219,7 @@ async function mockSelfBooking(page: import("@playwright/test").Page) {
             name: "Full Detail",
             categoryId: "cat-1",
             categoryLabel: "Detailing",
-            description: "Interior and exterior detail.",
+            description: options?.serviceDescription ?? "Interior and exterior detail.",
             price: 275,
             durationMinutes: 180,
             effectiveFlow: "self_book",
@@ -423,6 +426,37 @@ test("service cards expand in place before selection", async ({ page }) => {
 
   await serviceCard.getByRole("button", { name: "Select" }).click();
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What will we be working on?" })).toBeVisible();
+});
+
+test("booking page preserves multiline service descriptions as readable lists", async ({ page }) => {
+  await mockSelfBooking(page, {
+    serviceDescription: [
+      "What's Included:",
+      "",
+      "Foam Pre-Soak + Hand Wash",
+      "Wheels Deep Cleaned + Tires Dressed",
+      "Door & Trunk Seals Wiped",
+      "Exterior Glass Cleaned",
+      "Clay Bar + Iron Decontamination",
+      "Soft Towel Dry",
+      "Single-Stage Paint Correction (light to moderate swirl and oxidation removal)",
+      "Up to 12 month nano-protective sealant applied",
+    ].join("\n"),
+  });
+
+  await page.goto("/book/biz-book");
+
+  const serviceCard = page.locator('[data-service-card="svc-1"]');
+  await serviceCard.locator('button[aria-controls="booking-service-details-svc-1"]').click();
+
+  await expect(serviceCard.getByText("What's Included:")).toBeVisible();
+  await expect(serviceCard.locator("li").filter({ hasText: /Foam Pre-Soak \+ Hand Wash/i })).toBeVisible();
+  await expect(serviceCard.locator("li").filter({ hasText: /Single-Stage Paint Correction/i })).toBeVisible();
+
+  await serviceCard.getByRole("button", { name: "Select" }).click();
+
+  await expect(page.getByText("What's Included:").first()).toBeVisible();
+  await expect(page.locator("li").filter({ hasText: /Up to 12 month nano-protective sealant applied/i }).first()).toBeVisible();
 });
 
 test("public booking interactions stay client-side without a document refresh", async ({ page }) => {

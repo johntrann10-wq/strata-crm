@@ -236,6 +236,7 @@ function emptyForm(): BookingFormState {
 }
 
 const buildApiUrl = (path: string) => `${API_BASE}${path}`;
+const BOOKING_DESCRIPTION_LIST_MARKER = /^([*-•]|\d+[.)])\s+/;
 
 function buildBuilderPreviewRequestInit(
   isBuilderPreview: boolean,
@@ -331,6 +332,112 @@ function formatAvailabilityWindow(dayIndexes: number[] | null | undefined, openT
   const closeLabel = formatTimeValueLabel(closeTime);
   if (openLabel && closeLabel) return `${dayLabel} • ${openLabel} to ${closeLabel}`;
   return dayLabel;
+}
+
+type BookingDescriptionBlock =
+  | { type: "paragraph"; text: string }
+  | { type: "list"; heading?: string; items: string[] };
+
+function normalizeBookingDescriptionItem(line: string) {
+  return line.replace(BOOKING_DESCRIPTION_LIST_MARKER, "").trim();
+}
+
+function parseBookingDescription(description: string): BookingDescriptionBlock[] {
+  const sections = description
+    .replace(/\r\n?/g, "\n")
+    .split(/\n{2,}/)
+    .map((section) => section.split("\n").map((line) => line.trim()).filter(Boolean))
+    .filter((lines) => lines.length > 0);
+
+  const blocks: BookingDescriptionBlock[] = [];
+
+  for (let index = 0; index < sections.length; index += 1) {
+    const lines = sections[index];
+    const [firstLine, ...restLines] = lines;
+    const nextLines = sections[index + 1];
+
+    if (lines.length === 1 && firstLine.endsWith(":") && nextLines?.length) {
+      blocks.push({
+        type: "list",
+        heading: firstLine,
+        items: nextLines.map(normalizeBookingDescriptionItem),
+      });
+      index += 1;
+      continue;
+    }
+
+    if (firstLine.endsWith(":") && restLines.length > 0) {
+      blocks.push({
+        type: "list",
+        heading: firstLine,
+        items: restLines.map(normalizeBookingDescriptionItem),
+      });
+      continue;
+    }
+
+    if (lines.every((line) => BOOKING_DESCRIPTION_LIST_MARKER.test(line))) {
+      blocks.push({
+        type: "list",
+        items: lines.map(normalizeBookingDescriptionItem),
+      });
+      continue;
+    }
+
+    blocks.push({
+      type: "paragraph",
+      text: lines.join(" "),
+    });
+  }
+
+  return blocks;
+}
+
+function BookingDescription({
+  description,
+  className,
+  textClassName,
+  headingClassName,
+  listClassName,
+}: {
+  description: string;
+  className?: string;
+  textClassName?: string;
+  headingClassName?: string;
+  listClassName?: string;
+}) {
+  const blocks = parseBookingDescription(description);
+  if (!blocks.length) return null;
+
+  return (
+    <div className={cn("space-y-3", className)}>
+      {blocks.map((block, blockIndex) => {
+        if (block.type === "paragraph") {
+          return (
+            <p key={`booking-description-paragraph-${blockIndex}`} className={cn("text-sm leading-6 text-slate-600", textClassName)}>
+              {block.text}
+            </p>
+          );
+        }
+
+        return (
+          <div key={`booking-description-list-${blockIndex}`} className="space-y-1.5">
+            {block.heading ? (
+              <p className={cn("text-sm font-semibold leading-6 text-slate-700", headingClassName)}>
+                {block.heading}
+              </p>
+            ) : null}
+            <ul className={cn("ml-5 list-disc space-y-1.5", listClassName)}>
+              {block.items.map((item, itemIndex) => (
+                <li key={`booking-description-item-${blockIndex}-${itemIndex}`} className={cn("text-sm leading-6 text-slate-600", textClassName)}>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function buildSuggestedBookingDates(params: {
@@ -2291,7 +2398,17 @@ export default function PublicBookingPage() {
           </div>
           <div className="space-y-1.5">
             <h2 className="text-[1.35rem] font-semibold tracking-[-0.04em] text-slate-950">{selectedService.name}</h2>
-            <p className="max-w-2xl text-[13px] leading-6 text-slate-600">{selectedService.description || nextStepMessage}</p>
+            {selectedService.description ? (
+              <BookingDescription
+                description={selectedService.description}
+                className="max-w-2xl"
+                textClassName="text-[13px] leading-6 text-slate-600"
+                headingClassName="text-[13px] font-semibold leading-6 text-slate-700"
+                listClassName="space-y-1.5"
+              />
+            ) : (
+              <p className="max-w-2xl text-[13px] leading-6 text-slate-600">{nextStepMessage}</p>
+            )}
             {selectedService.leadTimeHours > 0 || totalBufferMinutes > 0 ? (
               <div className="flex flex-wrap gap-2 pt-1">
                 {selectedService.leadTimeHours > 0 ? (
@@ -2455,7 +2572,7 @@ export default function PublicBookingPage() {
                 className="space-y-3 border-t border-slate-200/80 pt-4"
               >
                 {hasDescription ? (
-                  <p className="text-sm leading-6 whitespace-pre-line text-slate-600">{service.description}</p>
+                  <BookingDescription description={service.description!} />
                 ) : (
                   <p className="text-sm leading-6 text-slate-600">
                     {service.effectiveFlow === "self_book"
@@ -3186,7 +3303,7 @@ export default function PublicBookingPage() {
                   <button key={addon.id} type="button" onClick={() => toggleAddon(addon.id)} className={cn("flex items-start justify-between gap-4 rounded-[1.25rem] border p-4 text-left transition-all motion-reduce:transition-none", active ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]" : "border-slate-200 bg-white hover:bg-slate-50")}>
                     <div className="space-y-1">
                       <p className="font-medium text-slate-950">{addon.name}</p>
-                      {addon.description ? <p className="text-sm leading-6 text-slate-600">{addon.description}</p> : null}
+                      {addon.description ? <BookingDescription description={addon.description} /> : null}
                     </div>
                     <div className="text-right text-sm">
                       {config.showPrices && addon.showPrice ? <p className="font-semibold text-slate-950">{formatPrice(addon.price)}</p> : null}
@@ -3827,7 +3944,7 @@ export default function PublicBookingPage() {
                           <Badge variant="outline" className="rounded-full">{serviceModeLabel}</Badge>
                         </div>
                         <p className="text-base font-semibold tracking-[-0.02em] text-slate-950">{selectedService.name}</p>
-                        {selectedService.description ? <p className="text-sm leading-6 text-slate-600">{selectedService.description}</p> : null}
+                        {selectedService.description ? <BookingDescription description={selectedService.description} /> : null}
                       </div>
                       {selectedAddons.length > 0 ? <div className="space-y-2"><p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Add-ons</p><div className="flex flex-wrap gap-2">{selectedAddons.map((addon) => <Badge key={addon.id} variant="outline">{addon.name}</Badge>)}</div></div> : null}
                       <div className="grid gap-3 rounded-[1.2rem] border border-slate-200/85 bg-slate-50/80 p-4 text-sm">
