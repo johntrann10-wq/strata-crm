@@ -2650,7 +2650,7 @@ export default function PublicBookingPage() {
 
           <div
             data-service-step-scroll=""
-            className="min-w-0 max-h-[min(52dvh,32rem)] space-y-5 overflow-x-hidden overflow-y-auto overscroll-contain pb-1 pr-1 [scrollbar-gutter:stable] sm:max-h-none sm:overflow-visible sm:pb-0 sm:pr-0 sm:[scrollbar-gutter:auto]"
+            className="min-w-0 space-y-5 overflow-x-hidden"
           >
             {featuredServices.length > 0 ? (
               <div className="space-y-3">

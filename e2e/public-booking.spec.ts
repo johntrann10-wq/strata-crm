@@ -475,7 +475,7 @@ test("mobile category selector stays contained with many categories", async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test("mobile service step stays scroll-contained as more services are added", async ({ page }) => {
+test("mobile service step uses page scroll instead of a nested scroll window", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockDenseServiceBooking(page);
 
@@ -488,10 +488,8 @@ test("mobile service step stays scroll-contained as more services are added", as
     clientHeight: element.clientHeight,
     scrollHeight: element.scrollHeight,
   }));
-  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
-
-  const box = await scrollArea.boundingBox();
-  expect(box?.height ?? 0).toBeLessThan(540);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight)).toBe(true);
+  expect(Math.abs(metrics.scrollHeight - metrics.clientHeight)).toBeLessThanOrEqual(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
