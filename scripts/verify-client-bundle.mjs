@@ -11,11 +11,11 @@ const repoRoot = process.cwd();
 const root = path.join(repoRoot, "build/client");
 const staticIndexPath = path.join(root, "index.html");
 const siteUrl = "https://stratacrm.app";
-const socialPreviewVersion = "20260417a";
+const homepageSocialPreviewFileName = "social-preview-home-20260417b.png";
 const fallbackTitle = "Strata CRM | Scheduling, CRM, Invoices, and Payments for Auto Service Shops";
 const fallbackDescription =
   "Strata CRM helps automotive service businesses run scheduling, clients, vehicles, jobs, quotes, invoices, deposits, team access, and payments in one clear operating system.";
-const stableSocialImagePath = `/social-preview.png?v=${socialPreviewVersion}`;
+const stableSocialImagePath = `/${homepageSocialPreviewFileName}`;
 const stableSocialImageUrl = `${siteUrl}${stableSocialImagePath}`;
 const configuredApiOrigin =
   process.env.VITE_API_URL?.trim() || process.env.NEXT_PUBLIC_API_URL?.trim() || "";
@@ -144,6 +144,7 @@ if (!fs.existsSync(root)) {
 
 walk(root);
 ensureStaticAsset("social-preview.png", "social-preview.png");
+ensureStaticAsset("social-preview.png", homepageSocialPreviewFileName);
 ensureStaticAsset("favicon.svg", "favicon.svg");
 ensureStaticAsset("apple-touch-icon.png", "apple-touch-icon.png");
 patchSpaIndexHead();

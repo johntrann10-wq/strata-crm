@@ -13,7 +13,6 @@ import { Suspense, useEffect, useLayoutEffect, useState } from "react";
 import "./app.css";
 import faviconHref from "./favicon.svg";
 import appleTouchIconHref from "./apple-touch-icon.png";
-import socialPreviewHref from "./social-preview.png";
 import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
 import { analyticsEnabled, getClarityProjectId, getGaMeasurementId, trackPageView } from "./lib/analytics";
@@ -23,11 +22,11 @@ import { recordRuntimeError } from "./lib/runtimeErrors";
 
 const isProduction = import.meta.env.PROD;
 const siteUrl = "https://stratacrm.app";
-const socialPreviewVersion = "20260417a";
+const homeSocialPreviewPath = "/social-preview-home-20260417b.png";
 const defaultTitle = "Strata - fast CRM for auto service shops";
 const defaultDescription =
   "Strata helps automotive service businesses run scheduling, clients, vehicles, jobs, quotes, invoices, and payments in one clear operating system.";
-const socialImageUrl = `${siteUrl}${socialPreviewHref}?v=${socialPreviewVersion}`;
+const socialImageUrl = `${siteUrl}${homeSocialPreviewPath}`;
 const googleSiteVerification = "8J8smTWAQcFyKEfHd6HqfOQ2K1G4afNezGJNNFN4RBM";
 const gaMeasurementId = getGaMeasurementId();
 const clarityProjectId = getClarityProjectId();
