@@ -2649,31 +2649,36 @@ export default function PublicBookingPage() {
             </div>
           ) : null}
 
-          {featuredServices.length > 0 ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-950">Featured services</p>
-                <Badge variant="outline">{featuredServices.length} highlighted</Badge>
+          <div
+            data-service-step-scroll=""
+            className="max-h-[min(52dvh,32rem)] space-y-5 overflow-y-auto overscroll-contain pb-1 pr-1 [scrollbar-gutter:stable] sm:max-h-none sm:overflow-visible sm:pb-0 sm:pr-0 sm:[scrollbar-gutter:auto]"
+          >
+            {featuredServices.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-950">Featured services</p>
+                  <Badge variant="outline">{featuredServices.length} highlighted</Badge>
+                </div>
+                <div>{featuredServices.map((service) => renderServiceCard(service, true))}</div>
               </div>
-              <div>{featuredServices.map((service) => renderServiceCard(service, true))}</div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {visibleServices.length === 0 ? (
-            <div className="rounded-[1.25rem] border border-dashed border-slate-300 px-4 py-5 text-sm leading-6 text-slate-600">
-              No services match that filter yet. Try another category to keep moving.
-            </div>
-          ) : null}
-
-          {groupedServices.map((group) => (
-            <div key={group.id} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-950">{group.title}</p>
-                <Badge variant="outline">{group.services.length} options</Badge>
+            {visibleServices.length === 0 ? (
+              <div className="rounded-[1.25rem] border border-dashed border-slate-300 px-4 py-5 text-sm leading-6 text-slate-600">
+                No services match that filter yet. Try another category to keep moving.
               </div>
-              <div>{group.services.map((service) => renderServiceCard(service))}</div>
-            </div>
-          ))}
+            ) : null}
+
+            {groupedServices.map((group) => (
+              <div key={group.id} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-950">{group.title}</p>
+                  <Badge variant="outline">{group.services.length} options</Badge>
+                </div>
+                <div>{group.services.map((service) => renderServiceCard(service))}</div>
+              </div>
+            ))}
+          </div>
         </div>
       );
     }

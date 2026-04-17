@@ -337,6 +337,65 @@ async function mockCategoryHeavyBooking(page: import("@playwright/test").Page) {
   });
 }
 
+async function mockDenseServiceBooking(page: import("@playwright/test").Page) {
+  await mockPublicBookingShareMetadata(page, "biz-dense-services", {
+    businessName: "North Star Volume",
+    title: "Tell us what you need | North Star Volume",
+  });
+
+  await page.route("**/api/businesses/biz-dense-services/public-booking-config", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        businessId: "biz-dense-services",
+        businessName: "North Star Volume",
+        businessType: "auto_detailing",
+        timezone: "America/Los_Angeles",
+        title: "Tell us what you need",
+        subtitle: "Choose the service you need, share your vehicle details, and lock in the next step without the back-and-forth.",
+        confirmationMessage: null,
+        trustPoints: ["Goes directly to the shop", "Quick follow-up", "Secure and simple"],
+        notesPrompt: "Add timing, questions, or anything the shop should know.",
+        branding: {
+          logoUrl: null,
+          primaryColorToken: "sky",
+          accentColorToken: "blue",
+          backgroundToneToken: "mist",
+          buttonStyleToken: "outline",
+        },
+        defaultFlow: "self_book",
+        requireEmail: false,
+        requirePhone: true,
+        requireVehicle: true,
+        allowCustomerNotes: true,
+        showPrices: true,
+        showDurations: true,
+        locations: [{ id: "loc-1", name: "Main Shop", address: "Irvine, CA" }],
+        services: Array.from({ length: 18 }, (_, index) => ({
+          id: `svc-dense-${index + 1}`,
+          name: `Premium package ${index + 1}`,
+          categoryId: "cat-1",
+          categoryLabel: "Detailing",
+          description: `High-volume service option ${index + 1}.`,
+          price: 125 + index * 10,
+          durationMinutes: 60 + index * 5,
+          effectiveFlow: "self_book",
+          depositAmount: 20,
+          leadTimeHours: 0,
+          bookingWindowDays: 30,
+          bufferMinutes: 0,
+          serviceMode: "in_shop",
+          featured: index < 2,
+          showPrice: true,
+          showDuration: true,
+          addons: [],
+        })),
+      }),
+    });
+  });
+}
+
 test("service cards expand in place before selection", async ({ page }) => {
   await mockSelfBooking(page);
 
@@ -413,6 +472,26 @@ test("mobile category selector stays contained with many categories", async ({ p
   await expect(page.locator('[data-service-card="svc-cat-7"]')).toBeVisible();
   await expect(page.locator('[data-service-card="svc-cat-1"]')).toHaveCount(0);
   await expect(categorySheet).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("mobile service step stays scroll-contained as more services are added", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockDenseServiceBooking(page);
+
+  await page.goto("/book/biz-dense-services");
+
+  const scrollArea = page.locator('[data-service-step-scroll]');
+  await expect(scrollArea).toBeVisible();
+
+  const metrics = await scrollArea.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+
+  const box = await scrollArea.boundingBox();
+  expect(box?.height ?? 0).toBeLessThan(540);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
