@@ -13,6 +13,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { trackEvent } from "@/lib/analytics";
 import {
+  resolveEffectiveBookingRequestSettings,
+  type BookingRequestSettings,
+  type ServiceBookingRequestPolicy,
+} from "@/lib/bookingRequestSettings";
+import {
   resolveBookingBrandTheme,
   type BookingBrandingTokens,
 } from "@/lib/bookingBranding";
@@ -62,6 +67,7 @@ type BookingService = {
   featured: boolean;
   showPrice: boolean;
   showDuration: boolean;
+  requestPolicy: ServiceBookingRequestPolicy;
   availableDayIndexes: number[] | null;
   openTime: string | null;
   closeTime: string | null;
@@ -81,6 +87,7 @@ type BookingConfig = {
   trustPoints: string[];
   notesPrompt: string;
   defaultFlow: "request" | "self_book";
+  requestSettings: BookingRequestSettings;
   requireEmail: boolean;
   requirePhone: boolean;
   requireVehicle: boolean;
@@ -121,6 +128,8 @@ type BookingSubmitResult = {
   depositAmount?: number;
 };
 
+type BookingRequestFlexibility = "exact_time_only" | "same_day_flexible" | "any_nearby_slot";
+
 type BookingFormState = {
   serviceId: string;
   addonServiceIds: string[];
@@ -128,6 +137,10 @@ type BookingFormState = {
   locationId: string;
   bookingDate: string;
   startTime: string;
+  requestedTimeEnd: string;
+  requestedTimeLabel: string;
+  flexibility: BookingRequestFlexibility;
+  customerTimezone: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -145,6 +158,7 @@ type BookingFormState = {
   website: string;
 };
 
+type RequestTimingMode = "exact" | "window";
 type StepKey = "service" | "vehicle" | "schedule" | "contact" | "review";
 type FlowStep = { key: StepKey; label: string; title: string; description: string };
 type DraftStatus = "idle" | "saving" | "saved";
@@ -188,6 +202,10 @@ function emptyForm(): BookingFormState {
     locationId: "",
     bookingDate: "",
     startTime: "",
+    requestedTimeEnd: "",
+    requestedTimeLabel: "",
+    flexibility: "same_day_flexible",
+    customerTimezone: "",
     firstName: "",
     lastName: "",
     email: "",
@@ -229,6 +247,27 @@ function formatLeadTimeLabel(hours: number) {
 }
 
 const BOOKING_DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const REQUEST_FLEXIBILITY_OPTIONS: Array<{
+  value: BookingRequestFlexibility;
+  label: string;
+  detail: string;
+}> = [
+  {
+    value: "exact_time_only",
+    label: "Exact time only",
+    detail: "Only this time works.",
+  },
+  {
+    value: "same_day_flexible",
+    label: "Same day flexible",
+    detail: "Nearby times that day are okay.",
+  },
+  {
+    value: "any_nearby_slot",
+    label: "Any nearby slot",
+    detail: "A different day can work too.",
+  },
+];
 
 function formatTimeValueLabel(value: string | null | undefined) {
   if (!value) return null;
@@ -319,6 +358,155 @@ function formatCalendarTriggerLabel(value: string | null | undefined) {
   }).format(date);
 }
 
+function formatLongBookingDateLabel(value: string | null | undefined) {
+  const date = parseDateValue(value);
+  if (!date) return null;
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function buildLocalIsoDateTime(dateValue: string, timeValue: string) {
+  if (!dateValue || !timeValue) return "";
+  const [yearRaw, monthRaw, dayRaw] = dateValue.split("-");
+  const [hoursRaw, minutesRaw] = timeValue.split(":");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(day) ||
+    !Number.isFinite(hours) ||
+    !Number.isFinite(minutes)
+  ) {
+    return "";
+  }
+  const date = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function parseTimeValueToMinutes(value: string | null | undefined) {
+  if (!value) return null;
+  const [hoursRaw, minutesRaw] = value.split(":");
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function formatTimeRangeLabel(params: {
+  startTime: string;
+  endTime?: string | null;
+  timeZone?: string | null;
+}) {
+  if (!params.startTime) return null;
+  const startDate = new Date(params.startTime);
+  if (Number.isNaN(startDate.getTime())) return null;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: params.timeZone || undefined,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const startLabel = formatter.format(startDate);
+  if (!params.endTime) return startLabel;
+  const endDate = new Date(params.endTime);
+  if (Number.isNaN(endDate.getTime())) return startLabel;
+  return `${startLabel} - ${formatter.format(endDate)}`;
+}
+
+function buildRequestTimingSummary(params: {
+  bookingDate: string;
+  startTime: string;
+  requestedTimeEnd?: string | null;
+  requestedTimeLabel?: string | null;
+  timeZone?: string | null;
+}) {
+  const dateLabel = formatLongBookingDateLabel(params.bookingDate);
+  const exactTimeLabel = formatTimeRangeLabel({
+    startTime: params.startTime,
+    endTime: params.requestedTimeEnd,
+    timeZone: params.timeZone,
+  });
+  const requestLabel = params.requestedTimeLabel?.trim();
+
+  if (dateLabel && exactTimeLabel) return `${dateLabel} · ${exactTimeLabel}`;
+  if (dateLabel && requestLabel) return `${dateLabel} · ${requestLabel}`;
+  return dateLabel || exactTimeLabel || requestLabel || null;
+}
+
+function buildRequestExactTimeOptions(params: {
+  bookingDate: string;
+  openTime?: string | null;
+  closeTime?: string | null;
+  durationMinutes: number;
+  stepMinutes?: number;
+}) {
+  if (!params.bookingDate) return [];
+  const fallbackOpen = parseTimeValueToMinutes(params.openTime) ?? 9 * 60;
+  const fallbackClose = parseTimeValueToMinutes(params.closeTime) ?? 17 * 60;
+  const serviceDuration = Math.max(params.durationMinutes || 0, 30);
+  const stepMinutes = params.stepMinutes ?? 60;
+  const lastStart = Math.max(fallbackOpen, fallbackClose - serviceDuration);
+  const slots: Array<{ label: string; startTime: string; endTime: string }> = [];
+
+  for (let minutes = fallbackOpen; minutes <= lastStart; minutes += stepMinutes) {
+    const startHours = Math.floor(minutes / 60);
+    const startMinutes = minutes % 60;
+    const startValue = `${String(startHours).padStart(2, "0")}:${String(startMinutes).padStart(2, "0")}`;
+    const endMinutes = minutes + serviceDuration;
+    const endHours = Math.floor(endMinutes / 60);
+    const trailingMinutes = endMinutes % 60;
+    const endValue = `${String(endHours).padStart(2, "0")}:${String(trailingMinutes).padStart(2, "0")}`;
+    const startIso = buildLocalIsoDateTime(params.bookingDate, startValue);
+    const endIso = buildLocalIsoDateTime(params.bookingDate, endValue);
+    if (!startIso || !endIso) continue;
+    slots.push({
+      label: formatTimeValueLabel(startValue) ?? startValue,
+      startTime: startIso,
+      endTime: endIso,
+    });
+  }
+
+  return slots;
+}
+
+function buildRequestWindowOptions(params: {
+  openTime?: string | null;
+  closeTime?: string | null;
+}) {
+  const openMinutes = parseTimeValueToMinutes(params.openTime) ?? 9 * 60;
+  const closeMinutes = parseTimeValueToMinutes(params.closeTime) ?? 17 * 60;
+  const baseWindows = [
+    { label: "Morning", start: 8 * 60, end: 12 * 60 },
+    { label: "Midday", start: 11 * 60, end: 15 * 60 },
+    { label: "After 3 PM", start: 15 * 60, end: 19 * 60 },
+  ];
+
+  const options = baseWindows
+    .map((window) => {
+      const start = Math.max(openMinutes, window.start);
+      const end = Math.min(closeMinutes, window.end);
+      if (end <= start) return null;
+      return {
+        label: window.label,
+        detail: `${formatTimeValueLabel(`${String(Math.floor(start / 60)).padStart(2, "0")}:${String(start % 60).padStart(2, "0")}`) ?? ""} - ${formatTimeValueLabel(`${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`) ?? ""}`,
+      };
+    })
+    .filter((value): value is { label: string; detail: string } => Boolean(value));
+
+  options.push({
+    label: "No strong preference",
+    detail: `${formatTimeValueLabel(params.openTime ?? "09:00") ?? "9:00 AM"} onward`,
+  });
+
+  return options;
+}
+
 function toDateInputValue(offsetDays = 0) {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
@@ -360,11 +548,11 @@ function stepDefinitions(flow: "request" | "self_book"): FlowStep[] {
     {
       key: "schedule",
       label: "Schedule",
-      title: "Where and when works best?",
+      title: flow === "self_book" ? "Where and when works best?" : "What day and time do you prefer?",
       description:
         flow === "self_book"
           ? "Pick the location, choose a time, and keep the booking moving."
-          : "Choose the setup that works best and the shop can confirm the timing with you.",
+          : "Choose a preferred date, share the time that works best, and let the shop review the request.",
     },
     {
       key: "contact",
@@ -375,8 +563,11 @@ function stepDefinitions(flow: "request" | "self_book"): FlowStep[] {
     {
       key: "review",
       label: "Review",
-      title: flow === "self_book" ? "Review and confirm" : "Review and send",
-      description: "Add any final notes, then send everything in one clean pass.",
+      title: flow === "self_book" ? "Review and confirm" : "Review your request",
+      description:
+        flow === "self_book"
+          ? "Add any final notes, then confirm everything in one clean pass."
+          : "Double-check the requested timing, vehicle, and contact details before sending.",
     },
   ];
 }
@@ -535,6 +726,8 @@ function hasLocalDraftProgress(params: {
       form.vehicleColor ||
       form.bookingDate ||
       form.startTime ||
+      form.requestedTimeEnd ||
+      form.requestedTimeLabel ||
       form.firstName ||
       form.lastName ||
       form.email ||
@@ -551,7 +744,7 @@ function hasMeaningfulServerDraft(form: BookingFormState) {
   if (!form.serviceId) return false;
   const hasContact = Boolean(form.email.trim() || form.phone.trim());
   const hasVehicle = Boolean(form.vehicleMake.trim() || form.vehicleModel.trim() || form.vehicleYear.trim());
-  const hasTiming = Boolean(form.bookingDate || form.startTime);
+  const hasTiming = Boolean(form.bookingDate || form.startTime || form.requestedTimeLabel);
   return hasContact || hasVehicle || hasTiming;
 }
 
@@ -571,6 +764,10 @@ function buildServerDraftSignature(params: {
     locationId: form.locationId.trim(),
     bookingDate: form.bookingDate,
     startTime: form.startTime,
+    requestedTimeEnd: form.requestedTimeEnd,
+    requestedTimeLabel: form.requestedTimeLabel.trim(),
+    flexibility: form.flexibility,
+    customerTimezone: form.customerTimezone.trim(),
     firstName: form.firstName.trim(),
     lastName: form.lastName.trim(),
     email: form.email.trim().toLowerCase(),
@@ -632,6 +829,9 @@ export default function PublicBookingPage() {
   const [draftServerId, setDraftServerId] = useState<string | null>(null);
   const [draftLifecycleStatus, setDraftLifecycleStatus] = useState<DraftLifecycleStatus | null>(null);
   const [savedNow, setSavedNow] = useState<number>(Date.now());
+  const [requestTimeMode, setRequestTimeMode] = useState<RequestTimingMode>("exact");
+  const [submittedForm, setSubmittedForm] = useState<BookingFormState | null>(null);
+  const [submittedService, setSubmittedService] = useState<BookingService | null>(null);
   const didHydrateQueryRef = useRef<string | null>(null);
   const restoredDraftRef = useRef<string | null>(null);
   const lastServerDraftSignatureRef = useRef<string | null>(null);
@@ -648,6 +848,17 @@ export default function PublicBookingPage() {
   const requestedServiceId = searchParams.get("service");
   const requestedCategoryId = searchParams.get("category");
   const requestedStep = searchParams.get("step");
+  const builderPreviewToken = searchParams.get("builderPreview");
+  const builderPreviewFlow = searchParams.get("builderPreviewFlow");
+  const builderPreviewStep = searchParams.get("builderPreviewStep");
+  const isBuilderPreview = Boolean(builderPreviewToken);
+  const detectedCustomerTimezone = useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || config?.timezone || "America/Los_Angeles";
+    } catch {
+      return config?.timezone || "America/Los_Angeles";
+    }
+  }, [config?.timezone]);
 
   useEffect(() => {
     if (!draftSavedAt) return;
@@ -657,11 +868,20 @@ export default function PublicBookingPage() {
     return () => window.clearInterval(interval);
   }, [draftSavedAt]);
 
+  useEffect(() => {
+    setForm((current) =>
+      current.customerTimezone === detectedCustomerTimezone
+        ? current
+        : { ...current, customerTimezone: current.customerTimezone || detectedCustomerTimezone }
+    );
+  }, [detectedCustomerTimezone]);
+
   const updateBookingQuery = (updates: {
     serviceId?: string | null;
     categoryId?: string | null;
     step?: "service" | null;
   }) => {
+    if (isBuilderPreview) return;
     const next = new URLSearchParams(searchParams);
     if (updates.serviceId !== undefined) {
       if (updates.serviceId) next.set("service", updates.serviceId);
@@ -719,6 +939,81 @@ export default function PublicBookingPage() {
           (requestedServiceRecord ? toCategoryFilterValue(requestedServiceRecord.categoryId) : "all");
 
         setConfig(payload);
+
+        if (isBuilderPreview) {
+          const previewService =
+            (builderPreviewFlow === "request"
+              ? payload.services.find((service) => service.effectiveFlow === "request")
+              : null) ??
+            requestedServiceRecord ??
+            payload.services[0] ??
+            null;
+          const previewCategory = previewService
+            ? toCategoryFilterValue(previewService.categoryId)
+            : "all";
+          const previewStepIndex =
+            builderPreviewStep === "review"
+              ? 4
+              : builderPreviewStep === "schedule"
+                ? 2
+                : previewService
+                  ? 1
+                  : 0;
+          const previewDate = previewService
+            ? toDateInputValue(Math.max(Math.ceil((previewService.leadTimeHours ?? 0) / 24), 0))
+            : "";
+          const previewOpenTime = previewService?.openTime ?? payload.availabilityDefaults.openTime ?? null;
+          const previewCloseTime = previewService?.closeTime ?? payload.availabilityDefaults.closeTime ?? null;
+          const previewExactSlot =
+            previewDate && previewService
+              ? buildRequestExactTimeOptions({
+                  bookingDate: previewDate,
+                  openTime: previewOpenTime,
+                  closeTime: previewCloseTime,
+                  durationMinutes: previewService.durationMinutes,
+                })[0] ?? null
+              : null;
+
+          setServiceCategoryFilter(previewCategory);
+          setExpandedServiceId("");
+          setRequestTimeMode("exact");
+          setForm({
+            ...emptyForm(),
+            serviceId: previewService?.id ?? "",
+            serviceMode: previewService?.serviceMode === "mobile" ? "mobile" : "in_shop",
+            locationId:
+              previewService?.serviceMode === "mobile"
+                ? ""
+                : payload.locations.length === 1
+                  ? payload.locations[0].id
+                  : "",
+            bookingDate: previewStepIndex >= 2 ? previewDate : "",
+            startTime: previewStepIndex >= 2 ? previewExactSlot?.startTime ?? "" : "",
+            requestedTimeEnd: previewStepIndex >= 2 ? previewExactSlot?.endTime ?? "" : "",
+            customerTimezone:
+              (() => {
+                try {
+                  return Intl.DateTimeFormat().resolvedOptions().timeZone || payload.timezone || "America/Los_Angeles";
+                } catch {
+                  return payload.timezone || "America/Los_Angeles";
+                }
+              })(),
+            vehicleYear: previewStepIndex >= 4 ? "2022" : "",
+            vehicleMake: previewStepIndex >= 4 ? "Tesla" : "",
+            vehicleModel: previewStepIndex >= 4 ? "Model Y" : "",
+            vehicleColor: previewStepIndex >= 4 ? "Black" : "",
+            firstName: previewStepIndex >= 4 ? "Alex" : "",
+            lastName: previewStepIndex >= 4 ? "Morgan" : "",
+            email: previewStepIndex >= 4 ? "alex@example.com" : "",
+            phone: previewStepIndex >= 4 ? "(555) 555-0188" : "",
+            notes:
+              previewStepIndex >= 4
+                ? "Please keep me posted if a nearby slot works better."
+                : "",
+          });
+          setCurrentStep(previewStepIndex);
+          return;
+        }
 
         const hydrationKey = businessId ?? "";
         if (didHydrateQueryRef.current !== hydrationKey) {
@@ -861,7 +1156,17 @@ export default function PublicBookingPage() {
     return () => {
       cancelled = true;
     };
-  }, [businessId, campaign, requestedCategoryId, requestedServiceId, requestedStep, source]);
+  }, [
+    builderPreviewFlow,
+    builderPreviewStep,
+    businessId,
+    campaign,
+    isBuilderPreview,
+    requestedCategoryId,
+    requestedServiceId,
+    requestedStep,
+    source,
+  ]);
 
   const selectedService = useMemo(
     () => config?.services.find((service) => service.id === form.serviceId) ?? null,
@@ -872,14 +1177,66 @@ export default function PublicBookingPage() {
     [form.addonServiceIds, selectedService]
   );
   const effectiveFlow = selectedService?.effectiveFlow ?? config?.defaultFlow ?? "request";
+  const effectiveRequestSettings = useMemo(
+    () =>
+      resolveEffectiveBookingRequestSettings({
+        business:
+          config?.requestSettings ?? {
+            requireExactTime: false,
+            allowTimeWindows: true,
+            allowFlexibility: true,
+            allowAlternateSlots: true,
+            alternateSlotLimit: 3,
+            alternateOfferExpiryHours: 48,
+            confirmationCopy: null,
+            ownerResponsePageCopy: null,
+            alternateAcceptanceCopy: null,
+            chooseAnotherDayCopy: null,
+          },
+        service: selectedService?.requestPolicy ?? null,
+      }),
+    [config?.requestSettings, selectedService?.requestPolicy]
+  );
+  const requestAllowsWindowMode =
+    effectiveFlow === "request" &&
+    !effectiveRequestSettings.requireExactTime &&
+    effectiveRequestSettings.allowTimeWindows;
+  const requestUsesExactTimeOnly = effectiveFlow === "request" && !requestAllowsWindowMode;
   const steps = useMemo(() => stepDefinitions(effectiveFlow), [effectiveFlow]);
   const activeStep = steps[currentStep] ?? steps[0];
+  const confirmationForm = result ? submittedForm ?? form : form;
+  const confirmationService = result ? submittedService ?? selectedService : selectedService;
 
   const selectedServiceMode = selectedService?.serviceMode ?? null;
   const requiresLocationChoice =
     selectedServiceMode === "in_shop" && (config?.locations.length ?? 0) > 1;
   const requiresServiceModeChoice = selectedServiceMode === "both";
   const isMobileService = selectedServiceMode === "mobile" || form.serviceMode === "mobile";
+
+  useEffect(() => {
+    if (effectiveFlow !== "request") {
+      setRequestTimeMode("exact");
+      return;
+    }
+    if (requestUsesExactTimeOnly) {
+      setRequestTimeMode("exact");
+      return;
+    }
+    if (form.startTime) {
+      setRequestTimeMode("exact");
+      return;
+    }
+    if (form.requestedTimeLabel) {
+      setRequestTimeMode("window");
+    }
+  }, [effectiveFlow, form.requestedTimeLabel, form.startTime, requestUsesExactTimeOnly]);
+
+  useEffect(() => {
+    if (effectiveFlow !== "request") return;
+    if (effectiveRequestSettings.allowFlexibility) return;
+    if (form.flexibility === "same_day_flexible") return;
+    setForm((current) => ({ ...current, flexibility: "same_day_flexible" }));
+  }, [effectiveFlow, effectiveRequestSettings.allowFlexibility, form.flexibility]);
 
   useEffect(() => {
     if (currentStep >= steps.length) setCurrentStep(Math.max(steps.length - 1, 0));
@@ -954,6 +1311,26 @@ export default function PublicBookingPage() {
     [effectiveAvailabilityDayIndexes, form.bookingDate, maxBookingDate, minBookingDate]
   );
   const defaultBookingDate = suggestedBookingDates[0] ?? minBookingDate;
+  const selectedScheduleDate =
+    effectiveFlow === "self_book" ? form.bookingDate || defaultBookingDate : form.bookingDate;
+  const requestExactTimeOptions = useMemo(
+    () =>
+      buildRequestExactTimeOptions({
+        bookingDate: form.bookingDate,
+        openTime: effectiveOpenTime,
+        closeTime: effectiveCloseTime,
+        durationMinutes: totalDuration,
+      }),
+    [effectiveCloseTime, effectiveOpenTime, form.bookingDate, totalDuration]
+  );
+  const requestWindowOptions = useMemo(
+    () =>
+      buildRequestWindowOptions({
+        openTime: effectiveOpenTime,
+        closeTime: effectiveCloseTime,
+      }),
+    [effectiveCloseTime, effectiveOpenTime]
+  );
 
   useEffect(() => {
     if (!selectedService) {
@@ -1040,7 +1417,7 @@ export default function PublicBookingPage() {
   ]);
 
   useEffect(() => {
-    if (!businessId || loading || draftHydrating || result) return;
+    if (!businessId || loading || draftHydrating || result || isBuilderPreview) return;
     if (typeof window === "undefined") return;
 
     const storageKey = buildDraftStorageKey(businessId);
@@ -1096,13 +1473,14 @@ export default function PublicBookingPage() {
     draftServerId,
     expandedServiceId,
     form,
+    isBuilderPreview,
     loading,
     result,
     serviceCategoryFilter,
   ]);
 
   useEffect(() => {
-    if (!businessId || !config || loading || draftHydrating || result) return;
+    if (!businessId || !config || loading || draftHydrating || result || isBuilderPreview) return;
     if (!selectedService || !hasMeaningfulServerDraft(form)) return;
 
     const signature = buildServerDraftSignature({
@@ -1128,6 +1506,10 @@ export default function PublicBookingPage() {
           locationId: form.locationId || undefined,
           bookingDate: form.bookingDate || undefined,
           startTime: form.startTime || undefined,
+          requestedTimeEnd: form.requestedTimeEnd || undefined,
+          requestedTimeLabel: form.requestedTimeLabel || undefined,
+          flexibility: form.flexibility,
+          customerTimezone: form.customerTimezone || detectedCustomerTimezone,
           firstName: form.firstName,
           lastName: form.lastName,
           email: form.email,
@@ -1198,11 +1580,13 @@ export default function PublicBookingPage() {
     campaign,
     config,
     currentStep,
+    detectedCustomerTimezone,
     draftResumeToken,
     draftHydrating,
     effectiveFlow,
     expandedServiceId,
     form,
+    isBuilderPreview,
     loading,
     result,
     selectedService,
@@ -1211,7 +1595,7 @@ export default function PublicBookingPage() {
   ]);
 
   useEffect(() => {
-    if (!businessId || !draftResumeToken || result) return;
+    if (!businessId || !draftResumeToken || result || isBuilderPreview) return;
     if (typeof window === "undefined") return;
 
     const hasProgress = hasLocalDraftProgress({
@@ -1258,6 +1642,7 @@ export default function PublicBookingPage() {
     draftResumeToken,
     expandedServiceId,
     form,
+    isBuilderPreview,
     result,
     serviceCategoryFilter,
   ]);
@@ -1309,16 +1694,30 @@ export default function PublicBookingPage() {
     availability?.slots.find((slot) => slot.startTime === form.startTime)?.label ??
     result?.scheduledFor ??
     null;
+  const requestTimingSummary = buildRequestTimingSummary({
+    bookingDate: confirmationForm.bookingDate,
+    startTime: confirmationForm.startTime,
+    requestedTimeEnd: confirmationForm.requestedTimeEnd,
+    requestedTimeLabel: confirmationForm.requestedTimeLabel,
+    timeZone: confirmationForm.customerTimezone || detectedCustomerTimezone,
+  });
+  const requestFlexibilityLabel =
+    REQUEST_FLEXIBILITY_OPTIONS.find((option) => option.value === confirmationForm.flexibility)?.label ?? null;
+  const vehicleReviewSummary = [confirmationForm.vehicleYear, confirmationForm.vehicleMake, confirmationForm.vehicleModel]
+    .filter(Boolean)
+    .join(" ");
+  const contactReviewSummary = [confirmationForm.firstName, confirmationForm.lastName].filter(Boolean).join(" ").trim();
   const relativeDraftStatusLabel = formatSavedAgo(draftSavedAt, savedNow);
   const stepProgress = steps.length > 0 ? Math.round(((currentStep + 1) / steps.length) * 100) : 0;
   const nextStepMessage =
     effectiveFlow === "self_book"
       ? "Choose a live slot, confirm the details, and get the confirmation right away."
-      : "Send the request and the shop can confirm the best next step with you.";
+      : effectiveRequestSettings.reviewMessage ||
+        "Send the request and the shop can confirm the best next step with you.";
   const summaryPromise =
     effectiveFlow === "self_book"
       ? "Confirmation is sent right after booking, with a customer portal link."
-      : "The shop reviews the request with the full service and vehicle context.";
+      : "The shop reviews the request with the full service, vehicle, and requested timing context.";
   const serviceModeLabel =
     selectedService?.serviceMode === "mobile"
       ? "Mobile / on-site"
@@ -1350,11 +1749,17 @@ export default function PublicBookingPage() {
     const nextCategory = service ? toCategoryFilterValue(service.categoryId) : serviceCategoryFilter;
     setServiceCategoryFilter(nextCategory);
     setExpandedServiceId(options?.stayOnServiceStep ? serviceId : "");
+    setRequestTimeMode("exact");
+    setSubmittedForm(null);
+    setSubmittedService(null);
     setForm((current) => ({
       ...current,
       serviceId,
       addonServiceIds: [],
       startTime: "",
+      requestedTimeEnd: "",
+      requestedTimeLabel: "",
+      flexibility: "same_day_flexible",
       bookingDate: "",
       serviceMode: service?.serviceMode === "mobile" ? "mobile" : "in_shop",
       locationId:
@@ -1399,6 +1804,18 @@ export default function PublicBookingPage() {
       if (effectiveFlow === "self_book") {
         if (!form.bookingDate) return "Choose a preferred date to see available times.";
         return form.startTime ? null : "Choose a time to continue.";
+      }
+      if (!form.bookingDate) {
+        return "Choose the day you want so the shop can review a real request.";
+      }
+      if (requestUsesExactTimeOnly) {
+        if (!form.startTime) {
+          return "Choose the exact time you want the shop to review.";
+        }
+        return null;
+      }
+      if (!form.startTime && !form.requestedTimeLabel.trim()) {
+        return "Choose an exact time or a time window so the shop knows what to review.";
       }
       return null;
     }
@@ -1452,7 +1869,25 @@ export default function PublicBookingPage() {
         draftResumeToken: draftResumeToken || undefined,
         source,
         campaign,
-        startTime: effectiveFlow === "self_book" ? form.startTime || undefined : undefined,
+        startTime:
+          effectiveFlow === "self_book" || requestUsesExactTimeOnly || requestTimeMode === "exact"
+            ? form.startTime || undefined
+            : undefined,
+        requestedTimeEnd:
+          effectiveFlow === "request" && (requestUsesExactTimeOnly || requestTimeMode === "exact")
+            ? form.requestedTimeEnd || undefined
+            : undefined,
+        requestedTimeLabel:
+          effectiveFlow === "request" && !requestUsesExactTimeOnly && requestTimeMode === "window"
+            ? form.requestedTimeLabel || undefined
+            : undefined,
+        flexibility:
+          effectiveFlow === "request"
+            ? effectiveRequestSettings.allowFlexibility
+              ? form.flexibility
+              : "same_day_flexible"
+            : undefined,
+        customerTimezone: form.customerTimezone || detectedCustomerTimezone,
         vehicleYear: form.vehicleYear ? Number(form.vehicleYear) : undefined,
         locationId: form.locationId || undefined,
       };
@@ -1474,6 +1909,8 @@ export default function PublicBookingPage() {
         business_id: businessId,
         status: effectiveFlow === "self_book" ? "confirmed_booking" : "submitted_request",
       });
+      setSubmittedForm(form);
+      setSubmittedService(selectedService);
       setDraftStatus("idle");
       setDraftSavedAt(null);
       setDraftResumeToken(null);
@@ -1486,6 +1923,7 @@ export default function PublicBookingPage() {
         ...emptyForm(),
         serviceId: current.serviceId,
         locationId: current.locationId,
+        customerTimezone: current.customerTimezone,
       }));
       setCurrentStep(0);
     } catch (submitErrorValue) {
@@ -1692,11 +2130,11 @@ export default function PublicBookingPage() {
         <div className="space-y-5">
           {selectedServiceMode === "both" ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              <button type="button" onClick={() => setForm((current) => ({ ...current, serviceMode: "in_shop", startTime: "" }))} className={cn("rounded-[1.3rem] border px-4 py-4 text-left transition-all motion-reduce:transition-none", form.serviceMode === "in_shop" ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]" : "border-slate-200 bg-white hover:bg-slate-50")}>
+              <button type="button" onClick={() => setForm((current) => ({ ...current, serviceMode: "in_shop", startTime: "", requestedTimeEnd: "" }))} className={cn("rounded-[1.3rem] border px-4 py-4 text-left transition-all motion-reduce:transition-none", form.serviceMode === "in_shop" ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]" : "border-slate-200 bg-white hover:bg-slate-50")}>
                 <p className="font-semibold text-slate-950">In-shop visit</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">Bring the vehicle to the shop and keep the timing accurate.</p>
               </button>
-              <button type="button" onClick={() => setForm((current) => ({ ...current, serviceMode: "mobile", locationId: "", startTime: "" }))} className={cn("rounded-[1.3rem] border px-4 py-4 text-left transition-all motion-reduce:transition-none", form.serviceMode === "mobile" ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]" : "border-slate-200 bg-white hover:bg-slate-50")}>
+              <button type="button" onClick={() => setForm((current) => ({ ...current, serviceMode: "mobile", locationId: "", startTime: "", requestedTimeEnd: "" }))} className={cn("rounded-[1.3rem] border px-4 py-4 text-left transition-all motion-reduce:transition-none", form.serviceMode === "mobile" ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]" : "border-slate-200 bg-white hover:bg-slate-50")}>
                 <p className="font-semibold text-slate-950">Mobile / on-site</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">Have the team come to you and add the service address below.</p>
               </button>
@@ -1710,7 +2148,7 @@ export default function PublicBookingPage() {
                 {config.locations.map((location) => {
                   const active = location.id === form.locationId;
                   return (
-                    <button key={location.id} type="button" onClick={() => setForm((current) => ({ ...current, locationId: location.id, startTime: "" }))} className={cn("rounded-[1.3rem] border px-4 py-4 text-left transition-all motion-reduce:transition-none", active ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]" : "border-slate-200 bg-white hover:bg-slate-50")}>
+                    <button key={location.id} type="button" onClick={() => setForm((current) => ({ ...current, locationId: location.id, startTime: "", requestedTimeEnd: "" }))} className={cn("rounded-[1.3rem] border px-4 py-4 text-left transition-all motion-reduce:transition-none", active ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]" : "border-slate-200 bg-white hover:bg-slate-50")}>
                       <p className="font-semibold text-slate-950">{location.name}</p>
                       {location.address ? <p className="mt-1 text-sm leading-6 text-slate-600">{location.address}</p> : null}
                     </button>
@@ -1745,7 +2183,7 @@ export default function PublicBookingPage() {
             <div className="flex items-center justify-between gap-3">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-slate-950">
-                  {effectiveFlow === "self_book" ? "Choose a day and time" : "Share your timing"}
+                  {effectiveFlow === "self_book" ? "Choose a day and time" : "Choose a preferred day and time"}
                 </p>
                 <p className="text-xs text-slate-500">
                   {availabilityWindowLabel}
@@ -1755,11 +2193,11 @@ export default function PublicBookingPage() {
             </div>
             <div className="space-y-3">
               <Label htmlFor="booking-date">
-                {effectiveFlow === "self_book" ? "Preferred date" : "Preferred date (optional)"}
+                {effectiveFlow === "self_book" ? "Preferred date" : "Preferred date *"}
               </Label>
               <div className="grid grid-cols-4 gap-2 sm:grid-cols-4">
                 {suggestedBookingDates.map((dateValue) => {
-                  const isActive = (form.bookingDate || defaultBookingDate) === dateValue;
+                  const isActive = selectedScheduleDate === dateValue;
                   const formattedDate = formatBookingDatePill(dateValue);
                   return (
                     <button
@@ -1770,6 +2208,7 @@ export default function PublicBookingPage() {
                           ...current,
                           bookingDate: dateValue,
                           startTime: "",
+                          requestedTimeEnd: "",
                         }))
                       }
                       className={cn(
@@ -1803,7 +2242,7 @@ export default function PublicBookingPage() {
                         <CalendarDays className="h-4 w-4 shrink-0 text-slate-500" />
                         <span className="truncate">
                           {formatCalendarTriggerLabel(
-                            form.bookingDate || (effectiveFlow === "self_book" ? defaultBookingDate : "")
+                            selectedScheduleDate || (effectiveFlow === "self_book" ? defaultBookingDate : "")
                           )}
                         </span>
                       </span>
@@ -1819,11 +2258,16 @@ export default function PublicBookingPage() {
                   >
                     <Calendar
                       mode="single"
-                      selected={parseDateValue(form.bookingDate || (effectiveFlow === "self_book" ? defaultBookingDate : ""))}
+                      selected={parseDateValue(selectedScheduleDate || (effectiveFlow === "self_book" ? defaultBookingDate : ""))}
                       onSelect={(date) => {
                         if (!date) return;
                         const nextValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-                        setForm((current) => ({ ...current, bookingDate: nextValue, startTime: "" }));
+                        setForm((current) => ({
+                          ...current,
+                          bookingDate: nextValue,
+                          startTime: "",
+                          requestedTimeEnd: "",
+                        }));
                       }}
                       defaultMonth={parseDateValue(form.bookingDate || defaultBookingDate)}
                       disabled={(date) => {
@@ -1851,9 +2295,14 @@ export default function PublicBookingPage() {
                   type="date"
                   min={minBookingDate}
                   max={maxBookingDate}
-                  value={form.bookingDate || (effectiveFlow === "self_book" ? defaultBookingDate : "")}
+                  value={selectedScheduleDate || (effectiveFlow === "self_book" ? defaultBookingDate : "")}
                   onChange={(event) =>
-                    setForm((current) => ({ ...current, bookingDate: event.target.value, startTime: "" }))
+                    setForm((current) => ({
+                      ...current,
+                      bookingDate: event.target.value,
+                      startTime: "",
+                      requestedTimeEnd: "",
+                    }))
                   }
                   className="sr-only"
                   aria-hidden="true"
@@ -1895,7 +2344,171 @@ export default function PublicBookingPage() {
                 {!availabilityLoading && !availabilityError && !availability?.slots.length ? <div className="rounded-[1.2rem] border border-dashed border-slate-300 px-4 py-5 text-sm leading-6 text-slate-600">No live times are open for that day. Pick another date above and we&apos;ll refresh the schedule.</div> : null}
               </>
             ) : (
-              <StepHint icon={Clock3} text="This service is reviewed by the shop before anything is scheduled. Pick a preferred day if you have one, or keep moving and use the notes field in the final step." />
+              <div className="space-y-4">
+                {effectiveRequestSettings.reviewMessage ? (
+                  <div className="rounded-[1.2rem] border border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] px-4 py-4 text-sm leading-6 text-[color:var(--booking-primary-ink)]">
+                    {effectiveRequestSettings.reviewMessage}
+                  </div>
+                ) : null}
+
+                {requestAllowsWindowMode ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRequestTimeMode("exact");
+                        setForm((current) => ({ ...current, requestedTimeLabel: "" }));
+                      }}
+                      className={cn(
+                        "rounded-[1.25rem] border px-4 py-4 text-left transition-all motion-reduce:transition-none",
+                        requestTimeMode === "exact"
+                          ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]"
+                          : "border-slate-200 bg-white hover:bg-slate-50"
+                      )}
+                    >
+                      <p className="font-semibold text-slate-950">Exact time</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">Request a real appointment time.</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRequestTimeMode("window");
+                        setForm((current) => ({ ...current, startTime: "", requestedTimeEnd: "" }));
+                      }}
+                      className={cn(
+                        "rounded-[1.25rem] border px-4 py-4 text-left transition-all motion-reduce:transition-none",
+                        requestTimeMode === "window"
+                          ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]"
+                          : "border-slate-200 bg-white hover:bg-slate-50"
+                      )}
+                    >
+                      <p className="font-semibold text-slate-950">Time window</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">Share a range if the day matters more than the exact slot.</p>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50/85 px-4 py-4">
+                    <p className="text-sm font-semibold text-slate-950">Exact time required</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      This service collects one preferred appointment time so the shop can review the exact slot you want.
+                    </p>
+                  </div>
+                )}
+
+                {!form.bookingDate ? (
+                  <div className="rounded-[1.2rem] border border-dashed border-slate-300 px-4 py-5 text-sm leading-6 text-slate-600">
+                    {requestAllowsWindowMode
+                      ? "Pick the day first, then choose an exact time or a time window."
+                      : "Pick the day first, then choose the exact time you want the shop to review."}
+                  </div>
+                ) : requestUsesExactTimeOnly || requestTimeMode === "exact" ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Preferred time *</p>
+                      <Badge variant="outline">{requestExactTimeOptions.length} options</Badge>
+                    </div>
+                    {requestExactTimeOptions.length ? (
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {requestExactTimeOptions.map((option) => (
+                          <button
+                            key={option.startTime}
+                            type="button"
+                            onClick={() =>
+                              setForm((current) => ({
+                                ...current,
+                                startTime: option.startTime,
+                                requestedTimeEnd: option.endTime,
+                                requestedTimeLabel: "",
+                              }))
+                            }
+                            className={cn(
+                              "rounded-[1rem] border px-3 py-3 text-center text-sm font-semibold transition-all motion-reduce:transition-none",
+                              form.startTime === option.startTime
+                                ? "border-[color:var(--booking-primary)] bg-[var(--booking-primary)] text-[color:var(--booking-primary-foreground)] shadow-[0_12px_24px_rgba(15,23,42,0.08)]"
+                                : "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50"
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-[1.2rem] border border-dashed border-slate-300 px-4 py-5 text-sm leading-6 text-slate-600">
+                        {requestAllowsWindowMode
+                          ? "The shop has not set request hours for this service yet. Pick a time window instead and we&apos;ll still send the request cleanly."
+                          : "The shop has not set request hours for this service yet. Check back soon or choose another service while the team updates timing rules."}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Preferred window *</p>
+                    <div className="grid gap-3">
+                      {requestWindowOptions.map((option) => (
+                        <button
+                          key={option.label}
+                          type="button"
+                          onClick={() =>
+                            setForm((current) => ({
+                              ...current,
+                              startTime: "",
+                              requestedTimeEnd: "",
+                              requestedTimeLabel: option.label,
+                            }))
+                          }
+                          className={cn(
+                            "rounded-[1.1rem] border px-4 py-4 text-left transition-all motion-reduce:transition-none",
+                            form.requestedTimeLabel === option.label
+                              ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]"
+                              : "border-slate-200 bg-white hover:bg-slate-50"
+                          )}
+                        >
+                          <p className="font-semibold text-slate-950">{option.label}</p>
+                          <p className="mt-1 text-sm text-slate-600">{option.detail}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {effectiveRequestSettings.allowFlexibility ? (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-slate-950">How flexible are you?</p>
+                      <p className="text-xs leading-5 text-slate-500">
+                        This helps the shop approve faster if the requested time is already taken.
+                      </p>
+                    </div>
+                    <div className="grid gap-3">
+                      {REQUEST_FLEXIBILITY_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setForm((current) => ({ ...current, flexibility: option.value }))}
+                          className={cn(
+                            "rounded-[1.1rem] border px-4 py-4 text-left transition-all motion-reduce:transition-none",
+                            form.flexibility === option.value
+                              ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]"
+                              : "border-slate-200 bg-white hover:bg-slate-50"
+                          )}
+                        >
+                          <p className="font-semibold text-slate-950">{option.label}</p>
+                          <p className="mt-1 text-sm text-slate-600">{option.detail}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <StepHint
+                  icon={Clock3}
+                  text={
+                    requestUsesExactTimeOnly || requestTimeMode === "exact"
+                      ? "The shop will review this requested time and either approve it or send alternate options if something closer works better."
+                      : "The shop will use this time window as the starting point and can send alternate times without making you start over."
+                  }
+                />
+              </div>
             )}
           </div>
         </div>
@@ -1933,6 +2546,46 @@ export default function PublicBookingPage() {
 
     return (
       <div className="space-y-6">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[1.15rem] border border-slate-200/85 bg-slate-50/80 p-4">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Service</p>
+            <p className="mt-2 text-base font-semibold tracking-[-0.02em] text-slate-950">{selectedService?.name}</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              {form.serviceMode === "mobile" ? "Mobile / on-site" : "In-shop"}
+              {selectedLocation ? ` · ${selectedLocation.name}` : ""}
+            </p>
+          </div>
+          <div className="rounded-[1.15rem] border border-slate-200/85 bg-slate-50/80 p-4">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Vehicle</p>
+            <p className="mt-2 text-base font-semibold tracking-[-0.02em] text-slate-950">
+              {vehicleReviewSummary || "Vehicle details pending"}
+            </p>
+            {form.vehicleColor ? <p className="mt-1 text-sm leading-6 text-slate-600">{form.vehicleColor}</p> : null}
+          </div>
+          <div className="rounded-[1.15rem] border border-slate-200/85 bg-slate-50/80 p-4">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {effectiveFlow === "self_book" ? "Timing" : "Requested timing"}
+            </p>
+            <p className="mt-2 text-base font-semibold tracking-[-0.02em] text-slate-950">
+              {effectiveFlow === "self_book"
+                ? selectedTimeLabel || formatLongBookingDateLabel(form.bookingDate) || "Choose a time"
+                : requestTimingSummary || "Choose a preferred date and time"}
+            </p>
+            {effectiveFlow === "request" && effectiveRequestSettings.allowFlexibility && requestFlexibilityLabel ? (
+              <p className="mt-1 text-sm leading-6 text-slate-600">{requestFlexibilityLabel}</p>
+            ) : null}
+          </div>
+          <div className="rounded-[1.15rem] border border-slate-200/85 bg-slate-50/80 p-4">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">Contact</p>
+            <p className="mt-2 text-base font-semibold tracking-[-0.02em] text-slate-950">
+              {contactReviewSummary || "Contact details pending"}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              {[form.email, form.phone].filter(Boolean).join(" · ") || "Add an email or phone number"}
+            </p>
+          </div>
+        </div>
+
         {selectedService?.addons.length ? (
           <div className="space-y-3">
             <div className="space-y-1">
@@ -1976,7 +2629,23 @@ export default function PublicBookingPage() {
             </div>
           </div>
         </div>
-        <StepHint icon={ShieldCheck} text={effectiveFlow === "self_book" ? "Availability is checked one more time when you confirm so the booking stays accurate." : "The request goes directly to the shop with the service, vehicle, and contact details it needs."} />
+        <div className="rounded-[1.25rem] border border-slate-200/85 bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">What happens next</p>
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            {effectiveFlow === "self_book"
+              ? "We'll lock the live slot, send confirmation right away, and keep the customer portal linked to this booking."
+              : effectiveRequestSettings.confirmationCopy ||
+                "The shop will review your requested time, approve it if it works, or send alternate times so you can keep everything moving without starting over."}
+          </p>
+        </div>
+        <StepHint
+          icon={ShieldCheck}
+          text={
+            effectiveFlow === "self_book"
+              ? "Availability is checked one more time when you confirm so the booking stays accurate."
+              : "Your service, vehicle, preferred time, and contact details are all included in the request the shop reviews."
+          }
+        />
       </div>
     );
   };
@@ -2375,20 +3044,22 @@ export default function PublicBookingPage() {
                     <div className="portal-h">
                       {result.mode === "self_book" ? "You're booked!" : "Request sent!"}
                     </div>
-                    <div className="portal-m">{result.message}</div>
+                    <div className="portal-m">
+                      {result.message}
+                    </div>
                   </div>
 
                   <div className="detail-card">
                     <div className="detail-head">
                       <span className="detail-head-l">Booking details</span>
-                      {config?.showPrices && selectedService ? (
+                      {config?.showPrices && confirmationService ? (
                         <span className="detail-price" style={{ color: "var(--c)" }}>
-                          {formatPrice(selectedService.price)}
+                          {formatPrice(confirmationService.price)}
                         </span>
                       ) : null}
                     </div>
 
-                    {selectedService ? (
+                    {confirmationService ? (
                       <div className="detail-row">
                         <div className="di">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
@@ -2397,12 +3068,12 @@ export default function PublicBookingPage() {
                         </div>
                         <div>
                           <span className="dl">Service</span>
-                          <span className="dv-t">{selectedService.name}</span>
+                          <span className="dv-t">{confirmationService.name}</span>
                         </div>
                       </div>
                     ) : null}
 
-                    {result.scheduledFor || form.bookingDate ? (
+                    {result.scheduledFor || confirmationForm.bookingDate ? (
                       <div className="detail-row">
                         <div className="di">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
@@ -2410,13 +3081,15 @@ export default function PublicBookingPage() {
                           </svg>
                         </div>
                         <div>
-                          <span className="dl">Date</span>
-                          <span className="dv-t">{result.scheduledFor || form.bookingDate}</span>
+                          <span className="dl">{result.mode === "self_book" ? "Date" : "Requested date"}</span>
+                          <span className="dv-t">
+                            {result.scheduledFor || formatLongBookingDateLabel(confirmationForm.bookingDate) || confirmationForm.bookingDate}
+                          </span>
                         </div>
                       </div>
                     ) : null}
 
-                    {selectedTimeLabel && result.mode === "self_book" ? (
+                    {(result.mode === "self_book" ? selectedTimeLabel : requestTimingSummary) ? (
                       <div className="detail-row">
                         <div className="di">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
@@ -2424,13 +3097,21 @@ export default function PublicBookingPage() {
                           </svg>
                         </div>
                         <div>
-                          <span className="dl">Time</span>
-                          <span className="dv-t">{selectedTimeLabel}</span>
+                          <span className="dl">{result.mode === "self_book" ? "Time" : "Requested time"}</span>
+                          <span className="dv-t">
+                            {result.mode === "self_book"
+                              ? selectedTimeLabel
+                              : formatTimeRangeLabel({
+                                  startTime: confirmationForm.startTime,
+                                  endTime: confirmationForm.requestedTimeEnd,
+                                  timeZone: confirmationForm.customerTimezone || detectedCustomerTimezone,
+                                }) || confirmationForm.requestedTimeLabel}
+                          </span>
                         </div>
                       </div>
                     ) : null}
 
-                    {config?.showDurations && selectedService ? (
+                    {config?.showDurations && confirmationService ? (
                       <div className="detail-row">
                         <div className="di">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
@@ -2439,7 +3120,7 @@ export default function PublicBookingPage() {
                         </div>
                         <div>
                           <span className="dl">Duration</span>
-                          <span className="dv-t">{formatDuration(selectedService.durationMinutes)}</span>
+                          <span className="dv-t">{formatDuration(confirmationService.durationMinutes)}</span>
                         </div>
                       </div>
                     ) : null}
@@ -2478,21 +3159,21 @@ export default function PublicBookingPage() {
                           <div className="next-num" style={{ background: "var(--cs)", color: "var(--c)" }}>1</div>
                           <div className="next-text">
                             <strong>Request received</strong>
-                            <span>The team has your details and will review shortly.</span>
+                            <span>The shop has your requested day, time, service, vehicle, and contact details.</span>
                           </div>
                         </div>
                         <div className="next-item">
                           <div className="next-num" style={{ background: "var(--cs)", color: "var(--c)" }}>2</div>
                           <div className="next-text">
-                            <strong>Confirmation coming</strong>
-                            <span>You'll get an email or text with a confirmed time.</span>
+                            <strong>Time review in progress</strong>
+                            <span>The team can approve your requested time or send alternate options if something nearby works better.</span>
                           </div>
                         </div>
                         <div className="next-item">
                           <div className="next-num" style={{ background: "var(--cs)", color: "var(--c)" }}>3</div>
                           <div className="next-text">
-                            <strong>Show up ready</strong>
-                            <span>Once confirmed, just show up at the scheduled time.</span>
+                            <strong>No need to start over</strong>
+                            <span>If they suggest another slot, you can respond from the follow-up instead of re-entering everything.</span>
                           </div>
                         </div>
                       </>
@@ -2516,7 +3197,11 @@ export default function PublicBookingPage() {
                     <button
                       type="button"
                       className="pa-g"
-                      onClick={() => setResult(null)}
+                      onClick={() => {
+                        setResult(null);
+                        setSubmittedForm(null);
+                        setSubmittedService(null);
+                      }}
                     >
                       Book another service
                     </button>
@@ -2586,7 +3271,12 @@ export default function PublicBookingPage() {
                         {canShowSelectedDuration ? <SummaryRow label="Estimated time" value={formatDuration(totalDuration)} /> : null}
                         {totalDeposit > 0 ? <SummaryRow label="Deposit" value={formatPrice(totalDeposit)} /> : null}
                         {selectedTimeLabel && effectiveFlow === "self_book" ? <SummaryRow label="Chosen time" value={selectedTimeLabel} /> : null}
-                        {form.bookingDate && effectiveFlow === "request" ? <SummaryRow label="Preferred date" value={form.bookingDate} /> : null}
+                        {effectiveFlow === "request" && requestTimingSummary ? (
+                          <SummaryRow label="Requested timing" value={requestTimingSummary} />
+                        ) : null}
+                        {effectiveFlow === "request" && effectiveRequestSettings.allowFlexibility && requestFlexibilityLabel ? (
+                          <SummaryRow label="Flexibility" value={requestFlexibilityLabel} />
+                        ) : null}
                       </div>
                       <div className={cn("rounded-[1.2rem] border px-4 py-4 text-sm leading-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]", effectiveFlow === "self_book" ? "border-emerald-200 bg-emerald-50/95 text-emerald-900" : "border-slate-200/85 bg-slate-50/80 text-slate-700")}>
                         {effectiveFlow === "self_book" ? "Confirmation is sent as soon as the booking is placed, with a customer portal link right away." : "Request-only services let the shop review the job before anything is scheduled."}

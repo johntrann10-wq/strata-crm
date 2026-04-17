@@ -124,6 +124,91 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
 
   const businessPatchBodies: Array<Record<string, unknown>> = [];
 
+  const buildPublicBookingConfig = () => ({
+    businessId: BUSINESS_ID,
+    businessName: businessRecord.name,
+    businessType: businessRecord.type,
+    timezone: "America/Los_Angeles",
+    title: businessRecord.bookingPageTitle,
+    subtitle: businessRecord.bookingPageSubtitle,
+    urgencyText: businessRecord.bookingUrgencyText,
+    confirmationMessage: businessRecord.bookingConfirmationMessage,
+    branding: {
+      primaryColorToken: businessRecord.bookingBrandPrimaryColorToken,
+      accentColorToken: businessRecord.bookingBrandAccentColorToken,
+      backgroundToneToken: businessRecord.bookingBrandBackgroundToneToken,
+      buttonStyleToken: businessRecord.bookingBrandButtonStyleToken,
+    },
+    trustPoints: [
+      businessRecord.bookingTrustBulletPrimary,
+      businessRecord.bookingTrustBulletSecondary,
+      businessRecord.bookingTrustBulletTertiary,
+    ].filter(Boolean),
+    notesPrompt: businessRecord.bookingNotesPrompt,
+    defaultFlow: businessRecord.bookingDefaultFlow,
+    requestSettings: {
+      requireExactTime: false,
+      allowTimeWindows: true,
+      allowFlexibility: true,
+      allowAlternateSlots: true,
+      alternateSlotLimit: 3,
+      alternateOfferExpiryHours: 48,
+      confirmationCopy: businessRecord.bookingRequestConfirmationCopy ?? null,
+      ownerResponsePageCopy: businessRecord.bookingRequestOwnerResponsePageCopy ?? null,
+      alternateAcceptanceCopy: businessRecord.bookingRequestAlternateAcceptanceCopy ?? null,
+      chooseAnotherDayCopy: businessRecord.bookingRequestChooseAnotherDayCopy ?? null,
+    },
+    requireEmail: businessRecord.bookingRequireEmail,
+    requirePhone: businessRecord.bookingRequirePhone,
+    requireVehicle: businessRecord.bookingRequireVehicle,
+    allowCustomerNotes: businessRecord.bookingAllowCustomerNotes,
+    showPrices: businessRecord.bookingShowPrices,
+    showDurations: businessRecord.bookingShowDurations,
+    urgencyEnabled: Boolean(businessRecord.bookingUrgencyText),
+    availabilityDefaults: {
+      dayIndexes: businessRecord.bookingAvailableDays,
+      openTime: businessRecord.bookingAvailableStartTime,
+      closeTime: businessRecord.bookingAvailableEndTime,
+    },
+    locations: [],
+    services: services.map((service) => ({
+      id: service.id,
+      name: service.name,
+      categoryId: service.categoryId,
+      categoryLabel: service.categoryLabel,
+      description: service.bookingDescription,
+      price: service.price,
+      durationMinutes: service.durationMinutes,
+      effectiveFlow:
+        service.bookingFlowType === "self_book"
+          ? "self_book"
+          : service.bookingFlowType === "request"
+            ? "request"
+            : businessRecord.bookingDefaultFlow,
+      depositAmount: service.bookingDepositAmount,
+      leadTimeHours: service.bookingLeadTimeHours,
+      bookingWindowDays: service.bookingWindowDays,
+      bufferMinutes: service.bookingBufferMinutes ?? 0,
+      serviceMode: service.bookingServiceMode,
+      featured: service.bookingFeatured,
+      showPrice: service.bookingHidePrice !== true,
+      showDuration: service.bookingHideDuration !== true,
+      requestPolicy: {
+        requireExactTime: false,
+        allowTimeWindows: true,
+        allowFlexibility: true,
+        reviewMessage: null,
+        allowAlternateSlots: true,
+        alternateSlotLimit: 3,
+        alternateOfferExpiryHours: 48,
+      },
+      availableDayIndexes: service.bookingAvailableDays,
+      openTime: service.bookingAvailableStartTime,
+      closeTime: service.bookingAvailableEndTime,
+      addons: [],
+    })),
+  });
+
   await page.addInitScript(({ businessId }) => {
     window.localStorage.setItem("authToken", "qa-token");
     window.localStorage.setItem("currentBusinessId", businessId);
@@ -291,6 +376,14 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
     });
   });
 
+  await page.route(`**/api/businesses/${BUSINESS_ID}/public-booking-config**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: toJson(buildPublicBookingConfig()),
+    });
+  });
+
   return {
     getLastBusinessPatch() {
       return businessPatchBodies.at(-1) ?? null;
@@ -312,10 +405,17 @@ test("booking builder preview updates and saves business-level settings", async 
   await page.getByRole("option", { name: "Sky" }).click();
   await page.getByRole("combobox").nth(3).click();
   await page.getByRole("option", { name: "Outline" }).click();
-  await page.getByRole("tab", { name: /Content/i }).click();
+  await page.getByRole("tab", { name: /Experience/i }).click();
   await page.locator('input[value="Add timing, questions, or anything the shop should know."]').fill("Add timing or service details the shop should know.");
-  await page.getByRole("tab", { name: /Convert/i }).click();
   await page.getByPlaceholder("Only 3 spots left this week").fill("Only 2 opening spots this week");
+  await page.getByRole("tab", { name: /^Request$/i }).click();
+  await page.locator('label[for="request-flexibility"]').click();
+  await page
+    .getByText("Request confirmation copy")
+    .locator("..")
+    .locator("textarea")
+    .fill("We received your requested time and will confirm it or send alternate options.");
+  await page.getByRole("button", { name: "Request review" }).click();
 
   await expect(page.getByText("Book your gloss reset")).toBeVisible();
   await expect(page.getByTitle("Booking builder preview")).toBeVisible();
@@ -331,6 +431,9 @@ test("booking builder preview updates and saves business-level settings", async 
     bookingUrgencyText: "Only 2 opening spots this week",
     bookingBrandPrimaryColorToken: "sky",
     bookingBrandButtonStyleToken: "outline",
+    bookingRequestAllowFlexibility: false,
+    bookingRequestConfirmationCopy:
+      "We received your requested time and will confirm it or send alternate options.",
     bookingRequestUrl: expect.stringContaining(`/book/${BUSINESS_ID}`),
   });
 });

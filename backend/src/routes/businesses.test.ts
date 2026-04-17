@@ -184,4 +184,181 @@ describe("business route serialization", () => {
       ])
     ).toBe(false);
   });
+
+  it("serializes owner booking requests with requested timing and secure response links", async () => {
+    const { serializeOwnerBookingRequest } = await import("./businesses.js");
+    const request = {
+      id: "req_123",
+      businessId: "biz_123",
+      draftId: "draft_123",
+      clientId: "client_123",
+      vehicleId: "vehicle_123",
+      serviceId: "service_123",
+      locationId: "location_123",
+      appointmentId: null,
+      status: "submitted_request",
+      ownerReviewStatus: "pending",
+      customerResponseStatus: "pending",
+      serviceMode: "mobile",
+      addonServiceIds: "[\"addon_1\"]",
+      serviceSummary: "Gold detail",
+      requestedDate: "2026-04-16",
+      requestedTimeStart: new Date("2026-04-16T16:00:00.000Z"),
+      requestedTimeEnd: new Date("2026-04-16T18:00:00.000Z"),
+      requestedTimeLabel: null,
+      customerTimezone: "America/Los_Angeles",
+      flexibility: "exact_time_only",
+      ownerResponseMessage: null,
+      customerResponseMessage: null,
+      alternateSlotOptions:
+        '[{"id":"alt_1","startTime":"2026-04-17T17:00:00.000Z","endTime":"2026-04-17T19:00:00.000Z","label":"Friday at 10:00 AM","status":"proposed","expiresAt":"2026-04-18T00:00:00.000Z"}]',
+      clientFirstName: "Avery",
+      clientLastName: "Lane",
+      clientEmail: "avery@example.com",
+      clientPhone: "555-111-2222",
+      vehicleYear: 2023,
+      vehicleMake: "Tesla",
+      vehicleModel: "Model 3",
+      vehicleColor: "Black",
+      serviceAddress: "123 Main St",
+      serviceCity: "Costa Mesa",
+      serviceState: "CA",
+      serviceZip: "92627",
+      notes: "Need pickup after work.",
+      marketingOptIn: true,
+      source: "booking_page",
+      campaign: "spring-detail",
+      publicTokenVersion: 3,
+      submittedAt: new Date("2026-04-15T20:00:00.000Z"),
+      underReviewAt: null,
+      ownerRespondedAt: null,
+      approvedRequestedSlotAt: null,
+      customerRespondedAt: null,
+      confirmedAt: null,
+      declinedAt: null,
+      expiredAt: null,
+      expiresAt: new Date("2026-04-18T00:00:00.000Z"),
+      createdAt: new Date("2026-04-15T20:00:00.000Z"),
+      updatedAt: new Date("2026-04-15T20:00:00.000Z"),
+    } as Parameters<typeof serializeOwnerBookingRequest>[0];
+
+    const serialized = await serializeOwnerBookingRequest(request, {
+      id: "biz_123",
+      name: "Coastline Detail Co.",
+      timezone: "America/Los_Angeles",
+      bookingRequestRequireExactTime: false,
+      bookingRequestAllowTimeWindows: true,
+      bookingRequestAllowFlexibility: true,
+      bookingRequestAllowAlternateSlots: true,
+      bookingRequestAlternateSlotLimit: 3,
+      bookingRequestAlternateOfferExpiryHours: 48,
+    }, {
+      requestPolicy: {
+        requireExactTime: true,
+        allowTimeWindows: false,
+        allowFlexibility: false,
+        reviewMessage: "We review every tint request first.",
+        allowAlternateSlots: false,
+        alternateSlotLimit: 1,
+        alternateOfferExpiryHours: 24,
+      },
+    });
+
+    expect(serialized.requestedTimingSummary).toContain("Apr");
+    expect(serialized.customer).toMatchObject({
+      firstName: "Avery",
+      lastName: "Lane",
+      email: "avery@example.com",
+    });
+    expect(serialized.alternateSlotOptions).toHaveLength(1);
+    expect(serialized.requestPolicy).toMatchObject({
+      requireExactTime: true,
+      allowAlternateSlots: false,
+      alternateSlotLimit: 1,
+    });
+    expect(serialized.publicResponseUrl).toContain("/booking-request/biz_123/req_123");
+    expect(serialized.publicResponseUrl).toContain("token=");
+  });
+
+  it("serializes public booking requests without leaking customer contact details", async () => {
+    const { serializePublicBookingRequest } = await import("./businesses.js");
+    const request = {
+      id: "req_456",
+      businessId: "biz_456",
+      draftId: null,
+      clientId: "client_456",
+      vehicleId: "vehicle_456",
+      serviceId: "service_456",
+      locationId: null,
+      appointmentId: null,
+      status: "awaiting_customer_selection",
+      ownerReviewStatus: "proposed_alternates",
+      customerResponseStatus: "pending",
+      serviceMode: "in_shop",
+      addonServiceIds: "[]",
+      serviceSummary: "Ceramic refresh",
+      requestedDate: "2026-04-16",
+      requestedTimeStart: null,
+      requestedTimeEnd: null,
+      requestedTimeLabel: "After 3 PM",
+      customerTimezone: "America/Los_Angeles",
+      flexibility: "any_nearby_slot",
+      ownerResponseMessage: "We can do later this week.",
+      customerResponseMessage: null,
+      alternateSlotOptions:
+        '[{"id":"alt_live","startTime":"2026-04-17T22:00:00.000Z","endTime":"2026-04-17T23:30:00.000Z","label":"Friday at 3:00 PM","status":"proposed","expiresAt":"2026-04-18T00:00:00.000Z"},{"id":"alt_old","startTime":"2026-04-19T18:00:00.000Z","endTime":"2026-04-19T19:30:00.000Z","label":"Sunday at 11:00 AM","status":"accepted","expiresAt":"2026-04-18T00:00:00.000Z"}]',
+      clientFirstName: "Jordan",
+      clientLastName: "Reed",
+      clientEmail: "jordan@example.com",
+      clientPhone: "555-333-4444",
+      vehicleYear: 2021,
+      vehicleMake: "Ford",
+      vehicleModel: "Bronco",
+      vehicleColor: "Blue",
+      serviceAddress: null,
+      serviceCity: null,
+      serviceState: null,
+      serviceZip: null,
+      notes: "Prefers afternoon.",
+      marketingOptIn: false,
+      source: "booking_page",
+      campaign: null,
+      publicTokenVersion: 1,
+      submittedAt: new Date("2026-04-15T20:00:00.000Z"),
+      underReviewAt: new Date("2026-04-15T21:00:00.000Z"),
+      ownerRespondedAt: new Date("2026-04-15T21:15:00.000Z"),
+      approvedRequestedSlotAt: null,
+      customerRespondedAt: null,
+      confirmedAt: null,
+      declinedAt: null,
+      expiredAt: null,
+      expiresAt: new Date("2026-04-18T00:00:00.000Z"),
+      createdAt: new Date("2026-04-15T20:00:00.000Z"),
+      updatedAt: new Date("2026-04-15T21:15:00.000Z"),
+    } as Parameters<typeof serializePublicBookingRequest>[0];
+
+    const serialized = serializePublicBookingRequest(request, {
+      id: "biz_456",
+      name: "Northline Auto Spa",
+      timezone: "America/Los_Angeles",
+    });
+
+    expect(serialized.requestedTimeLabel).toBe("After 3 PM");
+    expect(serialized.canRespond).toBe(true);
+    expect(serialized.alternateSlotOptions).toEqual([
+      expect.objectContaining({
+        id: "alt_live",
+        label: "Friday at 3:00 PM",
+      }),
+    ]);
+    expect(serialized.vehicle).toMatchObject({
+      year: 2021,
+      make: "Ford",
+      model: "Bronco",
+      summary: "2021 Ford Bronco",
+    });
+    expect(serialized).not.toHaveProperty("customer");
+    expect(serialized).not.toHaveProperty("clientEmail");
+    expect(serialized.ownerResponseMessage).toBe("We can do later this week.");
+  });
 });

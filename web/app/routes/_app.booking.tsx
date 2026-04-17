@@ -4,7 +4,7 @@ import { Copy, ExternalLink, LoaderCircle, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "../../api";
-import { useAction, useFindOne } from "../../hooks/useApi";
+import { useAction, useFindMany, useFindOne } from "../../hooks/useApi";
 import type { AuthOutletContext } from "../../routes/_app";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -28,8 +28,15 @@ import {
   type BookingBrandPrimaryColorToken,
   type BookingBrandingTokens,
 } from "@/lib/bookingBranding";
+import {
+  DEFAULT_BOOKING_REQUEST_ALTERNATE_OFFER_EXPIRY_HOURS,
+  DEFAULT_BOOKING_REQUEST_ALTERNATE_SLOT_LIMIT,
+  resolveEffectiveBookingRequestSettings,
+  type BookingRequestSettings,
+} from "@/lib/bookingRequestSettings";
 
-type BuilderTab = "branding" | "content" | "fields" | "convert";
+type BuilderTab = "branding" | "experience" | "request" | "fields";
+type PreviewMode = "live" | "request_timing" | "request_review";
 
 type BusinessBookingBuilderRecord = {
   id: string;
@@ -46,6 +53,16 @@ type BusinessBookingBuilderRecord = {
   bookingTrustBulletSecondary?: string | null;
   bookingTrustBulletTertiary?: string | null;
   bookingConfirmationMessage?: string | null;
+  bookingRequestRequireExactTime?: boolean | null;
+  bookingRequestAllowTimeWindows?: boolean | null;
+  bookingRequestAllowFlexibility?: boolean | null;
+  bookingRequestAllowAlternateSlots?: boolean | null;
+  bookingRequestAlternateSlotLimit?: number | null;
+  bookingRequestAlternateOfferExpiryHours?: number | null;
+  bookingRequestConfirmationCopy?: string | null;
+  bookingRequestOwnerResponsePageCopy?: string | null;
+  bookingRequestAlternateAcceptanceCopy?: string | null;
+  bookingRequestChooseAnotherDayCopy?: string | null;
   bookingNotesPrompt?: string | null;
   bookingRequireEmail?: boolean | null;
   bookingRequirePhone?: boolean | null;
@@ -75,6 +92,16 @@ type BookingBuilderFormState = {
   bookingTrustBulletTertiary: string;
   bookingDefaultFlow: "request" | "self_book";
   bookingConfirmationMessage: string;
+  bookingRequestRequireExactTime: boolean;
+  bookingRequestAllowTimeWindows: boolean;
+  bookingRequestAllowFlexibility: boolean;
+  bookingRequestAllowAlternateSlots: boolean;
+  bookingRequestAlternateSlotLimit: string;
+  bookingRequestAlternateOfferExpiryHours: string;
+  bookingRequestConfirmationCopy: string;
+  bookingRequestOwnerResponsePageCopy: string;
+  bookingRequestAlternateAcceptanceCopy: string;
+  bookingRequestChooseAnotherDayCopy: string;
   bookingNotesPrompt: string;
   bookingRequireEmail: boolean;
   bookingRequirePhone: boolean;
@@ -104,6 +131,16 @@ const defaultForm: BookingBuilderFormState = {
   bookingTrustBulletTertiary: "Secure and simple",
   bookingDefaultFlow: "request",
   bookingConfirmationMessage: "",
+  bookingRequestRequireExactTime: false,
+  bookingRequestAllowTimeWindows: true,
+  bookingRequestAllowFlexibility: true,
+  bookingRequestAllowAlternateSlots: true,
+  bookingRequestAlternateSlotLimit: String(DEFAULT_BOOKING_REQUEST_ALTERNATE_SLOT_LIMIT),
+  bookingRequestAlternateOfferExpiryHours: String(DEFAULT_BOOKING_REQUEST_ALTERNATE_OFFER_EXPIRY_HOURS),
+  bookingRequestConfirmationCopy: "",
+  bookingRequestOwnerResponsePageCopy: "",
+  bookingRequestAlternateAcceptanceCopy: "",
+  bookingRequestChooseAnotherDayCopy: "",
   bookingNotesPrompt: "Add timing, questions, or anything the shop should know.",
   bookingRequireEmail: false,
   bookingRequirePhone: false,
@@ -117,6 +154,33 @@ const defaultForm: BookingBuilderFormState = {
   bookingSlotIntervalMinutes: 15,
   bookingBufferMinutes: "",
   bookingCapacityPerSlot: "",
+};
+
+type BookingBuilderServiceRecord = {
+  id: string;
+  name: string;
+  bookingEnabled?: boolean | null;
+  bookingFlowType?: "inherit" | "request" | "self_book" | null;
+  bookingLeadTimeHours?: number | null;
+  bookingRequestRequireExactTime?: boolean | null;
+  bookingRequestAllowTimeWindows?: boolean | null;
+  bookingRequestAllowFlexibility?: boolean | null;
+  bookingRequestReviewMessage?: string | null;
+  bookingRequestAllowAlternateSlots?: boolean | null;
+  bookingRequestAlternateSlotLimit?: number | null;
+  bookingRequestAlternateOfferExpiryHours?: number | null;
+};
+
+type BookingBuilderServiceFormState = {
+  bookingFlowType: "inherit" | "request" | "self_book";
+  bookingLeadTimeHours: string;
+  bookingRequestRequireExactTime: "inherit" | "true" | "false";
+  bookingRequestAllowTimeWindows: "inherit" | "true" | "false";
+  bookingRequestAllowFlexibility: "inherit" | "true" | "false";
+  bookingRequestReviewMessage: string;
+  bookingRequestAllowAlternateSlots: "inherit" | "true" | "false";
+  bookingRequestAlternateSlotLimit: string;
+  bookingRequestAlternateOfferExpiryHours: string;
 };
 
 function toForm(record?: BusinessBookingBuilderRecord | null): BookingBuilderFormState {
@@ -136,6 +200,20 @@ function toForm(record?: BusinessBookingBuilderRecord | null): BookingBuilderFor
     bookingTrustBulletTertiary: record?.bookingTrustBulletTertiary ?? "Secure and simple",
     bookingDefaultFlow: flow,
     bookingConfirmationMessage: record?.bookingConfirmationMessage ?? "",
+    bookingRequestRequireExactTime: record?.bookingRequestRequireExactTime === true,
+    bookingRequestAllowTimeWindows: record?.bookingRequestAllowTimeWindows !== false,
+    bookingRequestAllowFlexibility: record?.bookingRequestAllowFlexibility !== false,
+    bookingRequestAllowAlternateSlots: record?.bookingRequestAllowAlternateSlots !== false,
+    bookingRequestAlternateSlotLimit: String(
+      record?.bookingRequestAlternateSlotLimit ?? DEFAULT_BOOKING_REQUEST_ALTERNATE_SLOT_LIMIT
+    ),
+    bookingRequestAlternateOfferExpiryHours: String(
+      record?.bookingRequestAlternateOfferExpiryHours ?? DEFAULT_BOOKING_REQUEST_ALTERNATE_OFFER_EXPIRY_HOURS
+    ),
+    bookingRequestConfirmationCopy: record?.bookingRequestConfirmationCopy ?? "",
+    bookingRequestOwnerResponsePageCopy: record?.bookingRequestOwnerResponsePageCopy ?? "",
+    bookingRequestAlternateAcceptanceCopy: record?.bookingRequestAlternateAcceptanceCopy ?? "",
+    bookingRequestChooseAnotherDayCopy: record?.bookingRequestChooseAnotherDayCopy ?? "",
     bookingNotesPrompt: record?.bookingNotesPrompt ?? defaultForm.bookingNotesPrompt,
     bookingRequireEmail: record?.bookingRequireEmail === true,
     bookingRequirePhone: record?.bookingRequirePhone === true,
@@ -170,6 +248,38 @@ function toBrandingTokens(form: BookingBuilderFormState): BookingBrandingTokens 
     accentColorToken: form.bookingBrandAccentColorToken,
     backgroundToneToken: form.bookingBrandBackgroundToneToken,
     buttonStyleToken: form.bookingBrandButtonStyleToken,
+  };
+}
+
+function booleanOverrideToken(value: boolean | null | undefined): "inherit" | "true" | "false" {
+  if (value == null) return "inherit";
+  return value ? "true" : "false";
+}
+
+function booleanOverrideValue(value: "inherit" | "true" | "false"): boolean | null {
+  if (value === "inherit") return null;
+  return value === "true";
+}
+
+function formsMatch<T>(left: T, right: T) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function buildServiceFormState(service?: BookingBuilderServiceRecord | null): BookingBuilderServiceFormState {
+  return {
+    bookingFlowType: service?.bookingFlowType ?? "inherit",
+    bookingLeadTimeHours: String(service?.bookingLeadTimeHours ?? 0),
+    bookingRequestRequireExactTime: booleanOverrideToken(service?.bookingRequestRequireExactTime ?? null),
+    bookingRequestAllowTimeWindows: booleanOverrideToken(service?.bookingRequestAllowTimeWindows ?? null),
+    bookingRequestAllowFlexibility: booleanOverrideToken(service?.bookingRequestAllowFlexibility ?? null),
+    bookingRequestReviewMessage: service?.bookingRequestReviewMessage ?? "",
+    bookingRequestAllowAlternateSlots: booleanOverrideToken(service?.bookingRequestAllowAlternateSlots ?? null),
+    bookingRequestAlternateSlotLimit:
+      service?.bookingRequestAlternateSlotLimit != null ? String(service.bookingRequestAlternateSlotLimit) : "",
+    bookingRequestAlternateOfferExpiryHours:
+      service?.bookingRequestAlternateOfferExpiryHours != null
+        ? String(service.bookingRequestAlternateOfferExpiryHours)
+        : "",
   };
 }
 
@@ -322,37 +432,128 @@ export default function BookingBuilderPage() {
   const { businessId, permissions } = useOutletContext<AuthOutletContext>();
   const canRead = permissions.has("settings.read");
   const canEdit = permissions.has("settings.write");
+  const canReadServices = permissions.has("services.read");
+  const canEditServices = permissions.has("services.write");
   const [activeTab, setActiveTab] = useState<BuilderTab>("branding");
   const [form, setForm] = useState<BookingBuilderFormState>(defaultForm);
   const [savedForm, setSavedForm] = useState<BookingBuilderFormState>(defaultForm);
   const [previewNonce, setPreviewNonce] = useState(0);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("live");
   const [logoUploading, setLogoUploading] = useState(false);
+  const [selectedServiceId, setSelectedServiceId] = useState<string>("");
+  const [serviceForm, setServiceForm] = useState<BookingBuilderServiceFormState>(
+    buildServiceFormState(null)
+  );
   const logoInputRef = useRef<HTMLInputElement | null>(null);
 
   const [{ data: business, fetching, error }, refetchBusiness] = useFindOne(api.business, businessId ?? "", {
     pause: !businessId || !canRead,
   });
   const [{ fetching: saving }, runUpdateBusiness] = useAction(api.business.update);
+  const [{ data: servicesData, fetching: servicesFetching }, refetchServices] = useFindMany(api.service, {
+    pause: !businessId || !canReadServices,
+    first: 200,
+  });
+  const [{ fetching: savingService }, runUpdateService] = useAction(api.service.update);
 
   const businessRecord = (business as BusinessBookingBuilderRecord | undefined) ?? null;
+  const services = useMemo(
+    () =>
+      ((servicesData as BookingBuilderServiceRecord[] | undefined) ?? []).filter(
+        (service) => service.bookingEnabled === true
+      ),
+    [servicesData]
+  );
+  const selectedService = useMemo(
+    () => services.find((service) => service.id === selectedServiceId) ?? null,
+    [selectedServiceId, services]
+  );
 
   useEffect(() => {
     if (!businessRecord) return;
     const next = toForm(businessRecord);
-    setForm(next);
-    setSavedForm(next);
+    setForm((current) => (formsMatch(current, next) ? current : next));
+    setSavedForm((current) => (formsMatch(current, next) ? current : next));
   }, [businessRecord]);
+
+  useEffect(() => {
+    if (!services.length) {
+      setSelectedServiceId((current) => (current === "" ? current : ""));
+      const next = buildServiceFormState(null);
+      setServiceForm((current) => (formsMatch(current, next) ? current : next));
+      return;
+    }
+    setSelectedServiceId((current) =>
+      services.some((service) => service.id === current) ? current : services[0]?.id ?? ""
+    );
+  }, [services]);
+
+  useEffect(() => {
+    const next = buildServiceFormState(selectedService);
+    setServiceForm((current) => (formsMatch(current, next) ? current : next));
+  }, [selectedService]);
 
   const bookingUrl = useMemo(() => {
     if (!businessId || typeof window === "undefined") return "";
     return `${window.location.origin}/book/${businessId}`;
   }, [businessId]);
+  const previewQuery = useMemo(() => {
+    const params = new URLSearchParams({
+      previewRefresh: String(previewNonce),
+    });
+    if (previewMode !== "live") {
+      params.set("builderPreview", "1");
+      params.set("builderPreviewFlow", "request");
+      if (previewMode === "request_timing") params.set("builderPreviewStep", "schedule");
+      if (previewMode === "request_review") params.set("builderPreviewStep", "review");
+    }
+    return params.toString();
+  }, [previewMode, previewNonce]);
   const previewUrl = useMemo(
-    () => (bookingUrl ? `${bookingUrl}?builderPreview=${previewNonce}` : "about:blank"),
-    [bookingUrl, previewNonce]
+    () => (bookingUrl ? `${bookingUrl}?${previewQuery}` : "about:blank"),
+    [bookingUrl, previewQuery]
   );
   const dirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(savedForm), [form, savedForm]);
   const bookingTheme = useMemo(() => resolveBookingBrandTheme(toBrandingTokens(form)), [form]);
+  const businessRequestSettings = useMemo<BookingRequestSettings>(
+    () => ({
+      requireExactTime: form.bookingRequestRequireExactTime,
+      allowTimeWindows: form.bookingRequestAllowTimeWindows,
+      allowFlexibility: form.bookingRequestAllowFlexibility,
+      allowAlternateSlots: form.bookingRequestAllowAlternateSlots,
+      alternateSlotLimit: Number(form.bookingRequestAlternateSlotLimit) || DEFAULT_BOOKING_REQUEST_ALTERNATE_SLOT_LIMIT,
+      alternateOfferExpiryHours:
+        Number(form.bookingRequestAlternateOfferExpiryHours) || DEFAULT_BOOKING_REQUEST_ALTERNATE_OFFER_EXPIRY_HOURS,
+      confirmationCopy: form.bookingRequestConfirmationCopy.trim() || null,
+      ownerResponsePageCopy: form.bookingRequestOwnerResponsePageCopy.trim() || null,
+      alternateAcceptanceCopy: form.bookingRequestAlternateAcceptanceCopy.trim() || null,
+      chooseAnotherDayCopy: form.bookingRequestChooseAnotherDayCopy.trim() || null,
+    }),
+    [form]
+  );
+  const effectiveSelectedServiceRequestSettings = useMemo(
+    () =>
+      resolveEffectiveBookingRequestSettings({
+        business: businessRequestSettings,
+        service:
+          selectedService != null
+            ? {
+                requireExactTime: selectedService.bookingRequestRequireExactTime ?? null,
+                allowTimeWindows: selectedService.bookingRequestAllowTimeWindows ?? null,
+                allowFlexibility: selectedService.bookingRequestAllowFlexibility ?? null,
+                reviewMessage: selectedService.bookingRequestReviewMessage ?? null,
+                allowAlternateSlots: selectedService.bookingRequestAllowAlternateSlots ?? null,
+                alternateSlotLimit: selectedService.bookingRequestAlternateSlotLimit ?? null,
+                alternateOfferExpiryHours: selectedService.bookingRequestAlternateOfferExpiryHours ?? null,
+              }
+            : null,
+      }),
+    [businessRequestSettings, selectedService]
+  );
+  const serviceDirty = useMemo(() => {
+    if (!selectedService) return false;
+    return JSON.stringify(serviceForm) !== JSON.stringify(buildServiceFormState(selectedService));
+  }, [selectedService, serviceForm]);
 
   const updateField = <K extends keyof BookingBuilderFormState>(key: K, value: BookingBuilderFormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -375,6 +576,18 @@ export default function BookingBuilderPage() {
       bookingTrustBulletTertiary: form.bookingTrustBulletTertiary.trim() || null,
       bookingDefaultFlow: form.bookingDefaultFlow,
       bookingConfirmationMessage: form.bookingConfirmationMessage.trim() || null,
+      bookingRequestRequireExactTime: form.bookingRequestRequireExactTime,
+      bookingRequestAllowTimeWindows: form.bookingRequestAllowTimeWindows,
+      bookingRequestAllowFlexibility: form.bookingRequestAllowFlexibility,
+      bookingRequestAllowAlternateSlots: form.bookingRequestAllowAlternateSlots,
+      bookingRequestAlternateSlotLimit:
+        Number(form.bookingRequestAlternateSlotLimit) || DEFAULT_BOOKING_REQUEST_ALTERNATE_SLOT_LIMIT,
+      bookingRequestAlternateOfferExpiryHours:
+        Number(form.bookingRequestAlternateOfferExpiryHours) || DEFAULT_BOOKING_REQUEST_ALTERNATE_OFFER_EXPIRY_HOURS,
+      bookingRequestConfirmationCopy: form.bookingRequestConfirmationCopy.trim() || null,
+      bookingRequestOwnerResponsePageCopy: form.bookingRequestOwnerResponsePageCopy.trim() || null,
+      bookingRequestAlternateAcceptanceCopy: form.bookingRequestAlternateAcceptanceCopy.trim() || null,
+      bookingRequestChooseAnotherDayCopy: form.bookingRequestChooseAnotherDayCopy.trim() || null,
       bookingNotesPrompt: form.bookingNotesPrompt.trim() || null,
       bookingRequireEmail: form.bookingRequireEmail,
       bookingRequirePhone: form.bookingRequirePhone,
@@ -423,6 +636,33 @@ export default function BookingBuilderPage() {
     setPreviewNonce((current) => current + 1);
     toast.success("Booking builder updated.");
     void refetchBusiness();
+  };
+
+  const saveServicePolicy = async () => {
+    if (!selectedService || !canEditServices) return;
+    const result = await runUpdateService({
+      id: selectedService.id,
+      bookingFlowType: serviceForm.bookingFlowType,
+      bookingLeadTimeHours: Number(serviceForm.bookingLeadTimeHours || "0"),
+      bookingRequestRequireExactTime: booleanOverrideValue(serviceForm.bookingRequestRequireExactTime),
+      bookingRequestAllowTimeWindows: booleanOverrideValue(serviceForm.bookingRequestAllowTimeWindows),
+      bookingRequestAllowFlexibility: booleanOverrideValue(serviceForm.bookingRequestAllowFlexibility),
+      bookingRequestReviewMessage: serviceForm.bookingRequestReviewMessage.trim() || null,
+      bookingRequestAllowAlternateSlots: booleanOverrideValue(serviceForm.bookingRequestAllowAlternateSlots),
+      bookingRequestAlternateSlotLimit: serviceForm.bookingRequestAlternateSlotLimit.trim()
+        ? Number(serviceForm.bookingRequestAlternateSlotLimit)
+        : null,
+      bookingRequestAlternateOfferExpiryHours: serviceForm.bookingRequestAlternateOfferExpiryHours.trim()
+        ? Number(serviceForm.bookingRequestAlternateOfferExpiryHours)
+        : null,
+    });
+    if (result.error) {
+      toast.error(result.error.message);
+      return;
+    }
+    toast.success("Service request policy updated.");
+    void refetchServices();
+    setPreviewNonce((current) => current + 1);
   };
 
   const copyBookingUrl = async () => {
@@ -505,9 +745,9 @@ export default function BookingBuilderPage() {
             <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as BuilderTab)} className="gap-4">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="branding">Branding</TabsTrigger>
-                <TabsTrigger value="content">Content</TabsTrigger>
+                <TabsTrigger value="experience">Experience</TabsTrigger>
+                <TabsTrigger value="request">Request</TabsTrigger>
                 <TabsTrigger value="fields">Fields</TabsTrigger>
-                <TabsTrigger value="convert">Convert</TabsTrigger>
               </TabsList>
 
               <TabsContent value="branding" className="space-y-3">
@@ -571,10 +811,15 @@ export default function BookingBuilderPage() {
                 <Field label="Meta line 3"><Input value={form.bookingTrustBulletTertiary} onChange={(e) => updateField("bookingTrustBulletTertiary", e.target.value)} placeholder="Verified" disabled={!canEdit} /></Field>
               </TabsContent>
 
-              <TabsContent value="content" className="space-y-3">
+              <TabsContent value="experience" className="space-y-3">
                 <Field label="Booking flow"><Select value={form.bookingDefaultFlow} onValueChange={(next) => updateField("bookingDefaultFlow", next as "request" | "self_book")} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="request">Request</SelectItem><SelectItem value="self_book">Self book</SelectItem></SelectContent></Select></Field>
                 <Field label="Confirmation message"><Textarea value={form.bookingConfirmationMessage} onChange={(e) => updateField("bookingConfirmationMessage", e.target.value)} rows={4} disabled={!canEdit} /></Field>
                 <Field label="Notes prompt"><Input value={form.bookingNotesPrompt} onChange={(e) => updateField("bookingNotesPrompt", e.target.value)} disabled={!canEdit} /></Field>
+                <ToggleRow id="urgency-enabled" label="Urgency cues" description="Enable urgency messaging on the public booking page." checked={form.bookingUrgencyEnabled} onCheckedChange={(next) => updateField("bookingUrgencyEnabled", next)} disabled={!canEdit} />
+                <Field label="Urgency message"><Input value={form.bookingUrgencyText} onChange={(e) => updateField("bookingUrgencyText", e.target.value)} placeholder="Only 3 spots left this week" disabled={!canEdit} /></Field>
+                <Field label="Slot interval"><Select value={String(form.bookingSlotIntervalMinutes)} onValueChange={(next) => updateField("bookingSlotIntervalMinutes", Number(next) as 15 | 30 | 45 | 60)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="15">15 minutes</SelectItem><SelectItem value="30">30 minutes</SelectItem><SelectItem value="45">45 minutes</SelectItem><SelectItem value="60">60 minutes</SelectItem></SelectContent></Select></Field>
+                <Field label="Buffer minutes"><Input inputMode="numeric" value={form.bookingBufferMinutes} onChange={(e) => updateField("bookingBufferMinutes", e.target.value)} placeholder="15" disabled={!canEdit} /></Field>
+                <Field label="Capacity per slot"><Input inputMode="numeric" value={form.bookingCapacityPerSlot} onChange={(e) => updateField("bookingCapacityPerSlot", e.target.value)} placeholder="1" disabled={!canEdit} /></Field>
                 <Field label="Booking URL">
                   <div className="flex gap-2">
                     <Input value={bookingUrl} readOnly />
@@ -593,12 +838,318 @@ export default function BookingBuilderPage() {
                 <ToggleRow id="confirmation-email" label="Send confirmation email" description="Use the existing confirmation email after self-booking." checked={form.notificationAppointmentConfirmationEmailEnabled} onCheckedChange={(next) => updateField("notificationAppointmentConfirmationEmailEnabled", next)} disabled={!canEdit} />
               </TabsContent>
 
-              <TabsContent value="convert" className="space-y-3">
-                <ToggleRow id="urgency-enabled" label="Urgency cues" description="Enable urgency messaging on the public booking page." checked={form.bookingUrgencyEnabled} onCheckedChange={(next) => updateField("bookingUrgencyEnabled", next)} disabled={!canEdit} />
-                <Field label="Urgency message"><Input value={form.bookingUrgencyText} onChange={(e) => updateField("bookingUrgencyText", e.target.value)} placeholder="Only 3 spots left this week" disabled={!canEdit} /></Field>
-                <Field label="Slot interval"><Select value={String(form.bookingSlotIntervalMinutes)} onValueChange={(next) => updateField("bookingSlotIntervalMinutes", Number(next) as 15 | 30 | 45 | 60)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="15">15 minutes</SelectItem><SelectItem value="30">30 minutes</SelectItem><SelectItem value="45">45 minutes</SelectItem><SelectItem value="60">60 minutes</SelectItem></SelectContent></Select></Field>
-                <Field label="Buffer minutes"><Input inputMode="numeric" value={form.bookingBufferMinutes} onChange={(e) => updateField("bookingBufferMinutes", e.target.value)} placeholder="15" disabled={!canEdit} /></Field>
-                <Field label="Capacity per slot"><Input inputMode="numeric" value={form.bookingCapacityPerSlot} onChange={(e) => updateField("bookingCapacityPerSlot", e.target.value)} placeholder="1" disabled={!canEdit} /></Field>
+              <TabsContent value="request" className="space-y-4">
+                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/85 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Default request flow</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    In request mode, the customer always chooses a real preferred date. Use these controls to shape how precise the time request should be and how follow-up should feel.
+                  </p>
+                </div>
+
+                <ToggleRow
+                  id="request-exact-time"
+                  label="Require exact time by default"
+                  description="Turn off time windows and ask for one preferred time unless a service overrides it."
+                  checked={form.bookingRequestRequireExactTime}
+                  onCheckedChange={(next) => updateField("bookingRequestRequireExactTime", next)}
+                  disabled={!canEdit}
+                />
+                <ToggleRow
+                  id="request-time-windows"
+                  label="Allow time windows"
+                  description="Let customers choose a window like Morning or After 3 PM when exact time is not required."
+                  checked={form.bookingRequestAllowTimeWindows}
+                  onCheckedChange={(next) => updateField("bookingRequestAllowTimeWindows", next)}
+                  disabled={!canEdit || form.bookingRequestRequireExactTime}
+                />
+                <ToggleRow
+                  id="request-flexibility"
+                  label="Allow flexibility choice"
+                  description="Let customers say whether only this time works or nearby slots are okay."
+                  checked={form.bookingRequestAllowFlexibility}
+                  onCheckedChange={(next) => updateField("bookingRequestAllowFlexibility", next)}
+                  disabled={!canEdit}
+                />
+                <ToggleRow
+                  id="request-alternates"
+                  label="Allow alternate slot offers"
+                  description="Let the team respond with alternate time options instead of only approving or asking for a new day."
+                  checked={form.bookingRequestAllowAlternateSlots}
+                  onCheckedChange={(next) => updateField("bookingRequestAllowAlternateSlots", next)}
+                  disabled={!canEdit}
+                />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Max alternate slots">
+                    <Input
+                      inputMode="numeric"
+                      value={form.bookingRequestAlternateSlotLimit}
+                      onChange={(e) => updateField("bookingRequestAlternateSlotLimit", e.target.value)}
+                      placeholder="3"
+                      disabled={!canEdit || !form.bookingRequestAllowAlternateSlots}
+                    />
+                  </Field>
+                  <Field label="Alternate offer expiry (hours)">
+                    <Input
+                      inputMode="numeric"
+                      value={form.bookingRequestAlternateOfferExpiryHours}
+                      onChange={(e) => updateField("bookingRequestAlternateOfferExpiryHours", e.target.value)}
+                      placeholder="48"
+                      disabled={!canEdit || !form.bookingRequestAllowAlternateSlots}
+                    />
+                  </Field>
+                </div>
+                <Field label="Request confirmation copy">
+                  <Textarea
+                    value={form.bookingRequestConfirmationCopy}
+                    onChange={(e) => updateField("bookingRequestConfirmationCopy", e.target.value)}
+                    rows={3}
+                    placeholder="Your request is with the shop. They’ll review the requested time and may approve it or send alternate options."
+                    disabled={!canEdit}
+                  />
+                </Field>
+                <Field label="Owner response page copy">
+                  <Textarea
+                    value={form.bookingRequestOwnerResponsePageCopy}
+                    onChange={(e) => updateField("bookingRequestOwnerResponsePageCopy", e.target.value)}
+                    rows={3}
+                    placeholder="The shop already has your service details. Review the response below and keep everything moving without starting over."
+                    disabled={!canEdit}
+                  />
+                </Field>
+                <Field label="Alternate acceptance copy">
+                  <Textarea
+                    value={form.bookingRequestAlternateAcceptanceCopy}
+                    onChange={(e) => updateField("bookingRequestAlternateAcceptanceCopy", e.target.value)}
+                    rows={3}
+                    placeholder="You’re booked. The shop locked in the alternate time and sent the final confirmation."
+                    disabled={!canEdit}
+                  />
+                </Field>
+                <Field label="Choose another day copy">
+                  <Textarea
+                    value={form.bookingRequestChooseAnotherDayCopy}
+                    onChange={(e) => updateField("bookingRequestChooseAnotherDayCopy", e.target.value)}
+                    rows={3}
+                    placeholder="Pick another day or preferred time below. Your service and vehicle stay attached to the request."
+                    disabled={!canEdit}
+                  />
+                </Field>
+
+                <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Service request policies</p>
+                    <p className="text-sm leading-6 text-slate-600">
+                      Keep request-specific service rules here so the public flow and review loop can change without code.
+                    </p>
+                  </div>
+                  {canReadServices ? (
+                    <>
+                      <Field label="Service">
+                        <Select value={selectedServiceId} onValueChange={setSelectedServiceId} disabled={servicesFetching || services.length === 0}>
+                          <SelectTrigger><SelectValue placeholder={services.length ? "Choose a service" : "No booking services yet"} /></SelectTrigger>
+                          <SelectContent>
+                            {services.map((service) => (
+                              <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      {selectedService ? (
+                        <div className="space-y-3">
+                          <div className="rounded-2xl border border-slate-200/80 bg-slate-50/85 p-3">
+                            <p className="text-sm font-semibold text-slate-950">{selectedService.name}</p>
+                            <p className="mt-1 text-xs leading-5 text-slate-500">
+                              Use existing service lead time for minimum notice, then shape how this service collects request timing and how alternates should behave.
+                            </p>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Field label="Booking mode">
+                              <Select
+                                value={serviceForm.bookingFlowType}
+                                onValueChange={(value) =>
+                                  setServiceForm((current) => ({ ...current, bookingFlowType: value as BookingBuilderServiceFormState["bookingFlowType"] }))
+                                }
+                                disabled={!canEditServices}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="inherit">Inherit business default</SelectItem>
+                                  <SelectItem value="request">Request review</SelectItem>
+                                  <SelectItem value="self_book">Direct book</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </Field>
+                            <Field label="Minimum notice (hours)">
+                              <Input
+                                inputMode="numeric"
+                                value={serviceForm.bookingLeadTimeHours}
+                                onChange={(e) => setServiceForm((current) => ({ ...current, bookingLeadTimeHours: e.target.value }))}
+                                placeholder="0"
+                                disabled={!canEditServices}
+                              />
+                            </Field>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Field label="Exact time">
+                              <Select
+                                value={serviceForm.bookingRequestRequireExactTime}
+                                onValueChange={(value) =>
+                                  setServiceForm((current) => ({ ...current, bookingRequestRequireExactTime: value as BookingBuilderServiceFormState["bookingRequestRequireExactTime"] }))
+                                }
+                                disabled={!canEditServices}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="inherit">Inherit</SelectItem>
+                                  <SelectItem value="true">Require exact time</SelectItem>
+                                  <SelectItem value="false">Do not require exact time</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </Field>
+                            <Field label="Time windows">
+                              <Select
+                                value={serviceForm.bookingRequestAllowTimeWindows}
+                                onValueChange={(value) =>
+                                  setServiceForm((current) => ({ ...current, bookingRequestAllowTimeWindows: value as BookingBuilderServiceFormState["bookingRequestAllowTimeWindows"] }))
+                                }
+                                disabled={!canEditServices}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="inherit">Inherit</SelectItem>
+                                  <SelectItem value="true">Allow windows</SelectItem>
+                                  <SelectItem value="false">Exact time only</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </Field>
+                            <Field label="Flexibility choice">
+                              <Select
+                                value={serviceForm.bookingRequestAllowFlexibility}
+                                onValueChange={(value) =>
+                                  setServiceForm((current) => ({ ...current, bookingRequestAllowFlexibility: value as BookingBuilderServiceFormState["bookingRequestAllowFlexibility"] }))
+                                }
+                                disabled={!canEditServices}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="inherit">Inherit</SelectItem>
+                                  <SelectItem value="true">Allow flexibility</SelectItem>
+                                  <SelectItem value="false">Hide flexibility</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </Field>
+                            <Field label="Alternate slots">
+                              <Select
+                                value={serviceForm.bookingRequestAllowAlternateSlots}
+                                onValueChange={(value) =>
+                                  setServiceForm((current) => ({ ...current, bookingRequestAllowAlternateSlots: value as BookingBuilderServiceFormState["bookingRequestAllowAlternateSlots"] }))
+                                }
+                                disabled={!canEditServices}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="inherit">Inherit</SelectItem>
+                                  <SelectItem value="true">Allow alternates</SelectItem>
+                                  <SelectItem value="false">No alternates</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </Field>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Field label="Max alternate slots">
+                              <Input
+                                inputMode="numeric"
+                                value={serviceForm.bookingRequestAlternateSlotLimit}
+                                onChange={(e) => setServiceForm((current) => ({ ...current, bookingRequestAlternateSlotLimit: e.target.value }))}
+                                placeholder="3"
+                                disabled={!canEditServices}
+                              />
+                            </Field>
+                            <Field label="Alternate expiry (hours)">
+                              <Input
+                                inputMode="numeric"
+                                value={serviceForm.bookingRequestAlternateOfferExpiryHours}
+                                onChange={(e) => setServiceForm((current) => ({ ...current, bookingRequestAlternateOfferExpiryHours: e.target.value }))}
+                                placeholder="48"
+                                disabled={!canEditServices}
+                              />
+                            </Field>
+                          </div>
+                          <Field label="Review message">
+                            <Textarea
+                              value={serviceForm.bookingRequestReviewMessage}
+                              onChange={(e) => setServiceForm((current) => ({ ...current, bookingRequestReviewMessage: e.target.value }))}
+                              rows={3}
+                              placeholder="We review this service request with timing, vehicle, and prep details before locking anything in."
+                              disabled={!canEditServices}
+                            />
+                          </Field>
+                          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-3 text-sm text-slate-600">
+                            <p className="font-medium text-slate-900">Effective experience for this service</p>
+                            <p className="mt-2 leading-6">
+                              {effectiveSelectedServiceRequestSettings.requireExactTime
+                                ? "Customers must choose an exact requested time."
+                                : effectiveSelectedServiceRequestSettings.allowTimeWindows
+                                  ? "Customers can choose an exact time or a time window."
+                                  : "Customers stay on an exact-time request flow."}
+                            </p>
+                            <p className="mt-1 leading-6">
+                              {effectiveSelectedServiceRequestSettings.allowFlexibility
+                                ? "Flexibility options stay visible."
+                                : "Flexibility stays hidden for this service."}
+                            </p>
+                            <p className="mt-1 leading-6">
+                              {effectiveSelectedServiceRequestSettings.allowAlternateSlots
+                                ? `The team can send up to ${effectiveSelectedServiceRequestSettings.alternateSlotLimit} alternate slot${effectiveSelectedServiceRequestSettings.alternateSlotLimit === 1 ? "" : "s"}${effectiveSelectedServiceRequestSettings.alternateOfferExpiryHours ? ` that expire after ${effectiveSelectedServiceRequestSettings.alternateOfferExpiryHours} hours.` : "."}`
+                                : "The team will approve the requested slot or ask for another day instead of sending alternates."}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={saveServicePolicy}
+                            disabled={!canEditServices || !serviceDirty || savingService}
+                            variant="outline"
+                          >
+                            {savingService ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Save service policy
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-600">
+                          {servicesFetching ? "Loading booking services..." : "Turn on at least one service for online booking to shape per-service request behavior here."}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-600">
+                      You can shape request copy here, but service-level request rules need service permissions too.
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/85 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Response copy preview</p>
+                  <div className="mt-3 grid gap-3">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <p className="text-sm font-semibold text-slate-950">Owner response page</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                        {form.bookingRequestOwnerResponsePageCopy.trim() || "The shop already has your details. Review the response below and keep the request moving without starting over."}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <p className="text-sm font-semibold text-slate-950">Alternate accepted</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                        {form.bookingRequestAlternateAcceptanceCopy.trim() || "You’re booked. The shop locked in the selected alternate time and sent the final confirmation."}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <p className="text-sm font-semibold text-slate-950">Choose another day</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                        {form.bookingRequestChooseAnotherDayCopy.trim() || "Pick another day or preferred time below. Your service and vehicle stay attached to the request."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </TabsContent>
             </Tabs>
           </CardContent>
@@ -609,11 +1160,40 @@ export default function BookingBuilderPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
                 <CardTitle className="text-base">Live preview</CardTitle>
-                <CardDescription>Points at the real public booking page and refreshes after save.</CardDescription>
+                <CardDescription>
+                  {previewMode === "live"
+                    ? "Points at the real public booking page and refreshes after save."
+                    : previewMode === "request_timing"
+                      ? "Preview the preferred date and time step for request-mode services."
+                      : "Preview the request review state with service, vehicle, and requested timing context."}
+                </CardDescription>
               </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
-                <span className={cn("h-2 w-2 rounded-full", form.bookingEnabled ? "bg-emerald-500" : "bg-slate-300")} />
-                {form.bookingEnabled ? "Live" : "Disabled"}
+              <div className="flex flex-col items-start gap-2 sm:items-end">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
+                  <span className={cn("h-2 w-2 rounded-full", form.bookingEnabled ? "bg-emerald-500" : "bg-slate-300")} />
+                  {form.bookingEnabled ? "Live" : "Disabled"}
+                </div>
+                <div className="inline-flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+                  {[
+                    { value: "live" as PreviewMode, label: "Live page" },
+                    { value: "request_timing" as PreviewMode, label: "Request timing" },
+                    { value: "request_review" as PreviewMode, label: "Request review" },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setPreviewMode(option.value)}
+                      className={cn(
+                        "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                        previewMode === option.value
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-600 hover:bg-slate-100"
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </CardHeader>

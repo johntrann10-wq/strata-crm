@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { endOfWeek, format, isToday, startOfWeek } from "date-fns";
 import { Link, useOutletContext } from "react-router";
-import { CalendarRange, ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, Inbox, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -397,6 +397,12 @@ export default function AppointmentsPage() {
               <Link to="/calendar?view=day">
                 <CalendarRange className="mr-2 h-4 w-4" />
                 Open Calendar
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full lg:w-auto">
+              <Link to="/appointments/requests">
+                <Inbox className="mr-2 h-4 w-4" />
+                Booking Requests
               </Link>
             </Button>
             <Button asChild className="w-full lg:w-auto">

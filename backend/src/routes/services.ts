@@ -18,6 +18,10 @@ import {
   type LegacyServiceCategory,
 } from "../lib/serviceCategories.js";
 import { normalizeBookingServiceMode, parseTimeToMinutes } from "../lib/booking.js";
+import {
+  normalizeBookingRequestAlternateOfferExpiryHours,
+  normalizeBookingRequestAlternateSlotLimit,
+} from "../lib/bookingRequestSettings.js";
 
 export const servicesRouter = Router({ mergeParams: true });
 
@@ -43,6 +47,13 @@ type ServiceRow = {
   bookingDepositAmount: string | null;
   bookingLeadTimeHours: number | null;
   bookingWindowDays: number | null;
+  bookingRequestRequireExactTime: boolean | null;
+  bookingRequestAllowTimeWindows: boolean | null;
+  bookingRequestAllowFlexibility: boolean | null;
+  bookingRequestReviewMessage: string | null;
+  bookingRequestAllowAlternateSlots: boolean | null;
+  bookingRequestAlternateSlotLimit: number | null;
+  bookingRequestAlternateOfferExpiryHours: number | null;
   bookingServiceMode: string | null;
   bookingAvailableDays: number[] | null;
   bookingAvailableStartTime: string | null;
@@ -153,6 +164,13 @@ function buildLegacyServiceSelectColumns(columns: Set<string>): string {
     columns.has("booking_deposit_amount") ? `s."booking_deposit_amount" as "bookingDepositAmount"` : `'0'::numeric as "bookingDepositAmount"`,
     columns.has("booking_lead_time_hours") ? `s."booking_lead_time_hours" as "bookingLeadTimeHours"` : `0::integer as "bookingLeadTimeHours"`,
     columns.has("booking_window_days") ? `s."booking_window_days" as "bookingWindowDays"` : `30::integer as "bookingWindowDays"`,
+    columns.has("booking_request_require_exact_time") ? `s."booking_request_require_exact_time" as "bookingRequestRequireExactTime"` : `null::boolean as "bookingRequestRequireExactTime"`,
+    columns.has("booking_request_allow_time_windows") ? `s."booking_request_allow_time_windows" as "bookingRequestAllowTimeWindows"` : `null::boolean as "bookingRequestAllowTimeWindows"`,
+    columns.has("booking_request_allow_flexibility") ? `s."booking_request_allow_flexibility" as "bookingRequestAllowFlexibility"` : `null::boolean as "bookingRequestAllowFlexibility"`,
+    columns.has("booking_request_review_message") ? `s."booking_request_review_message" as "bookingRequestReviewMessage"` : `null::text as "bookingRequestReviewMessage"`,
+    columns.has("booking_request_allow_alternate_slots") ? `s."booking_request_allow_alternate_slots" as "bookingRequestAllowAlternateSlots"` : `null::boolean as "bookingRequestAllowAlternateSlots"`,
+    columns.has("booking_request_alternate_slot_limit") ? `s."booking_request_alternate_slot_limit" as "bookingRequestAlternateSlotLimit"` : `null::integer as "bookingRequestAlternateSlotLimit"`,
+    columns.has("booking_request_alternate_offer_expiry_hours") ? `s."booking_request_alternate_offer_expiry_hours" as "bookingRequestAlternateOfferExpiryHours"` : `null::integer as "bookingRequestAlternateOfferExpiryHours"`,
     columns.has("booking_service_mode") ? `s."booking_service_mode" as "bookingServiceMode"` : `'in_shop'::text as "bookingServiceMode"`,
     columns.has("booking_available_days") ? `s."booking_available_days" as "bookingAvailableDays"` : `null::text as "bookingAvailableDays"`,
     columns.has("booking_available_start_time") ? `s."booking_available_start_time" as "bookingAvailableStartTime"` : `null::text as "bookingAvailableStartTime"`,
@@ -342,6 +360,42 @@ async function insertLegacyServiceRecord(
     insertColumns.push("booking_window_days");
     insertValues.push(body.bookingWindowDays ?? 30);
   }
+  if (columns.has("booking_request_require_exact_time")) {
+    insertColumns.push("booking_request_require_exact_time");
+    insertValues.push(body.bookingRequestRequireExactTime ?? null);
+  }
+  if (columns.has("booking_request_allow_time_windows")) {
+    insertColumns.push("booking_request_allow_time_windows");
+    insertValues.push(body.bookingRequestAllowTimeWindows ?? null);
+  }
+  if (columns.has("booking_request_allow_flexibility")) {
+    insertColumns.push("booking_request_allow_flexibility");
+    insertValues.push(body.bookingRequestAllowFlexibility ?? null);
+  }
+  if (columns.has("booking_request_review_message")) {
+    insertColumns.push("booking_request_review_message");
+    insertValues.push(body.bookingRequestReviewMessage ?? null);
+  }
+  if (columns.has("booking_request_allow_alternate_slots")) {
+    insertColumns.push("booking_request_allow_alternate_slots");
+    insertValues.push(body.bookingRequestAllowAlternateSlots ?? null);
+  }
+  if (columns.has("booking_request_alternate_slot_limit")) {
+    insertColumns.push("booking_request_alternate_slot_limit");
+    insertValues.push(
+      body.bookingRequestAlternateSlotLimit != null
+        ? normalizeBookingRequestAlternateSlotLimit(body.bookingRequestAlternateSlotLimit)
+        : null
+    );
+  }
+  if (columns.has("booking_request_alternate_offer_expiry_hours")) {
+    insertColumns.push("booking_request_alternate_offer_expiry_hours");
+    insertValues.push(
+      body.bookingRequestAlternateOfferExpiryHours != null
+        ? normalizeBookingRequestAlternateOfferExpiryHours(body.bookingRequestAlternateOfferExpiryHours)
+        : null
+    );
+  }
   if (columns.has("booking_service_mode")) {
     insertColumns.push("booking_service_mode");
     insertValues.push(body.bookingServiceMode ?? "in_shop");
@@ -451,6 +505,48 @@ async function updateLegacyServiceRecord(
   if (body.bookingWindowDays !== undefined && columns.has("booking_window_days")) {
     updates.push({ column: "booking_window_days", value: body.bookingWindowDays });
   }
+  if (body.bookingRequestRequireExactTime !== undefined && columns.has("booking_request_require_exact_time")) {
+    updates.push({ column: "booking_request_require_exact_time", value: body.bookingRequestRequireExactTime });
+  }
+  if (body.bookingRequestAllowTimeWindows !== undefined && columns.has("booking_request_allow_time_windows")) {
+    updates.push({ column: "booking_request_allow_time_windows", value: body.bookingRequestAllowTimeWindows });
+  }
+  if (body.bookingRequestAllowFlexibility !== undefined && columns.has("booking_request_allow_flexibility")) {
+    updates.push({ column: "booking_request_allow_flexibility", value: body.bookingRequestAllowFlexibility });
+  }
+  if (body.bookingRequestReviewMessage !== undefined && columns.has("booking_request_review_message")) {
+    updates.push({
+      column: "booking_request_review_message",
+      value: body.bookingRequestReviewMessage?.trim() || null,
+    });
+  }
+  if (body.bookingRequestAllowAlternateSlots !== undefined && columns.has("booking_request_allow_alternate_slots")) {
+    updates.push({
+      column: "booking_request_allow_alternate_slots",
+      value: body.bookingRequestAllowAlternateSlots,
+    });
+  }
+  if (body.bookingRequestAlternateSlotLimit !== undefined && columns.has("booking_request_alternate_slot_limit")) {
+    updates.push({
+      column: "booking_request_alternate_slot_limit",
+      value:
+        body.bookingRequestAlternateSlotLimit != null
+          ? normalizeBookingRequestAlternateSlotLimit(body.bookingRequestAlternateSlotLimit)
+          : null,
+    });
+  }
+  if (
+    body.bookingRequestAlternateOfferExpiryHours !== undefined &&
+    columns.has("booking_request_alternate_offer_expiry_hours")
+  ) {
+    updates.push({
+      column: "booking_request_alternate_offer_expiry_hours",
+      value:
+        body.bookingRequestAlternateOfferExpiryHours != null
+          ? normalizeBookingRequestAlternateOfferExpiryHours(body.bookingRequestAlternateOfferExpiryHours)
+          : null,
+    });
+  }
   if (body.bookingServiceMode !== undefined && columns.has("booking_service_mode")) {
     updates.push({ column: "booking_service_mode", value: body.bookingServiceMode });
   }
@@ -513,6 +609,13 @@ function normalizeServiceRecord(row: {
   bookingDepositAmount?: string | null;
   bookingLeadTimeHours?: number | null;
   bookingWindowDays?: number | null;
+  bookingRequestRequireExactTime?: boolean | null;
+  bookingRequestAllowTimeWindows?: boolean | null;
+  bookingRequestAllowFlexibility?: boolean | null;
+  bookingRequestReviewMessage?: string | null;
+  bookingRequestAllowAlternateSlots?: boolean | null;
+  bookingRequestAlternateSlotLimit?: number | null;
+  bookingRequestAlternateOfferExpiryHours?: number | null;
   bookingServiceMode?: string | null;
   bookingAvailableDays?: string | null;
   bookingAvailableStartTime?: string | null;
@@ -551,6 +654,13 @@ function normalizeServiceRecord(row: {
     bookingDepositAmount: row.bookingDepositAmount ?? "0",
     bookingLeadTimeHours: row.bookingLeadTimeHours ?? 0,
     bookingWindowDays: row.bookingWindowDays ?? 30,
+    bookingRequestRequireExactTime: row.bookingRequestRequireExactTime ?? null,
+    bookingRequestAllowTimeWindows: row.bookingRequestAllowTimeWindows ?? null,
+    bookingRequestAllowFlexibility: row.bookingRequestAllowFlexibility ?? null,
+    bookingRequestReviewMessage: row.bookingRequestReviewMessage ?? null,
+    bookingRequestAllowAlternateSlots: row.bookingRequestAllowAlternateSlots ?? null,
+    bookingRequestAlternateSlotLimit: row.bookingRequestAlternateSlotLimit ?? null,
+    bookingRequestAlternateOfferExpiryHours: row.bookingRequestAlternateOfferExpiryHours ?? null,
     bookingServiceMode: normalizeBookingServiceMode(row.bookingServiceMode),
     bookingAvailableDays: parseStoredNumberArray(row.bookingAvailableDays),
     bookingAvailableStartTime:
@@ -581,6 +691,13 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
   const hasBookingDepositAmount = serviceColumns.has("booking_deposit_amount");
   const hasBookingLeadTimeHours = serviceColumns.has("booking_lead_time_hours");
   const hasBookingWindowDays = serviceColumns.has("booking_window_days");
+  const hasBookingRequestRequireExactTime = serviceColumns.has("booking_request_require_exact_time");
+  const hasBookingRequestAllowTimeWindows = serviceColumns.has("booking_request_allow_time_windows");
+  const hasBookingRequestAllowFlexibility = serviceColumns.has("booking_request_allow_flexibility");
+  const hasBookingRequestReviewMessage = serviceColumns.has("booking_request_review_message");
+  const hasBookingRequestAllowAlternateSlots = serviceColumns.has("booking_request_allow_alternate_slots");
+  const hasBookingRequestAlternateSlotLimit = serviceColumns.has("booking_request_alternate_slot_limit");
+  const hasBookingRequestAlternateOfferExpiryHours = serviceColumns.has("booking_request_alternate_offer_expiry_hours");
   const hasBookingServiceMode = serviceColumns.has("booking_service_mode");
   const hasBookingAvailableDays = serviceColumns.has("booking_available_days");
   const hasBookingAvailableStartTime = serviceColumns.has("booking_available_start_time");
@@ -616,6 +733,27 @@ async function listServicesForBusiness(bid: string, activeFilter?: boolean, firs
         bookingDepositAmount: hasBookingDepositAmount ? services.bookingDepositAmount : sql<string | null>`'0'`,
         bookingLeadTimeHours: hasBookingLeadTimeHours ? services.bookingLeadTimeHours : sql<number | null>`0`,
         bookingWindowDays: hasBookingWindowDays ? services.bookingWindowDays : sql<number | null>`30`,
+        bookingRequestRequireExactTime: hasBookingRequestRequireExactTime
+          ? services.bookingRequestRequireExactTime
+          : sql<boolean | null>`null`,
+        bookingRequestAllowTimeWindows: hasBookingRequestAllowTimeWindows
+          ? services.bookingRequestAllowTimeWindows
+          : sql<boolean | null>`null`,
+        bookingRequestAllowFlexibility: hasBookingRequestAllowFlexibility
+          ? services.bookingRequestAllowFlexibility
+          : sql<boolean | null>`null`,
+        bookingRequestReviewMessage: hasBookingRequestReviewMessage
+          ? services.bookingRequestReviewMessage
+          : sql<string | null>`null`,
+        bookingRequestAllowAlternateSlots: hasBookingRequestAllowAlternateSlots
+          ? services.bookingRequestAllowAlternateSlots
+          : sql<boolean | null>`null`,
+        bookingRequestAlternateSlotLimit: hasBookingRequestAlternateSlotLimit
+          ? services.bookingRequestAlternateSlotLimit
+          : sql<number | null>`null`,
+        bookingRequestAlternateOfferExpiryHours: hasBookingRequestAlternateOfferExpiryHours
+          ? services.bookingRequestAlternateOfferExpiryHours
+          : sql<number | null>`null`,
         bookingServiceMode: hasBookingServiceMode ? services.bookingServiceMode : sql<string | null>`'in_shop'`,
         bookingAvailableDays: hasBookingAvailableDays ? services.bookingAvailableDays : sql<string | null>`null`,
         bookingAvailableStartTime: hasBookingAvailableStartTime ? services.bookingAvailableStartTime : sql<string | null>`null`,
@@ -663,6 +801,13 @@ async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRo
   const hasBookingDepositAmount = serviceColumns.has("booking_deposit_amount");
   const hasBookingLeadTimeHours = serviceColumns.has("booking_lead_time_hours");
   const hasBookingWindowDays = serviceColumns.has("booking_window_days");
+  const hasBookingRequestRequireExactTime = serviceColumns.has("booking_request_require_exact_time");
+  const hasBookingRequestAllowTimeWindows = serviceColumns.has("booking_request_allow_time_windows");
+  const hasBookingRequestAllowFlexibility = serviceColumns.has("booking_request_allow_flexibility");
+  const hasBookingRequestReviewMessage = serviceColumns.has("booking_request_review_message");
+  const hasBookingRequestAllowAlternateSlots = serviceColumns.has("booking_request_allow_alternate_slots");
+  const hasBookingRequestAlternateSlotLimit = serviceColumns.has("booking_request_alternate_slot_limit");
+  const hasBookingRequestAlternateOfferExpiryHours = serviceColumns.has("booking_request_alternate_offer_expiry_hours");
   const hasBookingServiceMode = serviceColumns.has("booking_service_mode");
   const hasBookingAvailableDays = serviceColumns.has("booking_available_days");
   const hasBookingAvailableStartTime = serviceColumns.has("booking_available_start_time");
@@ -696,6 +841,27 @@ async function getServiceForBusiness(id: string, bid: string): Promise<ServiceRo
         bookingDepositAmount: hasBookingDepositAmount ? services.bookingDepositAmount : sql<string | null>`'0'`,
         bookingLeadTimeHours: hasBookingLeadTimeHours ? services.bookingLeadTimeHours : sql<number | null>`0`,
         bookingWindowDays: hasBookingWindowDays ? services.bookingWindowDays : sql<number | null>`30`,
+        bookingRequestRequireExactTime: hasBookingRequestRequireExactTime
+          ? services.bookingRequestRequireExactTime
+          : sql<boolean | null>`null`,
+        bookingRequestAllowTimeWindows: hasBookingRequestAllowTimeWindows
+          ? services.bookingRequestAllowTimeWindows
+          : sql<boolean | null>`null`,
+        bookingRequestAllowFlexibility: hasBookingRequestAllowFlexibility
+          ? services.bookingRequestAllowFlexibility
+          : sql<boolean | null>`null`,
+        bookingRequestReviewMessage: hasBookingRequestReviewMessage
+          ? services.bookingRequestReviewMessage
+          : sql<string | null>`null`,
+        bookingRequestAllowAlternateSlots: hasBookingRequestAllowAlternateSlots
+          ? services.bookingRequestAllowAlternateSlots
+          : sql<boolean | null>`null`,
+        bookingRequestAlternateSlotLimit: hasBookingRequestAlternateSlotLimit
+          ? services.bookingRequestAlternateSlotLimit
+          : sql<number | null>`null`,
+        bookingRequestAlternateOfferExpiryHours: hasBookingRequestAlternateOfferExpiryHours
+          ? services.bookingRequestAlternateOfferExpiryHours
+          : sql<number | null>`null`,
         bookingServiceMode: hasBookingServiceMode ? services.bookingServiceMode : sql<string | null>`'in_shop'`,
         bookingAvailableDays: hasBookingAvailableDays ? services.bookingAvailableDays : sql<string | null>`null`,
         bookingAvailableStartTime: hasBookingAvailableStartTime ? services.bookingAvailableStartTime : sql<string | null>`null`,
@@ -736,6 +902,13 @@ const createSchema = z.object({
   bookingDepositAmount: z.coerce.number().min(0).max(100000).optional(),
   bookingLeadTimeHours: z.coerce.number().int().min(0).max(336).optional(),
   bookingWindowDays: z.coerce.number().int().min(1).max(180).optional(),
+  bookingRequestRequireExactTime: z.boolean().nullable().optional(),
+  bookingRequestAllowTimeWindows: z.boolean().nullable().optional(),
+  bookingRequestAllowFlexibility: z.boolean().nullable().optional(),
+  bookingRequestReviewMessage: z.string().max(360).nullable().optional(),
+  bookingRequestAllowAlternateSlots: z.boolean().nullable().optional(),
+  bookingRequestAlternateSlotLimit: z.coerce.number().int().min(1).max(3).nullable().optional(),
+  bookingRequestAlternateOfferExpiryHours: z.coerce.number().int().min(1).max(168).nullable().optional(),
   bookingServiceMode: z.enum(["in_shop", "mobile", "both"]).optional(),
   bookingAvailableDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   bookingAvailableStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
@@ -766,6 +939,13 @@ const patchSchema = z
     bookingDepositAmount: z.coerce.number().min(0).max(100000).optional(),
     bookingLeadTimeHours: z.coerce.number().int().min(0).max(336).optional(),
     bookingWindowDays: z.coerce.number().int().min(1).max(180).optional(),
+    bookingRequestRequireExactTime: z.boolean().nullable().optional(),
+    bookingRequestAllowTimeWindows: z.boolean().nullable().optional(),
+    bookingRequestAllowFlexibility: z.boolean().nullable().optional(),
+    bookingRequestReviewMessage: z.union([z.string().max(360), z.null()]).optional(),
+    bookingRequestAllowAlternateSlots: z.boolean().nullable().optional(),
+    bookingRequestAlternateSlotLimit: z.coerce.number().int().min(1).max(3).nullable().optional(),
+    bookingRequestAlternateOfferExpiryHours: z.coerce.number().int().min(1).max(168).nullable().optional(),
     bookingServiceMode: z.enum(["in_shop", "mobile", "both"]).optional(),
     bookingAvailableDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
     bookingAvailableStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
@@ -850,6 +1030,19 @@ servicesRouter.post(
           bookingDepositAmount: String(body.bookingDepositAmount ?? 0),
           bookingLeadTimeHours: body.bookingLeadTimeHours ?? 0,
           bookingWindowDays: body.bookingWindowDays ?? 30,
+          bookingRequestRequireExactTime: body.bookingRequestRequireExactTime ?? null,
+          bookingRequestAllowTimeWindows: body.bookingRequestAllowTimeWindows ?? null,
+          bookingRequestAllowFlexibility: body.bookingRequestAllowFlexibility ?? null,
+          bookingRequestReviewMessage: body.bookingRequestReviewMessage?.trim() || null,
+          bookingRequestAllowAlternateSlots: body.bookingRequestAllowAlternateSlots ?? null,
+          bookingRequestAlternateSlotLimit:
+            body.bookingRequestAlternateSlotLimit != null
+              ? normalizeBookingRequestAlternateSlotLimit(body.bookingRequestAlternateSlotLimit)
+              : null,
+          bookingRequestAlternateOfferExpiryHours:
+            body.bookingRequestAlternateOfferExpiryHours != null
+              ? normalizeBookingRequestAlternateOfferExpiryHours(body.bookingRequestAlternateOfferExpiryHours)
+              : null,
           bookingServiceMode: body.bookingServiceMode ?? "in_shop",
           bookingAvailableDays: body.bookingAvailableDays ? JSON.stringify(body.bookingAvailableDays) : null,
           bookingAvailableStartTime: body.bookingAvailableStartTime ?? null,
@@ -937,6 +1130,37 @@ servicesRouter.patch(
             ...(body.bookingDepositAmount !== undefined ? { bookingDepositAmount: String(body.bookingDepositAmount) } : {}),
             ...(body.bookingLeadTimeHours !== undefined ? { bookingLeadTimeHours: body.bookingLeadTimeHours } : {}),
             ...(body.bookingWindowDays !== undefined ? { bookingWindowDays: body.bookingWindowDays } : {}),
+            ...(body.bookingRequestRequireExactTime !== undefined
+              ? { bookingRequestRequireExactTime: body.bookingRequestRequireExactTime }
+              : {}),
+            ...(body.bookingRequestAllowTimeWindows !== undefined
+              ? { bookingRequestAllowTimeWindows: body.bookingRequestAllowTimeWindows }
+              : {}),
+            ...(body.bookingRequestAllowFlexibility !== undefined
+              ? { bookingRequestAllowFlexibility: body.bookingRequestAllowFlexibility }
+              : {}),
+            ...(body.bookingRequestReviewMessage !== undefined
+              ? { bookingRequestReviewMessage: body.bookingRequestReviewMessage?.trim() || null }
+              : {}),
+            ...(body.bookingRequestAllowAlternateSlots !== undefined
+              ? { bookingRequestAllowAlternateSlots: body.bookingRequestAllowAlternateSlots }
+              : {}),
+            ...(body.bookingRequestAlternateSlotLimit !== undefined
+              ? {
+                  bookingRequestAlternateSlotLimit:
+                    body.bookingRequestAlternateSlotLimit != null
+                      ? normalizeBookingRequestAlternateSlotLimit(body.bookingRequestAlternateSlotLimit)
+                      : null,
+                }
+              : {}),
+            ...(body.bookingRequestAlternateOfferExpiryHours !== undefined
+              ? {
+                  bookingRequestAlternateOfferExpiryHours:
+                    body.bookingRequestAlternateOfferExpiryHours != null
+                      ? normalizeBookingRequestAlternateOfferExpiryHours(body.bookingRequestAlternateOfferExpiryHours)
+                      : null,
+                }
+              : {}),
             ...(body.bookingServiceMode !== undefined ? { bookingServiceMode: body.bookingServiceMode } : {}),
             ...(body.bookingAvailableDays !== undefined ? { bookingAvailableDays: JSON.stringify(body.bookingAvailableDays ?? []) } : {}),
             ...(body.bookingAvailableStartTime !== undefined ? { bookingAvailableStartTime: body.bookingAvailableStartTime ?? null } : {}),

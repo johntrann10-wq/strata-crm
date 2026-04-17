@@ -192,6 +192,181 @@ Customer phone: {{clientPhone}}
 Open appointment: {{appointmentUrl}}`,
 };
 
+/** Placeholders: businessName, ownerName, clientName, requestedTiming, serviceSummary, vehicle, flexibility, clientEmail, clientPhone, customerMessage, requestUrl */
+export const bookingRequestOwnerAlert: BuiltinEmailTemplate = {
+  subject: "New booking request - {{businessName}}",
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Booking request",
+    title: "A customer requested a booking time",
+    introHtml:
+      `<p style="margin:0;">Hi {{ownerName}},</p>` +
+      `<p style="margin:10px 0 0;">{{clientName}} requested <strong>{{requestedTiming}}</strong> for <strong>{{serviceSummary}}</strong>.</p>` +
+      `<p style="margin:10px 0 0;">Open the request to approve it, offer alternate times, or ask the customer for another day without losing their details.</p>`,
+    bodyHtml:
+      renderDetailGrid([
+        { label: "Customer", value: "{{clientName}}" },
+        { label: "Requested timing", value: "{{requestedTiming}}" },
+        { label: "Service", value: "{{serviceSummary}}" },
+        { label: "Vehicle", value: "{{vehicle}}" },
+        { label: "Flexibility", value: "{{flexibility}}" },
+        { label: "Customer email", value: "{{clientEmail}}" },
+        { label: "Customer phone", value: "{{clientPhone}}" },
+      ]) +
+      `<div style="margin-top:14px;">${renderInfoCard("Customer note", `<div style="white-space:pre-line;">{{customerMessage}}</div>`)}</div>`,
+    ctaLabel: "Open booking request",
+    ctaUrl: "{{requestUrl}}",
+    ctaHint: "Open booking request: {{requestUrl}}",
+    showCtaHint: false,
+    footerNote: "This request came from the public booking flow.",
+  }),
+  bodyText: `{{businessName}}
+
+New booking request
+
+Hi {{ownerName}},
+
+{{clientName}} requested {{requestedTiming}} for {{serviceSummary}}.
+
+Customer: {{clientName}}
+Requested timing: {{requestedTiming}}
+Service: {{serviceSummary}}
+Vehicle: {{vehicle}}
+Flexibility: {{flexibility}}
+Customer email: {{clientEmail}}
+Customer phone: {{clientPhone}}
+Customer note: {{customerMessage}}
+
+Open booking request: {{requestUrl}}`,
+};
+
+/** Placeholders: clientName, businessName, requestedTiming, serviceSummary, vehicle, message, nextSteps, ctaLabel, ctaUrl */
+export const bookingRequestReceived: BuiltinEmailTemplate = {
+  subject: "We received your booking request - {{businessName}}",
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "Request received",
+    title: "Your booking request is in",
+    introHtml:
+      `<p style="margin:0;">Hi {{clientName}},</p>` +
+      `<p style="margin:10px 0 0;">We received your request for <strong>{{requestedTiming}}</strong> for <strong>{{serviceSummary}}</strong>.</p>`,
+    bodyHtml:
+      renderDetailGrid([
+        { label: "Requested timing", value: "{{requestedTiming}}" },
+        { label: "Service", value: "{{serviceSummary}}" },
+        { label: "Vehicle", value: "{{vehicle}}" },
+      ]) +
+      `<div style="margin-top:14px;">${renderInfoCard("Request update", "{{message}}")}</div>` +
+      `<div style="margin-top:14px;">${renderInfoCard("What happens next", "{{nextSteps}}")}</div>`,
+    ctaLabel: "{{ctaLabel}}",
+    ctaUrl: "{{ctaUrl}}",
+    ctaHint: "{{ctaLabel}}: {{ctaUrl}}",
+    showCtaHint: false,
+    footerNote: "If anything changes before the shop replies, use the secure request link above or contact us directly.<br>{{businessPhone}}<br>{{businessEmail}}<br>{{businessAddress}}",
+  }),
+  bodyText: `We received your booking request - {{businessName}}
+
+Hi {{clientName}},
+
+We received your request for {{requestedTiming}} for {{serviceSummary}}.
+
+Requested timing: {{requestedTiming}}
+Service: {{serviceSummary}}
+Vehicle: {{vehicle}}
+Request update: {{message}}
+What happens next: {{nextSteps}}
+
+{{ctaLabel}}: {{ctaUrl}}`,
+};
+
+/** Placeholders: subjectLine, businessName, eyebrow, title, intro, clientName, requestedTiming, serviceSummary, vehicle, ownerMessage, alternateOptions, expiresAt, nextSteps, ctaLabel, ctaUrl */
+export const bookingRequestCustomerUpdate: BuiltinEmailTemplate = {
+  subject: "{{subjectLine}}",
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "{{eyebrow}}",
+    title: "{{title}}",
+    introHtml:
+      `<p style="margin:0;">Hi {{clientName}},</p>` +
+      `<p style="margin:10px 0 0;">{{intro}}</p>`,
+    bodyHtml:
+      renderDetailGrid([
+        { label: "Requested timing", value: "{{requestedTiming}}" },
+        { label: "Service", value: "{{serviceSummary}}" },
+        { label: "Vehicle", value: "{{vehicle}}" },
+      ]) +
+      `<div style="margin-top:14px;">${renderInfoCard("Message from the shop", `<div style="white-space:pre-line;">{{ownerMessage}}</div>`)}</div>` +
+      `<div style="margin-top:14px;">${renderInfoCard("Options", `<div style="white-space:pre-line;">{{alternateOptions}}</div>`)}</div>` +
+      `<div style="margin-top:14px;">${renderInfoCard("Respond by", "{{expiresAt}}")}</div>` +
+      `<div style="margin-top:14px;">${renderInfoCard("What happens next", `<div style="white-space:pre-line;">{{nextSteps}}</div>`)}</div>`,
+    ctaLabel: "{{ctaLabel}}",
+    ctaUrl: "{{ctaUrl}}",
+    ctaHint: "{{ctaLabel}}: {{ctaUrl}}",
+    showCtaHint: false,
+    footerNote: "If you have questions before responding, contact us directly.<br>{{businessPhone}}<br>{{businessEmail}}<br>{{businessAddress}}",
+  }),
+  bodyText: `{{subjectLine}}
+
+{{businessName}}
+
+Hi {{clientName}},
+
+{{intro}}
+
+Requested timing: {{requestedTiming}}
+Service: {{serviceSummary}}
+Vehicle: {{vehicle}}
+Message from the shop: {{ownerMessage}}
+Options: {{alternateOptions}}
+Respond by: {{expiresAt}}
+What happens next: {{nextSteps}}
+
+{{ctaLabel}}: {{ctaUrl}}`,
+};
+
+/** Placeholders: subjectLine, businessName, ownerName, eyebrow, title, intro, clientName, confirmedTiming, requestedTiming, serviceSummary, vehicle, customerMessage, ctaLabel, ctaUrl */
+export const bookingRequestOwnerUpdate: BuiltinEmailTemplate = {
+  subject: "{{subjectLine}}",
+  bodyHtml: renderClientShell({
+    businessName: "{{businessName}}",
+    eyebrow: "{{eyebrow}}",
+    title: "{{title}}",
+    introHtml:
+      `<p style="margin:0;">Hi {{ownerName}},</p>` +
+      `<p style="margin:10px 0 0;">{{intro}}</p>`,
+    bodyHtml:
+      renderDetailGrid([
+        { label: "Customer", value: "{{clientName}}" },
+        { label: "Confirmed timing", value: "{{confirmedTiming}}" },
+        { label: "Original request", value: "{{requestedTiming}}" },
+        { label: "Service", value: "{{serviceSummary}}" },
+        { label: "Vehicle", value: "{{vehicle}}" },
+      ]) +
+      `<div style="margin-top:14px;">${renderInfoCard("Customer message", `<div style="white-space:pre-line;">{{customerMessage}}</div>`)}</div>`,
+    ctaLabel: "{{ctaLabel}}",
+    ctaUrl: "{{ctaUrl}}",
+    ctaHint: "{{ctaLabel}}: {{ctaUrl}}",
+    showCtaHint: false,
+    footerNote: "Open Strata to review the appointment, internal notes, and the full request history.",
+  }),
+  bodyText: `{{subjectLine}}
+
+{{businessName}}
+
+Hi {{ownerName}},
+
+{{intro}}
+
+Customer: {{clientName}}
+Confirmed timing: {{confirmedTiming}}
+Original request: {{requestedTiming}}
+Service: {{serviceSummary}}
+Vehicle: {{vehicle}}
+Customer message: {{customerMessage}}
+
+{{ctaLabel}}: {{ctaUrl}}`,
+};
+
 /** Placeholders: clientName, businessName, amount, invoiceNumber, paidAt, method */
 export const paymentReceipt: BuiltinEmailTemplate = {
   subject: "Payment receipt - {{businessName}}",
@@ -589,6 +764,10 @@ If this access looks wrong, contact your shop owner or admin before using the ac
   appointment_confirmation: appointmentConfirmation,
   appointment_change_request_alert: appointmentChangeRequestAlert,
   appointment_reminder: appointmentReminder,
+  booking_request_received: bookingRequestReceived,
+  booking_request_owner_alert: bookingRequestOwnerAlert,
+  booking_request_owner_update: bookingRequestOwnerUpdate,
+  booking_request_customer_update: bookingRequestCustomerUpdate,
   lead_auto_response: leadAutoResponse,
   missed_call_text_back: missedCallTextBack,
   lead_follow_up_alert: leadFollowUpAlert,

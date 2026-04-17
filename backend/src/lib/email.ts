@@ -595,6 +595,156 @@ export async function sendLeadFollowUpAlert(options: {
   });
 }
 
+export async function sendBookingRequestOwnerAlert(options: {
+  to: string;
+  businessId?: string | null;
+  ownerName: string;
+  businessName: string;
+  clientName: string;
+  requestedTiming?: string | null;
+  serviceSummary?: string | null;
+  vehicle?: string | null;
+  flexibility?: string | null;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  customerMessage?: string | null;
+  requestUrl?: string | null;
+}) {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "booking_request_owner_alert",
+    businessId: options.businessId,
+    vars: {
+      ownerName: options.ownerName,
+      businessName: options.businessName,
+      clientName: options.clientName,
+      requestedTiming: fallback(options.requestedTiming),
+      serviceSummary: fallback(options.serviceSummary),
+      vehicle: fallback(options.vehicle),
+      flexibility: fallback(options.flexibility),
+      clientEmail: fallback(options.clientEmail),
+      clientPhone: fallback(options.clientPhone),
+      customerMessage: fallback(options.customerMessage),
+      requestUrl: optionalValue(options.requestUrl),
+    },
+  });
+}
+
+export async function sendBookingRequestReceived(options: {
+  to: string;
+  businessId?: string | null;
+  clientName: string;
+  businessName: string;
+  requestedTiming?: string | null;
+  serviceSummary?: string | null;
+  vehicle?: string | null;
+  message?: string | null;
+  nextSteps: string;
+  ctaLabel?: string | null;
+  ctaUrl?: string | null;
+}) {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "booking_request_received",
+    businessId: options.businessId,
+    vars: {
+      clientName: options.clientName,
+      businessName: options.businessName,
+      requestedTiming: fallback(options.requestedTiming),
+      serviceSummary: fallback(options.serviceSummary),
+      vehicle: fallback(options.vehicle),
+      message: fallback(options.message),
+      nextSteps: fallback(options.nextSteps),
+      ctaLabel: fallback(options.ctaLabel ?? "View request"),
+      ctaUrl: optionalValue(options.ctaUrl),
+    },
+  });
+}
+
+export async function sendBookingRequestCustomerUpdate(options: {
+  to: string;
+  businessId?: string | null;
+  businessName: string;
+  clientName: string;
+  subjectLine: string;
+  eyebrow: string;
+  title: string;
+  intro: string;
+  requestedTiming?: string | null;
+  serviceSummary?: string | null;
+  vehicle?: string | null;
+  ownerMessage?: string | null;
+  alternateOptions?: string | null;
+  expiresAt?: string | null;
+  nextSteps?: string | null;
+  ctaLabel?: string | null;
+  ctaUrl?: string | null;
+}) {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "booking_request_customer_update",
+    businessId: options.businessId,
+    vars: {
+      subjectLine: options.subjectLine,
+      businessName: options.businessName,
+      eyebrow: options.eyebrow,
+      title: options.title,
+      intro: options.intro,
+      clientName: options.clientName,
+      requestedTiming: fallback(options.requestedTiming),
+      serviceSummary: fallback(options.serviceSummary),
+      vehicle: fallback(options.vehicle),
+      ownerMessage: optionalValue(options.ownerMessage),
+      alternateOptions: optionalValue(options.alternateOptions),
+      expiresAt: fallback(options.expiresAt),
+      nextSteps: fallback(options.nextSteps),
+      ctaLabel: fallback(options.ctaLabel),
+      ctaUrl: optionalValue(options.ctaUrl),
+    },
+  });
+}
+
+export async function sendBookingRequestOwnerUpdate(options: {
+  to: string;
+  businessId?: string | null;
+  subjectLine: string;
+  businessName: string;
+  ownerName: string;
+  eyebrow: string;
+  title: string;
+  intro: string;
+  clientName: string;
+  confirmedTiming?: string | null;
+  requestedTiming?: string | null;
+  serviceSummary?: string | null;
+  vehicle?: string | null;
+  customerMessage?: string | null;
+  ctaLabel?: string | null;
+  ctaUrl?: string | null;
+}) {
+  await sendTemplatedEmail({
+    to: options.to,
+    templateSlug: "booking_request_owner_update",
+    businessId: options.businessId,
+    vars: {
+      subjectLine: options.subjectLine,
+      businessName: options.businessName,
+      ownerName: options.ownerName,
+      eyebrow: options.eyebrow,
+      title: options.title,
+      intro: options.intro,
+      clientName: options.clientName,
+      confirmedTiming: fallback(options.confirmedTiming),
+      requestedTiming: fallback(options.requestedTiming),
+      serviceSummary: fallback(options.serviceSummary),
+      vehicle: fallback(options.vehicle),
+      customerMessage: fallback(options.customerMessage),
+      ctaLabel: fallback(options.ctaLabel),
+      ctaUrl: optionalValue(options.ctaUrl),
+    },
+  });
+}
+
 /** Send payment receipt. Vars: clientName, businessName, amount, invoiceNumber, paidAt, method */
 export async function sendPaymentReceipt(options: {
   to: string;

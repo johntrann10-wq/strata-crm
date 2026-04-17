@@ -5,6 +5,7 @@ import {
   appointmentServices,
   appointments,
   bookingDrafts,
+  bookingRequests,
   businessMemberships,
   businesses,
   clients,
@@ -19,6 +20,7 @@ import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
+import { requireTenant } from "../middleware/tenant.js";
 import { randomUUID } from "crypto";
 import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
 import { roleHasPermission } from "../lib/permissions.js";
@@ -36,7 +38,15 @@ import { createActivityLog } from "../lib/activity.js";
 import { buildLeadNotes } from "../lib/leads.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 import { isEmailConfigured, isStripeConfigured } from "../lib/env.js";
-import { sendAppointmentConfirmation, sendLeadAutoResponse, sendLeadFollowUpAlert } from "../lib/email.js";
+import {
+  sendAppointmentConfirmation,
+  sendBookingRequestCustomerUpdate,
+  sendBookingRequestOwnerUpdate,
+  sendBookingRequestOwnerAlert,
+  sendBookingRequestReceived,
+  sendLeadAutoResponse,
+  sendLeadFollowUpAlert,
+} from "../lib/email.js";
 import { ensureBusinessTrialSubscription } from "../lib/billingLifecycle.js";
 import { hasFullBillingAccess } from "../lib/billingAccess.js";
 import {
@@ -57,6 +67,16 @@ import {
   toBookingWindowDays,
   type BookingDefaultFlow,
 } from "../lib/booking.js";
+import {
+  DEFAULT_BOOKING_REQUEST_ALTERNATE_OFFER_EXPIRY_HOURS,
+  DEFAULT_BOOKING_REQUEST_ALTERNATE_SLOT_LIMIT,
+  normalizeBookingRequestAllowAlternateSlots,
+  normalizeBookingRequestAllowFlexibility,
+  normalizeBookingRequestAllowTimeWindows,
+  normalizeBookingRequestAlternateOfferExpiryHours,
+  normalizeBookingRequestAlternateSlotLimit,
+  normalizeBookingRequestRequireExactTime,
+} from "../lib/bookingRequestSettings.js";
 import { countOverlappingAppointments } from "../lib/appointmentOverlap.js";
 import { buildPublicAppUrl, buildPublicDocumentUrl, createPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 import { buildVehicleDisplayName } from "../lib/vehicleFormatting.js";
@@ -67,6 +87,30 @@ import {
   hasMeaningfulBookingDraftIntent,
   type BookingDraftStatus,
 } from "../lib/bookingDrafts.js";
+import {
+  buildPublicBookingRequestUrl,
+  createBookingRequestToken,
+  verifyCurrentBookingRequestToken,
+} from "../lib/bookingRequestAccess.js";
+import {
+  bookingRequestCustomerResponseStatuses,
+  bookingRequestFlexibilityValues,
+  bookingRequestOwnerReviewStatuses,
+  bookingRequestStatuses,
+  expireBookingRequestAlternateSlotOptions,
+  hasLiveAlternateSlotOptions,
+  normalizeBookingRequestCustomerResponseStatus,
+  normalizeBookingRequestFlexibility,
+  normalizeBookingRequestOwnerReviewStatus,
+  normalizeBookingRequestStatus,
+  parseBookingRequestAlternateSlotOptions,
+  serializeBookingRequestAlternateSlotOptions,
+  type BookingRequestAlternateSlot,
+  type BookingRequestCustomerResponseStatus,
+  type BookingRequestFlexibility,
+  type BookingRequestOwnerReviewStatus,
+  type BookingRequestStatus,
+} from "../lib/bookingRequests.js";
 
 export const businessesRouter = Router({ mergeParams: true });
 type BusinessRecord = typeof businesses.$inferSelect;
@@ -150,6 +194,16 @@ const createSchema = z.object({
   bookingPageTitle: z.string().max(120).nullable().optional(),
   bookingPageSubtitle: z.string().max(280).nullable().optional(),
   bookingConfirmationMessage: z.string().max(280).nullable().optional(),
+  bookingRequestRequireExactTime: z.boolean().optional(),
+  bookingRequestAllowTimeWindows: z.boolean().optional(),
+  bookingRequestAllowFlexibility: z.boolean().optional(),
+  bookingRequestAllowAlternateSlots: z.boolean().optional(),
+  bookingRequestAlternateSlotLimit: z.number().int().min(1).max(3).optional(),
+  bookingRequestAlternateOfferExpiryHours: z.number().int().min(1).max(168).nullable().optional(),
+  bookingRequestConfirmationCopy: z.string().max(360).nullable().optional(),
+  bookingRequestOwnerResponsePageCopy: z.string().max(360).nullable().optional(),
+  bookingRequestAlternateAcceptanceCopy: z.string().max(360).nullable().optional(),
+  bookingRequestChooseAnotherDayCopy: z.string().max(360).nullable().optional(),
   bookingTrustBulletPrimary: z.string().max(80).nullable().optional(),
   bookingTrustBulletSecondary: z.string().max(80).nullable().optional(),
   bookingTrustBulletTertiary: z.string().max(80).nullable().optional(),
@@ -255,7 +309,12 @@ const publicBookingSubmitSchema = z.object({
   draftResumeToken: z.string().trim().max(255).optional().or(z.literal("")),
   locationId: z.string().uuid().optional().or(z.literal("")),
   serviceMode: z.enum(["in_shop", "mobile"]).optional(),
+  bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Select a valid date.").optional().or(z.literal("")),
   startTime: z.string().datetime().optional(),
+  requestedTimeEnd: z.string().datetime().optional().or(z.literal("")),
+  requestedTimeLabel: z.string().trim().max(80).optional().or(z.literal("")),
+  flexibility: z.enum(bookingRequestFlexibilityValues).optional(),
+  customerTimezone: z.string().trim().max(120).optional().or(z.literal("")),
   firstName: z.string().trim().min(1, "First name is required.").max(80),
   lastName: z.string().trim().min(1, "Last name is required.").max(80),
   email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
@@ -303,9 +362,32 @@ const publicBookingDraftAbandonLimiter = createRateLimiter({
   message: "Please try again shortly.",
 });
 
+const publicBookingRequestViewLimiter = createRateLimiter({
+  id: "public_booking_request_view",
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  message: "Please refresh the request in a moment.",
+});
+
+const publicBookingRequestRespondLimiter = createRateLimiter({
+  id: "public_booking_request_respond",
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: "Please wait a moment before responding again.",
+});
+
 const publicBookingDraftParamsSchema = z.object({
   id: z.string().uuid("Invalid business id."),
   resumeToken: z.string().trim().min(16, "Invalid draft token.").max(255),
+});
+
+const bookingRequestParamsSchema = z.object({
+  id: z.string().uuid("Invalid business id."),
+  requestId: z.string().uuid("Invalid booking request."),
+});
+
+const bookingRequestTokenQuerySchema = z.object({
+  token: z.string().trim().min(16, "Missing request token.").max(4096),
 });
 
 const publicBookingDraftSaveSchema = z.object({
@@ -316,6 +398,10 @@ const publicBookingDraftSaveSchema = z.object({
   locationId: z.string().uuid().optional().or(z.literal("")),
   bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
   startTime: z.string().datetime().optional().or(z.literal("")),
+  requestedTimeEnd: z.string().datetime().optional().or(z.literal("")),
+  requestedTimeLabel: z.string().trim().max(80).optional().or(z.literal("")),
+  flexibility: z.enum(bookingRequestFlexibilityValues).optional(),
+  customerTimezone: z.string().trim().max(120).optional().or(z.literal("")),
   firstName: z.string().trim().max(80).optional().or(z.literal("")),
   lastName: z.string().trim().max(80).optional().or(z.literal("")),
   email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
@@ -335,6 +421,50 @@ const publicBookingDraftSaveSchema = z.object({
   currentStep: z.number().int().min(0).max(4).optional(),
   serviceCategoryFilter: z.string().trim().max(80).optional().or(z.literal("")),
   expandedServiceId: z.string().trim().max(120).optional().or(z.literal("")),
+});
+
+const bookingRequestApproveSchema = z.object({
+  message: z.string().trim().max(2000).optional().or(z.literal("")),
+});
+
+const bookingRequestProposeAlternatesSchema = z.object({
+  message: z.string().trim().max(2000).optional().or(z.literal("")),
+  expiresInHours: z.number().int().min(1).max(168).optional(),
+  options: z
+    .array(
+      z.object({
+        startTime: z.string().datetime(),
+        endTime: z.string().datetime().optional().or(z.literal("")),
+        label: z.string().trim().max(120).optional().or(z.literal("")),
+      })
+    )
+    .min(1)
+    .max(6),
+});
+
+const bookingRequestAskNewTimeSchema = z.object({
+  message: z.string().trim().min(1, "Add a message so the customer knows what to do next.").max(2000),
+  expiresInHours: z.number().int().min(1).max(336).optional(),
+});
+
+const bookingRequestDeclineSchema = z.object({
+  message: z.string().trim().max(2000).optional().or(z.literal("")),
+});
+
+const bookingRequestAvailabilityHintsQuerySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
+});
+
+const publicBookingRequestRespondSchema = z.object({
+  action: z.enum(["accept_alternate", "request_new_time", "decline"]),
+  alternateSlotId: z.string().trim().max(120).optional().or(z.literal("")),
+  requestedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
+  requestedTimeStart: z.string().datetime().optional().or(z.literal("")),
+  requestedTimeEnd: z.string().datetime().optional().or(z.literal("")),
+  requestedTimeLabel: z.string().trim().max(120).optional().or(z.literal("")),
+  flexibility: z.enum(bookingRequestFlexibilityValues).optional(),
+  customerTimezone: z.string().trim().max(120).optional().or(z.literal("")),
+  message: z.string().trim().max(2000).optional().or(z.literal("")),
 });
 
 const publicLeadConfigLimiter = createRateLimiter({
@@ -431,6 +561,49 @@ function normalizeBookingNotesPrompt(value: string | null | undefined): string {
   return cleanOptionalText(value ?? undefined) ?? "Add timing, questions, or anything the shop should know.";
 }
 
+function normalizeRequestCopy(
+  value: string | null | undefined,
+  fallback: string | null = null,
+): string | null {
+  return cleanOptionalText(value ?? undefined) ?? fallback;
+}
+
+function resolveBusinessBookingRequestSettings(
+  business: Pick<
+    BusinessRecord,
+    | "bookingRequestRequireExactTime"
+    | "bookingRequestAllowTimeWindows"
+    | "bookingRequestAllowFlexibility"
+    | "bookingRequestAllowAlternateSlots"
+    | "bookingRequestAlternateSlotLimit"
+    | "bookingRequestAlternateOfferExpiryHours"
+    | "bookingRequestConfirmationCopy"
+    | "bookingRequestOwnerResponsePageCopy"
+    | "bookingRequestAlternateAcceptanceCopy"
+    | "bookingRequestChooseAnotherDayCopy"
+  >
+) {
+  const requireExactTime = normalizeBookingRequestRequireExactTime(business.bookingRequestRequireExactTime);
+  const allowTimeWindows = requireExactTime
+    ? false
+    : normalizeBookingRequestAllowTimeWindows(business.bookingRequestAllowTimeWindows);
+
+  return {
+    requireExactTime,
+    allowTimeWindows,
+    allowFlexibility: normalizeBookingRequestAllowFlexibility(business.bookingRequestAllowFlexibility),
+    allowAlternateSlots: normalizeBookingRequestAllowAlternateSlots(business.bookingRequestAllowAlternateSlots),
+    alternateSlotLimit: normalizeBookingRequestAlternateSlotLimit(business.bookingRequestAlternateSlotLimit),
+    alternateOfferExpiryHours: normalizeBookingRequestAlternateOfferExpiryHours(
+      business.bookingRequestAlternateOfferExpiryHours
+    ),
+    confirmationCopy: normalizeRequestCopy(business.bookingRequestConfirmationCopy),
+    ownerResponsePageCopy: normalizeRequestCopy(business.bookingRequestOwnerResponsePageCopy),
+    alternateAcceptanceCopy: normalizeRequestCopy(business.bookingRequestAlternateAcceptanceCopy),
+    chooseAnotherDayCopy: normalizeRequestCopy(business.bookingRequestChooseAnotherDayCopy),
+  };
+}
+
 function parseStoredNumberArray(raw: string | null | undefined): number[] {
   if (!raw) return [];
   try {
@@ -464,6 +637,13 @@ function normalizeBlackoutDates(raw: string | null | undefined): Set<string> {
 }
 
 type BookingDraftRecord = typeof bookingDrafts.$inferSelect;
+type BookingRequestRecord = typeof bookingRequests.$inferSelect;
+type BookingRequestAlternateSlotInput = {
+  startTime: Date;
+  endTime: Date;
+  label: string;
+  expiresAt: Date | null;
+};
 
 function isBookingDraftSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -484,6 +664,10 @@ function buildPublicBookingDraftComparable(input: {
   locationId?: string | null;
   bookingDate?: string | null;
   startTime?: string | null;
+  requestedTimeEnd?: string | null;
+  requestedTimeLabel?: string | null;
+  flexibility?: string | null;
+  customerTimezone?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   email?: string | null;
@@ -511,6 +695,10 @@ function buildPublicBookingDraftComparable(input: {
     locationId: input.locationId ?? "",
     bookingDate: input.bookingDate ?? "",
     startTime: input.startTime ?? "",
+    requestedTimeEnd: input.requestedTimeEnd ?? "",
+    requestedTimeLabel: input.requestedTimeLabel ?? "",
+    flexibility: input.flexibility ?? "same_day_flexible",
+    customerTimezone: input.customerTimezone ?? "",
     firstName: input.firstName ?? "",
     lastName: input.lastName ?? "",
     email: input.email ?? "",
@@ -549,6 +737,10 @@ function serializePublicBookingDraft(draft: BookingDraftRecord) {
       locationId: draft.locationId ?? "",
       bookingDate: draft.bookingDate ?? "",
       startTime: draft.startTime ? draft.startTime.toISOString() : "",
+      requestedTimeEnd: draft.requestedTimeEnd ? draft.requestedTimeEnd.toISOString() : "",
+      requestedTimeLabel: draft.requestedTimeLabel ?? "",
+      flexibility: normalizeBookingRequestFlexibility(draft.flexibility),
+      customerTimezone: draft.customerTimezone ?? "",
       firstName: draft.firstName ?? "",
       lastName: draft.lastName ?? "",
       email: draft.email ?? "",
@@ -635,6 +827,458 @@ async function finalizePublicBookingDraft(params: {
     if (isBookingDraftSchemaDriftError(error)) return;
     throw error;
   }
+}
+
+function isBookingRequestSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  const cause =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as { code?: unknown; message?: unknown })
+      : candidate;
+  const code = String(cause.code ?? "");
+  const message = String(cause.message ?? "").toLowerCase();
+  return code === "42P01" || code === "42703" || message.includes("booking_requests");
+}
+
+function parseOptionalDateTime(value: string | null | undefined, message: string): Date | null {
+  const normalized = cleanOptionalText(value ?? undefined);
+  if (!normalized) return null;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new BadRequestError(message);
+  }
+  return parsed;
+}
+
+function formatBookingRequestAlternateSlotLabel(params: {
+  startTime: Date;
+  endTime: Date | null;
+  timeZone: string;
+  providedLabel?: string | null;
+}) {
+  const custom = cleanOptionalText(params.providedLabel ?? undefined);
+  if (custom) return custom;
+  const startLabel = new Intl.DateTimeFormat("en-US", {
+    timeZone: params.timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(params.startTime);
+  if (!params.endTime) return startLabel;
+  const endLabel = new Intl.DateTimeFormat("en-US", {
+    timeZone: params.timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(params.endTime);
+  return `${startLabel} - ${endLabel}`;
+}
+
+function buildBookingRequestTimingSummary(params: {
+  requestedDate?: string | null;
+  requestedTimeStart?: Date | null;
+  requestedTimeEnd?: Date | null;
+  requestedTimeLabel?: string | null;
+  timeZone: string;
+}) {
+  const requestedDate = cleanOptionalText(params.requestedDate ?? undefined);
+  const requestedTimeLabel = cleanOptionalText(params.requestedTimeLabel ?? undefined);
+  const requestedTimeStart = params.requestedTimeStart ?? null;
+  const requestedTimeEnd = params.requestedTimeEnd ?? null;
+
+  if (requestedTimeStart) {
+    return formatBookingRequestAlternateSlotLabel({
+      startTime: requestedTimeStart,
+      endTime: requestedTimeEnd,
+      timeZone: params.timeZone,
+      providedLabel: requestedTimeLabel,
+    });
+  }
+  if (requestedDate && requestedTimeLabel) {
+    const date = parsePublicBookingDate(requestedDate, params.timeZone);
+    return `${new Intl.DateTimeFormat("en-US", {
+      timeZone: params.timeZone,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    }).format(date)} - ${requestedTimeLabel}`;
+  }
+  if (requestedDate) {
+    const date = parsePublicBookingDate(requestedDate, params.timeZone);
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: params.timeZone,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    }).format(date);
+  }
+  return requestedTimeLabel || null;
+}
+
+function formatBookingRequestFlexibilityLabel(value: string | null | undefined) {
+  const normalized = normalizeBookingRequestFlexibility(value);
+  switch (normalized) {
+    case "exact_time_only":
+      return "Exact time only";
+    case "any_nearby_slot":
+      return "Any nearby slot";
+    default:
+      return "Same day flexible";
+  }
+}
+
+function toBookingRequestAlternateSlots(
+  options: BookingRequestAlternateSlotInput[],
+  timezone: string
+): BookingRequestAlternateSlot[] {
+  return options.map((option) => ({
+    id: randomUUID(),
+    startTime: option.startTime.toISOString(),
+    endTime: option.endTime.toISOString(),
+    label: formatBookingRequestAlternateSlotLabel({
+      startTime: option.startTime,
+      endTime: option.endTime,
+      timeZone: timezone,
+      providedLabel: option.label,
+    }),
+    expiresAt: option.expiresAt ? option.expiresAt.toISOString() : null,
+    status: "proposed",
+  }));
+}
+
+function buildBookingRequestPublicAccess(request: Pick<BookingRequestRecord, "id" | "businessId" | "publicTokenVersion">) {
+  const token = createBookingRequestToken({
+    requestId: request.id,
+    businessId: request.businessId,
+    tokenVersion: request.publicTokenVersion ?? 1,
+  });
+  return {
+    publicToken: token,
+    publicResponseUrl: buildPublicBookingRequestUrl({
+      businessId: request.businessId,
+      requestId: request.id,
+      token,
+    }),
+  };
+}
+
+function buildOwnerBookingRequestAppUrl(requestId: string) {
+  return buildPublicAppUrl(`/appointments/requests?request=${encodeURIComponent(requestId)}`);
+}
+
+function buildOwnerAppointmentAppUrl(appointmentId: string) {
+  return buildPublicAppUrl(`/appointments/${encodeURIComponent(appointmentId)}`);
+}
+
+function buildBookingRequestAlternateOptionsSummary(options: BookingRequestAlternateSlot[]) {
+  if (!options.length) return "";
+  return options.map((option, index) => `${index + 1}. ${option.label}`).join("\n");
+}
+
+async function notifyCustomerAboutBookingRequestUpdate(params: {
+  business: Pick<BusinessRecord, "id" | "name" | "timezone">;
+  request: Pick<
+    BookingRequestRecord,
+    | "id"
+    | "clientEmail"
+    | "clientPhone"
+    | "clientFirstName"
+    | "clientLastName"
+    | "serviceSummary"
+    | "vehicleYear"
+    | "vehicleMake"
+    | "vehicleModel"
+  >;
+  requestedTiming: string | null;
+  subjectLine: string;
+  eyebrow: string;
+  title: string;
+  intro: string;
+  ownerMessage?: string | null;
+  alternateOptions?: BookingRequestAlternateSlot[];
+  alternateOptionsText?: string | null;
+  expiresAt?: Date | null;
+  expiresAtText?: string | null;
+  nextSteps: string;
+  ctaLabel?: string | null;
+  ctaUrl?: string | null;
+  sendEmail?: boolean;
+  sendSms?: boolean;
+  smsEntityKey?: string;
+}) {
+  const clientName = `${params.request.clientFirstName ?? ""} ${params.request.clientLastName ?? ""}`.trim() || "Customer";
+  const serviceSummary = params.request.serviceSummary;
+  const vehicle = buildVehicleSummary({
+    year: params.request.vehicleYear ?? null,
+    make: params.request.vehicleMake ?? null,
+    model: params.request.vehicleModel ?? null,
+  });
+  const ownerMessage = cleanOptionalText(params.ownerMessage) ?? "The shop sent an update on your request.";
+  const alternateOptionsFromText = cleanOptionalText(params.alternateOptionsText);
+  const alternateOptionsFromSlots = buildBookingRequestAlternateOptionsSummary(params.alternateOptions ?? []);
+  const alternateOptions =
+    alternateOptionsFromText ??
+    (alternateOptionsFromSlots || "No alternate times were included in this update.");
+  const expiresAt =
+    cleanOptionalText(params.expiresAtText) ??
+    (params.expiresAt ? formatBookingDateTime(params.expiresAt, params.business.timezone) : "No set deadline");
+  const ctaLabel = cleanOptionalText(params.ctaLabel) ?? "Review request";
+  const ctaUrl = cleanOptionalText(params.ctaUrl) ?? null;
+  const shouldSendEmail = params.sendEmail ?? true;
+  const shouldSendSms = params.sendSms ?? false;
+
+  if (shouldSendEmail && params.request.clientEmail && isEmailConfigured()) {
+    await sendBookingRequestCustomerUpdate({
+      to: params.request.clientEmail,
+      businessId: params.business.id,
+      businessName: params.business.name,
+      clientName,
+      subjectLine: params.subjectLine,
+      eyebrow: params.eyebrow,
+      title: params.title,
+      intro: params.intro,
+      requestedTiming: params.requestedTiming,
+      serviceSummary,
+      vehicle,
+      ownerMessage,
+      alternateOptions,
+      expiresAt,
+      nextSteps: params.nextSteps,
+      ctaLabel,
+      ctaUrl,
+    });
+  }
+
+  if (shouldSendSms && params.request.clientPhone) {
+    await enqueueTwilioTemplateSms({
+      businessId: params.business.id,
+      templateSlug: "booking_request_customer_update",
+      to: params.request.clientPhone,
+      vars: {
+        subjectLine: params.subjectLine,
+        businessName: params.business.name,
+        eyebrow: params.eyebrow,
+        title: params.title,
+        intro: params.intro,
+        clientName,
+        requestedTiming: cleanOptionalText(params.requestedTiming) ?? "-",
+        serviceSummary: serviceSummary ?? "-",
+        vehicle: vehicle ?? "-",
+        ownerMessage,
+        alternateOptions,
+        expiresAt,
+        nextSteps: params.nextSteps,
+        ctaLabel,
+        ctaUrl: ctaUrl ?? "",
+      },
+      entityType: "booking_request_update",
+      entityId: `${params.request.id}:${params.smsEntityKey ?? "update"}`,
+    });
+  }
+}
+
+async function notifyCustomerAboutSubmittedBookingRequest(params: {
+  business: Pick<
+    BusinessRecord,
+    | "id"
+    | "name"
+    | "bookingRequestConfirmationCopy"
+    | "bookingConfirmationMessage"
+    | "leadAutoResponseEnabled"
+    | "leadAutoResponseEmailEnabled"
+    | "leadAutoResponseSmsEnabled"
+  >;
+  request: Pick<
+    BookingRequestRecord,
+    | "id"
+    | "clientEmail"
+    | "clientPhone"
+    | "clientFirstName"
+    | "clientLastName"
+    | "serviceSummary"
+    | "vehicleYear"
+    | "vehicleMake"
+    | "vehicleModel"
+  >;
+  requestedTiming: string | null;
+  publicResponseUrl: string;
+}) {
+  const sendEmail =
+    (params.business.leadAutoResponseEnabled ?? true) && (params.business.leadAutoResponseEmailEnabled ?? true);
+  const sendSms =
+    (params.business.leadAutoResponseEnabled ?? true) && (params.business.leadAutoResponseSmsEnabled ?? false);
+  if (!sendEmail && !sendSms) return;
+
+  const clientName = `${params.request.clientFirstName ?? ""} ${params.request.clientLastName ?? ""}`.trim() || "Customer";
+  const vehicle = buildVehicleSummary({
+    year: params.request.vehicleYear ?? null,
+    make: params.request.vehicleMake ?? null,
+    model: params.request.vehicleModel ?? null,
+  });
+  const message =
+    cleanOptionalText(params.business.bookingRequestConfirmationCopy) ??
+    cleanOptionalText(params.business.bookingConfirmationMessage) ??
+    "The shop has your request and will review the timing before confirming it or sending alternate options.";
+  const nextSteps =
+    "You do not need to start over. The shop will review your requested time and follow up with a confirmation or alternate options if needed.";
+
+  if (sendEmail && params.request.clientEmail && isEmailConfigured()) {
+    await sendBookingRequestReceived({
+      to: params.request.clientEmail,
+      businessId: params.business.id,
+      clientName,
+      businessName: params.business.name,
+      requestedTiming: params.requestedTiming,
+      serviceSummary: params.request.serviceSummary,
+      vehicle,
+      message,
+      nextSteps,
+      ctaLabel: "View request",
+      ctaUrl: params.publicResponseUrl,
+    });
+  }
+
+  if (sendSms && params.request.clientPhone) {
+    await enqueueTwilioTemplateSms({
+      businessId: params.business.id,
+      templateSlug: "booking_request_received",
+      to: params.request.clientPhone,
+      vars: {
+        clientName,
+        businessName: params.business.name,
+        requestedTiming: cleanOptionalText(params.requestedTiming) ?? "-",
+        serviceSummary: params.request.serviceSummary ?? "-",
+        vehicle: vehicle ?? "-",
+        message,
+        nextSteps,
+        ctaLabel: "View request",
+        ctaUrl: params.publicResponseUrl,
+      },
+      entityType: "booking_request_received",
+      entityId: params.request.id,
+    });
+  }
+}
+
+async function notifyOwnerAboutBookingRequestConfirmed(params: {
+  business: Pick<BusinessRecord, "id" | "name" | "email" | "timezone">;
+  request: Pick<
+    BookingRequestRecord,
+    | "id"
+    | "clientFirstName"
+    | "clientLastName"
+    | "serviceSummary"
+    | "vehicleYear"
+    | "vehicleMake"
+    | "vehicleModel"
+    | "requestedDate"
+    | "requestedTimeStart"
+    | "requestedTimeEnd"
+    | "requestedTimeLabel"
+    | "customerResponseMessage"
+  >;
+  confirmedTiming: string;
+  appointmentId: string;
+  requestUrl?: string | null;
+}) {
+  const ownerRecipient = cleanOptionalText(params.business.email ?? undefined);
+  if (!ownerRecipient || !isEmailConfigured()) return;
+
+  const requestedTiming = buildBookingRequestTimingSummary({
+    requestedDate: params.request.requestedDate,
+    requestedTimeStart: params.request.requestedTimeStart,
+    requestedTimeEnd: params.request.requestedTimeEnd,
+    requestedTimeLabel: params.request.requestedTimeLabel,
+    timeZone: params.business.timezone ?? "America/Los_Angeles",
+  });
+  const clientName = [params.request.clientFirstName, params.request.clientLastName].filter(Boolean).join(" ").trim() || "Customer";
+
+  await sendBookingRequestOwnerUpdate({
+    to: ownerRecipient,
+    businessId: params.business.id,
+    subjectLine: `Booking request confirmed - ${params.business.name}`,
+    businessName: params.business.name,
+    ownerName: "Team",
+    eyebrow: "Request confirmed",
+    title: "A customer accepted an alternate time",
+    intro: `${clientName} confirmed ${params.confirmedTiming}. The appointment is ready in Strata.`,
+    clientName,
+    confirmedTiming: params.confirmedTiming,
+    requestedTiming,
+    serviceSummary: params.request.serviceSummary,
+    vehicle: buildVehicleSummary({
+      year: params.request.vehicleYear,
+      make: params.request.vehicleMake,
+      model: params.request.vehicleModel,
+    }),
+    customerMessage: cleanOptionalText(params.request.customerResponseMessage) ?? "No extra message from the customer.",
+    ctaLabel: "Open appointment",
+    ctaUrl: buildOwnerAppointmentAppUrl(params.appointmentId) || params.requestUrl || buildOwnerBookingRequestAppUrl(params.request.id),
+  });
+}
+
+async function findBookingRequestById(params: { businessId: string; requestId: string }) {
+  const [request] = await db
+    .select()
+    .from(bookingRequests)
+    .where(and(eq(bookingRequests.businessId, params.businessId), eq(bookingRequests.id, params.requestId)))
+    .limit(1);
+  return request ?? null;
+}
+
+async function syncExpiredBookingRequestState(request: BookingRequestRecord) {
+  if (request.status === "confirmed" || request.status === "declined" || request.status === "expired") {
+    return request;
+  }
+
+  const options = parseBookingRequestAlternateSlotOptions(request.alternateSlotOptions);
+  const nextOptions = expireBookingRequestAlternateSlotOptions(options);
+  const optionsChanged =
+    serializeBookingRequestAlternateSlotOptions(nextOptions) !== serializeBookingRequestAlternateSlotOptions(options);
+  const expiresAtMs = request.expiresAt ? request.expiresAt.getTime() : Number.NaN;
+  const canExpire =
+    request.status === "awaiting_customer_selection" || request.status === "customer_requested_new_time";
+  const isExpired = canExpire && Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now();
+
+  if (!optionsChanged && !isExpired) return request;
+
+  const nextStatus =
+    request.status === "awaiting_customer_selection" && options.length > 0 && !hasLiveAlternateSlotOptions(nextOptions)
+      ? ("expired" as BookingRequestStatus)
+      : isExpired
+        ? ("expired" as BookingRequestStatus)
+        : normalizeBookingRequestStatus(request.status);
+  const nextCustomerResponseStatus = isExpired
+    ? ("expired" as BookingRequestCustomerResponseStatus)
+    : normalizeBookingRequestCustomerResponseStatus(request.customerResponseStatus);
+
+  const [updated] = await db
+    .update(bookingRequests)
+    .set({
+      status: nextStatus,
+      customerResponseStatus: nextCustomerResponseStatus,
+      alternateSlotOptions: serializeBookingRequestAlternateSlotOptions(nextOptions),
+      expiredAt: isExpired ? request.expiredAt ?? new Date() : request.expiredAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(bookingRequests.id, request.id))
+    .returning();
+
+  if (updated && isExpired) {
+    await createActivityLog({
+      businessId: request.businessId,
+      action: "booking.request_expired",
+      entityType: "booking_request",
+      entityId: request.id,
+      metadata: {
+        previousStatus: request.status,
+      },
+    });
+  }
+
+  return updated ?? request;
 }
 
 function resolveBookingSchedule(business: {
@@ -809,6 +1453,13 @@ type PublicBookingServiceRecord = {
   bookingDepositAmount: string | null;
   bookingLeadTimeHours: number | null;
   bookingWindowDays: number | null;
+  bookingRequestRequireExactTime: boolean | null;
+  bookingRequestAllowTimeWindows: boolean | null;
+  bookingRequestAllowFlexibility: boolean | null;
+  bookingRequestReviewMessage: string | null;
+  bookingRequestAllowAlternateSlots: boolean | null;
+  bookingRequestAlternateSlotLimit: number | null;
+  bookingRequestAlternateOfferExpiryHours: number | null;
   bookingServiceMode: string | null;
   bookingAvailableDays: string | null;
   bookingAvailableStartTime: string | null;
@@ -819,6 +1470,62 @@ type PublicBookingServiceRecord = {
   bookingHidePrice: boolean | null;
   bookingHideDuration: boolean | null;
 };
+
+function resolvePublicBookingRequestPolicy(params: {
+  business: Pick<
+    BusinessRecord,
+    | "bookingRequestRequireExactTime"
+    | "bookingRequestAllowTimeWindows"
+    | "bookingRequestAllowFlexibility"
+    | "bookingRequestAllowAlternateSlots"
+    | "bookingRequestAlternateSlotLimit"
+    | "bookingRequestAlternateOfferExpiryHours"
+  >;
+  service: Pick<
+    PublicBookingServiceRecord,
+    | "bookingRequestRequireExactTime"
+    | "bookingRequestAllowTimeWindows"
+    | "bookingRequestAllowFlexibility"
+    | "bookingRequestReviewMessage"
+    | "bookingRequestAllowAlternateSlots"
+    | "bookingRequestAlternateSlotLimit"
+    | "bookingRequestAlternateOfferExpiryHours"
+  >;
+}) {
+  const businessSettings = resolveBusinessBookingRequestSettings(params.business);
+  const requireExactTime =
+    params.service.bookingRequestRequireExactTime == null
+      ? businessSettings.requireExactTime
+      : normalizeBookingRequestRequireExactTime(params.service.bookingRequestRequireExactTime);
+  const allowTimeWindows =
+    requireExactTime
+      ? false
+      : params.service.bookingRequestAllowTimeWindows == null
+        ? businessSettings.allowTimeWindows
+        : normalizeBookingRequestAllowTimeWindows(params.service.bookingRequestAllowTimeWindows);
+
+  return {
+    requireExactTime,
+    allowTimeWindows,
+    allowFlexibility:
+      params.service.bookingRequestAllowFlexibility == null
+        ? businessSettings.allowFlexibility
+        : normalizeBookingRequestAllowFlexibility(params.service.bookingRequestAllowFlexibility),
+    reviewMessage: cleanOptionalText(params.service.bookingRequestReviewMessage ?? undefined),
+    allowAlternateSlots:
+      params.service.bookingRequestAllowAlternateSlots == null
+        ? businessSettings.allowAlternateSlots
+        : normalizeBookingRequestAllowAlternateSlots(params.service.bookingRequestAllowAlternateSlots),
+    alternateSlotLimit:
+      params.service.bookingRequestAlternateSlotLimit == null
+        ? businessSettings.alternateSlotLimit
+        : normalizeBookingRequestAlternateSlotLimit(params.service.bookingRequestAlternateSlotLimit),
+    alternateOfferExpiryHours:
+      params.service.bookingRequestAlternateOfferExpiryHours == null
+        ? businessSettings.alternateOfferExpiryHours
+        : normalizeBookingRequestAlternateOfferExpiryHours(params.service.bookingRequestAlternateOfferExpiryHours),
+  };
+}
 
 function sortedDayIndexes(value: Set<number> | null | undefined): number[] | null {
   if (!value || value.size === 0) return null;
@@ -903,6 +1610,18 @@ type PublicBookingConfigPayload = {
   subtitle: string;
   confirmationMessage: string | null;
   defaultFlow: "request" | "self_book";
+  requestSettings: {
+    requireExactTime: boolean;
+    allowTimeWindows: boolean;
+    allowFlexibility: boolean;
+    allowAlternateSlots: boolean;
+    alternateSlotLimit: number;
+    alternateOfferExpiryHours: number | null;
+    confirmationCopy: string | null;
+    ownerResponsePageCopy: string | null;
+    alternateAcceptanceCopy: string | null;
+    chooseAnotherDayCopy: string | null;
+  };
   branding: {
     logoUrl: string | null;
     primaryColorToken: "orange" | "sky" | "emerald" | "rose" | "slate";
@@ -941,6 +1660,15 @@ type PublicBookingConfigPayload = {
     featured: boolean;
     showPrice: boolean;
     showDuration: boolean;
+    requestPolicy: {
+      requireExactTime: boolean | null;
+      allowTimeWindows: boolean | null;
+      allowFlexibility: boolean | null;
+      reviewMessage: string | null;
+      allowAlternateSlots: boolean | null;
+      alternateSlotLimit: number | null;
+      alternateOfferExpiryHours: number | null;
+    };
     availableDayIndexes: number[] | null;
     openTime: string | null;
     closeTime: string | null;
@@ -970,6 +1698,16 @@ export function buildPublicBookingConfigResponse(params: {
     | "bookingPageTitle"
     | "bookingPageSubtitle"
     | "bookingConfirmationMessage"
+    | "bookingRequestRequireExactTime"
+    | "bookingRequestAllowTimeWindows"
+    | "bookingRequestAllowFlexibility"
+    | "bookingRequestAllowAlternateSlots"
+    | "bookingRequestAlternateSlotLimit"
+    | "bookingRequestAlternateOfferExpiryHours"
+    | "bookingRequestConfirmationCopy"
+    | "bookingRequestOwnerResponsePageCopy"
+    | "bookingRequestAlternateAcceptanceCopy"
+    | "bookingRequestChooseAnotherDayCopy"
     | "bookingTrustBulletPrimary"
     | "bookingTrustBulletSecondary"
     | "bookingTrustBulletTertiary"
@@ -997,6 +1735,7 @@ export function buildPublicBookingConfigResponse(params: {
 }): PublicBookingConfigPayload {
   const { business, services, locations } = params;
   const availabilityDefaults = resolvePublicBookingAvailabilityDefaults(business);
+  const requestSettings = resolveBusinessBookingRequestSettings(business);
   return {
     businessId: business.id,
     businessName: business.name,
@@ -1008,6 +1747,7 @@ export function buildPublicBookingConfigResponse(params: {
     subtitle: buildBookingPageSubtitle(business),
     confirmationMessage: cleanOptionalText(business.bookingConfirmationMessage ?? undefined),
     defaultFlow: normalizeBookingDefaultFlowValue(business.bookingDefaultFlow),
+    requestSettings,
     branding: {
       logoUrl: normalizeBookingBrandLogoUrl(business.bookingBrandLogoUrl),
       primaryColorToken: normalizeBookingBrandPrimaryColorToken(business.bookingBrandPrimaryColorToken),
@@ -1081,6 +1821,27 @@ async function listPublicBookingServices(businessId: string): Promise<{
       bookingDepositAmount: services.bookingDepositAmount,
       bookingLeadTimeHours: services.bookingLeadTimeHours,
       bookingWindowDays: services.bookingWindowDays,
+      bookingRequestRequireExactTime: columns.has("booking_request_require_exact_time")
+        ? services.bookingRequestRequireExactTime
+        : sql<boolean | null>`null`,
+      bookingRequestAllowTimeWindows: columns.has("booking_request_allow_time_windows")
+        ? services.bookingRequestAllowTimeWindows
+        : sql<boolean | null>`null`,
+      bookingRequestAllowFlexibility: columns.has("booking_request_allow_flexibility")
+        ? services.bookingRequestAllowFlexibility
+        : sql<boolean | null>`null`,
+      bookingRequestReviewMessage: columns.has("booking_request_review_message")
+        ? services.bookingRequestReviewMessage
+        : sql<string | null>`null`,
+      bookingRequestAllowAlternateSlots: columns.has("booking_request_allow_alternate_slots")
+        ? services.bookingRequestAllowAlternateSlots
+        : sql<boolean | null>`null`,
+      bookingRequestAlternateSlotLimit: columns.has("booking_request_alternate_slot_limit")
+        ? services.bookingRequestAlternateSlotLimit
+        : sql<number | null>`null`,
+      bookingRequestAlternateOfferExpiryHours: columns.has("booking_request_alternate_offer_expiry_hours")
+        ? services.bookingRequestAlternateOfferExpiryHours
+        : sql<number | null>`null`,
       bookingServiceMode: columns.has("booking_service_mode") ? services.bookingServiceMode : sql<string | null>`'in_shop'`,
       bookingAvailableDays: columns.has("booking_available_days") ? services.bookingAvailableDays : sql<string | null>`null`,
       bookingAvailableStartTime: columns.has("booking_available_start_time") ? services.bookingAvailableStartTime : sql<string | null>`null`,
@@ -1163,6 +1924,11 @@ function buildVehicleSummary(params: {
       model: params.model ?? null,
     }) || null
   );
+}
+
+function normalizeRequestServiceMode(value: string | null | undefined): "in_shop" | "mobile" {
+  const normalized = normalizeBookingServiceMode(value);
+  return normalized === "mobile" ? "mobile" : "in_shop";
 }
 
 function resolveBookingServicesSelection(params: {
@@ -1398,6 +2164,59 @@ async function findOrCreatePublicVehicle(params: {
   return created ?? null;
 }
 
+async function resolveBookingRequestClientAndVehicle(params: {
+  request: BookingRequestRecord;
+}) {
+  const existingClient =
+    params.request.clientId
+      ? await db
+          .select()
+          .from(clients)
+          .where(and(eq(clients.id, params.request.clientId), eq(clients.businessId, params.request.businessId)))
+          .limit(1)
+      : [];
+  const client =
+    existingClient[0] ??
+    (await findOrCreatePublicClient({
+      businessId: params.request.businessId,
+      firstName: params.request.clientFirstName ?? "Customer",
+      lastName: params.request.clientLastName ?? "Request",
+      email: params.request.clientEmail ?? null,
+      phone: params.request.clientPhone ?? null,
+      address: params.request.serviceAddress ?? null,
+      city: params.request.serviceCity ?? null,
+      state: params.request.serviceState ?? null,
+      zip: params.request.serviceZip ?? null,
+      marketingOptIn: params.request.marketingOptIn ?? true,
+      notes: params.request.notes ?? null,
+      internalNotes: "Booking request converted to appointment",
+    }));
+
+  const existingVehicle =
+    params.request.vehicleId
+      ? await db
+          .select()
+          .from(vehicles)
+          .where(and(eq(vehicles.id, params.request.vehicleId), eq(vehicles.businessId, params.request.businessId)))
+          .limit(1)
+      : [];
+  const vehicle =
+    existingVehicle[0] ??
+    (await findOrCreatePublicVehicle({
+      businessId: params.request.businessId,
+      clientId: client.id,
+      year: params.request.vehicleYear ?? null,
+      make: params.request.vehicleMake ?? null,
+      model: params.request.vehicleModel ?? null,
+      color: params.request.vehicleColor ?? null,
+    }));
+
+  return {
+    client,
+    vehicle,
+  };
+}
+
 async function listPublicBookingLocations(businessId: string) {
   return db
     .select({
@@ -1411,6 +2230,199 @@ async function listPublicBookingLocations(businessId: string) {
     .orderBy(asc(locations.name));
 }
 
+async function buildAppointmentPublicLinks(params: {
+  appointmentId: string;
+  businessId: string;
+  publicTokenVersion: number;
+}) {
+  const publicToken = createPublicDocumentToken({
+    kind: "appointment",
+    entityId: params.appointmentId,
+    businessId: params.businessId,
+    tokenVersion: params.publicTokenVersion,
+  });
+  return {
+    publicToken,
+    confirmationUrl: buildPublicDocumentUrl(
+      `/api/appointments/${encodeURIComponent(params.appointmentId)}/public-html?token=${encodeURIComponent(publicToken)}`
+    ),
+    portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(publicToken)}`),
+  };
+}
+
+async function createPublicBookingAppointment(params: {
+  business: BusinessRecord;
+  client: typeof clients.$inferSelect;
+  vehicleId: string | null;
+  locationId: string | null;
+  selection: ReturnType<typeof resolveBookingServicesSelection>;
+  startTime: Date;
+  requestedServiceMode: "in_shop" | "mobile";
+  customerNotes: string | null;
+  serviceAddress: string | null;
+  serviceCity: string | null;
+  serviceState: string | null;
+  serviceZip: string | null;
+  campaign: string | null;
+  sourceDetail: string | null;
+  normalizedSource: string;
+  activityAction: string;
+  activityMetadata?: Record<string, unknown>;
+  internalNotes: Array<string | null | undefined>;
+  sendConfirmationTo: string | null;
+  vehicleSummary: string | null;
+}) {
+  const finance = calculateAppointmentFinanceTotals({
+    subtotal: params.selection.subtotal,
+    taxRate: Number(params.business.defaultTaxRate ?? 0),
+    applyTax: params.selection.applyTax,
+    adminFeeRate: Number(params.business.defaultAdminFee ?? 0),
+    applyAdminFee: params.business.defaultAdminFeeEnabled ?? false,
+  });
+
+  const appointmentEnd =
+    params.selection.allServices.length > 0 && params.selection.durationMinutes > 0
+      ? new Date(params.startTime.getTime() + params.selection.durationMinutes * 60 * 1000)
+      : null;
+  const appointmentId = randomUUID();
+  const [createdAppointment] = await db
+    .insert(appointments)
+    .values({
+      id: appointmentId,
+      businessId: params.business.id,
+      clientId: params.client.id,
+      vehicleId: params.vehicleId,
+      locationId: params.requestedServiceMode === "in_shop" ? params.locationId ?? null : null,
+      title: params.selection.title,
+      startTime: params.startTime,
+      endTime: appointmentEnd,
+      jobStartTime: params.startTime,
+      expectedCompletionTime: appointmentEnd,
+      subtotal: String(finance.subtotal.toFixed(2)),
+      taxRate: String(finance.taxRate.toFixed(2)),
+      taxAmount: String(finance.taxAmount.toFixed(2)),
+      applyTax: finance.applyTax,
+      adminFeeRate: String(finance.adminFeeRate.toFixed(2)),
+      adminFeeAmount: String(finance.adminFeeAmount.toFixed(2)),
+      applyAdminFee: finance.applyAdminFee,
+      totalPrice: String(finance.totalPrice.toFixed(2)),
+      depositAmount: String(params.selection.depositAmount.toFixed(2)),
+      notes: params.customerNotes,
+      vehicleOnSite: params.requestedServiceMode === "in_shop",
+      internalNotes: params.internalNotes.filter(Boolean).join("\n"),
+    })
+    .returning({
+      id: appointments.id,
+      publicTokenVersion: appointments.publicTokenVersion,
+    });
+
+  if (!createdAppointment) {
+    throw new BadRequestError("Could not create this appointment.");
+  }
+
+  const serviceRows = params.selection.allServices.map((service) => ({
+    id: randomUUID(),
+    appointmentId: createdAppointment.id,
+    serviceId: service.id,
+    quantity: 1,
+    unitPrice: service.price,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+  if (serviceRows.length > 0) {
+    await db.insert(appointmentServices).values(serviceRows);
+  }
+
+  const links = await buildAppointmentPublicLinks({
+    appointmentId: createdAppointment.id,
+    businessId: params.business.id,
+    publicTokenVersion: createdAppointment.publicTokenVersion ?? 1,
+  });
+  const confirmationSmsVars = {
+    clientName: `${params.client.firstName} ${params.client.lastName}`.trim(),
+    businessName: params.business.name,
+    dateTime: formatBookingDateTime(params.startTime, params.business.timezone),
+    vehicle: params.vehicleSummary ?? "-",
+    address:
+      params.requestedServiceMode === "mobile"
+        ? [params.serviceAddress, params.serviceCity, params.serviceState, params.serviceZip].filter(Boolean).join(", ") || "-"
+        : "-",
+    serviceSummary: params.selection.serviceSummary ?? "-",
+    confirmationUrl: links.confirmationUrl ?? "",
+    confirmationActionLabel: "View appointment",
+    paymentStatus: params.selection.depositAmount > 0 ? "Deposit due" : "No deposit required",
+    message: "",
+  };
+
+  await createActivityLog({
+    businessId: params.business.id,
+    action: params.activityAction,
+    entityType: "appointment",
+    entityId: createdAppointment.id,
+    metadata: {
+      source: params.normalizedSource,
+      campaign: params.campaign,
+      serviceSummary: params.selection.serviceSummary,
+      locationId: params.locationId ?? null,
+      ...params.activityMetadata,
+    },
+  });
+
+  if (
+    params.sendConfirmationTo &&
+    isEmailConfigured() &&
+    (params.business.notificationAppointmentConfirmationEmailEnabled ?? true)
+  ) {
+    sendAppointmentConfirmation({
+      to: params.sendConfirmationTo,
+      businessId: params.business.id,
+      clientName: `${params.client.firstName} ${params.client.lastName}`.trim(),
+      businessName: params.business.name,
+      dateTime: formatBookingDateTime(params.startTime, params.business.timezone),
+      vehicle: params.vehicleSummary,
+      address:
+        params.requestedServiceMode === "mobile"
+          ? [params.serviceAddress, params.serviceCity, params.serviceState, params.serviceZip].filter(Boolean).join(", ")
+          : null,
+      serviceSummary: params.selection.serviceSummary,
+      confirmationUrl: links.confirmationUrl,
+      portalUrl: links.portalUrl,
+    }).catch((error) => {
+      warnOnce(`booking:appointment-confirmation:${createdAppointment.id}`, "public booking confirmation email failed", {
+        businessId: params.business.id,
+        appointmentId: createdAppointment.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  if (params.client.phone) {
+    enqueueTwilioTemplateSms({
+      businessId: params.business.id,
+      templateSlug: "appointment_confirmation",
+      to: params.client.phone,
+      vars: confirmationSmsVars,
+      entityType: "appointment",
+      entityId: createdAppointment.id,
+    }).catch((error) => {
+      warnOnce(`booking:appointment-confirmation-sms:${createdAppointment.id}`, "public booking confirmation SMS enqueue failed", {
+        businessId: params.business.id,
+        appointmentId: createdAppointment.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  return {
+    appointmentId: createdAppointment.id,
+    publicTokenVersion: createdAppointment.publicTokenVersion ?? 1,
+    confirmationUrl: links.confirmationUrl,
+    portalUrl: links.portalUrl,
+    scheduledFor: formatBookingDateTime(params.startTime, params.business.timezone),
+    depositAmount: params.selection.depositAmount,
+  };
+}
+
 function bookingSuccessMessage(params: {
   businessMessage: string | null | undefined;
   mode: BookingDefaultFlow;
@@ -1420,6 +2432,357 @@ function bookingSuccessMessage(params: {
   return params.mode === "self_book"
     ? "Your appointment is booked. You can review the confirmation details right away."
     : "Your request is with the shop. They can follow up with the next step soon.";
+}
+
+export async function serializeOwnerBookingRequest(
+  request: BookingRequestRecord,
+  business: Pick<
+    BusinessRecord,
+    | "id"
+    | "name"
+    | "timezone"
+    | "bookingRequestRequireExactTime"
+    | "bookingRequestAllowTimeWindows"
+    | "bookingRequestAllowFlexibility"
+    | "bookingRequestAllowAlternateSlots"
+    | "bookingRequestAlternateSlotLimit"
+    | "bookingRequestAlternateOfferExpiryHours"
+  >,
+  options?: {
+    requestPolicy?: {
+      requireExactTime: boolean;
+      allowTimeWindows: boolean;
+      allowFlexibility: boolean;
+      reviewMessage: string | null;
+      allowAlternateSlots: boolean;
+      alternateSlotLimit: number;
+      alternateOfferExpiryHours: number | null;
+    };
+  }
+) {
+  const publicAccess = buildBookingRequestPublicAccess(request);
+  let confirmationUrl: string | null = null;
+  let portalUrl: string | null = null;
+
+  if (request.appointmentId) {
+    const [appointment] = await db
+      .select({
+        publicTokenVersion: appointments.publicTokenVersion,
+      })
+      .from(appointments)
+      .where(and(eq(appointments.id, request.appointmentId), eq(appointments.businessId, business.id)))
+      .limit(1);
+
+    if (appointment) {
+      const links = await buildAppointmentPublicLinks({
+        appointmentId: request.appointmentId,
+        businessId: business.id,
+        publicTokenVersion: appointment.publicTokenVersion ?? 1,
+      });
+      confirmationUrl = links.confirmationUrl;
+      portalUrl = links.portalUrl;
+    }
+  }
+
+  const alternateSlotOptions = parseBookingRequestAlternateSlotOptions(request.alternateSlotOptions);
+  const defaultRequireExactTime = normalizeBookingRequestRequireExactTime(business.bookingRequestRequireExactTime);
+  const requestPolicy = options?.requestPolicy ?? {
+    requireExactTime: defaultRequireExactTime,
+    allowTimeWindows: defaultRequireExactTime
+      ? false
+      : normalizeBookingRequestAllowTimeWindows(business.bookingRequestAllowTimeWindows),
+    allowFlexibility: normalizeBookingRequestAllowFlexibility(business.bookingRequestAllowFlexibility),
+    reviewMessage: null,
+    allowAlternateSlots: normalizeBookingRequestAllowAlternateSlots(business.bookingRequestAllowAlternateSlots),
+    alternateSlotLimit: normalizeBookingRequestAlternateSlotLimit(business.bookingRequestAlternateSlotLimit),
+    alternateOfferExpiryHours: normalizeBookingRequestAlternateOfferExpiryHours(
+      business.bookingRequestAlternateOfferExpiryHours
+    ),
+  };
+
+  return {
+    id: request.id,
+    businessId: request.businessId,
+    clientId: request.clientId,
+    vehicleId: request.vehicleId,
+    serviceId: request.serviceId,
+    locationId: request.locationId,
+    appointmentId: request.appointmentId,
+    status: normalizeBookingRequestStatus(request.status),
+    ownerReviewStatus: normalizeBookingRequestOwnerReviewStatus(request.ownerReviewStatus),
+    customerResponseStatus: normalizeBookingRequestCustomerResponseStatus(request.customerResponseStatus),
+    serviceMode: normalizeBookingServiceMode(request.serviceMode),
+    addonServiceIds: parseStoredStringArray(request.addonServiceIds),
+    serviceSummary: request.serviceSummary ?? "",
+    requestedDate: request.requestedDate ?? null,
+    requestedTimeStart: request.requestedTimeStart?.toISOString() ?? null,
+    requestedTimeEnd: request.requestedTimeEnd?.toISOString() ?? null,
+    requestedTimeLabel: request.requestedTimeLabel ?? null,
+    requestedTimingSummary: buildBookingRequestTimingSummary({
+      requestedDate: request.requestedDate,
+      requestedTimeStart: request.requestedTimeStart,
+      requestedTimeEnd: request.requestedTimeEnd,
+      requestedTimeLabel: request.requestedTimeLabel,
+      timeZone: business.timezone ?? "America/Los_Angeles",
+    }),
+    customerTimezone: request.customerTimezone ?? business.timezone ?? "America/Los_Angeles",
+    flexibility: normalizeBookingRequestFlexibility(request.flexibility),
+    ownerResponseMessage: request.ownerResponseMessage ?? null,
+    customerResponseMessage: request.customerResponseMessage ?? null,
+    alternateSlotOptions: alternateSlotOptions.map((option) => ({
+      ...option,
+      startTime: option.startTime,
+      endTime: option.endTime,
+      expiresAt: option.expiresAt,
+    })),
+    customer: {
+      firstName: request.clientFirstName ?? "",
+      lastName: request.clientLastName ?? "",
+      email: request.clientEmail ?? null,
+      phone: request.clientPhone ?? null,
+    },
+    vehicle: {
+      year: request.vehicleYear ?? null,
+      make: request.vehicleMake ?? null,
+      model: request.vehicleModel ?? null,
+      color: request.vehicleColor ?? null,
+      summary: buildVehicleSummary({
+        year: request.vehicleYear,
+        make: request.vehicleMake,
+        model: request.vehicleModel,
+      }),
+    },
+    serviceAddress: request.serviceAddress ?? null,
+    serviceCity: request.serviceCity ?? null,
+    serviceState: request.serviceState ?? null,
+    serviceZip: request.serviceZip ?? null,
+    notes: request.notes ?? null,
+    marketingOptIn: request.marketingOptIn ?? true,
+    source: request.source ?? null,
+    campaign: request.campaign ?? null,
+    submittedAt: request.submittedAt.toISOString(),
+    underReviewAt: request.underReviewAt?.toISOString() ?? null,
+    ownerRespondedAt: request.ownerRespondedAt?.toISOString() ?? null,
+    approvedRequestedSlotAt: request.approvedRequestedSlotAt?.toISOString() ?? null,
+    customerRespondedAt: request.customerRespondedAt?.toISOString() ?? null,
+    confirmedAt: request.confirmedAt?.toISOString() ?? null,
+    declinedAt: request.declinedAt?.toISOString() ?? null,
+    expiredAt: request.expiredAt?.toISOString() ?? null,
+    expiresAt: request.expiresAt?.toISOString() ?? null,
+    requestPolicy,
+    publicResponseUrl: publicAccess.publicResponseUrl,
+    confirmationUrl,
+    portalUrl,
+  };
+}
+
+function resolveRequestPolicyForBookingRequest(params: {
+  business: Pick<
+    BusinessRecord,
+    | "bookingRequestRequireExactTime"
+    | "bookingRequestAllowTimeWindows"
+    | "bookingRequestAllowFlexibility"
+    | "bookingRequestAllowAlternateSlots"
+    | "bookingRequestAlternateSlotLimit"
+    | "bookingRequestAlternateOfferExpiryHours"
+  >;
+  request: Pick<BookingRequestRecord, "serviceId">;
+  services: PublicBookingServiceRecord[];
+}) {
+  const requestService = params.services.find((service) => service.id === params.request.serviceId) ?? null;
+  return requestService
+    ? resolvePublicBookingRequestPolicy({
+        business: params.business,
+        service: requestService,
+      })
+    : undefined;
+}
+
+export function serializePublicBookingRequest(
+  request: BookingRequestRecord,
+  business: Pick<
+    BusinessRecord,
+    | "id"
+    | "name"
+    | "timezone"
+    | "bookingRequestRequireExactTime"
+    | "bookingRequestAllowTimeWindows"
+    | "bookingRequestAllowFlexibility"
+    | "bookingRequestAllowAlternateSlots"
+    | "bookingRequestAlternateSlotLimit"
+    | "bookingRequestAlternateOfferExpiryHours"
+    | "bookingRequestOwnerResponsePageCopy"
+    | "bookingRequestAlternateAcceptanceCopy"
+    | "bookingRequestChooseAnotherDayCopy"
+  >,
+  options?: {
+    requestPolicy?: {
+      requireExactTime: boolean;
+      allowTimeWindows: boolean;
+      allowFlexibility: boolean;
+      reviewMessage: string | null;
+      allowAlternateSlots: boolean;
+      alternateSlotLimit: number;
+      alternateOfferExpiryHours: number | null;
+    };
+  }
+) {
+  const alternateSlotOptions = parseBookingRequestAlternateSlotOptions(request.alternateSlotOptions);
+  const defaultRequireExactTime = normalizeBookingRequestRequireExactTime(business.bookingRequestRequireExactTime);
+  const requestSettings = options?.requestPolicy ?? {
+    requireExactTime: defaultRequireExactTime,
+    allowTimeWindows: defaultRequireExactTime
+      ? false
+      : normalizeBookingRequestAllowTimeWindows(business.bookingRequestAllowTimeWindows),
+    allowFlexibility: normalizeBookingRequestAllowFlexibility(business.bookingRequestAllowFlexibility),
+    reviewMessage: null,
+    allowAlternateSlots: normalizeBookingRequestAllowAlternateSlots(business.bookingRequestAllowAlternateSlots),
+    alternateSlotLimit: normalizeBookingRequestAlternateSlotLimit(business.bookingRequestAlternateSlotLimit),
+    alternateOfferExpiryHours: normalizeBookingRequestAlternateOfferExpiryHours(
+      business.bookingRequestAlternateOfferExpiryHours
+    ),
+  };
+  return {
+    id: request.id,
+    businessId: request.businessId,
+    businessName: business.name,
+    status: normalizeBookingRequestStatus(request.status),
+    ownerReviewStatus: normalizeBookingRequestOwnerReviewStatus(request.ownerReviewStatus),
+    customerResponseStatus: normalizeBookingRequestCustomerResponseStatus(request.customerResponseStatus),
+    serviceSummary: request.serviceSummary ?? "",
+    requestedDate: request.requestedDate ?? null,
+    requestedTimeStart: request.requestedTimeStart?.toISOString() ?? null,
+    requestedTimeEnd: request.requestedTimeEnd?.toISOString() ?? null,
+    requestedTimeLabel: request.requestedTimeLabel ?? null,
+    requestedTimingSummary: buildBookingRequestTimingSummary({
+      requestedDate: request.requestedDate,
+      requestedTimeStart: request.requestedTimeStart,
+      requestedTimeEnd: request.requestedTimeEnd,
+      requestedTimeLabel: request.requestedTimeLabel,
+      timeZone: business.timezone ?? "America/Los_Angeles",
+    }),
+    customerTimezone: request.customerTimezone ?? business.timezone ?? "America/Los_Angeles",
+    flexibility: normalizeBookingRequestFlexibility(request.flexibility),
+    ownerResponseMessage: request.ownerResponseMessage ?? null,
+    alternateSlotOptions: alternateSlotOptions
+      .filter((option) => option.status === "proposed")
+      .map((option) => ({
+        id: option.id,
+        startTime: option.startTime,
+        endTime: option.endTime,
+        label: option.label,
+        expiresAt: option.expiresAt,
+      })),
+    vehicle: {
+      year: request.vehicleYear ?? null,
+      make: request.vehicleMake ?? null,
+      model: request.vehicleModel ?? null,
+      color: request.vehicleColor ?? null,
+      summary: buildVehicleSummary({
+        year: request.vehicleYear,
+        make: request.vehicleMake,
+        model: request.vehicleModel,
+      }),
+    },
+    serviceAddress: request.serviceAddress ?? null,
+    serviceCity: request.serviceCity ?? null,
+    serviceState: request.serviceState ?? null,
+    serviceZip: request.serviceZip ?? null,
+    notes: request.notes ?? null,
+    serviceMode: normalizeBookingServiceMode(request.serviceMode),
+    requestPolicy: requestSettings,
+    experienceCopy: {
+      ownerResponsePage: normalizeRequestCopy(business.bookingRequestOwnerResponsePageCopy),
+      alternateAcceptance: normalizeRequestCopy(business.bookingRequestAlternateAcceptanceCopy),
+      chooseAnotherDay: normalizeRequestCopy(business.bookingRequestChooseAnotherDayCopy),
+    },
+    submittedAt: request.submittedAt.toISOString(),
+    expiresAt: request.expiresAt?.toISOString() ?? null,
+    canRespond:
+      normalizeBookingRequestStatus(request.status) === "awaiting_customer_selection" ||
+      normalizeBookingRequestStatus(request.status) === "customer_requested_new_time",
+  };
+}
+
+async function assertBookableRequestSlot(params: {
+  business: BusinessRecord;
+  selection: ReturnType<typeof resolveBookingServicesSelection>;
+  startTime: Date;
+}) {
+  const bookingTimezone = params.business.timezone ?? "America/Los_Angeles";
+  const selectedDate = startOfLocalDay(params.startTime, bookingTimezone);
+  const today = startOfLocalDay(new Date(), bookingTimezone);
+  const lastAllowedDate = addDays(today, params.selection.bookingWindowDays - 1, bookingTimezone);
+  if (selectedDate.getTime() < today.getTime() || selectedDate.getTime() > lastAllowedDate.getTime()) {
+    throw new BadRequestError("Choose a booking date inside the available window.");
+  }
+
+  const bookingSchedule = resolveBookingSchedule(params.business);
+  if (bookingSchedule.blackoutDates.has(toDateKey(selectedDate, bookingTimezone))) {
+    throw new BadRequestError("This date is unavailable for online booking.");
+  }
+
+  const dayStart = startOfLocalDay(params.startTime, bookingTimezone);
+  const dayEnd = addDays(dayStart, 1, bookingTimezone);
+  const existingRows = await db
+    .select({
+      startTime: appointments.startTime,
+      endTime: appointments.endTime,
+      internalNotes: appointments.internalNotes,
+    })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.businessId, params.business.id),
+        sql`${appointments.status} NOT IN ('cancelled', 'no-show')`,
+        sql`${appointments.startTime} < ${dayEnd}`,
+        sql`coalesce(${appointments.endTime}, ${appointments.startTime} + interval '1 hour') > ${dayStart}`
+      )
+    )
+    .orderBy(asc(appointments.startTime));
+
+  const slotCapacity = bookingSchedule.slotCapacity;
+  const allowedSlots = buildSlotsForDate({
+    date: selectedDate,
+    operatingHours: params.business.operatingHours,
+    durationMinutes: params.selection.durationMinutes,
+    leadTimeHours: params.selection.leadTimeHours,
+    incrementMinutes: bookingSchedule.incrementMinutes,
+    availableDayIndexes: params.selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
+    openTime: params.selection.openTime ?? bookingSchedule.openTime,
+    closeTime: params.selection.closeTime ?? bookingSchedule.closeTime,
+    timezone: bookingTimezone,
+    now: new Date(),
+  }).filter((slotStart) =>
+    isSlotAvailable({
+      slotStart,
+      durationMinutes: params.selection.durationMinutes,
+      bufferMinutes: params.selection.bufferMinutes ?? bookingSchedule.bufferMinutes,
+      appointmentCapacity: params.selection.slotCapacity ?? slotCapacity,
+      blockCapacity: params.selection.slotCapacity ?? slotCapacity,
+      existingRows,
+    })
+  );
+
+  const matchesAvailableSlot = allowedSlots.some((slot) => slot.getTime() === params.startTime.getTime());
+  if (!matchesAvailableSlot) {
+    throw new BadRequestError("That time is no longer available. Refresh availability and choose another slot.");
+  }
+
+  const appointmentEnd = new Date(params.startTime.getTime() + params.selection.durationMinutes * 60 * 1000);
+  const overlappingAppointments = await countOverlappingAppointments({
+    businessId: params.business.id,
+    startTime: params.startTime,
+    endTime: appointmentEnd,
+  });
+  if (overlappingAppointments >= (params.selection.slotCapacity ?? slotCapacity)) {
+    throw new BadRequestError("That time is no longer available. Refresh availability and choose another slot.");
+  }
+
+  return {
+    bookingTimezone,
+    appointmentEnd,
+  };
 }
 
 function coerceBusinessRecord(
@@ -1475,6 +2838,16 @@ function coerceBusinessRecord(
     bookingPageTitle: record.bookingPageTitle ?? null,
     bookingPageSubtitle: record.bookingPageSubtitle ?? null,
     bookingConfirmationMessage: record.bookingConfirmationMessage ?? null,
+    bookingRequestRequireExactTime: record.bookingRequestRequireExactTime ?? false,
+    bookingRequestAllowTimeWindows: record.bookingRequestAllowTimeWindows ?? true,
+    bookingRequestAllowFlexibility: record.bookingRequestAllowFlexibility ?? true,
+    bookingRequestAllowAlternateSlots: record.bookingRequestAllowAlternateSlots ?? true,
+    bookingRequestAlternateSlotLimit: record.bookingRequestAlternateSlotLimit ?? DEFAULT_BOOKING_REQUEST_ALTERNATE_SLOT_LIMIT,
+    bookingRequestAlternateOfferExpiryHours: record.bookingRequestAlternateOfferExpiryHours ?? null,
+    bookingRequestConfirmationCopy: record.bookingRequestConfirmationCopy ?? null,
+    bookingRequestOwnerResponsePageCopy: record.bookingRequestOwnerResponsePageCopy ?? null,
+    bookingRequestAlternateAcceptanceCopy: record.bookingRequestAlternateAcceptanceCopy ?? null,
+    bookingRequestChooseAnotherDayCopy: record.bookingRequestChooseAnotherDayCopy ?? null,
     bookingTrustBulletPrimary: record.bookingTrustBulletPrimary ?? null,
     bookingTrustBulletSecondary: record.bookingTrustBulletSecondary ?? null,
     bookingTrustBulletTertiary: record.bookingTrustBulletTertiary ?? null,
@@ -1553,6 +2926,16 @@ export function serializeBusiness(record: BusinessRecord) {
     bookingPageTitle: record.bookingPageTitle ?? null,
     bookingPageSubtitle: record.bookingPageSubtitle ?? null,
     bookingConfirmationMessage: record.bookingConfirmationMessage ?? null,
+    bookingRequestRequireExactTime: record.bookingRequestRequireExactTime ?? false,
+    bookingRequestAllowTimeWindows: record.bookingRequestAllowTimeWindows ?? true,
+    bookingRequestAllowFlexibility: record.bookingRequestAllowFlexibility ?? true,
+    bookingRequestAllowAlternateSlots: record.bookingRequestAllowAlternateSlots ?? true,
+    bookingRequestAlternateSlotLimit: record.bookingRequestAlternateSlotLimit ?? DEFAULT_BOOKING_REQUEST_ALTERNATE_SLOT_LIMIT,
+    bookingRequestAlternateOfferExpiryHours: record.bookingRequestAlternateOfferExpiryHours ?? null,
+    bookingRequestConfirmationCopy: record.bookingRequestConfirmationCopy ?? null,
+    bookingRequestOwnerResponsePageCopy: record.bookingRequestOwnerResponsePageCopy ?? null,
+    bookingRequestAlternateAcceptanceCopy: record.bookingRequestAlternateAcceptanceCopy ?? null,
+    bookingRequestChooseAnotherDayCopy: record.bookingRequestChooseAnotherDayCopy ?? null,
     bookingTrustBulletPrimary: record.bookingTrustBulletPrimary ?? null,
     bookingTrustBulletSecondary: record.bookingTrustBulletSecondary ?? null,
     bookingTrustBulletTertiary: record.bookingTrustBulletTertiary ?? null,
@@ -1641,6 +3024,16 @@ async function ensureBusinessAutomationColumns(): Promise<void> {
           ADD COLUMN IF NOT EXISTS booking_page_title text,
           ADD COLUMN IF NOT EXISTS booking_page_subtitle text,
           ADD COLUMN IF NOT EXISTS booking_confirmation_message text,
+          ADD COLUMN IF NOT EXISTS booking_request_require_exact_time boolean DEFAULT false,
+          ADD COLUMN IF NOT EXISTS booking_request_allow_time_windows boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS booking_request_allow_flexibility boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS booking_request_allow_alternate_slots boolean DEFAULT true,
+          ADD COLUMN IF NOT EXISTS booking_request_alternate_slot_limit integer DEFAULT 3,
+          ADD COLUMN IF NOT EXISTS booking_request_alternate_offer_expiry_hours integer,
+          ADD COLUMN IF NOT EXISTS booking_request_confirmation_copy text,
+          ADD COLUMN IF NOT EXISTS booking_request_owner_response_page_copy text,
+          ADD COLUMN IF NOT EXISTS booking_request_alternate_acceptance_copy text,
+          ADD COLUMN IF NOT EXISTS booking_request_choose_another_day_copy text,
           ADD COLUMN IF NOT EXISTS booking_trust_bullet_primary text,
           ADD COLUMN IF NOT EXISTS booking_trust_bullet_secondary text,
           ADD COLUMN IF NOT EXISTS booking_trust_bullet_tertiary text,
@@ -1846,6 +3239,10 @@ businessesRouter.post(
       locationId: cleanOptionalText(parsedBody.data.locationId),
       bookingDate: cleanOptionalText(parsedBody.data.bookingDate),
       startTime: cleanOptionalText(parsedBody.data.startTime),
+      requestedTimeEnd: cleanOptionalText(parsedBody.data.requestedTimeEnd),
+      requestedTimeLabel: cleanOptionalText(parsedBody.data.requestedTimeLabel),
+      flexibility: parsedBody.data.flexibility,
+      customerTimezone: cleanOptionalText(parsedBody.data.customerTimezone) ?? bookingTimezone,
       firstName: cleanOptionalText(parsedBody.data.firstName),
       lastName: cleanOptionalText(parsedBody.data.lastName),
       email: cleanOptionalText(parsedBody.data.email),
@@ -1903,6 +3300,10 @@ businessesRouter.post(
           locationId: existing.locationId,
           bookingDate: existing.bookingDate,
           startTime: existing.startTime ? existing.startTime.toISOString() : "",
+          requestedTimeEnd: existing.requestedTimeEnd ? existing.requestedTimeEnd.toISOString() : "",
+          requestedTimeLabel: existing.requestedTimeLabel,
+          flexibility: existing.flexibility,
+          customerTimezone: existing.customerTimezone,
           firstName: existing.firstName,
           lastName: existing.lastName,
           email: existing.email,
@@ -1947,6 +3348,10 @@ businessesRouter.post(
         serviceMode: comparable.serviceMode,
         bookingDate: comparable.bookingDate || null,
         startTime: comparable.startTime ? new Date(comparable.startTime) : null,
+        requestedTimeEnd: comparable.requestedTimeEnd ? new Date(comparable.requestedTimeEnd) : null,
+        requestedTimeLabel: comparable.requestedTimeLabel || null,
+        flexibility: normalizeBookingRequestFlexibility(comparable.flexibility),
+        customerTimezone: comparable.customerTimezone || bookingTimezone,
         firstName: comparable.firstName || null,
         lastName: comparable.lastName || null,
         email: comparable.email || null,
@@ -2116,6 +3521,10 @@ businessesRouter.get(
       .filter((service) => service.active !== false && service.isAddon !== true && service.bookingEnabled === true)
       .map((service) => {
         const serviceScheduleOverrides = sanitizeServiceScheduleOverrides(service, businessSchedule);
+        const requestPolicy = resolvePublicBookingRequestPolicy({
+          business,
+          service,
+        });
         return {
           id: service.id,
           name: service.name,
@@ -2136,6 +3545,15 @@ businessesRouter.get(
           featured: service.bookingFeatured === true,
           showPrice: service.bookingHidePrice !== true,
           showDuration: service.bookingHideDuration !== true,
+          requestPolicy: {
+            requireExactTime: requestPolicy.requireExactTime,
+            allowTimeWindows: requestPolicy.allowTimeWindows,
+            allowFlexibility: requestPolicy.allowFlexibility,
+            reviewMessage: requestPolicy.reviewMessage,
+            allowAlternateSlots: requestPolicy.allowAlternateSlots,
+            alternateSlotLimit: requestPolicy.alternateSlotLimit,
+            alternateOfferExpiryHours: requestPolicy.alternateOfferExpiryHours,
+          },
           availableDayIndexes: sortedDayIndexes(serviceScheduleOverrides.availableDayIndexes),
           openTime: serviceScheduleOverrides.openTime,
           closeTime: serviceScheduleOverrides.closeTime,
@@ -2340,6 +3758,10 @@ businessesRouter.post(
       services: publicServices,
       addonLinks,
     });
+    const requestPolicy = resolvePublicBookingRequestPolicy({
+      business,
+      service: selection.baseService,
+    });
     const requestedServiceMode = resolveCustomerBookingMode({
       serviceMode: selection.serviceMode,
       requestedMode: parsedBody.data.serviceMode,
@@ -2379,6 +3801,27 @@ businessesRouter.post(
       make: vehicleMake,
       model: vehicleModel,
     });
+    const requestedDate = cleanOptionalText(parsedBody.data.bookingDate);
+    const requestedTimeStart = parsedBody.data.startTime
+      ? parseOptionalDateTime(parsedBody.data.startTime, "Choose a valid requested time.")
+      : null;
+    const requestedTimeEnd = parsedBody.data.requestedTimeEnd
+      ? parseOptionalDateTime(parsedBody.data.requestedTimeEnd, "Choose a valid requested end time.")
+      : requestedTimeStart
+        ? new Date(requestedTimeStart.getTime() + selection.durationMinutes * 60 * 1000)
+        : null;
+    const requestedTimeLabel = cleanOptionalText(parsedBody.data.requestedTimeLabel);
+    const requestedFlexibility = requestPolicy.allowFlexibility
+      ? normalizeBookingRequestFlexibility(parsedBody.data.flexibility)
+      : "same_day_flexible";
+    const customerTimezone = cleanOptionalText(parsedBody.data.customerTimezone) ?? bookingTimezone;
+    const requestedTimingSummary = buildBookingRequestTimingSummary({
+      requestedDate: requestedDate ?? (requestedTimeStart ? toDateKey(requestedTimeStart, bookingTimezone) : null),
+      requestedTimeStart,
+      requestedTimeEnd,
+      requestedTimeLabel,
+      timeZone: bookingTimezone,
+    });
 
     if (requestedServiceMode === "mobile" && !serviceAddress) {
       throw new BadRequestError("Add the service address for mobile or on-site bookings.");
@@ -2393,7 +3836,26 @@ businessesRouter.post(
     }
 
     if (selection.effectiveFlow === "request") {
+      if (!requestedDate) {
+        throw new BadRequestError("Choose the day you want so the shop can review your request.");
+      }
+      if (requestPolicy.requireExactTime || !requestPolicy.allowTimeWindows) {
+        if (!requestedTimeStart) {
+          throw new BadRequestError("Choose the exact time you want the shop to review.");
+        }
+      } else if (!requestedTimeStart && !requestedTimeLabel) {
+        throw new BadRequestError("Choose an exact time or a time window so the shop can review the request.");
+      }
+      if (!requestPolicy.allowTimeWindows && requestedTimeLabel) {
+        throw new BadRequestError("This service needs an exact requested time.");
+      }
       const nextStepHours = Math.max(1, Math.min(Number(business.automationUncontactedLeadHours ?? 2), 168));
+      const existingDraft = draftResumeToken
+        ? await findPublicBookingDraftByResumeToken({
+            businessId: business.id,
+            resumeToken: draftResumeToken,
+          })
+        : null;
       const [createdLead] = await db
         .insert(clients)
         .values({
@@ -2413,6 +3875,10 @@ businessesRouter.post(
             nextStep: `Contact within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
             summary: [
               customerNotes,
+              requestedTimingSummary ? `Requested timing: ${requestedTimingSummary}` : null,
+              requestedFlexibility !== "same_day_flexible"
+                ? `Flexibility: ${requestedFlexibility.replace(/_/g, " ")}`
+                : null,
               requestedServiceMode === "mobile"
                 ? [serviceAddress, serviceCity, serviceState, serviceZip].filter(Boolean).join(", ")
                 : null,
@@ -2426,6 +3892,10 @@ businessesRouter.post(
           internalNotes: [
             "Public booking request",
             `Service mode: ${requestedServiceMode}`,
+            requestedTimingSummary ? `Requested timing: ${requestedTimingSummary}` : null,
+            requestedFlexibility !== "same_day_flexible"
+              ? `Flexibility: ${requestedFlexibility.replace(/_/g, " ")}`
+              : null,
             requestedServiceMode === "in_shop" && locationId ? `Location: ${locationId}` : null,
             campaign ? `Campaign: ${campaign}` : null,
             cleanOptionalText(parsedBody.data.source) ? `Source detail: ${cleanOptionalText(parsedBody.data.source)}` : null,
@@ -2438,83 +3908,111 @@ businessesRouter.post(
 
       if (!createdLead) throw new BadRequestError("Could not save this booking request.");
 
+      let createdVehicleId: string | null = null;
       if (vehicleMake && vehicleModel) {
-        await db.insert(vehicles).values({
+        const [createdVehicle] = await db
+          .insert(vehicles)
+          .values({
+            id: randomUUID(),
+            businessId: business.id,
+            clientId: createdLead.id,
+            year: vehicleYear,
+            make: vehicleMake,
+            model: vehicleModel,
+            color: vehicleColor ?? null,
+          })
+          .returning({ id: vehicles.id });
+        createdVehicleId = createdVehicle?.id ?? null;
+      }
+
+      const [createdRequest] = await db
+        .insert(bookingRequests)
+        .values({
           id: randomUUID(),
           businessId: business.id,
+          draftId: existingDraft?.id ?? null,
           clientId: createdLead.id,
-          year: vehicleYear,
-          make: vehicleMake,
-          model: vehicleModel,
-          color: vehicleColor ?? null,
-        });
+          vehicleId: createdVehicleId,
+          serviceId: selection.baseService.id,
+          locationId: requestedServiceMode === "in_shop" ? locationId ?? null : null,
+          status: "submitted_request",
+          ownerReviewStatus: "pending",
+          customerResponseStatus: "pending",
+          serviceMode: requestedServiceMode,
+          addonServiceIds: JSON.stringify(selection.addonServices.map((service) => service.id)),
+          serviceSummary: selection.serviceSummary,
+          requestedDate: requestedDate ?? (requestedTimeStart ? toDateKey(requestedTimeStart, bookingTimezone) : null),
+          requestedTimeStart,
+          requestedTimeEnd,
+          requestedTimeLabel,
+          customerTimezone,
+          flexibility: requestedFlexibility,
+          ownerResponseMessage: null,
+          customerResponseMessage: null,
+          alternateSlotOptions: "[]",
+          clientFirstName: parsedBody.data.firstName.trim(),
+          clientLastName: parsedBody.data.lastName.trim(),
+          clientEmail: email,
+          clientPhone: phone,
+          vehicleYear,
+          vehicleMake,
+          vehicleModel,
+          vehicleColor,
+          serviceAddress,
+          serviceCity,
+          serviceState,
+          serviceZip,
+          notes: customerNotes,
+          marketingOptIn: parsedBody.data.marketingOptIn ?? true,
+          source: cleanOptionalText(parsedBody.data.source),
+          campaign,
+          submittedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      if (!createdRequest) {
+        throw new BadRequestError("Could not save this booking request.");
       }
 
       await createActivityLog({
         businessId: business.id,
         action: "booking.request_created",
-        entityType: "client",
-        entityId: createdLead.id,
+        entityType: "booking_request",
+        entityId: createdRequest.id,
         metadata: {
           source: normalizedSource,
           campaign,
           bookingFlow: "request",
           serviceMode: requestedServiceMode,
           serviceSummary: selection.serviceSummary,
+          requestedTiming: requestedTimingSummary,
+          leadId: createdLead.id,
         },
       });
 
       const clientName = `${createdLead.firstName} ${createdLead.lastName}`.trim();
+      const publicAccess = buildBookingRequestPublicAccess(createdRequest);
       const followUpTasks: Array<Promise<unknown>> = [];
-      if (business.leadAutoResponseEnabled) {
-        if (business.leadAutoResponseEmailEnabled && email && isEmailConfigured()) {
-          followUpTasks.push(
-            sendLeadAutoResponse({
-              to: email,
-              businessId: business.id,
-              clientName,
-              businessName: business.name,
-              serviceInterest: selection.serviceSummary,
-              responseWindow: `within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
-            }).catch((error) => {
-              warnOnce(`booking:auto-response-email:${createdLead.id}`, "booking request auto-response email failed", {
-                businessId: business.id,
-                clientId: createdLead.id,
-                error: error instanceof Error ? error.message : String(error),
-              });
-            })
-          );
-        }
-
-        if (business.leadAutoResponseSmsEnabled && phone) {
-          followUpTasks.push(
-            enqueueTwilioTemplateSms({
-              businessId: business.id,
-              templateSlug: "lead_auto_response",
-              to: phone,
-              vars: {
-                clientName,
-                businessName: business.name,
-                serviceInterest: selection.serviceSummary,
-                responseWindow: `within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
-              },
-              entityType: "client",
-              entityId: createdLead.id,
-            }).catch((error) => {
-              warnOnce(`booking:auto-response-sms:${createdLead.id}`, "booking request auto-response sms failed", {
-                businessId: business.id,
-                clientId: createdLead.id,
-                error: error instanceof Error ? error.message : String(error),
-              });
-            })
-          );
-        }
-      }
+      followUpTasks.push(
+        notifyCustomerAboutSubmittedBookingRequest({
+          business,
+          request: createdRequest,
+          requestedTiming: requestedTimingSummary,
+          publicResponseUrl: publicAccess.publicResponseUrl,
+        }).catch((error) => {
+          warnOnce(`booking:request-received:${createdRequest.id}`, "booking request received notification failed", {
+            businessId: business.id,
+            bookingRequestId: createdRequest.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        })
+      );
 
       const followUpRecipient = cleanOptionalText(business.email ?? undefined);
       if (followUpRecipient && isEmailConfigured()) {
         followUpTasks.push(
-          sendLeadFollowUpAlert({
+          sendBookingRequestOwnerAlert({
             to: followUpRecipient,
             businessId: business.id,
             businessName: business.name,
@@ -2522,9 +4020,12 @@ businessesRouter.post(
             clientName,
             clientEmail: email,
             clientPhone: phone,
+            requestedTiming: requestedTimingSummary,
             vehicle: vehicleSummary,
-            serviceInterest: selection.serviceSummary,
-            summary: customerNotes,
+            serviceSummary: selection.serviceSummary,
+            flexibility: formatBookingRequestFlexibilityLabel(requestedFlexibility),
+            customerMessage: customerNotes,
+            requestUrl: buildOwnerBookingRequestAppUrl(createdRequest.id),
           }).catch((error) => {
             warnOnce(`booking:follow-up-alert:${createdLead.id}`, "booking request follow-up alert failed", {
               businessId: business.id,
@@ -2543,6 +4044,7 @@ businessesRouter.post(
         finalStatus: "submitted_request",
         metadata: {
           leadId: createdLead.id,
+          bookingRequestId: createdRequest.id,
           bookingFlow: "request",
           serviceSummary: selection.serviceSummary,
         },
@@ -2553,8 +4055,11 @@ businessesRouter.post(
         accepted: true,
         mode: "request",
         leadId: createdLead.id,
+        bookingRequestId: createdRequest.id,
+        requestedTiming: requestedTimingSummary,
+        publicResponseUrl: publicAccess.publicResponseUrl,
         message: bookingSuccessMessage({
-          businessMessage: business.bookingConfirmationMessage,
+          businessMessage: business.bookingRequestConfirmationCopy ?? business.bookingConfirmationMessage,
           mode: "request",
         }),
       });
@@ -2805,6 +4310,1124 @@ businessesRouter.post(
         businessMessage: business.bookingConfirmationMessage,
         mode: "self_book",
       }),
+    });
+  })
+);
+
+businessesRouter.get(
+  "/:id/booking-requests",
+  requireAuth,
+  requireTenant,
+  requirePermission("appointments.read"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
+    const business = await loadBusinessById(parsed.data.id);
+    if (!business) throw new NotFoundError("Business not found.");
+    if (!req.businessId || req.businessId !== business.id) {
+      throw new ForbiddenError("You do not have permission to perform this action.");
+    }
+
+    const statusFilter = typeof req.query.status === "string" ? req.query.status.trim() : "";
+    const rows = await db
+      .select()
+      .from(bookingRequests)
+      .where(
+        and(
+          eq(bookingRequests.businessId, business.id),
+          statusFilter && (bookingRequestStatuses as readonly string[]).includes(statusFilter)
+            ? eq(bookingRequests.status, statusFilter as BookingRequestStatus)
+            : sql`true`
+        )
+      )
+      .orderBy(desc(bookingRequests.submittedAt), desc(bookingRequests.createdAt))
+      .limit(200);
+    const { services: publicServices } = await listPublicBookingServices(business.id);
+
+    const records = await Promise.all(
+      rows.map(async (row) => {
+        const syncedRow = await syncExpiredBookingRequestState(row);
+        return serializeOwnerBookingRequest(syncedRow, business, {
+          requestPolicy: resolveRequestPolicyForBookingRequest({
+            business,
+            request: syncedRow,
+            services: publicServices,
+          }),
+        });
+      })
+    );
+
+    res.json({ records });
+  })
+);
+
+businessesRouter.get(
+  "/:id/booking-requests/:requestId",
+  requireAuth,
+  requireTenant,
+  requirePermission("appointments.read"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = bookingRequestParamsSchema.safeParse(req.params);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid booking request.");
+    const business = await loadBusinessById(parsed.data.id);
+    if (!business) throw new NotFoundError("Business not found.");
+    if (!req.businessId || req.businessId !== business.id) {
+      throw new ForbiddenError("You do not have permission to perform this action.");
+    }
+
+    let bookingRequest = await findBookingRequestById({
+      businessId: business.id,
+      requestId: parsed.data.requestId,
+    });
+    if (!bookingRequest) throw new NotFoundError("Booking request not found.");
+    bookingRequest = await syncExpiredBookingRequestState(bookingRequest);
+
+    if (normalizeBookingRequestStatus(bookingRequest.status) === "submitted_request") {
+      const now = new Date();
+      const [updatedBookingRequest] = await db
+        .update(bookingRequests)
+        .set({
+          status: "under_review",
+          underReviewAt: bookingRequest.underReviewAt ?? now,
+          updatedAt: now,
+        })
+        .where(and(eq(bookingRequests.id, bookingRequest.id), eq(bookingRequests.businessId, business.id)))
+        .returning();
+
+      if (updatedBookingRequest) {
+        bookingRequest = updatedBookingRequest;
+        await createActivityLog({
+          businessId: business.id,
+          entityType: "booking_request",
+          entityId: bookingRequest.id,
+          action: "booking.request_under_review",
+          userId: req.userId ?? null,
+          metadata: {
+            bookingRequestId: bookingRequest.id,
+          },
+        });
+      }
+    }
+
+    const { services: publicServices } = await listPublicBookingServices(business.id);
+
+    res.json({
+      record: await serializeOwnerBookingRequest(bookingRequest, business, {
+        requestPolicy: resolveRequestPolicyForBookingRequest({
+          business,
+          request: bookingRequest,
+          services: publicServices,
+        }),
+      }),
+    });
+  })
+);
+
+businessesRouter.get(
+  "/:id/booking-requests/:requestId/availability-hints",
+  requireAuth,
+  requireTenant,
+  requirePermission("appointments.read"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsedParams = bookingRequestParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError(parsedParams.error.issues[0]?.message ?? "Invalid booking request.");
+    const parsedQuery = bookingRequestAvailabilityHintsQuerySchema.safeParse(req.query ?? {});
+    if (!parsedQuery.success) throw new BadRequestError(parsedQuery.error.issues[0]?.message ?? "Invalid availability request.");
+
+    const business = await loadBusinessById(parsedParams.data.id);
+    if (!business) throw new NotFoundError("Business not found.");
+    if (!req.businessId || req.businessId !== business.id) {
+      throw new ForbiddenError("You do not have permission to perform this action.");
+    }
+
+    let bookingRequest = await findBookingRequestById({
+      businessId: business.id,
+      requestId: parsedParams.data.requestId,
+    });
+    if (!bookingRequest) throw new NotFoundError("Booking request not found.");
+    bookingRequest = await syncExpiredBookingRequestState(bookingRequest);
+
+    const bookingTimezone = business.timezone ?? "America/Los_Angeles";
+    const requestedDateKey =
+      cleanOptionalText(parsedQuery.data.date) ??
+      bookingRequest.requestedDate ??
+      toDateKey(startOfLocalDay(new Date(), bookingTimezone), bookingTimezone);
+    const targetDate = parsePublicBookingDate(requestedDateKey, bookingTimezone);
+
+    const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
+    const selection = resolveBookingServicesSelection({
+      businessDefaultFlow: business.bookingDefaultFlow,
+      businessSchedule: resolveBookingSchedule(business),
+      baseServiceId: bookingRequest.serviceId ?? "",
+      addonServiceIds: parseStoredStringArray(bookingRequest.addonServiceIds),
+      services: publicServices,
+      addonLinks,
+    });
+
+    const today = startOfLocalDay(new Date(), bookingTimezone);
+    const lastAllowedDate = addDays(today, selection.bookingWindowDays - 1, bookingTimezone);
+    if (targetDate.getTime() < today.getTime() || targetDate.getTime() > lastAllowedDate.getTime()) {
+      throw new BadRequestError("Choose a date inside the available booking window.");
+    }
+
+    const bookingSchedule = resolveBookingSchedule(business);
+    if (bookingSchedule.blackoutDates.has(toDateKey(targetDate, bookingTimezone))) {
+      res.json({
+        date: toDateKey(targetDate, bookingTimezone),
+        timezone: bookingTimezone,
+        durationMinutes: selection.durationMinutes,
+        slots: [],
+      });
+      return;
+    }
+
+    const dayStart = startOfLocalDay(targetDate, bookingTimezone);
+    const dayEnd = addDays(dayStart, 1, bookingTimezone);
+    const existingRows = await db
+      .select({
+        startTime: appointments.startTime,
+        endTime: appointments.endTime,
+        internalNotes: appointments.internalNotes,
+      })
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.businessId, business.id),
+          sql`${appointments.status} NOT IN ('cancelled', 'no-show')`,
+          sql`${appointments.startTime} < ${dayEnd}`,
+          sql`coalesce(${appointments.endTime}, ${appointments.startTime} + interval '1 hour') > ${dayStart}`
+        )
+      )
+      .orderBy(asc(appointments.startTime));
+
+    const candidateSlots = buildSlotsForDate({
+      date: targetDate,
+      operatingHours: business.operatingHours,
+      durationMinutes: selection.durationMinutes,
+      leadTimeHours: selection.leadTimeHours,
+      incrementMinutes: bookingSchedule.incrementMinutes,
+      availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
+      openTime: selection.openTime ?? bookingSchedule.openTime,
+      closeTime: selection.closeTime ?? bookingSchedule.closeTime,
+      timezone: bookingTimezone,
+      now: new Date(),
+    })
+      .filter((slotStart) =>
+        isSlotAvailable({
+          slotStart,
+          durationMinutes: selection.durationMinutes,
+          bufferMinutes: selection.bufferMinutes ?? bookingSchedule.bufferMinutes,
+          appointmentCapacity: selection.slotCapacity ?? bookingSchedule.slotCapacity,
+          blockCapacity: selection.slotCapacity ?? bookingSchedule.slotCapacity,
+          existingRows,
+        })
+      )
+      .slice(0, 18);
+
+    res.json({
+      date: toDateKey(targetDate, bookingTimezone),
+      timezone: bookingTimezone,
+      durationMinutes: selection.durationMinutes,
+      slots: candidateSlots.map((slotStart) => {
+        const slotEnd = new Date(slotStart.getTime() + selection.durationMinutes * 60 * 1000);
+        return {
+          startTime: slotStart.toISOString(),
+          endTime: slotEnd.toISOString(),
+          label: formatBookingRequestAlternateSlotLabel({
+            startTime: slotStart,
+            endTime: slotEnd,
+            timeZone: bookingTimezone,
+          }),
+        };
+      }),
+    });
+  })
+);
+
+businessesRouter.post(
+  "/:id/booking-requests/:requestId/approve",
+  requireAuth,
+  requireTenant,
+  requirePermission("appointments.write"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsedParams = bookingRequestParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError(parsedParams.error.issues[0]?.message ?? "Invalid booking request.");
+    const parsedBody = bookingRequestApproveSchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) throw new BadRequestError(parsedBody.error.issues[0]?.message ?? "Invalid approval request.");
+
+    const business = await loadBusinessById(parsedParams.data.id);
+    if (!business) throw new NotFoundError("Business not found.");
+    if (!req.businessId || req.businessId !== business.id) {
+      throw new ForbiddenError("You do not have permission to perform this action.");
+    }
+
+    let bookingRequest = await findBookingRequestById({
+      businessId: business.id,
+      requestId: parsedParams.data.requestId,
+    });
+    if (!bookingRequest) throw new NotFoundError("Booking request not found.");
+    bookingRequest = await syncExpiredBookingRequestState(bookingRequest);
+    if (["confirmed", "declined", "expired"].includes(bookingRequest.status)) {
+      throw new BadRequestError("This booking request can no longer be approved.");
+    }
+    if (!bookingRequest.requestedTimeStart) {
+      throw new BadRequestError("This request does not have an exact requested time to approve.");
+    }
+
+    const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
+    const selection = resolveBookingServicesSelection({
+      businessDefaultFlow: business.bookingDefaultFlow,
+      businessSchedule: resolveBookingSchedule(business),
+      baseServiceId: bookingRequest.serviceId ?? "",
+      addonServiceIds: parseStoredStringArray(bookingRequest.addonServiceIds),
+      services: publicServices,
+      addonLinks,
+    });
+    await assertBookableRequestSlot({
+      business,
+      selection,
+      startTime: bookingRequest.requestedTimeStart,
+    });
+
+    const { client, vehicle } = await resolveBookingRequestClientAndVehicle({ request: bookingRequest });
+    const appointment = await createPublicBookingAppointment({
+      business,
+      client,
+      vehicleId: vehicle?.id ?? null,
+      locationId: bookingRequest.locationId ?? null,
+      selection,
+      startTime: bookingRequest.requestedTimeStart,
+      requestedServiceMode: normalizeRequestServiceMode(bookingRequest.serviceMode),
+      customerNotes: bookingRequest.notes ?? null,
+      serviceAddress: bookingRequest.serviceAddress ?? null,
+      serviceCity: bookingRequest.serviceCity ?? null,
+      serviceState: bookingRequest.serviceState ?? null,
+      serviceZip: bookingRequest.serviceZip ?? null,
+      campaign: bookingRequest.campaign ?? null,
+      sourceDetail: bookingRequest.source ?? null,
+      normalizedSource: normalizeLeadSourceValue(bookingRequest.source),
+      activityAction: "booking.request_confirmed",
+      activityMetadata: {
+        bookingRequestId: bookingRequest.id,
+        confirmedFrom: "requested_slot",
+      },
+      internalNotes: [
+        "Approved booking request",
+        `Booking flow: request`,
+        `Service mode: ${normalizeBookingServiceMode(bookingRequest.serviceMode)}`,
+        parsedBody.data.message?.trim() || null,
+        bookingRequest.campaign ? `Campaign: ${bookingRequest.campaign}` : null,
+        bookingRequest.source ? `Source detail: ${bookingRequest.source}` : null,
+      ],
+      sendConfirmationTo: bookingRequest.clientEmail ?? null,
+      vehicleSummary: buildVehicleSummary({
+        year: bookingRequest.vehicleYear,
+        make: bookingRequest.vehicleMake,
+        model: bookingRequest.vehicleModel,
+      }),
+    });
+
+    const now = new Date();
+    const [updated] = await db
+      .update(bookingRequests)
+      .set({
+        clientId: client.id,
+        vehicleId: vehicle?.id ?? null,
+        appointmentId: appointment.appointmentId,
+        status: "confirmed",
+        ownerReviewStatus: "approved_requested_slot",
+        customerResponseStatus: "accepted_requested_slot",
+        ownerResponseMessage: cleanOptionalText(parsedBody.data.message),
+        underReviewAt: bookingRequest.underReviewAt ?? now,
+        approvedRequestedSlotAt: now,
+        ownerRespondedAt: now,
+        customerRespondedAt: now,
+        confirmedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(bookingRequests.id, bookingRequest.id))
+      .returning();
+
+    await createActivityLog({
+      businessId: business.id,
+      action: "booking.request_approved",
+      entityType: "booking_request",
+      entityId: bookingRequest.id,
+      metadata: {
+        appointmentId: appointment.appointmentId,
+        confirmedFrom: "requested_slot",
+      },
+      userId: req.userId,
+    });
+
+    res.json({
+      ok: true,
+      record: await serializeOwnerBookingRequest(updated ?? bookingRequest, business, {
+        requestPolicy: resolvePublicBookingRequestPolicy({
+          business,
+          service: selection.baseService,
+        }),
+      }),
+      appointmentId: appointment.appointmentId,
+      confirmationUrl: appointment.confirmationUrl,
+      portalUrl: appointment.portalUrl,
+      scheduledFor: appointment.scheduledFor,
+    });
+  })
+);
+
+businessesRouter.post(
+  "/:id/booking-requests/:requestId/propose-alternates",
+  requireAuth,
+  requireTenant,
+  requirePermission("appointments.write"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsedParams = bookingRequestParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError(parsedParams.error.issues[0]?.message ?? "Invalid booking request.");
+    const parsedBody = bookingRequestProposeAlternatesSchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) throw new BadRequestError(parsedBody.error.issues[0]?.message ?? "Invalid alternate slot proposal.");
+
+    const business = await loadBusinessById(parsedParams.data.id);
+    if (!business) throw new NotFoundError("Business not found.");
+    if (!req.businessId || req.businessId !== business.id) {
+      throw new ForbiddenError("You do not have permission to perform this action.");
+    }
+
+    let bookingRequest = await findBookingRequestById({
+      businessId: business.id,
+      requestId: parsedParams.data.requestId,
+    });
+    if (!bookingRequest) throw new NotFoundError("Booking request not found.");
+    bookingRequest = await syncExpiredBookingRequestState(bookingRequest);
+    if (["confirmed", "declined", "expired"].includes(bookingRequest.status)) {
+      throw new BadRequestError("This booking request can no longer be updated.");
+    }
+
+    const { services: publicServices, addonLinks } = await listPublicBookingServices(business.id);
+    const selection = resolveBookingServicesSelection({
+      businessDefaultFlow: business.bookingDefaultFlow,
+      businessSchedule: resolveBookingSchedule(business),
+      baseServiceId: bookingRequest.serviceId ?? "",
+      addonServiceIds: parseStoredStringArray(bookingRequest.addonServiceIds),
+      services: publicServices,
+      addonLinks,
+    });
+    const requestPolicy = resolvePublicBookingRequestPolicy({
+      business,
+      service: selection.baseService,
+    });
+    if (!requestPolicy.allowAlternateSlots) {
+      throw new BadRequestError("This request is set to use approval or a new-time prompt instead of alternate slots.");
+    }
+    if (parsedBody.data.options.length > requestPolicy.alternateSlotLimit) {
+      throw new BadRequestError(`Send up to ${requestPolicy.alternateSlotLimit} alternate time option${requestPolicy.alternateSlotLimit === 1 ? "" : "s"} for this service.`);
+    }
+
+    const expiresAt = new Date(
+      Date.now() +
+        (parsedBody.data.expiresInHours ??
+          requestPolicy.alternateOfferExpiryHours ??
+          DEFAULT_BOOKING_REQUEST_ALTERNATE_OFFER_EXPIRY_HOURS) *
+          60 *
+          60 *
+          1000
+    );
+    const validatedOptions: BookingRequestAlternateSlotInput[] = [];
+    for (const option of parsedBody.data.options) {
+      const startTime = new Date(option.startTime);
+      if (Number.isNaN(startTime.getTime())) {
+        throw new BadRequestError("One of the alternate slot start times is invalid.");
+      }
+      const endTime =
+        cleanOptionalText(option.endTime) != null
+          ? new Date(cleanOptionalText(option.endTime)!)
+          : new Date(startTime.getTime() + selection.durationMinutes * 60 * 1000);
+      if (Number.isNaN(endTime.getTime()) || endTime.getTime() <= startTime.getTime()) {
+        throw new BadRequestError("One of the alternate slot end times is invalid.");
+      }
+      await assertBookableRequestSlot({
+        business,
+        selection,
+        startTime,
+      });
+      validatedOptions.push({
+        startTime,
+        endTime,
+        label: cleanOptionalText(option.label) ?? "",
+        expiresAt,
+      });
+    }
+
+    const alternateSlotOptions = toBookingRequestAlternateSlots(validatedOptions, business.timezone ?? "America/Los_Angeles");
+    const now = new Date();
+    const [updated] = await db
+      .update(bookingRequests)
+      .set({
+        status: "awaiting_customer_selection",
+        ownerReviewStatus: "proposed_alternates",
+        customerResponseStatus: "pending",
+        ownerResponseMessage: cleanOptionalText(parsedBody.data.message),
+        alternateSlotOptions: serializeBookingRequestAlternateSlotOptions(alternateSlotOptions),
+        underReviewAt: bookingRequest.underReviewAt ?? now,
+        ownerRespondedAt: now,
+        expiresAt,
+        updatedAt: now,
+      })
+      .where(eq(bookingRequests.id, bookingRequest.id))
+      .returning();
+
+    await createActivityLog({
+      businessId: business.id,
+      action: "booking.request_alternates_proposed",
+      entityType: "booking_request",
+      entityId: bookingRequest.id,
+      metadata: {
+        optionCount: alternateSlotOptions.length,
+        expiresAt: expiresAt.toISOString(),
+      },
+      userId: req.userId,
+    });
+
+    const effectiveRequest = updated ?? bookingRequest;
+    const publicAccess = buildBookingRequestPublicAccess(effectiveRequest);
+    notifyCustomerAboutBookingRequestUpdate({
+      business,
+      request: effectiveRequest,
+      requestedTiming: buildBookingRequestTimingSummary({
+        requestedDate: effectiveRequest.requestedDate,
+        requestedTimeStart: effectiveRequest.requestedTimeStart,
+        requestedTimeEnd: effectiveRequest.requestedTimeEnd,
+        requestedTimeLabel: effectiveRequest.requestedTimeLabel,
+        timeZone: business.timezone ?? "America/Los_Angeles",
+      }),
+      subjectLine: `Alternate booking times from ${business.name}`,
+      eyebrow: "Alternate times",
+      title: "The shop sent alternate booking times",
+      intro:
+        "Your original requested time is being reviewed. Choose one of the alternate options below and the shop will confirm it without making you start over.",
+      ownerMessage: cleanOptionalText(parsedBody.data.message),
+      alternateOptions: alternateSlotOptions,
+      expiresAt,
+      nextSteps: "Pick the option that works best, or request another day if none of these fit.",
+      ctaLabel: "Review options",
+      ctaUrl: publicAccess.publicResponseUrl,
+      sendSms: true,
+      smsEntityKey: "alternates",
+    }).catch((error) => {
+      warnOnce(`booking:request-alternates:${bookingRequest.id}`, "booking request alternate email failed", {
+        businessId: business.id,
+        bookingRequestId: bookingRequest.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+    res.json({
+      ok: true,
+      record: await serializeOwnerBookingRequest(effectiveRequest, business, {
+        requestPolicy,
+      }),
+    });
+  })
+);
+
+businessesRouter.post(
+  "/:id/booking-requests/:requestId/request-new-time",
+  requireAuth,
+  requireTenant,
+  requirePermission("appointments.write"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsedParams = bookingRequestParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError(parsedParams.error.issues[0]?.message ?? "Invalid booking request.");
+    const parsedBody = bookingRequestAskNewTimeSchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) throw new BadRequestError(parsedBody.error.issues[0]?.message ?? "Invalid follow-up request.");
+
+    const business = await loadBusinessById(parsedParams.data.id);
+    if (!business) throw new NotFoundError("Business not found.");
+    if (!req.businessId || req.businessId !== business.id) {
+      throw new ForbiddenError("You do not have permission to perform this action.");
+    }
+
+    let bookingRequest = await findBookingRequestById({
+      businessId: business.id,
+      requestId: parsedParams.data.requestId,
+    });
+    if (!bookingRequest) throw new NotFoundError("Booking request not found.");
+    bookingRequest = await syncExpiredBookingRequestState(bookingRequest);
+    if (["confirmed", "declined", "expired"].includes(bookingRequest.status)) {
+      throw new BadRequestError("This booking request can no longer be updated.");
+    }
+
+    const expiresAt = parsedBody.data.expiresInHours
+      ? new Date(Date.now() + parsedBody.data.expiresInHours * 60 * 60 * 1000)
+      : null;
+    const now = new Date();
+    const [updated] = await db
+      .update(bookingRequests)
+      .set({
+        status: "awaiting_customer_selection",
+        ownerReviewStatus: "requested_new_time",
+        customerResponseStatus: "pending",
+        ownerResponseMessage: parsedBody.data.message.trim(),
+        alternateSlotOptions: "[]",
+        underReviewAt: bookingRequest.underReviewAt ?? now,
+        ownerRespondedAt: now,
+        expiresAt,
+        updatedAt: now,
+      })
+      .where(eq(bookingRequests.id, bookingRequest.id))
+      .returning();
+
+    await createActivityLog({
+      businessId: business.id,
+      action: "booking.request_customer_prompted_for_new_time",
+      entityType: "booking_request",
+      entityId: bookingRequest.id,
+      metadata: {
+        expiresAt: expiresAt?.toISOString() ?? null,
+      },
+      userId: req.userId,
+    });
+
+    const effectiveRequest = updated ?? bookingRequest;
+    const publicAccess = buildBookingRequestPublicAccess(effectiveRequest);
+    notifyCustomerAboutBookingRequestUpdate({
+      business,
+      request: effectiveRequest,
+      requestedTiming: buildBookingRequestTimingSummary({
+        requestedDate: effectiveRequest.requestedDate,
+        requestedTimeStart: effectiveRequest.requestedTimeStart,
+        requestedTimeEnd: effectiveRequest.requestedTimeEnd,
+        requestedTimeLabel: effectiveRequest.requestedTimeLabel,
+        timeZone: business.timezone ?? "America/Los_Angeles",
+      }),
+      subjectLine: `Choose another booking time for ${business.name}`,
+      eyebrow: "Need another day",
+      title: "The shop asked for another day or time",
+      intro:
+        "The shop still wants to make this work, but they need you to pick another day or share a different time preference.",
+      ownerMessage: parsedBody.data.message.trim(),
+      alternateOptionsText: "No alternate slots were included in this update. Use the secure link to send another day or time that works for you.",
+      expiresAt,
+      expiresAtText: expiresAt ? undefined : "No set deadline",
+      nextSteps: "Open the request page, choose another day or time that works, and send it back without re-entering your service details.",
+      ctaLabel: "Choose another time",
+      ctaUrl: publicAccess.publicResponseUrl,
+      sendSms: true,
+      smsEntityKey: "choose-another-time",
+    }).catch((error) => {
+      warnOnce(`booking:request-new-time:${bookingRequest.id}`, "booking request new-time email failed", {
+        businessId: business.id,
+        bookingRequestId: bookingRequest.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+    const { services: publicServices } = await listPublicBookingServices(business.id);
+    res.json({
+      ok: true,
+      record: await serializeOwnerBookingRequest(effectiveRequest, business, {
+        requestPolicy: resolveRequestPolicyForBookingRequest({
+          business,
+          request: effectiveRequest,
+          services: publicServices,
+        }),
+      }),
+    });
+  })
+);
+
+businessesRouter.post(
+  "/:id/booking-requests/:requestId/decline",
+  requireAuth,
+  requireTenant,
+  requirePermission("appointments.write"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsedParams = bookingRequestParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError(parsedParams.error.issues[0]?.message ?? "Invalid booking request.");
+    const parsedBody = bookingRequestDeclineSchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) throw new BadRequestError(parsedBody.error.issues[0]?.message ?? "Invalid decline request.");
+
+    const business = await loadBusinessById(parsedParams.data.id);
+    if (!business) throw new NotFoundError("Business not found.");
+    if (!req.businessId || req.businessId !== business.id) {
+      throw new ForbiddenError("You do not have permission to perform this action.");
+    }
+
+    let bookingRequest = await findBookingRequestById({
+      businessId: business.id,
+      requestId: parsedParams.data.requestId,
+    });
+    if (!bookingRequest) throw new NotFoundError("Booking request not found.");
+    bookingRequest = await syncExpiredBookingRequestState(bookingRequest);
+    if (["confirmed", "declined", "expired"].includes(bookingRequest.status)) {
+      throw new BadRequestError("This booking request can no longer be declined.");
+    }
+
+    const now = new Date();
+    const [updated] = await db
+      .update(bookingRequests)
+      .set({
+        status: "declined",
+        ownerReviewStatus: "declined",
+        customerResponseStatus: "declined",
+        ownerResponseMessage: cleanOptionalText(parsedBody.data.message),
+        underReviewAt: bookingRequest.underReviewAt ?? now,
+        ownerRespondedAt: now,
+        declinedAt: now,
+        expiresAt: null,
+        updatedAt: now,
+      })
+      .where(eq(bookingRequests.id, bookingRequest.id))
+      .returning();
+
+    await createActivityLog({
+      businessId: business.id,
+      action: "booking.request_declined",
+      entityType: "booking_request",
+      entityId: bookingRequest.id,
+      metadata: {
+        message: cleanOptionalText(parsedBody.data.message),
+      },
+      userId: req.userId,
+    });
+
+    const effectiveRequest = updated ?? bookingRequest;
+    notifyCustomerAboutBookingRequestUpdate({
+      business,
+      request: effectiveRequest,
+      requestedTiming: buildBookingRequestTimingSummary({
+        requestedDate: effectiveRequest.requestedDate,
+        requestedTimeStart: effectiveRequest.requestedTimeStart,
+        requestedTimeEnd: effectiveRequest.requestedTimeEnd,
+        requestedTimeLabel: effectiveRequest.requestedTimeLabel,
+        timeZone: business.timezone ?? "America/Los_Angeles",
+      }),
+      subjectLine: `Booking request update from ${business.name}`,
+      eyebrow: "Request update",
+      title: "This booking request could not be confirmed",
+      intro:
+        "The shop reviewed your request but could not confirm this booking as submitted. If you still want the work done, contact the shop directly for the next step.",
+      ownerMessage: cleanOptionalText(parsedBody.data.message),
+      nextSteps: "If you still want to move forward, reach out to the shop directly and they can help with another option.",
+    }).catch((error) => {
+      warnOnce(`booking:request-declined:${bookingRequest.id}`, "booking request decline email failed", {
+        businessId: business.id,
+        bookingRequestId: bookingRequest.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+    const { services: publicServices } = await listPublicBookingServices(business.id);
+    res.json({
+      ok: true,
+      record: await serializeOwnerBookingRequest(effectiveRequest, business, {
+        requestPolicy: resolveRequestPolicyForBookingRequest({
+          business,
+          request: effectiveRequest,
+          services: publicServices,
+        }),
+      }),
+    });
+  })
+);
+
+businessesRouter.get(
+  "/:id/public-booking-requests/:requestId",
+  publicBookingRequestViewLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsedParams = bookingRequestParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError(parsedParams.error.issues[0]?.message ?? "Invalid booking request.");
+    const parsedQuery = bookingRequestTokenQuerySchema.safeParse(req.query ?? {});
+    if (!parsedQuery.success) throw new BadRequestError(parsedQuery.error.issues[0]?.message ?? "Invalid request access link.");
+
+    const business = await loadPublicBookingBusiness(parsedParams.data.id);
+    if (!business) throw new NotFoundError("Booking request not found.");
+    const bookingRequest = await findBookingRequestById({
+      businessId: business.id,
+      requestId: parsedParams.data.requestId,
+    });
+    if (!bookingRequest) throw new NotFoundError("Booking request not found.");
+
+    const access = verifyCurrentBookingRequestToken(
+      parsedQuery.data.token,
+      { requestId: bookingRequest.id, businessId: business.id },
+      bookingRequest.publicTokenVersion
+    );
+    if (!access) throw new ForbiddenError("This booking request link is invalid or expired.");
+
+    const syncedRequest = await syncExpiredBookingRequestState(bookingRequest);
+    const { services: publicServices } = await listPublicBookingServices(business.id);
+    const requestService = publicServices.find((service) => service.id === syncedRequest.serviceId) ?? null;
+    const requestPolicy = requestService
+      ? resolvePublicBookingRequestPolicy({
+          business,
+          service: requestService,
+        })
+      : undefined;
+    let confirmationUrl: string | null = null;
+    let portalUrl: string | null = null;
+    let scheduledFor: string | null = null;
+    if (syncedRequest.appointmentId) {
+      const [appointment] = await db
+        .select({
+          publicTokenVersion: appointments.publicTokenVersion,
+          startTime: appointments.startTime,
+        })
+        .from(appointments)
+        .where(and(eq(appointments.id, syncedRequest.appointmentId), eq(appointments.businessId, business.id)))
+        .limit(1);
+      if (appointment) {
+        const links = await buildAppointmentPublicLinks({
+          appointmentId: syncedRequest.appointmentId,
+          businessId: business.id,
+          publicTokenVersion: appointment.publicTokenVersion ?? 1,
+        });
+        confirmationUrl = links.confirmationUrl;
+        portalUrl = links.portalUrl;
+        scheduledFor = formatBookingDateTime(appointment.startTime, business.timezone);
+      }
+    }
+
+    res.json({
+      record: serializePublicBookingRequest(syncedRequest, business, { requestPolicy }),
+      confirmationUrl,
+      portalUrl,
+      scheduledFor,
+    });
+  })
+);
+
+businessesRouter.post(
+  "/:id/public-booking-requests/:requestId/respond",
+  publicBookingRequestRespondLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsedParams = bookingRequestParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError(parsedParams.error.issues[0]?.message ?? "Invalid booking request.");
+    const parsedQuery = bookingRequestTokenQuerySchema.safeParse(req.query ?? {});
+    if (!parsedQuery.success) throw new BadRequestError(parsedQuery.error.issues[0]?.message ?? "Invalid request access link.");
+    const parsedBody = publicBookingRequestRespondSchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) throw new BadRequestError(parsedBody.error.issues[0]?.message ?? "Invalid request response.");
+
+    const business = await loadPublicBookingBusiness(parsedParams.data.id);
+    if (!business) throw new NotFoundError("Booking request not found.");
+    let bookingRequest = await findBookingRequestById({
+      businessId: business.id,
+      requestId: parsedParams.data.requestId,
+    });
+    if (!bookingRequest) throw new NotFoundError("Booking request not found.");
+
+    const access = verifyCurrentBookingRequestToken(
+      parsedQuery.data.token,
+      { requestId: bookingRequest.id, businessId: business.id },
+      bookingRequest.publicTokenVersion
+    );
+    if (!access) throw new ForbiddenError("This booking request link is invalid or expired.");
+
+    bookingRequest = await syncExpiredBookingRequestState(bookingRequest);
+    if (["confirmed", "declined", "expired"].includes(bookingRequest.status)) {
+      throw new BadRequestError("This booking request can no longer be updated.");
+    }
+    const { services: publicServices } = await listPublicBookingServices(business.id);
+    const requestService = publicServices.find((service) => service.id === bookingRequest.serviceId) ?? null;
+    const requestPolicy = requestService
+      ? resolvePublicBookingRequestPolicy({
+          business,
+          service: requestService,
+        })
+      : undefined;
+
+    if (parsedBody.data.action === "decline") {
+      const now = new Date();
+      const [updated] = await db
+        .update(bookingRequests)
+        .set({
+          status: "declined",
+          customerResponseStatus: "declined",
+          customerResponseMessage: cleanOptionalText(parsedBody.data.message),
+          customerRespondedAt: now,
+          declinedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(bookingRequests.id, bookingRequest.id))
+        .returning();
+
+      await createActivityLog({
+        businessId: business.id,
+        action: "booking.request_declined_by_customer",
+        entityType: "booking_request",
+        entityId: bookingRequest.id,
+        metadata: {
+          message: cleanOptionalText(parsedBody.data.message),
+        },
+      });
+
+      res.json({
+        ok: true,
+        record: serializePublicBookingRequest(updated ?? bookingRequest, business, { requestPolicy }),
+      });
+      return;
+    }
+
+    if (parsedBody.data.action === "request_new_time") {
+      const nextRequestedTimeStart = parseOptionalDateTime(
+        cleanOptionalText(parsedBody.data.requestedTimeStart),
+        "Choose a valid requested time."
+      );
+      const nextRequestedTimeEnd = parseOptionalDateTime(
+        cleanOptionalText(parsedBody.data.requestedTimeEnd),
+        "Choose a valid requested end time."
+      );
+      const nextRequestedDate =
+        cleanOptionalText(parsedBody.data.requestedDate) ??
+        (nextRequestedTimeStart ? toDateKey(nextRequestedTimeStart, business.timezone ?? "America/Los_Angeles") : null);
+      const nextRequestedTimeLabel = cleanOptionalText(parsedBody.data.requestedTimeLabel);
+      const effectiveRequireExactTime = requestPolicy?.requireExactTime ?? false;
+      const effectiveAllowTimeWindows = requestPolicy?.allowTimeWindows ?? true;
+      const effectiveAllowFlexibility = requestPolicy?.allowFlexibility ?? true;
+      if (!nextRequestedDate) {
+        throw new BadRequestError("Choose the day that works best for you.");
+      }
+      if (effectiveRequireExactTime || !effectiveAllowTimeWindows) {
+        if (!nextRequestedTimeStart) {
+          throw new BadRequestError("Choose the exact time you want the shop to review.");
+        }
+      } else if (!nextRequestedTimeStart && !nextRequestedTimeLabel) {
+        throw new BadRequestError("Choose an exact time or a time window so the shop can review it.");
+      }
+      if (!effectiveAllowTimeWindows && nextRequestedTimeLabel) {
+        throw new BadRequestError("This request needs an exact time instead of a time window.");
+      }
+      if (
+        !nextRequestedDate &&
+        !nextRequestedTimeStart &&
+        !nextRequestedTimeLabel &&
+        !cleanOptionalText(parsedBody.data.message)
+      ) {
+        throw new BadRequestError("Share the next day, time, or note so the shop can help.");
+      }
+
+      const now = new Date();
+      const [updated] = await db
+        .update(bookingRequests)
+        .set({
+          status: "customer_requested_new_time",
+          ownerReviewStatus: "pending",
+          customerResponseStatus: "requested_new_time",
+          requestedDate: nextRequestedDate,
+          requestedTimeStart: nextRequestedTimeStart,
+          requestedTimeEnd:
+            nextRequestedTimeEnd ??
+            (nextRequestedTimeStart && bookingRequest.requestedTimeStart && bookingRequest.requestedTimeEnd
+              ? new Date(
+                  nextRequestedTimeStart.getTime() +
+                    (bookingRequest.requestedTimeEnd.getTime() - bookingRequest.requestedTimeStart.getTime())
+                )
+              : null),
+          requestedTimeLabel: nextRequestedTimeLabel,
+          customerTimezone: cleanOptionalText(parsedBody.data.customerTimezone) ?? bookingRequest.customerTimezone ?? business.timezone,
+          flexibility: effectiveAllowFlexibility
+            ? normalizeBookingRequestFlexibility(parsedBody.data.flexibility ?? bookingRequest.flexibility)
+            : "same_day_flexible",
+          customerResponseMessage: cleanOptionalText(parsedBody.data.message),
+          alternateSlotOptions: "[]",
+          customerRespondedAt: now,
+          expiresAt: null,
+          updatedAt: now,
+        })
+        .where(eq(bookingRequests.id, bookingRequest.id))
+        .returning();
+
+      await createActivityLog({
+        businessId: business.id,
+        action: "booking.request_customer_requested_new_time",
+        entityType: "booking_request",
+        entityId: bookingRequest.id,
+        metadata: {
+          requestedTiming: buildBookingRequestTimingSummary({
+            requestedDate: nextRequestedDate,
+            requestedTimeStart: nextRequestedTimeStart,
+            requestedTimeEnd:
+              nextRequestedTimeEnd ??
+              (nextRequestedTimeStart && bookingRequest.requestedTimeStart && bookingRequest.requestedTimeEnd
+                ? new Date(
+                    nextRequestedTimeStart.getTime() +
+                      (bookingRequest.requestedTimeEnd.getTime() - bookingRequest.requestedTimeStart.getTime())
+                  )
+                : null),
+            requestedTimeLabel: nextRequestedTimeLabel,
+            timeZone: business.timezone ?? "America/Los_Angeles",
+          }),
+        },
+      });
+
+      const effectiveRequest = updated ?? bookingRequest;
+      const ownerRecipient = cleanOptionalText(business.email ?? undefined);
+      if (ownerRecipient && isEmailConfigured()) {
+        sendBookingRequestOwnerAlert({
+          to: ownerRecipient,
+          businessId: business.id,
+          ownerName: "Team",
+          businessName: business.name,
+          clientName: [effectiveRequest.clientFirstName, effectiveRequest.clientLastName].filter(Boolean).join(" ").trim() || "Customer",
+          requestedTiming: buildBookingRequestTimingSummary({
+            requestedDate: effectiveRequest.requestedDate,
+            requestedTimeStart: effectiveRequest.requestedTimeStart,
+            requestedTimeEnd: effectiveRequest.requestedTimeEnd,
+            requestedTimeLabel: effectiveRequest.requestedTimeLabel,
+            timeZone: business.timezone ?? "America/Los_Angeles",
+          }),
+          serviceSummary: effectiveRequest.serviceSummary,
+          vehicle: buildVehicleSummary({
+            year: effectiveRequest.vehicleYear,
+            make: effectiveRequest.vehicleMake,
+            model: effectiveRequest.vehicleModel,
+          }),
+          flexibility: formatBookingRequestFlexibilityLabel(effectiveRequest.flexibility),
+          clientEmail: effectiveRequest.clientEmail,
+          clientPhone: effectiveRequest.clientPhone,
+          customerMessage: effectiveRequest.customerResponseMessage,
+          requestUrl: buildOwnerBookingRequestAppUrl(effectiveRequest.id),
+        }).catch((error) => {
+          warnOnce(`booking:request-customer-followup:${bookingRequest.id}`, "booking request owner alert failed after customer follow-up", {
+            businessId: business.id,
+            bookingRequestId: bookingRequest.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
+
+      res.json({
+        ok: true,
+        record: serializePublicBookingRequest(effectiveRequest, business, { requestPolicy }),
+      });
+      return;
+    }
+
+    const alternateSlotId = cleanOptionalText(parsedBody.data.alternateSlotId);
+    if (!alternateSlotId) {
+      throw new BadRequestError("Choose one of the alternate time options to continue.");
+    }
+    if (normalizeBookingRequestStatus(bookingRequest.status) !== "awaiting_customer_selection") {
+      throw new BadRequestError("This booking request is not waiting on an alternate slot choice.");
+    }
+
+    const alternateSlotOptions = expireBookingRequestAlternateSlotOptions(
+      parseBookingRequestAlternateSlotOptions(bookingRequest.alternateSlotOptions)
+    );
+    const selectedOption = alternateSlotOptions.find((option) => option.id === alternateSlotId);
+    if (!selectedOption || selectedOption.status !== "proposed") {
+      throw new BadRequestError("That alternate time is no longer available.");
+    }
+
+    const { addonLinks } = await listPublicBookingServices(business.id);
+    const selection = resolveBookingServicesSelection({
+      businessDefaultFlow: business.bookingDefaultFlow,
+      businessSchedule: resolveBookingSchedule(business),
+      baseServiceId: bookingRequest.serviceId ?? "",
+      addonServiceIds: parseStoredStringArray(bookingRequest.addonServiceIds),
+      services: publicServices,
+      addonLinks,
+    });
+    const selectedStartTime = new Date(selectedOption.startTime);
+    await assertBookableRequestSlot({
+      business,
+      selection,
+      startTime: selectedStartTime,
+    });
+
+    const { client, vehicle } = await resolveBookingRequestClientAndVehicle({ request: bookingRequest });
+    const appointment = await createPublicBookingAppointment({
+      business,
+      client,
+      vehicleId: vehicle?.id ?? null,
+      locationId: bookingRequest.locationId ?? null,
+      selection,
+      startTime: selectedStartTime,
+      requestedServiceMode: normalizeRequestServiceMode(bookingRequest.serviceMode),
+      customerNotes: bookingRequest.notes ?? null,
+      serviceAddress: bookingRequest.serviceAddress ?? null,
+      serviceCity: bookingRequest.serviceCity ?? null,
+      serviceState: bookingRequest.serviceState ?? null,
+      serviceZip: bookingRequest.serviceZip ?? null,
+      campaign: bookingRequest.campaign ?? null,
+      sourceDetail: bookingRequest.source ?? null,
+      normalizedSource: normalizeLeadSourceValue(bookingRequest.source),
+      activityAction: "booking.request_confirmed",
+      activityMetadata: {
+        bookingRequestId: bookingRequest.id,
+        confirmedFrom: "alternate_slot",
+        alternateSlotId,
+      },
+      internalNotes: [
+        "Booking request confirmed from alternate slot",
+        `Service mode: ${normalizeBookingServiceMode(bookingRequest.serviceMode)}`,
+        cleanOptionalText(parsedBody.data.message) ?? null,
+      ],
+      sendConfirmationTo: bookingRequest.clientEmail ?? null,
+      vehicleSummary: buildVehicleSummary({
+        year: bookingRequest.vehicleYear,
+        make: bookingRequest.vehicleMake,
+        model: bookingRequest.vehicleModel,
+      }),
+    });
+
+    const now = new Date();
+    const updatedOptions = alternateSlotOptions.map((option) =>
+      option.id === alternateSlotId
+        ? { ...option, status: "accepted" as const }
+        : option.status === "proposed"
+          ? { ...option, status: "rejected" as const }
+          : option
+    );
+    const [updated] = await db
+      .update(bookingRequests)
+      .set({
+        clientId: client.id,
+        vehicleId: vehicle?.id ?? null,
+        appointmentId: appointment.appointmentId,
+        status: "confirmed",
+        customerResponseStatus: "accepted_alternate_slot",
+        customerResponseMessage: cleanOptionalText(parsedBody.data.message),
+        alternateSlotOptions: serializeBookingRequestAlternateSlotOptions(updatedOptions),
+        customerRespondedAt: now,
+        confirmedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(bookingRequests.id, bookingRequest.id))
+      .returning();
+
+    await createActivityLog({
+      businessId: business.id,
+      action: "booking.request_customer_selected_alternate",
+      entityType: "booking_request",
+      entityId: bookingRequest.id,
+      metadata: {
+        alternateSlotId,
+        appointmentId: appointment.appointmentId,
+      },
+    });
+
+    notifyOwnerAboutBookingRequestConfirmed({
+      business,
+      request: updated ?? bookingRequest,
+      confirmedTiming: appointment.scheduledFor,
+      appointmentId: appointment.appointmentId,
+      requestUrl: buildOwnerBookingRequestAppUrl(bookingRequest.id),
+    }).catch((error) => {
+      warnOnce(`booking:request-confirmed-owner:${bookingRequest.id}`, "booking request owner confirmation email failed", {
+        businessId: business.id,
+        bookingRequestId: bookingRequest.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+    res.json({
+      ok: true,
+      record: serializePublicBookingRequest(updated ?? bookingRequest, business, { requestPolicy }),
+      appointmentId: appointment.appointmentId,
+      confirmationUrl: appointment.confirmationUrl,
+      portalUrl: appointment.portalUrl,
+      scheduledFor: appointment.scheduledFor,
     });
   })
 );
@@ -3122,6 +5745,18 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
       bookingPageTitle: parsed.data.bookingPageTitle?.trim() || null,
       bookingPageSubtitle: parsed.data.bookingPageSubtitle?.trim() || null,
       bookingConfirmationMessage: parsed.data.bookingConfirmationMessage?.trim() || null,
+      bookingRequestRequireExactTime: parsed.data.bookingRequestRequireExactTime ?? false,
+      bookingRequestAllowTimeWindows: parsed.data.bookingRequestAllowTimeWindows ?? true,
+      bookingRequestAllowFlexibility: parsed.data.bookingRequestAllowFlexibility ?? true,
+      bookingRequestAllowAlternateSlots: parsed.data.bookingRequestAllowAlternateSlots ?? true,
+      bookingRequestAlternateSlotLimit:
+        normalizeBookingRequestAlternateSlotLimit(parsed.data.bookingRequestAlternateSlotLimit),
+      bookingRequestAlternateOfferExpiryHours:
+        normalizeBookingRequestAlternateOfferExpiryHours(parsed.data.bookingRequestAlternateOfferExpiryHours ?? null),
+      bookingRequestConfirmationCopy: parsed.data.bookingRequestConfirmationCopy?.trim() || null,
+      bookingRequestOwnerResponsePageCopy: parsed.data.bookingRequestOwnerResponsePageCopy?.trim() || null,
+      bookingRequestAlternateAcceptanceCopy: parsed.data.bookingRequestAlternateAcceptanceCopy?.trim() || null,
+      bookingRequestChooseAnotherDayCopy: parsed.data.bookingRequestChooseAnotherDayCopy?.trim() || null,
       bookingTrustBulletPrimary: parsed.data.bookingTrustBulletPrimary?.trim() || null,
       bookingTrustBulletSecondary: parsed.data.bookingTrustBulletSecondary?.trim() || null,
       bookingTrustBulletTertiary: parsed.data.bookingTrustBulletTertiary?.trim() || null,
@@ -3336,6 +5971,40 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.bookingConfirmationMessage !== undefined) {
     updates.bookingConfirmationMessage = parsed.data.bookingConfirmationMessage?.trim() || null;
+  }
+  if (parsed.data.bookingRequestRequireExactTime !== undefined) {
+    updates.bookingRequestRequireExactTime = parsed.data.bookingRequestRequireExactTime ?? false;
+  }
+  if (parsed.data.bookingRequestAllowTimeWindows !== undefined) {
+    updates.bookingRequestAllowTimeWindows = parsed.data.bookingRequestAllowTimeWindows ?? true;
+  }
+  if (parsed.data.bookingRequestAllowFlexibility !== undefined) {
+    updates.bookingRequestAllowFlexibility = parsed.data.bookingRequestAllowFlexibility ?? true;
+  }
+  if (parsed.data.bookingRequestAllowAlternateSlots !== undefined) {
+    updates.bookingRequestAllowAlternateSlots = parsed.data.bookingRequestAllowAlternateSlots ?? true;
+  }
+  if (parsed.data.bookingRequestAlternateSlotLimit !== undefined) {
+    updates.bookingRequestAlternateSlotLimit = normalizeBookingRequestAlternateSlotLimit(
+      parsed.data.bookingRequestAlternateSlotLimit
+    );
+  }
+  if (parsed.data.bookingRequestAlternateOfferExpiryHours !== undefined) {
+    updates.bookingRequestAlternateOfferExpiryHours = normalizeBookingRequestAlternateOfferExpiryHours(
+      parsed.data.bookingRequestAlternateOfferExpiryHours ?? null
+    );
+  }
+  if (parsed.data.bookingRequestConfirmationCopy !== undefined) {
+    updates.bookingRequestConfirmationCopy = parsed.data.bookingRequestConfirmationCopy?.trim() || null;
+  }
+  if (parsed.data.bookingRequestOwnerResponsePageCopy !== undefined) {
+    updates.bookingRequestOwnerResponsePageCopy = parsed.data.bookingRequestOwnerResponsePageCopy?.trim() || null;
+  }
+  if (parsed.data.bookingRequestAlternateAcceptanceCopy !== undefined) {
+    updates.bookingRequestAlternateAcceptanceCopy = parsed.data.bookingRequestAlternateAcceptanceCopy?.trim() || null;
+  }
+  if (parsed.data.bookingRequestChooseAnotherDayCopy !== undefined) {
+    updates.bookingRequestChooseAnotherDayCopy = parsed.data.bookingRequestChooseAnotherDayCopy?.trim() || null;
   }
   if (parsed.data.bookingTrustBulletPrimary !== undefined) {
     updates.bookingTrustBulletPrimary = parsed.data.bookingTrustBulletPrimary?.trim() || null;

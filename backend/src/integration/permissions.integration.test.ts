@@ -139,6 +139,42 @@ describe("permission enforcement", () => {
     expect(res.status).toBe(403);
   });
 
+  it("denies booking-request owner actions without appointments.write", async () => {
+    resolveTenantContext.mockResolvedValue({
+      businessId: "biz-test",
+      role: "technician",
+      permissions: ["appointments.read"],
+      source: "membership",
+    });
+    loadAuthTokenVersion.mockResolvedValue(1);
+
+    const token = createAccessToken("user-test", 1);
+    const requestId = "11111111-1111-1111-1111-111111111111";
+    const businessId = "11111111-1111-1111-1111-111111111111";
+
+    const approve = await request(app)
+      .post(`/api/businesses/${businessId}/booking-requests/${requestId}/approve`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    const proposeAlternates = await request(app)
+      .post(`/api/businesses/${businessId}/booking-requests/${requestId}/propose-alternates`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    const askNewTime = await request(app)
+      .post(`/api/businesses/${businessId}/booking-requests/${requestId}/request-new-time`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    const decline = await request(app)
+      .post(`/api/businesses/${businessId}/booking-requests/${requestId}/decline`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+
+    expect(approve.status).toBe(403);
+    expect(proposeAlternates.status).toBe(403);
+    expect(askNewTime.status).toBe(403);
+    expect(decline.status).toBe(403);
+  });
+
   it("denies vehicle archive actions without vehicles.write", async () => {
     resolveTenantContext.mockResolvedValue({
       businessId: "biz-test",

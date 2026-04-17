@@ -5,6 +5,7 @@ import { logger } from "../lib/logger.js";
 function isPublicDocumentRoute(path: string): boolean {
   return (
     /^\/api\/portal\/[^/]+$/i.test(path) ||
+    /^\/api\/businesses\/[^/]+\/public-booking-requests\/[^/]+(?:\/respond)?$/i.test(path) ||
     /^\/api\/(?:quotes|invoices|appointments)\/[^/]+\/(?:public-html|public-pay|public-respond|public-request-revision|public-request-change)$/i.test(
       path
     )

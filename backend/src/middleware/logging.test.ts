@@ -71,6 +71,30 @@ describe("requestLogging", () => {
     );
   });
 
+  it("emits a launch warning for public booking request client errors", () => {
+    const { response, finish } = createResponse(403);
+    const req = {
+      method: "GET",
+      path: "/api/businesses/biz-1/public-booking-requests/request-1",
+      requestId: "req-booking-request-1",
+      userId: undefined,
+      businessId: undefined,
+    } as unknown as Request;
+    const next = vi.fn() as unknown as NextFunction;
+
+    requestLogging(req, response, next);
+    finish();
+
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "Launch monitor: public document client error",
+      expect.objectContaining({
+        requestId: "req-booking-request-1",
+        path: "/api/businesses/biz-1/public-booking-requests/request-1",
+        status: 403,
+      })
+    );
+  });
+
   it("emits a launch warning for protected CRUD denials", () => {
     const { response, finish } = createResponse(403);
     const req = {

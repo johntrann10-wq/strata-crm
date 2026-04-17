@@ -15,8 +15,13 @@ describe("builtin email templates", () => {
   it("do not include mojibake punctuation in subjects or bodies", () => {
     for (const slug of EMAIL_TEMPLATE_SLUGS) {
       const template = getBuiltinTemplate(slug);
-      expect(template?.subject).not.toContain("â");
-      expect(template?.bodyHtml).not.toContain("â");
+      expect(template?.subject).not.toContain("Ã¢");
+      expect(template?.bodyHtml).not.toContain("Ã¢");
     }
+  });
+
+  it("includes dedicated request-booking confirmation templates", () => {
+    expect(getBuiltinTemplate("booking_request_received")?.bodyText).toContain("What happens next");
+    expect(getBuiltinTemplate("booking_request_owner_update")?.bodyText).toContain("Confirmed timing");
   });
 });

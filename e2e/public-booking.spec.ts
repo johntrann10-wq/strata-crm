@@ -45,6 +45,10 @@ async function mockBookingDrafts(page: import("@playwright/test").Page, options?
             locationId: String(lastDraftBody?.locationId ?? ""),
             bookingDate: String(lastDraftBody?.bookingDate ?? ""),
             startTime: String(lastDraftBody?.startTime ?? ""),
+            requestedTimeEnd: String(lastDraftBody?.requestedTimeEnd ?? ""),
+            requestedTimeLabel: String(lastDraftBody?.requestedTimeLabel ?? ""),
+            flexibility: String(lastDraftBody?.flexibility ?? "same_day_flexible"),
+            customerTimezone: String(lastDraftBody?.customerTimezone ?? ""),
             firstName: String(lastDraftBody?.firstName ?? ""),
             lastName: String(lastDraftBody?.lastName ?? ""),
             email: String(lastDraftBody?.email ?? ""),
@@ -101,6 +105,10 @@ async function mockBookingDrafts(page: import("@playwright/test").Page, options?
             locationId: String(lastDraftBody?.locationId ?? ""),
             bookingDate: String(lastDraftBody?.bookingDate ?? ""),
             startTime: String(lastDraftBody?.startTime ?? ""),
+            requestedTimeEnd: String(lastDraftBody?.requestedTimeEnd ?? ""),
+            requestedTimeLabel: String(lastDraftBody?.requestedTimeLabel ?? ""),
+            flexibility: String(lastDraftBody?.flexibility ?? "same_day_flexible"),
+            customerTimezone: String(lastDraftBody?.customerTimezone ?? ""),
             firstName: String(lastDraftBody?.firstName ?? ""),
             lastName: String(lastDraftBody?.lastName ?? ""),
             email: String(lastDraftBody?.email ?? ""),
@@ -291,6 +299,7 @@ test("public booking flow supports self-booking end to end", async ({ page }) =>
 
 test("public booking supports request-only services on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  const draftMock = await mockBookingDrafts(page);
   let postedPayload: Record<string, unknown> | null = null;
 
   await page.route("**/api/businesses/biz-request/public-booking-config", async (route) => {
@@ -305,6 +314,18 @@ test("public booking supports request-only services on mobile", async ({ page })
         title: "Tell us what you need",
         subtitle: "Share the service details and the shop can confirm the best next step.",
         confirmationMessage: null,
+        requestSettings: {
+          requireExactTime: false,
+          allowTimeWindows: true,
+          allowFlexibility: true,
+          allowAlternateSlots: true,
+          alternateSlotLimit: 3,
+          alternateOfferExpiryHours: 48,
+          confirmationCopy: "Your request is with the shop. They can follow up with the next step soon.",
+          ownerResponsePageCopy: null,
+          alternateAcceptanceCopy: null,
+          chooseAnotherDayCopy: null,
+        },
         trustPoints: ["Goes directly to the shop", "Quick follow-up", "Secure and simple"],
         notesPrompt: "Add timing, questions, or anything the shop should know.",
         branding: {
@@ -321,6 +342,11 @@ test("public booking supports request-only services on mobile", async ({ page })
         allowCustomerNotes: true,
         showPrices: true,
         showDurations: true,
+        availabilityDefaults: {
+          dayIndexes: [1, 2, 3, 4, 5],
+          openTime: "09:00",
+          closeTime: "17:00",
+        },
         locations: [],
         services: [
           {
@@ -340,6 +366,18 @@ test("public booking supports request-only services on mobile", async ({ page })
             featured: false,
             showPrice: true,
             showDuration: true,
+            requestPolicy: {
+              requireExactTime: null,
+              allowTimeWindows: null,
+              allowFlexibility: null,
+              reviewMessage: null,
+              allowAlternateSlots: null,
+              alternateSlotLimit: null,
+              alternateOfferExpiryHours: null,
+            },
+            availableDayIndexes: [1, 2, 3, 4, 5],
+            openTime: "09:00",
+            closeTime: "17:00",
             addons: [],
           },
         ],
@@ -368,18 +406,184 @@ test("public booking supports request-only services on mobile", async ({ page })
   await page.locator(".svc-card").filter({ hasText: "Windshield tint" }).click();
   await page.getByLabel("Vehicle make *").fill("Tesla");
   await page.getByLabel("Vehicle model *").fill("Model Y");
+  await expect.poll(() => draftMock.getUpdateCount()).toBeGreaterThan(0);
   await page.getByRole("button", { name: /continue/i }).click();
-  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Where and when works best?" })).toBeVisible();
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What day and time do you prefer?" })).toBeVisible();
+  await page.getByRole("button", { name: "Apr 24 Fri" }).click();
+  await page.getByRole("button", { name: "9:00 AM" }).click();
+  await page.getByRole("button", { name: "Any nearby slot" }).click();
   await page.getByRole("button", { name: /continue/i }).click();
   await page.getByLabel("First name").fill("Taylor");
   await page.getByLabel("Last name").fill("Morgan");
   await page.getByLabel("Email address").fill("taylor@example.com");
   await page.getByRole("button", { name: /continue/i }).click();
-  await expect(page.getByLabel("Additional details")).toBeVisible();
+  await expect(page.getByText("Requested timing", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Fri, Apr 24 · 9:00 AM - 11:00 AM").first()).toBeVisible();
   await page.getByRole("button", { name: /send request/i }).click();
 
   await expect(page.getByText("Request sent!")).toBeVisible();
+  await expect(page.getByText("Your request is with the shop. They can follow up with the next step soon.")).toBeVisible();
+  expect(postedPayload).toMatchObject({
+    bookingDate: "2026-04-24",
+    flexibility: "any_nearby_slot",
+  });
+  expect(postedPayload?.startTime).toEqual(expect.any(String));
+  expect(postedPayload?.requestedTimeEnd).toEqual(expect.any(String));
+  expect(postedPayload?.customerTimezone).toEqual(expect.any(String));
+  expect(postedPayload?.requestedTimeLabel).toBeUndefined();
+  expect(new Date(String(postedPayload?.requestedTimeEnd)).getTime()).toBeGreaterThan(
+    new Date(String(postedPayload?.startTime)).getTime()
+  );
   expect(postedPayload?.locationId).toBeUndefined();
+});
+
+test("mixed-mode services keep request and direct-book flows separate", async ({ page }) => {
+  const draftMock = await mockBookingDrafts(page, { resumeToken: "mixed-mode-token" });
+
+  await page.route("**/api/businesses/biz-mixed/public-booking-config", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        businessId: "biz-mixed",
+        businessName: "North Star Studio",
+        businessType: "auto_detailing",
+        timezone: "America/Los_Angeles",
+        title: "Tell us what you need",
+        subtitle: "Choose the right path for this service without losing context.",
+        confirmationMessage: null,
+        requestSettings: {
+          requireExactTime: false,
+          allowTimeWindows: true,
+          allowFlexibility: true,
+          allowAlternateSlots: true,
+          alternateSlotLimit: 3,
+          alternateOfferExpiryHours: 48,
+          confirmationCopy: "Your request is with the shop.",
+          ownerResponsePageCopy: null,
+          alternateAcceptanceCopy: null,
+          chooseAnotherDayCopy: null,
+        },
+        trustPoints: ["Goes directly to the shop", "Quick follow-up", "Secure and simple"],
+        notesPrompt: "Add timing, questions, or anything the shop should know.",
+        branding: {
+          logoUrl: null,
+          primaryColorToken: "orange",
+          accentColorToken: "amber",
+          backgroundToneToken: "ivory",
+          buttonStyleToken: "solid",
+        },
+        defaultFlow: "request",
+        requireEmail: false,
+        requirePhone: false,
+        requireVehicle: true,
+        allowCustomerNotes: true,
+        showPrices: true,
+        showDurations: true,
+        availabilityDefaults: {
+          dayIndexes: [1, 2, 3, 4, 5],
+          openTime: "09:00",
+          closeTime: "17:00",
+        },
+        locations: [],
+        services: [
+          {
+            id: "svc-direct",
+            name: "Interior reset",
+            categoryId: "cat-1",
+            categoryLabel: "Detailing",
+            description: "Book instantly.",
+            price: 199,
+            durationMinutes: 120,
+            effectiveFlow: "self_book",
+            depositAmount: 25,
+            leadTimeHours: 0,
+            bookingWindowDays: 30,
+            bufferMinutes: 15,
+            serviceMode: "in_shop",
+            featured: true,
+            showPrice: true,
+            showDuration: true,
+            requestPolicy: {
+              requireExactTime: null,
+              allowTimeWindows: null,
+              allowFlexibility: null,
+              reviewMessage: null,
+              allowAlternateSlots: null,
+              alternateSlotLimit: null,
+              alternateOfferExpiryHours: null,
+            },
+            availableDayIndexes: [1, 2, 3, 4, 5],
+            openTime: "09:00",
+            closeTime: "17:00",
+            addons: [],
+          },
+          {
+            id: "svc-request-only",
+            name: "Chrome delete",
+            categoryId: "cat-1",
+            categoryLabel: "Detailing",
+            description: "Request review first.",
+            price: 299,
+            durationMinutes: 180,
+            effectiveFlow: "request",
+            depositAmount: 0,
+            leadTimeHours: 0,
+            bookingWindowDays: 30,
+            bufferMinutes: 0,
+            serviceMode: "in_shop",
+            featured: false,
+            showPrice: true,
+            showDuration: true,
+            requestPolicy: {
+              requireExactTime: false,
+              allowTimeWindows: true,
+              allowFlexibility: true,
+              reviewMessage: "We review every chrome delete request before confirming it.",
+              allowAlternateSlots: true,
+              alternateSlotLimit: 3,
+              alternateOfferExpiryHours: 48,
+            },
+            availableDayIndexes: [1, 2, 3, 4, 5],
+            openTime: "09:00",
+            closeTime: "17:00",
+            addons: [],
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route("**/api/businesses/biz-mixed/public-booking-availability**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        effectiveFlow: "self_book",
+        timezone: "America/Los_Angeles",
+        date: "2026-04-22",
+        slots: [{ startTime: "2026-04-22T17:00:00.000Z", label: "10:00 AM" }],
+        durationMinutes: 120,
+        subtotal: 199,
+        depositAmount: 25,
+      }),
+    });
+  });
+
+  await page.goto("/book/biz-mixed?service=svc-direct");
+  await page.getByLabel("Vehicle make *").fill("Audi");
+  await page.getByLabel("Vehicle model *").fill("Q5");
+  await expect.poll(() => draftMock.getUpdateCount()).toBeGreaterThan(0);
+  await page.getByRole("button", { name: /continue/i }).click();
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Where and when works best?" })).toBeVisible();
+  await expect(page.getByText("10:00 AM").first()).toBeVisible();
+
+  await page.goto("/book/biz-mixed?service=svc-request-only");
+  await page.getByLabel("Vehicle make *").fill("Audi");
+  await page.getByLabel("Vehicle model *").fill("Q5");
+  await page.getByRole("button", { name: /continue/i }).click();
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What day and time do you prefer?" })).toBeVisible();
+  await expect(page.getByText("We review every chrome delete request before confirming it.")).toBeVisible();
 });
 
 test("service query param carries service and category context into the booking flow", async ({ page }) => {
@@ -571,7 +775,7 @@ test("hybrid services support mobile booking mode and submit address details cle
   await page.getByRole("button", { name: /continue/i }).click();
 
   await expect(page.getByRole("button", { name: /wheel coating top-up/i })).toBeVisible();
-  await expect(page.getByText(/r1s/i)).toBeVisible();
+  await expect(page.getByText("Rivian R1S", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /wheel coating top-up/i }).click();
   await page.getByRole("button", { name: "Book now" }).click();
 

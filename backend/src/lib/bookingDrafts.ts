@@ -15,6 +15,10 @@ export type BookingDraftComparableInput = {
   locationId?: string | null;
   bookingDate?: string | null;
   startTime?: string | null;
+  requestedTimeEnd?: string | null;
+  requestedTimeLabel?: string | null;
+  flexibility?: string | null;
+  customerTimezone?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   email?: string | null;
@@ -55,7 +59,11 @@ function hasVehicleContext(input: BookingDraftComparableInput): boolean {
 }
 
 function hasTimingContext(input: BookingDraftComparableInput): boolean {
-  return Boolean(cleanText(input.bookingDate) || cleanText(input.startTime));
+  return Boolean(
+    cleanText(input.bookingDate) ||
+      cleanText(input.startTime) ||
+      cleanText(input.requestedTimeLabel)
+  );
 }
 
 function hasIdentifiedContact(input: BookingDraftComparableInput): boolean {
@@ -92,6 +100,10 @@ export function buildBookingDraftComparableSignature(input: BookingDraftComparab
     locationId: cleanText(input.locationId),
     bookingDate: cleanText(input.bookingDate),
     startTime: cleanText(input.startTime),
+    requestedTimeEnd: cleanText(input.requestedTimeEnd),
+    requestedTimeLabel: cleanText(input.requestedTimeLabel),
+    flexibility: cleanText(input.flexibility),
+    customerTimezone: cleanText(input.customerTimezone),
     firstName: cleanText(input.firstName),
     lastName: cleanText(input.lastName),
     email: cleanText(input.email).toLowerCase(),

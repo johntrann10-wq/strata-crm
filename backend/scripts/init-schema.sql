@@ -38,6 +38,31 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 DO $$ BEGIN
+  CREATE TYPE booking_request_status AS ENUM (
+    'submitted_request', 'under_review', 'approved_requested_slot', 'awaiting_customer_selection',
+    'confirmed', 'declined', 'customer_requested_new_time', 'expired'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE booking_request_flexibility AS ENUM (
+    'exact_time_only', 'same_day_flexible', 'any_nearby_slot'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE booking_request_owner_review_status AS ENUM (
+    'pending', 'approved_requested_slot', 'proposed_alternates', 'requested_new_time', 'declined'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE booking_request_customer_response_status AS ENUM (
+    'pending', 'accepted_requested_slot', 'accepted_alternate_slot', 'requested_new_time', 'declined', 'expired'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
   CREATE TYPE integration_provider AS ENUM (
     'quickbooks_online', 'twilio_sms', 'google_calendar', 'outbound_webhooks'
   );
@@ -153,6 +178,16 @@ CREATE TABLE IF NOT EXISTS businesses (
   booking_page_title text,
   booking_page_subtitle text,
   booking_confirmation_message text,
+  booking_request_require_exact_time boolean DEFAULT false,
+  booking_request_allow_time_windows boolean DEFAULT true,
+  booking_request_allow_flexibility boolean DEFAULT true,
+  booking_request_allow_alternate_slots boolean DEFAULT true,
+  booking_request_alternate_slot_limit integer DEFAULT 3,
+  booking_request_alternate_offer_expiry_hours integer,
+  booking_request_confirmation_copy text,
+  booking_request_owner_response_page_copy text,
+  booking_request_alternate_acceptance_copy text,
+  booking_request_choose_another_day_copy text,
   booking_trust_bullet_primary text,
   booking_trust_bullet_secondary text,
   booking_trust_bullet_tertiary text,
@@ -239,6 +274,16 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_default_flow text DEFAUL
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_page_title text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_page_subtitle text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_confirmation_message text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_require_exact_time boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_allow_time_windows boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_allow_flexibility boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_allow_alternate_slots boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_alternate_slot_limit integer DEFAULT 3;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_alternate_offer_expiry_hours integer;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_confirmation_copy text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_owner_response_page_copy text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_alternate_acceptance_copy text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_request_choose_another_day_copy text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_trust_bullet_primary text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_trust_bullet_secondary text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_trust_bullet_tertiary text;
@@ -412,6 +457,13 @@ CREATE TABLE IF NOT EXISTS services (
   booking_deposit_amount decimal(12,2) DEFAULT 0,
   booking_lead_time_hours integer DEFAULT 0,
   booking_window_days integer DEFAULT 30,
+  booking_request_require_exact_time boolean,
+  booking_request_allow_time_windows boolean,
+  booking_request_allow_flexibility boolean,
+  booking_request_review_message text,
+  booking_request_allow_alternate_slots boolean,
+  booking_request_alternate_slot_limit integer,
+  booking_request_alternate_offer_expiry_hours integer,
   booking_service_mode text DEFAULT 'in_shop',
   booking_available_days text,
   booking_available_start_time text,
@@ -454,6 +506,13 @@ ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_description text;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_deposit_amount decimal(12,2) DEFAULT 0;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_lead_time_hours integer DEFAULT 0;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_window_days integer DEFAULT 30;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_request_require_exact_time boolean;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_request_allow_time_windows boolean;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_request_allow_flexibility boolean;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_request_review_message text;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_request_allow_alternate_slots boolean;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_request_alternate_slot_limit integer;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_request_alternate_offer_expiry_hours integer;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_service_mode text DEFAULT 'in_shop';
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_days text;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_start_time text;
@@ -765,6 +824,10 @@ CREATE TABLE IF NOT EXISTS booking_drafts (
   service_mode text DEFAULT 'in_shop',
   booking_date text,
   start_time timestamptz,
+  requested_time_end timestamptz,
+  requested_time_label text,
+  flexibility booking_request_flexibility NOT NULL DEFAULT 'same_day_flexible',
+  customer_timezone text,
   first_name text,
   last_name text,
   email text,
@@ -796,6 +859,71 @@ CREATE TABLE IF NOT EXISTS booking_drafts (
 
 CREATE UNIQUE INDEX IF NOT EXISTS booking_drafts_resume_token_unique
   ON booking_drafts (resume_token);
+
+ALTER TABLE booking_drafts ADD COLUMN IF NOT EXISTS requested_time_end timestamptz;
+ALTER TABLE booking_drafts ADD COLUMN IF NOT EXISTS requested_time_label text;
+ALTER TABLE booking_drafts ADD COLUMN IF NOT EXISTS flexibility booking_request_flexibility NOT NULL DEFAULT 'same_day_flexible';
+ALTER TABLE booking_drafts ADD COLUMN IF NOT EXISTS customer_timezone text;
+
+CREATE TABLE IF NOT EXISTS booking_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  draft_id uuid REFERENCES booking_drafts(id) ON DELETE SET NULL,
+  client_id uuid REFERENCES clients(id) ON DELETE SET NULL,
+  vehicle_id uuid REFERENCES vehicles(id) ON DELETE SET NULL,
+  service_id uuid REFERENCES services(id) ON DELETE SET NULL,
+  location_id uuid REFERENCES locations(id) ON DELETE SET NULL,
+  appointment_id uuid REFERENCES appointments(id) ON DELETE SET NULL,
+  status booking_request_status NOT NULL DEFAULT 'submitted_request',
+  owner_review_status booking_request_owner_review_status NOT NULL DEFAULT 'pending',
+  customer_response_status booking_request_customer_response_status NOT NULL DEFAULT 'pending',
+  service_mode text DEFAULT 'in_shop',
+  addon_service_ids text NOT NULL DEFAULT '[]',
+  service_summary text,
+  requested_date text,
+  requested_time_start timestamptz,
+  requested_time_end timestamptz,
+  requested_time_label text,
+  customer_timezone text,
+  flexibility booking_request_flexibility NOT NULL DEFAULT 'same_day_flexible',
+  owner_response_message text,
+  customer_response_message text,
+  alternate_slot_options text NOT NULL DEFAULT '[]',
+  client_first_name text,
+  client_last_name text,
+  client_email text,
+  client_phone text,
+  vehicle_year integer,
+  vehicle_make text,
+  vehicle_model text,
+  vehicle_color text,
+  service_address text,
+  service_city text,
+  service_state text,
+  service_zip text,
+  notes text,
+  marketing_opt_in boolean NOT NULL DEFAULT true,
+  source text,
+  campaign text,
+  public_token_version integer NOT NULL DEFAULT 1,
+  submitted_at timestamptz NOT NULL DEFAULT now(),
+  under_review_at timestamptz,
+  owner_responded_at timestamptz,
+  approved_requested_slot_at timestamptz,
+  customer_responded_at timestamptz,
+  confirmed_at timestamptz,
+  declined_at timestamptz,
+  expired_at timestamptz,
+  expires_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS booking_requests_business_status_created_idx
+  ON booking_requests (business_id, status, created_at);
+
+CREATE INDEX IF NOT EXISTS booking_requests_client_created_idx
+  ON booking_requests (business_id, client_id, created_at);
 
 CREATE TABLE IF NOT EXISTS email_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

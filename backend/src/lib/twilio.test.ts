@@ -43,6 +43,8 @@ describe("twilio helpers", () => {
       "lead_auto_response",
       "missed_call_text_back",
       "appointment_confirmation",
+      "booking_request_received",
+      "booking_request_customer_update",
       "appointment_reminder",
       "payment_receipt",
       "review_request",

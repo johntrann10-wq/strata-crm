@@ -15,7 +15,9 @@ export default function PublicLayout() {
   const supportHours = "Mon-Fri 9am-5pm PST";
   const extendedSupportHours = "Mon-Sun 8am-8pm PST";
   const isStandalonePublicFlow =
-    location.pathname.startsWith("/lead/") || location.pathname.startsWith("/book/");
+    location.pathname.startsWith("/lead/") ||
+    location.pathname.startsWith("/book/") ||
+    location.pathname.startsWith("/booking-request/");
 
   return (
     <div className="flex h-full flex-col">
