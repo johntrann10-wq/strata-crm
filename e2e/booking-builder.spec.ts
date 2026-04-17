@@ -123,6 +123,7 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
   };
 
   const businessPatchBodies: Array<Record<string, unknown>> = [];
+  const publicBookingConfigRequestUrls: string[] = [];
 
   const buildPublicBookingConfig = () => ({
     businessId: BUSINESS_ID,
@@ -377,6 +378,7 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
   });
 
   await page.route(`**/api/businesses/${BUSINESS_ID}/public-booking-config**`, async (route) => {
+    publicBookingConfigRequestUrls.push(route.request().url());
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -387,6 +389,9 @@ async function mockBookingBuilderWorkspace(page: Page, options: MockOptions = {}
   return {
     getLastBusinessPatch() {
       return businessPatchBodies.at(-1) ?? null;
+    },
+    getPublicBookingConfigRequestUrls() {
+      return [...publicBookingConfigRequestUrls];
     },
   };
 }
@@ -419,6 +424,11 @@ test("booking builder preview updates and saves business-level settings", async 
 
   await expect(page.getByText("Book your gloss reset")).toBeVisible();
   await expect(page.getByTitle("Booking builder preview")).toBeVisible();
+  expect(
+    workspace
+      .getPublicBookingConfigRequestUrls()
+      .some((requestUrl) => new URL(requestUrl).searchParams.get("builderPreview") === "1")
+  ).toBe(true);
 
   await page.getByRole("button", { name: "Save changes" }).click();
 

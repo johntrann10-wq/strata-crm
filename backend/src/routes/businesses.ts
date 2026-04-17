@@ -1711,15 +1711,49 @@ async function loadPublicBookingBusiness(id: string) {
   return business;
 }
 
+function hasTruthyBuilderPreviewFlag(value: unknown): boolean {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "1" || normalized === "true" || normalized === "yes";
+  }
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasTruthyBuilderPreviewFlag(entry));
+  }
+  return false;
+}
+
+export function isAuthorizedPublicBookingPreviewRequest(
+  req: Request,
+  business: Pick<typeof businesses.$inferSelect, "id" | "ownerId">
+): boolean {
+  return hasTruthyBuilderPreviewFlag(req.query.builderPreview) && canAccessBusiness(req, business, "settings.read");
+}
+
 export function hasBookablePublicServices(
   services: Array<Pick<PublicBookingServiceRecord, "active" | "isAddon" | "bookingEnabled">>
 ) {
   return services.some((service) => service.active !== false && service.isAddon !== true && service.bookingEnabled === true);
 }
 
-async function loadAccessiblePublicBookingBusiness(id: string) {
-  const business = await loadPublicBookingBusiness(id);
+async function loadAccessiblePublicBookingBusiness(id: string, req?: Request) {
+  const business = await loadBusinessById(id);
   if (!business) return null;
+  const allowPreviewAccess = req ? isAuthorizedPublicBookingPreviewRequest(req, business) : false;
+  if (!allowPreviewAccess && process.env.BILLING_ENFORCED === "true" && isStripeConfigured()) {
+    if (
+      !hasFullBillingAccess(business.billingAccessState) &&
+      business.subscriptionStatus !== "active" &&
+      business.subscriptionStatus !== "trialing"
+    ) {
+      return null;
+    }
+  }
+  if (allowPreviewAccess) {
+    return {
+      ...business,
+      bookingEnabled: true,
+    };
+  }
   if (business.bookingEnabled === true) return business;
 
   const { services: publicServices } = await listPublicBookingServices(business.id);
@@ -3492,7 +3526,7 @@ businessesRouter.get(
     const parsed = publicBookingDraftParamsSchema.safeParse(req.params);
     if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid draft link.");
 
-    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id, req);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
@@ -3521,7 +3555,7 @@ businessesRouter.post(
     const parsedBody = publicBookingDraftSaveSchema.safeParse(req.body ?? {});
     if (!parsedBody.success) throw new BadRequestError(parsedBody.error.issues[0]?.message ?? "Invalid booking draft.");
 
-    const business = await loadAccessiblePublicBookingBusiness(parsedParams.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsedParams.data.id, req);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
@@ -3756,7 +3790,7 @@ businessesRouter.post(
     const parsed = publicBookingDraftParamsSchema.safeParse(req.params);
     if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid draft link.");
 
-    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id, req);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
@@ -3870,7 +3904,7 @@ businessesRouter.get(
     const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
     if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
 
-    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id, req);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
@@ -3963,7 +3997,7 @@ businessesRouter.get(
     const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
     if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
 
-    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsed.data.id, req);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
@@ -3979,7 +4013,7 @@ businessesRouter.get(
     const parsed = publicLeadConfigParamsSchema.safeParse(req.params);
     if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid business.");
 
-    const bookingBusiness = await loadAccessiblePublicBookingBusiness(parsed.data.id);
+    const bookingBusiness = await loadAccessiblePublicBookingBusiness(parsed.data.id, req);
     const leadBusiness = bookingBusiness ? null : await loadPublicLeadBusiness(parsed.data.id);
     const logoSource = bookingBusiness?.bookingBrandLogoUrl ?? leadBusiness?.bookingBrandLogoUrl ?? null;
     const asset = resolvePublicBookingBrandImageAsset(logoSource);
@@ -4009,7 +4043,7 @@ businessesRouter.get(
     const parsedQuery = publicBookingAvailabilityQuerySchema.safeParse(req.query ?? {});
     if (!parsedQuery.success) throw new BadRequestError(parsedQuery.error.issues[0]?.message ?? "Invalid booking availability request.");
 
-    const business = await loadAccessiblePublicBookingBusiness(parsedParams.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsedParams.data.id, req);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }
@@ -4148,7 +4182,7 @@ businessesRouter.post(
       return;
     }
 
-    const business = await loadAccessiblePublicBookingBusiness(parsedParams.data.id);
+    const business = await loadAccessiblePublicBookingBusiness(parsedParams.data.id, req);
     if (!business || business.bookingEnabled !== true) {
       throw new NotFoundError("Online booking is not available for this business.");
     }

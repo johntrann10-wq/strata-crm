@@ -1110,7 +1110,13 @@ export default function PublicBookingPage() {
     setDraftHydrating(true);
     setPageError(null);
 
-    fetch(buildApiUrl(`/api/businesses/${encodeURIComponent(businessId)}/public-booking-config`))
+    const configQuery = new URLSearchParams();
+    if (isBuilderPreview) configQuery.set("builderPreview", "1");
+    const configPath = `/api/businesses/${encodeURIComponent(businessId)}/public-booking-config${
+      configQuery.size > 0 ? `?${configQuery.toString()}` : ""
+    }`;
+
+    fetch(buildApiUrl(configPath))
       .then(async (response) => {
         if (!response.ok) {
           const payload = (await response.json().catch(() => ({}))) as { message?: string };
@@ -1137,7 +1143,7 @@ export default function PublicBookingPage() {
     return () => {
       cancelled = true;
     };
-  }, [businessId]);
+  }, [businessId, isBuilderPreview]);
 
   useEffect(() => {
     if (!config || !businessId || !isBuilderPreview) return;
@@ -1581,6 +1587,9 @@ export default function PublicBookingPage() {
       ...(form.serviceMode === "in_shop" && form.locationId ? { locationId: form.locationId } : {}),
       ...(form.addonServiceIds.length > 0 ? { addonServiceIds: form.addonServiceIds.join(",") } : {}),
     });
+    if (isBuilderPreview) {
+      query.set("builderPreview", "1");
+    }
 
     fetch(
       buildApiUrl(
@@ -1626,6 +1635,7 @@ export default function PublicBookingPage() {
     form.locationId,
     form.serviceMode,
     defaultBookingDate,
+    isBuilderPreview,
     selectedService,
     subtotal,
     totalDeposit,
@@ -2134,6 +2144,10 @@ export default function PublicBookingPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!businessId || !selectedService) return;
+    if (isBuilderPreview) {
+      setSubmitError("This preview is read-only. Save changes and open the live booking link to test the real flow.");
+      return;
+    }
 
     const validationMessage = validateStep("contact");
     if (validationMessage) {
@@ -3179,7 +3193,7 @@ export default function PublicBookingPage() {
     );
   };
 
-  const submitButtonDisabled = submitting || (effectiveFlow === "self_book" && !form.startTime);
+  const submitButtonDisabled = submitting || isBuilderPreview || (effectiveFlow === "self_book" && !form.startTime);
   const heroTrustPoints = (config?.trustPoints ?? [
     "Goes directly to the shop",
     "Quick follow-up",
@@ -3843,9 +3857,11 @@ export default function PublicBookingPage() {
                 form="public-booking-form"
                 className="bf-next"
                 style={{ background: "var(--c)" }}
-                disabled={submitting || (effectiveFlow === "self_book" && !form.startTime)}
+                disabled={submitButtonDisabled}
               >
-                {submitting
+                {isBuilderPreview
+                  ? "Preview only"
+                  : submitting
                   ? (effectiveFlow === "self_book" ? "Booking..." : "Sending...")
                   : (effectiveFlow === "self_book" ? "Book now" : "Send request")}
               </button>

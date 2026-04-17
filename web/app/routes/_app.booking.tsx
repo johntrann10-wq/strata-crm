@@ -541,9 +541,9 @@ export default function BookingBuilderPage() {
   const previewQuery = useMemo(() => {
     const params = new URLSearchParams({
       previewRefresh: String(previewNonce),
+      builderPreview: "1",
     });
     if (previewMode !== "live") {
-      params.set("builderPreview", "1");
       params.set("builderPreviewFlow", "request");
       if (previewMode === "request_timing") params.set("builderPreviewStep", "schedule");
       if (previewMode === "request_review") params.set("builderPreviewStep", "review");
@@ -1338,7 +1338,7 @@ export default function BookingBuilderPage() {
                 <CardTitle className="text-base">Live preview</CardTitle>
                 <CardDescription>
                   {previewMode === "live"
-                    ? "Points at the real public booking page and refreshes after save."
+                    ? "Uses the real public booking page in preview mode and refreshes after save."
                     : previewMode === "request_timing"
                       ? "Preview the preferred date and time step for request-mode services."
                       : "Preview the request review state with service, vehicle, and requested timing context."}

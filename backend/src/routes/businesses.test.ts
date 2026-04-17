@@ -296,6 +296,51 @@ describe("business route serialization", () => {
     ).toBe(false);
   });
 
+  it("allows builder preview access for signed-in settings users without exposing disabled booking publicly", async () => {
+    const { isAuthorizedPublicBookingPreviewRequest } = await import("./businesses.js");
+
+    const business = {
+      id: "biz_preview",
+      ownerId: "user_owner",
+    };
+
+    expect(
+      isAuthorizedPublicBookingPreviewRequest(
+        {
+          query: { builderPreview: "1" },
+          userId: "user_owner",
+          businessId: null,
+          membershipRole: null,
+        } as never,
+        business
+      )
+    ).toBe(true);
+
+    expect(
+      isAuthorizedPublicBookingPreviewRequest(
+        {
+          query: { builderPreview: "1" },
+          userId: null,
+          businessId: null,
+          membershipRole: null,
+        } as never,
+        business
+      )
+    ).toBe(false);
+
+    expect(
+      isAuthorizedPublicBookingPreviewRequest(
+        {
+          query: {},
+          userId: "user_owner",
+          businessId: null,
+          membershipRole: null,
+        } as never,
+        business
+      )
+    ).toBe(false);
+  });
+
   it("serializes owner booking requests with requested timing and secure response links", async () => {
     const { serializeOwnerBookingRequest } = await import("./businesses.js");
     const request = {
