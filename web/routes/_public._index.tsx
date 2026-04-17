@@ -644,13 +644,9 @@ export default function LandingPage() {
               <h2 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
                 Simple pricing with a 30-day free trial.
               </h2>
-              <p className="text-base leading-7 text-gray-600">No card required to start. Lock in founder pricing while spots remain.</p>
+              <p className="text-base leading-7 text-gray-600">No card required to start.</p>
               <div className="flex flex-wrap gap-3 text-sm font-semibold text-gray-700">
                 <span className="rounded-full border border-orange-100 bg-orange-50 px-4 py-2">Founder pricing $29/mo</span>
-                <span className="rounded-full border border-slate-200 bg-white px-4 py-2">Public pricing $79/mo</span>
-                <span className="rounded-full border border-orange-200 bg-white px-4 py-2 text-orange-800">
-                  Founder pricing: 25 spots · 23 left
-                </span>
               </div>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-stretch">
