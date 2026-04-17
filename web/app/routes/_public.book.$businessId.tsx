@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { trackEvent } from "@/lib/analytics";
+import { getAuthToken, getCurrentBusinessId } from "@/lib/auth";
 import {
   resolveEffectiveBookingRequestSettings,
   type BookingRequestSettings,
@@ -234,6 +235,31 @@ function emptyForm(): BookingFormState {
 }
 
 const buildApiUrl = (path: string) => `${API_BASE}${path}`;
+
+function buildBuilderPreviewRequestInit(
+  isBuilderPreview: boolean,
+  init: RequestInit = {}
+): RequestInit {
+  if (!isBuilderPreview || typeof window === "undefined") return init;
+
+  const headers = new Headers(init.headers);
+  const authToken = getAuthToken();
+  const currentBusinessId = getCurrentBusinessId();
+
+  if (authToken && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${authToken}`);
+  }
+  if (currentBusinessId && !headers.has("x-business-id")) {
+    headers.set("x-business-id", currentBusinessId);
+  }
+
+  return {
+    ...init,
+    headers,
+    credentials: init.credentials ?? "include",
+  };
+}
+
 const formatPrice = (price: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price);
 
@@ -909,8 +935,16 @@ export default function PublicBookingPage() {
     }
 
     let cancelled = false;
+    const shareMetadataQuery = new URLSearchParams();
+    if (isBuilderPreview) shareMetadataQuery.set("builderPreview", "1");
+    const shareMetadataPath = `/api/businesses/${encodeURIComponent(businessId)}/public-booking-share-metadata${
+      shareMetadataQuery.size > 0 ? `?${shareMetadataQuery.toString()}` : ""
+    }`;
 
-    fetch(buildApiUrl(`/api/businesses/${encodeURIComponent(businessId)}/public-booking-share-metadata`))
+    fetch(
+      buildApiUrl(shareMetadataPath),
+      buildBuilderPreviewRequestInit(isBuilderPreview)
+    )
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as PublicShareMetadataPayload & { message?: string };
         if (!response.ok) throw new Error(payload.message || "Could not load booking share metadata.");
@@ -926,7 +960,7 @@ export default function PublicBookingPage() {
     return () => {
       cancelled = true;
     };
-  }, [businessId]);
+  }, [businessId, isBuilderPreview]);
 
   useEffect(() => {
     if (!draftSavedAt) return;
@@ -1116,7 +1150,7 @@ export default function PublicBookingPage() {
       configQuery.size > 0 ? `?${configQuery.toString()}` : ""
     }`;
 
-    fetch(buildApiUrl(configPath))
+    fetch(buildApiUrl(configPath), buildBuilderPreviewRequestInit(isBuilderPreview))
       .then(async (response) => {
         if (!response.ok) {
           const payload = (await response.json().catch(() => ({}))) as { message?: string };
@@ -1594,7 +1628,8 @@ export default function PublicBookingPage() {
     fetch(
       buildApiUrl(
         `/api/businesses/${encodeURIComponent(businessId ?? "")}/public-booking-availability?${query.toString()}`
-      )
+      ),
+      buildBuilderPreviewRequestInit(isBuilderPreview)
     )
       .then(async (response) => {
         if (!response.ok) {

@@ -11,6 +11,11 @@ import { logger } from "./logger.js";
 import { escapeHtml } from "./escape.js";
 import { getBuiltinTemplate } from "./emailTemplates.js";
 import { getConfiguredEmailReplyTo, getConfiguredEmailSender, isEmailConfigured, isResendConfigured, isSmtpConfigured } from "./env.js";
+import {
+  buildPublicBookingBrandLogoUrl,
+  parseBookingBrandLogoTransform,
+  resolveBookingBrandLogoPlateStyles,
+} from "./bookingBranding.js";
 
 let transporter: nodemailer.Transporter | null = null;
 let fallbackTransporter: nodemailer.Transporter | null = null;
@@ -210,10 +215,50 @@ export type ResolvedTemplateMessage = {
   vars: TemplateVars;
 };
 
+const defaultBusinessLogoVars: TemplateVars = {
+  businessLogoUrl: undefined,
+  businessLogoDisplay: "none",
+  businessLogoFrameWidth: "96px",
+  businessLogoFrameHeight: "72px",
+  businessLogoFrameRadius: "22px",
+  businessLogoPadding: "14px",
+  businessLogoBackground: "rgba(255,255,255,0.98)",
+  businessLogoBorder: "rgba(226,232,240,0.95)",
+  businessLogoShadow: "0 18px 36px rgba(15,23,42,0.08)",
+  businessLogoFilter: "none",
+  businessLogoObjectFit: "contain",
+  businessLogoTransform: "none",
+};
+
+function buildBusinessLogoTransformCss(params: {
+  fitMode: "contain" | "cover" | "wordmark";
+  rotationDeg: number;
+  zoom: number;
+  offsetX: number;
+  offsetY: number;
+}) {
+  const frameWidth = params.fitMode === "wordmark" ? 184 : 96;
+  const frameHeight = 72;
+  const padding = params.fitMode === "cover" ? 0 : params.fitMode === "wordmark" ? 16 : 14;
+  const innerWidth = Math.max(frameWidth - padding * 2, 1);
+  const innerHeight = Math.max(frameHeight - padding * 2, 1);
+  const translateX = Math.round(params.offsetX * innerWidth * 0.18 * 100) / 100;
+  const translateY = Math.round(params.offsetY * innerHeight * 0.18 * 100) / 100;
+  return {
+    width: `${frameWidth}px`,
+    height: `${frameHeight}px`,
+    radius: `${params.fitMode === "wordmark" ? 22 : 22}px`,
+    padding: `${padding}px`,
+    objectFit: params.fitMode === "cover" ? "cover" : "contain",
+    transform: `translate(${translateX}px, ${translateY}px) rotate(${params.rotationDeg}deg) scale(${params.zoom})`,
+  };
+}
+
 async function getBusinessContactVars(businessId: string | null | undefined): Promise<TemplateVars> {
-  if (!businessId) return {};
+  if (!businessId) return { ...defaultBusinessLogoVars };
   const [business] = await db
     .select({
+      id: businesses.id,
       name: businesses.name,
       email: businesses.email,
       phone: businesses.phone,
@@ -222,19 +267,38 @@ async function getBusinessContactVars(businessId: string | null | undefined): Pr
       state: businesses.state,
       zip: businesses.zip,
       bookingBrandLogoUrl: businesses.bookingBrandLogoUrl,
+      bookingBrandLogoTransform: businesses.bookingBrandLogoTransform,
     })
     .from(businesses)
     .where(eq(businesses.id, businessId))
     .limit(1);
 
   const businessAddress = [business?.address, business?.city, business?.state, business?.zip].filter(Boolean).join(", ");
+  const transform = parseBookingBrandLogoTransform(business?.bookingBrandLogoTransform);
+  const plate = resolveBookingBrandLogoPlateStyles(transform.backgroundPlate);
+  const logoFrame = buildBusinessLogoTransformCss(transform);
+  const businessLogoUrl = business?.bookingBrandLogoUrl?.trim() && business?.id
+    ? buildPublicBookingBrandLogoUrl(business.id)
+    : undefined;
 
   return {
+    ...defaultBusinessLogoVars,
     businessName: business?.name?.trim() || undefined,
     businessEmail: business?.email?.trim() || undefined,
     businessPhone: business?.phone?.trim() || undefined,
     businessAddress: businessAddress.trim() || undefined,
-    businessLogoUrl: business?.bookingBrandLogoUrl?.trim() || undefined,
+    businessLogoUrl,
+    businessLogoDisplay: businessLogoUrl ? "block" : "none",
+    businessLogoFrameWidth: logoFrame.width,
+    businessLogoFrameHeight: logoFrame.height,
+    businessLogoFrameRadius: logoFrame.radius,
+    businessLogoPadding: logoFrame.padding,
+    businessLogoBackground: plate.background,
+    businessLogoBorder: plate.border,
+    businessLogoShadow: plate.shadow,
+    businessLogoFilter: plate.imageFilter,
+    businessLogoObjectFit: logoFrame.objectFit,
+    businessLogoTransform: logoFrame.transform,
   };
 }
 

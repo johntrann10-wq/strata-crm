@@ -54,6 +54,7 @@ type PreviewMode = "live" | "request_timing" | "request_review";
 
 type BusinessBookingBuilderRecord = {
   id: string;
+  name?: string | null;
   bookingEnabled?: boolean | null;
   bookingDefaultFlow?: "request" | "self_book" | null;
   bookingPageTitle?: string | null;
@@ -540,8 +541,8 @@ export default function BookingBuilderPage() {
   }, [businessId]);
   const previewQuery = useMemo(() => {
     const params = new URLSearchParams({
-      previewRefresh: String(previewNonce),
       builderPreview: "1",
+      previewRefresh: String(previewNonce),
     });
     if (previewMode !== "live") {
       params.set("builderPreviewFlow", "request");
@@ -1556,7 +1557,7 @@ export default function BookingBuilderPage() {
                   <Label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Rotation
                   </Label>
-                  <span className="text-sm font-medium text-slate-700">{logoEditorTransform.rotationDeg.toFixed(1)}°</span>
+                  <span className="text-sm font-medium text-slate-700">{logoEditorTransform.rotationDeg.toFixed(1)} deg</span>
                 </div>
                 <input
                   type="range"
@@ -1589,7 +1590,7 @@ export default function BookingBuilderPage() {
                     }
                   >
                     <RotateCcw className="mr-2 h-4 w-4" />
-                    Rotate -90°
+                    Rotate -90 deg
                   </Button>
                   <Button
                     type="button"
@@ -1605,7 +1606,7 @@ export default function BookingBuilderPage() {
                     }
                   >
                     <RotateCw className="mr-2 h-4 w-4" />
-                    Rotate +90°
+                    Rotate +90 deg
                   </Button>
                 </div>
               </div>
