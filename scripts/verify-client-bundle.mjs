@@ -11,7 +11,7 @@ const repoRoot = process.cwd();
 const root = path.join(repoRoot, "build/client");
 const staticIndexPath = path.join(root, "index.html");
 const siteUrl = "https://stratacrm.app";
-const socialPreviewVersion = "20260416c";
+const socialPreviewVersion = "20260417a";
 const fallbackTitle = "Strata CRM | Scheduling, CRM, Invoices, and Payments for Auto Service Shops";
 const fallbackDescription =
   "Strata CRM helps automotive service businesses run scheduling, clients, vehicles, jobs, quotes, invoices, deposits, team access, and payments in one clear operating system.";
