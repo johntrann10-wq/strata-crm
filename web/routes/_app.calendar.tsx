@@ -980,7 +980,7 @@ export default function CalendarPage() {
               className={cn(
                 "overflow-hidden",
                 view === "month"
-                  ? "h-[21rem] sm:h-[23rem] xl:h-[clamp(26rem,48dvh,38rem)]"
+                  ? "h-[25.5rem] sm:h-[23rem] xl:h-[clamp(26rem,48dvh,38rem)]"
                   : "h-[21.5rem] sm:h-[23rem] xl:h-[clamp(24rem,46dvh,34rem)]"
               )}
             >
