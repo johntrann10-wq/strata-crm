@@ -71,6 +71,28 @@ import {
 export const businessesRouter = Router({ mergeParams: true });
 type BusinessRecord = typeof businesses.$inferSelect;
 
+const bookingBrandLogoDataUrlPattern =
+  /^data:image\/(?:png|jpeg|jpg|webp|gif|svg\+xml)(?:;charset=[^;,]+)?;base64,[a-z0-9+/=]+$/i;
+
+function isValidBookingBrandLogoUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  if (bookingBrandLogoDataUrlPattern.test(trimmed)) return true;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+const bookingBrandLogoSchema = z
+  .string()
+  .max(260_000)
+  .refine((value) => isValidBookingBrandLogoUrl(value), "Logo must be an uploaded image or valid URL.")
+  .nullable()
+  .optional();
+
 const createSchema = z.object({
   name: z.string().min(1),
   type: z.enum([
@@ -132,7 +154,7 @@ const createSchema = z.object({
   bookingTrustBulletSecondary: z.string().max(80).nullable().optional(),
   bookingTrustBulletTertiary: z.string().max(80).nullable().optional(),
   bookingNotesPrompt: z.string().max(160).nullable().optional(),
-  bookingBrandLogoUrl: z.string().url().max(1000).nullable().optional(),
+  bookingBrandLogoUrl: bookingBrandLogoSchema,
   bookingBrandPrimaryColorToken: z.enum(["orange", "sky", "emerald", "rose", "slate"]).optional(),
   bookingBrandAccentColorToken: z.enum(["amber", "blue", "mint", "violet", "stone"]).optional(),
   bookingBrandBackgroundToneToken: z.enum(["ivory", "mist", "sand", "slate"]).optional(),

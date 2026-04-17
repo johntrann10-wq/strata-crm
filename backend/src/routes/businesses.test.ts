@@ -125,6 +125,48 @@ describe("business route serialization", () => {
     expect(payload.services[0].addons[0]).not.toHaveProperty("notes");
   });
 
+  it("preserves uploaded booking logo images in the public config payload", async () => {
+    const { buildPublicBookingConfigResponse } = await import("./businesses.js");
+    const uploadedLogo = "data:image/webp;base64,UklGRlIAAABXRUJQVlA4WAoAAAAQAAAABwAABwAAQUxQSAIAAAAA";
+    const payload = buildPublicBookingConfigResponse({
+      business: {
+        id: "biz_456",
+        name: "Northline Auto Spa",
+        type: "auto_detailing",
+        timezone: "America/Los_Angeles",
+        bookingDefaultFlow: "request",
+        bookingPageTitle: "Request service",
+        bookingPageSubtitle: "Tell us about the vehicle and we'll follow up fast.",
+        bookingConfirmationMessage: "We'll be in touch shortly.",
+        bookingTrustBulletPrimary: "Fast follow-up",
+        bookingTrustBulletSecondary: "Real shop team",
+        bookingTrustBulletTertiary: "Secure request",
+        bookingNotesPrompt: "Anything else we should know?",
+        bookingBrandLogoUrl: uploadedLogo,
+        bookingBrandPrimaryColorToken: "orange",
+        bookingBrandAccentColorToken: "amber",
+        bookingBrandBackgroundToneToken: "ivory",
+        bookingBrandButtonStyleToken: "solid",
+        bookingRequireEmail: false,
+        bookingRequirePhone: false,
+        bookingRequireVehicle: true,
+        bookingAllowCustomerNotes: true,
+        bookingShowPrices: true,
+        bookingShowDurations: true,
+        bookingUrgencyEnabled: false,
+        bookingUrgencyText: null,
+        bookingAvailableDays: "[1,2,3,4,5]",
+        bookingAvailableStartTime: "09:00",
+        bookingAvailableEndTime: "19:00",
+        operatingHours: "Mon-Fri 09:00-19:00",
+      },
+      locations: [],
+      services: [],
+    });
+
+    expect(payload.branding.logoUrl).toBe(uploadedLogo);
+  });
+
   it("treats booking as publicly available when bookable services exist", async () => {
     const { hasBookablePublicServices } = await import("./businesses.js");
 

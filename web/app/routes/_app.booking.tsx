@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useOutletContext } from "react-router";
-import { Copy, ExternalLink, LoaderCircle } from "lucide-react";
+import { Copy, ExternalLink, LoaderCircle, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "../../api";
@@ -240,6 +240,84 @@ function getUnsupportedBookingBuilderKeys(message: string | undefined): string[]
   return supportedKeys.filter((key) => trimmed.includes(key));
 }
 
+const MAX_BOOKING_LOGO_FILE_BYTES = 4 * 1024 * 1024;
+const MAX_BOOKING_LOGO_DIMENSION = 512;
+const MAX_BOOKING_LOGO_DATA_URL_LENGTH = 260_000;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read that image."));
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Could not read that image."));
+        return;
+      }
+      resolve(result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageFromFile(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Could not process that image."));
+    };
+    image.src = objectUrl;
+  });
+}
+
+async function buildBookingLogoDataUrl(file: File): Promise<string> {
+  if (file.size > MAX_BOOKING_LOGO_FILE_BYTES) {
+    throw new Error("Logo image must be smaller than 4 MB.");
+  }
+
+  if (file.type === "image/svg+xml") {
+    const dataUrl = await readFileAsDataUrl(file);
+    if (dataUrl.length > MAX_BOOKING_LOGO_DATA_URL_LENGTH) {
+      throw new Error("That SVG is too large. Try a smaller logo file.");
+    }
+    return dataUrl;
+  }
+
+  const image = await loadImageFromFile(file);
+  const maxSide = Math.max(image.naturalWidth, image.naturalHeight, 1);
+  const scale = Math.min(1, MAX_BOOKING_LOGO_DIMENSION / maxSide);
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Could not process that image.");
+  }
+
+  context.clearRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  let dataUrl = canvas.toDataURL("image/webp", 0.9);
+  if (dataUrl.length > MAX_BOOKING_LOGO_DATA_URL_LENGTH) {
+    dataUrl = canvas.toDataURL("image/png");
+  }
+  if (dataUrl.length > MAX_BOOKING_LOGO_DATA_URL_LENGTH) {
+    throw new Error("That logo is too detailed. Try a simpler image or smaller file.");
+  }
+
+  return dataUrl;
+}
+
 export default function BookingBuilderPage() {
   const { businessId, permissions } = useOutletContext<AuthOutletContext>();
   const canRead = permissions.has("settings.read");
@@ -248,6 +326,8 @@ export default function BookingBuilderPage() {
   const [form, setForm] = useState<BookingBuilderFormState>(defaultForm);
   const [savedForm, setSavedForm] = useState<BookingBuilderFormState>(defaultForm);
   const [previewNonce, setPreviewNonce] = useState(0);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
 
   const [{ data: business, fetching, error }, refetchBusiness] = useFindOne(api.business, businessId ?? "", {
     pause: !businessId || !canRead,
@@ -355,6 +435,23 @@ export default function BookingBuilderPage() {
     }
   };
 
+  const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setLogoUploading(true);
+    try {
+      const nextLogoUrl = await buildBookingLogoDataUrl(file);
+      updateField("bookingBrandLogoUrl", nextLogoUrl);
+      toast.success("Logo added to the booking page.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not upload that logo.");
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   if (!businessId) {
     return (
       <div className="page-content page-section max-w-6xl">
@@ -416,7 +513,55 @@ export default function BookingBuilderPage() {
               <TabsContent value="branding" className="space-y-3">
                 <Field label="Portal name"><Input value={form.bookingPageTitle} onChange={(e) => updateField("bookingPageTitle", e.target.value)} placeholder="Spark Studio" disabled={!canEdit} /></Field>
                 <Field label="Tagline"><Input value={form.bookingPageSubtitle} onChange={(e) => updateField("bookingPageSubtitle", e.target.value)} placeholder="Professional photography & video" disabled={!canEdit} /></Field>
-                <Field label="Logo URL"><Input value={form.bookingBrandLogoUrl} onChange={(e) => updateField("bookingBrandLogoUrl", e.target.value)} placeholder="https://..." disabled={!canEdit} /></Field>
+                <Field label="Logo">
+                  <div className="space-y-3">
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      className="hidden"
+                      onChange={handleLogoUpload}
+                      disabled={!canEdit || logoUploading}
+                    />
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                        {form.bookingBrandLogoUrl ? (
+                          <img src={form.bookingBrandLogoUrl} alt="" className="h-full w-full object-contain p-2" />
+                        ) : (
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">No logo</div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-sm font-semibold text-slate-950">Upload a logo image</p>
+                        <p className="text-xs leading-5 text-slate-500">
+                          PNG, JPG, WEBP, or SVG. We optimize the image before saving it to your booking page.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={!canEdit || logoUploading}
+                        className="sm:w-auto"
+                      >
+                        {logoUploading ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                        {form.bookingBrandLogoUrl ? "Replace image" : "Upload image"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => updateField("bookingBrandLogoUrl", "")}
+                        disabled={!canEdit || !form.bookingBrandLogoUrl || logoUploading}
+                        className="sm:w-auto"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Remove image
+                      </Button>
+                    </div>
+                  </div>
+                </Field>
                 <Field label="Primary color"><Select value={form.bookingBrandPrimaryColorToken} onValueChange={(next) => updateField("bookingBrandPrimaryColorToken", next as BookingBrandPrimaryColorToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandPrimaryColorOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
                 <Field label="Accent color"><Select value={form.bookingBrandAccentColorToken} onValueChange={(next) => updateField("bookingBrandAccentColorToken", next as BookingBrandAccentColorToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandAccentColorOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
                 <Field label="Background tone"><Select value={form.bookingBrandBackgroundToneToken} onValueChange={(next) => updateField("bookingBrandBackgroundToneToken", next as BookingBrandBackgroundToneToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandBackgroundToneOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
