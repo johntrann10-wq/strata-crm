@@ -1620,7 +1620,9 @@ export default function ServicesPage() {
               <div className="space-y-1">
                 <CardTitle className="text-xl tracking-[-0.03em]">Booking page settings now live in a dedicated builder</CardTitle>
                 <CardDescription className="max-w-2xl text-sm leading-6 text-slate-600">
-                  Keep Services focused on the catalog. Open the booking builder for branding, copy, fields, urgency, and the live page preview.
+                  {bookingSettings.bookingEnabled
+                    ? "Keep Services focused on the catalog. Open the booking builder for branding, copy, fields, urgency, and the live page preview."
+                    : "Booking page is disabled right now. Open the booking builder when you are ready to turn it on and shape the public experience."}
                 </CardDescription>
               </div>
             </div>
@@ -1631,8 +1633,8 @@ export default function ServicesPage() {
                   Open booking builder
                 </Link>
               </Button>
-              <Button type="button" asChild disabled={!bookingUrl} className="rounded-xl">
-                <a href={bookingUrl ?? "#"} target="_blank" rel="noreferrer">
+              <Button type="button" asChild disabled={!bookingUrl || !bookingSettings.bookingEnabled} className="rounded-xl">
+                <a href={bookingUrl && bookingSettings.bookingEnabled ? bookingUrl : "#"} target="_blank" rel="noreferrer">
                   <ExternalLink className="mr-2 h-4 w-4" />
                   View live
                 </a>
@@ -1640,30 +1642,32 @@ export default function ServicesPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4 sm:p-6">
-          <MetricCard label="Booking-ready" value={String(bookingEnabledServicesCount)} detail="Visible on the public booking page" />
-          <MetricCard label="Direct book" value={String(selfBookServicesCount)} detail="Can confirm instantly" />
-          <MetricCard
-            label="Booking headline"
-            value={bookingSettings.bookingPageTitle || "Tell us what you need"}
-            detail={bookingSettings.bookingPageSubtitle || "Share a few details and the shop can follow up with the right next step."}
-          />
-          <MetricCard
-            label="Availability defaults"
-            value={
-              bookingSettings.bookingAvailableStartTime || bookingSettings.bookingAvailableEndTime
-                ? `${formatAvailabilityTimeLabel(bookingSettings.bookingAvailableStartTime) || "Start time"} to ${
-                    formatAvailabilityTimeLabel(bookingSettings.bookingAvailableEndTime) || "end time"
-                  }`
-                : "Uses builder defaults"
-            }
-            detail={
-              bookingSettingsLoading
-                ? "Loading booking settings..."
-                : "These business hours feed public booking by default, and each service can adjust them below."
-            }
-          />
-        </CardContent>
+        {bookingSettings.bookingEnabled ? (
+          <CardContent className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4 sm:p-6">
+            <MetricCard label="Booking-ready" value={String(bookingEnabledServicesCount)} detail="Visible on the public booking page" />
+            <MetricCard label="Direct book" value={String(selfBookServicesCount)} detail="Can confirm instantly" />
+            <MetricCard
+              label="Booking headline"
+              value={bookingSettings.bookingPageTitle || "Tell us what you need"}
+              detail={bookingSettings.bookingPageSubtitle || "Share a few details and the shop can follow up with the right next step."}
+            />
+            <MetricCard
+              label="Availability defaults"
+              value={
+                bookingSettings.bookingAvailableStartTime || bookingSettings.bookingAvailableEndTime
+                  ? `${formatAvailabilityTimeLabel(bookingSettings.bookingAvailableStartTime) || "Start time"} to ${
+                      formatAvailabilityTimeLabel(bookingSettings.bookingAvailableEndTime) || "end time"
+                    }`
+                  : "Uses builder defaults"
+              }
+              detail={
+                bookingSettingsLoading
+                  ? "Loading booking settings..."
+                  : "These business hours feed public booking by default, and each service can adjust them below."
+              }
+            />
+          </CardContent>
+        ) : null}
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-3">
