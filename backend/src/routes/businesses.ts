@@ -541,7 +541,7 @@ async function loadPublicLeadBusiness(id: string) {
   return business;
 }
 
-function cleanOptionalText(value: string | undefined): string | null {
+function cleanOptionalText(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
 }
@@ -577,11 +577,16 @@ function resolveBusinessBookingRequestSettings(
     | "bookingRequestAllowAlternateSlots"
     | "bookingRequestAlternateSlotLimit"
     | "bookingRequestAlternateOfferExpiryHours"
-    | "bookingRequestConfirmationCopy"
-    | "bookingRequestOwnerResponsePageCopy"
-    | "bookingRequestAlternateAcceptanceCopy"
-    | "bookingRequestChooseAnotherDayCopy"
-  >
+  > &
+    Partial<
+      Pick<
+        BusinessRecord,
+        | "bookingRequestConfirmationCopy"
+        | "bookingRequestOwnerResponsePageCopy"
+        | "bookingRequestAlternateAcceptanceCopy"
+        | "bookingRequestChooseAnotherDayCopy"
+      >
+    >
 ) {
   const requireExactTime = normalizeBookingRequestRequireExactTime(business.bookingRequestRequireExactTime);
   const allowTimeWindows = requireExactTime
