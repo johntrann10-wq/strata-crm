@@ -751,22 +751,6 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Link
-                  to="/sign-up"
-                  className={cn(
-                    buttonVariants({ size: "lg" }),
-                    "min-h-[52px] rounded-2xl bg-orange-600 px-7 text-base font-semibold text-white shadow-[0_12px_30px_rgba(234,88,12,0.25)] hover:bg-orange-600"
-                  )}
-                  onClick={() => trackEvent("landing_cta_clicked", { placement: "booking_section", target: "sign_up" })}
-                >
-                  Build your booking page
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-                <p className="text-sm font-medium text-gray-500">
-                  One booking page. Instant slots when you want them. Review-first scheduling when you need it.
-                </p>
-              </div>
             </div>
 
             <div className="relative">
