@@ -6,6 +6,25 @@ import {
 
 type PublicShareSurface = "booking" | "lead";
 
+function buildSurfaceCanonicalPath(surface: PublicShareSurface, businessId: string) {
+  if (surface === "booking") {
+    return `/book/${encodeURIComponent(businessId)}`;
+  }
+  return `/lead/${encodeURIComponent(businessId)}`;
+}
+
+function normalizePublicSharePayload(
+  payload: PublicShareMetadataPayload,
+  surface: PublicShareSurface,
+  businessId: string
+): PublicShareMetadataPayload {
+  return {
+    ...payload,
+    businessId,
+    canonicalPath: buildSurfaceCanonicalPath(surface, businessId),
+  };
+}
+
 function extractBusinessId(pathname: string, surface: PublicShareSurface) {
   const prefix = surface === "booking" ? "/book/" : "/lead/";
   if (!pathname.startsWith(prefix)) return null;
@@ -51,7 +70,11 @@ export async function renderPublicShareShell(request: Request, surface: PublicSh
     });
   }
 
-  const payload = (await metadataResponse.json()) as PublicShareMetadataPayload;
+  const payload = normalizePublicSharePayload(
+    (await metadataResponse.json()) as PublicShareMetadataPayload,
+    surface,
+    businessId
+  );
   const html = injectPublicShareMetadata(
     shellHtml,
     resolvePublicShareMetadata(payload, currentUrl.origin, currentUrl.search)

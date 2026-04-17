@@ -54,10 +54,32 @@ function buildApiUrl(path: string): string {
   return `${API_BASE}${path}`;
 }
 
-export function meta() {
+const publicSiteUrl = "https://stratacrm.app";
+
+export function meta({ params }: { params: { businessId?: string } }) {
+  const businessId = params.businessId?.trim();
+  const previewUrl = businessId
+    ? `${publicSiteUrl}/api/businesses/${encodeURIComponent(businessId)}/public-brand-image`
+    : `${publicSiteUrl}/social-preview.png?v=20260416c`;
+  const canonicalUrl = businessId
+    ? `${publicSiteUrl}/lead/${encodeURIComponent(businessId)}`
+    : `${publicSiteUrl}/lead`;
+  const title = "Request service | Strata";
+  const description = "Share a few details so the shop can reach out with the right next step.";
   return [
-    { title: "Request service | Strata" },
-    { name: "description", content: "Share a few details so the shop can reach out with the right next step." },
+    { title },
+    { name: "description", content: description },
+    { property: "og:url", content: canonicalUrl },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: previewUrl },
+    { property: "og:image:secure_url", content: previewUrl },
+    { property: "og:image:alt", content: "Service request page preview" },
+    { name: "twitter:url", content: canonicalUrl },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: previewUrl },
+    { name: "twitter:image:alt", content: "Service request page preview" },
   ];
 }
 

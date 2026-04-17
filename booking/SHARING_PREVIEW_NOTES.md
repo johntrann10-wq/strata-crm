@@ -2,57 +2,65 @@
 
 ## Public share URL strategy
 
-- Public booking links should be shared directly as:
-  - `/book/:businessId`
-- Public service-request links should be shared directly as:
-  - `/lead/:businessId`
-- Keep meaningful booking query state when present:
+- Booking pages are shared and canonicalized as `/book/:businessId`.
+- Service-request pages are shared and canonicalized as `/lead/:businessId`.
+- The only public query params preserved in canonical and `og:url` are:
   - `service`
   - `category`
-- Strip transient params from the public preview/canonical state:
+- Everything else is treated as transient and stripped from the public share URL:
   - `step`
   - `source`
   - `campaign`
   - `utm_*`
   - `ref`
   - `builderPreview*`
+  - internal preview or editor state
 
-## How the preview is selected
+## How the public preview is selected
 
-- Generic marketing pages still use the static Strata marketing preview image.
-- Public booking and lead pages now expose business-aware metadata.
-- Vercel rewrites `/book/:businessId` and `/lead/:businessId` into the `public-share-shell` edge handler before the SPA catch-all, so Meta gets route-specific HTML instead of the generic app shell.
+- `/book/:businessId` and `/lead/:businessId` are the only public share entry points Meta should crawl.
+- Vercel rewrites those routes into the `public-share-shell` handler before the SPA catch-all, so crawlers receive server-rendered share tags in the initial HTML.
 - Netlify serves the same routes through the `public-share-preview` edge function.
-- If the business has a configured booking logo, the preview image points to:
-  - `/api/businesses/:businessId/public-brand-image`
-- If no business logo is configured, the preview falls back to the global Strata preview image.
+- The share shell normalizes the canonical path to the public surface being rendered, so a booking page always exposes `/book/:businessId` and a lead page always exposes `/lead/:businessId` even if upstream payloads drift.
+- Client-side `usePublicShareMeta` mirrors the same title, description, canonical URL, and image after hydration so browser state does not fight the crawled page source.
 
-## Why Meta/Facebook should now pick up the right page
+## Metadata contract
 
-- Direct requests to `/book/:businessId` and `/lead/:businessId` now return an HTML shell with the correct:
-  - canonical URL
+- Booking and lead public pages should expose one authoritative set of:
+  - `<link rel="canonical">`
   - `og:url`
   - `og:title`
   - `og:description`
   - `og:image`
-  - `twitter:*` image/title/description tags
-- This avoids relying only on client-side head updates, which Meta may ignore.
+  - `twitter:url`
+  - `twitter:title`
+  - `twitter:description`
+  - `twitter:image`
+- Duplicate or stale competing tags should be removed before injecting public share metadata.
+- Generic marketing pages continue using the global Strata preview image.
+- Business-aware public pages use business-aware metadata:
+  - booking pages prefer the booking preview image
+  - lead pages prefer the business public brand image
+  - both fall back to the global Strata social preview when no business-specific image is available
 
 ## Post-deploy Meta refresh process
 
 1. Deploy frontend and backend changes together.
-2. Open the page source for the public URL and confirm the final HTML contains the intended OG tags.
+2. Open the final public share URL in page source form and confirm the HTML includes the expected canonical, `og:*`, and `twitter:*` tags.
 3. Open the [Meta Sharing Debugger](https://developers.facebook.com/tools/debug/).
-4. Paste the exact public URL you want shared.
+4. Paste the exact public URL that should be shared.
 5. Click `Debug`.
 6. Click `Scrape Again`.
-7. Repeat `Scrape Again` once or twice if Meta still shows stale data.
-8. Confirm:
-   - `og:url` matches the intended public page
-   - `og:image` points to the correct branded or fallback image
-   - title/description match the page being shared
+7. If the preview is still stale, click `Scrape Again` one or two more times after the new deploy is fully live.
+8. Confirm the debugger shows:
+  - the final public URL, not a builder preview URL
+  - `og:url` matching the intended `/book/:businessId` or `/lead/:businessId` share path
+  - the expected `og:title` and `og:description`
+  - the correct `og:image`
+  - no internal editor, preview, or campaign-only params in the scraped canonical/share URL
 
-## Important rollout note
+## Rollout notes
 
-- Old posts may continue showing old cached previews.
-- Always validate a fresh share after running the debugger.
+- Old posts may keep showing old cached previews until Meta refreshes them.
+- When testing service/category preselection, use the exact public URL you want customers to share.
+- Do not debug with internal builder or admin URLs; Meta should only see the public `/book/*` or `/lead/*` route.

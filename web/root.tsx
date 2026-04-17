@@ -18,6 +18,7 @@ import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
 import { analyticsEnabled, getClarityProjectId, getGaMeasurementId, trackPageView } from "./lib/analytics";
 import { parseAuthTokenFromHash, persistAuthState } from "./lib/auth";
+import { buildCanonicalUrl } from "./lib/publicShareMeta";
 import { recordRuntimeError } from "./lib/runtimeErrors";
 
 const isProduction = import.meta.env.PROD;
@@ -292,7 +293,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
   const { gadgetConfig, csrfToken } = loaderData;
   const location = useLocation();
   const canonicalPath = location.pathname === "/" ? "/" : location.pathname.replace(/\/+$/, "");
-  const canonicalUrl = `${siteUrl}${canonicalPath || "/"}`;
+  const canonicalUrl = buildCanonicalUrl(siteUrl, canonicalPath || "/", location.search);
   const shouldIndex = isIndexableMarketingPath(canonicalPath || "/");
   const robotsContent = shouldIndex ? "index,follow" : "noindex,nofollow";
 

@@ -42,7 +42,7 @@ function buildAbsoluteUrl(origin: string, path: string) {
 
 const SHAREABLE_QUERY_KEYS = ["service", "category"] as const;
 
-function buildCanonicalUrl(origin: string, canonicalPath: string, currentSearch = "") {
+export function buildCanonicalUrl(origin: string, canonicalPath: string, currentSearch = "") {
   const url = new URL(buildAbsoluteUrl(origin, canonicalPath));
   const currentParams = new URLSearchParams(currentSearch);
   for (const key of SHAREABLE_QUERY_KEYS) {
@@ -76,6 +76,10 @@ function upsertHeadTag(html: string, pattern: RegExp, tag: string) {
   return html.replace("</head>", `  ${tag}\n</head>`);
 }
 
+function stripHeadTags(html: string, pattern: RegExp) {
+  return html.replace(pattern, "");
+}
+
 export function injectPublicShareMetadata(html: string, metadata: ResolvedPublicShareMetadata) {
   let next = html;
   const title = escapeHtml(metadata.title);
@@ -84,39 +88,53 @@ export function injectPublicShareMetadata(html: string, metadata: ResolvedPublic
   const imageUrl = escapeHtml(metadata.imageUrl);
   const imageAlt = escapeHtml(metadata.imageAlt);
 
-  next = upsertHeadTag(next, /<title>[\s\S]*?<\/title>/i, `<title>${title}</title>`);
-  next = upsertHeadTag(next, /<meta\s+name="description"[^>]*>/i, `<meta name="description" content="${description}"/>`);
-  next = upsertHeadTag(next, /<link\s+rel="canonical"[^>]*>/i, `<link rel="canonical" href="${canonicalUrl}"/>`);
-  next = upsertHeadTag(next, /<meta\s+property="og:site_name"[^>]*>/i, `<meta property="og:site_name" content="Strata CRM"/>`);
-  next = upsertHeadTag(next, /<meta\s+property="og:type"[^>]*>/i, `<meta property="og:type" content="website"/>`);
-  next = upsertHeadTag(next, /<meta\s+property="og:url"[^>]*>/i, `<meta property="og:url" content="${canonicalUrl}"/>`);
-  next = upsertHeadTag(next, /<meta\s+property="og:title"[^>]*>/i, `<meta property="og:title" content="${title}"/>`);
-  next = upsertHeadTag(next, /<meta\s+property="og:description"[^>]*>/i, `<meta property="og:description" content="${description}"/>`);
-  next = upsertHeadTag(next, /<meta\s+property="og:image"[^>]*>/i, `<meta property="og:image" content="${imageUrl}"/>`);
-  next = upsertHeadTag(
-    next,
-    /<meta\s+property="og:image:secure_url"[^>]*>/i,
-    `<meta property="og:image:secure_url" content="${imageUrl}"/>`
-  );
-  next = upsertHeadTag(
-    next,
-    /<meta\s+property="og:image:alt"[^>]*>/i,
-    `<meta property="og:image:alt" content="${imageAlt}"/>`
-  );
-  next = upsertHeadTag(next, /<meta\s+name="twitter:card"[^>]*>/i, `<meta name="twitter:card" content="summary_large_image"/>`);
-  next = upsertHeadTag(next, /<meta\s+name="twitter:url"[^>]*>/i, `<meta name="twitter:url" content="${canonicalUrl}"/>`);
-  next = upsertHeadTag(next, /<meta\s+name="twitter:title"[^>]*>/i, `<meta name="twitter:title" content="${title}"/>`);
-  next = upsertHeadTag(
-    next,
-    /<meta\s+name="twitter:description"[^>]*>/i,
-    `<meta name="twitter:description" content="${description}"/>`
-  );
-  next = upsertHeadTag(next, /<meta\s+name="twitter:image"[^>]*>/i, `<meta name="twitter:image" content="${imageUrl}"/>`);
-  next = upsertHeadTag(
-    next,
-    /<meta\s+name="twitter:image:alt"[^>]*>/i,
-    `<meta name="twitter:image:alt" content="${imageAlt}"/>`
-  );
+  const patterns = [
+    /<title>[\s\S]*?<\/title>/gi,
+    /<meta\s+name="description"[^>]*>/gi,
+    /<link\s+rel="canonical"[^>]*>/gi,
+    /<meta\s+property="og:site_name"[^>]*>/gi,
+    /<meta\s+property="og:type"[^>]*>/gi,
+    /<meta\s+property="og:url"[^>]*>/gi,
+    /<meta\s+property="og:title"[^>]*>/gi,
+    /<meta\s+property="og:description"[^>]*>/gi,
+    /<meta\s+property="og:image"[^>]*>/gi,
+    /<meta\s+property="og:image:secure_url"[^>]*>/gi,
+    /<meta\s+property="og:image:alt"[^>]*>/gi,
+    /<meta\s+property="og:image:width"[^>]*>/gi,
+    /<meta\s+property="og:image:height"[^>]*>/gi,
+    /<meta\s+name="twitter:card"[^>]*>/gi,
+    /<meta\s+name="twitter:url"[^>]*>/gi,
+    /<meta\s+name="twitter:title"[^>]*>/gi,
+    /<meta\s+name="twitter:description"[^>]*>/gi,
+    /<meta\s+name="twitter:image"[^>]*>/gi,
+    /<meta\s+name="twitter:image:alt"[^>]*>/gi,
+  ];
+  for (const pattern of patterns) {
+    next = stripHeadTags(next, pattern);
+  }
+
+  const shareTags = [
+    `<title>${title}</title>`,
+    `<meta name="description" content="${description}"/>`,
+    `<link rel="canonical" href="${canonicalUrl}"/>`,
+    `<meta property="og:site_name" content="Strata CRM"/>`,
+    `<meta property="og:type" content="website"/>`,
+    `<meta property="og:url" content="${canonicalUrl}"/>`,
+    `<meta property="og:title" content="${title}"/>`,
+    `<meta property="og:description" content="${description}"/>`,
+    `<meta property="og:image" content="${imageUrl}"/>`,
+    `<meta property="og:image:secure_url" content="${imageUrl}"/>`,
+    `<meta property="og:image:alt" content="${imageAlt}"/>`,
+    `<meta name="twitter:card" content="summary_large_image"/>`,
+    `<meta name="twitter:url" content="${canonicalUrl}"/>`,
+    `<meta name="twitter:title" content="${title}"/>`,
+    `<meta name="twitter:description" content="${description}"/>`,
+    `<meta name="twitter:image" content="${imageUrl}"/>`,
+    `<meta name="twitter:image:alt" content="${imageAlt}"/>`,
+  ];
+  for (const tag of shareTags) {
+    next = upsertHeadTag(next, /$^/, tag);
+  }
 
   return next;
 }
@@ -126,7 +144,9 @@ function syncMetaTag(params: {
   attributes: Record<string, string>;
   content: string;
 }) {
-  const existing = document.head.querySelector(params.selector) as HTMLMetaElement | null;
+  const matches = [...document.head.querySelectorAll(params.selector)] as HTMLMetaElement[];
+  const existing = matches[0] ?? null;
+  const extras = matches.slice(1);
   const element = existing ?? document.createElement("meta");
   const created = !existing;
   const previousAttributes = {
@@ -134,6 +154,9 @@ function syncMetaTag(params: {
     name: element.getAttribute("name"),
     property: element.getAttribute("property"),
   };
+  const removedExtras = extras.map((entry) => entry.cloneNode(true) as HTMLMetaElement);
+
+  for (const extra of extras) extra.remove();
 
   for (const [key, value] of Object.entries(params.attributes)) {
     element.setAttribute(key, value);
@@ -153,14 +176,22 @@ function syncMetaTag(params: {
     else element.setAttribute("name", previousAttributes.name);
     if (previousAttributes.property == null) element.removeAttribute("property");
     else element.setAttribute("property", previousAttributes.property);
+    for (const extra of removedExtras) {
+      document.head.appendChild(extra);
+    }
   };
 }
 
 function syncCanonicalLink(href: string) {
-  const existing = document.head.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+  const matches = [...document.head.querySelectorAll('link[rel="canonical"]')] as HTMLLinkElement[];
+  const existing = matches[0] ?? null;
+  const extras = matches.slice(1);
   const element = existing ?? document.createElement("link");
   const created = !existing;
   const previousHref = element.getAttribute("href");
+  const removedExtras = extras.map((entry) => entry.cloneNode(true) as HTMLLinkElement);
+
+  for (const extra of extras) extra.remove();
 
   element.setAttribute("rel", "canonical");
   element.setAttribute("href", href);
@@ -174,6 +205,33 @@ function syncCanonicalLink(href: string) {
     }
     if (previousHref == null) element.removeAttribute("href");
     else element.setAttribute("href", previousHref);
+    for (const extra of removedExtras) {
+      document.head.appendChild(extra);
+    }
+  };
+}
+
+function removeHeadTags(selector: string) {
+  const elements = [...document.head.querySelectorAll(selector)] as HTMLElement[];
+  if (elements.length === 0) return () => undefined;
+
+  const entries = elements.map((element) => ({
+    element,
+    nextSibling: element.nextSibling,
+  }));
+
+  for (const { element } of entries) {
+    element.remove();
+  }
+
+  return () => {
+    for (const { element, nextSibling } of entries) {
+      if (nextSibling && nextSibling.parentNode === document.head) {
+        document.head.insertBefore(element, nextSibling);
+      } else {
+        document.head.appendChild(element);
+      }
+    }
   };
 }
 
@@ -230,6 +288,8 @@ export function usePublicShareMeta(metadata: ResolvedPublicShareMetadata | null)
         attributes: { property: "og:image:alt" },
         content: metadata.imageAlt,
       }),
+      removeHeadTags('meta[property="og:image:width"]'),
+      removeHeadTags('meta[property="og:image:height"]'),
       syncMetaTag({
         selector: 'meta[name="twitter:card"]',
         attributes: { name: "twitter:card" },

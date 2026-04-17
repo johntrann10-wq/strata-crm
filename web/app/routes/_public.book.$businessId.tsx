@@ -839,17 +839,20 @@ export function meta({ params }: { params: { businessId?: string } }) {
   const canonicalUrl = businessId
     ? `${publicSiteUrl}/book/${encodeURIComponent(businessId)}`
     : `${publicSiteUrl}/book`;
+  const title = "Book online | Strata";
+  const description = "Choose a service, share your vehicle, and move through a faster booking flow without the back-and-forth.";
   return [
-    { title: "Book online | Strata" },
-    {
-      name: "description",
-      content:
-        "Choose a service, share your vehicle, and move through a faster booking flow without the back-and-forth.",
-    },
+    { title },
+    { name: "description", content: description },
     { property: "og:url", content: canonicalUrl },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
     { property: "og:image", content: previewUrl },
     { property: "og:image:secure_url", content: previewUrl },
     { property: "og:image:alt", content: "Booking page preview" },
+    { name: "twitter:url", content: canonicalUrl },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
     { name: "twitter:image", content: previewUrl },
     { name: "twitter:image:alt", content: "Booking page preview" },
   ];
