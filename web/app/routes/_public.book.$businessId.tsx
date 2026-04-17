@@ -28,6 +28,7 @@ import {
   CalendarDays,
   CarFront,
   Check,
+  ChevronDown,
   Clock3,
   Loader2,
   Star,
@@ -1725,15 +1726,17 @@ export default function PublicBookingPage() {
         ? "Mobile or in-shop"
         : "In-shop";
 
-  const moveToStep = (index: number) => {
+  const moveToStep = (index: number, options?: { serviceId?: string; categoryId?: string }) => {
     setStepError(null);
     setSubmitError(null);
     const nextIndex = Math.min(Math.max(index, 0), steps.length - 1);
     setCurrentStep(nextIndex);
-    if (form.serviceId) {
+    const queryServiceId = options?.serviceId ?? form.serviceId;
+    const queryCategoryId = options?.categoryId ?? serviceCategoryFilter;
+    if (queryServiceId) {
       updateBookingQuery({
-        serviceId: form.serviceId,
-        categoryId: serviceCategoryFilter,
+        serviceId: queryServiceId,
+        categoryId: queryCategoryId,
         step: nextIndex === 0 ? "service" : null,
       });
     }
@@ -1741,37 +1744,86 @@ export default function PublicBookingPage() {
 
   const handleCategoryChange = (value: string) => {
     setServiceCategoryFilter(value);
+    setExpandedServiceId((current) => {
+      if (!current || value === "all") return current;
+      const expandedService = config?.services.find((entry) => entry.id === current) ?? null;
+      return expandedService && toCategoryFilterValue(expandedService.categoryId) === value ? current : "";
+    });
     updateBookingQuery({ categoryId: value, step: activeStep?.key === "service" ? "service" : null });
   };
 
-  const handleServiceSelect = (serviceId: string, options?: { stayOnServiceStep?: boolean }) => {
+  const openServiceSelection = (serviceId: string) => {
     const service = config?.services.find((entry) => entry.id === serviceId) ?? null;
     const nextCategory = service ? toCategoryFilterValue(service.categoryId) : serviceCategoryFilter;
     setServiceCategoryFilter(nextCategory);
-    setExpandedServiceId(options?.stayOnServiceStep ? serviceId : "");
-    setRequestTimeMode("exact");
-    setSubmittedForm(null);
-    setSubmittedService(null);
-    setForm((current) => ({
-      ...current,
-      serviceId,
-      addonServiceIds: [],
-      startTime: "",
-      requestedTimeEnd: "",
-      requestedTimeLabel: "",
-      flexibility: "same_day_flexible",
-      bookingDate: "",
-      serviceMode: service?.serviceMode === "mobile" ? "mobile" : "in_shop",
-      locationId:
-        service?.serviceMode === "mobile"
-          ? ""
-          : config?.locations.length === 1
-            ? config.locations[0].id
-            : current.locationId,
-    }));
-    setResult(null);
-    updateBookingQuery({ serviceId, categoryId: nextCategory, step: options?.stayOnServiceStep ? "service" : null });
-    moveToStep(options?.stayOnServiceStep ? 0 : 1);
+    setExpandedServiceId(serviceId);
+    moveToStep(0, { serviceId, categoryId: nextCategory });
+  };
+
+  const toggleServiceExpansion = (serviceId: string) => {
+    setExpandedServiceId((current) => {
+      const next = current === serviceId ? "" : serviceId;
+      if (next) {
+        trackEvent("booking_service_details_opened", {
+          business_id: businessId ?? "",
+          service_id: serviceId,
+        });
+      }
+      return next;
+    });
+  };
+
+  const handleServiceSelect = (serviceId: string) => {
+    const service = config?.services.find((entry) => entry.id === serviceId) ?? null;
+    const nextCategory = service ? toCategoryFilterValue(service.categoryId) : serviceCategoryFilter;
+    const selectingSameService = form.serviceId === serviceId;
+    setServiceCategoryFilter(nextCategory);
+    setExpandedServiceId("");
+    if (!selectingSameService) {
+      setRequestTimeMode("exact");
+      setSubmittedForm(null);
+      setSubmittedService(null);
+      setResult(null);
+      trackEvent("booking_service_selected", {
+        business_id: businessId ?? "",
+        service_id: serviceId,
+        flow: service?.effectiveFlow ?? config?.defaultFlow ?? "request",
+      });
+    }
+    const nextServiceMode =
+      service?.serviceMode === "mobile"
+        ? "mobile"
+        : service?.serviceMode === "both"
+          ? form.serviceMode
+          : "in_shop";
+    const nextLocationId =
+      service?.serviceMode === "mobile"
+        ? ""
+        : config?.locations.length === 1
+          ? config.locations[0].id
+          : form.locationId;
+    setForm((current) =>
+      selectingSameService
+        ? {
+            ...current,
+            serviceId,
+            serviceMode: nextServiceMode,
+            locationId: nextLocationId,
+          }
+        : {
+            ...current,
+            serviceId,
+            addonServiceIds: [],
+            startTime: "",
+            requestedTimeEnd: "",
+            requestedTimeLabel: "",
+            flexibility: "same_day_flexible",
+            bookingDate: "",
+            serviceMode: nextServiceMode,
+            locationId: nextLocationId,
+          }
+    );
+    moveToStep(1, { serviceId, categoryId: nextCategory });
   };
 
   const toggleAddon = (addonId: string) =>
@@ -1994,7 +2046,7 @@ export default function PublicBookingPage() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => handleServiceSelect(selectedService.id, { stayOnServiceStep: true })}
+            onClick={() => openServiceSelection(selectedService.id)}
             className="rounded-xl border-slate-200 bg-white/90"
           >
             Change service
@@ -2005,32 +2057,160 @@ export default function PublicBookingPage() {
   ) : null;
 
   const renderServiceCard = (service: BookingService, featured?: boolean) => {
+    const isSelected = form.serviceId === service.id;
+    const isExpanded = expandedServiceId === service.id;
+    const showPrice = Boolean(config?.showPrices && service.showPrice);
+    const showDuration = Boolean(config?.showDurations && service.showDuration);
+    const hasDescription = Boolean(service.description?.trim());
+    const detailsId = `booking-service-details-${service.id}`;
+    const toggleId = `booking-service-toggle-${service.id}`;
+
     return (
       <div
         key={service.id}
-        className={cn("svc-card", form.serviceId === service.id && "sel")}
-        style={form.serviceId === service.id ? { borderColor: "var(--c)" } : undefined}
-        onClick={() => handleServiceSelect(service.id)}
+        data-service-card={service.id}
+        data-selected={isSelected ? "true" : "false"}
+        data-expanded={isExpanded ? "true" : "false"}
+        className={cn(
+          "mb-3 overflow-hidden rounded-[1.35rem] border bg-white/96 shadow-[0_14px_28px_rgba(15,23,42,0.05)] transition-[border-color,box-shadow,background-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none last:mb-0",
+          isSelected
+            ? "border-[color:var(--booking-primary-soft-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.985),var(--booking-primary-soft))] shadow-[0_20px_40px_rgba(15,23,42,0.08)]"
+            : isExpanded
+              ? "border-slate-300/90 shadow-[0_18px_34px_rgba(15,23,42,0.07)]"
+              : "border-slate-200/85 hover:border-slate-300 hover:shadow-[0_18px_34px_rgba(15,23,42,0.06)]"
+        )}
       >
-        <div style={{ minWidth: 0 }}>
-          <div className="sv-n">{service.name}</div>
-          <div className="sv-m">{service.description}</div>
-          <div className="sv-badges">
-            <span className={service.effectiveFlow === "self_book" ? "badge b-g" : "badge b-gr"}>
-              {service.effectiveFlow === "self_book" ? "Instant" : "Request"}
-            </span>
-            {featured ? <span className="badge b-gr">Featured</span> : null}
+        <div className="flex flex-col gap-4 p-4 sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <button
+              id={toggleId}
+              type="button"
+              aria-expanded={isExpanded}
+              aria-controls={detailsId}
+              onClick={() => toggleServiceExpansion(service.id)}
+              className="group flex min-w-0 flex-1 items-start justify-between gap-3 text-left"
+            >
+              <div className="min-w-0 space-y-3">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[1.02rem] font-semibold tracking-[-0.025em] text-slate-950">{service.name}</p>
+                    {isSelected ? (
+                      <Badge
+                        variant="secondary"
+                        className="rounded-full border border-[color:var(--booking-primary-soft-border)] bg-white/90 text-[color:var(--booking-primary-ink)]"
+                      >
+                        <Check className="mr-1 h-3.5 w-3.5" />
+                        Selected
+                      </Badge>
+                    ) : null}
+                    {featured ? (
+                      <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-amber-900">
+                        Featured
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "rounded-full border",
+                        service.effectiveFlow === "self_book"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                          : "border-slate-200 bg-slate-100 text-slate-700"
+                      )}
+                    >
+                      {service.effectiveFlow === "self_book" ? "Book instantly" : "Request review"}
+                    </Badge>
+                    {showPrice ? (
+                      <Badge variant="outline" className="rounded-full border-slate-200 bg-white/90 text-slate-700">
+                        {formatPrice(service.price)}
+                      </Badge>
+                    ) : null}
+                    {showDuration ? (
+                      <Badge variant="outline" className="rounded-full border-slate-200 bg-white/90 text-slate-700">
+                        {formatDuration(service.durationMinutes)}
+                      </Badge>
+                    ) : null}
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  {isExpanded ? "Hide details" : "View details"}
+                </span>
+              </div>
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-500 shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none">
+                <ChevronDown className={cn("h-4 w-4 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none", isExpanded && "rotate-180")} />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleServiceSelect(service.id)}
+              className={cn(
+                "inline-flex min-h-11 shrink-0 items-center justify-center rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-[0_14px_28px_rgba(15,23,42,0.14)] transition-all duration-200 hover:translate-y-[-1px] hover:shadow-[0_18px_30px_rgba(15,23,42,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[color:var(--booking-primary-strong)] motion-reduce:transition-none sm:min-w-[112px]",
+                isSelected && "sm:min-w-[126px]"
+              )}
+              style={{ background: "var(--c)" }}
+            >
+              {isSelected ? "Continue" : "Select"}
+            </button>
           </div>
-        </div>
-        <div style={{ flexShrink: 0, textAlign: "right" }}>
-          {config?.showPrices && service.showPrice ? (
-            <div className="sv-p" style={{ color: "var(--c)" }}>
-              {formatPrice(service.price)}
+
+          <div
+            className={cn(
+              "grid overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none",
+              isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+            )}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div
+                id={detailsId}
+                role="region"
+                aria-labelledby={toggleId}
+                aria-hidden={!isExpanded}
+                className="space-y-3 border-t border-slate-200/80 pt-4"
+              >
+                {hasDescription ? (
+                  <p className="text-sm leading-6 whitespace-pre-line text-slate-600">{service.description}</p>
+                ) : (
+                  <p className="text-sm leading-6 text-slate-600">
+                    {service.effectiveFlow === "self_book"
+                      ? "Select this service to move straight into live availability and confirm the slot."
+                      : "Select this service to share the timing details the shop should review with your request."}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {service.serviceMode === "both" ? (
+                    <Badge variant="outline" className="rounded-full border-slate-200 bg-white/90 text-slate-700">
+                      Mobile or in-shop
+                    </Badge>
+                  ) : service.serviceMode === "mobile" ? (
+                    <Badge variant="outline" className="rounded-full border-slate-200 bg-white/90 text-slate-700">
+                      Mobile service
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="rounded-full border-slate-200 bg-white/90 text-slate-700">
+                      In-shop visit
+                    </Badge>
+                  )}
+                  {service.leadTimeHours > 0 ? (
+                    <Badge variant="outline" className="rounded-full border-slate-200 bg-white/90 text-slate-700">
+                      {formatLeadTimeLabel(service.leadTimeHours)}
+                    </Badge>
+                  ) : null}
+                  {service.addons.length > 0 ? (
+                    <Badge variant="outline" className="rounded-full border-slate-200 bg-white/90 text-slate-700">
+                      {service.addons.length} optional add-on{service.addons.length === 1 ? "" : "s"}
+                    </Badge>
+                  ) : null}
+                </div>
+                {service.addons.length > 0 ? (
+                  <p className="text-xs leading-5 text-slate-500">
+                    Optional add-ons show up after selection so the first step stays quick and easy on mobile.
+                  </p>
+                ) : null}
+              </div>
             </div>
-          ) : null}
-          {config?.showDurations && service.showDuration ? (
-            <div className="sv-d">{formatDuration(service.durationMinutes)}</div>
-          ) : null}
+          </div>
         </div>
       </div>
     );
@@ -2751,24 +2931,6 @@ export default function PublicBookingPage() {
           text-align: center; font-size: 9.5px;
           color: var(--l); padding: 2px 0 4px; font-weight: 500;
         }
-        .svc-card {
-          border: 1.5px solid var(--b); border-radius: 12px;
-          padding: 11px 13px; margin-bottom: 7px;
-          cursor: pointer; display: flex;
-          justify-content: space-between; align-items: center;
-          gap: 8px; background: var(--w); transition: all .12s;
-          user-select: none; -webkit-user-select: none;
-        }
-        .svc-card:active { transform: scale(.97); }
-        .svc-card.sel    { background: var(--cs); }
-        .sv-n { font-size: 12.5px; font-weight: 700; color: var(--t); }
-        .sv-m { font-size: 10.5px; color: var(--m); margin-top: 2px; }
-        .sv-badges { display: flex; gap: 3px; margin-top: 4px; }
-        .sv-p { font-size: 13px; font-weight: 700; }
-        .sv-d { font-size: 10px; color: var(--l); margin-top: 1px; }
-        .badge   { font-size: 9px; font-weight: 700; padding: 1.5px 6px; border-radius: 20px; border: 1px solid; display: inline-flex; }
-        .b-g     { background: #ECFDF5; border-color: #A7F3D0; color: #065F46; }
-        .b-gr    { background: #F3F4F6; border-color: #E5E7EB; color: #374151; }
         .time-grid {
           display: grid; grid-template-columns: 1fr 1fr;
           gap: 5px; margin-bottom: 12px;

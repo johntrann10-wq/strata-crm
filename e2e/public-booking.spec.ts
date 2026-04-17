@@ -226,6 +226,29 @@ async function mockSelfBooking(page: import("@playwright/test").Page) {
   });
 }
 
+test("service cards expand in place before selection", async ({ page }) => {
+  await mockSelfBooking(page);
+
+  await page.goto("/book/biz-book");
+
+  const serviceCard = page.locator('[data-service-card="svc-1"]');
+  const detailsToggle = serviceCard.locator('button[aria-controls="booking-service-details-svc-1"]');
+
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What service do you need?" })).toBeVisible();
+  await expect(serviceCard).toHaveAttribute("data-expanded", "false");
+  await expect(page).toHaveURL(/\/book\/biz-book$/);
+
+  await detailsToggle.click();
+
+  await expect(serviceCard).toHaveAttribute("data-expanded", "true");
+  await expect(serviceCard.getByText("Interior and exterior detail.")).toBeVisible();
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What service do you need?" })).toBeVisible();
+  await expect(page).toHaveURL(/\/book\/biz-book$/);
+
+  await serviceCard.getByRole("button", { name: "Select" }).click();
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What will we be working on?" })).toBeVisible();
+});
+
 test("public booking flow supports self-booking end to end", async ({ page }) => {
   await mockSelfBooking(page);
   const draftMock = await mockBookingDrafts(page);
@@ -254,7 +277,7 @@ test("public booking flow supports self-booking end to end", async ({ page }) =>
   await expect(page.getByText("Tell us what you need").first()).toBeVisible();
   await expect(page.locator('[data-booking-primary="sky"][data-booking-accent="blue"][data-booking-background="mist"][data-booking-button-style="outline"]')).toBeVisible();
   await expect(page.locator(".bp-logo-img")).toBeVisible();
-  await page.locator(".svc-card").filter({ hasText: "Full Detail" }).click();
+  await page.locator('[data-service-card="svc-1"]').getByRole("button", { name: "Select" }).click();
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What will we be working on?" })).toBeVisible();
 
   await page.getByLabel("Vehicle make *").fill("BMW");
@@ -403,7 +426,7 @@ test("public booking supports request-only services on mobile", async ({ page })
   await page.goto("/book/biz-request");
 
   await expect(page.getByText("Tell us what you need").first()).toBeVisible();
-  await page.locator(".svc-card").filter({ hasText: "Windshield tint" }).click();
+  await page.locator('[data-service-card="svc-request"]').getByRole("button", { name: "Select" }).click();
   await page.getByLabel("Vehicle make *").fill("Tesla");
   await page.getByLabel("Vehicle model *").fill("Model Y");
   await expect.poll(() => draftMock.getUpdateCount()).toBeGreaterThan(0);
@@ -589,15 +612,20 @@ test("mixed-mode services keep request and direct-book flows separate", async ({
 test("service query param carries service and category context into the booking flow", async ({ page }) => {
   await mockSelfBooking(page);
   await page.goto("/book/biz-book?service=svc-1&category=cat-1&source=services-page&step=service");
+  const selectedCard = page.locator('[data-service-card="svc-1"]');
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What service do you need?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Detailing" })).toBeVisible();
-  await expect(page.locator(".svc-card.sel").getByText("Full Detail")).toBeVisible();
+  await expect(selectedCard).toHaveAttribute("data-selected", "true");
+  await expect(selectedCard).toHaveAttribute("data-expanded", "true");
+  await expect(selectedCard.getByText("Full Detail")).toBeVisible();
   await expect(page.getByText(/instant|book instantly/i).first()).toBeVisible();
   await expect(page.getByText("$275.00").first()).toBeVisible();
   await expect(page.getByText("3h").first()).toBeVisible();
 
   await page.reload();
-  await expect(page.locator(".svc-card.sel").getByText("Full Detail")).toBeVisible();
+  await expect(selectedCard).toHaveAttribute("data-selected", "true");
+  await expect(selectedCard).toHaveAttribute("data-expanded", "true");
+  await expect(selectedCard.getByText("Full Detail")).toBeVisible();
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "What service do you need?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Detailing" })).toBeVisible();
 });
@@ -607,7 +635,7 @@ test("booking drafts autosave once intent is meaningful and resume on return", a
   const draftMock = await mockBookingDrafts(page, { resumeToken: "resume-booking-1" });
 
   await page.goto("/book/biz-book");
-  await page.locator(".svc-card").filter({ hasText: "Full Detail" }).click();
+  await page.locator('[data-service-card="svc-1"]').getByRole("button", { name: "Select" }).click();
   await page.getByLabel("Vehicle make *").fill("BMW");
   await page.getByLabel("Vehicle model *").fill("X5");
 
