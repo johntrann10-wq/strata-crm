@@ -22,7 +22,7 @@ import {
   ArrowRight,
   CalendarDays,
   CarFront,
-  CheckCircle2,
+  Check,
   Clock3,
   Loader2,
   Star,
@@ -2162,12 +2162,19 @@ export default function PublicBookingPage() {
           border-bottom: 1px solid var(--okb);
         }
         .check-ring {
-          width: 52px; height: 52px; border-radius: 50%;
+          width: 56px; height: 56px; border-radius: 50%;
           background: var(--ok);
           display: flex; align-items: center; justify-content: center;
-          margin: 0 auto 10px;
+          margin: 0 auto 12px;
+          box-shadow: 0 12px 28px rgba(5, 150, 105, 0.16);
         }
-        .check-ring svg { display: block; }
+        .check-ring-icon {
+          width: 28px;
+          height: 28px;
+          color: #fff;
+          stroke-width: 3.1;
+          transform: translateX(1px);
+        }
         .portal-pill {
           display: inline-flex; font-size: 10px; font-weight: 700;
           padding: 3px 10px; border-radius: 20px;
@@ -2362,10 +2369,7 @@ export default function PublicBookingPage() {
                 <div className="portal">
                   <div className="portal-hero">
                     <div className="check-ring">
-                      <CheckCircle2 className="hidden" />
-                      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20,6 9,17 4,12" />
-                      </svg>
+                      <Check className="check-ring-icon" aria-hidden="true" />
                     </div>
                     <div className="portal-pill">{result.mode === "self_book" ? "Confirmed" : "Sent"}</div>
                     <div className="portal-h">
