@@ -22,7 +22,7 @@ import { recordRuntimeError } from "./lib/runtimeErrors";
 
 const isProduction = import.meta.env.PROD;
 const siteUrl = "https://stratacrm.app";
-const socialPreviewVersion = "20260416b";
+const socialPreviewVersion = "20260416c";
 const defaultTitle = "Strata - fast CRM for auto service shops";
 const defaultDescription =
   "Strata helps automotive service businesses run scheduling, clients, vehicles, jobs, quotes, invoices, and payments in one clear operating system.";

@@ -143,7 +143,7 @@ const switchComparison = [
 ];
 
 export function meta() {
-  const socialImageUrl = "https://stratacrm.app/social-preview.png?v=20260416b";
+  const socialImageUrl = "https://stratacrm.app/social-preview.png?v=20260416c";
   return [
     { title: pricingTitle },
     { name: "description", content: pricingDescription },

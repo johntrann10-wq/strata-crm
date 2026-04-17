@@ -124,7 +124,7 @@ const homeSchema = {
 };
 
 export function meta() {
-  const socialImageUrl = "https://stratacrm.app/social-preview.png?v=20260416b";
+  const socialImageUrl = "https://stratacrm.app/social-preview.png?v=20260416c";
   return [
     { title: homeTitle },
     { name: "description", content: homeDescription },
