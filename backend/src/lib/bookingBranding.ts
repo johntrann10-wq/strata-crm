@@ -80,12 +80,19 @@ export function serializeBookingBrandLogoTransform(
   return JSON.stringify(normalizeBookingBrandLogoTransform(value));
 }
 
-export function buildPublicBookingBrandLogoPath(businessId: string): string {
-  return `/api/businesses/${encodeURIComponent(businessId)}/public-booking-brand-logo`;
+function appendAssetVersion(path: string, version?: string | number | null): string {
+  const normalizedVersion = typeof version === "number" ? String(version) : version?.trim();
+  if (!normalizedVersion) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}v=${encodeURIComponent(normalizedVersion)}`;
 }
 
-export function buildPublicBookingBrandLogoUrl(businessId: string): string {
-  return buildPublicDocumentUrl(buildPublicBookingBrandLogoPath(businessId));
+export function buildPublicBookingBrandLogoPath(businessId: string, version?: string | number | null): string {
+  return appendAssetVersion(`/api/businesses/${encodeURIComponent(businessId)}/public-booking-brand-logo`, version);
+}
+
+export function buildPublicBookingBrandLogoUrl(businessId: string, version?: string | number | null): string {
+  return buildPublicDocumentUrl(buildPublicBookingBrandLogoPath(businessId, version));
 }
 
 export function buildPublicBookingPreviewImagePath(businessId: string): string {

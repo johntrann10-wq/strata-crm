@@ -1414,6 +1414,11 @@ function normalizeBookingBrandLogoUrl(value: string | null | undefined) {
   return cleanOptionalText(value ?? undefined);
 }
 
+function buildBookingBrandAssetVersion(updatedAt: Date | null | undefined): string | null {
+  if (!(updatedAt instanceof Date) || Number.isNaN(updatedAt.getTime())) return null;
+  return String(updatedAt.getTime());
+}
+
 function normalizeBookingBrandPrimaryColorToken(value: string | null | undefined) {
   return value === "sky" || value === "emerald" || value === "rose" || value === "slate" ? value : "orange";
 }
@@ -1458,11 +1463,13 @@ function escapeSvgText(value: string): string {
 }
 
 function resolveBookingPreviewLogoSource(
-  business: Pick<BusinessRecord, "id" | "bookingBrandLogoUrl">
+  business: Pick<BusinessRecord, "id" | "bookingBrandLogoUrl"> & { updatedAt?: Date | null }
 ): string | null {
   const logoUrl = normalizeBookingBrandLogoUrl(business.bookingBrandLogoUrl);
   if (!logoUrl) return null;
-  return bookingBrandLogoDataUrlPattern.test(logoUrl) ? logoUrl : buildPublicBookingBrandLogoUrl(business.id);
+  return bookingBrandLogoDataUrlPattern.test(logoUrl)
+    ? logoUrl
+    : buildPublicBookingBrandLogoUrl(business.id, buildBookingBrandAssetVersion(business.updatedAt));
 }
 
 function renderPublicBookingPreviewSvg(
@@ -1480,7 +1487,7 @@ function renderPublicBookingPreviewSvg(
     | "bookingBrandPrimaryColorToken"
     | "bookingBrandAccentColorToken"
     | "bookingBrandBackgroundToneToken"
-  >
+  > & { updatedAt?: Date | null }
 ) {
   const title = buildBookingPageTitle(business);
   const subtitle = buildBookingPageSubtitle(business);
@@ -2066,7 +2073,7 @@ export function buildPublicBookingConfigResponse(params: {
     | "bookingAvailableDays"
     | "bookingAvailableStartTime"
     | "bookingAvailableEndTime"
-  >;
+  > & { updatedAt?: Date | null };
   services: PublicBookingConfigPayload["services"];
   locations: PublicBookingConfigPayload["locations"];
 }): PublicBookingConfigPayload {
@@ -2087,7 +2094,7 @@ export function buildPublicBookingConfigResponse(params: {
     requestSettings,
     branding: {
       logoUrl: normalizeBookingBrandLogoUrl(business.bookingBrandLogoUrl)
-        ? buildPublicBookingBrandLogoUrl(business.id)
+        ? buildPublicBookingBrandLogoUrl(business.id, buildBookingBrandAssetVersion(business.updatedAt))
         : null,
       logoTransform: parseBookingBrandLogoTransform(business.bookingBrandLogoTransform),
       primaryColorToken: normalizeBookingBrandPrimaryColorToken(business.bookingBrandPrimaryColorToken),

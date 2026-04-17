@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { CSSProperties, PointerEventHandler } from "react";
 
 import {
@@ -36,6 +37,8 @@ export function BookingBrandLogo({
   const tokens = normalizeBookingBranding(branding);
   const transform = tokens.logoTransform;
   const source = logoUrl ?? tokens.logoUrl;
+  const [imageFailed, setImageFailed] = useState(false);
+  const resolvedSource = imageFailed ? null : source;
   const frame = resolveBookingBrandLogoFrame(preset, transform.fitMode);
   const plate = resolveBookingBrandLogoPlateStyles(transform.backgroundPlate);
   const innerWidth = Math.max(1, frame.width - frame.padding * 2);
@@ -63,6 +66,10 @@ export function BookingBrandLogo({
     boxShadow: plate.shadow,
   } satisfies CSSProperties;
 
+  useEffect(() => {
+    setImageFailed(false);
+  }, [source]);
+
   return (
     <div className={cn("inline-flex", className)}>
       <div
@@ -74,13 +81,14 @@ export function BookingBrandLogo({
         style={frameStyle}
         onPointerDown={onPointerDown}
       >
-        {source ? (
+        {resolvedSource ? (
           <img
-            src={source}
+            src={resolvedSource}
             alt={alt}
             draggable={false}
             className="absolute select-none"
             style={imageStyle}
+            onError={() => setImageFailed(true)}
           />
         ) : (
           <div

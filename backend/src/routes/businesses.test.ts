@@ -217,6 +217,63 @@ describe("business route serialization", () => {
     });
   });
 
+  it("adds a cache-busting version to public booking logo URLs after branding updates", async () => {
+    const { buildPublicBookingConfigResponse } = await import("./businesses.js");
+    const updatedAt = new Date("2026-04-17T12:00:00.000Z");
+
+    const payload = buildPublicBookingConfigResponse({
+      business: {
+        id: "biz_cache",
+        name: "Cacheline Detail Co.",
+        type: "auto_detailing",
+        timezone: "America/Los_Angeles",
+        bookingDefaultFlow: "request",
+        bookingPageTitle: "Book with Cacheline",
+        bookingPageSubtitle: "Fresh branding should render right away.",
+        bookingConfirmationMessage: null,
+        bookingRequestRequireExactTime: false,
+        bookingRequestAllowTimeWindows: true,
+        bookingRequestAllowFlexibility: true,
+        bookingRequestAllowAlternateSlots: true,
+        bookingRequestAlternateSlotLimit: 3,
+        bookingRequestAlternateOfferExpiryHours: 48,
+        bookingRequestConfirmationCopy: null,
+        bookingRequestOwnerResponsePageCopy: null,
+        bookingRequestAlternateAcceptanceCopy: null,
+        bookingRequestChooseAnotherDayCopy: null,
+        bookingTrustBulletPrimary: null,
+        bookingTrustBulletSecondary: null,
+        bookingTrustBulletTertiary: null,
+        bookingNotesPrompt: null,
+        bookingBrandLogoUrl: "https://cdn.example.com/logo.png",
+        bookingBrandLogoTransform: null,
+        bookingBrandPrimaryColorToken: "orange",
+        bookingBrandAccentColorToken: "amber",
+        bookingBrandBackgroundToneToken: "ivory",
+        bookingBrandButtonStyleToken: "solid",
+        bookingRequireEmail: false,
+        bookingRequirePhone: false,
+        bookingRequireVehicle: true,
+        bookingAllowCustomerNotes: true,
+        bookingShowPrices: true,
+        bookingShowDurations: true,
+        bookingUrgencyEnabled: false,
+        bookingUrgencyText: null,
+        bookingAvailableDays: "[1,2,3,4,5]",
+        bookingAvailableStartTime: "09:00",
+        bookingAvailableEndTime: "19:00",
+        operatingHours: "Mon-Fri 09:00-19:00",
+        updatedAt,
+      },
+      locations: [],
+      services: [],
+    });
+
+    expect(payload.branding.logoUrl).toBe(
+      `http://localhost:5173/api/businesses/biz_cache/public-booking-brand-logo?v=${updatedAt.getTime()}`
+    );
+  });
+
   it("builds branded booking share metadata without leaking internal fields", async () => {
     const { buildPublicBookingShareMetadataResponse } = await import("./businesses.js");
     const payload = buildPublicBookingShareMetadataResponse({
