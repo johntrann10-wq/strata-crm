@@ -21,7 +21,7 @@
 
 - Generic marketing pages still use the static Strata marketing preview image.
 - Public booking and lead pages now expose business-aware metadata.
-- Vercel serves `/book/:businessId` and `/lead/:businessId` through dedicated public-share handlers before the SPA catch-all, so Meta gets route-specific HTML instead of the generic app shell.
+- Vercel rewrites `/book/:businessId` and `/lead/:businessId` into the `public-share-shell` edge handler before the SPA catch-all, so Meta gets route-specific HTML instead of the generic app shell.
 - Netlify serves the same routes through the `public-share-preview` edge function.
 - If the business has a configured booking logo, the preview image points to:
   - `/api/businesses/:businessId/public-brand-image`

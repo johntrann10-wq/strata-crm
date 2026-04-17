@@ -24,11 +24,19 @@
   ],
   "rewrites": [
     {
+      "source": "/book/:businessId",
+      "destination": "/api/public-share-shell?surface=booking&businessId=:businessId"
+    },
+    {
+      "source": "/lead/:businessId",
+      "destination": "/api/public-share-shell?surface=lead&businessId=:businessId"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/[...path].ts"
     },
     {
-      "source": "/((?!api/|assets/|marketing/|qa/|book/|lead/|favicon\\.svg$|apple-touch-icon\\.png$|robots\\.txt$|sitemap\\.xml$|googleb90dd9f849dc96e5\\.html$|social-preview\\.png$).*)",
+      "source": "/((?!api/|assets/|marketing/|qa/|favicon\\.svg$|apple-touch-icon\\.png$|robots\\.txt$|sitemap\\.xml$|googleb90dd9f849dc96e5\\.html$|social-preview\\.png$).*)",
       "destination": "/index.html"
     }
   ]
