@@ -30,8 +30,8 @@ const featureRail = [
     description: "Start from the month, drill into the day, and act with the full client and vehicle context.",
     desktopImage: "/marketing/strata-ui/hero-desktop-calendar.png",
     desktopAlt: "Monthly calendar with active appointments and day inspector.",
-    mobileImage: "/marketing/strata-ui/hero-mobile-appointment.png",
-    mobileAlt: "Mobile appointment detail with client, vehicle, and deposit status.",
+    mobileImage: "/marketing/strata-ui/mobile-calendar.png",
+    mobileAlt: "Mobile calendar month view with appointment dots and scheduling actions.",
   },
   {
     id: "crm",
@@ -148,49 +148,20 @@ export function meta() {
   ];
 }
 
-type DeviceFrameProps = {
+type ScreenshotSurfaceProps = {
   children: ReactNode;
   className?: string;
-  screenClassName?: string;
 };
 
-function LaptopScreenshotFrame({ children, className, screenClassName }: DeviceFrameProps) {
+function ScreenshotSurface({ children, className }: ScreenshotSurfaceProps) {
   return (
-    <div className={cn("relative isolate mx-auto w-full aspect-[495/294]", className)}>
-      <div className="absolute inset-x-[11%] top-[4.5%] bottom-[10.8%] rounded-[24px] bg-[linear-gradient(180deg,#1f2937_0%,#0f172a_72%,#111827_100%)] p-[1.2%] shadow-[0_28px_60px_rgba(15,23,42,0.18)]">
-        <div
-          className={cn(
-            "relative h-full w-full overflow-hidden rounded-[20px] bg-slate-50 ring-1 ring-white/10",
-            screenClassName
-          )}
-        >
-          {children}
-        </div>
-      </div>
-      <div className="absolute inset-x-[8%] bottom-[10.5%] h-[1.4%] rounded-full bg-white/8" />
-      <div className="absolute inset-x-[1.5%] bottom-[3.5%] h-[8.6%] rounded-b-[999px] rounded-t-[28px] bg-[linear-gradient(180deg,#6b7280_0%,#1f2937_24%,#0f172a_65%,#374151_100%)] shadow-[0_16px_30px_rgba(15,23,42,0.14)]" />
-      <div className="absolute left-1/2 bottom-[5.9%] h-[1.6%] w-[14%] -translate-x-1/2 rounded-full bg-black/35" />
-      <div className="absolute inset-x-[7%] bottom-[2.3%] h-[2.6%] rounded-b-[999px] bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(15,23,42,0))]" />
-    </div>
-  );
-}
-
-function PhoneScreenshotFrame({ children, className, screenClassName }: DeviceFrameProps) {
-  return (
-    <div className={cn("relative isolate mx-auto w-full aspect-[195/374]", className)}>
-      <div className="absolute inset-0 rounded-[18%] bg-[linear-gradient(145deg,#475569_0%,#111827_18%,#020617_44%,#1f2937_70%,#64748b_100%)] shadow-[0_24px_48px_rgba(15,23,42,0.22)]" />
-      <div className="absolute inset-[1.5%] rounded-[17%] bg-[linear-gradient(145deg,#0f172a_0%,#1e293b_48%,#111827_100%)]" />
-      <div
-        className={cn(
-          "absolute left-[8.8%] right-[8.8%] top-[4.4%] bottom-[4.4%] overflow-hidden rounded-[14%] bg-slate-50 ring-1 ring-black/5",
-          screenClassName
-        )}
-      >
-        {children}
-      </div>
-      <div className="absolute left-1/2 top-[6.5%] z-10 h-[4.4%] w-[30%] -translate-x-1/2 rounded-full bg-black/90 shadow-[0_1px_2px_rgba(255,255,255,0.08)]" />
-      <div className="absolute right-[2.6%] top-[24%] h-[14%] w-[1.8%] rounded-full bg-white/15" />
-      <div className="absolute left-[2.7%] top-[19%] h-[10%] w-[1.6%] rounded-full bg-white/10" />
+    <div
+      className={cn(
+        "relative isolate overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_24px_64px_rgba(15,23,42,0.14)]",
+        className
+      )}
+    >
+      {children}
     </div>
   );
 }
@@ -408,23 +379,23 @@ export default function LandingPage() {
 
           <div className="relative px-2 pb-16 sm:px-4 sm:pb-20">
             <div className="rounded-[36px] border border-orange-100/80 bg-[radial-gradient(circle_at_top,#fff7ed_0%,#ffffff_52%,#fff1e8_100%)] p-4 shadow-[0_24px_70px_rgba(15,23,42,0.08)] sm:p-6">
-              <LaptopScreenshotFrame className="max-w-[44rem]">
+              <ScreenshotSurface className="mx-auto max-w-[44rem]">
                 <img
                   src="/marketing/strata-ui/hero-desktop-calendar.png"
                   alt="Strata calendar with month overview and active appointments."
-                  className="h-full w-full object-cover object-left-top"
+                  className="block h-auto w-full object-cover object-left-top"
                   loading="eager"
                 />
-              </LaptopScreenshotFrame>
+              </ScreenshotSurface>
             </div>
-            <PhoneScreenshotFrame className="absolute -bottom-1 right-0 w-28 sm:right-4 sm:w-36 lg:w-40">
+            <ScreenshotSurface className="absolute -bottom-7 right-0 w-36 aspect-[390/760] sm:right-2 sm:w-44 lg:w-48">
               <img
-                src="/marketing/strata-ui/hero-mobile-appointment.png"
-                alt="Strata mobile appointment details."
-                className="h-full w-full object-cover object-top"
+                src="/marketing/strata-ui/mobile-calendar.png"
+                alt="Strata mobile calendar month view."
+                className="block h-full w-full object-cover object-top"
                 loading="eager"
               />
-            </PhoneScreenshotFrame>
+            </ScreenshotSurface>
           </div>
         </div>
       </section>
@@ -488,7 +459,7 @@ export default function LandingPage() {
             <div className="sticky top-24 h-fit">
               <div className="relative overflow-visible rounded-[36px] border border-orange-100/80 bg-[radial-gradient(circle_at_top,#fff7ed_0%,#ffffff_52%,#fff1e8_100%)] p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
                 <div className="relative pr-12 pb-10">
-                  <LaptopScreenshotFrame>
+                  <ScreenshotSurface className="aspect-[16/10]">
                     <div className="relative h-full w-full">
                       <img
                         src={displayedFeature.desktopImage}
@@ -514,9 +485,9 @@ export default function LandingPage() {
                         </div>
                       ) : null}
                     </div>
-                  </LaptopScreenshotFrame>
+                  </ScreenshotSurface>
                   {displayedFeature.mobileImage || queuedFeature?.mobileImage ? (
-                    <PhoneScreenshotFrame className="absolute -bottom-1 right-0 w-36 lg:w-40">
+                    <ScreenshotSurface className="absolute -bottom-1 right-0 w-36 aspect-[390/760] lg:w-40">
                       <div className="relative h-full w-full">
                         {displayedFeature.mobileImage ? (
                           <img
@@ -544,7 +515,7 @@ export default function LandingPage() {
                           </div>
                         ) : null}
                       </div>
-                    </PhoneScreenshotFrame>
+                    </ScreenshotSurface>
                   ) : null}
                 </div>
               </div>
@@ -574,7 +545,7 @@ export default function LandingPage() {
             </div>
             <div className="rounded-[32px] border border-orange-100 bg-white/95 p-4 shadow-[0_18px_54px_rgba(15,23,42,0.08)]">
               <div className="relative overflow-visible px-1 pb-10">
-                <LaptopScreenshotFrame>
+                <ScreenshotSurface className="aspect-[16/10]">
                   <div className="relative h-full w-full">
                     <img
                       src={displayedFeature.desktopImage}
@@ -600,9 +571,9 @@ export default function LandingPage() {
                       </div>
                     ) : null}
                   </div>
-                </LaptopScreenshotFrame>
+                </ScreenshotSurface>
                 {displayedFeature.mobileImage || queuedFeature?.mobileImage ? (
-                  <PhoneScreenshotFrame className="absolute -bottom-2 right-1 w-24 sm:w-28">
+                  <ScreenshotSurface className="absolute -bottom-2 right-1 w-24 aspect-[390/760] sm:w-28">
                     <div className="relative h-full w-full">
                       {displayedFeature.mobileImage ? (
                         <img
@@ -626,11 +597,11 @@ export default function LandingPage() {
                             className="absolute inset-0 h-full w-full object-cover"
                             onLoad={() => handleImageLoad(queuedFeature.mobileImage)}
                             loading="lazy"
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                  </PhoneScreenshotFrame>
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                  </ScreenshotSurface>
                 ) : null}
               </div>
               <div className="space-y-2 px-2 pb-2 pt-4">

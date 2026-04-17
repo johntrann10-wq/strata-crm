@@ -65,6 +65,16 @@ test.describe("Marketing screenshots", () => {
     await captureScreenshot(page, "weekly-calendar-desktop", 960);
   });
 
+  test("calendar-mobile", async ({ page }) => {
+    await mockMarketingApp(page);
+    await signIn(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await freezeDate(page, "2026-04-08T10:00:00-07:00");
+    await page.goto("/calendar?view=month&date=2026-04-08");
+    await expect(page.getByRole("heading", { name: /April 2026/i }).first()).toBeVisible();
+    await captureScreenshot(page, "mobile-calendar", 760);
+  });
+
   test("appointment-details-mobile", async ({ page }) => {
     await mockMarketingApp(page);
     await signIn(page);

@@ -9,6 +9,10 @@
   - Route: `/appointments/appt-ceramic-1`
   - Message: Mobile appointment details with customer, vehicle, service, and deposit context.
   - Placement: Hero mobile overlay
+- `mobile-calendar.png`
+  - Route: `/calendar?view=month&date=2026-04-08`
+  - Message: Mobile month calendar with quick actions and visible appointment density.
+  - Placement: Hero mobile screenshot card and scheduling mobile preview
 
 ## Showcase
 - `desktop-invoice.png`
