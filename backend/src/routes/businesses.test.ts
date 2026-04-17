@@ -205,7 +205,7 @@ describe("business route serialization", () => {
       services: [],
     });
 
-    expect(payload.branding.logoUrl).toBe("http://localhost:5173/api/businesses/biz_456/public-booking-brand-logo");
+    expect(payload.branding.logoUrl).toBe(uploadedLogo);
     expect(payload.branding.logoTransform).toEqual({
       version: 1,
       fitMode: "contain",

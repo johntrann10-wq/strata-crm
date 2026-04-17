@@ -2093,9 +2093,7 @@ export function buildPublicBookingConfigResponse(params: {
     defaultFlow: normalizeBookingDefaultFlowValue(business.bookingDefaultFlow),
     requestSettings,
     branding: {
-      logoUrl: normalizeBookingBrandLogoUrl(business.bookingBrandLogoUrl)
-        ? buildPublicBookingBrandLogoUrl(business.id, buildBookingBrandAssetVersion(business.updatedAt))
-        : null,
+      logoUrl: resolveBookingPreviewLogoSource(business),
       logoTransform: parseBookingBrandLogoTransform(business.bookingBrandLogoTransform),
       primaryColorToken: normalizeBookingBrandPrimaryColorToken(business.bookingBrandPrimaryColorToken),
       accentColorToken: normalizeBookingBrandAccentColorToken(business.bookingBrandAccentColorToken),
