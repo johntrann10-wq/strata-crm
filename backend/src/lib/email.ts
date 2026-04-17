@@ -16,6 +16,20 @@ let transporter: nodemailer.Transporter | null = null;
 let fallbackTransporter: nodemailer.Transporter | null = null;
 const PRIMARY_SEND_TIMEOUT_MS = 2_500;
 const FALLBACK_SEND_TIMEOUT_MS = 1_500;
+const CUSTOMER_FACING_TEMPLATE_SLUGS = new Set([
+  "appointment_confirmation",
+  "appointment_reminder",
+  "booking_request_received",
+  "booking_request_customer_update",
+  "customer_portal_link",
+  "invoice_sent",
+  "lapsed_client_reengagement",
+  "lead_auto_response",
+  "payment_receipt",
+  "quote_follow_up",
+  "quote_sent",
+  "review_request",
+]);
 
 function isEmailSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -97,6 +111,46 @@ function getReplyToAddress(): string | undefined {
   return getConfiguredEmailReplyTo() ?? undefined;
 }
 
+function extractMailboxAddress(mailbox: string): string {
+  const trimmed = mailbox.trim();
+  const bracketMatch = trimmed.match(/<([^>]+)>/);
+  if (bracketMatch?.[1]?.trim()) return bracketMatch[1].trim();
+  return trimmed;
+}
+
+function extractMailboxDisplayName(mailbox: string): string {
+  const trimmed = mailbox.trim();
+  const bracketMatch = trimmed.match(/^(.*?)\s*<[^>]+>$/);
+  if (!bracketMatch?.[1]) return "";
+  return bracketMatch[1].trim().replace(/^"|"$/g, "");
+}
+
+function normalizeMailboxDisplayName(value: string | number | null | undefined): string {
+  return String(value ?? "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatMailbox(displayName: string, address: string): string {
+  const normalizedName = normalizeMailboxDisplayName(displayName);
+  const normalizedAddress = extractMailboxAddress(address);
+  if (!normalizedName) return normalizedAddress;
+  const escapedName = normalizedName.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escapedName}" <${normalizedAddress}>`;
+}
+
+export function resolveFromAddressForTemplate(
+  configuredFrom: string,
+  templateSlug: string,
+  vars: TemplateVars = {}
+): string {
+  if (!CUSTOMER_FACING_TEMPLATE_SLUGS.has(templateSlug)) return configuredFrom;
+  const businessDisplayName = normalizeMailboxDisplayName(vars.businessName);
+  const fallbackDisplayName = normalizeMailboxDisplayName(extractMailboxDisplayName(configuredFrom)) || "Strata CRM";
+  return formatMailbox(businessDisplayName || fallbackDisplayName, configuredFrom);
+}
+
 function htmlToPlainText(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -160,12 +214,14 @@ async function getBusinessContactVars(businessId: string | null | undefined): Pr
   if (!businessId) return {};
   const [business] = await db
     .select({
+      name: businesses.name,
       email: businesses.email,
       phone: businesses.phone,
       address: businesses.address,
       city: businesses.city,
       state: businesses.state,
       zip: businesses.zip,
+      bookingBrandLogoUrl: businesses.bookingBrandLogoUrl,
     })
     .from(businesses)
     .where(eq(businesses.id, businessId))
@@ -174,9 +230,11 @@ async function getBusinessContactVars(businessId: string | null | undefined): Pr
   const businessAddress = [business?.address, business?.city, business?.state, business?.zip].filter(Boolean).join(", ");
 
   return {
+    businessName: business?.name?.trim() || undefined,
     businessEmail: business?.email?.trim() || undefined,
     businessPhone: business?.phone?.trim() || undefined,
     businessAddress: businessAddress.trim() || undefined,
+    businessLogoUrl: business?.bookingBrandLogoUrl?.trim() || undefined,
   };
 }
 
@@ -256,7 +314,7 @@ export async function sendTemplatedEmailInternal(
     throw new Error("Recipient email address is required");
   }
   const payload = {
-    from: getFromAddress(),
+    from: resolveFromAddressForTemplate(getFromAddress(), options.templateSlug, message.vars),
     replyTo: getReplyToAddress(),
     to: recipient,
     subject: message.subject,
@@ -294,6 +352,7 @@ export async function sendTemplatedEmailInternal(
 
 async function sendViaResend(payload: {
   from: string;
+  replyTo?: string;
   to: string;
   subject: string;
   html: string;
@@ -315,6 +374,7 @@ async function sendViaResend(payload: {
       subject: payload.subject,
       html: payload.html,
       text: payload.text,
+      reply_to: payload.replyTo,
     }),
   });
   if (response.ok) return;
