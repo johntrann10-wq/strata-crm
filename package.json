@@ -21,7 +21,7 @@
     "test:backend": "npm --prefix backend run test",
     "test:e2e": "playwright test",
     "test:e2e:mobile": "playwright test e2e/mobile-core.spec.ts --project=mobile-chrome",
-    "test:e2e:reliability": "playwright test e2e/reliability-diagnostics.spec.ts e2e/soak-navigation.spec.ts",
+    "test:e2e:reliability": "playwright test e2e/reliability-diagnostics.spec.ts e2e/soak-navigation.mocked.spec.ts",
     "predeploy": "npm run scan:secrets && npm run lint && npm run test:backend && npm run build:backend && npm run build",
     "run:db": "docker compose up -d",
     "run": "node run-local.cjs"
