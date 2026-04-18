@@ -82,6 +82,20 @@ type JobRecord = {
   createdAt: string;
 };
 
+type ServiceRecord = {
+  id: string;
+  businessId: string;
+  name: string;
+  price: number;
+  durationMinutes: number;
+  category: string;
+  categoryId: string | null;
+  categoryLabel: string;
+  notes: string | null;
+  active: boolean;
+  isAddon: boolean;
+};
+
 export type ClientVehicleMockState = {
   client: ClientRecord;
   vehicle: VehicleRecord;
@@ -119,6 +133,10 @@ function toJson(body: unknown) {
 function parseBody(route: Parameters<Page["route"]>[1] extends (args: infer A) => any ? A : never): Record<string, unknown> {
   const postData = route.request().postData();
   return postData ? (JSON.parse(postData) as Record<string, unknown>) : {};
+}
+
+function toSlug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
 
 export async function mockClientVehicleApp(page: Page, options: ClientVehicleMockOptions = {}): Promise<ClientVehicleMockState> {
@@ -161,6 +179,8 @@ export async function mockClientVehicleApp(page: Page, options: ClientVehicleMoc
     clientArchived: false,
     vehicleArchived: false,
   };
+  const clients: ClientRecord[] = [state.client];
+  const vehicles: VehicleRecord[] = [state.vehicle];
 
   const appointments: AppointmentRecord[] = [
     {
@@ -225,6 +245,24 @@ export async function mockClientVehicleApp(page: Page, options: ClientVehicleMoc
       createdAt: "2026-04-01T16:00:00.000Z",
     },
   ];
+  const services: ServiceRecord[] = [
+    {
+      id: "service-1",
+      businessId: BUSINESS_ID,
+      name: "Ceramic Maintenance",
+      price: 225,
+      durationMinutes: 120,
+      category: "detailing",
+      categoryId: null,
+      categoryLabel: "Detailing",
+      notes: "Maintenance wash and topper refresh.",
+      active: true,
+      isAddon: false,
+    },
+  ];
+  let nextClientNumber = 2;
+  let nextVehicleNumber = 2;
+  let nextAppointmentNumber = 3;
 
   await page.route("**/api/auth/sign-in", async (route) => {
     await route.fulfill({
@@ -353,86 +391,333 @@ export async function mockClientVehicleApp(page: Page, options: ClientVehicleMoc
     }
 
     if (path === "/clients" && method === "GET") {
+      const search = url.searchParams.get("search")?.trim().toLowerCase() ?? "";
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: toJson({ records: state.clientArchived ? [] : [state.client] }),
+        body: toJson({
+          records: clients.filter((client) => {
+            if (client.id === CLIENT_ID && state.clientArchived) return false;
+            if (!search) return true;
+            return [client.firstName, client.lastName, client.email, client.phone].filter(Boolean).join(" ").toLowerCase().includes(search);
+          }),
+        }),
       });
       return;
     }
 
-    if (path === `/clients/${CLIENT_ID}` && method === "GET") {
-      await route.fulfill({
-        status: state.clientArchived ? 404 : 200,
-        contentType: "application/json",
-        body: toJson(state.clientArchived ? { message: "Client not found" } : state.client),
-      });
-      return;
-    }
-
-    if (path === `/clients/${CLIENT_ID}` && method === "DELETE") {
-      state.clientArchived = true;
-      state.vehicleArchived = true;
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ success: true, id: CLIENT_ID }) });
-      return;
-    }
-
-    if (path === `/clients/${CLIENT_ID}` && method !== "GET") {
+    if (path === "/clients" && method === "POST") {
       const payload = parseBody(route);
-      state.client = {
-        ...state.client,
+      const createdClient: ClientRecord = {
+        id: `client-${nextClientNumber++}`,
+        firstName: String(payload.firstName ?? "New"),
+        lastName: String(payload.lastName ?? "Client"),
+        email: String(payload.email ?? ""),
+        phone: String(payload.phone ?? ""),
+        address: typeof payload.address === "string" ? payload.address : null,
+        city: typeof payload.city === "string" ? payload.city : null,
+        state: typeof payload.state === "string" ? payload.state : null,
+        zip: typeof payload.zip === "string" ? payload.zip : null,
+        notes: typeof payload.notes === "string" ? payload.notes : null,
+        internalNotes: typeof payload.internalNotes === "string" ? payload.internalNotes : null,
+        marketingOptIn: payload.marketingOptIn !== false,
+        createdAt: new Date().toISOString(),
+      };
+      clients.push(createdClient);
+      await route.fulfill({ status: 201, contentType: "application/json", body: toJson(createdClient) });
+      return;
+    }
+
+    if (/^\/clients\/[^/]+$/.test(path) && method === "GET") {
+      const clientId = path.split("/").at(-1) ?? "";
+      const client = clients.find((entry) => entry.id === clientId);
+      await route.fulfill({
+        status: !client || (client.id === CLIENT_ID && state.clientArchived) ? 404 : 200,
+        contentType: "application/json",
+        body: toJson(!client || (client.id === CLIENT_ID && state.clientArchived) ? { message: "Client not found" } : client),
+      });
+      return;
+    }
+
+    if (/^\/clients\/[^/]+$/.test(path) && method === "DELETE") {
+      const clientId = path.split("/").at(-1) ?? "";
+      if (clientId === CLIENT_ID) {
+        state.clientArchived = true;
+        state.vehicleArchived = true;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ success: true, id: clientId }) });
+      return;
+    }
+
+    if (/^\/clients\/[^/]+$/.test(path) && method !== "GET") {
+      const clientId = path.split("/").at(-1) ?? "";
+      const payload = parseBody(route);
+      const index = clients.findIndex((entry) => entry.id === clientId);
+      if (index === -1) {
+        await route.fulfill({ status: 404, contentType: "application/json", body: toJson({ message: "Client not found" }) });
+        return;
+      }
+      const updatedClient = {
+        ...clients[index],
         ...payload,
-        id: CLIENT_ID,
+        id: clientId,
       } as ClientRecord;
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson(state.client) });
+      clients[index] = updatedClient;
+      if (clientId === CLIENT_ID) {
+        state.client = updatedClient;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson(updatedClient) });
       return;
     }
 
     if (path === "/vehicles" && method === "GET") {
       const clientId = url.searchParams.get("clientId");
-      const records =
-        state.vehicleArchived || state.clientArchived || (clientId && clientId !== CLIENT_ID) ? [] : [state.vehicle];
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records }) });
-      return;
-    }
-
-    if (path === `/vehicles/${VEHICLE_ID}` && method === "GET") {
-      await route.fulfill({
-        status: state.vehicleArchived || state.clientArchived ? 404 : 200,
-        contentType: "application/json",
-        body: toJson(state.vehicleArchived || state.clientArchived ? { message: "Vehicle not found" } : state.vehicle),
-      });
-      return;
-    }
-
-    if (path === `/vehicles/${VEHICLE_ID}` && method === "DELETE") {
-      state.vehicleArchived = true;
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ success: true, id: VEHICLE_ID }) });
-      return;
-    }
-
-    if (path === `/vehicles/${VEHICLE_ID}` && method !== "GET") {
-      const payload = parseBody(route);
-      state.vehicle = {
-        ...state.vehicle,
-        ...payload,
-        id: VEHICLE_ID,
-        clientId: CLIENT_ID,
-        client: state.vehicle.client,
-      } as VehicleRecord;
-      await route.fulfill({ status: 200, contentType: "application/json", body: toJson(state.vehicle) });
-      return;
-    }
-
-    if (path === "/appointments") {
-      const clientId = url.searchParams.get("clientId");
-      const vehicleId = url.searchParams.get("vehicleId");
-      const records = appointments.filter((appointment) => {
-        if (clientId && appointment.clientId !== clientId) return false;
-        if (vehicleId && appointment.vehicleId !== vehicleId) return false;
+      const records = vehicles.filter((vehicle) => {
+        if (vehicle.id === VEHICLE_ID && (state.vehicleArchived || state.clientArchived)) return false;
+        if (clientId && vehicle.clientId !== clientId) return false;
         return true;
       });
       await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records }) });
+      return;
+    }
+
+    if (path === "/vehicles" && method === "POST") {
+      const payload = parseBody(route);
+      const clientId = String(payload.clientId ?? "");
+      const client = clients.find((entry) => entry.id === clientId);
+      const createdVehicle: VehicleRecord = {
+        id: `vehicle-${nextVehicleNumber++}`,
+        clientId,
+        year: payload.year == null || payload.year === "" ? null : Number(payload.year),
+        make: typeof payload.make === "string" ? payload.make : null,
+        model: typeof payload.model === "string" ? payload.model : null,
+        trim: typeof payload.trim === "string" ? payload.trim : null,
+        bodyStyle: typeof payload.bodyStyle === "string" ? payload.bodyStyle : null,
+        engine: typeof payload.engine === "string" ? payload.engine : null,
+        displayName: typeof payload.displayName === "string" ? payload.displayName : null,
+        source: typeof payload.source === "string" ? payload.source : "manual",
+        sourceVehicleId: typeof payload.sourceVehicleId === "string" ? payload.sourceVehicleId : null,
+        color: typeof payload.color === "string" ? payload.color : null,
+        vin: typeof payload.vin === "string" ? payload.vin : null,
+        licensePlate: typeof payload.licensePlate === "string" ? payload.licensePlate : null,
+        mileage: payload.mileage == null || payload.mileage === "" ? null : Number(payload.mileage),
+        notes: typeof payload.notes === "string" ? payload.notes : null,
+        client: client ? { id: client.id, firstName: client.firstName, lastName: client.lastName } : undefined,
+      };
+      vehicles.push(createdVehicle);
+      await route.fulfill({ status: 201, contentType: "application/json", body: toJson(createdVehicle) });
+      return;
+    }
+
+    if (/^\/vehicles\/[^/]+$/.test(path) && method === "GET") {
+      const vehicleId = path.split("/").at(-1) ?? "";
+      const vehicle = vehicles.find((entry) => entry.id === vehicleId);
+      await route.fulfill({
+        status: !vehicle || (vehicle.id === VEHICLE_ID && (state.vehicleArchived || state.clientArchived)) ? 404 : 200,
+        contentType: "application/json",
+        body: toJson(!vehicle || (vehicle.id === VEHICLE_ID && (state.vehicleArchived || state.clientArchived)) ? { message: "Vehicle not found" } : vehicle),
+      });
+      return;
+    }
+
+    if (/^\/vehicles\/[^/]+$/.test(path) && method === "DELETE") {
+      const vehicleId = path.split("/").at(-1) ?? "";
+      if (vehicleId === VEHICLE_ID) {
+        state.vehicleArchived = true;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ success: true, id: vehicleId }) });
+      return;
+    }
+
+    if (/^\/vehicles\/[^/]+$/.test(path) && method !== "GET") {
+      const vehicleId = path.split("/").at(-1) ?? "";
+      const payload = parseBody(route);
+      const index = vehicles.findIndex((entry) => entry.id === vehicleId);
+      if (index === -1) {
+        await route.fulfill({ status: 404, contentType: "application/json", body: toJson({ message: "Vehicle not found" }) });
+        return;
+      }
+      const updatedVehicle = {
+        ...vehicles[index],
+        ...payload,
+        id: vehicleId,
+        client: vehicles[index].client,
+      } as VehicleRecord;
+      vehicles[index] = updatedVehicle;
+      if (vehicleId === VEHICLE_ID) {
+        state.vehicle = updatedVehicle;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson(updatedVehicle) });
+      return;
+    }
+
+    if (path === "/appointments" && method === "POST") {
+      const payload = parseBody(route);
+      const clientId = typeof payload.clientId === "string" ? payload.clientId : "";
+      const vehicleId = typeof payload.vehicleId === "string" ? payload.vehicleId : "";
+      const client = clients.find((entry) => entry.id === clientId) ?? null;
+      const vehicle = vehicles.find((entry) => entry.id === vehicleId) ?? null;
+      const selectedServices = Array.isArray(payload.serviceIds)
+        ? services.filter((service) => (payload.serviceIds as unknown[]).includes(service.id))
+        : [];
+      const appointmentTitle =
+        typeof payload.title === "string" && payload.title.trim()
+          ? payload.title
+          : selectedServices.length > 0
+            ? selectedServices.map((service) => service.name).join(" + ")
+            : "Appointment";
+      const totalPrice = selectedServices.reduce((sum, service) => sum + service.price, 0);
+      const createdAppointment: AppointmentRecord & {
+        endTime?: string | null;
+        assignedStaffId?: string | null;
+        depositAmount?: number | null;
+        totalPrice?: number;
+        client?: { id: string; firstName: string; lastName: string } | null;
+        vehicle?: { id: string; year: number | null; make: string | null; model: string | null } | null;
+        services?: Array<{ id: string; name: string; price: number; durationMinutes: number }>;
+      } = {
+        id: `appt-${nextAppointmentNumber++}`,
+        clientId,
+        vehicleId,
+        title: appointmentTitle,
+        startTime: String(payload.startTime ?? new Date().toISOString()),
+        endTime: typeof payload.endTime === "string" ? payload.endTime : null,
+        status: "scheduled",
+        totalPrice,
+        assignedStaffId: typeof payload.assignedStaffId === "string" ? payload.assignedStaffId : null,
+        depositAmount: payload.depositAmount == null ? null : Number(payload.depositAmount),
+        client: client ? { id: client.id, firstName: client.firstName, lastName: client.lastName } : null,
+        vehicle: vehicle
+          ? { id: vehicle.id, year: vehicle.year, make: vehicle.make, model: vehicle.model }
+          : null,
+        services: selectedServices.map((service) => ({
+          id: service.id,
+          name: service.name,
+          price: service.price,
+          durationMinutes: service.durationMinutes,
+        })),
+      };
+      appointments.push(createdAppointment);
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: toJson({ ...createdAppointment, deliveryStatus: "smtp_disabled" }),
+      });
+      return;
+    }
+
+    if (/^\/appointments\/[^/]+$/.test(path) && method === "GET") {
+      const appointmentId = path.split("/").at(-1) ?? "";
+      const appointment = appointments.find((entry) => entry.id === appointmentId);
+      await route.fulfill({
+        status: appointment ? 200 : 404,
+        contentType: "application/json",
+        body: toJson(
+          appointment
+            ? appointment
+            : { message: "Appointment not found" }
+        ),
+      });
+      return;
+    }
+
+    if (path === "/appointments" && method === "GET") {
+      const clientId = url.searchParams.get("clientId");
+      const vehicleId = url.searchParams.get("vehicleId");
+      const startGte = url.searchParams.get("startGte");
+      const startLte = url.searchParams.get("startLte");
+      const records = appointments.filter((appointment) => {
+        if (clientId && appointment.clientId !== clientId) return false;
+        if (vehicleId && appointment.vehicleId !== vehicleId) return false;
+        if (startGte && new Date(appointment.startTime).getTime() < new Date(startGte).getTime()) return false;
+        if (startLte && new Date(appointment.startTime).getTime() > new Date(startLte).getTime()) return false;
+        return true;
+      });
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records }) });
+      return;
+    }
+
+    if (path === "/services") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records: services }) });
+      return;
+    }
+
+    if (path === "/service-addon-links") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: toJson({ records: [] }) });
+      return;
+    }
+
+    if (path === "/staff") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson({
+          records: [
+            { id: "staff-1", firstName: "Owner", lastName: "QA", role: "owner" },
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (path === "/vehicle-catalog/years") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson({
+          records: [{ id: "2024", year: 2024, label: "2024" }],
+        }),
+      });
+      return;
+    }
+
+    if (path === "/vehicle-catalog/makes") {
+      const year = url.searchParams.get("year") ?? "2024";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson({
+          records: [
+            { id: `${year}-bmw`, label: "BMW", value: "BMW", source: "manual", sourceVehicleId: `${year}-bmw` },
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (path === "/vehicle-catalog/models") {
+      const make = url.searchParams.get("make") ?? "BMW";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson({
+          records: [
+            { id: `${toSlug(make)}-m3`, label: "M3", value: "M3", source: "manual", sourceVehicleId: `${toSlug(make)}-m3` },
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (path === "/vehicle-catalog/trims") {
+      const model = url.searchParams.get("model") ?? "M3";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: toJson({
+          records: [
+            {
+              id: `${toSlug(model)}-competition`,
+              label: "Competition",
+              value: "Competition",
+              source: "manual",
+              sourceVehicleId: `${toSlug(model)}-competition`,
+              bodyStyle: "Sedan",
+              engine: "3.0L Twin Turbo",
+            },
+          ],
+        }),
+      });
       return;
     }
 

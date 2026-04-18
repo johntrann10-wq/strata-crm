@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { mockHomeDashboard, permissionsForRole } from "./helpers/mockHomeDashboard";
+import { mockClientVehicleApp, signIn } from "./helpers/clientVehicleFlow";
 
 test.describe.configure({ mode: "serial" });
 
@@ -283,5 +284,53 @@ test.describe("Critical path (mocked)", () => {
 
     await page.waitForURL(/\/signed-in/);
     await expect(page.getByRole("heading", { name: /^dashboard$/i }).first()).toBeVisible();
+  });
+
+  test("creates a client, vehicle, and appointment through the real forms without a backend", async ({ page }) => {
+    await mockClientVehicleApp(page);
+    await signIn(page);
+
+    const stamp = Date.now();
+    const clientFirstName = "Workflow";
+    const clientLastName = `Smoke${String(stamp).slice(-4)}`;
+    const clientEmail = `workflow-smoke-${stamp}@example.com`;
+
+    await page.goto("/clients/new");
+    await expect(page.getByRole("heading", { name: /^new client$/i })).toBeVisible();
+
+    await page.locator("#firstName").fill(clientFirstName);
+    await page.locator("#lastName").fill(clientLastName);
+    await page.locator("#email").fill(clientEmail);
+    await page.getByRole("button", { name: /\+\s*vehicle/i }).click();
+    await page.getByRole("button", { name: /manual fallback/i }).click();
+    await page.locator("#vehicle-year").fill("2024");
+    await page.locator("#vehicle-make").fill("BMW");
+    await page.locator("#vehicle-model").fill("M3");
+    await page.locator("#vehicle-trim").fill("Competition");
+    await page.locator("#vehicleColor").fill("Black Sapphire");
+    await page.locator("#vehicleLicensePlate").fill("SMOKE24");
+    await page.getByRole("button", { name: /save and book appointment/i }).click();
+
+    await page.waitForURL(/\/appointments\/new/);
+    await expect(page).toHaveURL(new RegExp(`clientId=.*vehicleId=`));
+    await expect(page.getByRole("heading", { name: /new appointment/i })).toBeVisible();
+
+    const serviceName = "Ceramic Maintenance";
+    await page.getByRole("button", { name: /detailing\s+1 service/i }).click();
+    await expect(page.getByText(serviceName, { exact: true }).first()).toBeVisible();
+    await page.getByText(serviceName, { exact: true }).first().click();
+    await expect(page.getByText(/^Services selected$/i)).toBeVisible();
+
+    await page.getByRole("button", { name: /save appointment/i }).click();
+
+    await page.waitForURL(/\/appointments\/appt-/);
+    await expect(page.getByText(new RegExp(`${clientFirstName}\\s+${clientLastName}`, "i")).first()).toBeVisible();
+    await page.reload();
+    await expect(page.getByText(new RegExp(`${clientFirstName}\\s+${clientLastName}`, "i")).first()).toBeVisible();
+
+    await page.goto("/appointments");
+    await expect(page.locator("main").getByRole("heading", { name: /^schedule$/i })).toBeVisible();
+    await expect(page.getByText(serviceName, { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(new RegExp(`${clientFirstName}\\s+${clientLastName}`, "i")).first()).toBeVisible();
   });
 });
