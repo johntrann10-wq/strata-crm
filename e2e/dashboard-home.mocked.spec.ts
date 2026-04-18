@@ -246,6 +246,38 @@ async function mockDashboard(page: import("@playwright/test").Page, options?: { 
     snapshotCalls: 0,
     preferences: { widgetOrder: widgetOrder(role), hiddenWidgets: hiddenWidgets(role), defaultRange: "today", defaultTeamMemberId: role === "technician" ? null : "staff-1", dismissedQueueItems: {} as Record<string, string>, snoozedQueueItems: {} as Record<string, string>, lastSeenAt: "2026-04-10T12:00:00.000Z", updatedAt: "2026-04-10T12:00:00.000Z" },
   };
+  const businessRecord = { id: "biz-1", name: "Strata Detail Lab", type: "auto_detailing", onboardingComplete: true };
+  const staffRecords = [
+    { id: "staff-1", userId: "user-1", firstName: "Alex", lastName: "Detailer" },
+    { id: "staff-2", userId: "user-2", firstName: "Mia", lastName: "Porter" },
+  ];
+  const billingStatus = {
+    status: "active",
+    accessState: "active_paid",
+    trialStartedAt: null,
+    trialEndsAt: null,
+    currentPeriodEnd: null,
+    billingHasPaymentMethod: true,
+    billingPaymentMethodAddedAt: "2026-04-01T12:00:00.000Z",
+    billingSetupError: null,
+    billingSetupFailedAt: null,
+    billingLastStripeEventId: null,
+    billingLastStripeEventType: null,
+    billingLastStripeEventAt: null,
+    billingLastStripeSyncStatus: null,
+    billingLastStripeSyncError: null,
+    activationMilestone: { reached: false, type: null, occurredAt: null, detail: null },
+    billingPrompt: {
+      stage: "none",
+      visible: false,
+      daysLeftInTrial: null,
+      dismissedUntil: null,
+      cooldownDays: 5,
+    },
+    billingEnforced: true,
+    checkoutConfigured: true,
+    portalConfigured: true,
+  };
 
   await page.addInitScript(() => {
     window.localStorage.setItem("authToken", "dashboard-test-token");
@@ -254,11 +286,19 @@ async function mockDashboard(page: import("@playwright/test").Page, options?: { 
 
   await page.route("**/api/auth/me", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { id: "user-1", email: `${role}@example.com`, firstName: role[0]?.toUpperCase() + role.slice(1), lastName: "User", token: "dashboard-test-token", googleProfileId: null, hasPassword: true } }) }));
   await page.route("**/api/auth/context", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { businesses: [{ id: "biz-1", name: "Strata Detail Lab", type: "auto_detailing", role, status: "active", isDefault: true, permissions: permissionsForRole(role) }], currentBusinessId: "biz-1" } }) }));
-  await page.route("**/api/businesses**", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ id: "biz-1", name: "Strata Detail Lab", type: "auto_detailing", onboardingComplete: true }]) }));
+  await page.route("**/api/businesses**", async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname.replace(/^\/api/, "");
+    if (path === "/businesses") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ records: [businessRecord] }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(businessRecord) });
+  });
   await page.route("**/api/users/user-1", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: "user-1", email: `${role}@example.com`, firstName: role[0]?.toUpperCase() + role.slice(1), lastName: "User", googleProfileId: null }) }));
-  await page.route("**/api/billing/status", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "active", active: true, subscriptionStatus: "active", planName: "Pro", billingRequired: false }) }));
-  await page.route("**/api/staff**", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ id: "staff-1", userId: "user-1", firstName: "Alex", lastName: "Detailer" }, { id: "staff-2", userId: "user-2", firstName: "Mia", lastName: "Porter" }]) }));
-  await page.route("**/api/locations**", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) }));
+  await page.route(/.*\/api\/billing\/(status|refresh-state)$/, async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(billingStatus) }));
+  await page.route("**/api/staff**", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ records: staffRecords }) }));
+  await page.route("**/api/locations**", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ records: [] }) }));
   await page.route("**/api/auth/sign-out", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) }));
 
   await page.route("**/api/actions/getHomeDashboard", async (route) => {
@@ -282,6 +322,27 @@ async function mockDashboard(page: import("@playwright/test").Page, options?: { 
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ preferences: state.preferences }) });
   });
 
+  await page.route("**/api/actions/getFinanceDashboard", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        kpis: {
+          grossRevenue: state.mode === "empty" ? 0 : 11840,
+          expenses: state.mode === "empty" ? 0 : state.mode === "edge" ? 3180 : 2410,
+          projectedNetProfit: state.mode === "empty" ? 0 : state.mode === "edge" ? 6140 : 6910,
+          awaitingPayment: role === "technician" ? 0 : state.mode === "edge" ? 2440 : 920,
+        },
+        statusBuckets: [],
+        recentPayments: [],
+        invoiceRows: [],
+        trend: [],
+        generatedAt: "2026-04-10T16:00:00.000Z",
+        referenceDate: "2026-04-10",
+      }),
+    });
+  });
+
   return state;
 }
 
@@ -295,8 +356,8 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(main.getByText("Weekly Appointment Overview", { exact: true })).toBeVisible();
     await expect(main.getByText("Upcoming Jobs / Needs Attention", { exact: true })).toBeVisible();
     await expect(main.getByText("Monthly Revenue", { exact: true })).toBeVisible();
-    await expect(main.getByText("Expenses", { exact: true })).toBeVisible();
-    await expect(main.getByText("Net cash", { exact: true })).toBeVisible();
+    await expect(main.getByText("Expenses", { exact: true }).first()).toBeVisible();
+    await expect(main.getByText("Projected net", { exact: true })).toBeVisible();
     await expect(main.getByText("Bookings Overview", { exact: true })).toBeVisible();
     await expect(main.getByText("Recent Activity", { exact: true })).toBeVisible();
     await expect(main.getByText("Unpaid Invoices / Deposits Due", { exact: true })).toBeVisible();
@@ -311,12 +372,9 @@ test.describe("Dashboard home (mocked)", () => {
     await expect(page.getByRole("link", { name: /open day view/i }).first()).toHaveAttribute("href", "/calendar?view=day&date=2026-04-10");
     await page.getByRole("button", { name: "Focus Tuesday in weekly overview" }).click();
     await expect(page.getByRole("link", { name: /open day in calendar/i })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-07");
-    await page.getByRole("button", { name: /^booked$/i }).click();
-    await expect(page.getByRole("link", { name: "Open booked records for Apr 2", exact: true })).toHaveAttribute("href", "/calendar?view=day&date=2026-04-02");
-    await page.getByRole("button", { name: /^cash$/i }).click();
-    await expect(page.getByRole("link", { name: "Open collected records for Apr 3", exact: true })).toHaveAttribute("href", "/finances?focusDate=2026-04-03");
-    await page.getByRole("button", { name: /^expenses$/i }).click();
-    await expect(page.getByRole("link", { name: "Open expenses records for Apr 2", exact: true })).toHaveAttribute("href", "/finances?focusDate=2026-04-02");
+    await expect(page.getByRole("link", { name: /^Booked \$11\.8K scheduled work this month$/i })).toHaveAttribute("href", "/calendar?view=month");
+    await expect(page.getByRole("link", { name: /^Invoiced \$11\.8K invoice value created this month$/i })).toHaveAttribute("href", "/finances");
+    await expect(page.getByRole("link", { name: /^Expenses \$2\.4K logged expenses this month$/i })).toHaveAttribute("href", "/finances?view=expenses");
     if (process.platform === "win32") {
       await expect(page.locator("main")).toHaveScreenshot("dashboard-owner-control-tower.png", {
         animations: "disabled",
@@ -412,8 +470,8 @@ test.describe("Dashboard home (mocked)", () => {
     });
     await page.goto("/signed-in");
     await expect(page.getByText("Monthly Revenue", { exact: true })).toBeVisible();
-    await expect(page.getByText("Expenses", { exact: true })).toBeVisible();
-    await expect(page.getByText("Booked work is grouped by scheduled day. Open any bar to drill into that date.")).toBeVisible();
+    await expect(page.getByText("Expenses", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Open any bar to jump into the source view behind that month-to-date number.")).toBeVisible();
   });
 
   test("respects the dashboard feature flag rollback path", async ({ page }) => {
