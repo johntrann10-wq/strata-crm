@@ -1,8 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { mockHomeDashboard } from "./helpers/mockHomeDashboard";
 import { readClientDiagnostics } from "./helpers/reliability";
 
 test.describe("Reliability diagnostics", () => {
   async function mockAuthenticatedShell(context: import("@playwright/test").BrowserContext) {
+    await mockHomeDashboard(context);
+
     await context.route("**/api/auth/me", async (route) => {
       await route.fulfill({
         status: 200,
@@ -205,6 +208,8 @@ test.describe("Reliability diagnostics", () => {
   });
 
   test("shows a retryable workspace error instead of pretending the user needs onboarding", async ({ page }) => {
+    await mockHomeDashboard(page);
+
     await page.addInitScript(() => {
       window.localStorage.setItem("authToken", "qa-token");
     });
@@ -255,6 +260,8 @@ test.describe("Reliability diagnostics", () => {
 
   test("workspace retry recovers cleanly once context is available again", async ({ context }) => {
     let authContextAttempts = 0;
+
+    await mockHomeDashboard(context);
 
     await context.route("**/api/auth/me", async (route) => {
       await route.fulfill({

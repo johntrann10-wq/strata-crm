@@ -22,20 +22,27 @@ describe.skipIf(!runConcurrencyTests)("Concurrency and hardening (requires DB + 
     const email = `test-${Date.now()}@example.com`;
     const password = "TestPassword123!";
     const signUp = await request(app).post("/api/auth/sign-up").send({ email, password, firstName: "Test", lastName: "User" });
+    expect(signUp.status).toBe(201);
     const cookie = signUp.headers["set-cookie"];
     if (cookie) authCookie = Array.isArray(cookie) ? cookie[0] : cookie;
     else {
       const signIn = await request(app).post("/api/auth/sign-in").send({ email, password });
+      expect(signIn.status).toBe(200);
       const setCookie = signIn.headers["set-cookie"];
       authCookie = Array.isArray(setCookie) ? setCookie[0] ?? "" : setCookie ?? "";
     }
+    expect(authCookie).toBeTruthy();
     const bizRes = await request(app)
       .post("/api/businesses")
       .set("Cookie", authCookie)
       .send({ name: "Concurrency Test Business", type: "detailing", timezone: "America/New_York" });
+    expect(bizRes.status).toBe(201);
     businessId = bizRes.body?.id ?? "";
+    expect(businessId).toBeTruthy();
     const clientRes = await request(app).post("/api/clients").set("Cookie", authCookie).send({ firstName: "C", lastName: "L" });
+    expect(clientRes.status).toBe(201);
     clientId = clientRes.body?.id ?? "";
+    expect(clientId).toBeTruthy();
   });
 
   it("payment reversal is idempotent: second reverse returns 200 with same payment", async () => {
@@ -43,13 +50,13 @@ describe.skipIf(!runConcurrencyTests)("Concurrency and hardening (requires DB + 
       .post("/api/invoices")
       .set("Cookie", authCookie)
       .send({ clientId, lineItems: [{ description: "Test", quantity: 1, unitPrice: 100 }] });
-    if (invRes.status !== 201) return; // skip if no auth
+    expect(invRes.status).toBe(201);
     const invoiceId = invRes.body?.id;
     const payRes = await request(app)
       .post("/api/payments")
       .set("Cookie", authCookie)
       .send({ invoiceId, amount: 50, method: "cash" });
-    if (payRes.status !== 201) return;
+    expect(payRes.status).toBe(201);
     const paymentId = payRes.body?.id;
 
     const first = await request(app).post(`/api/payments/${paymentId}/reverse`).set("Cookie", authCookie);
@@ -73,7 +80,7 @@ describe.skipIf(!runConcurrencyTests)("Concurrency and hardening (requires DB + 
       )
     );
     const created = results.filter((r) => r.status === 201);
-    if (created.length === 0) return;
+    expect(created.length).toBe(concurrency);
     const numbers = created.map((r) => r.body?.invoiceNumber).filter(Boolean);
     const unique = new Set(numbers);
     expect(unique.size).toBe(numbers.length);
