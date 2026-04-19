@@ -12,7 +12,7 @@ interface PageHeaderProps {
   badge?: ReactNode;
 }
 
-export function PageHeader({ title, right, actions, loading, backTo }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, right, actions, loading, backTo, badge }: PageHeaderProps) {
   return (
     <div className="surface-panel relative mb-4 overflow-hidden rounded-[1.7rem] sm:mb-7">
       <div className="border-b border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-4 py-3 sm:px-5 sm:py-4">
@@ -29,9 +29,17 @@ export function PageHeader({ title, right, actions, loading, backTo }: PageHeade
           </Link>
         )}
         <div className="flex flex-col gap-2">
-          <h1 className="text-balance text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-[31px]">
-            {title}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="min-w-0 text-balance text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-[31px]">
+              {title}
+            </h1>
+            {badge ? <div className="shrink-0">{badge}</div> : null}
+          </div>
+          {subtitle ? (
+            <p className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-[15px]">
+              {subtitle}
+            </p>
+          ) : null}
         </div>
       </div>
       {(right ?? actions) && (

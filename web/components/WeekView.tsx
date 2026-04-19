@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   getMultiDayDayKind,
-  getMultiDayDayLabel,
-  getMultiDayDayShortLabel,
   getMultiDayDayTone,
+  getJobSpanEnd,
+  getJobSpanStart,
   hasLaborOnDay,
   hasPresenceOnDay,
   isMultiDayJob,
@@ -16,6 +16,7 @@ import {
   TOTAL_HEIGHT,
   TIME_HOURS,
   DAY_NAMES,
+  clampSlotMinutes,
   isSameDay,
   formatHour,
   getWeekDays,
@@ -60,17 +61,11 @@ export function WeekView({
   }, []);
 
   const getSnappedTimeFromY = (yOffset: number): { hour: number; minute: number } => {
-    const totalMinutesFromStart = (yOffset / HOUR_HEIGHT) * 60;
-    const rawHour = Math.floor(totalMinutesFromStart / 60) + START_HOUR;
-    const rawMinute = Math.floor(totalMinutesFromStart % 60);
-    let snappedMinute = Math.round(rawMinute / 15) * 15;
-    let finalHour = rawHour;
-    if (snappedMinute >= 60) {
-      finalHour += 1;
-      snappedMinute = 0;
-    }
-    finalHour = Math.max(START_HOUR, Math.min(19, finalHour));
-    return { hour: finalHour, minute: snappedMinute };
+    const clampedMinutes = clampSlotMinutes((yOffset / HOUR_HEIGHT) * 60);
+    return {
+      hour: START_HOUR + Math.floor(clampedMinutes / 60),
+      minute: clampedMinutes % 60,
+    };
   };
 
   const nowLineTop = useMemo(() => {
@@ -120,7 +115,9 @@ export function WeekView({
         {weekDays.map((day, di) => {
           const isToday = isSameDay(day, today);
           const bookedCount = appointments.filter((apt) => hasLaborOnDay(apt, day)).length;
-          const onSiteCount = appointments.filter((apt) => isMultiDayJob(apt) && hasPresenceOnDay(apt, day)).length;
+          const onSiteCount = appointments.filter(
+            (apt) => isMultiDayJob(apt) && hasPresenceOnDay(apt, day) && !hasLaborOnDay(apt, day)
+          ).length;
           const dayConflictCount = appointments.filter(
             (apt) => hasLaborOnDay(apt, day) && conflictIds?.has(apt.id)
           ).length;
@@ -188,11 +185,11 @@ export function WeekView({
                       getMultiDayDayTone(getMultiDayDayKind(apt, weekDays[startIndex] ?? currentDate))
                     )}
                   >
-                    {getMultiDayDayShortLabel(getMultiDayDayKind(apt, weekDays[startIndex] ?? currentDate))}
+                    On site
                   </span>
                   <span className="truncate font-medium text-foreground">{apt.title || apt.vehicle?.model || apt.client?.lastName || "Job"}</span>
                   <span className="hidden truncate rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground md:inline-flex">
-                    {`${weekDays[startIndex]?.toLocaleDateString("en-US", { month: "short", day: "numeric" }) ?? ""} to ${weekDays[endIndex]?.toLocaleDateString("en-US", { month: "short", day: "numeric" }) ?? ""}`}
+                    {`${getJobSpanStart(apt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} drop-off -> ${getJobSpanEnd(apt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} pickup`}
                   </span>
                 </button>
               ))

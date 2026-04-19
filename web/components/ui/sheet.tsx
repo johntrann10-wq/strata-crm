@@ -47,21 +47,21 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "bg-background/98 data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-[0_20px_60px_rgba(15,23,42,0.18)] transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+          "bg-background/98 data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 overflow-y-auto overscroll-y-contain shadow-[0_20px_60px_rgba(15,23,42,0.18)] transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
           side === "right" &&
-            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-[min(88vw,24rem)] border-l border-border/80 sm:w-[24rem]",
+            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-[min(92vw,24rem)] border-l border-border/80 pb-[max(1rem,env(safe-area-inset-bottom))] sm:w-[24rem]",
           side === "left" &&
-            "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-[min(88vw,24rem)] border-r border-border/80 sm:w-[24rem]",
+            "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-[min(92vw,24rem)] border-r border-border/80 pb-[max(1rem,env(safe-area-inset-bottom))] sm:w-[24rem]",
           side === "top" &&
-            "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 max-h-[85vh] overflow-y-auto border-b border-border/80",
+            "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 max-h-[90svh] border-b border-border/80",
           side === "bottom" &&
-            "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto border-t border-border/80",
+            "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 max-h-[90svh] rounded-t-[1.5rem] border-t border-border/80 pb-[max(1rem,env(safe-area-inset-bottom))]",
           className
         )}
         {...props}
       >
         {children}
-        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-lg border border-transparent bg-background/80 p-1.5 opacity-80 transition hover:border-border hover:bg-accent focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
+        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-3 right-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-transparent bg-background/88 opacity-80 transition hover:border-border hover:bg-accent focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
           <XIcon className="size-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>

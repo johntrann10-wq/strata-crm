@@ -273,3 +273,7 @@ body,
     text-wrap: balance;
   }
 }
+
+html[data-mobile-shell="true"] body {
+  padding-top: env(safe-area-inset-top, 0px);
+}

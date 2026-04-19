@@ -94,6 +94,11 @@ function formatCurrency(amount: number | null | undefined): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
 }
 
+function toMoneyNumber(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
 function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "—";
   return new Date(value).toLocaleDateString("en-US", {
@@ -157,14 +162,14 @@ function normalizeLineItems(inv: Record<string, unknown> | null | undefined): Ar
 }
 
 /** Normalize payments from API (array or edges.node) */
-function normalizePayments(inv: Record<string, unknown> | null | undefined): Array<{ id: string; amount?: number; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null }> {
+function normalizePayments(inv: Record<string, unknown> | null | undefined): Array<{ id: string; amount?: number | string | null; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null }> {
   if (!inv?.payments) return [];
   const p = inv.payments as unknown;
-  if (Array.isArray(p)) return p as Array<{ id: string; amount?: number; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null }>;
+  if (Array.isArray(p)) return p as Array<{ id: string; amount?: number | string | null; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null }>;
   const edges = (p as { edges?: Array<{ node?: unknown }> })?.edges;
   return Array.isArray(edges)
     ? edges
-        .map((e) => e?.node as { id: string; amount?: number; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null })
+        .map((e) => e?.node as { id: string; amount?: number | string | null; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null })
         .filter(Boolean)
     : [];
 }
@@ -354,6 +359,9 @@ export default function InvoiceDetailPage() {
             amount: true,
             method: true,
             createdAt: true,
+            paidAt: true,
+            reversedAt: true,
+            notes: true,
           },
         },
       },
@@ -430,8 +438,10 @@ export default function InvoiceDetailPage() {
 
   const paymentsList = normalizePayments(invoice as Record<string, unknown>);
   const lineItemsList = normalizeLineItems(invoice as Record<string, unknown>);
-  const totalPaid = paymentsList.reduce((sum, p) => sum + (p.reversedAt ? 0 : Number(p.amount || 0)), 0);
-  const remainingBalance = Number((invoice as Record<string, unknown>)?.total || 0) - totalPaid;
+  const activePayments = paymentsList.filter((payment) => !payment.reversedAt);
+  const totalPaid = Number(activePayments.reduce((sum, payment) => sum + toMoneyNumber(payment.amount), 0).toFixed(2));
+  const invoiceTotal = Math.max(0, toMoneyNumber((invoice as Record<string, unknown>)?.total));
+  const remainingBalance = Math.max(0, Number((invoiceTotal - totalPaid).toFixed(2)));
 
   const handleOpenPaymentDialog = useCallback(() => {
     setPaymentAmount(remainingBalance > 0 ? remainingBalance.toFixed(2) : "0.00");

@@ -163,6 +163,8 @@ function parseOptionalDateInput(value: string | null): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+const CALENDAR_FETCH_LIMIT = 1000;
+
 function combineDateAndTime(dateValue: string, timeValue: string): Date {
   const [hours, minutes] = timeValue.split(":").map(Number);
   const date = parseDateInput(dateValue);
@@ -223,6 +225,12 @@ export default function CalendarPage() {
   const lastInternalUrlSyncRef = useRef<{ view: "month" | "day"; date: string } | null>(null);
 
   useEffect(() => {
+    const nextView = requestedView === "month" || requestedView === "day" ? requestedView : null;
+    if (!nextView || nextView === view) return;
+    setView(nextView);
+  }, [requestedView, view]);
+
+  useEffect(() => {
     const check = () => {
       const mobile = window.innerWidth < 768;
       setIsMobileLayout(mobile);
@@ -258,6 +266,7 @@ export default function CalendarPage() {
     if (internalSync) {
       if (internalSync.view === view && internalSync.date === requestedKey) {
         lastInternalUrlSyncRef.current = null;
+        return;
       }
       return;
     }
@@ -281,9 +290,9 @@ export default function CalendarPage() {
 
     if (visibleMonthKey !== requestedMonthKey) {
       setVisibleMonthDate(requestedMonthAnchor);
-      if (toLocalDateString(selectedDate) !== requestedKey) {
-        setSelectedDate(requestedDate);
-      }
+    }
+    if (toLocalDateString(selectedDate) !== requestedKey) {
+      setSelectedDate(requestedDate);
     }
   }, [currentDate, requestedDate, selectedDate, view, visibleMonthDate]);
 
@@ -301,13 +310,20 @@ export default function CalendarPage() {
   );
 
   const { queryStart, queryEnd } = useMemo(() => {
+    if (view === "month") {
+      return {
+        queryStart: new Date(visibleDate.getFullYear(), visibleDate.getMonth() - 1, 1, 0, 0, 0, 0),
+        queryEnd: new Date(visibleDate.getFullYear(), visibleDate.getMonth() + 2, 0, 23, 59, 59, 999),
+      };
+    }
+
     const monthStart = new Date(visibleDate.getFullYear(), visibleDate.getMonth(), 1);
     const monthEnd = new Date(visibleDate.getFullYear(), visibleDate.getMonth() + 1, 0, 23, 59, 59, 999);
     return {
       queryStart: viewStart.getTime() < monthStart.getTime() ? viewStart : monthStart,
       queryEnd: viewEnd.getTime() > monthEnd.getTime() ? viewEnd : monthEnd,
     };
-  }, [visibleDate, viewEnd, viewStart]);
+  }, [view, viewEnd, viewStart, visibleDate]);
 
   const { startGte, startLte } = useMemo(
     () => ({ startGte: queryStart.toISOString(), startLte: queryEnd.toISOString() }),
@@ -354,7 +370,7 @@ export default function CalendarPage() {
       vehicle: { id: true, make: true, model: true, year: true },
       assignedStaff: { id: true, firstName: true, lastName: true },
     },
-    first: 500,
+    first: CALENDAR_FETCH_LIMIT,
   });
 
   const [{ data: locationsRaw }] = useFindMany(api.location, {
@@ -481,6 +497,16 @@ export default function CalendarPage() {
       setCurrentDate(today);
     }
     setSelectedDate(today);
+  }
+
+  function handleViewChange(nextView: "month" | "day") {
+    if (nextView === view) return;
+    if (nextView === "day") {
+      setCurrentDate(selectedDate);
+    } else {
+      setVisibleMonthDate(toMonthAnchor(selectedDate));
+    }
+    setView(nextView);
   }
 
   function handleDayClick(date: Date) {
@@ -917,7 +943,7 @@ export default function CalendarPage() {
                       <button
                         key={calendarView}
                         type="button"
-                        onClick={() => setView(calendarView)}
+                        onClick={() => handleViewChange(calendarView)}
                         className={cn(
                           "shrink-0 rounded-full px-4 py-1.5 text-sm font-medium capitalize transition-colors",
                           view === calendarView

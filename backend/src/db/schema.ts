@@ -155,6 +155,8 @@ export const users = pgTable("users", {
   emailVerified: boolean("email_verified").default(false),
   googleProfileId: text("google_profile_id"),
   authTokenVersion: integer("auth_token_version").default(1).notNull(),
+  accountDeletionRequestedAt: timestamp("account_deletion_requested_at", { withTimezone: true }),
+  accountDeletionRequestNote: text("account_deletion_request_note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

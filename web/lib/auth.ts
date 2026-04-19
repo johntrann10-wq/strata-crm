@@ -2,6 +2,7 @@ const CURRENT_BUSINESS_ID_KEY = "currentBusinessId";
 const CURRENT_LOCATION_ID_KEY = "currentLocationId";
 const AUTH_EVENT_CHANNEL_KEY = "authEventChannel";
 const SESSION_AUTH_TOKEN_KEY = "strataSessionAuthToken";
+const PERSISTED_APP_AUTH_TOKEN_KEY = "strataPersistentAuthToken";
 const LEGACY_AUTH_TOKEN_KEY = "authToken";
 let inMemoryAuthToken: string | null = null;
 
@@ -59,9 +60,32 @@ function safeSessionStorageRemove(key: string): void {
   }
 }
 
+function isPersistentAppShell(): boolean {
+  if (typeof window === "undefined") return false;
+  const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
+  try {
+    if (window.matchMedia?.("(display-mode: standalone)").matches) return true;
+  } catch {
+    // Ignore matchMedia failures in restricted environments.
+  }
+  return navigatorWithStandalone.standalone === true || typeof (window as Window & { Capacitor?: unknown }).Capacitor !== "undefined";
+}
+
+function syncPersistentAuthToken(token: string | null): void {
+  if (token && isPersistentAppShell()) {
+    safeLocalStorageSet(PERSISTED_APP_AUTH_TOKEN_KEY, token);
+    return;
+  }
+  safeLocalStorageRemove(PERSISTED_APP_AUTH_TOKEN_KEY);
+}
+
 export function getAuthToken(): string | null {
   if (!inMemoryAuthToken) {
-    inMemoryAuthToken = safeSessionStorageGet(SESSION_AUTH_TOKEN_KEY);
+    inMemoryAuthToken =
+      safeSessionStorageGet(SESSION_AUTH_TOKEN_KEY) ??
+      (isPersistentAppShell()
+        ? safeLocalStorageGet(PERSISTED_APP_AUTH_TOKEN_KEY) ?? safeLocalStorageGet(LEGACY_AUTH_TOKEN_KEY)
+        : null);
   }
   return inMemoryAuthToken;
 }
@@ -69,6 +93,7 @@ export function getAuthToken(): string | null {
 export function setAuthToken(token: string): void {
   inMemoryAuthToken = token;
   safeSessionStorageSet(SESSION_AUTH_TOKEN_KEY, token);
+  syncPersistentAuthToken(token);
 }
 
 export function persistAuthState(token: string, detail?: unknown): void {
@@ -81,6 +106,7 @@ export function persistAuthState(token: string, detail?: unknown): void {
 export function clearAuthToken(): void {
   inMemoryAuthToken = null;
   safeSessionStorageRemove(SESSION_AUTH_TOKEN_KEY);
+  safeLocalStorageRemove(PERSISTED_APP_AUTH_TOKEN_KEY);
   safeLocalStorageRemove(LEGACY_AUTH_TOKEN_KEY);
 }
 

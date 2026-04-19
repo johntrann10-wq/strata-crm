@@ -114,6 +114,7 @@ type QuoteDetailRecord = {
   id: string;
   status: string;
   total: number | null;
+  appointmentId?: string | null;
   client: {
     id: string;
     firstName: string | null;
@@ -223,6 +224,7 @@ export default function QuoteDetailPage() {
       select: {
         id: true,
         status: true,
+        appointmentId: true,
         notes: true,
         subtotal: true,
         taxRate: true,
@@ -279,7 +281,7 @@ export default function QuoteDetailPage() {
             .filter(Boolean)
             .join(" ")
         : null,
-      appointmentId: (quote as any)?.appointmentId ?? null,
+      appointmentId: quote?.appointmentId ?? null,
       invoiceId: null,
     });
     return () => setPageContext(null);
@@ -462,7 +464,7 @@ export default function QuoteDetailPage() {
     );
   }
 
-  const relatedRecords = buildQuoteRelatedRecords(quote as QuoteDetailRecord & { appointmentId?: string | null }, currentLocationId);
+  const relatedRecords = buildQuoteRelatedRecords(quote as QuoteDetailRecord, currentLocationId);
   const clientName = getQuoteClientName(quote as QuoteDetailRecord);
   const totalLineItems = quote.lineItems.edges.length;
   const expiresSoon =
@@ -1068,15 +1070,15 @@ export default function QuoteDetailPage() {
                       }&from=${encodeURIComponent(returnTo)}`
                     )
                   }
-                  disabled={Boolean((quote as any).appointmentId)}
+                  disabled={Boolean(quote.appointmentId)}
                 >
                   <CalendarPlus className="mr-2 h-4 w-4" />
-                  {(quote as any).appointmentId ? "Already Scheduled" : "Book Appointment"}
+                  {quote.appointmentId ? "Already Scheduled" : "Book Appointment"}
                 </Button>
               )}
-              {(quote as any).appointmentId && (
+              {quote.appointmentId && (
                 <Button variant="outline" className="w-full" asChild>
-                  <Link to={withReturn(`/appointments/${(quote as any).appointmentId}`)}>
+                  <Link to={withReturn(`/appointments/${quote.appointmentId}`)}>
                     <Calendar className="mr-2 h-4 w-4" />
                     Open Scheduled Job
                   </Link>

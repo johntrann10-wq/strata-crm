@@ -7,9 +7,12 @@ import {
   getOverviewCalendarAppointments,
   getHistoricalCalendarAppointments,
   getVisibleCalendarAppointments,
+  getJobSpanEnd,
   getWorkEnd,
   getWorkStart,
   hasLaborOnDay,
+  hasPresenceOnDay,
+  isMultiDayJob,
 } from "@/lib/calendarJobSpans";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
@@ -28,6 +31,25 @@ export const START_HOUR = 7;
 export const END_HOUR = 20;
 export const HOUR_HEIGHT = 72;
 export const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
+export const SLOT_INTERVAL_MINUTES = 15;
+export const MAX_SLOT_OFFSET_MINUTES = (END_HOUR - START_HOUR) * 60 - SLOT_INTERVAL_MINUTES;
+
+export function clampSlotMinutes(totalMinutesFromStart: number): number {
+  const snapped = Math.round(totalMinutesFromStart / SLOT_INTERVAL_MINUTES) * SLOT_INTERVAL_MINUTES;
+  return Math.max(0, Math.min(MAX_SLOT_OFFSET_MINUTES, snapped));
+}
+
+export function buildSlotDate(baseDate: Date, totalMinutesFromStart: number): Date {
+  const clampedMinutes = clampSlotMinutes(totalMinutesFromStart);
+  const slotDate = new Date(baseDate);
+  slotDate.setHours(
+    START_HOUR + Math.floor(clampedMinutes / 60),
+    clampedMinutes % 60,
+    0,
+    0
+  );
+  return slotDate;
+}
 
 type StatusStyle = {
   surface: string;
@@ -857,17 +879,31 @@ export function MonthView({
   const monthGridLookup = useMemo(() => {
     const days = grid.flat();
     const dayKeys = new Set(days.map((day) => toDayKey(day)));
-    const startDayMap = new Map<string, ApptRecord[]>();
+    const dayMap = new Map<string, ApptRecord[]>();
     const revenueMap = new Map<string, number>();
     const conflictDaySet = new Set<string>();
 
     getOverviewCalendarAppointments(historicalAppointments).forEach((appointment) => {
-      const startKey = toDayKey(getJobSpanStart(appointment));
-      if (!dayKeys.has(startKey)) return;
-      const list = startDayMap.get(startKey);
-      if (list) list.push(appointment);
-      else startDayMap.set(startKey, [appointment]);
-      revenueMap.set(startKey, (revenueMap.get(startKey) ?? 0) + getCalendarAppointmentAmount(appointment));
+      const spanStart = getJobSpanStart(appointment);
+      const spanEnd = isMultiDayJob(appointment) ? getJobSpanEnd(appointment) : getWorkEnd(appointment);
+      const cursor = new Date(spanStart.getFullYear(), spanStart.getMonth(), spanStart.getDate());
+      const last = new Date(spanEnd.getFullYear(), spanEnd.getMonth(), spanEnd.getDate());
+
+      while (cursor.getTime() <= last.getTime()) {
+        const key = toDayKey(cursor);
+        const showsOnDay =
+          hasLaborOnDay(appointment, cursor) ||
+          (isMultiDayJob(appointment) && hasPresenceOnDay(appointment, cursor));
+
+        if (showsOnDay && dayKeys.has(key)) {
+          const list = dayMap.get(key);
+          if (list) list.push(appointment);
+          else dayMap.set(key, [appointment]);
+          revenueMap.set(key, (revenueMap.get(key) ?? 0) + getCalendarAppointmentAmount(appointment));
+        }
+
+        cursor.setDate(cursor.getDate() + 1);
+      }
     });
 
     if (conflictIds?.size) {
@@ -888,7 +924,7 @@ export function MonthView({
     }
 
     return {
-      startDayMap,
+      dayMap,
       revenueMap,
       conflictDaySet,
     };
@@ -903,7 +939,7 @@ export function MonthView({
   const hoverPreviewData = useMemo(() => {
     if (!hoverPreview) return null;
     const previewKey = toDayKey(hoverPreview.date);
-    const previewDensityItems = uniqueAppointmentsById(monthGridLookup.startDayMap.get(previewKey) ?? []);
+    const previewDensityItems = uniqueAppointmentsById(monthGridLookup.dayMap.get(previewKey) ?? []);
     const previewRevenue = monthGridLookup.revenueMap.get(previewKey) ?? 0;
 
     return {
@@ -987,7 +1023,7 @@ export function MonthView({
               const isCurrentMonth = day.getMonth() === currentDate.getMonth();
               const isToday = isSameDay(day, today);
               const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
-              const dayDensityItems = uniqueAppointmentsById(monthGridLookup.startDayMap.get(dayKey) ?? []);
+              const dayDensityItems = uniqueAppointmentsById(monthGridLookup.dayMap.get(dayKey) ?? []);
               const hasConflict = monthGridLookup.conflictDaySet.has(dayKey);
               const dayLabel = day.toLocaleDateString("en-US", {
                 weekday: "long",
@@ -1096,7 +1132,7 @@ export function MonthView({
           </div>
 
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <CompactSignal label="Starting" value={hoverPreviewData.count} />
+                <CompactSignal label="Scheduled" value={hoverPreviewData.count} />
           </div>
 
           <div className="mt-3 space-y-2">
@@ -1111,7 +1147,7 @@ export function MonthView({
               ))
             ) : (
               <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
-                No jobs start on this day.
+                No jobs scheduled on this day.
               </div>
             )}
           </div>

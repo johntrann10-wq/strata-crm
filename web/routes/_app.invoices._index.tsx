@@ -286,7 +286,7 @@ export default function InvoicesIndexPage() {
             debouncedSearch ? `Search: ${debouncedSearch}` : null,
           ]
             .filter(Boolean)
-            .join(" â€¢ ") || null
+            .join(" • ") || null
         }
         onClear={() => {
           setSearch("");
@@ -551,12 +551,12 @@ export default function InvoicesIndexPage() {
                                   <div className="font-medium">{formatCurrency(primaryAmount)}</div>
                                   <div className="text-xs text-muted-foreground">
                                     Total {formatCurrency(invoice.total)}
-                                    {hasPaymentHistory ? ` Â· Paid ${formatCurrency(paid)}` : ""}
+                                    {hasPaymentHistory ? ` • Paid ${formatCurrency(paid)}` : ""}
                                   </div>
                                   <div className="text-xs text-muted-foreground">{collectionSummary.detail}</div>
                                   {lastSent || lastPaid ? (
                                     <div className="text-xs text-muted-foreground">
-                                      {[lastSent, lastPaid].filter(Boolean).join(" Â· ")}
+                                      {[lastSent, lastPaid].filter(Boolean).join(" • ")}
                                     </div>
                                   ) : null}
                                 </div>
@@ -725,3 +725,4 @@ function InvoiceMobileCard({
     </div>
   );
 }
+

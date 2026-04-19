@@ -152,7 +152,11 @@ function buildLeadAppointmentHref(input: {
   if (input.customerName?.trim()) params.set("sourceCustomerName", input.customerName.trim());
   if (input.phone?.trim()) params.set("sourcePhone", input.phone.trim());
   if (input.email?.trim()) params.set("sourceEmail", input.email.trim());
-  if (input.customerNotes?.trim()) params.set("notes", input.customerNotes.trim());
+  if (input.customerNotes?.trim()) {
+    params.set("notes", input.customerNotes.trim());
+  } else if (input.sourceSummary?.trim()) {
+    params.set("notes", input.sourceSummary.trim());
+  }
   const internalNotes = ["Created from Lead", input.teamNotes?.trim() || null].filter(Boolean).join("\n\n");
   if (internalNotes) params.set("internalNotes", internalNotes);
   if (input.sourceAddress?.trim()) params.set("sourceAddress", input.sourceAddress.trim());

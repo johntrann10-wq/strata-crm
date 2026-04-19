@@ -12,7 +12,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ResponsiveTimeSelect, buildQuarterHourOptions, toDateInputValue } from "@/components/appointments/SchedulingControls";
 import { cn } from "@/lib/utils";
-import { getJobPhaseLabel, getOperationalDayLabel, getOperationalTimelineLabel, isMultiDayJob } from "@/lib/calendarJobSpans";
+import {
+  getJobPhaseLabel,
+  getOperationalDayLabel,
+  getOperationalTimelineLabel,
+  isMultiDayJob,
+  parseCalendarDateTimeInput,
+} from "@/lib/calendarJobSpans";
 import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { hasBackendFinanceField, resolveAppointmentFinanceState } from "@/lib/appointmentFinanceState";
 
@@ -562,8 +568,18 @@ export function AppointmentInspectorPanel({
       return;
     }
 
-    const nextStartTime = new Date(`${serviceDate}T${serviceStartTime}`);
-    const nextEndTime = serviceEndTime ? new Date(`${serviceDate}T${serviceEndTime}`) : undefined;
+    const nextStartTime = parseCalendarDateTimeInput(serviceDate, serviceStartTime);
+    if (!nextStartTime) {
+      toast.error("Choose a valid service start time.");
+      return;
+    }
+
+    const nextEndTime = serviceEndTime ? parseCalendarDateTimeInput(serviceDate, serviceEndTime) : undefined;
+    if (serviceEndTime && !nextEndTime) {
+      toast.error("Choose a valid work end time.");
+      return;
+    }
+
     if (nextEndTime && nextEndTime.getTime() <= nextStartTime.getTime()) {
       toast.error("Work end must be after work start.");
       return;
@@ -578,8 +594,12 @@ export function AppointmentInspectorPanel({
         toast.error("Choose both drop-off and pickup timing.");
         return;
       }
-      nextJobStartTime = new Date(`${dropoffDate}T${dropoffTime}`);
-      nextExpectedCompletionTime = new Date(`${pickupDate}T${pickupTime}`);
+      nextJobStartTime = parseCalendarDateTimeInput(dropoffDate, dropoffTime);
+      nextExpectedCompletionTime = parseCalendarDateTimeInput(pickupDate, pickupTime);
+      if (!nextJobStartTime || !nextExpectedCompletionTime) {
+        toast.error("Choose valid drop-off and pickup timing.");
+        return;
+      }
       if (nextExpectedCompletionTime.getTime() < nextJobStartTime.getTime()) {
         toast.error("Pickup must be after drop-off.");
         return;
@@ -591,8 +611,32 @@ export function AppointmentInspectorPanel({
         toast.error("Drop-off cannot be after the scheduled labor start.");
         return;
       }
+      if ((pickupReadyDate && !pickupReadyTime) || (!pickupReadyDate && pickupReadyTime)) {
+        toast.error("Choose both pickup ready date and time, or leave both blank.");
+        return;
+      }
       if (pickupReadyDate && pickupReadyTime) {
-        nextPickupReadyTime = new Date(`${pickupReadyDate}T${pickupReadyTime}`);
+        nextPickupReadyTime = parseCalendarDateTimeInput(pickupReadyDate, pickupReadyTime);
+        if (!nextPickupReadyTime) {
+          toast.error("Choose a valid pickup ready time.");
+          return;
+        }
+      }
+      if (nextEndTime && nextEndTime.getTime() > nextExpectedCompletionTime.getTime()) {
+        toast.error("Work end cannot be after pickup.");
+        return;
+      }
+      if (nextPickupReadyTime && nextPickupReadyTime.getTime() < nextStartTime.getTime()) {
+        toast.error("Pickup ready cannot be before work starts.");
+        return;
+      }
+      if (nextPickupReadyTime && nextEndTime && nextPickupReadyTime.getTime() < nextEndTime.getTime()) {
+        toast.error("Pickup ready cannot be before work ends.");
+        return;
+      }
+      if (nextPickupReadyTime && nextPickupReadyTime.getTime() > nextExpectedCompletionTime.getTime()) {
+        toast.error("Pickup ready cannot be after pickup.");
+        return;
       }
     }
 

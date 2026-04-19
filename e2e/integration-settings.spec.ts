@@ -323,6 +323,30 @@ async function mockAuthenticatedSettings(
     });
   });
 
+  await context.route("**/api/health", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+
+  await context.route(/.*\/api\/notifications(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ records: [] }),
+    });
+  });
+
+  await context.route(/.*\/api\/notifications\/unread-count(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ total: 0, leads: 0, calendar: 0 }),
+    });
+  });
+
   await context.route("**/api/locations**", async (route) => {
     await route.fulfill({
       status: 200,

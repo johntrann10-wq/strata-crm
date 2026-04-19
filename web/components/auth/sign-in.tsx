@@ -108,7 +108,11 @@ export const SignInComponent = (props: {
                 id="email"
                 type="email"
                 placeholder="you@example.com"
-                autoComplete="off"
+                autoComplete="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                inputMode="email"
+                enterKeyHint="next"
                 {...register("email")}
                 defaultValue={inviteState.email}
                 className={`h-9 rounded-lg text-[13px]${errors?.root?.message ? " border-destructive" : ""}`}
@@ -128,7 +132,8 @@ export const SignInComponent = (props: {
                 id="password"
                 type="password"
                 placeholder="........"
-                autoComplete="off"
+                autoComplete="current-password"
+                enterKeyHint="done"
                 {...register("password")}
                 className={`h-9 rounded-lg text-[13px]${errors?.root?.message ? " border-destructive" : ""}`}
               />

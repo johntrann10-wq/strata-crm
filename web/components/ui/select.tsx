@@ -48,7 +48,6 @@ function SelectContent({
   children,
   position = "popper",
   align = "center",
-  onOpenAutoFocus,
   onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
@@ -68,10 +67,6 @@ function SelectContent({
         )}
         position={resolvedPosition}
         align={resolvedPosition === "popper" ? align : undefined}
-        onOpenAutoFocus={(event) => {
-          if (isSmallViewport) event.preventDefault();
-          onOpenAutoFocus?.(event);
-        }}
         onCloseAutoFocus={(event) => {
           if (isSmallViewport) event.preventDefault();
           onCloseAutoFocus?.(event);

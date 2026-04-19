@@ -5,11 +5,10 @@ import { activityLogs, appointments } from "../db/schema.js";
 import { eq, desc, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
-import { requirePermission } from "../middleware/permissions.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { createRequestActivityLog } from "../lib/activity.js";
 import { sanitizeStringValue, sanitizeValue } from "../lib/logger.js";
-import { roleHasPermission, type PermissionKey } from "../lib/permissions.js";
+import type { PermissionKey } from "../lib/permissions.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 
 export const activityLogsRouter = Router();
@@ -99,14 +98,35 @@ async function assertEntityExists(req: Request, entityType: "appointment" | "job
 }
 
 function assertRequestPermission(req: Request, permission: PermissionKey) {
-  if (!req.membershipRole) {
+  if (!req.membershipRole || !req.businessId) {
     throw new ForbiddenError("No tenant role is associated with this request.");
   }
-  const hasPermission = req.permissions
-    ? req.permissions.includes(permission)
-    : roleHasPermission(req.membershipRole, permission);
-  if (!hasPermission) {
+  if (!Array.isArray(req.permissions) || !req.permissions.includes(permission)) {
     throw new ForbiddenError("You do not have permission to perform this action.");
+  }
+}
+
+function getActivityReadPermission(entityType: string | null): PermissionKey {
+  switch (entityType) {
+    case "appointment":
+      return "appointments.read";
+    case "job":
+      return "jobs.read";
+    case "client":
+    case "vehicle":
+    case "booking_request":
+      return "customers.read";
+    case "invoice":
+      return "invoices.read";
+    case "quote":
+      return "quotes.read";
+    case "payment":
+    case "expense":
+      return "payments.read";
+    case "business":
+      return "settings.read";
+    default:
+      return "dashboard.view";
   }
 }
 
@@ -114,12 +134,15 @@ activityLogsRouter.get(
   "/",
   requireAuth,
   requireTenant,
-  requirePermission("dashboard.view"),
   wrapAsync(async (req: Request, res: Response) => {
     const bid = businessId(req);
     const first = Math.min(Number(req.query.first) || 20, 50);
     const entityType = typeof req.query.entityType === "string" ? req.query.entityType.trim() : "";
     const entityId = typeof req.query.entityId === "string" ? req.query.entityId.trim() : "";
+    if (entityId && !entityType) {
+      throw new BadRequestError("Entity type is required when filtering activity by entity id.");
+    }
+    assertRequestPermission(req, getActivityReadPermission(entityType || null));
     const conditions = [eq(activityLogs.businessId, bid)];
     if (entityType) conditions.push(eq(activityLogs.entityType, entityType));
     if (entityId) conditions.push(eq(activityLogs.entityId, entityId));

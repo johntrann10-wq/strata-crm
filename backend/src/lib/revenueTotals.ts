@@ -14,8 +14,13 @@ import { BadRequestError } from "./errors.js";
 /** Drizzle `db` or transaction client — same query surface. */
 type DbLike = any;
 
+function roundMoney(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Number(n.toFixed(2)));
+}
+
 function money(n: number): string {
-  return (Math.round(n * 100) / 100).toFixed(2);
+  return roundMoney(n).toFixed(2);
 }
 
 export function calculateAppointmentFinanceTotals(input: {
@@ -25,16 +30,16 @@ export function calculateAppointmentFinanceTotals(input: {
   adminFeeRate?: number;
   applyAdminFee?: boolean;
 }) {
-  const subtotal = Number.isFinite(input.subtotal) ? Math.max(input.subtotal, 0) : 0;
+  const subtotal = roundMoney(Number.isFinite(input.subtotal) ? Math.max(input.subtotal, 0) : 0);
   const taxRate = Number.isFinite(input.taxRate ?? 0) ? Math.max(Number(input.taxRate ?? 0), 0) : 0;
   const adminFeeRate =
     Number.isFinite(input.adminFeeRate ?? 0) ? Math.max(Number(input.adminFeeRate ?? 0), 0) : 0;
   const applyTax = Boolean(input.applyTax) && taxRate > 0;
   const applyAdminFee = Boolean(input.applyAdminFee) && adminFeeRate > 0;
-  const adminFeeAmount = applyAdminFee ? subtotal * (adminFeeRate / 100) : 0;
-  const taxableSubtotal = subtotal + adminFeeAmount;
-  const taxAmount = applyTax ? taxableSubtotal * (taxRate / 100) : 0;
-  const totalPrice = taxableSubtotal + taxAmount;
+  const adminFeeAmount = applyAdminFee ? roundMoney(subtotal * (adminFeeRate / 100)) : 0;
+  const taxableSubtotal = roundMoney(subtotal + adminFeeAmount);
+  const taxAmount = applyTax ? roundMoney(taxableSubtotal * (taxRate / 100)) : 0;
+  const totalPrice = roundMoney(taxableSubtotal + taxAmount);
 
   return {
     subtotal,
@@ -84,10 +89,10 @@ export async function recalculateQuoteTotals(executor: DbLike, quoteId: string):
   }
   if (!q) return;
   const lines = await executor.select().from(quoteLineItems).where(eq(quoteLineItems.quoteId, quoteId));
-  const subtotal = lines.reduce((s, r) => s + Number(r.total ?? 0), 0);
+  const subtotal = roundMoney(lines.reduce((s, r) => s + Number(r.total ?? 0), 0));
   const taxRate = Number(q.taxRate ?? 0);
-  const taxAmount = (subtotal * taxRate) / 100;
-  const total = subtotal + taxAmount;
+  const taxAmount = roundMoney((subtotal * taxRate) / 100);
+  const total = roundMoney(subtotal + taxAmount);
   await executor
     .update(quotes)
     .set({
@@ -116,17 +121,21 @@ export async function recalculateInvoiceTotals(executor: DbLike, invoiceId: stri
   if (inv.status === "void") return;
 
   const lines = await executor.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId));
-  const subtotal = lines.reduce((s, r) => s + Number(r.total ?? 0), 0);
-  const discountAmount = Number(inv.discountAmount ?? 0);
-  const taxRate = Number(inv.taxRate ?? 0);
-  const taxAmount = (subtotal * taxRate) / 100;
-  const total = Math.max(0, subtotal + taxAmount - discountAmount);
+  const subtotal = roundMoney(lines.reduce((s, r) => s + Number(r.total ?? 0), 0));
+  const discountAmount = roundMoney(Number(inv.discountAmount ?? 0));
+  const taxRate = Number.isFinite(Number(inv.taxRate ?? 0)) ? Math.max(Number(inv.taxRate ?? 0), 0) : 0;
+  const taxAmount = roundMoney((subtotal * taxRate) / 100);
+  const total = roundMoney(Math.max(0, subtotal + taxAmount - discountAmount));
 
   const [sumRow] = await executor
-    .select({ paid: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)` })
+    .select({
+      paid: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)`,
+      lastPaidAt: sql<Date | null>`max(${payments.paidAt})`,
+    })
     .from(payments)
     .where(and(eq(payments.invoiceId, invoiceId), isNull(payments.reversedAt)));
-  const paidSoFar = Number(sumRow?.paid ?? 0);
+  const paidSoFar = roundMoney(Number(sumRow?.paid ?? 0));
+  const lastPaidAt = sumRow?.lastPaidAt ? new Date(sumRow.lastPaidAt) : null;
   if (paidSoFar > total + 0.009) {
     throw new BadRequestError(
       `Invoice line totals would make the balance (${total.toFixed(2)}) less than payments already recorded (${paidSoFar.toFixed(2)}).`
@@ -141,10 +150,14 @@ export async function recalculateInvoiceTotals(executor: DbLike, invoiceId: stri
       paidAt = null;
     } else if (paidSoFar >= total - 0.009) {
       status = "paid";
-      paidAt = paidAt ?? new Date();
+      paidAt = paidAt ?? lastPaidAt ?? new Date();
     } else {
       status = "partial";
+      paidAt = null;
     }
+  } else if (paidSoFar > 0 && total > 0) {
+    status = paidSoFar >= total - 0.009 ? "paid" : "partial";
+    paidAt = status === "paid" ? paidAt ?? lastPaidAt ?? new Date() : null;
   }
 
   await executor
@@ -209,11 +222,11 @@ export async function recalculateAppointmentTotal(executor: DbLike, appointmentI
     .innerJoin(services, eq(appointmentServices.serviceId, services.id))
     .where(eq(appointmentServices.appointmentId, appointmentId));
 
-  const total = rows.reduce((sum, row) => {
+  const total = roundMoney(rows.reduce((sum, row) => {
     const up = row.unitPrice != null && row.unitPrice !== "" ? Number(row.unitPrice) : Number(row.catalogPrice ?? 0);
     const q = row.qty ?? 1;
     return sum + q * up;
-  }, 0);
+  }, 0));
   const finance = calculateAppointmentFinanceTotals({
     subtotal: total,
     taxRate: Number(appointment.taxRate ?? 0),

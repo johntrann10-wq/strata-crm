@@ -150,7 +150,11 @@ export const SignUpComponent = (props: {
                     id="email"
                     type="email"
                     placeholder="you@example.com"
-                    autoComplete="off"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    inputMode="email"
+                    enterKeyHint="next"
                     {...register("email")}
                     defaultValue={inviteState.email}
                     readOnly={isInviteFlow}
@@ -169,7 +173,8 @@ export const SignUpComponent = (props: {
                     id="password"
                     type="password"
                     placeholder="********"
-                    autoComplete="off"
+                    autoComplete="new-password"
+                    enterKeyHint="next"
                     {...register("password")}
                     className={`h-9 text-[13px] rounded-lg shadow-none${errors?.root?.message ? " border-destructive" : ""}`}
                   />
@@ -185,7 +190,8 @@ export const SignUpComponent = (props: {
                     name="confirmPassword"
                     type="password"
                     placeholder="********"
-                    autoComplete="off"
+                    autoComplete="new-password"
+                    enterKeyHint="done"
                     onChange={() => setConfirmPasswordError(null)}
                     className={`h-9 text-[13px] rounded-lg shadow-none${confirmPasswordError ? " border-destructive" : ""}`}
                   />

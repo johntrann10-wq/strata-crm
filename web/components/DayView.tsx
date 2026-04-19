@@ -20,6 +20,8 @@ import {
   isSameDay,
   formatHour,
   formatTime,
+  buildSlotDate,
+  clampSlotMinutes,
   getStatusStyle,
   apptLabel,
   apptClientLabel,
@@ -176,7 +178,7 @@ export function DayView({
 
   const today = useMemo(() => new Date(), []);
   const isToday = isSameDay(currentDate, today);
-  const unassignedCount = dayAppts.filter((apt) => !apt.assignedStaffId).length;
+  const unassignedCount = dayAppts.filter((apt) => !isCalendarBlockAppointment(apt) && !apt.assignedStaffId).length;
   const activeItemCount = daySnapshot.activeItemCount;
   const nowLineTop = useMemo(() => {
     if (!isToday) return null;
@@ -314,12 +316,7 @@ export function DayView({
     const container = document.getElementById("day-scroll-container");
     const scrollTop = container?.scrollTop ?? 0;
     const y = e.clientY - rect.top + scrollTop;
-    const totalMinutes = Math.round(((y / HOUR_HEIGHT) * 60) / 15) * 15;
-    const hour = START_HOUR + Math.floor(totalMinutes / 60);
-    const minute = totalMinutes % 60;
-    const slotDate = new Date(currentDate);
-    slotDate.setHours(hour, minute, 0, 0);
-    onSlotClick(slotDate);
+    onSlotClick(buildSlotDate(currentDate, (y / HOUR_HEIGHT) * 60));
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -329,8 +326,7 @@ export function DayView({
     const container = document.getElementById("day-scroll-container");
     const scrollTop = container?.scrollTop ?? 0;
     const y = e.clientY - rect.top + scrollTop;
-    const totalMinutes = Math.round(((y / HOUR_HEIGHT) * 60) / 15) * 15;
-    setDragOverMinute(totalMinutes);
+    setDragOverMinute(clampSlotMinutes((y / HOUR_HEIGHT) * 60));
   };
 
   const handleDragLeave = () => {
@@ -348,10 +344,7 @@ export function DayView({
       return;
     }
 
-    const hour = START_HOUR + Math.floor(dragOverMinute / 60);
-    const minute = dragOverMinute % 60;
-    const newStart = new Date(currentDate);
-    newStart.setHours(hour, minute, 0, 0);
+    const newStart = buildSlotDate(currentDate, dragOverMinute);
 
     let newEnd: Date | null = null;
     if (origStartTime && origEndTime) {

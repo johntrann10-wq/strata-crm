@@ -119,14 +119,17 @@ export default function DashboardHomeRoute() {
     }
     lastRefreshRef.current = now;
     const scrollY = typeof window !== "undefined" ? window.scrollY : 0;
-    await runDashboard({
-      range,
-      teamMemberId: teamMemberId === "all" ? null : teamMemberId,
-      weekStartDate,
-    });
+    const requests: Array<Promise<unknown>> = [
+      runDashboard({
+        range,
+        teamMemberId: teamMemberId === "all" ? null : teamMemberId,
+        weekStartDate,
+      }),
+    ];
     if (canReadPayments) {
-      await runFinanceDashboard({ paymentLimit: 8, invoiceLimit: 150, monthCount: 6 });
+      requests.push(runFinanceDashboard({ paymentLimit: 8, invoiceLimit: 150, monthCount: 6 }));
     }
+    await Promise.all(requests);
     if (typeof window !== "undefined") {
       window.requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
     }

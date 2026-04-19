@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAction, useActionForm } from "../hooks/useApi";
+import { Textarea } from "@/components/ui/textarea";
+import { useAction, useActionForm, useFindOne } from "../hooks/useApi";
 import { useState, type FormEvent } from "react";
 import { Link, useOutletContext, useRevalidator } from "react-router";
 import { api } from "../api";
@@ -16,18 +17,44 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isSettingPassword, setIsSettingPassword] = useState(false);
+  const [isRequestingDeletion, setIsRequestingDeletion] = useState(false);
+  const [{ data: profileData }, refetchProfile] = useFindOne(api.user, String(user.id ?? ""), {
+    pause: !user?.id,
+  });
+  const profile = (profileData as (typeof user & {
+    hasPassword?: boolean;
+    googleProfileId?: string | null;
+    accountDeletionRequestedAt?: string | null;
+    accountDeletionRequestNote?: string | null;
+  })) ?? user;
 
-  const hasName = user.firstName || user.lastName;
-  const title = hasName ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : user.email;
-  const authMethod = user.googleProfileId
-    ? user.hasPassword
+  const hasName = profile.firstName || profile.lastName;
+  const title = hasName ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim() : profile.email;
+  const authMethod = profile.googleProfileId
+    ? profile.hasPassword
       ? "Google + password"
       : "Google sign-in"
-    : user.hasPassword
+    : profile.hasPassword
       ? "Email and password"
       : "Password not added";
-  const canChangePassword = Boolean(user.hasPassword);
-  const canAddPassword = Boolean(!user.hasPassword);
+  const canChangePassword = Boolean(profile.hasPassword);
+  const canAddPassword = Boolean(!profile.hasPassword);
+  const deletionRequestedAt = profile.accountDeletionRequestedAt
+    ? new Date(profile.accountDeletionRequestedAt)
+    : null;
+  const deletionRequestedLabel = deletionRequestedAt
+    ? deletionRequestedAt.toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+  const refreshProfile = async () => {
+    await Promise.allSettled([refreshUser(), refetchProfile()]);
+    revalidator.revalidate();
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
@@ -47,7 +74,7 @@ export default function ProfilePage() {
               <UserIcon user={user} className="h-16 w-16" />
               <div className="space-y-1">
                 <h2 className="text-lg font-semibold">{title}</h2>
-                <p className="text-sm text-muted-foreground">{user.email}</p>
+                <p className="text-sm text-muted-foreground">{profile.email}</p>
                 <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{authMethod}</p>
               </div>
             </div>
@@ -74,15 +101,15 @@ export default function ProfilePage() {
             <CardDescription>Keep your login method reliable before real team usage starts.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 pt-0 text-sm">
-            <SecurityRow label="Email" value={user.email} />
+            <SecurityRow label="Email" value={profile.email} />
             <SecurityRow label="Sign-in method" value={authMethod} />
             <SecurityRow
               label="Password access"
-              value={user.hasPassword ? "Enabled" : "Not added yet"}
+              value={profile.hasPassword ? "Enabled" : "Not added yet"}
             />
             <div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
-              {user.googleProfileId
-                ? user.hasPassword
+              {profile.googleProfileId
+                ? profile.hasPassword
                   ? "This Google-connected account can change its password from Profile. If you ever forget it, use the forgot-password flow instead."
                   : "Add a password if you want a fallback login option alongside Google."
                 : canChangePassword
@@ -91,7 +118,7 @@ export default function ProfilePage() {
                   "Add a password so this account has a direct email login option."}
             </div>
             <Button asChild variant="outline" size="sm">
-              <Link to={`/forgot-password?email=${encodeURIComponent(user.email)}`}>Open forgot-password flow</Link>
+              <Link to={`/forgot-password?email=${encodeURIComponent(profile.email)}`}>Open forgot-password flow</Link>
             </Button>
           </CardContent>
         </Card>
@@ -104,9 +131,9 @@ export default function ProfilePage() {
             <CardDescription>These identity fields show across activity, assignments, and team records.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 pt-0 text-sm">
-            <SecurityRow label="First name" value={user.firstName?.trim() || "Not set"} />
-            <SecurityRow label="Last name" value={user.lastName?.trim() || "Not set"} />
-            <SecurityRow label="Login email" value={user.email} />
+            <SecurityRow label="First name" value={profile.firstName?.trim() || "Not set"} />
+            <SecurityRow label="Last name" value={profile.lastName?.trim() || "Not set"} />
+            <SecurityRow label="Login email" value={profile.email} />
           </CardContent>
         </Card>
 
@@ -118,11 +145,11 @@ export default function ProfilePage() {
           <CardContent className="space-y-3 pt-0 text-sm">
             <div className="rounded-xl border bg-card px-4 py-3">
               <p className="font-medium text-foreground">
-                {user.googleProfileId ? "Google account connected" : "Email login enabled"}
+                {profile.googleProfileId ? "Google account connected" : "Email login enabled"}
               </p>
               <p className="mt-1 text-muted-foreground">
-                {user.googleProfileId
-                  ? user.hasPassword
+                {profile.googleProfileId
+                  ? profile.hasPassword
                     ? "Google is currently your primary login path, and this account also has a password fallback."
                     : "Google is currently your primary login path."
                   : "You can sign in directly with your email and password."}
@@ -136,7 +163,7 @@ export default function ProfilePage() {
                 <>
                   <Button onClick={() => setIsChangingPassword(true)}>Change password</Button>
                   <Button asChild variant="outline">
-                    <Link to={`/forgot-password?email=${encodeURIComponent(user.email)}`}>Reset password</Link>
+                    <Link to={`/forgot-password?email=${encodeURIComponent(profile.email)}`}>Reset password</Link>
                   </Button>
                 </>
               ) : canAddPassword ? (
@@ -147,28 +174,91 @@ export default function ProfilePage() {
         </Card>
       </section>
 
+      <section className="grid gap-6 md:grid-cols-2">
+        <Card className="border-white/65">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Privacy, support, and policies</CardTitle>
+            <CardDescription>These are the customer-facing surfaces App Store review and real operators expect to find easily.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0 text-sm">
+            <div className="rounded-xl border bg-card px-4 py-3">
+              <p className="font-medium text-foreground">Need help or a privacy answer?</p>
+              <p className="mt-1 text-muted-foreground">
+                Reach the Strata team directly if you need support, legal details, or help with an account-level request.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline">
+                <Link to="/privacy">Privacy policy</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link to="/terms">Terms</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <a href="mailto:support@stratacrm.app">Contact support</a>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-white/65">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Account deletion</CardTitle>
+            <CardDescription>Initiate deletion from inside the app. Because businesses, invoices, and team access can be attached to your account, final removal is reviewed before completion.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0 text-sm">
+            <div className="rounded-xl border bg-card px-4 py-3">
+              <p className="font-medium text-foreground">
+                {deletionRequestedLabel ? "Deletion request received" : "No deletion request on file"}
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                {deletionRequestedLabel
+                  ? `Submitted ${deletionRequestedLabel}. Support will follow up before removing business-owned data and access.`
+                  : "Use this only if you want Strata to remove your account after ownership and compliance review."}
+              </p>
+              {profile.accountDeletionRequestNote ? (
+                <p className="mt-3 rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                  Last request note: {profile.accountDeletionRequestNote}
+                </p>
+              ) : null}
+            </div>
+            <Button
+              variant={deletionRequestedLabel ? "outline" : "destructive"}
+              onClick={() => setIsRequestingDeletion(true)}
+              disabled={Boolean(deletionRequestedLabel)}
+            >
+              {deletionRequestedLabel ? "Deletion requested" : "Request account deletion"}
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+
       <EditProfileModal
         open={isEditing}
         onClose={() => {
           setIsEditing(false);
-          void refreshUser();
-          revalidator.revalidate();
+          void refreshProfile();
         }}
       />
       <ChangePasswordModal
         open={isChangingPassword}
         onClose={() => {
           setIsChangingPassword(false);
-          void refreshUser();
-          revalidator.revalidate();
+          void refreshProfile();
         }}
       />
       <SetPasswordModal
         open={isSettingPassword}
         onClose={() => {
           setIsSettingPassword(false);
-          void refreshUser();
-          revalidator.revalidate();
+          void refreshProfile();
+        }}
+      />
+      <RequestAccountDeletionModal
+        open={isRequestingDeletion}
+        onClose={() => {
+          setIsRequestingDeletion(false);
+          void refreshProfile();
         }}
       />
     </div>
@@ -367,6 +457,63 @@ const SetPasswordModal = (props: { open: boolean; onClose: () => void }) => {
             </Button>
             <Button type="submit" disabled={fetching}>
               Save
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const RequestAccountDeletionModal = (props: { open: boolean; onClose: () => void }) => {
+  const [{ fetching }, requestAccountDeletion] = useAction(api.user.requestAccountDeletion);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const onClose = () => {
+    setReason("");
+    setError(null);
+    props.onClose();
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    const result = await requestAccountDeletion({ reason });
+    if (result.error) {
+      setError(result.error.message ?? "Could not submit your deletion request.");
+      return;
+    }
+    onClose();
+  };
+
+  return (
+    <Dialog open={props.open} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Request account deletion</DialogTitle>
+          <DialogDescription>
+            Submit this from inside the app to start the deletion process. We review ownership, billing, and historical records before final removal.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid items-center gap-3">
+            <Label htmlFor="accountDeletionReason">Anything we should know?</Label>
+            <Textarea
+              id="accountDeletionReason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Optional note for support, ownership transfer context, or timing needs..."
+              className="min-h-[112px] resize-none rounded-2xl"
+            />
+          </div>
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={onClose} type="button">
+              Cancel
+            </Button>
+            <Button type="submit" variant="destructive" disabled={fetching}>
+              {fetching ? "Submitting..." : "Submit request"}
             </Button>
           </div>
         </form>

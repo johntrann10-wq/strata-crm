@@ -621,24 +621,39 @@ function getDashboardAppointmentAmount(
     adminFeeRate: toMoneyNumber(row.adminFeeRate),
     applyAdminFee: row.applyAdminFee === true,
   });
+  const explicitAdminFeeAmount = Math.max(0, toMoneyNumber(row.adminFeeAmount));
+  const explicitTaxAmount = Math.max(0, toMoneyNumber(row.taxAmount));
 
   const adminFeeAmount =
     row.applyAdminFee === true
-      ? row.adminFeeAmount != null
-        ? Math.max(0, toMoneyNumber(row.adminFeeAmount))
+      ? explicitAdminFeeAmount > 0
+        ? explicitAdminFeeAmount
         : computed.adminFeeAmount
       : 0;
   const taxableSubtotal = subtotal + adminFeeAmount;
   const taxAmount =
     row.applyTax === true
-      ? row.taxAmount != null
-        ? Math.max(0, toMoneyNumber(row.taxAmount))
+      ? explicitTaxAmount > 0
+        ? explicitTaxAmount
         : Number(((taxableSubtotal * Math.max(0, toMoneyNumber(row.taxRate))) / 100).toFixed(2))
       : 0;
   const computedTotal = Math.max(0, Number((taxableSubtotal + taxAmount).toFixed(2)));
+  const hasStructuredAmountInputs =
+    subtotal > 0 ||
+    row.applyTax === true ||
+    row.applyAdminFee === true ||
+    explicitTaxAmount > 0 ||
+    explicitAdminFeeAmount > 0 ||
+    toMoneyNumber(row.taxRate) > 0 ||
+    toMoneyNumber(row.adminFeeRate) > 0;
 
-  if (computedTotal > 0) return computedTotal;
-  return storedTotal;
+  if (hasStructuredAmountInputs && computedTotal > 0) {
+    return computedTotal;
+  }
+  if (storedTotal > 0) {
+    return Number(storedTotal.toFixed(2));
+  }
+  return computedTotal;
 }
 
 function safeParseMetadata(metadata: string | null | undefined): Record<string, unknown> {

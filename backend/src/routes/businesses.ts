@@ -23,7 +23,6 @@ import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { randomUUID } from "crypto";
 import { getBusinessTypeDefaults } from "../lib/businessTypeDefaults.js";
-import { roleHasPermission } from "../lib/permissions.js";
 import { warnOnce } from "../lib/warnOnce.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { syncOutboundWebhookConnectionForBusiness } from "../lib/integrations.js";
@@ -35,7 +34,7 @@ import {
 } from "../lib/businessWebhookSecret.js";
 import { createRateLimiter } from "../middleware/security.js";
 import { createActivityLog } from "../lib/activity.js";
-import { buildLeadNotes, updateLeadNotesStatus } from "../lib/leads.js";
+import { buildLeadNotes, parseLeadRecord, updateLeadNotesStatus } from "../lib/leads.js";
 import { safeCreateNotification, upsertAppointmentSourceLink } from "../lib/notifications.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 import { isEmailConfigured, isStripeConfigured } from "../lib/env.js";
@@ -2523,6 +2522,69 @@ async function findOrCreatePublicVehicle(params: {
   return created ?? null;
 }
 
+function mergeUniqueNoteLines(...sections: Array<string | null | undefined>): string | null {
+  const lines: string[] = [];
+  for (const section of sections) {
+    const trimmedSection = String(section ?? "").trim();
+    if (!trimmedSection) continue;
+    for (const rawLine of trimmedSection.split(/\r?\n+/)) {
+      const line = rawLine.trim();
+      if (!line || lines.includes(line)) continue;
+      lines.push(line);
+    }
+  }
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
+async function findRecentMatchingBookingRequestSubmission(params: {
+  businessId: string;
+  serviceId: string;
+  serviceSummary: string | null;
+  serviceMode: string | null;
+  email: string | null;
+  phone: string | null;
+  requestedDate: string | null;
+  requestedTimeStart: Date | null;
+  requestedTimeLabel: string | null;
+  notes: string | null;
+}) {
+  const [existing] = await db
+    .select({
+      id: bookingRequests.id,
+      businessId: bookingRequests.businessId,
+      clientId: bookingRequests.clientId,
+      appointmentId: bookingRequests.appointmentId,
+      status: bookingRequests.status,
+      publicTokenVersion: bookingRequests.publicTokenVersion,
+    })
+    .from(bookingRequests)
+    .where(
+      and(
+        eq(bookingRequests.businessId, params.businessId),
+        eq(bookingRequests.serviceId, params.serviceId),
+        params.serviceSummary ? eq(bookingRequests.serviceSummary, params.serviceSummary) : isNull(bookingRequests.serviceSummary),
+        params.serviceMode ? eq(bookingRequests.serviceMode, params.serviceMode) : isNull(bookingRequests.serviceMode),
+        params.requestedDate ? eq(bookingRequests.requestedDate, params.requestedDate) : isNull(bookingRequests.requestedDate),
+        params.requestedTimeStart
+          ? eq(bookingRequests.requestedTimeStart, params.requestedTimeStart)
+          : isNull(bookingRequests.requestedTimeStart),
+        params.requestedTimeLabel
+          ? eq(bookingRequests.requestedTimeLabel, params.requestedTimeLabel)
+          : isNull(bookingRequests.requestedTimeLabel),
+        params.notes ? eq(bookingRequests.notes, params.notes) : isNull(bookingRequests.notes),
+        or(
+          params.email ? eq(bookingRequests.clientEmail, params.email) : sql`false`,
+          params.phone ? eq(bookingRequests.clientPhone, params.phone) : sql`false`
+        ),
+        sql`${bookingRequests.createdAt} >= ${new Date(Date.now() - 5 * 60 * 1000)}`
+      )
+    )
+    .orderBy(desc(bookingRequests.createdAt))
+    .limit(1);
+
+  return existing ?? null;
+}
+
 async function resolveBookingRequestClientAndVehicle(params: {
   request: BookingRequestRecord;
 }) {
@@ -2708,6 +2770,10 @@ async function createPublicBookingAppointment(params: {
       requestedTiming: formatBookingDateTime(params.startTime, params.business.timezone),
       sourceDetail: params.sourceDetail,
       campaign: params.campaign,
+      customerName: `${params.client.firstName} ${params.client.lastName}`.trim() || null,
+      customerPhone: params.client.phone ?? null,
+      customerEmail: params.client.email ?? null,
+      originalCustomerNotes: params.customerNotes ?? null,
       serviceAddress:
         params.requestedServiceMode === "mobile"
           ? [params.serviceAddress, params.serviceCity, params.serviceState, params.serviceZip].filter(Boolean).join(", ") || null
@@ -3427,8 +3493,10 @@ function canAccessBusiness(
   permission?: "settings.read" | "settings.write"
 ): boolean {
   if (req.userId && business.ownerId === req.userId) return true;
-  if (!req.businessId || req.businessId !== business.id || !req.membershipRole) return false;
-  return permission ? roleHasPermission(req.membershipRole, permission) : true;
+  if (!req.businessId || req.businessId !== business.id || !req.membershipRole || !Array.isArray(req.permissions)) {
+    return false;
+  }
+  return permission ? req.permissions.includes(permission) : true;
 }
 
 function isBusinessSchemaDriftError(error: unknown): boolean {
@@ -4400,74 +4468,140 @@ businessesRouter.post(
             resumeToken: draftResumeToken,
           })
         : null;
-      const [createdLead] = await db
-        .insert(clients)
-        .values({
-          businessId: business.id,
-          firstName: parsedBody.data.firstName.trim(),
-          lastName: parsedBody.data.lastName.trim(),
-          email,
-          phone,
-          address: requestedServiceMode === "mobile" ? serviceAddress : null,
-          city: requestedServiceMode === "mobile" ? serviceCity : null,
-          state: requestedServiceMode === "mobile" ? serviceState : null,
-          zip: requestedServiceMode === "mobile" ? serviceZip : null,
-          notes: buildLeadNotes({
-            status: "new",
-            source: normalizedSource,
-            serviceInterest: selection.serviceSummary,
-            nextStep: `Contact within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
-            summary: [
-              customerNotes,
-              requestedTimingSummary ? `Requested timing: ${requestedTimingSummary}` : null,
-              requestedFlexibility !== "same_day_flexible"
-                ? `Flexibility: ${requestedFlexibility.replace(/_/g, " ")}`
-                : null,
-              requestedServiceMode === "mobile"
-                ? [serviceAddress, serviceCity, serviceState, serviceZip].filter(Boolean).join(", ")
-                : null,
-              campaign ? `Campaign: ${campaign}` : null,
-              "Submitted from the public booking request flow.",
-            ]
-              .filter(Boolean)
-              .join("\n"),
-            vehicle: vehicleSummary ?? "",
-          }),
-          internalNotes: [
-            "Public booking request",
-            `Service mode: ${requestedServiceMode}`,
-            requestedTimingSummary ? `Requested timing: ${requestedTimingSummary}` : null,
-            requestedFlexibility !== "same_day_flexible"
-              ? `Flexibility: ${requestedFlexibility.replace(/_/g, " ")}`
-              : null,
-            requestedServiceMode === "in_shop" && locationId ? `Location: ${locationId}` : null,
-            campaign ? `Campaign: ${campaign}` : null,
-            cleanOptionalText(parsedBody.data.source) ? `Source detail: ${cleanOptionalText(parsedBody.data.source)}` : null,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          marketingOptIn: parsedBody.data.marketingOptIn ?? true,
-        })
-        .returning();
-
-      if (!createdLead) throw new BadRequestError("Could not save this booking request.");
-
-      let createdVehicleId: string | null = null;
-      if (vehicleMake && vehicleModel) {
-        const [createdVehicle] = await db
-          .insert(vehicles)
-          .values({
-            id: randomUUID(),
-            businessId: business.id,
-            clientId: createdLead.id,
-            year: vehicleYear,
-            make: vehicleMake,
-            model: vehicleModel,
-            color: vehicleColor ?? null,
+      if (existingDraft && ["submitted_request", "confirmed_booking"].includes(existingDraft.status)) {
+        const [existingRequest] = await db
+          .select({
+            id: bookingRequests.id,
+            businessId: bookingRequests.businessId,
+            clientId: bookingRequests.clientId,
+            appointmentId: bookingRequests.appointmentId,
+            status: bookingRequests.status,
+            publicTokenVersion: bookingRequests.publicTokenVersion,
           })
-          .returning({ id: vehicles.id });
-        createdVehicleId = createdVehicle?.id ?? null;
+          .from(bookingRequests)
+          .where(and(eq(bookingRequests.businessId, business.id), eq(bookingRequests.draftId, existingDraft.id)))
+          .orderBy(desc(bookingRequests.createdAt))
+          .limit(1);
+        if (existingRequest) {
+          const publicAccess = buildBookingRequestPublicAccess(existingRequest);
+          res.status(200).json({
+            ok: true,
+            accepted: true,
+            duplicate: true,
+            mode: "request",
+            leadId: existingRequest.clientId,
+            bookingRequestId: existingRequest.id,
+            appointmentId: existingRequest.appointmentId ?? null,
+            publicResponseUrl: publicAccess.publicResponseUrl,
+          });
+          return;
+        }
       }
+
+      const duplicateRequest = await findRecentMatchingBookingRequestSubmission({
+        businessId: business.id,
+        serviceId: selection.baseService.id,
+        serviceSummary: selection.serviceSummary,
+        serviceMode: requestedServiceMode,
+        email,
+        phone,
+        requestedDate: requestedDate ?? (requestedTimeStart ? toDateKey(requestedTimeStart, bookingTimezone) : null),
+        requestedTimeStart,
+        requestedTimeLabel,
+        notes: customerNotes,
+      });
+      if (duplicateRequest) {
+        const publicAccess = buildBookingRequestPublicAccess(duplicateRequest);
+        res.status(200).json({
+          ok: true,
+          accepted: true,
+          duplicate: true,
+          mode: "request",
+          leadId: duplicateRequest.clientId,
+          bookingRequestId: duplicateRequest.id,
+          appointmentId: duplicateRequest.appointmentId ?? null,
+          publicResponseUrl: publicAccess.publicResponseUrl,
+        });
+        return;
+      }
+
+      const nextLeadNotes = buildLeadNotes({
+        status: "new",
+        source: normalizedSource,
+        serviceInterest: selection.serviceSummary,
+        nextStep: `Contact within ${nextStepHours} hour${nextStepHours === 1 ? "" : "s"}`,
+        summary: [
+          customerNotes,
+          requestedTimingSummary ? `Requested timing: ${requestedTimingSummary}` : null,
+          requestedFlexibility !== "same_day_flexible"
+            ? `Flexibility: ${requestedFlexibility.replace(/_/g, " ")}`
+            : null,
+          requestedServiceMode === "mobile"
+            ? [serviceAddress, serviceCity, serviceState, serviceZip].filter(Boolean).join(", ")
+            : null,
+          campaign ? `Campaign: ${campaign}` : null,
+          "Submitted from the public booking request flow.",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        vehicle: vehicleSummary ?? "",
+      });
+      const requestedSourceDetail = cleanOptionalText(parsedBody.data.source);
+      const nextLeadInternalNotes = [
+        "Public booking request",
+        `Requested services: ${selection.serviceSummary}`,
+        `Service mode: ${requestedServiceMode}`,
+        requestedTimingSummary ? `Requested timing: ${requestedTimingSummary}` : null,
+        requestedFlexibility !== "same_day_flexible"
+          ? `Flexibility: ${requestedFlexibility.replace(/_/g, " ")}`
+          : null,
+        requestedServiceMode === "in_shop" && locationId ? `Location: ${locationId}` : null,
+        campaign ? `Campaign: ${campaign}` : null,
+        requestedSourceDetail ? `Source detail: ${requestedSourceDetail}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const client = await findOrCreatePublicClient({
+        businessId: business.id,
+        firstName: parsedBody.data.firstName.trim(),
+        lastName: parsedBody.data.lastName.trim(),
+        email,
+        phone,
+        address: requestedServiceMode === "mobile" ? serviceAddress : null,
+        city: requestedServiceMode === "mobile" ? serviceCity : null,
+        state: requestedServiceMode === "mobile" ? serviceState : null,
+        zip: requestedServiceMode === "mobile" ? serviceZip : null,
+        notes: nextLeadNotes,
+        internalNotes: nextLeadInternalNotes,
+        marketingOptIn: parsedBody.data.marketingOptIn ?? true,
+      });
+
+      const existingLeadRecord = parseLeadRecord(client.notes);
+      const mergedLeadInternalNotes = mergeUniqueNoteLines(client.internalNotes, nextLeadInternalNotes);
+      let createdLead = client;
+      if (client.notes !== nextLeadNotes || mergedLeadInternalNotes !== (client.internalNotes ?? null)) {
+        const [updatedLead] = await db
+          .update(clients)
+          .set({
+            notes: nextLeadNotes,
+            internalNotes: mergedLeadInternalNotes,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(clients.id, client.id), eq(clients.businessId, business.id)))
+          .returning();
+        createdLead = updatedLead ?? client;
+      }
+
+      const createdVehicle = await findOrCreatePublicVehicle({
+        businessId: business.id,
+        clientId: createdLead.id,
+        year: vehicleYear,
+        make: vehicleMake,
+        model: vehicleModel,
+        color: vehicleColor ?? null,
+      });
+      const createdVehicleId = createdVehicle?.id ?? null;
 
       const [createdRequest] = await db
         .insert(bookingRequests)
@@ -4545,6 +4679,7 @@ businessesRouter.post(
           source: normalizedSource,
           campaign,
           serviceSummary: selection.serviceSummary,
+          existingLead: existingLeadRecord.isLead,
         },
       });
 
@@ -5217,6 +5352,7 @@ businessesRouter.post(
       internalNotes: [
         "Approved booking request",
         `Booking flow: request`,
+        bookingRequest.serviceSummary ? `Requested services: ${bookingRequest.serviceSummary}` : null,
         `Service mode: ${normalizeBookingServiceMode(bookingRequest.serviceMode)}`,
         parsedBody.data.message?.trim() || null,
         bookingRequest.campaign ? `Campaign: ${bookingRequest.campaign}` : null,
@@ -6056,6 +6192,7 @@ businessesRouter.post(
       },
       internalNotes: [
         "Booking request confirmed from alternate slot",
+        bookingRequest.serviceSummary ? `Requested services: ${bookingRequest.serviceSummary}` : null,
         `Service mode: ${normalizeBookingServiceMode(bookingRequest.serviceMode)}`,
         cleanOptionalText(parsedBody.data.message) ?? null,
       ],
@@ -6407,7 +6544,7 @@ businessesRouter.post(
 businessesRouter.get("/", requireAuth, wrapAsync(async (req: Request, res: Response) => {
   if (!req.userId) throw new ForbiddenError("Not signed in.");
   if (req.businessId) {
-    if (!req.membershipRole || !roleHasPermission(req.membershipRole, "settings.read")) {
+    if (!req.membershipRole || !Array.isArray(req.permissions) || !req.permissions.includes("settings.read")) {
       throw new ForbiddenError("You do not have permission to perform this action.");
     }
     const currentBusiness = await loadBusinessById(req.businessId);

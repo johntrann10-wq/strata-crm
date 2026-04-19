@@ -455,10 +455,13 @@ function buildBookingRequestAppointmentHref(record: OwnerBookingRequestRecord): 
   if (record.serviceId) {
     params.set("serviceIds", [record.serviceId, ...record.addonServiceIds].filter(Boolean).join(","));
   }
+  if (record.vehicle.summary) params.set("vehicleSummary", record.vehicle.summary);
   if (record.vehicle.year != null) params.set("vehicleYear", String(record.vehicle.year));
   if (record.vehicle.make) params.set("vehicleMake", record.vehicle.make);
   if (record.vehicle.model) params.set("vehicleModel", record.vehicle.model);
   if (record.vehicle.color) params.set("vehicleColor", record.vehicle.color);
+  const sourceAddress = [record.serviceAddress, record.serviceCity, record.serviceState, record.serviceZip].filter(Boolean).join(", ");
+  if (sourceAddress) params.set("sourceAddress", sourceAddress);
   return `/appointments/new?${params.toString()}`;
 }
 

@@ -75,7 +75,9 @@ export function recordRuntimeError(params: {
   };
   const next = [entry, ...readEntries()].slice(0, MAX_ENTRIES);
   writeEntries(next);
-  console.error("[Strata runtime]", entry);
+  if (import.meta.env.DEV) {
+    console.error("[Strata runtime]", entry);
+  }
 }
 
 export function listRuntimeErrors(): RuntimeErrorEntry[] {

@@ -88,12 +88,15 @@ export async function resolveTenantContext(
             preferredBusinessId: normalizedPreferredBusinessId,
             error: error instanceof Error ? error.message : String(error),
           });
-          return [];
+          return null;
         });
       return {
         businessId: membershipScopedBusiness[0].businessId,
         role: membershipScopedBusiness[0].role,
-        permissions: Array.from(resolvePermissionsForRole(membershipScopedBusiness[0].role, overrides)),
+        permissions:
+          overrides === null
+            ? []
+            : Array.from(resolvePermissionsForRole(membershipScopedBusiness[0].role, overrides)),
         source: "membership",
       };
     }
@@ -145,12 +148,15 @@ export async function resolveTenantContext(
           userId,
           error: error instanceof Error ? error.message : String(error),
         });
-        return [];
+        return null;
       });
     return {
       businessId: membershipBusiness[0].businessId,
       role: membershipBusiness[0].role,
-      permissions: Array.from(resolvePermissionsForRole(membershipBusiness[0].role, overrides)),
+      permissions:
+        overrides === null
+          ? []
+          : Array.from(resolvePermissionsForRole(membershipBusiness[0].role, overrides)),
       source: "membership",
     };
   }

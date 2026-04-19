@@ -178,6 +178,22 @@ test.describe("Critical path (mocked)", () => {
       });
     });
 
+    await page.route(/.*\/api\/notifications(?:\?.*)?$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ records: [] }),
+      });
+    });
+
+    await page.route(/.*\/api\/notifications\/unread-count(?:\?.*)?$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ total: 0, leads: 0, calendar: 0 }),
+      });
+    });
+
     await page.route("**/api/businesses**", async (route) => {
       const request = route.request();
       const url = new URL(request.url());

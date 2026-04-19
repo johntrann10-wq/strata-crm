@@ -8,6 +8,11 @@ export function toMoneyNumber(value: number | string | null | undefined): number
   return Number.isFinite(normalized) ? normalized : 0;
 }
 
+function roundMoney(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Number(value.toFixed(2)));
+}
+
 export function getDepositSummary(params: {
   totalPrice?: number | string | null;
   depositAmount?: number | string | null;
@@ -26,10 +31,11 @@ export function getDepositSummary(params: {
     requiredDetail?: (depositAmount: number, totalPrice: number) => string;
   };
 }) {
-  const totalPrice = toMoneyNumber(params.totalPrice);
-  const depositAmount = toMoneyNumber(params.depositAmount);
-  const collectedAmount = Math.max(0, toMoneyNumber(params.collectedAmount));
-  const backendBalanceDue = Math.max(0, toMoneyNumber(params.balanceDue));
+  const totalPrice = roundMoney(toMoneyNumber(params.totalPrice));
+  const depositAmount = roundMoney(toMoneyNumber(params.depositAmount));
+  const collectedAmount = roundMoney(toMoneyNumber(params.collectedAmount));
+  const hasExplicitBalanceDue = params.balanceDue != null;
+  const backendBalanceDue = roundMoney(toMoneyNumber(params.balanceDue));
   const paidInFull = params.paidInFull === true;
   const depositSatisfied = params.depositSatisfied === true;
   const hasDeposit = depositAmount > 0;
@@ -38,9 +44,11 @@ export function getDepositSummary(params: {
     params.balanceDue != null ||
     params.paidInFull != null ||
     params.depositSatisfied != null;
-  const remainingBalance = hasBackendFinance
+  const remainingBalance = hasExplicitBalanceDue
     ? backendBalanceDue
-    : totalPrice;
+    : totalPrice > 0
+      ? roundMoney(Math.max(0, totalPrice - collectedAmount))
+      : 0;
   const labels = params.labels ?? {};
   const noun = labels.noun ?? "deposit";
   const nounLabel = `${noun[0]?.toUpperCase() ?? "D"}${noun.slice(1)}`;
@@ -58,6 +66,19 @@ export function getDepositSummary(params: {
     };
   }
 
+  if (hasBackendFinance && paidInFull) {
+    return {
+      hasDeposit,
+      depositAmount,
+      remainingBalance: 0,
+      stateLabel: "Paid in full",
+      detail:
+        collectedAmount > 0
+          ? `${formatCurrency(collectedAmount)} has been collected for this appointment.`
+          : "No balance remains on this appointment.",
+    };
+  }
+
   if (hasBackendFinance && depositSatisfied) {
     return {
       hasDeposit: true,
@@ -69,16 +90,6 @@ export function getDepositSummary(params: {
         (remainingBalance > 0
           ? `${formatCurrency(depositAmount)} collected. ${formatCurrency(remainingBalance)} remains for invoicing.`
           : `${formatCurrency(depositAmount)} collected and no balance remains.`),
-    };
-  }
-
-  if (hasBackendFinance && paidInFull) {
-    return {
-      hasDeposit,
-      depositAmount,
-      remainingBalance: 0,
-      stateLabel: "Paid in full",
-      detail: collectedAmount > 0 ? `${formatCurrency(collectedAmount)} has been collected for this appointment.` : "No balance remains on this appointment.",
     };
   }
 
@@ -105,10 +116,10 @@ export function getInvoiceCollectionSummary(params: {
   const status = String(params.status ?? "");
   const total = toMoneyNumber(params.total);
   const totalPaid = toMoneyNumber(params.totalPaid);
-  const remainingBalance = Math.max(0, toMoneyNumber(params.remainingBalance));
+  const remainingBalance = roundMoney(toMoneyNumber(params.remainingBalance));
   const isOverdue = params.isOverdue === true;
 
-  if (remainingBalance <= 0 || status === "paid") {
+  if (remainingBalance <= 0.009) {
     return {
       title: "Fully collected",
       detail:

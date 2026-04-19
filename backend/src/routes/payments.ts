@@ -2,8 +2,8 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { payments, invoices, clients, businesses } from "../db/schema.js";
-import { eq, and } from "drizzle-orm";
-import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
+import { eq, and, sql } from "drizzle-orm";
+import { AppError, NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -12,11 +12,12 @@ import { logger } from "../lib/logger.js";
 import { createRequestActivityLog } from "../lib/activity.js";
 import { enqueueQuickBooksPaymentSync } from "../lib/quickbooks.js";
 import {
-  getActiveInvoicePaymentTotal,
+  getActiveInvoicePaymentSummary,
   isPaymentSchemaDriftError,
   recordInvoicePayment,
   syncAppointmentAfterPaymentReversal,
 } from "../lib/invoicePayments.js";
+import { safeCreateNotification } from "../lib/notifications.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 
 export const paymentsRouter = Router({ mergeParams: true });
@@ -125,6 +126,9 @@ paymentsRouter.post("/", requireAuth, requireTenant, requirePermission("payments
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const bid = businessId(req);
   const data = parsed.data;
+  const idempotencyKey = data.idempotencyKey?.trim() || null;
+  const notes = data.notes?.trim() || null;
+  const referenceNumber = data.referenceNumber?.trim() || null;
 
   const doCreate = async () => {
     return await db.transaction(async (tx) => {
@@ -135,9 +139,9 @@ paymentsRouter.post("/", requireAuth, requireTenant, requirePermission("payments
           amount: data.amount,
           method: data.method,
           paidAt: data.paidAt ?? new Date(),
-          idempotencyKey: data.idempotencyKey ?? null,
-          notes: data.notes ?? null,
-          referenceNumber: data.referenceNumber ?? null,
+          idempotencyKey,
+          notes,
+          referenceNumber,
         },
         tx
       );
@@ -146,8 +150,9 @@ paymentsRouter.post("/", requireAuth, requireTenant, requirePermission("payments
     });
   };
 
-  const key = data.idempotencyKey ?? `payment-${data.invoiceId}-${Date.now()}`;
-  const payment = await withIdempotency(key, { businessId: bid, operation: "payment.create" }, doCreate);
+  const payment = idempotencyKey
+    ? await withIdempotency(idempotencyKey, { businessId: bid, operation: "payment.create" }, doCreate)
+    : await doCreate();
   await createRequestActivityLog(req, {
     businessId: bid,
     action: "payment.recorded",
@@ -159,6 +164,42 @@ paymentsRouter.post("/", requireAuth, requireTenant, requirePermission("payments
       method: payment.method,
     },
   });
+  const [context] = await db
+    .select({
+      invoiceNumber: invoices.invoiceNumber,
+      appointmentId: invoices.appointmentId,
+      businessName: businesses.name,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+      clientPhone: clients.phone,
+    })
+    .from(invoices)
+    .leftJoin(clients, eq(invoices.clientId, clients.id))
+    .leftJoin(businesses, eq(invoices.businessId, businesses.id))
+    .where(and(eq(invoices.id, data.invoiceId), eq(invoices.businessId, bid)))
+    .limit(1);
+  const clientName =
+    `${context?.clientFirstName ?? ""} ${context?.clientLastName ?? ""}`.trim() || "A customer";
+  await safeCreateNotification(
+    {
+      businessId: bid,
+      type: "payment_received",
+      title: "Payment received",
+      message: `${clientName} paid $${Number(payment.amount ?? 0).toFixed(2)} toward ${context?.invoiceNumber ?? "an invoice"}.`,
+      entityType: "payment",
+      entityId: payment.id,
+      bucket: "finance",
+      dedupeKey: `payment-received:${payment.id}`,
+      metadata: {
+        invoiceId: data.invoiceId,
+        appointmentId: context?.appointmentId ?? null,
+        amount: Number(payment.amount ?? 0),
+        method: payment.method,
+        path: `/invoices/${encodeURIComponent(data.invoiceId)}`,
+      },
+    },
+    { source: "payments.create" }
+  );
   void enqueueQuickBooksPaymentSync({
     businessId: bid,
     paymentId: payment.id,
@@ -172,19 +213,6 @@ paymentsRouter.post("/", requireAuth, requireTenant, requirePermission("payments
   });
   void (async () => {
     try {
-      const [context] = await db
-        .select({
-          invoiceNumber: invoices.invoiceNumber,
-          businessName: businesses.name,
-          clientFirstName: clients.firstName,
-          clientLastName: clients.lastName,
-          clientPhone: clients.phone,
-        })
-        .from(invoices)
-        .leftJoin(clients, eq(invoices.clientId, clients.id))
-        .leftJoin(businesses, eq(invoices.businessId, businesses.id))
-        .where(and(eq(invoices.id, data.invoiceId), eq(invoices.businessId, bid)))
-        .limit(1);
       if (!context) return;
       await enqueueTwilioTemplateSms({
         businessId: bid,
@@ -192,8 +220,7 @@ paymentsRouter.post("/", requireAuth, requireTenant, requirePermission("payments
         templateSlug: "payment_receipt",
         to: context.clientPhone,
         vars: {
-          clientName:
-            `${context.clientFirstName ?? ""} ${context.clientLastName ?? ""}`.trim() || "Customer",
+          clientName: clientName || "Customer",
           businessName: context.businessName ?? "Your shop",
           amount: `$${Number(payment.amount ?? 0).toFixed(2)}`,
           invoiceNumber: context.invoiceNumber ?? "Invoice",
@@ -222,32 +249,75 @@ paymentsRouter.post("/:id/reverse", requireAuth, requireTenant, requirePermissio
     res.json(existing);
     return;
   }
-  let updated;
-  try {
-    [updated] = await db
-      .update(payments)
-      .set({ reversedAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(payments.id, req.params.id), eq(payments.businessId, bid)))
-      .returning();
-  } catch (error) {
-    if (!isPaymentSchemaDriftError(error)) throw error;
-    logger.warn("Payments schema drift detected on reverse; skipping reverse for legacy schema", { paymentId: req.params.id, businessId: bid, error });
-    res.json(existing);
-    return;
-  }
-  if (!updated) throw new NotFoundError("Payment not found.");
-  // Recompute invoice status after reversal
-  const [inv] = await db.select().from(invoices).where(eq(invoices.id, updated.invoiceId)).limit(1);
-  if (inv && inv.status !== "void") {
-    const paidNow = await getActiveInvoicePaymentTotal(inv.id);
-    const invTotal = Number(inv.total ?? 0);
-    const newStatus = paidNow <= 0 ? "sent" : paidNow >= invTotal ? "paid" : "partial";
-    await db
-      .update(invoices)
-      .set({ status: newStatus, paidAt: paidNow >= invTotal ? inv.paidAt : null, updatedAt: new Date() })
-      .where(and(eq(invoices.id, inv.id), eq(invoices.businessId, bid)));
-    await syncAppointmentAfterPaymentReversal(inv.id, newStatus);
-  }
+  const updated = await db.transaction(async (tx) => {
+    let reversedPayment;
+    try {
+      [reversedPayment] = await tx
+        .update(payments)
+        .set({ reversedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(payments.id, req.params.id),
+            eq(payments.businessId, bid),
+            sql`${payments.reversedAt} is null`
+          )
+        )
+        .returning();
+    } catch (error) {
+      if (!isPaymentSchemaDriftError(error)) throw error;
+      logger.error("Payments schema drift detected on reverse; blocking unsafe reversal", {
+        paymentId: req.params.id,
+        businessId: bid,
+        error,
+      });
+      throw new AppError(
+        "Payment reversal is temporarily unavailable because the payments schema is missing required fields. Finish the latest migration and try again.",
+        503,
+        "PAYMENT_REVERSAL_UNAVAILABLE"
+      );
+    }
+
+    if (!reversedPayment) {
+      throw new BadRequestError("Payment has already been reversed.");
+    }
+
+    const [inv] = await tx
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.id, reversedPayment.invoiceId), eq(invoices.businessId, bid)))
+      .limit(1);
+
+    if (inv && inv.status !== "void") {
+      const paidSummary = await getActiveInvoicePaymentSummary(inv.id, tx);
+      const invoiceTotal = Number(inv.total ?? 0);
+      const invoiceTotalCents = Number.isFinite(invoiceTotal) ? Math.round(invoiceTotal * 100) : Number.NaN;
+      if (!Number.isFinite(invoiceTotalCents) || invoiceTotalCents < 0) {
+        throw new AppError(
+          "Invoice total is invalid and cannot be recalculated safely after reversing this payment.",
+          500,
+          "INVOICE_TOTAL_INVALID"
+        );
+      }
+      const newStatus =
+        paidSummary.totalCents <= 0
+          ? inv.status === "draft"
+            ? "draft"
+            : "sent"
+          : paidSummary.totalCents >= invoiceTotalCents
+            ? "paid"
+            : "partial";
+      const paidAt = newStatus === "paid" ? paidSummary.lastPaidAt : null;
+
+      await tx
+        .update(invoices)
+        .set({ status: newStatus, paidAt, updatedAt: new Date() })
+        .where(and(eq(invoices.id, inv.id), eq(invoices.businessId, bid)));
+      await syncAppointmentAfterPaymentReversal(inv.id, newStatus, paidAt, tx);
+    }
+
+    return reversedPayment;
+  });
+
   await createRequestActivityLog(req, {
     businessId: bid,
     action: "payment.reversed",

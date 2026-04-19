@@ -91,7 +91,7 @@ type BillingStatus = {
   billingLastStripeSyncStatus: "synced" | "failed" | null;
   billingLastStripeSyncError: string | null;
   activationMilestone: BillingActivationMilestone;
-  billingPrompt: BillingPromptState;
+  billingPrompt?: BillingPromptState | null;
   billingEnforced: boolean;
   checkoutConfigured: boolean;
   portalConfigured: boolean;
@@ -216,7 +216,9 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
       message: error.message || "React render error",
       detail: info.componentStack || error.stack,
     });
-    console.error(error, info);
+    if (import.meta.env.DEV) {
+      console.error(error, info);
+    }
   }
 
   render() {
@@ -248,6 +250,14 @@ function getNotificationHref(notification: AppNotificationRecord): string | null
   }
   if (notification.entityType === "client" && notification.entityId) {
     return `/clients/${encodeURIComponent(notification.entityId)}?from=${encodeURIComponent("/leads")}`;
+  }
+  if (notification.entityType === "invoice" && notification.entityId) {
+    return `/invoices/${encodeURIComponent(notification.entityId)}`;
+  }
+  if (notification.entityType === "payment") {
+    const invoiceId =
+      typeof notification.metadata?.invoiceId === "string" ? notification.metadata.invoiceId.trim() : "";
+    if (invoiceId) return `/invoices/${encodeURIComponent(invoiceId)}`;
   }
   return null;
 }
@@ -347,7 +357,10 @@ function NotificationCenter({
                     <div className="flex items-start gap-3">
                       <button
                         type="button"
-                        onClick={() => onOpenNotification(notification)}
+                        onClick={() => {
+                          setOpen(false);
+                          void onOpenNotification(notification);
+                        }}
                         disabled={!href}
                         className={cn("min-w-0 flex-1 text-left", !href && "cursor-default")}
                       >
@@ -1164,7 +1177,9 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       } catch (error) {
         const workspaceError =
           error instanceof Error ? error : new Error("Failed to load workspace context");
-        console.error("Failed to load auth context", workspaceError);
+        if (import.meta.env.DEV) {
+          console.error("Failed to load auth context", workspaceError);
+        }
         if (!cancelled) {
           setClientUserId(me.id);
           setTenantBusinesses([]);
@@ -1282,7 +1297,19 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const [{ data: user, fetching: userFetching, error: userError }, refetchUser] = useFindOne(
     api.user,
     effectiveUserId ?? "",
-    { select: { id: true, firstName: true, lastName: true, email: true }, pause: !effectiveUserId }
+    {
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        googleProfileId: true,
+        hasPassword: true,
+        accountDeletionRequestedAt: true,
+        accountDeletionRequestNote: true,
+      },
+      pause: !effectiveUserId,
+    }
   );
   const currentMembership = useMemo(
     () => tenantBusinesses.find((tenantBusiness) => tenantBusiness.id === currentBusinessId) ?? null,

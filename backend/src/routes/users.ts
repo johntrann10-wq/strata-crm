@@ -21,6 +21,17 @@ type PasswordUserRecord = {
   authTokenVersion: number | null;
 };
 
+type UserProfileRecord = {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  googleProfileId: string | null;
+  hasPassword: boolean;
+  accountDeletionRequestedAt: Date | null;
+  accountDeletionRequestNote: string | null;
+};
+
 async function loadUserByIdSafe(userId: string): Promise<PasswordUserRecord | null> {
   try {
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
@@ -78,12 +89,70 @@ async function updatePasswordHashSafe(userId: string, passwordHash: string, next
   }
 }
 
+async function loadUserProfileByIdSafe(userId: string): Promise<UserProfileRecord | null> {
+  try {
+    const [user] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        googleProfileId: users.googleProfileId,
+        hasPassword: users.passwordHash,
+        accountDeletionRequestedAt: users.accountDeletionRequestedAt,
+        accountDeletionRequestNote: users.accountDeletionRequestNote,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    return user
+      ? {
+          ...user,
+          hasPassword: Boolean(user.hasPassword),
+        }
+      : null;
+  } catch (error) {
+    if (!isUserSchemaDriftError(error)) throw error;
+    logger.warn("Users schema drift detected during profile lookup; falling back to legacy select", {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const result = await db.execute(sql`
+      SELECT id, email, first_name, last_name, google_profile_id, password_hash
+      FROM users
+      WHERE id = ${userId}
+      LIMIT 1
+    `);
+    const row = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0];
+    return row
+      ? {
+          id: String(row.id),
+          email: String(row.email),
+          firstName: (row.first_name as string | null | undefined) ?? null,
+          lastName: (row.last_name as string | null | undefined) ?? null,
+          googleProfileId: (row.google_profile_id as string | null | undefined) ?? null,
+          hasPassword: Boolean(row.password_hash),
+          accountDeletionRequestedAt: null,
+          accountDeletionRequestNote: null,
+        }
+      : null;
+  }
+}
+
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
   newPassword: z.string().min(8, "New password must be at least 8 characters"),
 });
 const setPasswordSchema = z.object({
   newPassword: z.string().min(8, "New password must be at least 8 characters"),
+});
+const requestAccountDeletionSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .max(1000, "Please keep your request details under 1000 characters.")
+    .optional()
+    .default(""),
 });
 
 /** POST /api/users/change-password — authenticated user updates password. */
@@ -142,25 +211,87 @@ usersRouter.post("/set-password", requireAuth, async (req: Request, res: Respons
   }
 });
 
+usersRouter.post("/request-account-deletion", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = requestAccountDeletionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0]?.message;
+      throw new BadRequestError(first ?? "Invalid input");
+    }
+
+    const userId = req.userId!;
+    const [existing] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        accountDeletionRequestedAt: users.accountDeletionRequestedAt,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!existing) throw new NotFoundError("User not found.");
+    if (existing.accountDeletionRequestedAt) {
+      res.json({
+        ok: true,
+        alreadyRequested: true,
+        requestedAt: existing.accountDeletionRequestedAt,
+      });
+      return;
+    }
+
+    const requestNote = parsed.data.reason.trim() || null;
+    const requestedAt = new Date();
+    const [updated] = await db
+      .update(users)
+      .set({
+        accountDeletionRequestedAt: requestedAt,
+        accountDeletionRequestNote: requestNote,
+        updatedAt: requestedAt,
+      })
+      .where(eq(users.id, userId))
+      .returning({
+        id: users.id,
+        accountDeletionRequestedAt: users.accountDeletionRequestedAt,
+      });
+
+    if (!updated?.accountDeletionRequestedAt) {
+      throw new BadRequestError("We couldn't save your account deletion request. Please try again.");
+    }
+
+    logger.info("Account deletion requested", {
+      userId,
+      email: existing.email,
+      hasReason: Boolean(requestNote),
+    });
+
+    res.json({
+      ok: true,
+      alreadyRequested: false,
+      requestedAt: updated.accountDeletionRequestedAt,
+    });
+  } catch (error) {
+    if (isUserSchemaDriftError(error)) {
+      logger.warn("Account deletion request unavailable because the user schema is outdated", {
+        userId: req.userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      res.status(503).json({
+        message: "Account deletion requests are temporarily unavailable while the latest account schema update is being applied.",
+      });
+      return;
+    }
+    next(error);
+  }
+});
+
 usersRouter.get("/:id", requireAuth, async (req: Request, res: Response) => {
   const id = req.params.id;
   if (req.userId !== id) throw new NotFoundError("User not found.");
-  const [user] = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      firstName: users.firstName,
-      lastName: users.lastName,
-      googleProfileId: users.googleProfileId,
-      hasPassword: users.passwordHash,
-    })
-    .from(users)
-    .where(eq(users.id, id))
-    .limit(1);
+  const user = await loadUserProfileByIdSafe(id);
   if (!user) throw new NotFoundError("User not found.");
   res.json({
     ...user,
-    hasPassword: Boolean(user.hasPassword),
     googleImageUrl: null,
     profilePicture: null,
   });

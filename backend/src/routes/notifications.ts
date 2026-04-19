@@ -1,11 +1,12 @@
 import { Router, Request, Response } from "express";
-import { and, desc, eq, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { notifications } from "../db/schema.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import {
   ensureNotificationInfrastructure,
-  getVisibleUnreadNotificationCounts,
+  getNotificationScope,
+  parseNotificationMetadata,
 } from "../lib/notifications.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -26,6 +27,8 @@ type NotificationListRow = {
   updatedAt: Date;
 };
 
+type NotificationAccessRow = Pick<NotificationListRow, "type" | "entityType" | "metadata">;
+
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
   return req.businessId;
@@ -38,15 +41,28 @@ function notificationVisibilityFilter(req: Request) {
   return isNull(notifications.userId);
 }
 
-function parseNotificationMetadata(metadata: string | null | undefined): Record<string, unknown> {
-  if (!metadata?.trim()) return {};
-  try {
-    const parsed = JSON.parse(metadata) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
+function getResolvedPermissions(req: Request): Set<string> {
+  if (!req.membershipRole || !Array.isArray(req.permissions)) {
+    throw new ForbiddenError("You do not have permission to perform this action.");
+  }
+  return new Set(req.permissions);
+}
+
+function canAccessNotification(permissions: Set<string>, row: NotificationAccessRow): boolean {
+  const scope = getNotificationScope({
+    type: row.type,
+    entityType: row.entityType,
+    metadata: parseNotificationMetadata(row.metadata),
+  });
+  switch (scope) {
+    case "leads":
+      return permissions.has("customers.read");
+    case "calendar":
+      return permissions.has("appointments.read");
+    case "finance":
+      return permissions.has("payments.read") || permissions.has("invoices.read");
+    default:
+      return permissions.has("dashboard.view");
   }
 }
 
@@ -65,14 +81,18 @@ function serializeNotificationRecord(row: NotificationListRow) {
   };
 }
 
-notificationsRouter.get(
-  "/",
-  requireAuth,
-  requireTenant,
-  wrapAsync(async (req: Request, res: Response) => {
-    await ensureNotificationInfrastructure();
-    const first = Math.min(Math.max(Number(req.query.first) || 12, 1), 50);
-    const list = await db
+async function listVisibleNotifications(params: {
+  businessId: string;
+  visibilityFilter: ReturnType<typeof notificationVisibilityFilter>;
+  permissions: Set<string>;
+  first: number;
+}): Promise<NotificationListRow[]> {
+  const pageSize = Math.min(Math.max(params.first * 4, 24), 100);
+  const visible: NotificationListRow[] = [];
+  let offset = 0;
+
+  while (visible.length < params.first) {
+    const rows = await db
       .select({
         id: notifications.id,
         type: notifications.type,
@@ -86,11 +106,38 @@ notificationsRouter.get(
         updatedAt: notifications.updatedAt,
       })
       .from(notifications)
-      .where(and(eq(notifications.businessId, businessId(req)), notificationVisibilityFilter(req)))
+      .where(and(eq(notifications.businessId, params.businessId), params.visibilityFilter))
       .orderBy(desc(notifications.createdAt))
-      .limit(first);
+      .limit(pageSize)
+      .offset(offset);
 
-    res.json({ records: list.map(serializeNotificationRecord) });
+    if (rows.length === 0) break;
+    visible.push(...rows.filter((row) => canAccessNotification(params.permissions, row)));
+    if (rows.length < pageSize) break;
+    offset += rows.length;
+  }
+
+  return visible.slice(0, params.first);
+}
+
+notificationsRouter.get(
+  "/",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    await ensureNotificationInfrastructure();
+    const first = Math.min(Math.max(Number(req.query.first) || 12, 1), 50);
+    const permissions = getResolvedPermissions(req);
+    const list = await listVisibleNotifications({
+      businessId: businessId(req),
+      visibilityFilter: notificationVisibilityFilter(req),
+      permissions,
+      first,
+    });
+
+    res.json({
+      records: list.map(serializeNotificationRecord),
+    });
   })
 );
 
@@ -99,10 +146,35 @@ notificationsRouter.get(
   requireAuth,
   requireTenant,
   wrapAsync(async (req: Request, res: Response) => {
-    const counts = await getVisibleUnreadNotificationCounts({
-      businessId: businessId(req),
-      userId: req.userId ?? null,
-    });
+    await ensureNotificationInfrastructure();
+    const permissions = getResolvedPermissions(req);
+    const unreadRows = await db
+      .select({
+        type: notifications.type,
+        entityType: notifications.entityType,
+        metadata: notifications.metadata,
+      })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.businessId, businessId(req)),
+          notificationVisibilityFilter(req),
+          eq(notifications.isRead, false)
+        )
+      );
+
+    const counts = { total: 0, leads: 0, calendar: 0 };
+    for (const row of unreadRows) {
+      if (!canAccessNotification(permissions, row)) continue;
+      counts.total += 1;
+      const scope = getNotificationScope({
+        type: row.type,
+        entityType: row.entityType,
+        metadata: parseNotificationMetadata(row.metadata),
+      });
+      if (scope === "leads") counts.leads += 1;
+      if (scope === "calendar") counts.calendar += 1;
+    }
     res.json(counts);
   })
 );
@@ -114,6 +186,28 @@ notificationsRouter.post(
   wrapAsync(async (req: Request, res: Response) => {
     if (!req.params.id?.trim()) throw new BadRequestError("Notification id is required.");
     await ensureNotificationInfrastructure();
+    const permissions = getResolvedPermissions(req);
+
+    const [existing] = await db
+      .select({
+        id: notifications.id,
+        type: notifications.type,
+        entityType: notifications.entityType,
+        metadata: notifications.metadata,
+      })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.id, req.params.id),
+          eq(notifications.businessId, businessId(req)),
+          notificationVisibilityFilter(req)
+        )
+      )
+      .limit(1);
+
+    if (!existing || !canAccessNotification(permissions, existing)) {
+      throw new NotFoundError("Notification not found.");
+    }
 
     const [updated] = await db
       .update(notifications)
@@ -142,6 +236,32 @@ notificationsRouter.post(
   requireTenant,
   wrapAsync(async (req: Request, res: Response) => {
     await ensureNotificationInfrastructure();
+    const permissions = getResolvedPermissions(req);
+    const unreadRows = await db
+      .select({
+        id: notifications.id,
+        type: notifications.type,
+        entityType: notifications.entityType,
+        metadata: notifications.metadata,
+      })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.businessId, businessId(req)),
+          notificationVisibilityFilter(req),
+          eq(notifications.isRead, false)
+        )
+      );
+
+    const authorizedIds = unreadRows
+      .filter((row) => canAccessNotification(permissions, row))
+      .map((row) => row.id);
+
+    if (authorizedIds.length === 0) {
+      res.json({ ok: true });
+      return;
+    }
+
     const now = new Date();
     await db
       .update(notifications)
@@ -152,8 +272,7 @@ notificationsRouter.post(
       .where(
         and(
           eq(notifications.businessId, businessId(req)),
-          notificationVisibilityFilter(req),
-          eq(notifications.isRead, false)
+          inArray(notifications.id, authorizedIds)
         )
       );
 

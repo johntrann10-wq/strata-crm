@@ -132,9 +132,21 @@ CREATE TABLE IF NOT EXISTS users (
   last_name text,
   email_verified boolean DEFAULT false,
   google_profile_id text,
+  auth_token_version integer NOT NULL DEFAULT 1,
+  account_deletion_requested_at timestamptz,
+  account_deletion_request_note text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS auth_token_version integer NOT NULL DEFAULT 1;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS account_deletion_requested_at timestamptz;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS account_deletion_request_note text;
 
 CREATE TABLE IF NOT EXISTS businesses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

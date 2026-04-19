@@ -212,28 +212,6 @@ async function installMockApi(page: Page, options: MockApiOptions = {}) {
       });
     }
 
-    if (pathname.endsWith("/api/notifications/read-all") && method === "POST") {
-      state.notifications = state.notifications.map((notification) => ({ ...notification, isRead: true }));
-      return json(route, { ok: true });
-    }
-
-    const markReadMatch = pathname.match(/\/api\/notifications\/([^/]+)\/read$/);
-    if (markReadMatch && method === "POST") {
-      const notificationId = decodeURIComponent(markReadMatch[1] ?? "");
-      state.notifications = state.notifications.map((notification) =>
-        notification.id === notificationId ? { ...notification, isRead: true } : notification
-      );
-      return json(route, { ok: true, id: notificationId });
-    }
-
-    if (pathname.endsWith("/api/notifications/unread-count")) {
-      return json(route, computeCounts(state.notifications));
-    }
-
-    if (pathname.endsWith("/api/notifications")) {
-      return json(route, { records: state.notifications });
-    }
-
     if (pathname.endsWith("/api/appointments/appt_source")) {
       return json(route, options.appointment ?? createSourceLinkedAppointment());
     }
@@ -247,6 +225,34 @@ async function installMockApi(page: Page, options: MockApiOptions = {}) {
     }
 
     return json(route, { ok: true });
+  });
+
+  await page.route(/.*\/api\/notifications\/read-all(?:\?.*)?$/, async (route) => {
+    if (route.request().method().toUpperCase() !== "POST") {
+      return route.fallback();
+    }
+    state.notifications = state.notifications.map((notification) => ({ ...notification, isRead: true }));
+    return json(route, { ok: true });
+  });
+
+  await page.route(/.*\/api\/notifications\/[^/]+\/read(?:\?.*)?$/, async (route) => {
+    if (route.request().method().toUpperCase() !== "POST") {
+      return route.fallback();
+    }
+    const url = new URL(route.request().url());
+    const notificationId = decodeURIComponent(url.pathname.split("/").at(-2) ?? "");
+    state.notifications = state.notifications.map((notification) =>
+      notification.id === notificationId ? { ...notification, isRead: true } : notification
+    );
+    return json(route, { ok: true, id: notificationId });
+  });
+
+  await page.route(/.*\/api\/notifications\/unread-count(?:\?.*)?$/, async (route) => {
+    return json(route, computeCounts(state.notifications));
+  });
+
+  await page.route(/.*\/api\/notifications(?:\?.*)?$/, async (route) => {
+    return json(route, { records: state.notifications });
   });
 }
 
@@ -272,11 +278,16 @@ test("notification counts stay scoped and update without a full page reload", as
   await installMockApi(page, { notifications: createMockNotifications() });
   await signIn(page);
 
-  await expect(page.getByRole("button", { name: /open notifications \(4 unread\)/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /leads \(2 unread\)/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /calendar \(1 unread\)/i })).toBeVisible();
+  const notificationsButton = page.getByRole("button", { name: /open notifications/i });
+  const primaryNav = page.locator("aside");
+  const leadsLink = primaryNav.getByRole("link", { name: /leads/i });
+  const calendarLink = primaryNav.getByRole("link", { name: /calendar/i });
 
-  await page.getByRole("button", { name: /open notifications \(4 unread\)/i }).click();
+  await expect.poll(() => notificationsButton.getAttribute("aria-label")).toBe("Open notifications (4 unread)");
+  await expect.poll(() => leadsLink.getAttribute("aria-label")).toBe("Leads (2 unread)");
+  await expect.poll(() => calendarLink.getAttribute("aria-label")).toBe("Calendar (1 unread)");
+
+  await notificationsButton.click();
   await expect(page.getByText("New booking request")).toBeVisible();
 
   await page.getByRole("button", { name: /^Read$/i }).first().click();

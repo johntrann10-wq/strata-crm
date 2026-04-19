@@ -176,6 +176,28 @@ function AuthHashConsumer() {
   return null;
 }
 
+function MobileShellBridge() {
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
+    const html = document.documentElement;
+    const standalone =
+      navigatorWithStandalone.standalone === true ||
+      typeof (window as Window & { Capacitor?: unknown }).Capacitor !== "undefined" ||
+      window.matchMedia?.("(display-mode: standalone)")?.matches === true;
+    if (standalone) {
+      html.dataset.mobileShell = "true";
+    } else {
+      delete html.dataset.mobileShell;
+    }
+    return () => {
+      delete html.dataset.mobileShell;
+    };
+  }, []);
+
+  return null;
+}
+
 function AnalyticsScripts() {
   if (!isProduction || !analyticsEnabled()) return null;
 
@@ -223,12 +245,15 @@ export const links = () => [
 
 export const meta = () => [
   { charset: "utf-8" },
-  { name: "viewport", content: "width=device-width, initial-scale=1" },
+  { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
   { title: defaultTitle },
   { name: "description", content: defaultDescription },
   { name: "application-name", content: "Strata CRM" },
   { name: "theme-color", content: "#f97316" },
   { name: "google-site-verification", content: googleSiteVerification },
+  { name: "mobile-web-app-capable", content: "yes" },
+  { name: "apple-mobile-web-app-capable", content: "yes" },
+  { name: "apple-mobile-web-app-status-bar-style", content: "default" },
   { name: "apple-mobile-web-app-title", content: "Strata CRM" },
   { property: "og:site_name", content: "Strata CRM" },
   { property: "og:type", content: "website" },
@@ -309,6 +334,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
       </head>
       <body>
         <Suspense>
+          <MobileShellBridge />
           <AuthHashConsumer />
           <AnalyticsRouteTracker />
           <BrowserErrorReporter />

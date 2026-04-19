@@ -43,7 +43,7 @@ const navigationItems: NavItems = [
   },
   {
     type: "item",
-    title: "Who it’s for",
+    title: "Who it's for",
     href: "/#industries",
     description: "Detail, tint, wrap, mobile, and owner-operated automotive service teams.",
   },
@@ -57,7 +57,7 @@ const navigationItems: NavItems = [
 
 // Root navigation bar: logo, mobile, and desktop nav
 export const Navigation = () => (
-  <div className="flex justify-center items-center gap-2">
+  <div className="flex items-center justify-center gap-2 sm:gap-3">
     <MobileNav />
     <div className="flex-shrink-0">
       <Link to="/" className="flex items-center gap-2">
@@ -77,17 +77,17 @@ const MobileNav = () => {
     <div className="md:hidden">
       <NavDrawer>
         {({ close }) => (
-          <nav className="flex flex-col gap-4 px-6 pt-16 pb-8">
+          <nav className="flex max-h-[calc(100svh-4.5rem)] flex-col gap-3 overflow-y-auto px-4 pt-14 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             {navigationItems.map((item) =>
               item.type === "section" ? (
-                <div key={item.title}>
+                <div key={item.title} className="rounded-2xl border border-border/70 bg-card/96 p-4 shadow-sm">
                   <p className="text-sm font-medium">{item.title}</p>
-                  <div className="mt-2 flex flex-col gap-2 pl-4">
+                  <div className="mt-3 flex flex-col gap-2">
                     {item.items.map((subItem) => (
                       <Link
                         key={subItem.title}
                         to={subItem.href}
-                        className="text-sm text-gray-600 hover:text-gray-900"
+                        className="rounded-xl px-3 py-3 text-sm font-medium text-gray-600 transition-colors hover:bg-accent/70 hover:text-gray-900"
                         onClick={close}
                       >
                         {subItem.title}
@@ -99,7 +99,7 @@ const MobileNav = () => {
                 <Link
                   key={item.title}
                   to={item.href}
-                  className="text-sm font-medium hover:text-gray-900"
+                  className="rounded-2xl border border-border/70 bg-card/96 px-4 py-3.5 text-sm font-medium shadow-sm transition-colors hover:bg-accent/70 hover:text-gray-900"
                   onClick={close}
                 >
                   {item.title}
@@ -154,3 +154,4 @@ const DesktopNav = () => (
 // --------------------------------------------------------------------------------------
 // To extend: add to navigationItems. For custom rendering, edit MobileNav/DesktopNav.
 // --------------------------------------------------------------------------------------
+

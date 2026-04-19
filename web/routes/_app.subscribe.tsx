@@ -19,7 +19,7 @@ type BillingStatus = {
   billingSetupError: string | null;
   billingSetupFailedAt: string | null;
   activationMilestone: BillingActivationMilestone;
-  billingPrompt: BillingPromptState;
+  billingPrompt?: BillingPromptState | null;
   billingEnforced: boolean;
   checkoutConfigured: boolean;
   portalConfigured: boolean;
@@ -66,6 +66,7 @@ export default function SubscribePage() {
 
   const daysLeft = useMemo(() => getTrialDaysLeft(billingStatus?.trialEndsAt), [billingStatus?.trialEndsAt]);
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
+  const billingPrompt = billingStatus?.billingPrompt ?? null;
 
   const handleOpenBillingPortal = async () => {
     if (!canManageBilling) return;
@@ -82,8 +83,8 @@ export default function SubscribePage() {
         return;
       }
       const promptStage =
-        billingStatus?.billingPrompt.stage && billingStatus.billingPrompt.stage !== "none"
-          ? billingStatus.billingPrompt.stage
+        billingPrompt?.stage && billingPrompt.stage !== "none"
+          ? billingPrompt.stage
           : billingStatus?.accessState === "paused_missing_payment_method"
             ? "paused"
             : null;

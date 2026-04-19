@@ -108,7 +108,9 @@ export function recordReliabilityDiagnostic(params: {
   });
   if (duplicate) return;
   writeEntries([entry, ...existing]);
-  console.error("[Strata reliability]", entry);
+  if (import.meta.env.DEV) {
+    console.error("[Strata reliability]", entry);
+  }
 }
 
 export function listReliabilityDiagnostics(): ReliabilityDiagnosticEntry[] {

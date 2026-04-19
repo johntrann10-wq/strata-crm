@@ -155,7 +155,7 @@ interface BillingStatus {
   billingLastStripeSyncStatus: "synced" | "failed" | null;
   billingLastStripeSyncError: string | null;
   activationMilestone: BillingActivationMilestone;
-  billingPrompt: BillingPromptState;
+  billingPrompt?: BillingPromptState | null;
   stripeConnectConfigured: boolean;
   stripeConnectAccountId: string | null;
   stripeConnectDetailsSubmitted: boolean;
@@ -990,12 +990,13 @@ function BillingTab({
     : null;
   const canManageStripeConnect = membershipRole === "owner" || membershipRole === "admin";
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
+  const billingPrompt = billingStatus?.billingPrompt ?? null;
   const promptBody =
-    billingStatus?.billingPrompt.stage && billingStatus.billingPrompt.stage !== "none"
+    billingPrompt?.stage && billingPrompt.stage !== "none"
       ? getBillingPromptBody({
-          stage: billingStatus.billingPrompt.stage,
+          stage: billingPrompt.stage,
           milestone: billingStatus.activationMilestone,
-          daysLeftInTrial: billingStatus.billingPrompt.daysLeftInTrial,
+          daysLeftInTrial: billingPrompt.daysLeftInTrial,
         })
       : "";
 
@@ -1032,10 +1033,10 @@ function BillingTab({
             </div>
           ) : null}
 
-          {billingStatus && billingStatus.billingPrompt.stage !== "none" ? (
+          {billingStatus && billingPrompt?.stage && billingPrompt.stage !== "none" ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-sm font-medium text-amber-950">
-                {getBillingPromptHeadline(billingStatus.billingPrompt.stage)}
+                {getBillingPromptHeadline(billingPrompt.stage)}
               </p>
               <p className="mt-1 text-sm text-amber-900">{promptBody}</p>
             </div>
@@ -1099,8 +1100,8 @@ function BillingTab({
               ) : null}
               <Button
                 onClick={
-                  billingStatus?.billingPrompt.stage &&
-                  billingStatus.billingPrompt.stage !== "none" &&
+                  billingPrompt?.stage &&
+                  billingPrompt.stage !== "none" &&
                   billingStatus.accessState === "active_trial"
                     ? () => setBillingPromptOpen(true)
                     : handleManageSubscription
@@ -1145,12 +1146,12 @@ function BillingTab({
       <BillingPromptDialog
         open={billingPromptOpen}
         onOpenChange={setBillingPromptOpen}
-        stage={billingStatus?.billingPrompt.stage ?? "none"}
+        stage={billingPrompt?.stage ?? "none"}
         body={promptBody}
         canManageBilling={canManageBilling}
         loading={billingPortalLoading}
         onContinue={() => {
-          const promptStage = billingStatus?.billingPrompt.stage;
+          const promptStage = billingPrompt?.stage;
           if (!promptStage || promptStage === "none") return;
           void (async () => {
             setBillingPortalLoading(true);

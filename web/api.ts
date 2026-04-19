@@ -72,14 +72,39 @@ function resolveApiBase(): string {
 
 // Base origin for browser API calls.
 export const API_BASE = resolveApiBase();
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
 
 function buildApiUrl(path: string, baseOverride?: string): string {
   if (path.startsWith("http")) return path;
   return `${baseOverride ?? API_BASE}/api${path}`;
 }
 
+function buildInFlightRequestKey(params: {
+  method: string;
+  url: string;
+  authToken?: string | null;
+  businessId?: string | null;
+  hasAbortSignal?: boolean;
+}): string | null {
+  if (params.method !== "GET") return null;
+  if (params.hasAbortSignal) return null;
+  return [params.method, params.url, params.authToken ?? "", params.businessId ?? ""].join("|");
+}
+
 async function performRequest(url: string, init: RequestInit): Promise<Response> {
   return await fetch(url, init);
+}
+
+function isAbortLikeRequestError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === "AbortError") return true;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("abort") ||
+    message.includes("aborted") ||
+    message.includes("request was cancelled") ||
+    message.includes("request was canceled")
+  );
 }
 
 export class ApiError extends Error {
@@ -167,128 +192,157 @@ async function request<T = unknown>(
     headers,
     credentials: "include",
   };
-  try {
-    res = await performRequest(url, requestInit);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Network request failed";
-    const canRetrySameOrigin =
-      import.meta.env.PROD &&
-      typeof window !== "undefined" &&
-      API_BASE &&
-      !path.startsWith("http");
+  const execute = async (): Promise<T> => {
+    try {
+      res = await performRequest(url, requestInit);
+    } catch (error) {
+      if (isAbortLikeRequestError(error)) {
+        throw new ApiError("Request was cancelled", 0, path, undefined, "REQUEST_ABORTED");
+      }
+      const message = error instanceof Error ? error.message : "Network request failed";
+      const canRetrySameOrigin =
+        import.meta.env.PROD &&
+        typeof window !== "undefined" &&
+        API_BASE &&
+        !path.startsWith("http");
 
-    if (canRetrySameOrigin) {
-      try {
-        const fallbackUrl = buildApiUrl(path, "");
-        res = await performRequest(fallbackUrl, requestInit);
-      } catch {
+      if (canRetrySameOrigin) {
+        try {
+          const fallbackUrl = buildApiUrl(path, "");
+          res = await performRequest(fallbackUrl, requestInit);
+        } catch {
+          recordReliabilityDiagnostic({
+            source: "api.network",
+            severity: "warning",
+            message: `Primary API origin failed for ${method} ${path}; same-origin fallback also failed`,
+            method,
+            path,
+            detail: message,
+          });
+          throw new ApiError(message, 0, path);
+        }
+      } else {
         recordReliabilityDiagnostic({
           source: "api.network",
-          severity: "warning",
-          message: `Primary API origin failed for ${method} ${path}; same-origin fallback also failed`,
+          severity: "error",
+          message: `Network request failed for ${method} ${path}`,
           method,
           path,
           detail: message,
         });
         throw new ApiError(message, 0, path);
       }
-    } else {
-      recordReliabilityDiagnostic({
-        source: "api.network",
-        severity: "error",
-        message: `Network request failed for ${method} ${path}`,
-        method,
-        path,
-        detail: message,
-      });
-      throw new ApiError(message, 0, path);
     }
-  }
-  if (
-    import.meta.env.PROD &&
-    typeof window !== "undefined" &&
-    API_BASE &&
-    !path.startsWith("http") &&
-    res.status === 404
-  ) {
-    try {
-      const fallbackUrl = buildApiUrl(path, "");
-      const fallbackRes = await performRequest(fallbackUrl, requestInit);
-      res = fallbackRes;
-    } catch {
-      // Keep the original response and let normal error handling below explain it.
-    }
-  }
-  if (res.ok && shouldInvalidateHomeDashboard(path, method)) {
-    emitHomeDashboardInvalidated(path, method);
-  }
-  if (!res.ok) {
-    // Special-case 402 for businesses so onboarding is never blocked
-    if (res.status === 402 && path.startsWith("/businesses")) {
-      return { records: [] } as T;
-    }
-    if (res.status === 401) {
-      // Invalid/expired token: clear local auth so boot + protected pages can redirect predictably.
-      clearAuthState("auth:invalid", { status: res.status, path });
-      recordReliabilityDiagnostic({
-        source: "auth.invalid",
-        severity: "warning",
-        message: `Authentication expired or was rejected for ${method} ${path}`,
-        method,
-        path,
-        status: res.status,
-      });
-    }
-    const errText = await res.text();
-    let errBody: { message?: string; detail?: string; code?: string } = {};
-    if (errText) {
+    if (
+      import.meta.env.PROD &&
+      typeof window !== "undefined" &&
+      API_BASE &&
+      !path.startsWith("http") &&
+      res.status === 404
+    ) {
       try {
-        errBody = JSON.parse(errText) as { message?: string; detail?: string; code?: string };
+        const fallbackUrl = buildApiUrl(path, "");
+        const fallbackRes = await performRequest(fallbackUrl, requestInit);
+        res = fallbackRes;
       } catch {
-        errBody = { message: errText.slice(0, 200) };
+        // Keep the original response and let normal error handling below explain it.
       }
     }
-    if (res.status === 402 && errBody.code === "SUBSCRIPTION_REQUIRED") {
-      emitSubscriptionRequired(path);
+    if (res.ok && shouldInvalidateHomeDashboard(path, method)) {
+      emitHomeDashboardInvalidated(path, method);
     }
-    let message =
-      errBody.message ?? res.statusText ?? `Request failed ${res.status}`;
-    if (res.status === 404 && import.meta.env.PROD) {
-      const snippet = errText.slice(0, 120).toLowerCase();
-      const looksLikeSpaOrStatic = snippet.includes("<!doctype") || snippet.includes("<html");
-      if (looksLikeSpaOrStatic || (!errBody.message && !errText.trim())) {
-        message =
-          "API not found (404). Set STRATA_API_ORIGIN on Vercel/Netlify for the /api proxy, or VITE_API_URL / NEXT_PUBLIC_API_URL at build time (see DEPLOY.md).";
+    if (!res.ok) {
+      // Special-case 402 for businesses so onboarding is never blocked
+      if (res.status === 402 && path.startsWith("/businesses")) {
+        return { records: [] } as T;
       }
+      if (res.status === 401) {
+        // Invalid/expired token: clear local auth so boot + protected pages can redirect predictably.
+        clearAuthState("auth:invalid", { status: res.status, path });
+        recordReliabilityDiagnostic({
+          source: "auth.invalid",
+          severity: "warning",
+          message: `Authentication expired or was rejected for ${method} ${path}`,
+          method,
+          path,
+          status: res.status,
+        });
+      }
+      const errText = await res.text();
+      let errBody: { message?: string; detail?: string; code?: string } = {};
+      if (errText) {
+        try {
+          errBody = JSON.parse(errText) as { message?: string; detail?: string; code?: string };
+        } catch {
+          errBody = { message: errText.slice(0, 200) };
+        }
+      }
+      if (res.status === 402 && errBody.code === "SUBSCRIPTION_REQUIRED") {
+        emitSubscriptionRequired(path);
+      }
+      let message =
+        errBody.message ?? res.statusText ?? `Request failed ${res.status}`;
+      if (res.status === 404 && import.meta.env.PROD) {
+        const snippet = errText.slice(0, 120).toLowerCase();
+        const looksLikeSpaOrStatic = snippet.includes("<!doctype") || snippet.includes("<html");
+        if (looksLikeSpaOrStatic || (!errBody.message && !errText.trim())) {
+          message =
+            "API not found (404). Set STRATA_API_ORIGIN on Vercel/Netlify for the /api proxy, or VITE_API_URL / NEXT_PUBLIC_API_URL at build time (see DEPLOY.md).";
+        }
+      }
+      if (!isExpectedSubscriptionRestriction({ status: res.status, method, code: errBody.code })) {
+        recordReliabilityDiagnostic({
+          source: "api.http",
+          severity: res.status >= 500 ? "error" : "warning",
+          message,
+          method,
+          path,
+          status: res.status,
+          detail: errBody.detail ?? errText.slice(0, 300),
+        });
+      }
+      throw new ApiError(message, res.status, path, errBody.detail, errBody.code);
     }
-    if (!isExpectedSubscriptionRestriction({ status: res.status, method, code: errBody.code })) {
+
+    const text = await res.text();
+    try {
+      return (text ? JSON.parse(text) : null) as T;
+    } catch {
       recordReliabilityDiagnostic({
-        source: "api.http",
-        severity: res.status >= 500 ? "error" : "warning",
-        message,
+        source: "api.parse",
+        severity: "error",
+        message: `Invalid JSON received for ${method} ${path}`,
         method,
         path,
         status: res.status,
-        detail: errBody.detail ?? errText.slice(0, 300),
+        detail: text.slice(0, 300),
       });
+      throw new ApiError("Invalid JSON from server", res.status, path);
     }
-    throw new ApiError(message, res.status, path, errBody.detail, errBody.code);
+  };
+
+  const requestKey = buildInFlightRequestKey({
+    method,
+    url,
+    authToken,
+    businessId: currentBusinessId,
+    hasAbortSignal:
+      typeof AbortSignal !== "undefined" && init.signal instanceof AbortSignal,
+  });
+  if (!requestKey) {
+    return execute();
   }
-  const text = await res.text();
-  try {
-    return (text ? JSON.parse(text) : null) as T;
-  } catch {
-    recordReliabilityDiagnostic({
-      source: "api.parse",
-      severity: "error",
-      message: `Invalid JSON received for ${method} ${path}`,
-      method,
-      path,
-      status: res.status,
-      detail: text.slice(0, 300),
-    });
-    throw new ApiError("Invalid JSON from server", res.status, path);
+
+  const existingRequest = inFlightGetRequests.get(requestKey) as Promise<T> | undefined;
+  if (existingRequest) {
+    return existingRequest;
   }
+
+  const pendingRequest = execute().finally(() => {
+    inFlightGetRequests.delete(requestKey);
+  });
+  inFlightGetRequests.set(requestKey, pendingRequest);
+  return pendingRequest;
 }
 
 function assertAuthEnvelope(body: unknown, path: string): AuthUserData {
@@ -319,8 +373,7 @@ function assertAuthContextEnvelope(body: unknown, path: string): AuthContextData
 }
 function resource(path: string) {
   const base = path.startsWith("/") ? path : `/${path}`;
-  return {
-    findMany: (opts?: {
+  const findMany = (opts?: {
       filter?: unknown;
       sort?: unknown;
       first?: number;
@@ -372,11 +425,13 @@ function resource(path: string) {
           ? "?" + new URLSearchParams(serializeQuery(query as Record<string, unknown>)).toString()
           : "";
       return request<{ records?: unknown[] }>(`${base}${qs}`).then((r) => r?.records ?? []);
-    },
-    findFirst: (opts?: { filter?: unknown; select?: unknown }) =>
-      resource(path).findMany({ ...opts, first: 1 }).then((arr) => arr[0] ?? null),
-    maybeFindFirst: (opts?: { filter?: unknown; select?: unknown }) =>
-      resource(path).findFirst(opts),
+    };
+  const findFirst = (opts?: { filter?: unknown; select?: unknown }) =>
+    findMany({ ...opts, first: 1 }).then((arr) => arr[0] ?? null);
+  return {
+    findMany,
+    findFirst,
+    maybeFindFirst: findFirst,
     findOne: (id: string, _opts?: Record<string, unknown>) =>
       request<unknown>(`${base}/${encodeURIComponent(id)}`),
     create: (data: Record<string, unknown>) =>
@@ -536,7 +591,7 @@ export const api = {
   expense: resource("expenses"),
   activityLog: resource("activity-logs"),
   notification: {
-    list: (params?: { first?: number }) => {
+    list: (params?: { first?: number; signal?: AbortSignal }) => {
       const first = Math.min(Math.max(Number(params?.first ?? 12), 1), 50);
       return request<{
         records: Array<{
@@ -551,10 +606,14 @@ export const api = {
           createdAt: string;
           updatedAt: string;
         }>;
-      }>(`/notifications?first=${encodeURIComponent(String(first))}`).then((body) => body.records ?? []);
+      }>(`/notifications?first=${encodeURIComponent(String(first))}`, {
+        signal: params?.signal,
+      }).then((body) => body.records ?? []);
     },
-    unreadCount: () =>
-      request<{ total: number; leads: number; calendar: number }>("/notifications/unread-count"),
+    unreadCount: (params?: { signal?: AbortSignal }) =>
+      request<{ total: number; leads: number; calendar: number }>("/notifications/unread-count", {
+        signal: params?.signal,
+      }),
     markRead: (params: { id: string }) =>
       request<{ ok: true; id: string }>(`/notifications/${encodeURIComponent(params.id)}/read`, {
         method: "POST",
@@ -919,6 +978,11 @@ export const api = {
       }),
     setPassword: (params: Record<string, unknown>) =>
       request<unknown>("/users/set-password", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    requestAccountDeletion: (params: Record<string, unknown>) =>
+      request<{ ok: boolean; alreadyRequested?: boolean; requestedAt?: string | null }>("/users/request-account-deletion", {
         method: "POST",
         body: JSON.stringify(params),
       }),

@@ -24,7 +24,12 @@ export type AppointmentFinanceSummary = {
 
 export function getAppointmentFinanceMirrorUpdates(params: {
   depositAmount?: number | string | null;
-  finance?: Pick<AppointmentFinanceSummary, "depositSatisfied" | "paidInFull"> | null;
+  finance?: Partial<
+    Pick<
+    AppointmentFinanceSummary,
+    "collectedAmount" | "balanceDue" | "depositSatisfied" | "paidInFull"
+    >
+  > | null;
   paidAtWhenPaid?: Date | null;
   includePaidAt?: boolean;
   includeUpdatedAt?: boolean;
@@ -41,8 +46,22 @@ export function getAppointmentFinanceMirrorUpdates(params: {
     updates.paidAt = finance?.paidInFull ? params.paidAtWhenPaid ?? new Date() : null;
   }
 
-  if (depositAmount > 0 && finance?.depositSatisfied === true) {
-    updates.depositPaid = true;
+  if (finance) {
+    if (typeof finance.collectedAmount === "number" && Number.isFinite(finance.collectedAmount)) {
+      updates.collectedAmount = Math.max(0, Number(finance.collectedAmount.toFixed(2)));
+    }
+    if (typeof finance.balanceDue === "number" && Number.isFinite(finance.balanceDue)) {
+      updates.balanceDue = Math.max(0, Number(finance.balanceDue.toFixed(2)));
+    }
+    if (typeof finance.paidInFull === "boolean") {
+      updates.paidInFull = finance.paidInFull;
+    }
+    if (typeof finance.depositSatisfied === "boolean") {
+      updates.depositSatisfied = finance.depositSatisfied;
+      if (depositAmount > 0) {
+        updates.depositPaid = finance.depositSatisfied;
+      }
+    }
   }
 
   return updates;

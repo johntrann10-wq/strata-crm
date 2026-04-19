@@ -3,7 +3,8 @@ import { db } from "../db/index.js";
 import { appointmentSources, notifications } from "../db/schema.js";
 import { logger } from "./logger.js";
 
-export type NotificationBucket = "leads" | "calendar" | "other";
+export type NotificationBucket = "leads" | "calendar" | "finance" | "other";
+export type NotificationScope = "leads" | "calendar" | "finance" | "general";
 
 type NotificationInput = {
   businessId: string;
@@ -29,17 +30,97 @@ type AppointmentSourceInput = {
 
 let ensureInfrastructurePromise: Promise<void> | null = null;
 
-function normalizeNotificationBucket(value: string | null | undefined): NotificationBucket {
-  if (value === "leads" || value === "calendar" || value === "other") return value;
-  return "other";
+function normalizeNotificationBucket(value: string | null | undefined): NotificationBucket | null {
+  if (value === "leads" || value === "calendar" || value === "finance" || value === "other") return value;
+  return null;
+}
+
+export function parseNotificationMetadata(metadata: string | null | undefined): Record<string, unknown> {
+  if (!metadata?.trim()) return {};
+  try {
+    const parsed = JSON.parse(metadata) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getNotificationScope(input: {
+  type?: string | null;
+  entityType?: string | null;
+  metadata?: Record<string, unknown> | null;
+  bucket?: string | null;
+}): NotificationScope {
+  const metadata = input.metadata ?? {};
+  const bucket =
+    normalizeNotificationBucket(input.bucket) ??
+    normalizeNotificationBucket(
+      typeof metadata.notificationBucket === "string"
+        ? metadata.notificationBucket
+        : typeof metadata.bucket === "string"
+          ? metadata.bucket
+          : null
+    );
+
+  if (bucket === "leads") return "leads";
+  if (bucket === "calendar") return "calendar";
+  if (bucket === "finance") return "finance";
+  if (bucket === "other") return "general";
+
+  if (
+    input.entityType === "booking_request" ||
+    input.entityType === "client" ||
+    input.type === "new_lead" ||
+    input.type?.startsWith("lead_") ||
+    input.type?.startsWith("booking_request")
+  ) {
+    return "leads";
+  }
+
+  if (input.entityType === "appointment" || input.type?.startsWith("appointment_")) {
+    return "calendar";
+  }
+
+  if (
+    input.entityType === "invoice" ||
+    input.entityType === "payment" ||
+    input.type === "payment_received"
+  ) {
+    return "finance";
+  }
+
+  return "general";
+}
+
+function resolveNotificationBucket(input: NotificationInput): NotificationBucket {
+  const scope = getNotificationScope({
+    type: input.type,
+    entityType: input.entityType,
+    metadata: input.metadata ?? null,
+    bucket: input.bucket ?? null,
+  });
+  return scope === "general" ? "other" : scope;
 }
 
 function normalizeNotificationMetadata(input: NotificationInput): Record<string, unknown> {
   return {
     ...(input.metadata ?? {}),
-    notificationBucket: normalizeNotificationBucket(input.bucket),
+    notificationBucket: resolveNotificationBucket(input),
     dedupeKey: input.dedupeKey?.trim() || null,
   };
+}
+
+function buildNotificationDedupeLockKey(input: NotificationInput, dedupeKey: string): string {
+  return [
+    input.businessId,
+    input.userId ?? "*",
+    input.type,
+    input.entityType ?? "*",
+    input.entityId ?? "*",
+    dedupeKey,
+  ].join(":");
 }
 
 export async function ensureNotificationInfrastructure(): Promise<void> {
@@ -126,9 +207,42 @@ export async function createNotification(input: NotificationInput) {
   const entityTypeFilter = input.entityType ? eq(notifications.entityType, input.entityType) : isNull(notifications.entityType);
   const entityIdFilter = input.entityId ? eq(notifications.entityId, input.entityId) : isNull(notifications.entityId);
 
-  if (dedupeKey) {
-    const [existing] = await db
-      .select({ id: notifications.id })
+  const insertValues = {
+    businessId: input.businessId,
+    userId: input.userId ?? null,
+    type: input.type,
+    title: input.title,
+    message: input.message,
+    entityType: input.entityType ?? null,
+    entityId: input.entityId ?? null,
+    isRead: false,
+    metadata: JSON.stringify(metadata),
+  };
+
+  if (!dedupeKey) {
+    const now = new Date();
+    const [created] = await db
+      .insert(notifications)
+      .values({
+        ...insertValues,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({
+        id: notifications.id,
+        createdAt: notifications.createdAt,
+      });
+    return created ?? null;
+  }
+
+  return await db.transaction(async (tx) => {
+    const lockKey = buildNotificationDedupeLockKey(input, dedupeKey);
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${input.businessId}), hashtext(${lockKey}))`
+    );
+
+    const [existing] = await tx
+      .select({ id: notifications.id, createdAt: notifications.createdAt })
       .from(notifications)
       .where(
         and(
@@ -144,30 +258,22 @@ export async function createNotification(input: NotificationInput) {
       .limit(1);
 
     if (existing) return existing;
-  }
 
-  const now = new Date();
-  const [created] = await db
-    .insert(notifications)
-    .values({
-      businessId: input.businessId,
-      userId: input.userId ?? null,
-      type: input.type,
-      title: input.title,
-      message: input.message,
-      entityType: input.entityType ?? null,
-      entityId: input.entityId ?? null,
-      isRead: false,
-      metadata: JSON.stringify(metadata),
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning({
-      id: notifications.id,
-      createdAt: notifications.createdAt,
-    });
+    const now = new Date();
+    const [created] = await tx
+      .insert(notifications)
+      .values({
+        ...insertValues,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({
+        id: notifications.id,
+        createdAt: notifications.createdAt,
+      });
 
-  return created ?? null;
+    return created ?? null;
+  });
 }
 
 export async function safeCreateNotification(
