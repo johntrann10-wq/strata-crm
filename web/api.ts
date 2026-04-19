@@ -535,6 +535,35 @@ export const api = {
   },
   expense: resource("expenses"),
   activityLog: resource("activity-logs"),
+  notification: {
+    list: (params?: { first?: number }) => {
+      const first = Math.min(Math.max(Number(params?.first ?? 12), 1), 50);
+      return request<{
+        records: Array<{
+          id: string;
+          type: string;
+          title: string;
+          message: string;
+          entityType: string | null;
+          entityId: string | null;
+          isRead: boolean;
+          metadata: Record<string, unknown>;
+          createdAt: string;
+          updatedAt: string;
+        }>;
+      }>(`/notifications?first=${encodeURIComponent(String(first))}`).then((body) => body.records ?? []);
+    },
+    unreadCount: () =>
+      request<{ total: number; leads: number; calendar: number }>("/notifications/unread-count"),
+    markRead: (params: { id: string }) =>
+      request<{ ok: true; id: string }>(`/notifications/${encodeURIComponent(params.id)}/read`, {
+        method: "POST",
+      }),
+    markAllRead: () =>
+      request<{ ok: true }>("/notifications/read-all", {
+        method: "POST",
+      }),
+  },
   notificationLog: resource("notification-logs"),
   integration: {
     listStatus: () =>

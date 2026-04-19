@@ -14,6 +14,11 @@ import { isEmailConfigured } from "../lib/env.js";
 import { sendCustomerPortalEmail } from "../lib/email.js";
 import { buildPublicAppUrl, createPublicDocumentToken } from "../lib/publicDocumentAccess.js";
 import { enqueueQuickBooksCustomerSync } from "../lib/quickbooks.js";
+import {
+  isImportantLeadStatus,
+  parseLeadRecord,
+} from "../lib/leads.js";
+import { safeCreateNotification } from "../lib/notifications.js";
 
 export const clientsRouter = Router({ mergeParams: true });
 
@@ -240,6 +245,41 @@ clientsRouter.post("/", requireAuth, requireTenant, requirePermission("customers
       phone: created.phone,
     },
   });
+  const createdLead = parseLeadRecord(created.notes);
+  if (createdLead.isLead) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "lead.created",
+      entityType: "client",
+      entityId: created.id,
+      metadata: {
+        status: createdLead.status,
+        source: createdLead.source,
+        serviceInterest: createdLead.serviceInterest || null,
+      },
+    });
+    await safeCreateNotification(
+      {
+        businessId: bid,
+        type: "new_lead",
+        title: "New lead captured",
+        message:
+          `${created.firstName} ${created.lastName}`.trim() +
+          (createdLead.serviceInterest?.trim() ? ` asked about ${createdLead.serviceInterest.trim()}.` : " was added to the lead pipeline."),
+        entityType: "client",
+        entityId: created.id,
+        bucket: "leads",
+        dedupeKey: `lead-created:${created.id}`,
+        metadata: {
+          leadStatus: createdLead.status,
+          leadSource: createdLead.source,
+          serviceInterest: createdLead.serviceInterest || null,
+          path: `/clients/${encodeURIComponent(created.id)}?from=${encodeURIComponent("/leads")}`,
+        },
+      },
+      { source: "clients.create" }
+    );
+  }
   void enqueueQuickBooksCustomerSync({
     businessId: bid,
     clientId: created.id,
@@ -258,6 +298,7 @@ clientsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("custo
   const bid = businessId(req);
   const [existing] = await db.select().from(clients).where(and(eq(clients.id, req.params.id), eq(clients.businessId, bid))).limit(1);
   if (!existing) throw new NotFoundError("Client not found.");
+  const existingLead = parseLeadRecord(existing.notes);
   const parsed = updateSchema.safeParse(normalizeClientPatchBody(req.body));
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
   const patch = { ...parsed.data };
@@ -279,6 +320,89 @@ clientsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("custo
       phone: updated.phone,
     },
   });
+  const updatedLead = parseLeadRecord(updated.notes);
+  if (!existingLead.isLead && updatedLead.isLead) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "lead.created",
+      entityType: "client",
+      entityId: updated.id,
+      metadata: {
+        status: updatedLead.status,
+        source: updatedLead.source,
+        serviceInterest: updatedLead.serviceInterest || null,
+        createdFrom: "client_update",
+      },
+    });
+    await safeCreateNotification(
+      {
+        businessId: bid,
+        type: "new_lead",
+        title: "Lead added to the pipeline",
+        message:
+          `${updated.firstName} ${updated.lastName}`.trim() +
+          (updatedLead.serviceInterest?.trim() ? ` is now tracked for ${updatedLead.serviceInterest.trim()}.` : " is now being tracked as a lead."),
+        entityType: "client",
+        entityId: updated.id,
+        bucket: "leads",
+        dedupeKey: `lead-created:${updated.id}`,
+        metadata: {
+          leadStatus: updatedLead.status,
+          leadSource: updatedLead.source,
+          serviceInterest: updatedLead.serviceInterest || null,
+          path: `/clients/${encodeURIComponent(updated.id)}?from=${encodeURIComponent("/leads")}`,
+        },
+      },
+      { source: "clients.update.promoted_to_lead" }
+    );
+  } else if (
+    updatedLead.isLead &&
+    existingLead.status !== updatedLead.status &&
+    isImportantLeadStatus(updatedLead.status)
+  ) {
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action: "lead.status_changed",
+      entityType: "client",
+      entityId: updated.id,
+      metadata: {
+        fromStatus: existingLead.status,
+        toStatus: updatedLead.status,
+        source: updatedLead.source,
+      },
+    });
+    const title =
+      updatedLead.status === "quoted"
+        ? "Lead quoted"
+        : updatedLead.status === "booked"
+          ? "Lead booked"
+          : updatedLead.status === "converted"
+            ? "Lead converted"
+            : updatedLead.status === "lost"
+              ? "Lead marked lost"
+              : "Lead updated";
+    await safeCreateNotification(
+      {
+        businessId: bid,
+        type: "lead_status_changed",
+        title,
+        message:
+          `${updated.firstName} ${updated.lastName}`.trim() +
+          ` moved from ${existingLead.status.replace(/_/g, " ")} to ${updatedLead.status.replace(/_/g, " ")}.`,
+        entityType: "client",
+        entityId: updated.id,
+        bucket: "leads",
+        dedupeKey: `lead-status:${updated.id}:${updatedLead.status}`,
+        metadata: {
+          leadStatus: updatedLead.status,
+          previousLeadStatus: existingLead.status,
+          leadSource: updatedLead.source,
+          path: `/clients/${encodeURIComponent(updated.id)}?from=${encodeURIComponent("/leads")}`,
+        },
+      },
+      { source: "clients.update.lead_status" }
+    );
+  }
   void enqueueQuickBooksCustomerSync({
     businessId: bid,
     clientId: updated.id,

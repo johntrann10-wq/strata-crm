@@ -29,6 +29,7 @@ import { serviceAddonLinksRouter } from "./routes/service-addon-links.js";
 import { jobsRouter } from "./routes/jobs.js";
 import { actionsRouter } from "./routes/actions.js";
 import { activityLogsRouter } from "./routes/activity-logs.js";
+import { notificationsRouter } from "./routes/notifications.js";
 import { notificationLogsRouter } from "./routes/notification-logs.js";
 import {
   handleGoogleCalendarCallbackRoute,
@@ -129,6 +130,7 @@ app.use("/api/service-addon-links", optionalAuth, serviceAddonLinksRouter);
 app.use("/api/jobs", optionalAuth, requireSubscription, jobsRouter);
 app.use("/api/actions", optionalAuth, dashboardMutationInvalidation, actionsRouter);
 app.use("/api/activity-logs", optionalAuth, requireSubscription, activityLogsRouter);
+app.use("/api/notifications", optionalAuth, requireSubscription, notificationsRouter);
 app.use("/api/notification-logs", optionalAuth, requireSubscription, notificationLogsRouter);
 app.use("/api/integrations", optionalAuth, requireSubscription, integrationsRouter);
 

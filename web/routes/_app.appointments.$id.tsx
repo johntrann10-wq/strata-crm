@@ -193,6 +193,11 @@ function safeDate(value: string | Date | null | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function readMetadataString(record: Record<string, unknown> | null | undefined, key: string): string | null {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function formatFreshness(value: string | Date | null | undefined, label: string): string | null {
   const parsed = safeDate(value);
   return parsed ? `${label} ${parsed.toLocaleDateString()}` : null;
@@ -222,16 +227,28 @@ type AppointmentDetailRecord = {
     id: string;
     firstName?: string | null;
     lastName?: string | null;
+    phone?: string | null;
+    email?: string | null;
   } | null;
   vehicle?: {
     id: string;
     year?: number | null;
     make?: string | null;
     model?: string | null;
+    color?: string | null;
+    licensePlate?: string | null;
   } | null;
   assignedStaff?: {
     firstName?: string | null;
     lastName?: string | null;
+  } | null;
+  source?: {
+    type: "lead" | "booking_request";
+    label: string;
+    leadClientId?: string | null;
+    bookingRequestId?: string | null;
+    href?: string | null;
+    metadata?: Record<string, unknown>;
   } | null;
 };
 
@@ -1166,6 +1183,37 @@ export default function AppointmentDetail() {
     financeState.depositSatisfied;
   const showsPaidStatusInsteadOfDeposit = totalPriceValue > 0 ? financeState.isPaidInFull : financeState.paidInFull;
   const showsCollectPaymentLabel = !isInternalAppointment && hasRecordedPayment;
+  const appointmentSource = (appointment.source ?? null) as AppointmentDetailRecord["source"];
+  const appointmentSourceMetadata =
+    appointmentSource?.metadata && typeof appointmentSource.metadata === "object"
+      ? appointmentSource.metadata
+      : {};
+  const appointmentSourceHref =
+    typeof appointmentSource?.href === "string" && appointmentSource.href.trim()
+      ? appointmentSource.href.trim()
+      : null;
+  const appointmentSourceRequestedServices =
+    readMetadataString(appointmentSourceMetadata, "requestedServices") ??
+    readMetadataString(appointmentSourceMetadata, "serviceSummary");
+  const appointmentSourceSummary =
+    readMetadataString(appointmentSourceMetadata, "sourceSummary") ??
+    readMetadataString(appointmentSourceMetadata, "requestedTiming");
+  const appointmentSourceLeadSource =
+    readMetadataString(appointmentSourceMetadata, "leadSource") ??
+    readMetadataString(appointmentSourceMetadata, "sourceDetail");
+  const appointmentSourceAddress =
+    readMetadataString(appointmentSourceMetadata, "requestedAddress") ??
+    readMetadataString(appointmentSourceMetadata, "serviceAddress") ??
+    readMetadataString(appointmentSourceMetadata, "mobileServiceAddress");
+  const appointmentSourceCustomerName =
+    readMetadataString(appointmentSourceMetadata, "customerName") ??
+    (appointment.client
+      ? [appointment.client.firstName, appointment.client.lastName].filter(Boolean).join(" ").trim() || null
+      : null);
+  const appointmentSourcePhone =
+    readMetadataString(appointmentSourceMetadata, "customerPhone") ?? appointment.client?.phone?.trim() ?? null;
+  const appointmentSourceEmail =
+    readMetadataString(appointmentSourceMetadata, "customerEmail") ?? appointment.client?.email?.trim() ?? null;
   const canEditDeposit =
     !showsPaidStatusInsteadOfDeposit &&
     appointment.status !== "cancelled" &&
@@ -1427,6 +1475,11 @@ export default function AppointmentDetail() {
                 Appointment record
               </Badge>
               <StatusBadge status={appointment.status} type="appointment" />
+              {appointmentSource ? (
+                <Badge variant="outline" className="rounded-full border-slate-300 bg-white/80 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-slate-700">
+                  Created from {appointmentSource.label}
+                </Badge>
+              ) : null}
               {appointment.rescheduleCount != null && appointment.rescheduleCount > 0 ? (
                 <Badge className="rounded-full border-amber-200 bg-amber-100 text-amber-800 text-[11px] uppercase tracking-[0.16em]">
                   {appointment.rescheduleCount}x rescheduled
@@ -2167,6 +2220,62 @@ export default function AppointmentDetail() {
                       </div>
                     </div>
                   )}
+
+                  {appointmentSource ? (
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/90 p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-950">Created from {appointmentSource.label}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {appointmentSource.type === "booking_request" && appointmentSource.bookingRequestId
+                              ? `Booking request ID: ${appointmentSource.bookingRequestId}`
+                              : appointmentSource.leadClientId
+                                ? `Lead ID: ${appointmentSource.leadClientId}`
+                                : "Source record linked to this appointment"}
+                          </p>
+                        </div>
+                        {appointmentSourceHref ? (
+                          <Button asChild variant="outline" size="sm" className="shrink-0">
+                            <Link to={appointmentSourceHref}>Open source</Link>
+                          </Button>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {appointmentSourceRequestedServices ? (
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Requested work</p>
+                            <p className="mt-1 text-sm text-slate-900">{appointmentSourceRequestedServices}</p>
+                          </div>
+                        ) : null}
+                        {appointmentSourceSummary ? (
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Source summary</p>
+                            <p className="mt-1 text-sm text-slate-900">{appointmentSourceSummary}</p>
+                          </div>
+                        ) : null}
+                        {appointmentSourceLeadSource ? (
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Lead source</p>
+                            <p className="mt-1 text-sm text-slate-900">{appointmentSourceLeadSource}</p>
+                          </div>
+                        ) : null}
+                        {appointmentSourceAddress ? (
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Requested address</p>
+                            <p className="mt-1 text-sm text-slate-900">{appointmentSourceAddress}</p>
+                          </div>
+                        ) : null}
+                        {appointmentSourceCustomerName || appointmentSourcePhone || appointmentSourceEmail ? (
+                          <div className="sm:col-span-2">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Captured contact</p>
+                            <p className="mt-1 text-sm text-slate-900">
+                              {[appointmentSourceCustomerName, appointmentSourcePhone, appointmentSourceEmail].filter(Boolean).join(" · ")}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {appointment.depositAmount != null && appointment.depositAmount > 0 && (
                     <div className="flex items-start gap-3">

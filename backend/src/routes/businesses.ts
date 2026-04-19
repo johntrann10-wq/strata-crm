@@ -35,7 +35,8 @@ import {
 } from "../lib/businessWebhookSecret.js";
 import { createRateLimiter } from "../middleware/security.js";
 import { createActivityLog } from "../lib/activity.js";
-import { buildLeadNotes } from "../lib/leads.js";
+import { buildLeadNotes, updateLeadNotesStatus } from "../lib/leads.js";
+import { safeCreateNotification, upsertAppointmentSourceLink } from "../lib/notifications.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 import { isEmailConfigured, isStripeConfigured } from "../lib/env.js";
 import {
@@ -2629,6 +2630,10 @@ async function createPublicBookingAppointment(params: {
   internalNotes: Array<string | null | undefined>;
   sendConfirmationTo: string | null;
   vehicleSummary: string | null;
+  sourceLeadClientId?: string | null;
+  sourceBookingRequestId?: string | null;
+  sourceMetadata?: Record<string, unknown>;
+  createdByUserId?: string | null;
 }) {
   const finance = calculateAppointmentFinanceTotals({
     subtotal: params.selection.subtotal,
@@ -2691,6 +2696,50 @@ async function createPublicBookingAppointment(params: {
     await db.insert(appointmentServices).values(serviceRows);
   }
 
+  await upsertAppointmentSourceLink({
+    appointmentId: createdAppointment.id,
+    businessId: params.business.id,
+    sourceType: "booking_request",
+    leadClientId: params.sourceLeadClientId ?? params.client.id,
+    bookingRequestId: params.sourceBookingRequestId ?? null,
+    metadata: {
+      serviceSummary: params.selection.serviceSummary,
+      requestedServiceMode: params.requestedServiceMode,
+      requestedTiming: formatBookingDateTime(params.startTime, params.business.timezone),
+      sourceDetail: params.sourceDetail,
+      campaign: params.campaign,
+      serviceAddress:
+        params.requestedServiceMode === "mobile"
+          ? [params.serviceAddress, params.serviceCity, params.serviceState, params.serviceZip].filter(Boolean).join(", ") || null
+          : null,
+      vehicleSummary: params.vehicleSummary,
+      ...(params.sourceMetadata ?? {}),
+    },
+  });
+
+  const nextLeadNotes = updateLeadNotesStatus(params.client.notes, "booked");
+  if (nextLeadNotes && nextLeadNotes !== params.client.notes) {
+    await db
+      .update(clients)
+      .set({
+        notes: nextLeadNotes,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(clients.id, params.client.id), eq(clients.businessId, params.business.id)));
+
+    await createActivityLog({
+      businessId: params.business.id,
+      action: "lead.booked",
+      entityType: "client",
+      entityId: params.client.id,
+      metadata: {
+        appointmentId: createdAppointment.id,
+        bookingRequestId: params.sourceBookingRequestId ?? null,
+      },
+      userId: params.createdByUserId ?? null,
+    });
+  }
+
   const links = await buildAppointmentPublicLinks({
     appointmentId: createdAppointment.id,
     businessId: params.business.id,
@@ -2724,7 +2773,44 @@ async function createPublicBookingAppointment(params: {
       locationId: params.locationId ?? null,
       ...params.activityMetadata,
     },
+    userId: params.createdByUserId ?? null,
   });
+
+  await createActivityLog({
+    businessId: params.business.id,
+    action: "appointment.created_from_source",
+    entityType: "appointment",
+    entityId: createdAppointment.id,
+    metadata: {
+      sourceType: "booking_request",
+      leadClientId: params.sourceLeadClientId ?? params.client.id,
+      bookingRequestId: params.sourceBookingRequestId ?? null,
+    },
+    userId: params.createdByUserId ?? null,
+  });
+
+  await safeCreateNotification(
+    {
+      businessId: params.business.id,
+      type: "appointment_created",
+      title: "Appointment created from booking request",
+      message:
+        `${params.client.firstName} ${params.client.lastName}`.trim() +
+        ` is now scheduled for ${formatBookingDateTime(params.startTime, params.business.timezone)}.`,
+      entityType: "appointment",
+      entityId: createdAppointment.id,
+      bucket: "calendar",
+      dedupeKey: `appointment-created:${createdAppointment.id}`,
+      metadata: {
+        sourceType: "booking_request",
+        leadClientId: params.sourceLeadClientId ?? params.client.id,
+        bookingRequestId: params.sourceBookingRequestId ?? null,
+        serviceSummary: params.selection.serviceSummary,
+        path: `/appointments/${encodeURIComponent(createdAppointment.id)}`,
+      },
+    },
+    { source: "businesses.createPublicBookingAppointment" }
+  );
 
   if (
     params.sendConfirmationTo &&
@@ -4449,7 +4535,66 @@ businessesRouter.post(
         },
       });
 
+      await createActivityLog({
+        businessId: business.id,
+        action: "lead.created_from_booking_request",
+        entityType: "client",
+        entityId: createdLead.id,
+        metadata: {
+          bookingRequestId: createdRequest.id,
+          source: normalizedSource,
+          campaign,
+          serviceSummary: selection.serviceSummary,
+        },
+      });
+
       const clientName = `${createdLead.firstName} ${createdLead.lastName}`.trim();
+      await safeCreateNotification(
+        {
+          businessId: business.id,
+          type: "new_booking_request",
+          title: "New booking request",
+          message:
+            `${clientName || "A customer"}` +
+            (requestedTimingSummary
+              ? ` requested ${selection.serviceSummary} for ${requestedTimingSummary}.`
+              : ` requested ${selection.serviceSummary}.`),
+          entityType: "booking_request",
+          entityId: createdRequest.id,
+          bucket: "leads",
+          dedupeKey: `booking-request-created:${createdRequest.id}`,
+          metadata: {
+            bookingRequestId: createdRequest.id,
+            leadId: createdLead.id,
+            leadSource: normalizedSource,
+            serviceSummary: selection.serviceSummary,
+            requestedTiming: requestedTimingSummary,
+            path: `/appointments/requests?request=${encodeURIComponent(createdRequest.id)}`,
+          },
+        },
+        { source: "businesses.public-bookings" }
+      );
+      await safeCreateNotification(
+        {
+          businessId: business.id,
+          type: "new_lead",
+          title: "Booking request became a lead",
+          message:
+            `${clientName || "A customer"}` +
+            (selection.serviceSummary ? ` entered the pipeline for ${selection.serviceSummary}.` : " entered the lead pipeline."),
+          entityType: "client",
+          entityId: createdLead.id,
+          bucket: "leads",
+          dedupeKey: `lead-from-booking-request:${createdLead.id}`,
+          metadata: {
+            bookingRequestId: createdRequest.id,
+            leadSource: normalizedSource,
+            serviceInterest: selection.serviceSummary,
+            path: `/clients/${encodeURIComponent(createdLead.id)}?from=${encodeURIComponent("/leads")}`,
+          },
+        },
+        { source: "businesses.public-bookings.lead" }
+      );
       const publicAccess = buildBookingRequestPublicAccess(createdRequest);
       const followUpTasks: Array<Promise<unknown>> = [];
       followUpTasks.push(
@@ -5083,6 +5228,9 @@ businessesRouter.post(
         make: bookingRequest.vehicleMake,
         model: bookingRequest.vehicleModel,
       }),
+      sourceLeadClientId: client.id,
+      sourceBookingRequestId: bookingRequest.id,
+      createdByUserId: req.userId ?? null,
     });
 
     const now = new Date();
@@ -5245,6 +5393,24 @@ businessesRouter.post(
       },
       userId: req.userId,
     });
+    await safeCreateNotification(
+      {
+        businessId: business.id,
+        type: "booking_request_updated",
+        title: "Alternate times sent",
+        message: `Alternate times were sent for ${bookingRequest.serviceSummary || "this booking request"}.`,
+        entityType: "booking_request",
+        entityId: bookingRequest.id,
+        bucket: "leads",
+        dedupeKey: `booking-request-updated:${bookingRequest.id}:alternates`,
+        metadata: {
+          bookingRequestId: bookingRequest.id,
+          ownerReviewStatus: "proposed_alternates",
+          path: `/appointments/requests?request=${encodeURIComponent(bookingRequest.id)}`,
+        },
+      },
+      { source: "businesses.booking-requests.propose-alternates" }
+    );
 
     const effectiveRequest = updated ?? bookingRequest;
     const publicAccess = buildBookingRequestPublicAccess(effectiveRequest);
@@ -5345,6 +5511,24 @@ businessesRouter.post(
       },
       userId: req.userId,
     });
+    await safeCreateNotification(
+      {
+        businessId: business.id,
+        type: "booking_request_updated",
+        title: "Customer asked for another time",
+        message: `A new time was requested for ${bookingRequest.serviceSummary || "this booking request"}.`,
+        entityType: "booking_request",
+        entityId: bookingRequest.id,
+        bucket: "leads",
+        dedupeKey: `booking-request-updated:${bookingRequest.id}:ask-new-time`,
+        metadata: {
+          bookingRequestId: bookingRequest.id,
+          ownerReviewStatus: "requested_new_time",
+          path: `/appointments/requests?request=${encodeURIComponent(bookingRequest.id)}`,
+        },
+      },
+      { source: "businesses.booking-requests.request-new-time" }
+    );
 
     const effectiveRequest = updated ?? bookingRequest;
     const publicAccess = buildBookingRequestPublicAccess(effectiveRequest);
@@ -5448,6 +5632,24 @@ businessesRouter.post(
       },
       userId: req.userId,
     });
+    await safeCreateNotification(
+      {
+        businessId: business.id,
+        type: "booking_request_updated",
+        title: "Booking request declined",
+        message: `${bookingRequest.serviceSummary || "A booking request"} was declined.`,
+        entityType: "booking_request",
+        entityId: bookingRequest.id,
+        bucket: "leads",
+        dedupeKey: `booking-request-updated:${bookingRequest.id}:declined`,
+        metadata: {
+          bookingRequestId: bookingRequest.id,
+          ownerReviewStatus: "declined",
+          path: `/appointments/requests?request=${encodeURIComponent(bookingRequest.id)}`,
+        },
+      },
+      { source: "businesses.booking-requests.decline" }
+    );
 
     const effectiveRequest = updated ?? bookingRequest;
     notifyCustomerAboutBookingRequestUpdate({
@@ -5618,6 +5820,24 @@ businessesRouter.post(
           message: cleanOptionalText(parsedBody.data.message),
         },
       });
+      await safeCreateNotification(
+        {
+          businessId: business.id,
+          type: "booking_request_updated",
+          title: "Customer declined the request",
+          message: `${bookingRequest.serviceSummary || "This booking request"} was declined by the customer.`,
+          entityType: "booking_request",
+          entityId: bookingRequest.id,
+          bucket: "leads",
+          dedupeKey: `booking-request-updated:${bookingRequest.id}:customer-declined`,
+          metadata: {
+            bookingRequestId: bookingRequest.id,
+            customerResponseStatus: "declined",
+            path: `/appointments/requests?request=${encodeURIComponent(bookingRequest.id)}`,
+          },
+        },
+        { source: "businesses.public-booking-requests.decline" }
+      );
 
       res.json({
         ok: true,
@@ -5717,8 +5937,26 @@ businessesRouter.post(
           }),
         },
       });
-
       const effectiveRequest = updated ?? bookingRequest;
+      await safeCreateNotification(
+        {
+          businessId: business.id,
+          type: "booking_request_updated",
+          title: "Customer sent a new requested time",
+          message: `${effectiveRequest.serviceSummary || "This booking request"} now has a new preferred time to review.`,
+          entityType: "booking_request",
+          entityId: bookingRequest.id,
+          bucket: "leads",
+          dedupeKey: `booking-request-updated:${bookingRequest.id}:customer-requested-new-time`,
+          metadata: {
+            bookingRequestId: bookingRequest.id,
+            customerResponseStatus: "requested_new_time",
+            path: `/appointments/requests?request=${encodeURIComponent(bookingRequest.id)}`,
+          },
+        },
+        { source: "businesses.public-booking-requests.request-new-time" }
+      );
+
       const ownerRecipient = cleanOptionalText(business.email ?? undefined);
       if (ownerRecipient && isEmailConfigured()) {
         sendBookingRequestOwnerAlert({
@@ -5827,6 +6065,8 @@ businessesRouter.post(
         make: bookingRequest.vehicleMake,
         model: bookingRequest.vehicleModel,
       }),
+      sourceLeadClientId: client.id,
+      sourceBookingRequestId: bookingRequest.id,
     });
 
     const now = new Date();
@@ -5864,6 +6104,25 @@ businessesRouter.post(
         appointmentId: appointment.appointmentId,
       },
     });
+    await safeCreateNotification(
+      {
+        businessId: business.id,
+        type: "booking_request_updated",
+        title: "Customer picked an alternate time",
+        message: `${bookingRequest.serviceSummary || "This booking request"} was confirmed from an alternate slot.`,
+        entityType: "booking_request",
+        entityId: bookingRequest.id,
+        bucket: "leads",
+        dedupeKey: `booking-request-updated:${bookingRequest.id}:alternate-accepted`,
+        metadata: {
+          bookingRequestId: bookingRequest.id,
+          appointmentId: appointment.appointmentId,
+          customerResponseStatus: "accepted_alternate_slot",
+          path: `/appointments/requests?request=${encodeURIComponent(bookingRequest.id)}`,
+        },
+      },
+      { source: "businesses.public-booking-requests.accept-alternate" }
+    );
 
     notifyOwnerAboutBookingRequestConfirmed({
       business,
@@ -6006,6 +6265,40 @@ businessesRouter.post(
         capturedVia: "public_form",
       },
     });
+    await createActivityLog({
+      businessId: business.id,
+      action: "lead.created",
+      entityType: "client",
+      entityId: created.id,
+      metadata: {
+        source: normalizedSource,
+        campaign,
+        serviceInterest,
+      },
+    });
+
+    await safeCreateNotification(
+      {
+        businessId: business.id,
+        type: "new_lead",
+        title: "New lead captured",
+        message:
+          `${created.firstName} ${created.lastName}`.trim() +
+          (serviceInterest?.trim() ? ` reached out about ${serviceInterest.trim()}.` : " reached out through the lead form."),
+        entityType: "client",
+        entityId: created.id,
+        bucket: "leads",
+        dedupeKey: `lead-created:${created.id}`,
+        metadata: {
+          leadSource: normalizedSource,
+          campaign,
+          serviceInterest,
+          capturedVia: "public_form",
+          path: `/clients/${encodeURIComponent(created.id)}?from=${encodeURIComponent("/leads")}`,
+        },
+      },
+      { source: "businesses.public-leads" }
+    );
 
     const clientName = `${created.firstName} ${created.lastName}`.trim();
     const autoResponseTasks: Array<Promise<unknown>> = [];

@@ -125,6 +125,40 @@ function buildQuoteRecipientQuery(values: {
   return query ? `&${query}` : "";
 }
 
+function buildLeadAppointmentHref(input: {
+  clientId: string;
+  locationId?: string | null;
+  requestedServices?: string | null;
+  leadSource?: string | null;
+  sourceSummary?: string | null;
+  teamNotes?: string | null;
+  customerNotes?: string | null;
+  vehicle?: string | null;
+  sourceAddress?: string | null;
+  customerName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}) {
+  const params = new URLSearchParams();
+  params.set("clientId", input.clientId);
+  params.set("from", "/leads");
+  params.set("sourceType", "lead");
+  params.set("sourceLeadClientId", input.clientId);
+  if (input.locationId?.trim()) params.set("locationId", input.locationId.trim());
+  if (input.requestedServices?.trim()) params.set("requestedServices", input.requestedServices.trim());
+  if (input.leadSource?.trim()) params.set("leadSource", input.leadSource.trim());
+  if (input.sourceSummary?.trim()) params.set("sourceSummary", input.sourceSummary.trim());
+  if (input.vehicle?.trim()) params.set("vehicleSummary", input.vehicle.trim());
+  if (input.customerName?.trim()) params.set("sourceCustomerName", input.customerName.trim());
+  if (input.phone?.trim()) params.set("sourcePhone", input.phone.trim());
+  if (input.email?.trim()) params.set("sourceEmail", input.email.trim());
+  if (input.customerNotes?.trim()) params.set("notes", input.customerNotes.trim());
+  const internalNotes = ["Created from Lead", input.teamNotes?.trim() || null].filter(Boolean).join("\n\n");
+  if (internalNotes) params.set("internalNotes", internalNotes);
+  if (input.sourceAddress?.trim()) params.set("sourceAddress", input.sourceAddress.trim());
+  return `/appointments/new?${params.toString()}`;
+}
+
 function buildLeadSearchText(client: any, lead: ReturnType<typeof parseLeadRecord>) {
   return [
     client.firstName,
@@ -541,7 +575,21 @@ export default function LeadsPage() {
       return;
     }
     if (mode === "appointment") {
-      navigate(`/appointments/new?clientId=${createdClientId}${currentLocationId ? `&locationId=${encodeURIComponent(currentLocationId)}` : ""}&from=${encodeURIComponent("/leads")}`);
+      navigate(
+        buildLeadAppointmentHref({
+          clientId: createdClientId,
+          locationId: currentLocationId,
+          requestedServices: formData.serviceInterest,
+          leadSource: formData.leadSource,
+          sourceSummary: formData.summary,
+          teamNotes: formData.teamNotes,
+          vehicle: formData.vehicle,
+          sourceAddress: [formData.address, formData.city, formData.state, formData.zip].filter(Boolean).join(", "),
+          customerName: [formData.firstName, formData.lastName].filter(Boolean).join(" "),
+          phone: formData.phone,
+          email: formData.email,
+        })
+      );
       return;
     }
 
@@ -1058,7 +1106,19 @@ export default function LeadsPage() {
                       <div className="mt-4 flex flex-wrap gap-2">
                         {lead.status === "new" ? <Button size="sm" onClick={() => void handleMarkContacted(entry)} disabled={updatingLead}>Mark contacted</Button> : null}
                         <Button size="sm" variant="outline" asChild><Link to={`/clients/${client.id}?from=${encodeURIComponent("/leads")}`}>Open client</Link></Button>
-                        <Button size="sm" variant="outline" asChild><Link to={`/appointments/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}`}>Book</Link></Button>
+                        <Button size="sm" variant="outline" asChild><Link to={buildLeadAppointmentHref({
+                          clientId: client.id,
+                          locationId: currentLocationId,
+                          requestedServices: lead.serviceInterest,
+                          leadSource: lead.source,
+                          sourceSummary: lead.summary,
+                          teamNotes: client.internalNotes,
+                          vehicle: lead.vehicle,
+                          sourceAddress: [client.address, client.city, client.state, client.zip].filter(Boolean).join(", "),
+                          customerName: [client.firstName, client.lastName].filter(Boolean).join(" "),
+                          phone: client.phone,
+                          email: client.email,
+                        })}>Create appointment</Link></Button>
                         <Button size="sm" variant="outline" asChild><Link to={`/quotes/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}${buildQuoteRecipientQuery({
                           firstName: client.firstName,
                           lastName: client.lastName,

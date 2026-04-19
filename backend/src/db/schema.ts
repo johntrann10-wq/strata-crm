@@ -12,6 +12,7 @@ import {
   pgEnum,
   primaryKey,
   uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 
 const businessTypeEnum = pgEnum("business_type", [
@@ -659,6 +660,30 @@ export const notificationLogs = pgTable("notification_logs", {
   uniqueIndex("notification_logs_provider_message_unique").on(t.channel, t.providerMessageId),
 ]);
 
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id").notNull().references(() => businesses.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    entityType: text("entity_type"),
+    entityId: uuid("entity_id"),
+    isRead: boolean("is_read").default(false).notNull(),
+    metadata: text("metadata").default("{}").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("notifications_business_id_idx").on(t.businessId),
+    index("notifications_user_id_idx").on(t.userId),
+    index("notifications_is_read_idx").on(t.isRead),
+    index("notifications_created_at_idx").on(t.createdAt),
+  ]
+);
+
 export const stripeWebhookEvents = pgTable(
   "stripe_webhook_events",
   {
@@ -791,6 +816,31 @@ export const bookingRequests = pgTable("booking_requests", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const appointmentSources = pgTable(
+  "appointment_sources",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    appointmentId: uuid("appointment_id")
+      .notNull()
+      .references(() => appointments.id, { onDelete: "cascade" }),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    sourceType: text("source_type").notNull(),
+    leadClientId: uuid("lead_client_id").references(() => clients.id, { onDelete: "set null" }),
+    bookingRequestId: uuid("booking_request_id").references(() => bookingRequests.id, { onDelete: "set null" }),
+    metadata: text("metadata").default("{}").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("appointment_sources_appointment_unique").on(t.appointmentId),
+    uniqueIndex("appointment_sources_booking_request_unique").on(t.bookingRequestId),
+    index("appointment_sources_business_id_idx").on(t.businessId),
+    index("appointment_sources_lead_client_id_idx").on(t.leadClientId),
+  ]
+);
 
 export const emailTemplates = pgTable("email_templates", {
   id: uuid("id").primaryKey().defaultRandom(),

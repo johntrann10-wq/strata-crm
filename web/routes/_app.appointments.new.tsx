@@ -129,6 +129,76 @@ function parseDateTimeInputValue(dateValue: string, timeValue: string): Date | n
   );
 }
 
+function parseCsvIds(value: string | null): string[] {
+  if (!value?.trim()) return [];
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function normalizeMatchingText(value: string | null | undefined): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function parseVehicleSummaryPrefill(value: string | null) {
+  if (!value?.trim()) return null;
+  const summary = value.trim();
+  const yearMatch = summary.match(/\b(19|20)\d{2}\b/);
+  const year = yearMatch?.[0] ?? "";
+  const withoutYear = summary.replace(/\b(19|20)\d{2}\b/, "").replace(/\s+/g, " ").trim();
+  const parts = withoutYear.split(/[,\s]+/).filter(Boolean);
+  return {
+    year,
+    make: parts[0] ?? "",
+    model: parts.slice(1).join(" "),
+    displayName: summary,
+  };
+}
+
+function matchServicesFromRequestedText(
+  services: ServiceCatalogRecord[],
+  requestedText: string | null
+): string[] {
+  const normalizedRequest = normalizeMatchingText(requestedText);
+  if (!normalizedRequest) return [];
+
+  const exactOrIncluded = services
+    .filter((service) => {
+      const normalizedName = normalizeMatchingText(service.name);
+      if (!normalizedName) return false;
+      return normalizedRequest.includes(normalizedName) || normalizedName.includes(normalizedRequest);
+    })
+    .map((service) => service.id);
+
+  if (exactOrIncluded.length > 0) {
+    return Array.from(new Set(exactOrIncluded)).slice(0, 6);
+  }
+
+  const requestTokens = new Set(normalizedRequest.split(" ").filter((token) => token.length >= 3));
+  return services
+    .map((service) => {
+      const haystack = normalizeMatchingText([service.name, service.notes, service.categoryLabel].filter(Boolean).join(" "));
+      const serviceTokens = haystack.split(" ").filter((token) => token.length >= 3);
+      const score = serviceTokens.reduce((sum, token) => sum + (requestTokens.has(token) ? 1 : 0), 0);
+      return { id: service.id, score };
+    })
+    .filter((entry) => entry.score >= 2)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 4)
+    .map((entry) => entry.id);
+}
+
+function joinNoteSections(...sections: Array<string | null | undefined>): string {
+  return sections
+    .map((section) => String(section ?? "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 type ServiceCatalogRecord = {
   id: string;
   name: string;
@@ -294,6 +364,30 @@ export default function NewAppointmentPage() {
   const clientIdParam = searchParams.get("clientId");
   const vehicleIdParam = searchParams.get("vehicleId");
   const locationIdParam = searchParams.get("locationId");
+  const sourceTypeParam =
+    searchParams.get("sourceType") === "lead" || searchParams.get("sourceType") === "booking_request"
+      ? (searchParams.get("sourceType") as "lead" | "booking_request")
+      : null;
+  const sourceLeadClientIdParam = searchParams.get("sourceLeadClientId");
+  const sourceBookingRequestIdParam = searchParams.get("sourceBookingRequestId");
+  const requestedServicesParam = searchParams.get("requestedServices");
+  const leadSourceParam = searchParams.get("leadSource");
+  const sourceSummaryParam = searchParams.get("sourceSummary");
+  const sourceAddressParam = searchParams.get("sourceAddress");
+  const sourceCustomerNameParam = searchParams.get("sourceCustomerName");
+  const sourcePhoneParam = searchParams.get("sourcePhone");
+  const sourceEmailParam = searchParams.get("sourceEmail");
+  const sourceNotesParam = searchParams.get("notes");
+  const sourceInternalNotesParam = searchParams.get("internalNotes");
+  const sourceServiceIdsParam = parseCsvIds(searchParams.get("serviceIds"));
+  const sourceVehicleSummaryParam = searchParams.get("vehicleSummary");
+  const sourceVehicleYearParam = searchParams.get("vehicleYear");
+  const sourceVehicleMakeParam = searchParams.get("vehicleMake");
+  const sourceVehicleModelParam = searchParams.get("vehicleModel");
+  const sourceVehicleColorParam = searchParams.get("vehicleColor");
+  const sourceLicensePlateParam = searchParams.get("licensePlate");
+  const sourceMobileFlag = searchParams.get("mobile") === "1";
+  const sourceMobileAddressParam = searchParams.get("mobileAddress");
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/calendar?view=month";
   const hasQueueReturn = searchParams.has("from");
 
@@ -339,6 +433,8 @@ export default function NewAppointmentPage() {
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(() => locationIdParam ?? currentLocationId);
   const [showQuotePrefilledBadge, setShowQuotePrefilledBadge] = useState(false);
   const hasPrefilledFromQuote = useRef(false);
+  const hasSeededSourceContext = useRef(false);
+  const hasSeededSourceServices = useRef(false);
   const hasSeededBusinessFinanceDefaults = useRef(false);
   const hasSeededBusinessDefaultStartTime = useRef(false);
   const expectedCompletionDateTouchedRef = useRef(false);
@@ -350,6 +446,45 @@ export default function NewAppointmentPage() {
   const [expandedServiceCategories, setExpandedServiceCategories] = useState<string[]>([]);
   const dateParam = searchParams.get("date");
   const timeParam = searchParams.get("time");
+  const sourceContext = useMemo(
+    () =>
+      sourceTypeParam
+        ? {
+            type: sourceTypeParam,
+            label: sourceTypeParam === "booking_request" ? "Booking Request" : "Lead",
+            sourceLeadClientId: sourceLeadClientIdParam?.trim() || null,
+            sourceBookingRequestId: sourceBookingRequestIdParam?.trim() || null,
+            requestedServices: requestedServicesParam?.trim() || null,
+            leadSource: leadSourceParam?.trim() || null,
+            summary: sourceSummaryParam?.trim() || null,
+            address: sourceMobileAddressParam?.trim() || sourceAddressParam?.trim() || null,
+            customerName: sourceCustomerNameParam?.trim() || null,
+            customerPhone: sourcePhoneParam?.trim() || null,
+            customerEmail: sourceEmailParam?.trim() || null,
+            internalNotes: sourceInternalNotesParam?.trim() || null,
+            customerNotes: sourceNotesParam?.trim() || null,
+            serviceIds: sourceServiceIdsParam,
+            vehicleSummary: sourceVehicleSummaryParam?.trim() || null,
+          }
+        : null,
+    [
+      leadSourceParam,
+      requestedServicesParam,
+      sourceAddressParam,
+      sourceBookingRequestIdParam,
+      sourceCustomerNameParam,
+      sourceEmailParam,
+      sourceInternalNotesParam,
+      sourceLeadClientIdParam,
+      sourceMobileAddressParam,
+      sourceNotesParam,
+      sourcePhoneParam,
+      sourceServiceIdsParam,
+      sourceSummaryParam,
+      sourceTypeParam,
+      sourceVehicleSummaryParam,
+    ]
+  );
 
   // Pre-fill client, date and time from URL query params
   useEffect(() => {
@@ -372,6 +507,100 @@ export default function NewAppointmentPage() {
       setSelectedDate(new Date());
     }
   }, [dateParam, selectedDate]);
+
+  useEffect(() => {
+    if (hasSeededSourceContext.current || !sourceContext) return;
+
+    if (sourceContext.sourceLeadClientId && !clientIdParam && selectedClientId === null) {
+      setSelectedClientId(sourceContext.sourceLeadClientId);
+    }
+    if (sourceContext.customerNotes) {
+      setNotes(sourceContext.customerNotes);
+    }
+
+    const sourceCarryoverLines = [
+      !sourceContext.sourceLeadClientId && sourceContext.customerName
+        ? `Customer: ${sourceContext.customerName}`
+        : null,
+      !sourceContext.sourceLeadClientId && sourceContext.customerPhone
+        ? `Customer phone: ${sourceContext.customerPhone}`
+        : null,
+      !sourceContext.sourceLeadClientId && sourceContext.customerEmail
+        ? `Customer email: ${sourceContext.customerEmail}`
+        : null,
+      sourceContext.requestedServices ? `Requested services: ${sourceContext.requestedServices}` : null,
+      sourceContext.leadSource ? `Lead source: ${sourceContext.leadSource}` : null,
+      sourceContext.sourceBookingRequestId
+        ? `Booking request reference: ${sourceContext.sourceBookingRequestId}`
+        : null,
+      !sourceMobileFlag && sourceContext.address ? `Requested service address: ${sourceContext.address}` : null,
+      sourceVehicleColorParam?.trim() ? `Vehicle color: ${sourceVehicleColorParam.trim()}` : null,
+      sourceLicensePlateParam?.trim() ? `License plate: ${sourceLicensePlateParam.trim()}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const seededInternalNotes = joinNoteSections(sourceContext.internalNotes, sourceCarryoverLines);
+    if (seededInternalNotes) {
+      setInternalNotes(seededInternalNotes);
+    }
+
+    if (sourceMobileFlag) {
+      setIsMobile(true);
+    }
+    if (sourceContext.address) {
+      setMobileAddress(sourceContext.address);
+    }
+
+    const parsedVehicleSummary = parseVehicleSummaryPrefill(sourceVehicleSummaryParam);
+    const seededVehicleYear =
+      sourceVehicleYearParam?.trim() ||
+      parsedVehicleSummary?.year ||
+      quickVehicleForm.year;
+    const seededVehicleMake =
+      sourceVehicleMakeParam?.trim() ||
+      parsedVehicleSummary?.make ||
+      quickVehicleForm.make;
+    const seededVehicleModel =
+      sourceVehicleModelParam?.trim() ||
+      parsedVehicleSummary?.model ||
+      quickVehicleForm.model;
+    const seededVehicleDisplayName =
+      sourceVehicleSummaryParam?.trim() ||
+      parsedVehicleSummary?.displayName ||
+      [seededVehicleYear, seededVehicleMake, seededVehicleModel].filter(Boolean).join(" ");
+    if (seededVehicleYear || seededVehicleMake || seededVehicleModel || seededVehicleDisplayName) {
+      setQuickVehicleForm((current) => ({
+        ...current,
+        year: seededVehicleYear,
+        make: seededVehicleMake,
+        model: seededVehicleModel,
+        displayName: seededVehicleDisplayName || current.displayName,
+        manualEntry: true,
+        source: "manual",
+      }));
+    }
+
+    hasSeededSourceContext.current = true;
+  }, [
+    clientIdParam,
+    quickVehicleForm.displayName,
+    quickVehicleForm.make,
+    quickVehicleForm.model,
+    quickVehicleForm.year,
+    selectedClientId,
+    sourceContext,
+    sourceInternalNotesParam,
+    sourceLicensePlateParam,
+    sourceMobileAddressParam,
+    sourceMobileFlag,
+    sourceNotesParam,
+    sourceVehicleColorParam,
+    sourceVehicleMakeParam,
+    sourceVehicleModelParam,
+    sourceVehicleSummaryParam,
+    sourceVehicleYearParam,
+  ]);
 
   useEffect(() => {
     if (creationPreset.defaultMobile) {
@@ -1007,6 +1236,30 @@ export default function NewAppointmentPage() {
         : Number.isFinite(parsedDepositAmount) && parsedDepositAmount > 0
           ? parsedDepositAmount
           : undefined;
+      const sourceMetadata = sourceContext
+        ? {
+            sourceLabel: sourceContext.label,
+            sourceSummary: sourceContext.summary ?? undefined,
+            requestedServices: sourceContext.requestedServices ?? undefined,
+            leadSource: sourceContext.leadSource ?? undefined,
+            requestedAddress: sourceContext.address ?? undefined,
+            customerName: sourceContext.customerName ?? undefined,
+            customerPhone: sourceContext.customerPhone ?? undefined,
+            customerEmail: sourceContext.customerEmail ?? undefined,
+            originalCustomerNotes: sourceContext.customerNotes ?? undefined,
+            originalInternalNotes: sourceContext.internalNotes ?? undefined,
+            vehicleSummary: sourceContext.vehicleSummary ?? undefined,
+            vehicleYear: sourceVehicleYearParam?.trim() || undefined,
+            vehicleMake: sourceVehicleMakeParam?.trim() || undefined,
+            vehicleModel: sourceVehicleModelParam?.trim() || undefined,
+            vehicleColor: sourceVehicleColorParam?.trim() || undefined,
+            licensePlate: sourceLicensePlateParam?.trim() || undefined,
+            mobileServiceRequested: sourceMobileFlag || undefined,
+            mobileServiceAddress: sourceMobileAddressParam?.trim() || undefined,
+            matchedServiceIds: selectedServiceIds.length > 0 ? selectedServiceIds : undefined,
+            prefilledServiceIds: sourceContext.serviceIds.length > 0 ? sourceContext.serviceIds : undefined,
+          }
+        : undefined;
       const result = await createAppointment({
         clientId: selectedClientId ?? undefined,
         vehicleId: selectedVehicleId ?? undefined,
@@ -1027,6 +1280,14 @@ export default function NewAppointmentPage() {
         applyAdminFee,
         notes: persistedNotes,
         internalNotes: internalNotes.trim() || undefined,
+        ...(sourceContext?.type ? { sourceType: sourceContext.type } : {}),
+        ...(sourceContext?.sourceLeadClientId
+          ? { sourceLeadClientId: sourceContext.sourceLeadClientId }
+          : {}),
+        ...(sourceContext?.sourceBookingRequestId
+          ? { sourceBookingRequestId: sourceContext.sourceBookingRequestId }
+          : {}),
+        ...(sourceMetadata ? { sourceMetadata } : {}),
         ...(quoteIdParam ? { quoteId: quoteIdParam } : {}),
         ...(serviceSelections?.length ? { serviceSelections } : {}),
         ...(selectedServiceIds.length > 0 ? { serviceIds: selectedServiceIds } : {}),
@@ -1111,6 +1372,50 @@ export default function NewAppointmentPage() {
     () => services.filter((service) => selectedServiceIds.includes(service.id)),
     [selectedServiceIds, services]
   );
+  const sourcePreviewLines = useMemo<string[]>(
+    () =>
+      sourceContext
+        ? [
+            sourceContext.summary,
+            sourceContext.requestedServices ? `Requested: ${sourceContext.requestedServices}` : null,
+            sourceContext.address ? `Address: ${sourceContext.address}` : null,
+            !selectedClientId && (sourceContext.customerName || sourceContext.customerPhone || sourceContext.customerEmail)
+              ? `Contact: ${[
+                  sourceContext.customerName,
+                  sourceContext.customerPhone,
+                  sourceContext.customerEmail,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}`
+              : null,
+            sourceContext.leadSource ? `Lead source: ${sourceContext.leadSource}` : null,
+          ].filter((line): line is string => Boolean(line))
+        : [],
+    [selectedClientId, sourceContext]
+  );
+
+  useEffect(() => {
+    if (hasSeededSourceServices.current || !sourceContext || quoteIdParam || services.length === 0) return;
+
+    if (selectedServiceIds.length > 0) {
+      hasSeededSourceServices.current = true;
+      return;
+    }
+
+    const explicitMatches = sourceContext.serviceIds.filter((serviceId) =>
+      services.some((service) => service.id === serviceId)
+    );
+    const matchedServiceIds =
+      explicitMatches.length > 0
+        ? explicitMatches
+        : matchServicesFromRequestedText(services as ServiceCatalogRecord[], sourceContext.requestedServices);
+
+    if (matchedServiceIds.length > 0) {
+      setSelectedServiceIds(Array.from(new Set(matchedServiceIds)));
+    }
+
+    hasSeededSourceServices.current = true;
+  }, [quoteIdParam, selectedServiceIds.length, services, sourceContext]);
 
   useEffect(() => {
     if (normalizedServiceSearch) {
@@ -1611,6 +1916,43 @@ export default function NewAppointmentPage() {
                       No services match this search yet. Try another term or clear the search.
                     </div>
                   )}
+                </div>
+              )}
+
+              {sourceContext && (
+                <div className="mt-3 rounded-[1.15rem] border border-slate-200/80 bg-slate-50/90 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant="secondary"
+                      className="rounded-full bg-slate-900 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white hover:bg-slate-900"
+                    >
+                      Created from {sourceContext.label}
+                    </Badge>
+                    {sourceContext.sourceBookingRequestId ? (
+                      <span className="text-xs text-muted-foreground">
+                        Request ID: {sourceContext.sourceBookingRequestId}
+                      </span>
+                    ) : null}
+                  </div>
+                  {sourcePreviewLines.length > 0 ? (
+                    <div className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+                      {sourcePreviewLines.map((line) =>
+                        String(line).startsWith("Address:") ? (
+                          <div key={line} className="flex items-start gap-2">
+                            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+                            <span>{String(line).replace(/^Address:\s*/, "")}</span>
+                          </div>
+                        ) : (
+                          <p key={line}>{line}</p>
+                        )
+                      )}
+                    </div>
+                  ) : null}
+                  {sourceContext.requestedServices && selectedServiceIds.length === 0 && services.length > 0 ? (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      No exact catalog match is selected yet. The original request stays in the notes so nothing is lost.
+                    </p>
+                  ) : null}
                 </div>
               )}
 

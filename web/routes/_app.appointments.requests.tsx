@@ -405,6 +405,63 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
   );
 }
 
+function buildBookingRequestAppointmentHref(record: OwnerBookingRequestRecord): string {
+  const params = new URLSearchParams();
+  params.set("from", `/appointments/requests?request=${record.id}`);
+  params.set("sourceType", "booking_request");
+  params.set("sourceBookingRequestId", record.id);
+  if (record.clientId) params.set("sourceLeadClientId", record.clientId);
+  params.set("requestedServices", record.serviceSummary || "");
+  params.set("leadSource", record.source || "");
+  params.set("sourceSummary", record.requestedTimingSummary || "");
+  if ([record.customer.firstName, record.customer.lastName].filter(Boolean).join(" ").trim()) {
+    params.set("sourceCustomerName", [record.customer.firstName, record.customer.lastName].filter(Boolean).join(" ").trim());
+  }
+  if (record.customer.phone) params.set("sourcePhone", record.customer.phone);
+  if (record.customer.email) params.set("sourceEmail", record.customer.email);
+  params.set("notes", record.notes || "");
+  params.set(
+    "internalNotes",
+    [
+      "Created from Booking Request",
+      record.requestedTimingSummary ? `Requested timing: ${record.requestedTimingSummary}` : null,
+      record.campaign ? `Campaign: ${record.campaign}` : null,
+      record.source ? `Source detail: ${record.source}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n")
+  );
+
+  if (record.clientId) params.set("clientId", record.clientId);
+  if (record.vehicleId) params.set("vehicleId", record.vehicleId);
+  if (record.locationId) params.set("locationId", record.locationId);
+  if (record.requestedDate) params.set("date", record.requestedDate);
+  if (record.requestedTimeStart) {
+    const requestedStart = new Date(record.requestedTimeStart);
+    if (!Number.isNaN(requestedStart.getTime())) {
+      params.set(
+        "time",
+        `${String(requestedStart.getHours()).padStart(2, "0")}:${String(requestedStart.getMinutes()).padStart(2, "0")}`
+      );
+    }
+  }
+  if (record.serviceMode === "mobile") {
+    params.set("mobile", "1");
+    params.set(
+      "mobileAddress",
+      [record.serviceAddress, record.serviceCity, record.serviceState, record.serviceZip].filter(Boolean).join(", ")
+    );
+  }
+  if (record.serviceId) {
+    params.set("serviceIds", [record.serviceId, ...record.addonServiceIds].filter(Boolean).join(","));
+  }
+  if (record.vehicle.year != null) params.set("vehicleYear", String(record.vehicle.year));
+  if (record.vehicle.make) params.set("vehicleMake", record.vehicle.make);
+  if (record.vehicle.model) params.set("vehicleModel", record.vehicle.model);
+  if (record.vehicle.color) params.set("vehicleColor", record.vehicle.color);
+  return `/appointments/new?${params.toString()}`;
+}
+
 export default function AppointmentRequestsPage() {
   const outletContext = useOutletContext<AuthOutletContext>();
   if (!outletContext.permissions.has("appointments.read")) {
@@ -944,6 +1001,12 @@ function AppointmentRequestsContent() {
                     ) : null}
                     {canRespondWithOwnerAction ? (
                       <>
+                        <Button variant="outline" asChild>
+                          <Link to={buildBookingRequestAppointmentHref(selectedRecord)}>
+                            <CalendarClock className="mr-2 h-4 w-4" />
+                            Create appointment
+                          </Link>
+                        </Button>
                         <Button onClick={() => setApproveDialog({ open: true, message: "" })} disabled={!canApproveRequestedSlot}>
                           <ShieldCheck className="mr-2 h-4 w-4" />
                           Approve requested slot

@@ -1,4 +1,4 @@
-const LEAD_STATUS_OPTIONS = [
+export const LEAD_STATUS_OPTIONS = [
   "new",
   "contacted",
   "quoted",
@@ -7,7 +7,7 @@ const LEAD_STATUS_OPTIONS = [
   "lost",
 ] as const;
 
-const LEAD_SOURCE_OPTIONS = [
+export const LEAD_SOURCE_OPTIONS = [
   "website",
   "phone",
   "walk_in",
@@ -102,4 +102,30 @@ export function parseLeadRecord(notes: string | null | undefined): LeadRecord {
     firstContactedAt: read(PREFIXES.firstContactedAt) || null,
     isLead: normalizedStatus !== "converted",
   };
+}
+
+export function isImportantLeadStatus(status: LeadStatus): boolean {
+  return ["contacted", "quoted", "booked", "converted", "lost"].includes(status);
+}
+
+export function updateLeadNotesStatus(
+  notes: string | null | undefined,
+  status: LeadStatus,
+  options?: { firstContactedAt?: string | null }
+): string | null {
+  const lead = parseLeadRecord(notes);
+  if (!lead.isLead) return null;
+
+  const nextFirstContactedAt =
+    options?.firstContactedAt !== undefined
+      ? options.firstContactedAt
+      : !lead.firstContactedAt && ["contacted", "quoted", "booked", "converted"].includes(status)
+        ? new Date().toISOString()
+        : lead.firstContactedAt;
+
+  return buildLeadNotes({
+    ...lead,
+    status,
+    firstContactedAt: nextFirstContactedAt,
+  });
 }

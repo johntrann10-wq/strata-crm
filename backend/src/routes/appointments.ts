@@ -2,7 +2,7 @@ import express, { Router, Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { appointments, clients, vehicles, staff, locations, quotes, services, appointmentServices, businesses, invoices, activityLogs } from "../db/schema.js";
+import { appointments, clients, vehicles, staff, locations, quotes, services, appointmentServices, businesses, invoices, activityLogs, bookingRequests, appointmentSources } from "../db/schema.js";
 import { eq, and, or, desc, asc, gte, lte, ilike, sql } from "drizzle-orm";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -31,6 +31,8 @@ import { renderAppointmentHtml } from "../lib/appointmentTemplate.js";
 import { scheduleGoogleCalendarAppointmentSync } from "../lib/googleCalendar.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 import { calculateAppointmentFinanceSummary, getAppointmentFinanceMirrorUpdates, getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
+import { updateLeadNotesStatus } from "../lib/leads.js";
+import { safeCreateNotification, upsertAppointmentSourceLink } from "../lib/notifications.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
@@ -77,6 +79,63 @@ export function canDeleteAppointmentWithInvoiceStatuses(
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
   return req.businessId;
+}
+
+function parseStoredObject(value: string | null | undefined): Record<string, unknown> {
+  if (!value?.trim()) return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function buildAppointmentSourceHref(params: {
+  sourceType: string | null | undefined;
+  leadClientId: string | null | undefined;
+  bookingRequestId: string | null | undefined;
+  metadata?: Record<string, unknown>;
+}): string | null {
+  const metadataPath = typeof params.metadata?.path === "string" ? params.metadata.path.trim() : "";
+  if (metadataPath.startsWith("/")) return metadataPath;
+  if (params.sourceType === "booking_request" && params.bookingRequestId) {
+    return `/appointments/requests?request=${encodeURIComponent(params.bookingRequestId)}`;
+  }
+  if (params.leadClientId) {
+    return `/clients/${encodeURIComponent(params.leadClientId)}?from=${encodeURIComponent("/leads")}`;
+  }
+  return null;
+}
+
+async function notifyAppointmentCalendarChange(params: {
+  businessId: string;
+  appointmentId: string;
+  title: string;
+  message: string;
+  contextSource: string;
+  metadata?: Record<string, unknown>;
+  dedupeKey?: string | null;
+}) {
+  await safeCreateNotification(
+    {
+      businessId: params.businessId,
+      type: "appointment_updated",
+      title: params.title,
+      message: params.message,
+      entityType: "appointment",
+      entityId: params.appointmentId,
+      bucket: "calendar",
+      dedupeKey: params.dedupeKey ?? null,
+      metadata: {
+        ...(params.metadata ?? {}),
+        path: `/appointments/${encodeURIComponent(params.appointmentId)}`,
+      },
+    },
+    { source: params.contextSource }
+  );
 }
 
 async function confirmAppointmentDepositCheckout(params: {
@@ -615,6 +674,10 @@ const createSchema = z.object({
       })
     )
     .optional(),
+  sourceType: z.enum(["lead", "booking_request"]).optional(),
+  sourceLeadClientId: z.string().uuid().optional(),
+  sourceBookingRequestId: z.string().uuid().optional(),
+  sourceMetadata: z.record(z.string(), z.unknown()).optional(),
 });
 const updateSchema = z
   .object({
@@ -774,6 +837,48 @@ function formatAppointmentDateTime(value: Date | string | null | undefined, time
       timeZoneName: "short",
     }).format(date);
   }
+}
+
+async function syncLeadBookedStatus(params: {
+  businessId: string;
+  leadClientId: string | null;
+  appointmentId: string;
+  userId?: string | null;
+}) {
+  if (!params.leadClientId) return;
+
+  const [leadClient] = await db
+    .select({
+      id: clients.id,
+      notes: clients.notes,
+    })
+    .from(clients)
+    .where(and(eq(clients.id, params.leadClientId), eq(clients.businessId, params.businessId)))
+    .limit(1);
+
+  if (!leadClient) return;
+
+  const nextNotes = updateLeadNotesStatus(leadClient.notes, "booked");
+  if (!nextNotes || nextNotes === leadClient.notes) return;
+
+  await db
+    .update(clients)
+    .set({
+      notes: nextNotes,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(clients.id, leadClient.id), eq(clients.businessId, params.businessId)));
+
+  await createActivityLog({
+    businessId: params.businessId,
+    action: "lead.booked",
+    entityType: "client",
+    entityId: leadClient.id,
+    metadata: {
+      appointmentId: params.appointmentId,
+    },
+    userId: params.userId ?? null,
+  });
 }
 
 async function buildAppointmentConfirmationPayload(
@@ -1350,11 +1455,16 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
       completedAt: appointments.completedAt,
       createdAt: appointments.createdAt,
       updatedAt: appointments.updatedAt,
+      sourceType: appointmentSources.sourceType,
+      sourceLeadClientId: appointmentSources.leadClientId,
+      sourceBookingRequestId: appointmentSources.bookingRequestId,
+      sourceMetadata: appointmentSources.metadata,
     })
     .from(appointments)
     .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
     .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
     .leftJoin(staff, and(eq(appointments.assignedStaffId, staff.id), eq(staff.businessId, bid)))
+    .leftJoin(appointmentSources, and(eq(appointmentSources.appointmentId, appointments.id), eq(appointmentSources.businessId, bid)))
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
     .limit(1);
 
@@ -1370,6 +1480,13 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
       },
     ])
   ).get(row.id);
+  const sourceMetadata = parseStoredObject(row.sourceMetadata);
+  const sourceHref = buildAppointmentSourceHref({
+    sourceType: row.sourceType,
+    leadClientId: row.sourceLeadClientId,
+    bookingRequestId: row.sourceBookingRequestId,
+    metadata: sourceMetadata,
+  });
 
   res.json({
     // Keep flat columns for existing clients
@@ -1442,6 +1559,17 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
             lastName: row.staffLastName,
           }
         : null,
+    source:
+      row.sourceType != null
+        ? {
+            type: row.sourceType,
+            label: row.sourceType === "booking_request" ? "Booking Request" : "Lead",
+            leadClientId: row.sourceLeadClientId ?? null,
+            bookingRequestId: row.sourceBookingRequestId ?? null,
+            metadata: sourceMetadata,
+            href: sourceHref,
+          }
+        : null,
     business: { id: row.businessId },
   });
 });
@@ -1463,6 +1591,14 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
 
   let effectiveClientId = parsed.data.clientId ?? null;
   let effectiveVehicleId = parsed.data.vehicleId ?? null;
+  let sourceLeadClientId = parsed.data.sourceLeadClientId ?? null;
+  let sourceBookingRequest: {
+    id: string;
+    clientId: string | null;
+    vehicleId: string | null;
+    appointmentId: string | null;
+    status: string;
+  } | null = null;
 
   if (parsed.data.quoteId) {
     const [q] = await db
@@ -1482,6 +1618,41 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
     if (!q.vehicleId || q.vehicleId !== effectiveVehicleId) {
       throw new BadRequestError("Appointment vehicle must match the quote (add a vehicle to the quote first).");
     }
+  }
+
+  if (sourceLeadClientId) {
+    const [leadClient] = await db
+      .select({ id: clients.id })
+      .from(clients)
+      .where(and(eq(clients.id, sourceLeadClientId), eq(clients.businessId, bid)))
+      .limit(1);
+    if (!leadClient) throw new BadRequestError("Lead source record was not found.");
+    effectiveClientId ??= leadClient.id;
+  }
+
+  if (parsed.data.sourceBookingRequestId) {
+    const [bookingRequest] = await db
+      .select({
+        id: bookingRequests.id,
+        clientId: bookingRequests.clientId,
+        vehicleId: bookingRequests.vehicleId,
+        appointmentId: bookingRequests.appointmentId,
+        status: bookingRequests.status,
+      })
+      .from(bookingRequests)
+      .where(and(eq(bookingRequests.id, parsed.data.sourceBookingRequestId), eq(bookingRequests.businessId, bid)))
+      .limit(1);
+    if (!bookingRequest) throw new BadRequestError("Booking request source record was not found.");
+    if (bookingRequest.appointmentId) {
+      throw new BadRequestError("This booking request already has a linked appointment.");
+    }
+    if (["declined", "expired"].includes(bookingRequest.status)) {
+      throw new BadRequestError("This booking request can no longer be converted into an appointment.");
+    }
+    sourceBookingRequest = bookingRequest;
+    sourceLeadClientId ??= bookingRequest.clientId ?? null;
+    effectiveClientId ??= bookingRequest.clientId ?? null;
+    effectiveVehicleId ??= bookingRequest.vehicleId ?? null;
   }
 
   if (effectiveClientId) {
@@ -1504,6 +1675,16 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
       throw new BadRequestError("Vehicle does not belong to the selected client.");
     }
     effectiveClientId ??= vehicle.clientId;
+  }
+
+  if (sourceLeadClientId && effectiveClientId && sourceLeadClientId !== effectiveClientId) {
+    throw new BadRequestError("Source lead does not match the selected client.");
+  }
+  if (sourceBookingRequest?.clientId && effectiveClientId && sourceBookingRequest.clientId !== effectiveClientId) {
+    throw new BadRequestError("Booking request source does not match the selected client.");
+  }
+  if (sourceBookingRequest?.vehicleId && effectiveVehicleId && sourceBookingRequest.vehicleId !== effectiveVehicleId) {
+    throw new BadRequestError("Booking request source does not match the selected vehicle.");
   }
 
   if (parsed.data.assignedStaffId) {
@@ -1817,6 +1998,111 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
   } catch (error) {
     logger.warn("Appointment created but activity log write failed", { appointmentId: created.id, businessId: bid, error });
   }
+  const sourceType =
+    parsed.data.sourceType ??
+    (sourceBookingRequest ? "booking_request" : sourceLeadClientId ? "lead" : undefined);
+  if (sourceType) {
+    await upsertAppointmentSourceLink({
+      appointmentId: created.id,
+      businessId: bid,
+      sourceType,
+      leadClientId: sourceLeadClientId,
+      bookingRequestId: sourceBookingRequest?.id ?? parsed.data.sourceBookingRequestId ?? null,
+      metadata: {
+        ...(parsed.data.sourceMetadata ?? {}),
+        path:
+          sourceType === "booking_request" && (sourceBookingRequest?.id ?? parsed.data.sourceBookingRequestId)
+            ? `/appointments/requests?request=${encodeURIComponent(sourceBookingRequest?.id ?? String(parsed.data.sourceBookingRequestId))}`
+            : sourceLeadClientId
+              ? `/clients/${encodeURIComponent(sourceLeadClientId)}?from=${encodeURIComponent("/leads")}`
+              : null,
+      },
+    });
+
+    await createActivityLog({
+      businessId: bid,
+      action: "appointment.created_from_source",
+      entityType: "appointment",
+      entityId: created.id,
+      metadata: {
+        sourceType,
+        leadClientId: sourceLeadClientId,
+        bookingRequestId: sourceBookingRequest?.id ?? parsed.data.sourceBookingRequestId ?? null,
+      },
+      userId: req.userId ?? null,
+    });
+  }
+  if (sourceBookingRequest) {
+    const now = new Date();
+    const customerResponseStatus =
+      sourceBookingRequest.status === "awaiting_customer_selection"
+        ? "accepted_alternate_slot"
+        : "accepted_requested_slot";
+
+    await db
+      .update(bookingRequests)
+      .set({
+        appointmentId: created.id,
+        clientId: effectiveClientId ?? null,
+        vehicleId: effectiveVehicleId ?? null,
+        status: "confirmed",
+        ownerReviewStatus: "approved_requested_slot",
+        customerResponseStatus,
+        approvedRequestedSlotAt: now,
+        ownerRespondedAt: now,
+        customerRespondedAt: now,
+        confirmedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(bookingRequests.id, sourceBookingRequest.id), eq(bookingRequests.businessId, bid)));
+
+    await createActivityLog({
+      businessId: bid,
+      action: "booking.request_confirmed",
+      entityType: "booking_request",
+      entityId: sourceBookingRequest.id,
+      metadata: {
+        appointmentId: created.id,
+        confirmedFrom: "manual_appointment_create",
+      },
+      userId: req.userId ?? null,
+    });
+  }
+  await syncLeadBookedStatus({
+    businessId: bid,
+    leadClientId: sourceLeadClientId,
+    appointmentId: created.id,
+    userId: req.userId ?? null,
+  });
+  await safeCreateNotification(
+    {
+      businessId: bid,
+      type: "appointment_created",
+      title:
+        sourceType === "booking_request"
+          ? "Appointment created from booking request"
+          : sourceType === "lead"
+            ? "Appointment created from lead"
+            : "Appointment created",
+      message:
+        sourceType === "booking_request"
+          ? "The booking request has been converted into a scheduled appointment."
+          : sourceType === "lead"
+            ? "The lead has been moved onto the calendar."
+            : "A new appointment was added to the calendar.",
+      entityType: "appointment",
+      entityId: created.id,
+      bucket: "calendar",
+      dedupeKey: `appointment-created:${created.id}`,
+      metadata: {
+        sourceType: sourceType ?? null,
+        leadClientId: sourceLeadClientId,
+        bookingRequestId: sourceBookingRequest?.id ?? parsed.data.sourceBookingRequestId ?? null,
+        path: `/appointments/${encodeURIComponent(created.id)}`,
+      },
+    },
+    { source: "appointments.create" }
+  );
   let confirmationResult: { deliveryStatus: AppointmentDeliveryStatus; deliveryError: string | null; recipient: string | null } = {
     deliveryStatus: "email_failed",
     deliveryError: "Appointment confirmation was skipped after a post-create failure.",
@@ -2084,6 +2370,13 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("
         title: updated.title ?? null,
         status: updated.status,
       },
+    });
+    await notifyAppointmentCalendarChange({
+      businessId: bid,
+      appointmentId: updated.id,
+      title: "Appointment updated",
+      message: "An appointment on the calendar was updated.",
+      contextSource: "appointments.update",
     });
     try {
       await scheduleGoogleCalendarAppointmentSync({
@@ -2954,6 +3247,16 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, require
         status,
       },
     });
+    await notifyAppointmentCalendarChange({
+      businessId: bid,
+      appointmentId: updated.id,
+      title: "Appointment status changed",
+      message: `An appointment was marked ${status.replace(/-/g, " ")}.`,
+      contextSource: "appointments.update-status",
+      metadata: {
+        status,
+      },
+    });
   }
   if (!updated) {
     res.json(updated);
@@ -3112,6 +3415,16 @@ appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, requirePerm
         completedAt: updated.completedAt,
       },
     });
+    await notifyAppointmentCalendarChange({
+      businessId: bid,
+      appointmentId: updated.id,
+      title: "Appointment completed",
+      message: "A scheduled appointment was marked complete.",
+      contextSource: "appointments.complete",
+      metadata: {
+        status: "completed",
+      },
+    });
     try {
       await scheduleGoogleCalendarAppointmentSync({
         businessId: bid,
@@ -3155,6 +3468,16 @@ appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, requirePermis
       entityId: updated.id,
       metadata: {
         cancelledAt: updated.cancelledAt,
+      },
+    });
+    await notifyAppointmentCalendarChange({
+      businessId: bid,
+      appointmentId: updated.id,
+      title: "Appointment cancelled",
+      message: "An appointment was cancelled and may need follow-up.",
+      contextSource: "appointments.cancel",
+      metadata: {
+        status: "cancelled",
       },
     });
     try {

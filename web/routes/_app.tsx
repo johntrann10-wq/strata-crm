@@ -28,21 +28,26 @@ import {
   Settings,
   Menu,
   AlertCircle,
+  Bell,
   PhoneCall,
   Search as SearchIcon,
   Plus,
+  CheckCheck,
   X,
 } from "lucide-react";
 import React, { useState, useEffect, memo, useMemo, useCallback } from "react";
+import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CommandPaletteProvider, useCommandPalette } from "../components/shared/CommandPaletteContext";
 import { CommandPalette } from "../components/shared/CommandPalette";
 import { getEnabledModules } from "../lib/modules";
 import { canAccessAppPath, getPreferredAuthorizedAppPath } from "../lib/permissionRouting";
 import { useFindMany, useFindOne, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
+import { useNotifications, type AppNotificationCounts, type AppNotificationRecord } from "../hooks/useNotifications";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import {
   clearAuthState,
@@ -117,6 +122,22 @@ export type AuthOutletContext = RootOutletContext & {
   enabledModules: Set<string>;
 };
 
+function resolveWorkspaceBusiness(
+  business: Record<string, unknown> | null | undefined,
+  currentMembership: AuthOutletContext["tenantBusinesses"][number] | null | undefined
+) {
+  if (business && typeof business.id === "string" && business.id.trim()) {
+    return business;
+  }
+  if (!currentMembership) return null;
+  return {
+    id: currentMembership.id,
+    name: currentMembership.name,
+    type: currentMembership.type,
+    onboardingComplete: currentMembership.onboardingComplete,
+  };
+}
+
 type NavSectionId = "operations" | "sales" | "crm" | "setup";
 type AppNavItem = {
   icon: React.ElementType;
@@ -126,6 +147,7 @@ type AppNavItem = {
   reloadDocument?: boolean;
   module?: string;
   permission?: string;
+  notificationBucket?: "leads" | "calendar";
   description: string;
 };
 
@@ -135,7 +157,7 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
     label: "Operations",
     items: [
       { icon: LayoutDashboard, label: "Dashboard", href: "/signed-in", end: true, permission: "dashboard.view", description: "Run today's operation from one command surface." },
-      { icon: Calendar, label: "Calendar", href: "/calendar", end: false, module: "calendar", permission: "appointments.read", description: "Plan the schedule and see the shop at a glance." },
+      { icon: Calendar, label: "Calendar", href: "/calendar", end: false, module: "calendar", permission: "appointments.read", notificationBucket: "calendar", description: "Plan the schedule and see the shop at a glance." },
       { icon: Calendar, label: "Schedule", href: "/appointments", end: false, module: "appointments", permission: "appointments.read", description: "Work the appointment queue and move bookings forward." },
       { icon: ClipboardList, label: "Jobs", href: "/jobs", end: false, module: "jobs", permission: "jobs.read", description: "Track live work orders, staffing, and completion." },
     ],
@@ -154,7 +176,7 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
     label: "CRM",
     items: [
       { icon: Users, label: "Clients", href: "/clients", end: false, module: "clients", permission: "customers.read", description: "Find customers quickly and act from their history." },
-      { icon: PhoneCall, label: "Leads", href: "/leads", end: false, module: "clients", permission: "customers.read", description: "Capture call-in opportunities fast and move them straight into work." },
+      { icon: PhoneCall, label: "Leads", href: "/leads", end: false, module: "clients", permission: "customers.read", notificationBucket: "leads", description: "Capture call-in opportunities fast and move them straight into work." },
     ],
   },
   {
@@ -214,6 +236,159 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
   }
 }
 
+function getNotificationHref(notification: AppNotificationRecord): string | null {
+  const metadataPath = typeof notification.metadata?.path === "string" ? notification.metadata.path.trim() : "";
+  if (metadataPath.startsWith("/")) return metadataPath;
+
+  if (notification.entityType === "appointment" && notification.entityId) {
+    return `/appointments/${encodeURIComponent(notification.entityId)}`;
+  }
+  if (notification.entityType === "booking_request" && notification.entityId) {
+    return `/appointments/requests?request=${encodeURIComponent(notification.entityId)}`;
+  }
+  if (notification.entityType === "client" && notification.entityId) {
+    return `/clients/${encodeURIComponent(notification.entityId)}?from=${encodeURIComponent("/leads")}`;
+  }
+  return null;
+}
+
+function NotificationCenter({
+  notifications,
+  counts,
+  loading,
+  onRefresh,
+  onOpenNotification,
+  onMarkAsRead,
+  onMarkAllAsRead,
+  compact = false,
+}: {
+  notifications: AppNotificationRecord[];
+  counts: AppNotificationCounts;
+  loading: boolean;
+  onRefresh: () => Promise<void> | void;
+  onOpenNotification: (notification: AppNotificationRecord) => void;
+  onMarkAsRead: (notification: AppNotificationRecord) => Promise<void> | void;
+  onMarkAllAsRead: () => Promise<void> | void;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    void onRefresh();
+  }, [open, onRefresh]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className={cn(
+            "relative rounded-full border-border/80 bg-background/85 shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
+            compact ? "h-9 w-9" : "h-10 w-10"
+          )}
+          aria-label={counts.total > 0 ? `Open notifications (${counts.total} unread)` : "Open notifications"}
+        >
+          <Bell className={compact ? "h-4 w-4" : "h-4.5 w-4.5"} />
+          {counts.total > 0 ? (
+            <span
+              aria-hidden="true"
+              className="absolute -right-1 -top-1 inline-flex min-w-[1.15rem] items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-semibold text-white shadow-sm"
+            >
+              {counts.total > 9 ? "9+" : counts.total}
+            </span>
+          ) : null}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-1rem))] rounded-2xl border border-border/80 p-0 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
+        <div className="border-b border-border/70 px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Notifications</p>
+              <p className="text-xs text-muted-foreground">
+                {counts.total > 0 ? `${counts.total} unread.` : "Everything is caught up."}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs"
+              disabled={counts.total === 0}
+              onClick={() => void onMarkAllAsRead()}
+            >
+              <CheckCheck className="mr-1.5 h-3.5 w-3.5" />
+              Mark all read
+            </Button>
+          </div>
+        </div>
+        <div className="max-h-[24rem] overflow-y-auto px-3 py-3">
+          {loading && notifications.length === 0 ? (
+            <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+              Loading notifications...
+            </div>
+          ) : notifications.length > 0 ? (
+            <div className="space-y-2">
+              {notifications.map((notification) => {
+                const href = getNotificationHref(notification);
+                const relativeTime = formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true });
+                return (
+                  <div
+                    key={notification.id}
+                    className={cn(
+                      "rounded-2xl border px-3 py-3 transition-colors",
+                      notification.isRead
+                        ? "border-border/70 bg-background"
+                        : "border-orange-200/80 bg-orange-50/70"
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <button
+                        type="button"
+                        onClick={() => onOpenNotification(notification)}
+                        disabled={!href}
+                        className={cn("min-w-0 flex-1 text-left", !href && "cursor-default")}
+                      >
+                        <div className="flex items-center gap-2">
+                          {!notification.isRead ? <span className="h-2 w-2 rounded-full bg-orange-500" /> : null}
+                          <p className="truncate text-sm font-semibold text-foreground">{notification.title}</p>
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">{notification.message}</p>
+                        <p className="mt-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{relativeTime}</p>
+                      </button>
+                      {!notification.isRead ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 shrink-0 px-2 text-xs"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void onMarkAsRead(notification);
+                          }}
+                        >
+                          Read
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border/70 bg-muted/15 px-4 py-8 text-center">
+              <p className="text-sm font-medium text-foreground">No notifications yet</p>
+              <p className="mt-1 text-sm text-muted-foreground">New booking requests, leads, and appointment changes will land here.</p>
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function BillingStatusBanner({
   billingStatus,
   membershipRole,
@@ -224,34 +399,35 @@ function BillingStatusBanner({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [dismissedLocally, setDismissedLocally] = useState(false);
+  const billingPrompt = billingStatus?.billingPrompt ?? null;
 
   useEffect(() => {
     setDismissedLocally(false);
-  }, [billingStatus?.billingPrompt.stage, billingStatus?.billingPrompt.visible]);
+  }, [billingPrompt?.stage, billingPrompt?.visible]);
 
   useEffect(() => {
-    if (!billingStatus?.billingPrompt.visible || dismissedLocally || billingStatus.billingPrompt.stage === "none") return;
+    if (!billingPrompt?.visible || dismissedLocally || billingPrompt.stage === "none") return;
     void api.billing
       .trackPromptEvent({
         event: "shown",
-        stage: billingStatus.billingPrompt.stage,
+        stage: billingPrompt.stage,
       })
       .catch(() => {
         // Prompt analytics should never break the shell.
       });
-  }, [billingStatus?.billingPrompt.stage, billingStatus?.billingPrompt.visible, dismissedLocally]);
+  }, [billingPrompt?.stage, billingPrompt?.visible, dismissedLocally]);
 
   if (!billingStatus) return null;
 
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
 
   const handleDismiss = async () => {
-    if (!canDismissBillingPrompt(billingStatus.billingPrompt.stage)) return;
+    if (!billingPrompt || !canDismissBillingPrompt(billingPrompt.stage)) return;
     setDismissedLocally(true);
     try {
       await api.billing.trackPromptEvent({
         event: "dismissed",
-        stage: billingStatus.billingPrompt.stage,
+        stage: billingPrompt.stage,
       });
     } catch {
       // Keep the prompt dismissed locally even if logging fails.
@@ -259,8 +435,8 @@ function BillingStatusBanner({
   };
 
   const handleContinue = async () => {
-    if (!canManageBilling) return;
-    const promptStage = billingStatus.billingPrompt.stage;
+    if (!canManageBilling || !billingPrompt) return;
+    const promptStage = billingPrompt.stage;
     if (promptStage === "none") return;
     setOpeningPortal(true);
     try {
@@ -274,19 +450,19 @@ function BillingStatusBanner({
     }
   };
 
-  if (billingStatus.accessState === "active_trial" && billingStatus.billingPrompt.visible && !dismissedLocally) {
+  if (billingStatus.accessState === "active_trial" && billingPrompt?.visible && !dismissedLocally) {
     const daysLeft = getTrialDaysLeft(billingStatus.trialEndsAt);
     const body = getBillingPromptBody({
-      stage: billingStatus.billingPrompt.stage,
+      stage: billingPrompt.stage,
       milestone: billingStatus.activationMilestone,
-      daysLeftInTrial: billingStatus.billingPrompt.daysLeftInTrial ?? daysLeft,
+      daysLeftInTrial: billingPrompt.daysLeftInTrial ?? daysLeft,
     });
     return (
       <>
         <div className="border-b border-amber-200/70 bg-amber-50/85 px-4 py-3 text-sm text-amber-950">
           <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0 flex-1">
-              <p className="font-medium">{getBillingPromptHeadline(billingStatus.billingPrompt.stage)}</p>
+              <p className="font-medium">{getBillingPromptHeadline(billingPrompt.stage)}</p>
               <p className="text-amber-900/80">
                 {body ||
                   (daysLeft == null
@@ -295,7 +471,7 @@ function BillingStatusBanner({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {canDismissBillingPrompt(billingStatus.billingPrompt.stage) ? (
+              {canDismissBillingPrompt(billingPrompt.stage) ? (
                 <Button
                   type="button"
                   size="sm"
@@ -325,7 +501,7 @@ function BillingStatusBanner({
         <BillingPromptDialog
           open={dialogOpen}
           onOpenChange={setDialogOpen}
-          stage={billingStatus.billingPrompt.stage}
+          stage={billingPrompt.stage}
           body={body}
           canManageBilling={canManageBilling}
           loading={openingPortal}
@@ -386,6 +562,7 @@ const SidebarNav = memo(function SidebarNav({
   onBusinessChange,
   onLocationChange,
   tenantBusinesses,
+  notificationCounts,
 }: {
   onItemClick?: () => void;
   enabledModules: Set<string>;
@@ -398,6 +575,7 @@ const SidebarNav = memo(function SidebarNav({
   onBusinessChange?: (businessId: string) => void;
   onLocationChange?: (locationId: string | null) => void;
   tenantBusinesses?: AuthOutletContext["tenantBusinesses"];
+  notificationCounts?: Pick<AppNotificationCounts, "leads" | "calendar">;
 }) {
   const location = useLocation();
   const homeHref = useMemo(() => getPreferredAuthorizedAppPath(permissions, enabledModules), [permissions, enabledModules]);
@@ -457,13 +635,16 @@ const SidebarNav = memo(function SidebarNav({
                 <span className="h-px w-6 bg-white/8" />
               </div>
               <div className="space-y-1">
-                {section.items.map(({ icon: Icon, label, href, end, reloadDocument }) => (
+                {section.items.map(({ icon: Icon, label, href, end, reloadDocument, notificationBucket }) => {
+                  const unreadCount = notificationBucket ? notificationCounts?.[notificationBucket] ?? 0 : 0;
+                  return (
                   <NavLink
                     key={href}
                     to={href}
                     end={end}
                     reloadDocument={reloadDocument}
                     onClick={onItemClick}
+                    aria-label={unreadCount > 0 ? `${label} (${unreadCount} unread)` : label}
                     className={({ isActive }) =>
                       cn(
                         "group flex w-full items-center gap-3 rounded-[1rem] px-3 py-2.5 text-[13px] font-medium transition-all duration-150",
@@ -477,11 +658,19 @@ const SidebarNav = memo(function SidebarNav({
                       <Icon className="h-4 w-4 shrink-0" />
                     </div>
                     <span className="flex-1 truncate">{label}</span>
-                    {isNavItemActive(location.pathname, { href, end }) ? (
+                    {unreadCount > 0 ? (
+                      <span
+                        aria-hidden="true"
+                        className="inline-flex min-w-[1.15rem] items-center justify-center rounded-full border border-white/10 bg-white/10 px-1 text-[10px] font-semibold text-white/80"
+                      >
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    ) : isNavItemActive(location.pathname, { href, end }) ? (
                       <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
                     ) : null}
                   </NavLink>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -563,16 +752,25 @@ function AppLayoutInner({
   onBusinessChange: (businessId: string) => void;
   rootOutletContext: RootOutletContext;
 }) {
+  const navigate = useNavigate();
   const location = useLocation();
-  const resolvedBusiness =
-    business ??
-    currentMembership ??
-    null;
+  const resolvedBusiness = resolveWorkspaceBusiness(
+    business as Record<string, unknown> | null | undefined,
+    currentMembership
+  );
   const businessName = (resolvedBusiness?.name as string) ?? null;
   const businessId = (resolvedBusiness?.id as string) ?? null;
   const businessType = (resolvedBusiness?.type as string) ?? null;
   const [mobileOpen, setMobileOpen] = useState(false);
   const { setOpen } = useCommandPalette();
+  const {
+    notifications,
+    counts: notificationCounts,
+    loading: notificationsLoading,
+    refresh: refreshNotifications,
+    markAsRead,
+    markAllAsRead,
+  } = useNotifications(!!businessId);
   const enabledModules = useMemo(
     () => getEnabledModules(businessType) as Set<string>,
     [businessType]
@@ -695,13 +893,29 @@ function AppLayoutInner({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [setOpen]);
 
+  const handleOpenNotification = useCallback(
+    async (notification: AppNotificationRecord) => {
+      const href = getNotificationHref(notification);
+      if (!notification.isRead) {
+        await markAsRead(notification.id);
+      }
+      if (href) navigate(href);
+    },
+    [markAsRead, navigate]
+  );
+
   return (
     <div className="flex min-h-dvh flex-col md:h-screen md:flex-row md:overflow-hidden">
       <CommandPalette enabledModules={enabledModules} hasBusiness={!!businessId} />
 
       {/* Desktop sidebar - fixed, visible on md+ screens */}
       <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:w-64 z-20">
-        <SidebarNav enabledModules={enabledModules} permissions={permissions} onOpenCommandPalette={() => setOpen(true)} />
+        <SidebarNav
+          enabledModules={enabledModules}
+          permissions={permissions}
+          onOpenCommandPalette={() => setOpen(true)}
+          notificationCounts={notificationCounts}
+        />
       </aside>
 
       {/* Mobile sidebar - Sheet that slides in from the left */}
@@ -719,6 +933,7 @@ function AppLayoutInner({
             currentLocationId={currentLocationId}
             locationRecords={locationRecords}
             membershipRole={membershipRole}
+            notificationCounts={notificationCounts}
             onBusinessChange={(nextBusinessId) => {
               onBusinessChange(nextBusinessId);
               setMobileOpen(false);
@@ -742,7 +957,7 @@ function AppLayoutInner({
             >
               <Menu className="h-4.5 w-4.5" />
             </Button>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 pr-1">
               <p className="truncate text-[13px] font-semibold text-foreground">{activeNavEntry.item.label}</p>
               {(businessName || activeLocationName) ? (
                 <p className="truncate text-[10px] text-muted-foreground">
@@ -751,8 +966,20 @@ function AppLayoutInner({
                 </p>
               ) : null}
             </div>
-            <div className="shrink-0 scale-[0.96] origin-right">
-              <SecondaryNavigation icon={<UserIcon user={user as any} />} />
+            <div className="flex shrink-0 items-center gap-1">
+              <NotificationCenter
+                notifications={notifications}
+                counts={notificationCounts}
+                loading={notificationsLoading}
+                onRefresh={() => refreshNotifications()}
+                onOpenNotification={handleOpenNotification}
+                onMarkAsRead={(notification) => markAsRead(notification.id)}
+                onMarkAllAsRead={markAllAsRead}
+                compact
+              />
+              <div className="scale-[0.92] origin-right">
+                <SecondaryNavigation icon={<UserIcon user={user as any} />} />
+              </div>
             </div>
           </div>
 
@@ -785,6 +1012,15 @@ function AppLayoutInner({
                     <span className="ml-1 hidden text-xs text-muted-foreground sm:inline">Ctrl K</span>
                   </Button>
                   <QuickCreateMenu />
+                  <NotificationCenter
+                    notifications={notifications}
+                    counts={notificationCounts}
+                    loading={notificationsLoading}
+                    onRefresh={() => refreshNotifications()}
+                    onOpenNotification={handleOpenNotification}
+                    onMarkAsRead={(notification) => markAsRead(notification.id)}
+                    onMarkAllAsRead={markAllAsRead}
+                  />
                   <div className="justify-self-start sm:justify-self-auto">
                     <SecondaryNavigation
                       icon={
@@ -1180,16 +1416,10 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     if (!effectiveUserId) return signInPath;
     if (workspaceLoadError) return null;
     if (userFetching || businessFetching || businessError) return null;
-    const resolvedBusiness =
-      business ??
-      (currentMembership
-        ? {
-            id: currentMembership.id,
-            name: currentMembership.name,
-            type: currentMembership.type,
-            onboardingComplete: currentMembership.onboardingComplete,
-          }
-        : null);
+    const resolvedBusiness = resolveWorkspaceBusiness(
+      business as Record<string, unknown> | null | undefined,
+      currentMembership
+    );
     if (!resolvedBusiness) return "/onboarding";
     if ((resolvedBusiness as { onboardingComplete?: boolean }).onboardingComplete === false) return "/onboarding";
     const hasAccess =
