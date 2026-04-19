@@ -31,6 +31,7 @@ import { actionsRouter } from "./routes/actions.js";
 import { activityLogsRouter } from "./routes/activity-logs.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { notificationLogsRouter } from "./routes/notification-logs.js";
+import { clientDiagnosticsRouter } from "./routes/client-diagnostics.js";
 import {
   handleGoogleCalendarCallbackRoute,
   handleTwilioVoiceWebhookRoute,
@@ -132,6 +133,7 @@ app.use("/api/actions", optionalAuth, dashboardMutationInvalidation, actionsRout
 app.use("/api/activity-logs", optionalAuth, requireSubscription, activityLogsRouter);
 app.use("/api/notifications", optionalAuth, requireSubscription, notificationsRouter);
 app.use("/api/notification-logs", optionalAuth, requireSubscription, notificationLogsRouter);
+app.use("/api/client-diagnostics", optionalAuth, clientDiagnosticsRouter);
 app.use("/api/integrations", optionalAuth, requireSubscription, integrationsRouter);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));

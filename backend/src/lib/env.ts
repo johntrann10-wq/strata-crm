@@ -146,6 +146,12 @@ function validateOptionalServiceEnv(): void {
   warnIfPartialEmailConfig();
 }
 
+function isClientErrorReportingEnabled(): boolean {
+  const configured = process.env.CLIENT_ERROR_REPORTING_ENABLED?.trim().toLowerCase();
+  if (!configured) return process.env.NODE_ENV === "production";
+  return configured !== "false" && configured !== "0" && configured !== "off";
+}
+
 function isGoogleOAuthEnabled(): boolean {
   const id = process.env.GOOGLE_CLIENT_ID?.trim();
   const secret = process.env.GOOGLE_CLIENT_SECRET?.trim();
@@ -246,6 +252,11 @@ function logOptionalServices(): void {
   logger.info("Integration feature flags", integrationFlags);
   if (Object.values(integrationFlags).some(Boolean) && !isIntegrationVaultConfigured()) {
     logger.warn("Integration vault secret is missing; encrypted provider connections will remain unavailable");
+  }
+  if (isClientErrorReportingEnabled()) {
+    logger.info("Client error reporting enabled");
+  } else {
+    logger.info("Client error reporting disabled");
   }
 }
 

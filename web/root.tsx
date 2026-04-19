@@ -16,9 +16,10 @@ import appleTouchIconHref from "./apple-touch-icon.png";
 import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
 import { analyticsEnabled, getClarityProjectId, getGaMeasurementId, trackPageView } from "./lib/analytics";
-import { parseAuthTokenFromHash, persistAuthState } from "./lib/auth";
+import { persistAuthState } from "./lib/auth";
 import { buildCanonicalUrl } from "./lib/publicShareMeta";
 import { recordRuntimeError } from "./lib/runtimeErrors";
+import { buildNavigationTarget, isNativeShell, resolveAppReturnState } from "./lib/mobileShell";
 
 const isProduction = import.meta.env.PROD;
 const siteUrl = "https://stratacrm.app";
@@ -165,11 +166,19 @@ function AuthHashConsumer() {
 
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
-    const { token, cleanedHash } = parseAuthTokenFromHash(location.hash);
+    const { token, nextPath, cleanedSearch, cleanedHash, isAppReturnPath } = resolveAppReturnState({
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+    });
     if (!token) return;
-    persistAuthState(token, { source: "auth-hash" });
-    if (cleanedHash !== location.hash) {
-      navigate(`${location.pathname}${location.search}${cleanedHash}`, { replace: true });
+    persistAuthState(token, { source: isAppReturnPath ? "app-return" : "auth-hash" });
+    if (isAppReturnPath && nextPath) {
+      navigate(buildNavigationTarget(nextPath, cleanedSearch, cleanedHash), { replace: true });
+      return;
+    }
+    if (cleanedSearch !== location.search || cleanedHash !== location.hash) {
+      navigate(`${location.pathname}${cleanedSearch}${cleanedHash}`, { replace: true });
     }
   }, [location.hash, location.pathname, location.search, navigate]);
 
@@ -179,13 +188,8 @@ function AuthHashConsumer() {
 function MobileShellBridge() {
   useEffect(() => {
     if (typeof document === "undefined") return;
-    const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
     const html = document.documentElement;
-    const standalone =
-      navigatorWithStandalone.standalone === true ||
-      typeof (window as Window & { Capacitor?: unknown }).Capacitor !== "undefined" ||
-      window.matchMedia?.("(display-mode: standalone)")?.matches === true;
-    if (standalone) {
+    if (isNativeShell()) {
       html.dataset.mobileShell = "true";
     } else {
       delete html.dataset.mobileShell;
@@ -367,6 +371,14 @@ export function ErrorBoundary() {
   const error = useRouteError();
   const { title, detail, stack } = errorToDetails(error);
   const showStack = import.meta.env.DEV && stack;
+
+  useEffect(() => {
+    recordRuntimeError({
+      source: "react.boundary",
+      message: title,
+      detail: detail || stack,
+    });
+  }, [detail, stack, title]);
 
   return (
     <html lang="en">

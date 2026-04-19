@@ -1,3 +1,5 @@
+import { reportRemoteDiagnosticEvent } from "./remoteDiagnostics";
+
 export type RuntimeErrorEntry = {
   id: string;
   source: "window.error" | "window.unhandledrejection" | "react.boundary";
@@ -75,6 +77,15 @@ export function recordRuntimeError(params: {
   };
   const next = [entry, ...readEntries()].slice(0, MAX_ENTRIES);
   writeEntries(next);
+  reportRemoteDiagnosticEvent({
+    category: "runtime_error",
+    source: params.source,
+    severity: "error",
+    message: entry.message,
+    detail: entry.detail,
+    path: entry.path,
+    timestamp: entry.timestamp,
+  });
   if (import.meta.env.DEV) {
     console.error("[Strata runtime]", entry);
   }

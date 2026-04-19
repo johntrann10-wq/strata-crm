@@ -4,15 +4,14 @@ import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { trackEvent } from "@/lib/analytics";
+import { buildGoogleAuthRedirectPath } from "@/lib/mobileShell";
 import { api, API_BASE } from "../../api";
 import { useActionForm } from "../../hooks/useApi";
 import { GoogleMark } from "./GoogleMark";
 
 function buildGoogleAuthHref(search: string) {
   const params = new URLSearchParams(search);
-  if (!params.has("redirectPath")) {
-    params.set("redirectPath", "/signed-in");
-  }
+  params.set("redirectPath", buildGoogleAuthRedirectPath(search));
   const query = params.toString();
   return `${API_BASE}/api/auth/google/start${query ? `?${query}` : ""}`;
 }
@@ -167,6 +166,19 @@ export const SignInComponent = (props: {
           Sign up
         </Link>
       </p>
+      <div className="mt-4 flex items-center justify-center gap-3 text-[12px] text-muted-foreground">
+        <Link to="/privacy" className="hover:text-foreground">
+          Privacy
+        </Link>
+        <span>•</span>
+        <Link to="/terms" className="hover:text-foreground">
+          Terms
+        </Link>
+        <span>•</span>
+        <a href="mailto:support@stratacrm.app" className="hover:text-foreground">
+          Support
+        </a>
+      </div>
     </div>
   );
 };

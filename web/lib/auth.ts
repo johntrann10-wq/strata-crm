@@ -1,3 +1,5 @@
+import { isNativeShell } from "./mobileShell";
+
 const CURRENT_BUSINESS_ID_KEY = "currentBusinessId";
 const CURRENT_LOCATION_ID_KEY = "currentLocationId";
 const AUTH_EVENT_CHANNEL_KEY = "authEventChannel";
@@ -61,14 +63,7 @@ function safeSessionStorageRemove(key: string): void {
 }
 
 function isPersistentAppShell(): boolean {
-  if (typeof window === "undefined") return false;
-  const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
-  try {
-    if (window.matchMedia?.("(display-mode: standalone)").matches) return true;
-  } catch {
-    // Ignore matchMedia failures in restricted environments.
-  }
-  return navigatorWithStandalone.standalone === true || typeof (window as Window & { Capacitor?: unknown }).Capacitor !== "undefined";
+  return isNativeShell();
 }
 
 function syncPersistentAuthToken(token: string | null): void {

@@ -32,6 +32,13 @@ describe("auth route helper logic", () => {
     );
   });
 
+  it("uses a query token for the native app return path", async () => {
+    const { buildPostAuthRedirectUrl } = await import("./auth.js");
+    expect(buildPostAuthRedirectUrl("https://app.strata.test", "/app-return?next=%2Fsigned-in", "abc123")).toBe(
+      "https://app.strata.test/app-return?next=%2Fsigned-in&authToken=abc123"
+    );
+  });
+
   it("uses the configured frontend origin for security-sensitive links", async () => {
     const { resolveFrontendBaseUrl } = await import("./auth.js");
     const previous = process.env.FRONTEND_URL;

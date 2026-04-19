@@ -182,7 +182,15 @@ export function resolveGoogleStateRedirect(input: unknown): string {
 }
 
 export function buildPostAuthRedirectUrl(frontendUrl: string, redirectPath: string, token: string): string {
-  const baseRedirect = `${frontendUrl}${redirectPath}`;
+  const target = new URL(redirectPath, `${frontendUrl}/`);
+  if (target.origin !== frontendUrl) {
+    throw new BadRequestError("Google auth redirect path must stay within the app.");
+  }
+  if (target.pathname === "/app-return") {
+    target.searchParams.set("authToken", token);
+    return target.toString();
+  }
+  const baseRedirect = target.toString();
   const separator = baseRedirect.includes("#") ? "&" : "#";
   return `${baseRedirect}${separator}authToken=${encodeURIComponent(token)}`;
 }
