@@ -18,10 +18,19 @@ Use this immediately after deploy. Keep it short, real, and sequential.
   - `INTEGRATION_VAULT_SECRET`
   - `INTEGRATION_VAULT_KEY_ID`
   - optional rotation values only if actively rotating
-- If Google sign-in is enabled, confirm:
+- If Google Calendar is enabled, confirm:
   - `GOOGLE_CLIENT_ID`
   - `GOOGLE_CLIENT_SECRET`
   - `API_BASE`
+- If QuickBooks is enabled, confirm:
+  - `QUICKBOOKS_CLIENT_ID`
+  - `QUICKBOOKS_CLIENT_SECRET`
+  - `API_BASE`
+- If any provider integration is expected to be live, confirm the feature flags are explicitly enabled:
+  - `FEATURE_INTEGRATION_QUICKBOOKS_ONLINE`
+  - `FEATURE_INTEGRATION_GOOGLE_CALENDAR`
+  - `FEATURE_INTEGRATION_TWILIO_SMS`
+  - `FEATURE_INTEGRATION_OUTBOUND_WEBHOOKS`
 - If password reset or transactional email is expected to work, confirm either:
   - `RESEND_API_KEY` + `RESEND_FROM`
   - or full SMTP config

@@ -42,7 +42,7 @@ export function SeoLandingPage({ page, relatedPages }: SeoLandingPageProps) {
   const answerFaqs = [
     {
       question: `What is ${page.navLabel.toLowerCase()} in Strata CRM?`,
-      answer: `${page.navLabel} in Strata CRM is software for ${page.audience.toLowerCase()} that keeps scheduling, customer records, vehicle history, quotes, invoices, and daily workflow in one system.`,
+      answer: `${page.navLabel} in Strata CRM is software for ${page.audience.toLowerCase()} that keeps scheduling, public booking pages, customer records, vehicle history, quotes, invoices, and daily workflow in one system.`,
     },
     {
       question: `Who is ${page.navLabel.toLowerCase()} best for?`,

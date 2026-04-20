@@ -8,6 +8,7 @@ import {
   CreditCard,
   FileText,
   LayoutDashboard,
+  Sparkles,
   Users,
   Wrench,
 } from "lucide-react";
@@ -19,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 const featuresTitle = "Strata CRM Features | Scheduling, CRM, Invoicing, and Shop Workflow Software";
 const featuresDescription =
-  "Explore Strata CRM features for automotive service businesses, including scheduling, calendar workflow, estimates, invoicing, customer management, vehicle management, appointment confirmations, and shop workflow organization.";
+  "Explore Strata CRM features for automotive service businesses, including scheduling, branded booking pages, calendar workflow, estimates, invoicing, customer management, vehicle management, appointment confirmations, and shop workflow organization.";
 
 const featureSections = [
   {
@@ -89,6 +90,14 @@ const featureSections = [
       "Appointment confirmations and follow-up can be configured so the shop can keep customers informed without losing clarity around the scheduled work.",
     bullets: ["Confirmation sending", "Follow-up workflow support", "Operational context stays attached"],
     links: [{ to: "/shop-scheduling-software", label: "See scheduling and confirmation flow" }],
+  },
+  {
+    icon: Sparkles,
+    title: "Branded online booking pages",
+    description:
+      "Public booking can now feel like part of the shop brand instead of a generic form. Shops can present cleaner booking pages, choose request-only or direct-book paths, and keep public previews ready for sharing.",
+    bullets: ["Direct-book and request-first flows", "Logo framing with crop and rotate controls", "Share-ready public metadata and previews"],
+    links: [{ to: "/pricing", label: "See how booking fits into Strata CRM pricing" }],
   },
   {
     icon: Wrench,
@@ -243,7 +252,7 @@ export default function FeaturesHubPage() {
                 Features built for real automotive shop workflow, not generic admin software.
               </h1>
               <p className="max-w-3xl text-lg leading-8 text-gray-600 sm:text-xl">
-                Explore the Strata CRM feature set around scheduling, calendar, estimates, invoicing, customer management, vehicle management, appointment confirmations, and shop workflow organization.
+                Explore the Strata CRM feature set around scheduling, branded booking pages, calendar, estimates, invoicing, customer management, vehicle management, appointment confirmations, and shop workflow organization.
               </p>
               <p className="max-w-3xl text-base leading-7 text-gray-600">
                 This hub is designed for buyers actively searching for software. It organizes the product around the features that drive daily operations in detailing, tint, wrap, mechanic, tire, performance, and mixed automotive businesses.
@@ -278,7 +287,7 @@ export default function FeaturesHubPage() {
             <div className="rounded-3xl bg-gray-950 p-6 text-white">
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-300">Feature clusters</p>
               <div className="mt-5 space-y-3">
-                {["Scheduling and calendar", "CRM and vehicle history", "Quotes, invoices, and confirmations", "Daily workflow organization"].map((item) => (
+                {["Scheduling and calendar", "Branded online booking", "CRM and vehicle history", "Quotes, invoices, confirmations, and sharing"].map((item) => (
                   <div key={item} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-300" />
                     <p className="text-sm text-white/88">{item}</p>

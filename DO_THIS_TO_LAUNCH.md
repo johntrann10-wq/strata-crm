@@ -44,12 +44,20 @@ Create a new Web Service (or equivalent), connect this repo, set **Root director
 | `SMTP_PASS` | Your SMTP password (e.g. Gmail App Password) | Yes |
 | `CRON_SECRET` | Long random string (for cron endpoint) | Yes |
 | `FRONTEND_URL` | Your frontend URL, e.g. `https://your-app.vercel.app` (no trailing slash) | If frontend on different domain |
-| `API_BASE` | Backend URL origin (no trailing slash) | Yes (required for Google OAuth redirects) |
+| `API_BASE` | Backend URL origin (no trailing slash) | Yes (required for Google Calendar, QuickBooks, and Twilio callbacks) |
 | `STRIPE_SECRET_KEY` | Stripe Secret key (sk_live_... or sk_test_...) | Yes |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret (whsec_...) | Yes |
 | `STRIPE_PRICE_ID` | Stripe Price ID (price_...) | Yes |
-| `GOOGLE_CLIENT_ID` | Google OAuth Client ID | Yes |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret | Yes |
+| `GOOGLE_CLIENT_ID` | Google Calendar OAuth Client ID | If using Google Calendar |
+| `GOOGLE_CLIENT_SECRET` | Google Calendar OAuth Client Secret | If using Google Calendar |
+| `QUICKBOOKS_CLIENT_ID` | QuickBooks OAuth Client ID | If using QuickBooks |
+| `QUICKBOOKS_CLIENT_SECRET` | QuickBooks OAuth Client Secret | If using QuickBooks |
+| `INTEGRATION_VAULT_SECRET` | Long random string for encrypted provider secrets | If using any integration |
+| `INTEGRATION_VAULT_KEY_ID` | Label for the active vault key, e.g. `current` | If using any integration |
+| `FEATURE_INTEGRATION_QUICKBOOKS_ONLINE` | `true` to enable QuickBooks flows | If using QuickBooks |
+| `FEATURE_INTEGRATION_GOOGLE_CALENDAR` | `true` to enable Google Calendar flows | If using Google Calendar |
+| `FEATURE_INTEGRATION_TWILIO_SMS` | `true` to enable Twilio SMS flows | If using Twilio |
+| `FEATURE_INTEGRATION_OUTBOUND_WEBHOOKS` | `true` to enable signed outbound webhooks | If using outbound webhooks |
 | `PORT` | `3001` | Yes |
 | `LOG_LEVEL` | `info` | Yes |
 

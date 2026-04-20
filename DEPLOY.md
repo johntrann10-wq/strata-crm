@@ -28,8 +28,11 @@ Copy from `backend/.env.example`:
 - `JWT_SECRET` — JWT signing secret (required for `sign-in`, `sign-up`, and `GET /api/auth/me`)
 - `SESSION_SECRET` — random string for session signing
 - `FRONTEND_URL` — origin of the frontend (e.g. `https://your-app.vercel.app`) for CORS and Stripe redirect URLs
-- `API_BASE` — backend API origin (required for Google OAuth redirect URIs)
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Google OAuth credentials
+- `API_BASE` — backend API origin (required for Google Calendar, QuickBooks, and Twilio callback URLs)
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Google Calendar OAuth credentials
+- `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET` — QuickBooks OAuth credentials
+- `INTEGRATION_VAULT_SECRET`, `INTEGRATION_VAULT_KEY_ID` — required to store provider credentials and signed webhook secrets safely
+- `FEATURE_INTEGRATION_QUICKBOOKS_ONLINE`, `FEATURE_INTEGRATION_GOOGLE_CALENDAR`, `FEATURE_INTEGRATION_TWILIO_SMS`, `FEATURE_INTEGRATION_OUTBOUND_WEBHOOKS` — set to `true` for each provider you want live
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` — required for paid subscriptions ($29/mo, first month free)
 - `CRON_SECRET` — required; `POST /api/actions/runAutomations` requires header `x-cron-secret: <CRON_SECRET>`
 - `PORT` — required (server port, e.g. `3001`)
