@@ -28,6 +28,19 @@ const forbiddenSecrets = [
   { re: /\bghp_[A-Za-z0-9]{20,}\b/i, msg: "GitHub personal access token" },
   { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/i, msg: "private key material" },
 ];
+const configuredIosAppIdentifiers = Array.from(
+  new Set(
+    [
+      process.env.IOS_APP_IDENTIFIER,
+      process.env.IOS_APP_IDENTIFIERS,
+      process.env.APPLE_APP_IDENTIFIER,
+      process.env.APPLE_APP_IDENTIFIERS,
+    ]
+      .flatMap((value) => value?.split(",") ?? [])
+      .map((value) => value.trim())
+      .filter(Boolean),
+  ),
+);
 
 if (configuredApiHost && configuredApiHost !== "localhost" && configuredApiHost !== "127.0.0.1") {
   forbidden.push({
@@ -137,6 +150,55 @@ function patchSpaIndexHead() {
   console.log("[verify-client-bundle] Patched static SPA metadata in build/client/index.html");
 }
 
+function writeAppleAssociationFiles() {
+  const associationPayload = {
+    applinks: {
+      details: configuredIosAppIdentifiers.length
+        ? [
+            {
+              appIDs: configuredIosAppIdentifiers,
+              components: [
+                {
+                  "/": "/app-return",
+                  comment: "Handle Safari-to-app auth return links inside the Strata iOS shell.",
+                },
+                {
+                  "/": "/app-return/*",
+                  comment: "Allow iOS handoffs that append a trailing slash or nested auth-return path.",
+                },
+              ],
+            },
+          ]
+        : [],
+    },
+    webcredentials: {
+      apps: configuredIosAppIdentifiers,
+    },
+  };
+
+  const outputPaths = [
+    path.join(root, "apple-app-site-association"),
+    path.join(root, ".well-known", "apple-app-site-association"),
+  ];
+  const associationJson = JSON.stringify(associationPayload, null, 2);
+
+  for (const outputPath of outputPaths) {
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, associationJson);
+  }
+
+  if (!configuredIosAppIdentifiers.length) {
+    console.warn(
+      "[verify-client-bundle] Wrote placeholder apple-app-site-association files with no app identifiers. Set IOS_APP_IDENTIFIER (or IOS_APP_IDENTIFIERS) in production to enable universal links.",
+    );
+    return;
+  }
+
+  console.log(
+    `[verify-client-bundle] Wrote apple-app-site-association for ${configuredIosAppIdentifiers.join(", ")}`,
+  );
+}
+
 if (!fs.existsSync(root)) {
   console.warn("[verify-client-bundle] build/client missing - skip");
   process.exit(0);
@@ -148,4 +210,5 @@ ensureStaticAsset("social-preview.png", homepageSocialPreviewFileName);
 ensureStaticAsset("favicon.svg", "favicon.svg");
 ensureStaticAsset("apple-touch-icon.png", "apple-touch-icon.png");
 patchSpaIndexHead();
+writeAppleAssociationFiles();
 console.log("[verify-client-bundle] OK (no forbidden API host strings)");
