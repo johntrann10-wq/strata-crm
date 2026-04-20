@@ -629,11 +629,17 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const signInPath = safeLoaderData.signInPath ?? "/sign-in";
   // Predictable auth persistence: always revalidate via /api/auth/me on boot.
   const [clientUserId, setClientUserId] = useState<string | null>(null);
+  const [bootUser, setBootUser] = useState<{
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+  } | null>(null);
   const [tenantBusinesses, setTenantBusinesses] = useState<AuthOutletContext["tenantBusinesses"]>([]);
   const [currentBusinessId, setCurrentBusinessIdState] = useState<string | null>(() => getCurrentBusinessId());
   const [currentLocationId, setCurrentLocationIdState] = useState<string | null>(() => getCurrentLocationId());
   const [authCheckDone, setAuthCheckDone] = useState(false);
-  const effectiveUserId = clientUserId;
+  const effectiveUserId = bootUser?.id ?? clientUserId;
 
   useEffect(() => {
     let cancelled = false;
@@ -657,6 +663,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           availableBusinesses[0]?.id ??
           null;
         if (!cancelled) {
+          setBootUser(me);
           setClientUserId(me.id);
           setTenantBusinesses(availableBusinesses);
           setCurrentBusinessIdState(resolvedBusinessId);
@@ -671,6 +678,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           clearAuthToken();
           clearCurrentBusinessId();
           clearCurrentLocationId();
+          setBootUser(null);
           setTenantBusinesses([]);
           setCurrentBusinessIdState(null);
           setCurrentLocationIdState(null);
@@ -684,6 +692,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
 
   useEffect(() => {
     const onInvalid = () => {
+      setBootUser(null);
       setClientUserId(null);
       setTenantBusinesses([]);
       setCurrentBusinessIdState(null);
@@ -693,6 +702,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       setAuthCheckDone(true);
     };
     const onLogout = () => {
+      setBootUser(null);
       setClientUserId(null);
       setTenantBusinesses([]);
       setCurrentBusinessIdState(null);
@@ -701,11 +711,29 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       clearCurrentLocationId();
       setAuthCheckDone(true);
     };
+    const onBusinessChanged = (event: Event) => {
+      const nextBusinessId =
+        (event as CustomEvent<{ businessId?: string | null }>).detail?.businessId ?? getCurrentBusinessId();
+      setCurrentBusinessIdState(nextBusinessId ?? null);
+      if (!nextBusinessId) {
+        setCurrentLocationIdState(null);
+        clearCurrentLocationId();
+      }
+    };
+    const onLocationChanged = (event: Event) => {
+      const nextLocationId =
+        (event as CustomEvent<{ locationId?: string | null }>).detail?.locationId ?? getCurrentLocationId();
+      setCurrentLocationIdState(nextLocationId ?? null);
+    };
     window.addEventListener("auth:invalid", onInvalid as EventListener);
     window.addEventListener("auth:logout", onLogout as EventListener);
+    window.addEventListener("auth:business-changed", onBusinessChanged as EventListener);
+    window.addEventListener("auth:location-changed", onLocationChanged as EventListener);
     return () => {
       window.removeEventListener("auth:invalid", onInvalid as EventListener);
       window.removeEventListener("auth:logout", onLogout as EventListener);
+      window.removeEventListener("auth:business-changed", onBusinessChanged as EventListener);
+      window.removeEventListener("auth:location-changed", onLocationChanged as EventListener);
     };
   }, []);
 
@@ -718,6 +746,10 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     api.business,
     currentBusinessId ?? "",
     { pause: !effectiveUserId || !currentBusinessId }
+  );
+  const resolvedUser = useMemo(
+    () => (user as Record<string, unknown> | null | undefined) ?? (bootUser as unknown as Record<string, unknown> | null),
+    [user, bootUser]
   );
 
   const currentMembership = useMemo(
@@ -781,14 +813,14 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       </div>
     );
   }
-  if (userFetching) {
+  if (userFetching && !bootUser) {
     return (
       <div className="h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
   }
-  if (!user) {
+  if (!resolvedUser) {
     if (userError) {
       return (
         <div className="h-screen flex flex-col items-center justify-center gap-4 p-6 max-w-md mx-auto text-center">
@@ -841,7 +873,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   return (
     <CommandPaletteProvider>
       <AppLayoutInner
-        user={user as Record<string, unknown>}
+        user={resolvedUser}
         business={(business as Record<string, unknown>) ?? null}
         tenantBusinesses={tenantBusinesses}
         currentLocationId={currentLocationId}
@@ -853,4 +885,3 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     </CommandPaletteProvider>
   );
 }
-

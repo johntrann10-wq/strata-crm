@@ -13,11 +13,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.join(__dirname, "..");
 const dataDir = path.join(backendRoot, ".pgdata");
 const sqlPath = path.join(__dirname, "init-schema.sql");
+const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
 
 const DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/strata";
 
 async function main() {
   console.log("Starting embedded Postgres...");
+  const hasExistingCluster = fs.existsSync(path.join(dataDir, "PG_VERSION"));
   const embedded = new EmbeddedPostgres({
     databaseDir: dataDir,
     user: "postgres",
@@ -28,9 +30,18 @@ async function main() {
     onError: (e) => console.error("[pg]", e),
   });
 
-  await embedded.initialise();
+  if (!hasExistingCluster) {
+    await embedded.initialise();
+  }
   await embedded.start();
-  await embedded.createDatabase("strata");
+  try {
+    await embedded.createDatabase("strata");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.toLowerCase().includes("already exists")) {
+      throw error;
+    }
+  }
 
   console.log("Running schema init...");
   const sql = fs.readFileSync(sqlPath, "utf8");
@@ -41,7 +52,7 @@ async function main() {
   console.log("Schema ready.");
 
   // Start backend server with this DB URL
-  const server = spawn("yarn", ["dev"], {
+  const server = spawn(npmCmd, ["run", "dev"], {
     cwd: backendRoot,
     stdio: "inherit",
     shell: true,

@@ -1,6 +1,8 @@
 const AUTH_TOKEN_KEY = "authToken";
 const CURRENT_BUSINESS_ID_KEY = "currentBusinessId";
 const CURRENT_LOCATION_ID_KEY = "currentLocationId";
+const BUSINESS_CHANGED_EVENT = "auth:business-changed";
+const LOCATION_CHANGED_EVENT = "auth:location-changed";
 
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -25,11 +27,13 @@ export function getCurrentBusinessId(): string | null {
 export function setCurrentBusinessId(businessId: string): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CURRENT_BUSINESS_ID_KEY, businessId);
+  window.dispatchEvent(new CustomEvent(BUSINESS_CHANGED_EVENT, { detail: { businessId } }));
 }
 
 export function clearCurrentBusinessId(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(CURRENT_BUSINESS_ID_KEY);
+  window.dispatchEvent(new CustomEvent(BUSINESS_CHANGED_EVENT, { detail: { businessId: null } }));
 }
 
 export function getCurrentLocationId(): string | null {
@@ -40,17 +44,22 @@ export function getCurrentLocationId(): string | null {
 export function setCurrentLocationId(locationId: string): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CURRENT_LOCATION_ID_KEY, locationId);
+  window.dispatchEvent(new CustomEvent(LOCATION_CHANGED_EVENT, { detail: { locationId } }));
 }
 
 export function clearCurrentLocationId(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(CURRENT_LOCATION_ID_KEY);
+  window.dispatchEvent(new CustomEvent(LOCATION_CHANGED_EVENT, { detail: { locationId: null } }));
 }
 
-export type AuthEventName = "auth:invalid" | "auth:logout";
+export type AuthEventName =
+  | "auth:invalid"
+  | "auth:logout"
+  | typeof BUSINESS_CHANGED_EVENT
+  | typeof LOCATION_CHANGED_EVENT;
 
 export function emitAuthEvent(name: AuthEventName, detail?: unknown): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(name, { detail }));
 }
-

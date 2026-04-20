@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { useAction, useFindFirst } from "../hooks/useApi";
+import { useAction } from "../hooks/useApi";
 import { api } from "../api";
 import { setCurrentBusinessId } from "../lib/auth";
 import {
@@ -54,6 +54,20 @@ const businessTypeIcons: Record<BusinessTypeValue, typeof Droplets> = {
 };
 
 type FormData = { name: string; phone: string; email: string; address: string; city: string; state: string; zip: string };
+type ExistingBusinessRecord = {
+  id: string;
+  name: string | null;
+  type: BusinessTypeValue | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  staffCount: number | null;
+  operatingHours: string | null;
+  onboardingComplete: boolean | null;
+};
 
 function ProgressIndicator({ step }: { step: number }) {
   const steps = [
@@ -88,14 +102,50 @@ export default function OnboardingPage() {
   const [showOptionalBasics, setShowOptionalBasics] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({ name: "", phone: "", email: "", address: "", city: "", state: "", zip: "" });
+  const [existingBusiness, setExistingBusiness] = useState<ExistingBusinessRecord | null | undefined>(undefined);
+  const [businessLoading, setBusinessLoading] = useState(true);
 
-  const [{ data: existingBusiness, fetching: businessLoading }] = useFindFirst(api.business, {
-    select: { id: true, name: true, type: true, phone: true, email: true, address: true, city: true, state: true, zip: true, staffCount: true, operatingHours: true, onboardingComplete: true },
-  } as any);
   const [{ fetching: creating, error }, createBusiness] = useAction(api.business.create);
   const [{ fetching: updating }, updateBusiness] = useAction(api.business.update);
   const [{ fetching: applyingPreset }, applyBusinessPreset] = useAction(api.applyBusinessPreset);
   const fetching = creating || updating || applyingPreset;
+
+  useEffect(() => {
+    let cancelled = false;
+    setBusinessLoading(true);
+    api.business
+      .findFirst({
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          phone: true,
+          email: true,
+          address: true,
+          city: true,
+          state: true,
+          zip: true,
+          staffCount: true,
+          operatingHours: true,
+          onboardingComplete: true,
+        },
+      } as any)
+      .then((result) => {
+        if (cancelled) return;
+        setExistingBusiness((result as ExistingBusinessRecord | null) ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setExistingBusiness(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBusinessLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!existingBusiness) return;
@@ -194,7 +244,9 @@ export default function OnboardingPage() {
     }
   };
 
-  if (businessLoading) {
+  const showBusinessLoading = businessLoading && typeof existingBusiness === "undefined";
+
+  if (showBusinessLoading) {
     return <div className="flex min-h-screen items-center justify-center bg-[#0f0f0f] px-4 text-sm text-[#9ca3af]">Loading your workspace setup...</div>;
   }
 
