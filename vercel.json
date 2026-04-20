@@ -13,6 +13,24 @@
       ]
     },
     {
+      "source": "/apple-app-site-association",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json; charset=utf-8"
+        }
+      ]
+    },
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json; charset=utf-8"
+        }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         {
@@ -36,7 +54,7 @@
       "destination": "/api/[...path].ts"
     },
     {
-      "source": "/((?!api/|assets/|marketing/|qa/|favicon\\.svg$|apple-touch-icon\\.png$|robots\\.txt$|sitemap\\.xml$|googleb90dd9f849dc96e5\\.html$|social-preview\\.png$).*)",
+      "source": "/((?!api/|assets/|marketing/|qa/|favicon\\.svg$|apple-touch-icon\\.png$|robots\\.txt$|sitemap\\.xml$|googleb90dd9f849dc96e5\\.html$|social-preview\\.png$|apple-app-site-association$|\\.well-known/apple-app-site-association$).*)",
       "destination": "/index.html"
     }
   ]
