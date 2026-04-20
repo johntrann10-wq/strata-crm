@@ -16,7 +16,8 @@ import appleTouchIconHref from "./apple-touch-icon.png";
 import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
 import { analyticsEnabled, getClarityProjectId, getGaMeasurementId, trackPageView } from "./lib/analytics";
-import { parseAuthTokenFromHash, persistAuthState } from "./lib/auth";
+import { persistAuthState } from "./lib/auth";
+import { buildNavigationTarget, isNativeShell, resolveAppReturnState, resolveNativeShellReturnUrl } from "./lib/mobileShell";
 import { buildCanonicalUrl } from "./lib/publicShareMeta";
 import { recordRuntimeError } from "./lib/runtimeErrors";
 
@@ -97,6 +98,115 @@ function isIndexableMarketingPath(pathname: string) {
   ].includes(pathname);
 }
 
+/** Consumes both legacy ?token=... redirects and native-shell auth returns. */
+function AuthTokenConsumer() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    const { token, nextPath, cleanedSearch, cleanedHash, isAppReturnPath } = resolveAppReturnState({
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+    });
+    if (!token) return;
+
+    persistAuthState(token, { source: isAppReturnPath ? "app-return" : "auth-return" });
+    if (isAppReturnPath && nextPath) {
+      navigate(buildNavigationTarget(nextPath, cleanedSearch, cleanedHash), { replace: true });
+      return;
+    }
+    if (cleanedSearch !== location.search || cleanedHash !== location.hash) {
+      navigate(`${location.pathname}${cleanedSearch}${cleanedHash}`, { replace: true });
+    }
+  }, [location.pathname, location.search, location.hash, navigate]);
+
+  return null;
+}
+
+function MobileShellBridge() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const html = document.documentElement;
+    if (isNativeShell()) {
+      html.dataset.mobileShell = "true";
+    } else {
+      delete html.dataset.mobileShell;
+    }
+    return () => {
+      delete html.dataset.mobileShell;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isNativeShell()) return;
+
+    type AppLaunchResult = { url?: string | null };
+    type AppUrlOpenEvent = { url: string };
+    type AppListenerHandle = { remove?: () => Promise<void> | void };
+    type AppPlugin = {
+      getLaunchUrl?: () => Promise<AppLaunchResult | undefined>;
+      addListener?: (
+        eventName: "appUrlOpen",
+        listenerFunc: (event: AppUrlOpenEvent) => void,
+      ) => Promise<AppListenerHandle> | AppListenerHandle;
+    };
+    type CapacitorWindow = Window & {
+      Capacitor?: {
+        Plugins?: {
+          App?: AppPlugin;
+        };
+      };
+    };
+
+    const appPlugin = (window as CapacitorWindow).Capacitor?.Plugins?.App;
+    if (!appPlugin) return;
+
+    let disposed = false;
+    let removeListener: (() => void) | null = null;
+
+    const routeIncomingUrl = (rawUrl: string | null | undefined) => {
+      const target = resolveNativeShellReturnUrl(rawUrl);
+      if (!target) return;
+      navigate(target, { replace: true });
+    };
+
+    const attach = async () => {
+      try {
+        const launchResult = await appPlugin.getLaunchUrl?.();
+        if (!disposed) {
+          routeIncomingUrl(launchResult?.url);
+        }
+
+        if (!appPlugin.addListener) return;
+        const handle = await appPlugin.addListener("appUrlOpen", ({ url }) => {
+          routeIncomingUrl(url);
+        });
+        removeListener = () => {
+          void handle.remove?.();
+        };
+      } catch (error) {
+        recordRuntimeError({
+          source: "mobile-shell-bridge",
+          message: error instanceof Error ? error.message : "Failed to initialize mobile auth return bridge",
+          detail: error instanceof Error ? error.stack : undefined,
+        });
+      }
+    };
+
+    void attach();
+
+    return () => {
+      disposed = true;
+      removeListener?.();
+    };
+  }, [navigate]);
+
+  return null;
+}
 
 /** Renders Toaster only on the client to avoid SSR crashes (e.g. Sonner in serverless). */
 function ClientToaster() {
@@ -155,23 +265,6 @@ function AnalyticsRouteTracker() {
     const safeHash = hash.includes("authToken=") ? "" : hash;
     trackPageView(`${location.pathname}${query}${safeHash}`);
   }, [location.pathname, location.search, location.hash]);
-
-  return null;
-}
-
-function AuthHashConsumer() {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  useLayoutEffect(() => {
-    if (typeof window === "undefined") return;
-    const { token, cleanedHash } = parseAuthTokenFromHash(location.hash);
-    if (!token) return;
-    persistAuthState(token, { source: "auth-hash" });
-    if (cleanedHash !== location.hash) {
-      navigate(`${location.pathname}${location.search}${cleanedHash}`, { replace: true });
-    }
-  }, [location.hash, location.pathname, location.search, navigate]);
 
   return null;
 }
@@ -309,7 +402,8 @@ export default function App({ loaderData }: Route.ComponentProps) {
       </head>
       <body>
         <Suspense>
-          <AuthHashConsumer />
+          <AuthTokenConsumer />
+          <MobileShellBridge />
           <AnalyticsRouteTracker />
           <BrowserErrorReporter />
           <Outlet context={{ gadgetConfig, csrfToken }} />

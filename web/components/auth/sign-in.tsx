@@ -4,15 +4,14 @@ import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { trackEvent } from "@/lib/analytics";
+import { buildGoogleAuthRedirectPath } from "@/lib/mobileShell";
 import { api, API_BASE } from "../../api";
 import { useActionForm } from "../../hooks/useApi";
 import { GoogleMark } from "./GoogleMark";
 
 function buildGoogleAuthHref(search: string) {
   const params = new URLSearchParams(search);
-  if (!params.has("redirectPath")) {
-    params.set("redirectPath", "/signed-in");
-  }
+  params.set("redirectPath", buildGoogleAuthRedirectPath(search));
   const query = params.toString();
   return `${API_BASE}/api/auth/google/start${query ? `?${query}` : ""}`;
 }

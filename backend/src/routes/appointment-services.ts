@@ -132,7 +132,7 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, requirePermission
       id: row.id,
       appointmentId: row.appointmentId,
       serviceId: row.serviceId,
-      quantity: row.quantity,
+      quantity: row.quantity ?? 1,
       unitPrice: row.unitPrice,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -411,4 +411,3 @@ appointmentServicesRouter.post("/:id/reopen", requireAuth, requireTenant, requir
   });
   res.json({ ok: true });
 });
-
