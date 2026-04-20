@@ -69,7 +69,7 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Reque
     id: string;
     appointmentId: string;
     serviceId: string;
-    quantity: number;
+    quantity: number | null;
     unitPrice: string | null;
     createdAt: Date;
     updatedAt: Date;
@@ -138,7 +138,7 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, async (req: Reque
       id: row.id,
       appointmentId: row.appointmentId,
       serviceId: row.serviceId,
-      quantity: row.quantity,
+      quantity: row.quantity ?? 1,
       unitPrice: row.unitPrice,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

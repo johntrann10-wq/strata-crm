@@ -7,6 +7,14 @@ import { Wrench } from "lucide-react";
 import { GoogleMark } from "./GoogleMark";
 import { Link, useLocation } from "react-router";
 import { api, API_BASE } from "../../api";
+import { buildGoogleAuthRedirectPath } from "@/lib/mobileShell";
+
+function buildGoogleAuthHref(search: string) {
+  const params = new URLSearchParams(search);
+  params.set("redirectPath", buildGoogleAuthRedirectPath(search));
+  const query = params.toString();
+  return `${API_BASE}/api/auth/google/start${query ? `?${query}` : ""}`;
+}
 
 export const SignUpComponent = (props: {
   options?: Parameters<typeof useActionForm>[1];
@@ -15,6 +23,7 @@ export const SignUpComponent = (props: {
 }) => {
   const location = useLocation();
   const search = props.searchParamsOverride ?? location.search;
+  const googleAuthHref = buildGoogleAuthHref(search);
 
   const {
     submit,
@@ -48,7 +57,7 @@ export const SignUpComponent = (props: {
               className="w-full h-9 text-[13px] font-medium rounded-lg shadow-none"
               asChild
             >
-              <a href={`${API_BASE}/api/auth/google/start${search}`}>
+              <a href={googleAuthHref}>
                 <GoogleMark className="mr-2 h-4 w-4 shrink-0" />
                 Sign up with Google
               </a>

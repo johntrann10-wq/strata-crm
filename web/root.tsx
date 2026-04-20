@@ -9,7 +9,7 @@ import {
   useNavigate,
   useRouteError,
 } from "react-router";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useState } from "react";
 import "./app.css";
 import faviconHref from "./favicon.svg";
 import appleTouchIconHref from "./apple-touch-icon.png";
@@ -17,6 +17,7 @@ import socialPreviewHref from "./social-preview.png";
 import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
 import { setAuthToken } from "./lib/auth";
+import { buildNavigationTarget, isNativeShell, resolveAppReturnState } from "./lib/mobileShell";
 import { recordRuntimeError } from "./lib/runtimeErrors";
 
 const isProduction = import.meta.env.PROD;
@@ -49,22 +50,57 @@ function isIndexableMarketingPath(pathname: string) {
   ].includes(pathname);
 }
 
-/** Google OAuth redirects with ?token=... persist before /auth/me runs. */
-function OAuthTokenFromQuery() {
+/** Consumes both legacy ?token=... redirects and native-shell auth returns. */
+function AuthTokenConsumer() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
     const params = new URLSearchParams(location.search);
-    const token = params.get("token");
+    const legacyToken = params.get("token");
+    if (legacyToken) {
+      setAuthToken(legacyToken);
+      params.delete("token");
+      const qs = params.toString();
+      const next = `${location.pathname}${qs ? `?${qs}` : ""}${location.hash}`;
+      navigate(next, { replace: true });
+      return;
+    }
+
+    const { token, nextPath, cleanedSearch, cleanedHash, isAppReturnPath } = resolveAppReturnState({
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+    });
     if (!token) return;
 
     setAuthToken(token);
-    params.delete("token");
-    const qs = params.toString();
-    const next = `${location.pathname}${qs ? `?${qs}` : ""}${location.hash}`;
-    navigate(next, { replace: true });
+    if (isAppReturnPath && nextPath) {
+      navigate(buildNavigationTarget(nextPath, cleanedSearch, cleanedHash), { replace: true });
+      return;
+    }
+    if (cleanedSearch !== location.search || cleanedHash !== location.hash) {
+      navigate(`${location.pathname}${cleanedSearch}${cleanedHash}`, { replace: true });
+    }
   }, [location.pathname, location.search, location.hash, navigate]);
+
+  return null;
+}
+
+function MobileShellBridge() {
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const html = document.documentElement;
+    if (isNativeShell()) {
+      html.dataset.mobileShell = "true";
+    } else {
+      delete html.dataset.mobileShell;
+    }
+    return () => {
+      delete html.dataset.mobileShell;
+    };
+  }, []);
 
   return null;
 }
@@ -202,7 +238,8 @@ export default function App({ loaderData }: Route.ComponentProps) {
       </head>
       <body>
         <Suspense>
-          <OAuthTokenFromQuery />
+          <AuthTokenConsumer />
+          <MobileShellBridge />
           <BrowserErrorReporter />
           <Outlet context={{ gadgetConfig, csrfToken }} />
           <ClientToaster />

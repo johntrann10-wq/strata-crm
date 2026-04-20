@@ -47,6 +47,30 @@ export function resolveSafeRedirectPath(input: unknown): string {
   return trimmed || "/signed-in";
 }
 
+export function resolveGoogleStateRedirect(input: unknown): string {
+  if (typeof input !== "string" || input.trim() === "") return "/signed-in";
+  try {
+    const parsed = JSON.parse(input) as { redirectPath?: unknown };
+    return resolveSafeRedirectPath(parsed.redirectPath);
+  } catch {
+    return "/signed-in";
+  }
+}
+
+export function buildPostAuthRedirectUrl(frontendUrl: string, redirectPath: string, token: string): string {
+  const target = new URL(redirectPath, `${frontendUrl}/`);
+  if (target.origin !== frontendUrl) {
+    throw new BadRequestError("Google auth redirect path must stay within the app.");
+  }
+  if (target.pathname === "/app-return") {
+    target.searchParams.set("authToken", token);
+    return target.toString();
+  }
+  const baseRedirect = target.toString();
+  const separator = baseRedirect.includes("#") ? "&" : "#";
+  return `${baseRedirect}${separator}authToken=${encodeURIComponent(token)}`;
+}
+
 function requireJwtSecret() {
   const secret = process.env.JWT_SECRET;
   if (secret && secret.trim() !== "") return secret;
@@ -415,20 +439,10 @@ authRouter.get(
       logger.info("User signed in via Google", { userId: user.id, email: user.email });
     }
     const token = createToken(user.id);
-    const redirectPath = (() => {
-      try {
-        const raw = (req.query.state as string | undefined) ?? "";
-        if (!raw) return "/";
-        const parsed = JSON.parse(raw) as { redirectPath?: string };
-        return resolveSafeRedirectPath(parsed.redirectPath);
-      } catch {
-        return "/signed-in";
-      }
-    })();
-    const frontendUrl = process.env.FRONTEND_URL ?? "";
-    const baseRedirect = frontendUrl ? `${frontendUrl}${redirectPath}` : redirectPath;
-    const url = new URL(baseRedirect, frontendUrl || undefined);
-    url.searchParams.set("token", token);
-    res.redirect(url.toString());
+    const redirectPath = resolveGoogleStateRedirect(req.query.state);
+    const frontendUrl = (process.env.FRONTEND_URL ?? "").replace(/\/+$/, "");
+    const fallbackOrigin = `${req.protocol}://${req.get("host") ?? ""}`.replace(/\/+$/, "");
+    const frontendBase = frontendUrl || fallbackOrigin;
+    res.redirect(buildPostAuthRedirectUrl(frontendBase, redirectPath, token));
   })
 );
