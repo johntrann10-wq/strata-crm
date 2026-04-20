@@ -431,6 +431,34 @@ describe("home dashboard domain logic", () => {
     expect(days[4]).toMatchObject({ dayOfMonth: 5, expenseAmount: 125, netAmount: -125 });
   });
 
+  it("ignores invalid monthly revenue dates instead of degrading the chart", () => {
+    const days = buildMonthlyRevenueChart({
+      monthStart: new Date("2026-04-01T07:00:00.000Z"),
+      monthEnd: new Date("2026-04-30T06:59:59.999Z"),
+      timezone: "America/Los_Angeles",
+      monthlyRevenueGoal: null,
+      bookedAppointments: [
+        {
+          bookedAt: "not-a-date",
+          subtotal: "500",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "0",
+          adminFeeAmount: "0",
+          applyAdminFee: false,
+          totalPrice: "500",
+        },
+      ],
+      standaloneInvoices: [{ bookedAt: "also-not-a-date", total: "300" }],
+      collectedPayments: [{ paidAt: "still-not-a-date", amount: 250 }],
+      expenseRows: [{ expenseDate: "bad-expense-date", amount: "125" }],
+    });
+
+    expect(days.length).toBeGreaterThan(0);
+    expect(days.every((day) => day.bookedRevenue === 0 && day.collectedRevenue === 0 && day.expenseAmount === 0)).toBe(true);
+  });
+
   it("prefers computed appointment finance totals over stale dashboard totalPrice values", () => {
     const days = buildWeeklyAppointmentOverview({
       weekStart: new Date("2026-04-06T07:00:00.000Z"),

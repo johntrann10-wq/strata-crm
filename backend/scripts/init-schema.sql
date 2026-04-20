@@ -132,9 +132,12 @@ CREATE TABLE IF NOT EXISTS users (
   last_name text,
   email_verified boolean DEFAULT false,
   google_profile_id text,
+  auth_token_version integer NOT NULL DEFAULT 1,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_token_version integer NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS businesses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -784,6 +787,24 @@ ALTER TABLE IF EXISTS notification_logs
 
 CREATE UNIQUE INDEX IF NOT EXISTS notification_logs_provider_message_unique
   ON notification_logs (channel, provider_message_id);
+
+CREATE TABLE IF NOT EXISTS dashboard_preferences (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  widget_order text NOT NULL DEFAULT '[]',
+  hidden_widgets text NOT NULL DEFAULT '[]',
+  default_range text DEFAULT NULL,
+  default_team_member_id uuid DEFAULT NULL,
+  dismissed_queue_items text NOT NULL DEFAULT '{}',
+  snoozed_queue_items text NOT NULL DEFAULT '{}',
+  last_seen_at timestamptz DEFAULT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS dashboard_preferences_business_user_unique
+  ON dashboard_preferences (business_id, user_id);
 
 CREATE TABLE IF NOT EXISTS stripe_webhook_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

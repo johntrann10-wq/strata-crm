@@ -599,6 +599,17 @@ function toMoneyNumber(value: MoneyLike): number {
   return Number.isFinite(parsed) ? Number(parsed) : 0;
 }
 
+function toValidDate(value: Date | string | null | undefined) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 function getDashboardAppointmentAmount(
   row: Pick<
     AppointmentDashboardRow,
@@ -1872,7 +1883,7 @@ export function buildMonthlyRevenueChart(params: {
   monthEnd: Date;
   timezone: string;
   bookedAppointments: Array<{
-    bookedAt: Date;
+    bookedAt: Date | string | null;
     subtotal: MoneyLike;
     taxRate: MoneyLike;
     taxAmount: MoneyLike;
@@ -1882,9 +1893,9 @@ export function buildMonthlyRevenueChart(params: {
     applyAdminFee: boolean | null;
     totalPrice: MoneyLike;
   }>;
-  standaloneInvoices: Array<{ bookedAt: Date; total: MoneyLike }>;
-  collectedPayments: Array<{ paidAt: Date; amount: number }>;
-  expenseRows: Array<{ expenseDate: Date; amount: MoneyLike }>;
+  standaloneInvoices: Array<{ bookedAt: Date | string | null; total: MoneyLike }>;
+  collectedPayments: Array<{ paidAt: Date | string | null; amount: number }>;
+  expenseRows: Array<{ expenseDate: Date | string | null; amount: MoneyLike }>;
   monthlyRevenueGoal: number | null;
 }) {
   const monthStartParts = getTimeZoneParts(params.monthStart, params.timezone);
@@ -1910,17 +1921,23 @@ export function buildMonthlyRevenueChart(params: {
   });
 
   const indexByDate = new Map(days.map((day, index) => [day.date, index]));
-  const addBooked = (date: Date, amount: MoneyLike) => {
+  const addBooked = (dateLike: Date | string | null | undefined, amount: MoneyLike) => {
+    const date = toValidDate(dateLike);
+    if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
     days[index]!.bookedRevenue += toMoneyNumber(amount);
   };
-  const addCollected = (date: Date, amount: number) => {
+  const addCollected = (dateLike: Date | string | null | undefined, amount: number) => {
+    const date = toValidDate(dateLike);
+    if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
     days[index]!.collectedRevenue += amount;
   };
-  const addExpense = (date: Date, amount: MoneyLike) => {
+  const addExpense = (dateLike: Date | string | null | undefined, amount: MoneyLike) => {
+    const date = toValidDate(dateLike);
+    if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
     days[index]!.expenseAmount += toMoneyNumber(amount);
@@ -2269,27 +2286,77 @@ function normalizeRangePreference(value: string | null | undefined): HomeDashboa
   return null;
 }
 
+let dashboardPreferencesSchemaReady: Promise<void> | null = null;
+
+function isIgnorableDashboardPreferencesSchemaError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    detail?: unknown;
+    constraint?: unknown;
+    cause?: unknown;
+  };
+  const source =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as {
+          code?: unknown;
+          message?: unknown;
+          detail?: unknown;
+          constraint?: unknown;
+        })
+      : candidate;
+  const code = String(source.code ?? "");
+  const message = String(source.message ?? "").toLowerCase();
+  const detail = String(source.detail ?? "").toLowerCase();
+  const constraint = String(source.constraint ?? "").toLowerCase();
+
+  return (
+    code === "42P07" ||
+    code === "42710" ||
+    message.includes("relation \"dashboard_preferences\" already exists") ||
+    (code === "23505" &&
+      constraint === "pg_type_typname_nsp_index" &&
+      detail.includes("dashboard_preferences"))
+  );
+}
+
 async function ensureDashboardPreferencesSchema(tx: DbExecutor) {
-  await tx.execute(sql`
-    CREATE TABLE IF NOT EXISTS dashboard_preferences (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      widget_order text NOT NULL DEFAULT '[]',
-      hidden_widgets text NOT NULL DEFAULT '[]',
-      default_range text DEFAULT NULL,
-      default_team_member_id uuid DEFAULT NULL,
-      dismissed_queue_items text NOT NULL DEFAULT '{}',
-      snoozed_queue_items text NOT NULL DEFAULT '{}',
-      last_seen_at timestamptz DEFAULT NULL,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now()
-    )
-  `);
-  await tx.execute(sql`
-    CREATE UNIQUE INDEX IF NOT EXISTS dashboard_preferences_business_user_unique
-      ON dashboard_preferences (business_id, user_id)
-  `);
+  if (!dashboardPreferencesSchemaReady) {
+    dashboardPreferencesSchemaReady = (async () => {
+      try {
+        await tx.execute(sql`
+          CREATE TABLE IF NOT EXISTS dashboard_preferences (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            widget_order text NOT NULL DEFAULT '[]',
+            hidden_widgets text NOT NULL DEFAULT '[]',
+            default_range text DEFAULT NULL,
+            default_team_member_id uuid DEFAULT NULL,
+            dismissed_queue_items text NOT NULL DEFAULT '{}',
+            snoozed_queue_items text NOT NULL DEFAULT '{}',
+            last_seen_at timestamptz DEFAULT NULL,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            updated_at timestamptz NOT NULL DEFAULT now()
+          )
+        `);
+        await tx.execute(sql`
+          CREATE UNIQUE INDEX IF NOT EXISTS dashboard_preferences_business_user_unique
+            ON dashboard_preferences (business_id, user_id)
+        `);
+      } catch (error) {
+        if (!isIgnorableDashboardPreferencesSchemaError(error)) throw error;
+      }
+    })();
+  }
+
+  try {
+    await dashboardPreferencesSchemaReady;
+  } catch (error) {
+    dashboardPreferencesSchemaReady = null;
+    throw error;
+  }
 }
 
 async function loadDashboardPreferences(
