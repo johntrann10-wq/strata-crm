@@ -8,13 +8,12 @@ import { Link, useLocation } from "react-router";
 import { api, API_BASE } from "../../api";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import { trackEvent } from "@/lib/analytics";
+import { buildGoogleAuthRedirectPath } from "@/lib/mobileShell";
 import { useMemo, useState, type FormEvent } from "react";
 
 function buildGoogleAuthHref(search: string): string {
   const params = new URLSearchParams(search);
-  if (!params.has("redirectPath")) {
-    params.set("redirectPath", "/signed-in");
-  }
+  params.set("redirectPath", buildGoogleAuthRedirectPath(search));
   const query = params.toString();
   return `${API_BASE}/api/auth/google/start${query ? `?${query}` : ""}`;
 }
