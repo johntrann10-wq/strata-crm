@@ -8,6 +8,7 @@
 const DEFAULT_SIGNED_IN_PATH = "/signed-in";
 const DEFAULT_APP_RETURN_PATH = "/app-return";
 const DEFAULT_APP_URL_SCHEME = "strata";
+const DEFAULT_FRONTEND_HOST = "stratacrm.app";
 const APP_RETURN_NEXT_PARAM = "next";
 const APP_RETURN_SOURCE_PARAM = "source";
 const GOOGLE_AUTH_SOURCE = "google-auth";
@@ -69,6 +70,46 @@ export function buildGoogleAuthRedirectPath(search: string, fallback = DEFAULT_S
  */
 export function buildNativeSchemeReturnUrl(path = getAppReturnPath()): string {
   return `${getAppUrlScheme()}://${path.replace(/^\/+/, "")}`;
+}
+
+export function resolveNativeShellReturnUrl(rawUrl: string | null | undefined): string | null {
+  if (typeof rawUrl !== "string") return null;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("/")) {
+    return resolveSafeClientRedirectPath(trimmed, getAppReturnPath());
+  }
+
+  try {
+    const url = new URL(trimmed);
+
+    if (url.protocol === `${getAppUrlScheme()}:`) {
+      const schemePath = `${url.hostname ? `/${url.hostname}` : ""}${url.pathname || ""}`;
+      const normalizedPath = resolveSafeClientRedirectPath(schemePath, getAppReturnPath());
+      return `${normalizedPath}${url.search}${url.hash}`;
+    }
+
+    const configuredOrigin = (() => {
+      try {
+        return import.meta.env.VITE_API_URL?.trim() ? new URL(import.meta.env.VITE_API_URL).origin : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const isConfiguredFrontendOrigin = configuredOrigin ? url.origin === configuredOrigin : false;
+    const isDefaultFrontendOrigin = url.protocol === "https:" && url.hostname === DEFAULT_FRONTEND_HOST;
+
+    if (!isConfiguredFrontendOrigin && !isDefaultFrontendOrigin) {
+      return null;
+    }
+
+    const normalizedPath = resolveSafeClientRedirectPath(url.pathname || "/", getAppReturnPath());
+    return `${normalizedPath}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
 }
 
 export function resolveAppReturnState(params: {

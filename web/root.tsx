@@ -17,7 +17,7 @@ import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
 import { analyticsEnabled, getClarityProjectId, getGaMeasurementId, trackPageView } from "./lib/analytics";
 import { persistAuthState } from "./lib/auth";
-import { buildNavigationTarget, isNativeShell, resolveAppReturnState } from "./lib/mobileShell";
+import { buildNavigationTarget, isNativeShell, resolveAppReturnState, resolveNativeShellReturnUrl } from "./lib/mobileShell";
 import { buildCanonicalUrl } from "./lib/publicShareMeta";
 import { recordRuntimeError } from "./lib/runtimeErrors";
 
@@ -126,6 +126,8 @@ function AuthTokenConsumer() {
 }
 
 function MobileShellBridge() {
+  const navigate = useNavigate();
+
   useEffect(() => {
     if (typeof document === "undefined") return;
     const html = document.documentElement;
@@ -138,6 +140,70 @@ function MobileShellBridge() {
       delete html.dataset.mobileShell;
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isNativeShell()) return;
+
+    type AppLaunchResult = { url?: string | null };
+    type AppUrlOpenEvent = { url: string };
+    type AppListenerHandle = { remove?: () => Promise<void> | void };
+    type AppPlugin = {
+      getLaunchUrl?: () => Promise<AppLaunchResult | undefined>;
+      addListener?: (
+        eventName: "appUrlOpen",
+        listenerFunc: (event: AppUrlOpenEvent) => void,
+      ) => Promise<AppListenerHandle> | AppListenerHandle;
+    };
+    type CapacitorWindow = Window & {
+      Capacitor?: {
+        Plugins?: {
+          App?: AppPlugin;
+        };
+      };
+    };
+
+    const appPlugin = (window as CapacitorWindow).Capacitor?.Plugins?.App;
+    if (!appPlugin) return;
+
+    let disposed = false;
+    let removeListener: (() => void) | null = null;
+
+    const routeIncomingUrl = (rawUrl: string | null | undefined) => {
+      const target = resolveNativeShellReturnUrl(rawUrl);
+      if (!target) return;
+      navigate(target, { replace: true });
+    };
+
+    const attach = async () => {
+      try {
+        const launchResult = await appPlugin.getLaunchUrl?.();
+        if (!disposed) {
+          routeIncomingUrl(launchResult?.url);
+        }
+
+        if (!appPlugin.addListener) return;
+        const handle = await appPlugin.addListener("appUrlOpen", ({ url }) => {
+          routeIncomingUrl(url);
+        });
+        removeListener = () => {
+          void handle.remove?.();
+        };
+      } catch (error) {
+        recordRuntimeError({
+          source: "mobile-shell-bridge",
+          message: error instanceof Error ? error.message : "Failed to initialize mobile auth return bridge",
+          detail: error instanceof Error ? error.stack : undefined,
+        });
+      }
+    };
+
+    void attach();
+
+    return () => {
+      disposed = true;
+      removeListener?.();
+    };
+  }, [navigate]);
 
   return null;
 }

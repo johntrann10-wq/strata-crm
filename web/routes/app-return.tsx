@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import { Card } from "@/components/ui/card";
-import { resolveSafeClientRedirectPath } from "@/lib/mobileShell";
+import { buildNativeSchemeReturnUrl, isNativeShell, resolveSafeClientRedirectPath } from "@/lib/mobileShell";
 import { Wrench } from "lucide-react";
 import { Link, useLocation } from "react-router";
 
@@ -8,6 +9,12 @@ export default function AppReturnRoute() {
   const params = new URLSearchParams(location.search);
   const nextPath = resolveSafeClientRedirectPath(params.get("next"), "/signed-in");
   const hasAuthToken = params.has("authToken") || location.hash.includes("authToken=");
+  const nativeReturnHref = buildNativeSchemeReturnUrl(`${location.pathname}${location.search}${location.hash}`);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || isNativeShell() || !hasAuthToken) return;
+    window.location.replace(nativeReturnHref);
+  }, [hasAuthToken, nativeReturnHref]);
 
   return (
     <div className="min-h-screen bg-background px-6 py-12">
@@ -23,10 +30,18 @@ export default function AppReturnRoute() {
             </h1>
             <p className="text-[13px] text-muted-foreground">
               {hasAuthToken
-                ? "Strata is restoring your session and routing you back into the app."
+                ? "Strata is restoring your session and routing you back into the app. If the app does not reopen automatically, use the button below."
                 : "If this page opened outside the app shell, continue safely from here."}
             </p>
             <div className="flex flex-col gap-3 pt-2">
+              {!isNativeShell() ? (
+                <a
+                  href={nativeReturnHref}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-border bg-background px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  Open in Strata app
+                </a>
+              ) : null}
               <Link
                 to={nextPath}
                 className="inline-flex h-10 items-center justify-center rounded-lg bg-orange-500 px-4 text-[13px] font-medium text-white transition-colors hover:bg-orange-500/90"
