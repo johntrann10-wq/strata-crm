@@ -653,6 +653,15 @@ const fallback = (v: string | number | undefined | null) =>
 const optionalValue = (v: string | number | undefined | null) =>
   v !== undefined && v !== null && String(v).trim() !== "" ? String(v) : "";
 
+export function resolveAppointmentConfirmationActionLabel(options: {
+  confirmationActionLabel?: string | null;
+  confirmationUrl?: string | null;
+}): string {
+  const explicitLabel = optionalValue(options.confirmationActionLabel);
+  if (explicitLabel) return explicitLabel;
+  return optionalValue(options.confirmationUrl) ? "View appointment" : "";
+}
+
 /** Send appointment confirmation. Vars: clientName, businessName, dateTime, vehicle?, address?, serviceSummary?, confirmationUrl? */
 export async function sendAppointmentConfirmation(options: {
   to: string;
@@ -669,6 +678,12 @@ export async function sendAppointmentConfirmation(options: {
   paymentStatus?: string | null;
   message?: string | null;
 }): Promise<void> {
+  const confirmationUrl = optionalValue(options.confirmationUrl);
+  const portalUrl = optionalValue(options.portalUrl);
+  const confirmationActionLabel = resolveAppointmentConfirmationActionLabel({
+    confirmationActionLabel: options.confirmationActionLabel,
+    confirmationUrl,
+  });
   await sendTemplatedEmail({
     to: options.to,
     templateSlug: "appointment_confirmation",
@@ -680,9 +695,9 @@ export async function sendAppointmentConfirmation(options: {
       vehicle: fallback(options.vehicle),
       address: fallback(options.address),
       serviceSummary: fallback(options.serviceSummary),
-      confirmationUrl: optionalValue(options.confirmationUrl),
-      portalUrl: optionalValue(options.portalUrl),
-      confirmationActionLabel: fallback(options.confirmationActionLabel),
+      confirmationUrl,
+      portalUrl,
+      confirmationActionLabel,
       paymentStatus: fallback(options.paymentStatus),
       message: optionalValue(options.message),
     },
@@ -1238,5 +1253,4 @@ export async function retryFailedEmailNotifications(businessId: string): Promise
   }
   return { retried: failed.length, succeeded };
 }
-
 

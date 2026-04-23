@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Link, Navigate, useOutletContext, useSearchParams } from "react-router";
 import {
@@ -477,6 +477,7 @@ function AppointmentRequestsContent() {
   const { businessId, permissions } = useOutletContext<AuthOutletContext>();
   const canManage = permissions.has("appointments.write");
   const [searchParams, setSearchParams] = useSearchParams();
+  const detailPanelRef = useRef<HTMLDivElement | null>(null);
   const [records, setRecords] = useState<OwnerBookingRequestRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<OwnerBookingRequestRecord | null>(null);
   const [listLoading, setListLoading] = useState(true);
@@ -544,7 +545,7 @@ function AppointmentRequestsContent() {
       if (selectedRequestId) {
         const next = new URLSearchParams(searchParams);
         next.delete("request");
-        setSearchParams(next, { replace: true });
+        setSearchParams(next, { replace: true, preventScrollReset: true });
       }
       setSelectedRecord(null);
       return;
@@ -552,7 +553,7 @@ function AppointmentRequestsContent() {
     if (!selectedRequestId || !visibleRecords.some((record) => record.id === selectedRequestId)) {
       const next = new URLSearchParams(searchParams);
       next.set("request", visibleRecords[0].id);
-      setSearchParams(next, { replace: true });
+      setSearchParams(next, { replace: true, preventScrollReset: true });
     }
   }, [searchParams, selectedRequestId, setSearchParams, visibleRecords]);
 
@@ -617,6 +618,15 @@ function AppointmentRequestsContent() {
       cancelled = true;
     };
   }, [businessId, selectedRecord]);
+
+  useEffect(() => {
+    if (!selectedRequestId || typeof window === "undefined") return;
+    if (!window.matchMedia("(max-width: 1279px)").matches) return;
+    const frame = window.requestAnimationFrame(() => {
+      detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedRequestId]);
 
   const requestMetrics = useMemo(() => {
     const openCount = records.filter((record) => matchesStatusFilter(record, "open")).length;
@@ -912,7 +922,7 @@ function AppointmentRequestsContent() {
                       onClick={() => {
                         const next = new URLSearchParams(searchParams);
                         next.set("request", record.id);
-                        setSearchParams(next);
+                        setSearchParams(next, { preventScrollReset: true });
                       }}
                       className={cn(
                         "flex w-full flex-col gap-3 px-5 py-4 text-left transition-colors sm:px-6",
@@ -950,7 +960,7 @@ function AppointmentRequestsContent() {
             )}
           </CardContent>
         </Card>
-        <div className="space-y-4">
+        <div ref={detailPanelRef} className="space-y-4">
           {detailLoading && !selectedRecord ? (
             <Card>
               <CardHeader>

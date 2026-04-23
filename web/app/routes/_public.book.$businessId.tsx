@@ -2004,7 +2004,11 @@ export default function PublicBookingPage() {
     };
 
     window.addEventListener("pagehide", handlePageHide);
-    return () => window.removeEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handlePageHide);
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handlePageHide);
+    };
   }, [
     businessId,
     currentStep,
@@ -2805,21 +2809,23 @@ export default function PublicBookingPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="booking-vehicle-year">Vehicle year</Label>
-              <Input id="booking-vehicle-year" type="number" min="1900" max="2100" value={form.vehicleYear} onChange={(event) => setForm((current) => ({ ...current, vehicleYear: event.target.value }))} placeholder="2022" className="h-12 rounded-2xl bg-slate-50" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="booking-vehicle-color">Vehicle color</Label>
-              <Input id="booking-vehicle-color" value={form.vehicleColor} onChange={(event) => setForm((current) => ({ ...current, vehicleColor: event.target.value }))} placeholder="Black" className="h-12 rounded-2xl bg-slate-50" />
+              <Input id="booking-vehicle-year" type="number" min="1900" max="2100" value={form.vehicleYear} onChange={(event) => setForm((current) => ({ ...current, vehicleYear: event.target.value }))} placeholder="Year" className="h-12 rounded-2xl bg-slate-50" />
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="booking-vehicle-make">Vehicle make{config.requireVehicle ? " *" : ""}</Label>
-              <Input id="booking-vehicle-make" value={form.vehicleMake} onChange={(event) => setForm((current) => ({ ...current, vehicleMake: event.target.value }))} placeholder="BMW" required={config.requireVehicle} className="h-12 rounded-2xl bg-slate-50" />
+              <Input id="booking-vehicle-make" value={form.vehicleMake} onChange={(event) => setForm((current) => ({ ...current, vehicleMake: event.target.value }))} placeholder="Vehicle make" required={config.requireVehicle} className="h-12 rounded-2xl bg-slate-50" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="booking-vehicle-model">Vehicle model{config.requireVehicle ? " *" : ""}</Label>
-              <Input id="booking-vehicle-model" value={form.vehicleModel} onChange={(event) => setForm((current) => ({ ...current, vehicleModel: event.target.value }))} placeholder="X5" required={config.requireVehicle} className="h-12 rounded-2xl bg-slate-50" />
+              <Input id="booking-vehicle-model" value={form.vehicleModel} onChange={(event) => setForm((current) => ({ ...current, vehicleModel: event.target.value }))} placeholder="Vehicle model" required={config.requireVehicle} className="h-12 rounded-2xl bg-slate-50" />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="booking-vehicle-color">Vehicle color</Label>
+              <Input id="booking-vehicle-color" value={form.vehicleColor} onChange={(event) => setForm((current) => ({ ...current, vehicleColor: event.target.value }))} placeholder="Color (optional)" className="h-12 rounded-2xl bg-slate-50" />
             </div>
           </div>
           <StepHint icon={CarFront} text={selectedService ? `Add the vehicle for ${selectedService.name}. If you only know part of it, start with the basics and the shop can fill in the rest.` : "Add the vehicle you want serviced. If you only know part of it, start with the basics and the shop can fill in the rest."} />
@@ -3224,11 +3230,11 @@ export default function PublicBookingPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="booking-first-name">First name</Label>
-              <Input id="booking-first-name" value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} placeholder="Jamie" required className="h-12 rounded-2xl bg-slate-50" />
+              <Input id="booking-first-name" value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" required className="h-12 rounded-2xl bg-slate-50" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="booking-last-name">Last name</Label>
-              <Input id="booking-last-name" value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} placeholder="Rivera" required className="h-12 rounded-2xl bg-slate-50" />
+              <Input id="booking-last-name" value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" required className="h-12 rounded-2xl bg-slate-50" />
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">

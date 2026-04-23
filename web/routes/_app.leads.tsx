@@ -11,6 +11,7 @@ import {
   ChevronUp,
   ClipboardList,
   Loader2,
+  MoreVertical,
   Receipt,
   Search,
   UserRoundPlus,
@@ -24,6 +25,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -1053,89 +1056,176 @@ export default function LeadsPage() {
                   const { client, lead } = entry;
                   const sla = getLeadSlaState(client.createdAt, lead, responseWindowHours);
                   const slaMessage = formatLeadSlaMessage(client.createdAt, lead, responseWindowHours);
+                  const clientDisplayName = [client.firstName, client.lastName].filter(Boolean).join(" ").trim() || "Lead";
+                  const clientInitials =
+                    [client.firstName, client.lastName]
+                      .filter(Boolean)
+                      .map((value) => String(value).trim().charAt(0).toUpperCase())
+                      .join("")
+                      .slice(0, 2) || "L";
+                  const clientLocationLabel = [client.address, client.city, client.state, client.zip].filter(Boolean).join(", ");
+                  const clientHref = `/clients/${client.id}?from=${encodeURIComponent("/leads")}`;
+                  const appointmentHref = buildLeadAppointmentHref({
+                    clientId: client.id,
+                    locationId: currentLocationId,
+                    requestedServices: lead.serviceInterest,
+                    leadSource: lead.source,
+                    sourceSummary: lead.summary,
+                    teamNotes: client.internalNotes,
+                    vehicle: lead.vehicle,
+                    sourceAddress: clientLocationLabel,
+                    customerName: clientDisplayName,
+                    phone: client.phone,
+                    email: client.email,
+                  });
+                  const quoteHref = `/quotes/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}${buildQuoteRecipientQuery({
+                    firstName: client.firstName,
+                    lastName: client.lastName,
+                    email: client.email,
+                  })}`;
+                  const addVehicleHref = `/clients/${client.id}/vehicles/new?from=${encodeURIComponent("/leads")}`;
+                  const slaStatusLabel = sla.overdue ? "Past the response window" : sla.dueSoon ? "Approaching the response window" : "On track";
                   return (
-                    <div key={client.id} className="rounded-xl border border-border/70 bg-background/80 px-4 py-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-medium text-foreground">{client.firstName} {client.lastName}</p>
-                            <Badge variant={badgeVariantForStatus(lead.status)}>{formatLeadStatus(lead.status)}</Badge>
-                            <Badge variant="outline">{formatLeadSource(lead.source)}</Badge>
-                            {sla.overdue ? <Badge className="bg-rose-600 text-white hover:bg-rose-600">Overdue</Badge> : null}
-                            {!sla.overdue && sla.dueSoon ? <Badge className="bg-amber-500 text-white hover:bg-amber-500">Due soon</Badge> : null}
+                    <Card key={client.id} className="overflow-hidden border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] py-0 shadow-[0_14px_28px_rgba(15,23,42,0.04)]">
+                      <CardContent className="space-y-5 p-4 sm:p-5">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="flex min-w-0 items-start gap-4">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] bg-slate-950 text-sm font-semibold tracking-[0.14em] text-white shadow-[0_12px_24px_rgba(15,23,42,0.16)]">
+                              {clientInitials}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="truncate text-base font-semibold tracking-[-0.02em] text-slate-950">{clientDisplayName}</p>
+                                <Badge variant={badgeVariantForStatus(lead.status)}>{formatLeadStatus(lead.status)}</Badge>
+                                <Badge variant="outline">{formatLeadSource(lead.source)}</Badge>
+                                {sla.overdue ? <Badge className="bg-rose-600 text-white hover:bg-rose-600">Overdue</Badge> : null}
+                                {!sla.overdue && sla.dueSoon ? <Badge className="bg-amber-500 text-white hover:bg-amber-500">Due soon</Badge> : null}
+                              </div>
+                              <p className="mt-1 text-sm text-slate-600">
+                                {lead.serviceInterest?.trim() || "Lead captured and ready for the next step."}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                                {client.phone ? <span>{client.phone}</span> : null}
+                                {client.email ? <span>{client.email}</span> : null}
+                                {clientLocationLabel ? <span>{clientLocationLabel}</span> : null}
+                              </div>
+                            </div>
                           </div>
-                          <div className="mt-2 grid gap-1 text-sm text-muted-foreground">
-                            {client.phone ? <p>{client.phone}</p> : null}
-                            {client.email ? <p>{client.email}</p> : null}
-                            {client.address || client.city || client.state || client.zip ? <p>{[client.address, client.city, client.state, client.zip].filter(Boolean).join(", ")}</p> : null}
+                          <div className="flex w-full items-start gap-2 lg:w-[232px] lg:justify-end">
+                            <div className="min-w-0 flex-1 lg:max-w-[180px]">
+                              {isMobileLayout ? (
+                                <MobileLeadSelect
+                                  value={lead.status}
+                                  onChange={(value) => void updateLeadStatus(client, value as LeadStatus)}
+                                  disabled={updatingLead}
+                                >
+                                  {LEAD_STATUS_OPTIONS.map((status) => (
+                                    <option key={status} value={status}>
+                                      {formatLeadStatus(status)}
+                                    </option>
+                                  ))}
+                                </MobileLeadSelect>
+                              ) : (
+                                <Select value={lead.status} onValueChange={(value) => void updateLeadStatus(client, value as LeadStatus)}>
+                                  <SelectTrigger className="w-full" disabled={updatingLead}><SelectValue /></SelectTrigger>
+                                  <SelectContent>{LEAD_STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{formatLeadStatus(status)}</SelectItem>)}</SelectContent>
+                                </Select>
+                              )}
+                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" aria-label="Lead actions" className="shrink-0">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem asChild>
+                                  <Link to={clientHref}>Open client</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <Link to={appointmentHref}>Create appointment</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <Link to={quoteHref}>Create quote</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <Link to={addVehicleHref}>Add vehicle</Link>
+                                </DropdownMenuItem>
+                                {lead.status === "new" ? (
+                                  <DropdownMenuItem onSelect={() => void handleMarkContacted(entry)}>
+                                    Mark contacted
+                                  </DropdownMenuItem>
+                                ) : null}
+                                {lead.status !== "converted" ? (
+                                  <DropdownMenuItem onSelect={() => void handleConvert(entry)}>
+                                    Convert to client
+                                  </DropdownMenuItem>
+                                ) : null}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </div>
-                        <div className="w-full sm:w-[180px]">
-                          {isMobileLayout ? (
-                            <MobileLeadSelect
-                              value={lead.status}
-                              onChange={(value) => void updateLeadStatus(client, value as LeadStatus)}
-                              disabled={updatingLead}
-                            >
-                              {LEAD_STATUS_OPTIONS.map((status) => (
-                                <option key={status} value={status}>
-                                  {formatLeadStatus(status)}
-                                </option>
-                              ))}
-                            </MobileLeadSelect>
-                          ) : (
-                            <Select value={lead.status} onValueChange={(value) => void updateLeadStatus(client, value as LeadStatus)}>
-                              <SelectTrigger className="w-full" disabled={updatingLead}><SelectValue /></SelectTrigger>
-                              <SelectContent>{LEAD_STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{formatLeadStatus(status)}</SelectItem>)}</SelectContent>
-                            </Select>
-                          )}
-                        </div>
-                      </div>
 
-                      <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
-                        <p><span className="font-medium text-foreground">What they want:</span> {lead.serviceInterest || "Not captured"}</p>
-                        {lead.vehicle ? (
-                          <p className="flex items-start gap-2">
-                            <Car className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                            <span><span className="font-medium text-foreground">Vehicle:</span> {lead.vehicle}</span>
-                          </p>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          <div className="rounded-[1.1rem] border border-slate-200/85 bg-slate-50/80 p-3.5">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vehicle</p>
+                            <p className="mt-2 text-sm font-medium text-slate-950">{lead.vehicle || "Vehicle not captured yet"}</p>
+                          </div>
+                          <div className="rounded-[1.1rem] border border-slate-200/85 bg-slate-50/80 p-3.5">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Next step</p>
+                            <p className="mt-2 text-sm font-medium text-slate-950">{lead.nextStep || "Not set yet"}</p>
+                          </div>
+                          <div className="rounded-[1.1rem] border border-slate-200/85 bg-slate-50/80 p-3.5">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Response time</p>
+                            <p className="mt-2 text-sm font-medium text-slate-950">{formatLeadResponseTime(client.createdAt, lead.firstContactedAt)}</p>
+                          </div>
+                          <div className="rounded-[1.1rem] border border-slate-200/85 bg-slate-50/80 p-3.5">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">SLA</p>
+                            <p className="mt-2 text-sm font-medium text-slate-950">{slaMessage || slaStatusLabel}</p>
+                          </div>
+                        </div>
+
+                        {lead.summary || client.internalNotes ? (
+                          <div className="grid gap-3 lg:grid-cols-2">
+                            <div className="rounded-[1.1rem] border border-slate-200/85 bg-white p-4">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Lead context</p>
+                              <p className="mt-2 text-sm leading-6 text-slate-700">
+                                {lead.summary || "No additional context captured yet."}
+                              </p>
+                            </div>
+                            <div className="rounded-[1.1rem] border border-slate-200/85 bg-white p-4">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Team notes</p>
+                              <p className="mt-2 text-sm leading-6 text-slate-700">
+                                {client.internalNotes || "No internal team notes yet."}
+                              </p>
+                            </div>
+                          </div>
                         ) : null}
-                        <p><span className="font-medium text-foreground">Response time:</span> {formatLeadResponseTime(client.createdAt, lead.firstContactedAt)}</p>
-                        {slaMessage ? <p><span className="font-medium text-foreground">SLA:</span> {slaMessage}</p> : null}
-                        <p><span className="font-medium text-foreground">Next step:</span> {lead.nextStep || "Not set"}</p>
-                        {lead.summary ? <p><span className="font-medium text-foreground">Context:</span> {lead.summary}</p> : null}
-                        {client.internalNotes ? <p><span className="font-medium text-foreground">Team notes:</span> {client.internalNotes}</p> : null}
-                      </div>
 
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {lead.status === "new" ? <Button size="sm" onClick={() => void handleMarkContacted(entry)} disabled={updatingLead}>Mark contacted</Button> : null}
-                        <Button size="sm" variant="outline" asChild><Link to={`/clients/${client.id}?from=${encodeURIComponent("/leads")}`}>Open client</Link></Button>
-                        <Button size="sm" variant="outline" asChild><Link to={buildLeadAppointmentHref({
-                          clientId: client.id,
-                          locationId: currentLocationId,
-                          requestedServices: lead.serviceInterest,
-                          leadSource: lead.source,
-                          sourceSummary: lead.summary,
-                          teamNotes: client.internalNotes,
-                          vehicle: lead.vehicle,
-                          sourceAddress: [client.address, client.city, client.state, client.zip].filter(Boolean).join(", "),
-                          customerName: [client.firstName, client.lastName].filter(Boolean).join(" "),
-                          phone: client.phone,
-                          email: client.email,
-                        })}>Create appointment</Link></Button>
-                        <Button size="sm" variant="outline" asChild><Link to={`/quotes/new?clientId=${client.id}&from=${encodeURIComponent("/leads")}${buildQuoteRecipientQuery({
-                          firstName: client.firstName,
-                          lastName: client.lastName,
-                          email: client.email,
-                        })}`}>Quote</Link></Button>
-                        <Button size="sm" variant="outline" asChild><Link to={`/clients/${client.id}/vehicles/new?from=${encodeURIComponent("/leads")}`}>Add vehicle</Link></Button>
-                        {lead.status !== "converted" ? <Button size="sm" onClick={() => void handleConvert(entry)} disabled={updatingLead}>Convert to client</Button> : null}
-                      </div>
+                        <div className="flex flex-wrap gap-2">
+                          {lead.status === "new" ? (
+                            <Button size="sm" onClick={() => void handleMarkContacted(entry)} disabled={updatingLead}>
+                              Mark contacted
+                            </Button>
+                          ) : null}
+                          <Button size="sm" variant="outline" asChild>
+                            <Link to={clientHref}>Open client</Link>
+                          </Button>
+                          <Button size="sm" variant="outline" asChild>
+                            <Link to={appointmentHref}>Create appointment</Link>
+                          </Button>
+                          {lead.status !== "converted" ? (
+                            <Button size="sm" onClick={() => void handleConvert(entry)} disabled={updatingLead}>
+                              Convert to client
+                            </Button>
+                          ) : null}
+                        </div>
 
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        Captured {formatDistanceToNow(new Date(client.createdAt), { addSuffix: true })}
-                      </p>
-                    </div>
+                        <p className="text-xs text-muted-foreground">
+                          Captured {formatDistanceToNow(new Date(client.createdAt), { addSuffix: true })}
+                        </p>
+                      </CardContent>
+                    </Card>
                   );
                 })
               ) : (

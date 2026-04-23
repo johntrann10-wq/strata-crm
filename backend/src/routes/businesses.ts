@@ -2379,7 +2379,6 @@ function isSlotAvailable(params: {
   const blockingEnd = new Date(appointmentEnd.getTime() + params.bufferMinutes * 60 * 1000);
 
   let overlappingAppointments = 0;
-  let overlappingBlocks = 0;
   for (const row of params.existingRows) {
     const rowEnd =
       row.endTime && row.endTime.getTime() > row.startTime.getTime()
@@ -2388,13 +2387,12 @@ function isSlotAvailable(params: {
     const overlaps = row.startTime.getTime() < blockingEnd.getTime() && rowEnd.getTime() > params.slotStart.getTime();
     if (!overlaps) continue;
     if (String(row.internalNotes ?? "").trim().startsWith("[[calendar-block")) {
-      overlappingBlocks += 1;
-    } else {
-      overlappingAppointments += 1;
+      return false;
     }
+    overlappingAppointments += 1;
   }
 
-  return overlappingAppointments < params.appointmentCapacity && overlappingBlocks < params.blockCapacity;
+  return overlappingAppointments < params.appointmentCapacity;
 }
 
 async function findOrCreatePublicClient(params: {
