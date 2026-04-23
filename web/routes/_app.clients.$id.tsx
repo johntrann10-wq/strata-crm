@@ -130,6 +130,33 @@ function getVehicleDisplayLabel(vehicle: Record<string, unknown> | null | undefi
   return [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || fallback;
 }
 
+function trimContactValue(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function formatDisplayPhone(value: unknown): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+
+  const digits = trimmed.replace(/\D/g, "");
+
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  if (digits.length === 7) {
+    return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  }
+
+  return trimmed;
+}
+
 function getClientDisplayState({
   client,
   vehicleList,
@@ -156,7 +183,7 @@ function getClientDisplayState({
     day: "numeric",
     year: "numeric",
   });
-  const headerMeta = [client.email, client.phone].filter(Boolean).join(" - ") || "Client record";
+  const headerMeta = [client.email, formatDisplayPhone(client.phone)].filter(Boolean).join(" - ") || "Client record";
   const openRevenueLabel =
     unpaidInvoiceValue > 0
       ? `${formatCurrency(unpaidInvoiceValue)} unpaid`
@@ -178,12 +205,6 @@ function getClientDisplayState({
     openRevenueLabel,
     nextStepLabel,
   };
-}
-
-function trimContactValue(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
 }
 
 function buildPhoneHref(value: string | null | undefined): string | null {
@@ -629,6 +650,7 @@ export default function ClientDetailPage() {
   });
   const clientEmail = trimContactValue(client.email);
   const clientPhone = trimContactValue(client.phone);
+  const clientPhoneLabel = formatDisplayPhone(clientPhone);
   const clientAddress = [client.address, client.city, client.state, client.zip].map(trimContactValue).filter(Boolean).join(", ");
   const clientEmailHref = buildEmailHref(clientEmail);
   const clientPhoneHref = buildPhoneHref(clientPhone);
@@ -748,10 +770,10 @@ export default function ClientDetailPage() {
                                 href={clientPhoneHref}
                                 className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-4 transition hover:text-slate-950"
                               >
-                                {clientPhone}
+                                {clientPhoneLabel ?? clientPhone}
                               </a>
                             ) : (
-                              clientPhone
+                              clientPhoneLabel ?? clientPhone
                             )}
                           </>
                         ) : null}
@@ -805,8 +827,8 @@ export default function ClientDetailPage() {
               <div className="mt-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Reach client</p>
                 <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                  <ContactActionTile icon={Phone} title="Call client" detail={clientPhone ?? "No phone on file"} href={clientPhoneHref} />
-                  <ContactActionTile icon={MessageSquareMore} title="Text client" detail={clientPhone ?? "No phone on file"} href={clientSmsHref} />
+                  <ContactActionTile icon={Phone} title="Call client" detail={clientPhoneLabel ?? "No phone on file"} href={clientPhoneHref} />
+                  <ContactActionTile icon={MessageSquareMore} title="Text client" detail={clientPhoneLabel ?? "No phone on file"} href={clientSmsHref} />
                   <ContactActionTile icon={Mail} title="Email client" detail={clientEmail ?? "No email on file"} href={clientEmailHref} />
                   <ContactActionTile icon={MapPin} title="Open in Maps" detail={clientAddress || "No service address on file"} href={clientMapsHref} />
                 </div>
@@ -854,7 +876,7 @@ export default function ClientDetailPage() {
                   <div className="space-y-5">
                     <div className="grid gap-4 sm:grid-cols-2">
                       <SummaryField label="Email" value={clientEmail} href={clientEmailHref} />
-                      <SummaryField label="Phone" value={clientPhone} href={clientPhoneHref} />
+                      <SummaryField label="Phone" value={clientPhoneLabel} href={clientPhoneHref} />
                       <SummaryField label="Address" value={clientAddress} href={clientMapsHref} />
                       <SummaryField label="Marketing" value={client.marketingOptIn ? "Subscribed" : "Not subscribed"} />
                     </div>
