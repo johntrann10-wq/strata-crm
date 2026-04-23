@@ -9,8 +9,12 @@ import {
   Clock3,
   FileText,
   Loader2,
+  Mail,
+  MapPin,
+  MessageSquareMore,
   MoreVertical,
   Pencil,
+  Phone,
   Plus,
   Receipt,
 } from "lucide-react";
@@ -174,6 +178,36 @@ function getClientDisplayState({
     openRevenueLabel,
     nextStepLabel,
   };
+}
+
+function trimContactValue(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function buildPhoneHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^\d+]/g, "");
+  return normalized ? `tel:${normalized}` : null;
+}
+
+function buildSmsHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^\d+]/g, "");
+  return normalized ? `sms:${normalized}` : null;
+}
+
+function buildEmailHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  return trimmed ? `mailto:${trimmed}` : null;
+}
+
+function buildMapsHref(parts: Array<string | null | undefined>): string | null {
+  const formattedAddress = parts.map(trimContactValue).filter(Boolean).join(", ");
+  return formattedAddress ? `https://maps.apple.com/?q=${encodeURIComponent(formattedAddress)}` : null;
 }
 
 function buildClientTimeline({
@@ -593,6 +627,13 @@ export default function ClientDetailPage() {
     quoteList: quoteList as Array<Record<string, any>>,
     apptList: apptList as Array<Record<string, any>>,
   });
+  const clientEmail = trimContactValue(client.email);
+  const clientPhone = trimContactValue(client.phone);
+  const clientAddress = [client.address, client.city, client.state, client.zip].map(trimContactValue).filter(Boolean).join(", ");
+  const clientEmailHref = buildEmailHref(clientEmail);
+  const clientPhoneHref = buildPhoneHref(clientPhone);
+  const clientSmsHref = buildSmsHref(clientPhone);
+  const clientMapsHref = buildMapsHref([client.address, client.city, client.state, client.zip]);
 
   return (
     <div className="page-content">
@@ -684,8 +725,36 @@ export default function ClientDetailPage() {
                       <h2 className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">{clientDisplayName}</h2>
                       <p className="mt-1 break-words text-sm text-slate-600">
                         {clientSinceLabel ? `Client since ${clientSinceLabel}` : "Client record"}
-                        {client.email ? ` · ${client.email}` : ""}
-                        {client.phone ? ` · ${client.phone}` : ""}
+                        {clientEmail ? (
+                          <>
+                            {" · "}
+                            {clientEmailHref ? (
+                              <a
+                                href={clientEmailHref}
+                                className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-4 transition hover:text-slate-950"
+                              >
+                                {clientEmail}
+                              </a>
+                            ) : (
+                              clientEmail
+                            )}
+                          </>
+                        ) : null}
+                        {clientPhone ? (
+                          <>
+                            {" · "}
+                            {clientPhoneHref ? (
+                              <a
+                                href={clientPhoneHref}
+                                className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-4 transition hover:text-slate-950"
+                              >
+                                {clientPhone}
+                              </a>
+                            ) : (
+                              clientPhone
+                            )}
+                          </>
+                        ) : null}
                       </p>
                     </div>
                   </div>
@@ -731,8 +800,22 @@ export default function ClientDetailPage() {
 
             <div className="min-w-0 max-w-full overflow-hidden rounded-[26px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.24)]">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Actions</p>
-              <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Client workflow</h3>
-              <div className="mt-5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
+              <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Contact and workflow</h3>
+              <p className="mt-1 text-sm text-white/70">Reach the client fast, then move straight into the next job step.</p>
+              <div className="mt-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Reach client</p>
+                <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                  <ContactActionTile icon={Phone} title="Call client" detail={clientPhone ?? "No phone on file"} href={clientPhoneHref} />
+                  <ContactActionTile icon={MessageSquareMore} title="Text client" detail={clientPhone ?? "No phone on file"} href={clientSmsHref} />
+                  <ContactActionTile icon={Mail} title="Email client" detail={clientEmail ?? "No email on file"} href={clientEmailHref} />
+                  <ContactActionTile icon={MapPin} title="Open in Maps" detail={clientAddress || "No service address on file"} href={clientMapsHref} />
+                </div>
+              </div>
+              <div className="mt-5 h-px bg-white/10" />
+              <div className="mt-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Workflow</p>
+              </div>
+              <div className="mt-3 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
                 <QuickWorkflowAction icon={CalendarPlus} title="New appointment" detail="" href={appointmentHref} />
                 <QuickWorkflowAction icon={Receipt} title="Create quote" detail="" href={newQuoteHref} />
                 <QuickWorkflowAction icon={FileText} title="Create invoice" detail="" href={newInvoiceHref} />
@@ -770,9 +853,9 @@ export default function ClientDetailPage() {
                 ) : (
                   <div className="space-y-5">
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <SummaryField label="Email" value={client.email} />
-                      <SummaryField label="Phone" value={client.phone} />
-                      <SummaryField label="Address" value={[client.address, client.city, client.state, client.zip].filter(Boolean).join(", ")} />
+                      <SummaryField label="Email" value={clientEmail} href={clientEmailHref} />
+                      <SummaryField label="Phone" value={clientPhone} href={clientPhoneHref} />
+                      <SummaryField label="Address" value={clientAddress} href={clientMapsHref} />
                       <SummaryField label="Marketing" value={client.marketingOptIn ? "Subscribed" : "Not subscribed"} />
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -1028,12 +1111,72 @@ function TimelineCard({
   );
 }
 
-function SummaryField({ label, value }: { label: string; value?: string | null }) {
+function SummaryField({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value?: string | null;
+  href?: string | null;
+}) {
+  const displayValue = value || "Not provided";
+
   return (
     <div className="max-w-full overflow-hidden rounded-[1rem] border border-white/65 bg-white/76 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      <p className="mt-1 break-words text-sm font-medium text-foreground">{value || "Not provided"}</p>
+      {href && value ? (
+        <a
+          href={href}
+          className="mt-1 block break-words text-sm font-medium text-foreground underline decoration-border underline-offset-4 transition hover:text-primary"
+        >
+          {displayValue}
+        </a>
+      ) : (
+        <p className="mt-1 break-words text-sm font-medium text-foreground">{displayValue}</p>
+      )}
     </div>
+  );
+}
+
+function ContactActionTile({
+  icon: Icon,
+  title,
+  detail,
+  href,
+}: {
+  icon: typeof FileText;
+  title: string;
+  detail: string;
+  href?: string | null;
+}) {
+  const sharedClassName =
+    "rounded-[1rem] border px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)] transition-colors";
+
+  const content = (
+    <div className="flex items-start gap-3">
+      <div className={`rounded-lg p-2 ${href ? "bg-white/12 text-white" : "bg-white/8 text-white/50"}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 space-y-1">
+        <p className={`text-sm font-medium ${href ? "text-white" : "text-white/70"}`}>{title}</p>
+        <p className={`break-words text-xs ${href ? "text-white/65" : "text-white/40"}`}>{detail}</p>
+      </div>
+    </div>
+  );
+
+  if (!href) {
+    return (
+      <div className={`${sharedClassName} cursor-not-allowed border-white/10 bg-white/5`} aria-disabled="true">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <a href={href} className={`${sharedClassName} border-white/15 bg-white/8 hover:border-white/25 hover:bg-white/12`}>
+      {content}
+    </a>
   );
 }
 
